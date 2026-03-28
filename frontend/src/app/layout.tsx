@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { SiteFooter } from "@/components/SiteFooter";
-import { SiteHeader } from "@/components/SiteHeader";
-import { ToastProvider } from "@/components/ToastProvider";
+import { ClientProviders } from "@/components/ClientProviders";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,15 +15,15 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "AEVION — IP-инфраструктура, реестр и compliance",
+    default: "AEVION — Trust infrastructure for digital assets & IP",
     template: "%s · AEVION",
   },
   description:
-    "Платформа для реестра цифровых объектов (QRight), криптоподписи (QSign), патентного бюро и слоя соответствия (Planet). Интерактивная карта экосистемы Globus — 27 узлов. Демонстрируемый MVP для инвесторов и интеграторов.",
+    "Global platform for IP registration (QRight), cryptographic signatures (QSign), patent bureau, compliance certification (Planet), awards, digital banking and more. 27 product nodes on interactive Globus map.",
   openGraph: {
-    title: "AEVION — IP-инфраструктура и Globus",
+    title: "AEVION — Trust infrastructure & Globus",
     description:
-      "Реестр, подпись, бюро, compliance и карта продуктов. Живой продуктовый контур.",
+      "Registry, signatures, bureau, compliance and product map. Live product environment.",
     type: "website",
   },
 };
@@ -36,16 +34,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru">
+    <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}
       >
-        <SiteHeader />
-        <ToastProvider>
-          <div style={{ flex: 1 }}>{children}</div>
-        </ToastProvider>
-        <SiteFooter />
+        <ClientProviders>
+          {children}
+        </ClientProviders>
       </body>
     </html>
   );

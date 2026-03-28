@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { getBackendOrigin } from "@/lib/apiBase";
+import { LangSwitch } from "@/lib/i18n";
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
@@ -18,46 +21,25 @@ export function SiteHeader() {
         style={{
           maxWidth: 1280,
           margin: "0 auto",
-          padding: "12px 20px",
+          padding: "10px 20px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 16,
+          gap: 12,
           flexWrap: "wrap",
         }}
       >
-        <Link href="/" style={{ textDecoration: "none", color: "#0f172a" }}>
+        <Link href="/" style={{ textDecoration: "none", color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.02em" }}>AEVION</span>
-          <span style={{ marginLeft: 8, fontSize: 12, color: "#64748b", fontWeight: 600 }}>
-            IP · Compliance · Globus
+          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+            Trust · IP · Globus
           </span>
         </Link>
-        <Link
-          href="/demo"
-          style={{
-            padding: "6px 12px",
-            borderRadius: 8,
-            textDecoration: "none",
-            fontWeight: 800,
-            fontSize: 13,
-            color: "#fff",
-            background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
-            boxShadow: "0 2px 10px rgba(13,148,136,0.35)",
-          }}
-        >
-          Демо экосистемы
-        </Link>
-        <nav
-          style={{
-            display: "flex",
-            gap: 6,
-            flexWrap: "wrap",
-            alignItems: "center",
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-          aria-label="Основная навигация"
-        >
+
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+          <Link href="/demo" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #0d9488, #0ea5e9)" }}>
+            Demo
+          </Link>
           {[
             { href: "/auth", label: "Auth" },
             { href: "/qright", label: "QRight" },
@@ -66,35 +48,19 @@ export function SiteHeader() {
             { href: "/planet", label: "Planet" },
             { href: "/awards", label: "Awards" },
             { href: "/bank", label: "Bank" },
+            { href: "/cyberchess", label: "Chess" },
           ].map((x) => (
-            <Link
-              key={x.href}
-              href={x.href}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 8,
-                textDecoration: "none",
-                color: "#334155",
-              }}
-            >
+            <Link key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
               {x.label}
             </Link>
           ))}
-          <a
-            href={`${origin}/api/openapi.json`}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              padding: "6px 10px",
-              borderRadius: 8,
-              textDecoration: "none",
-              color: "#0d9488",
-              border: "1px solid rgba(13,148,136,0.35)",
-            }}
-          >
+          <a href={`${origin}/api/openapi.json`} target="_blank" rel="noreferrer" style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#0d9488", fontSize: 12, fontWeight: 600, border: "1px solid rgba(13,148,136,0.3)" }}>
             API
           </a>
-        </nav>
+          <div style={{ marginLeft: 4 }}>
+            <LangSwitch />
+          </div>
+        </div>
       </div>
     </header>
   );

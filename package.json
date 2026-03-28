@@ -1,0 +1,16 @@
+{
+  "name": "aevion-core",
+  "private": true,
+  "description": "AEVION monorepo root — единые команды сборки и dev",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev --prefix aevion-globus-backend\" \"npm run dev --prefix frontend\"",
+    "build:backend": "npm run build --prefix aevion-globus-backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:all": "npm run build:backend && npm run build:frontend",
+    "verify": "npm run build:all",
+    "lint:frontend": "npm run lint --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+# Локальные JSON-стора MVP (QTrade и др.)
+.aevion-data/
+
+/src/generated/prisma

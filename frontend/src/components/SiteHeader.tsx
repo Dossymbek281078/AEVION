@@ -65,6 +65,7 @@ export function SiteHeader() {
             { href: "/bureau", label: "Bureau" },
             { href: "/planet", label: "Planet" },
             { href: "/awards", label: "Awards" },
+            { href: "/bank", label: "Bank" },
           ].map((x) => (
             <Link
               key={x.href}

@@ -66,6 +66,9 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/awards/film" style={{ color: link, fontWeight: 600 }}>
         Премия · кино
       </Link>
+      <Link href="/bank" style={{ color: link, fontWeight: 600 }}>
+        Bank
+      </Link>
       {!hidePlanet ? (
         <>
           <span style={{ color: sep }} aria-hidden>

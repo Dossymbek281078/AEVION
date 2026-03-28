@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
+import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -237,6 +238,7 @@ export default function BureauPage() {
     <main>
       <ProductPageShell>
       <Wave1Nav />
+      <PipelineSteps current="bureau" />
       <div
         style={{
           border: "1px solid rgba(0,0,0,0.12)",

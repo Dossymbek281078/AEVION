@@ -118,3 +118,101 @@ code {
 .aevion-skeleton-pulse {
   animation: aevion-skeleton-pulse 1.4s ease-in-out infinite;
 }
+
+/* ── Mobile responsive ────────────────────────────────── */
+
+/* Sticky vote bar: stack on mobile */
+.aevion-sticky-vote {
+  position: sticky;
+  top: 60px;
+  z-index: 20;
+  margin-bottom: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  padding: 8px 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+@media (max-width: 520px) {
+  .aevion-sticky-vote {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 10px 12px;
+    top: 52px;
+  }
+  .aevion-sticky-vote button,
+  .aevion-sticky-vote a {
+    width: 100%;
+    text-align: center;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Tables: horizontal scroll on mobile */
+.aevion-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -12px;
+  padding: 0 12px;
+}
+
+@media (max-width: 520px) {
+  .aevion-table-wrap table {
+    font-size: 12px;
+  }
+  .aevion-table-wrap th,
+  .aevion-table-wrap td {
+    padding: 8px 6px !important;
+  }
+}
+
+/* Form grids: single column on mobile */
+@media (max-width: 520px) {
+  .aevion-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Hero stats: 2 columns on mobile */
+@media (max-width: 520px) {
+  .aevion-hero-stats {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* Planet dashboard: 2 columns on mobile */
+@media (max-width: 520px) {
+  .aevion-planet-dash {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Navigation pills: scroll on mobile */
+@media (max-width: 520px) {
+  .aevion-nav-pills {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .aevion-nav-pills > * {
+    flex-shrink: 0;
+  }
+}
+
+/* Cards section: single column on very small screens */
+@media (max-width: 420px) {
+  .aevion-quick-cards {
+    grid-template-columns: 1fr !important;
+  }
+}

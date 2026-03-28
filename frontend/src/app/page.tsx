@@ -72,6 +72,9 @@ export default function HomePage() {
     certifiedArtifactVersions: number;
     submissions: number;
   } | null>(null);
+  const [recentArtifacts, setRecentArtifacts] = useState<
+    Array<{ id: string; submissionTitle?: string; artifactType?: string; voteCount?: number; voteAverage?: number | null }>
+  >([]);
 
   const [selectedGeo, setSelectedGeo] = useState<{
     country?: string;
@@ -98,6 +101,12 @@ export default function HomePage() {
           fetch(apiUrl("/api/qright/objects")),
           fetch(apiUrl("/api/planet/stats")).catch(() => null),
         ]);
+
+        // Non-blocking: fetch recent artifacts
+        fetch(apiUrl("/api/planet/artifacts/recent?limit=5"))
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => { if (Array.isArray(j?.items)) setRecentArtifacts(j.items); })
+          .catch(() => null);
 
         if (pr.ok) {
           const projectsData = await pr.json().catch(() => ({}));
@@ -303,6 +312,7 @@ export default function HomePage() {
           </div>
 
           <div
+            className="aevion-hero-stats"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
@@ -339,6 +349,7 @@ export default function HomePage() {
 
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: 24 }}>
         <section
+          className="aevion-quick-cards"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
@@ -415,6 +426,7 @@ export default function HomePage() {
               </div>
             </div>
             <div
+              className="aevion-planet-dash"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
@@ -500,6 +512,68 @@ export default function HomePage() {
                 🎬 Кино
               </Link>
             </div>
+          </section>
+        ) : null}
+
+        {recentArtifacts.length > 0 ? (
+          <section
+            style={{
+              marginBottom: 20,
+              padding: "16px 18px",
+              borderRadius: 14,
+              border: "1px solid rgba(0,0,0,0.08)",
+              background: "#fff",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 15, color: "#0f172a", marginBottom: 12 }}>
+              Недавние артефакты Planet
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {recentArtifacts.map((a) => (
+                <Link
+                  key={a.id}
+                  href={`/planet/artifact/${a.id}`}
+                  style={{
+                    textDecoration: "none",
+                    color: "inherit",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(0,0,0,0.06)",
+                    background: "rgba(15,23,42,0.02)",
+                  }}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#0f766e", minWidth: 48, textTransform: "uppercase" }}>
+                    {a.artifactType || "—"}
+                  </span>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", flex: 1 }}>
+                    {a.submissionTitle || "Без названия"}
+                  </span>
+                  {a.voteCount != null && a.voteCount > 0 ? (
+                    <span style={{ fontSize: 12, color: "#64748b" }}>
+                      {a.voteAverage != null ? `${Number(a.voteAverage).toFixed(1)} ★` : ""}{" "}
+                      ({a.voteCount})
+                    </span>
+                  ) : null}
+                  <span style={{ fontSize: 12, color: "#0d9488", fontWeight: 700 }}>→</span>
+                </Link>
+              ))}
+            </div>
+            <Link
+              href="/planet"
+              style={{
+                display: "inline-block",
+                marginTop: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                color: "#0f766e",
+                textDecoration: "none",
+              }}
+            >
+              Все артефакты в Planet →
+            </Link>
           </section>
         ) : null}
 

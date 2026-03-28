@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
+import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 
 import { apiUrl } from "@/lib/apiBase";
@@ -84,6 +85,7 @@ export default function QSignPage() {
     <main>
       <ProductPageShell maxWidth={900}>
       <Wave1Nav />
+      <PipelineSteps current="qsign" />
       <h1 style={{ fontSize: 28, marginBottom: 8 }}>QSign</h1>
       <p style={{ color: "#555", marginBottom: 16 }}>
         Подпись и проверка целостности данных (HMAC-SHA256). Payload с QRight совпадает с тем, что подписывает IP Bureau.

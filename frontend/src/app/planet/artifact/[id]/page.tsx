@@ -272,23 +272,7 @@ export default function PlanetArtifactPublicPage() {
           </a>
         ))}
       </div>
-      <div
-        style={{
-          position: "sticky",
-          top: 74,
-          zIndex: 20,
-          marginBottom: 12,
-          border: "1px solid rgba(15,23,42,0.14)",
-          borderRadius: 12,
-          background: "rgba(255,255,255,0.96)",
-          backdropFilter: "blur(8px)",
-          padding: "8px 10px",
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
+      <div className="aevion-sticky-vote">
         <span style={{ fontSize: 12, color: "#475569", fontWeight: 700 }}>Быстрое действие:</span>
         <label style={{ fontSize: 12, color: "#334155" }}>
           Оценка{" "}

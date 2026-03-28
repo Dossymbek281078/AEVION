@@ -3,343 +3,183 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { useToast } from "@/components/ToastProvider";
+import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
-
 import { apiUrl } from "@/lib/apiBase";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<"login" | "register">("login");
-
+  const { showToast } = useToast();
+  const [mode, setMode] = useState<"login" | "register">("register");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [token, setToken] = useState<string>("");
   const [me, setMe] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const loadToken = () => {
+  useEffect(() => {
     try {
       const raw = localStorage.getItem(TOKEN_KEY);
       if (raw) setToken(raw);
-    } catch {
-      // ignore
-    }
-  };
-
-  useEffect(() => {
-    loadToken();
+    } catch {}
   }, []);
 
-  const signIn = async () => {
-    setErr(null);
-    setMe(null);
-    setBusy(true);
-    try {
-      if (!email.trim() || !password.trim()) {
-        throw new Error("email и password обязательны");
-      }
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/auth/me"), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data) setMe(data);
+      } catch {}
+    })();
+  }, [token]);
 
+  const signIn = async () => {
+    setErr(null); setMe(null); setBusy(true);
+    try {
+      if (!email.trim() || !password.trim()) throw new Error("Email и пароль обязательны");
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-
       const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Ошибка login");
-      }
-
+      if (!res.ok) throw new Error(data?.error || "Ошибка входа");
       const nextToken = data.token as string;
       setToken(nextToken);
-      try {
-        localStorage.setItem(TOKEN_KEY, nextToken);
-      } catch {
-        // ignore
-      }
+      try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
+      showToast("Вход выполнен", "success");
     } catch (e: any) {
-      setErr(e?.message || "Ошибка login");
-    } finally {
-      setBusy(false);
-    }
+      setErr(e?.message || "Ошибка");
+      showToast(e?.message || "Ошибка входа", "error");
+    } finally { setBusy(false); }
   };
 
   const register = async () => {
-    setErr(null);
-    setMe(null);
-    setBusy(true);
+    setErr(null); setMe(null); setBusy(true);
     try {
-      if (!name.trim() || !email.trim() || !password.trim()) {
-        throw new Error("name, email и password обязательны");
-      }
-
+      if (!name.trim() || !email.trim() || !password.trim()) throw new Error("Имя, email и пароль обязательны");
       const res = await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
       });
-
       const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Ошибка register");
-      }
-
+      if (!res.ok) throw new Error(data?.error || "Ошибка регистрации");
       const nextToken = data.token as string;
       setToken(nextToken);
-      try {
-        localStorage.setItem(TOKEN_KEY, nextToken);
-      } catch {
-        // ignore
-      }
+      try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
+      showToast("Аккаунт создан! Добро пожаловать в AEVION", "success");
     } catch (e: any) {
-      setErr(e?.message || "Ошибка register");
-    } finally {
-      setBusy(false);
-    }
+      setErr(e?.message || "Ошибка");
+      showToast(e?.message || "Ошибка регистрации", "error");
+    } finally { setBusy(false); }
   };
 
-  const fetchMe = async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      const t = token || localStorage.getItem(TOKEN_KEY) || "";
-      if (!t) throw new Error("Сначала выполните login/register");
+  const logout = () => {
+    try { localStorage.removeItem(TOKEN_KEY); } catch {}
+    setToken(""); setMe(null);
+    showToast("Вы вышли из системы", "info");
+  };
 
-      const res = await fetch(apiUrl("/api/auth/me"), {
-        method: "GET",
-        headers: { Authorization: `Bearer ${t}` },
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Ошибка /me");
-      }
-
-      setMe(data);
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка /me");
-    } finally {
-      setBusy(false);
-    }
+  const inputStyle = {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 12,
+    border: "1px solid rgba(15,23,42,0.15)",
+    fontSize: 15,
+    outline: "none",
   };
 
   return (
     <main>
-      <ProductPageShell maxWidth={980}>
-      <Wave1Nav />
-      <h1 style={{ fontSize: 28, marginBottom: 6 }}>Auth</h1>
-      <div style={{ color: "#555", marginBottom: 16 }}>
-        MVP: регистрация, логин, JWT, роли `USER/ADMIN`.
-      </div>
-
-      {token ? (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: "12px 14px",
-            borderRadius: 12,
-            border: "1px solid rgba(10,160,80,0.35)",
-            background: "rgba(10,160,80,0.06)",
-            fontSize: 14,
-            lineHeight: 1.5,
-          }}
-        >
-          <b>Сессия активна.</b> Дальше по конвейеру:{" "}
-          <Link href="/qright" style={{ fontWeight: 700, color: "#064" }}>
-            QRight
-          </Link>
-          {" → "}
-          <Link href="/qsign" style={{ fontWeight: 700, color: "#064" }}>
-            QSign
-          </Link>
-          {" → "}
-          <Link href="/bureau" style={{ fontWeight: 700, color: "#064" }}>
-            Bureau
-          </Link>
-          {" · "}
-          <Link href="/planet" style={{ fontWeight: 700, color: "#064" }}>
-            Planet
-          </Link>
-        </div>
-      ) : null}
-
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <button
-          onClick={() => setMode("login")}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #111",
-            background: mode === "login" ? "#111" : "#fff",
-            color: mode === "login" ? "#fff" : "#111",
-            cursor: "pointer",
-            fontWeight: 700,
-          }}
-          disabled={busy}
-        >
-          Login
-        </button>
-        <button
-          onClick={() => setMode("register")}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #111",
-            background: mode === "register" ? "#111" : "#fff",
-            color: mode === "register" ? "#fff" : "#111",
-            cursor: "pointer",
-            fontWeight: 700,
-          }}
-          disabled={busy}
-        >
-          Register
-        </button>
-      </div>
-
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
-        {mode === "register" ? (
-          <div style={{ gridColumn: "1 / span 2" }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Name</div>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.15)",
-              }}
-              disabled={busy}
-            />
+      <ProductPageShell maxWidth={720}>
+        <Wave1Nav />
+        <PipelineSteps current="auth" />
+        <div style={{ borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden" }}>
+          <div style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "28px 24px 20px", color: "#fff" }}>
+            <h1 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
+              Идентичность AEVION
+            </h1>
+            <p style={{ margin: 0, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }}>
+              Единая учётная запись для всех модулей экосистемы. Зарегистрируйтесь или войдите, чтобы получить JWT-токен.
+            </p>
           </div>
-        ) : null}
+          <div style={{ padding: "24px 24px 28px" }}>
+            {token && me?.user ? (
+              <div style={{ marginBottom: 20, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(16,185,129,0.3)", background: "rgba(16,185,129,0.06)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: "#065f46" }}>{me.user.name || me.user.email}</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{me.user.email} · {me.user.role || "USER"}</div>
+                  </div>
+                  <button onClick={logout} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)", color: "#dc2626", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                    Выйти
+                  </button>
+                </div>
+                <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Link href="/qright" style={{ padding: "8px 14px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                    Создать объект в QRight →
+                  </Link>
+                  <Link href="/planet" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #0f766e", color: "#0f766e", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+                    🌍 Planet Lab
+                  </Link>
+                </div>
+              </div>
+            ) : null}
 
-        <div style={{ gridColumn: "1 / span 2" }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Email</div>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="user@example.com"
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.15)",
-            }}
-            disabled={busy}
-          />
+            <div style={{ display: "inline-flex", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", marginBottom: 20 }}>
+              {(["register", "login"] as const).map((m) => (
+                <button key={m} onClick={() => setMode(m)} disabled={busy} style={{ padding: "10px 20px", border: "none", background: mode === m ? "#0f172a" : "#fff", color: mode === m ? "#fff" : "#64748b", fontWeight: mode === m ? 800 : 600, fontSize: 14, cursor: "pointer" }}>
+                  {m === "register" ? "Регистрация" : "Вход"}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gap: 14, maxWidth: 440 }}>
+              {mode === "register" ? (
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ваше имя" style={inputStyle} disabled={busy} />
+                </div>
+              ) : null}
+              <div>
+                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Email</div>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" type="email" style={inputStyle} disabled={busy} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Минимум 6 символов" style={inputStyle} disabled={busy} />
+              </div>
+              <button onClick={mode === "login" ? signIn : register} disabled={busy} style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: busy ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)", color: "#fff", cursor: busy ? "default" : "pointer", fontWeight: 900, fontSize: 15, boxShadow: busy ? "none" : "0 4px 14px rgba(13,148,136,0.35)" }}>
+                {busy ? "Подождите..." : mode === "register" ? "Создать аккаунт" : "Войти"}
+              </button>
+            </div>
+
+            {err ? (
+              <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(220,38,38,0.25)", background: "rgba(220,38,38,0.06)", color: "#991b1b", fontSize: 13 }}>
+                {err}
+              </div>
+            ) : null}
+
+            {token ? (
+              <details style={{ marginTop: 20 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#64748b" }}>
+                  JWT-токен (для разработчиков)
+                </summary>
+                <textarea readOnly value={token} rows={3} style={{ width: "100%", fontFamily: "monospace", fontSize: 11, padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.1)", marginTop: 8, color: "#475569", background: "#f8fafc" }} />
+              </details>
+            ) : null}
+          </div>
         </div>
-
-        <div style={{ gridColumn: "1 / span 2" }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Password</div>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            placeholder="min 6 chars"
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.15)",
-            }}
-            disabled={busy}
-          />
-        </div>
-
-        <div style={{ gridColumn: "1 / span 2", display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {mode === "login" ? (
-            <button
-              onClick={signIn}
-              disabled={busy}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #111",
-                background: "#111",
-                color: "#fff",
-                cursor: busy ? "default" : "pointer",
-                fontWeight: 800,
-              }}
-            >
-              Login
-            </button>
-          ) : (
-            <button
-              onClick={register}
-              disabled={busy}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #111",
-                background: "#111",
-                color: "#fff",
-                cursor: busy ? "default" : "pointer",
-                fontWeight: 800,
-              }}
-            >
-              Register
-            </button>
-          )}
-
-          <button
-            onClick={fetchMe}
-            disabled={busy}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #0a5",
-              background: "#0a5",
-              color: "#fff",
-              cursor: busy ? "default" : "pointer",
-              fontWeight: 800,
-            }}
-          >
-            Check token (/me)
-          </button>
-        </div>
-      </div>
-
-      {err ? <div style={{ marginTop: 12, color: "crimson" }}>{err}</div> : null}
-
-      <div style={{ marginTop: 18 }}>
-        <div style={{ fontWeight: 800, marginBottom: 6 }}>JWT token</div>
-        <textarea
-          readOnly
-          value={token}
-          rows={4}
-          style={{
-            width: "100%",
-            fontFamily: "monospace",
-            fontSize: 12,
-            padding: 10,
-            borderRadius: 12,
-            border: "1px solid rgba(0,0,0,0.15)",
-          }}
-        />
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <div style={{ fontWeight: 800, marginBottom: 6 }}>/me result</div>
-        <pre
-          style={{
-            background: "#f5f5f5",
-            padding: 12,
-            borderRadius: 12,
-            fontSize: 12,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {me ? JSON.stringify(me, null, 2) : "—"}
-        </pre>
-      </div>
       </ProductPageShell>
     </main>
   );
 }
-

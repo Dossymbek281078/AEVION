@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
+import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { bureauUrlFocusObject, qsignUrlForQRightObject } from "@/lib/wave1Payload";
 import { apiUrl } from "@/lib/apiBase";
@@ -173,6 +174,7 @@ export default function QRightPage() {
     <main>
       <ProductPageShell>
       <Wave1Nav />
+      <PipelineSteps current="qright" />
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>QRight</h1>
       <div style={{ color: "#666", marginBottom: 16 }}>
         Электронное патентирование (MVP): регистрация объекта → хэш → запись в реестр. Дальше — подпись и бюро в один клик.
@@ -207,7 +209,7 @@ export default function QRightPage() {
           style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
         />
 
-        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+        <div className="aevion-form-grid" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
           <input
             placeholder="Имя автора (опционально)"
             value={ownerName}
@@ -222,7 +224,7 @@ export default function QRightPage() {
           />
         </div>
 
-        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+        <div className="aevion-form-grid" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
           <input
             placeholder="Страна (опционально)"
             value={country}

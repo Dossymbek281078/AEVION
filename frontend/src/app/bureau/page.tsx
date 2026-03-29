@@ -255,7 +255,7 @@ export default function BureauPage() {
               AEVION IP Bureau
             </h1>
             <div style={{ color: "#555", lineHeight: 1.5 }}>
-              Реестр QRight + подпись/проверка целостности через QSign. Формат “certificate-ready” в MVP.
+              QRight registry + signature verification via QSign. Certificate-ready format in MVP.
             </div>
             {(ctxCountry || ctxCity) && (
               <div
@@ -402,10 +402,10 @@ export default function BureauPage() {
                     <div style={{ fontSize: 13, fontWeight: 800, marginTop: 6, color: statusColor }}>
                       {verifiedThis
                         ? verifiedThis.valid
-                          ? "VALID (подтверждено)"
-                          : "INVALID (не совпадает)"
+                          ? "VALID (confirmed)"
+                          : "INVALID (mismatch)"
                         : signature
-                        ? "SIGNED (подписано локально)"
+                        ? "SIGNED (locally)"
                         : "NOT SIGNED"}
                     </div>
                   </div>
@@ -425,7 +425,7 @@ export default function BureauPage() {
                       fontWeight: 700,
                     }}
                   >
-                    {copiedId === x.id ? "Скопировано" : "Копировать payload JSON"}
+                    {copiedId === x.id ? "Copied" : "Copy payload JSON"}
                   </button>
                   <button
                     onClick={() => signObject(x)}
@@ -460,7 +460,7 @@ export default function BureauPage() {
 
                   <button
                     disabled
-                    title="Placeholder для будущего PDF экспорта"
+                    title="Placeholder for future PDF export"
                     style={{
                       padding: "10px 12px",
                       borderRadius: 10,

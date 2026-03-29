@@ -225,12 +225,12 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>{
       const m=aiMove(gs,lv.depth);
       if(!m){setThink(false);return}
-      exec(m.from,m.to);setThink(false)},400+Math.random()*300);
+      exec(m.from,m.to);setThink(false)},50);
     return()=>clearTimeout(t)},[gs.turn,over,started,tab]);
 
   // AI plays first if player chose black
   useEffect(()=>{if(started&&playerColor==="b"&&gs.turn==="w"&&hist.length===0&&tab==="play"){
-    setThink(true);const t=setTimeout(()=>{const m=aiMove(gs,lv.depth);if(m)exec(m.from,m.to);setThink(false)},600);return()=>clearTimeout(t)}},[started,playerColor]);
+    setThink(true);const t=setTimeout(()=>{const m=aiMove(gs,lv.depth);if(m)exec(m.from,m.to);setThink(false)},50);return()=>clearTimeout(t)}},[started,playerColor]);
 
   /* ── Click ── */
   const click=useCallback((r:number,c:number)=>{

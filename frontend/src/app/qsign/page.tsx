@@ -6,7 +6,6 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
-
 import { apiUrl } from "@/lib/apiBase";
 
 export default function QSignPage() {
@@ -16,8 +15,9 @@ export default function QSignPage() {
   const [verifySignature, setVerifySignature] = useState("");
   const [result, setResult] = useState("");
   const [payloadOrigin, setPayloadOrigin] = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
-  // Deep link from Globus / module pages: /qsign?payload=<encodeURIComponent(JSON)>
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
@@ -27,192 +27,163 @@ export default function QSignPage() {
       JSON.parse(decoded);
       setPayloadText(decoded);
       setPayloadOrigin("deep link (QRight / Globus)");
-    } catch {
-      // ignore malformed payload param
-    }
+    } catch {}
   }, []);
 
   const sign = async () => {
-    setResult("");
+    setResult(""); setSigning(true);
     try {
       const payload = JSON.parse(payloadText);
-
       const res = await fetch(apiUrl("/api/qsign/sign"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setResult(`Ошибка подписи: ${(data as { error?: string }).error || res.status}`);
-        return;
-      }
-      setSignature((data as { signature?: string }).signature || "");
+      if (!res.ok) { setResult(`Error: ${(data as any).error || res.status}`); showToast("Signing failed", "error"); return; }
+      setSignature((data as any).signature || "");
       setResult(JSON.stringify(data, null, 2));
-      showToast("Payload подписан", "success");
+      showToast("Payload signed successfully", "success");
     } catch (e: any) {
-      setResult("Ошибка подписи: " + (e?.message || String(e)));
-      showToast("Ошибка подписи", "error");
-    }
+      setResult("Error: " + (e?.message || String(e)));
+      showToast("Signing error", "error");
+    } finally { setSigning(false); }
   };
 
   const verify = async () => {
-    setResult("");
+    setResult(""); setVerifying(true);
     try {
       const payload = JSON.parse(payloadText);
-
       const res = await fetch(apiUrl("/api/qsign/verify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payload,
-          signature: verifySignature || signature,
-        }),
+        body: JSON.stringify({ payload, signature: verifySignature || signature }),
       });
-
       const data = await res.json();
       setResult(JSON.stringify(data, null, 2));
-      if (data.valid) showToast("Подпись VALID", "success");
-      else showToast("Подпись INVALID", "error");
+      if (data.valid) showToast("Signature VALID", "success");
+      else showToast("Signature INVALID", "error");
     } catch (e: any) {
-      setResult("Ошибка проверки: " + e.message);
-      showToast("Ошибка проверки", "error");
-    }
+      setResult("Error: " + e.message);
+      showToast("Verification error", "error");
+    } finally { setVerifying(false); }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid rgba(15,23,42,0.15)",
+    fontSize: 14,
   };
 
   return (
     <main>
       <ProductPageShell maxWidth={900}>
-      <Wave1Nav />
-      <PipelineSteps current="qsign" />
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>QSign</h1>
-      <p style={{ color: "#555", marginBottom: 16 }}>
-        Подпись и проверка целостности данных (HMAC-SHA256). Payload с QRight совпадает с тем, что подписывает IP Bureau.
-      </p>
+        <Wave1Nav />
+        <PipelineSteps current="qsign" />
 
-      {payloadOrigin ? (
-        <div
-          style={{
-            marginBottom: 14,
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid rgba(15,118,110,0.25)",
-            background: "rgba(15,118,110,0.06)",
-            fontSize: 13,
-            color: "#0f766e",
-            fontWeight: 600,
-          }}
-        >
-          Payload получен из: {payloadOrigin}
-        </div>
-      ) : null}
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        <Link href="/qright" style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #0f172a", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 13 }}>
-          ← QRight
-        </Link>
-        <Link href="/bureau" style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #0f172a", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 13 }}>
-          IP Bureau →
-        </Link>
-        <Link href="/planet" style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #0f766e", textDecoration: "none", color: "#0f766e", fontWeight: 700, fontSize: 13 }}>
-          🌍 Planet
-        </Link>
-      </div>
-
-      <div style={{ display: "grid", gap: 16 }}>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Payload (JSON)</div>
-          <textarea
-            value={payloadText}
-            onChange={(e) => setPayloadText(e.target.value)}
-            rows={8}
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 8,
-              border: "1px solid #ccc",
-              fontFamily: "monospace",
-            }}
-          />
-        </div>
-
-        <button
-          onClick={sign}
-          style={{
-            padding: 10,
-            borderRadius: 8,
-            border: "1px solid #111",
-            background: "#111",
-            color: "#fff",
-            width: 160,
-          }}
-        >
-          Подписать
-        </button>
-
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Подпись</div>
-          <input
-            value={signature}
-            readOnly
-            style={{
-              width: "100%",
-              padding: 8,
-              borderRadius: 8,
-              border: "1px solid #ccc",
-              fontSize: 12,
-            }}
-          />
-        </div>
-
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            Подпись для проверки (необязательно)
+        <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 20 }}>
+          <div style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "24px 24px 18px", color: "#fff" }}>
+            <h1 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.02em" }}>QSign — Cryptographic Signatures</h1>
+            <p style={{ margin: 0, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }}>
+              Sign and verify data integrity using HMAC-SHA256. The same payload format used by QRight and IP Bureau — ensuring end-to-end consistency across the pipeline.
+            </p>
           </div>
-          <input
-            value={verifySignature}
-            onChange={(e) => setVerifySignature(e.target.value)}
-            placeholder="Оставь пустым — возьмётся подпись выше"
-            style={{
-              width: "100%",
-              padding: 8,
-              borderRadius: 8,
-              border: "1px solid #ccc",
-              fontSize: 12,
-            }}
-          />
         </div>
 
-        <button
-          onClick={verify}
-          style={{
-            padding: 10,
-            borderRadius: 8,
-            border: "1px solid #0a5",
-            background: "#0a5",
-            color: "#fff",
-            width: 160,
-          }}
-        >
-          Проверить
-        </button>
+        {payloadOrigin ? (
+          <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(15,118,110,0.25)", background: "rgba(15,118,110,0.06)", fontSize: 13, color: "#0f766e", fontWeight: 600 }}>
+            Payload received from: {payloadOrigin}
+          </div>
+        ) : null}
 
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Результат</div>
-          <pre
-            style={{
-              background: "#f5f5f5",
-              padding: 12,
-              borderRadius: 8,
-              fontSize: 12,
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {result || "—"}
-          </pre>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+          <Link href="/qright" style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 13 }}>
+            ← QRight
+          </Link>
+          <Link href="/bureau" style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 13 }}>
+            IP Bureau →
+          </Link>
+          <Link href="/planet" style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #0f766e", textDecoration: "none", color: "#0f766e", fontWeight: 700, fontSize: 13 }}>
+            Planet
+          </Link>
         </div>
-      </div>
+
+        <div style={{ display: "grid", gap: 20, gridTemplateColumns: "1fr 1fr" }}>
+          {/* Left: Sign */}
+          <div style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 16, padding: 20 }}>
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>1. Sign payload</div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Payload (JSON)</div>
+              <textarea
+                value={payloadText}
+                onChange={(e) => setPayloadText(e.target.value)}
+                rows={6}
+                style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
+              />
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                Paste any JSON object — it will be signed with HMAC-SHA256
+              </div>
+            </div>
+
+            <button onClick={sign} disabled={signing}
+              style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: signing ? "#94a3b8" : "#0f172a", color: "#fff", fontWeight: 800, fontSize: 14, cursor: signing ? "default" : "pointer", marginBottom: 12 }}>
+              {signing ? "Signing..." : "Sign"}
+            </button>
+
+            {signature ? (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Signature (HMAC)</div>
+                <input value={signature} readOnly style={{ ...inputStyle, fontFamily: "monospace", fontSize: 11, color: "#475569", background: "#f8fafc" }} />
+              </div>
+            ) : null}
+          </div>
+
+          {/* Right: Verify */}
+          <div style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 16, padding: 20 }}>
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>2. Verify signature</div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Signature to verify</div>
+              <input
+                value={verifySignature}
+                onChange={(e) => setVerifySignature(e.target.value)}
+                placeholder="Leave empty to use the signature from step 1"
+                style={inputStyle}
+              />
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                If empty, the signature generated above will be used
+              </div>
+            </div>
+
+            <button onClick={verify} disabled={verifying}
+              style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: verifying ? "#94a3b8" : "#0d9488", color: "#fff", fontWeight: 800, fontSize: 14, cursor: verifying ? "default" : "pointer" }}>
+              {verifying ? "Verifying..." : "Verify"}
+            </button>
+          </div>
+        </div>
+
+        {/* Result */}
+        {result ? (
+          <div style={{ marginTop: 20, border: "1px solid rgba(15,23,42,0.1)", borderRadius: 16, padding: 16 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Result</div>
+            <pre style={{ background: "#f8fafc", padding: 14, borderRadius: 10, fontSize: 12, whiteSpace: "pre-wrap", fontFamily: "monospace", color: "#334155", margin: 0 }}>
+              {result}
+            </pre>
+          </div>
+        ) : null}
+
+        {/* How it works */}
+        <div style={{ marginTop: 24, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "rgba(15,23,42,0.02)" }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>How QSign works</div>
+          <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.7 }}>
+            QSign uses HMAC-SHA256 to create a cryptographic signature of your data. The same key is used by QRight and IP Bureau, 
+            ensuring that any object registered in QRight can be verified for integrity at any point in the pipeline. 
+            The signature proves that the data has not been tampered with since it was signed.
+          </div>
+        </div>
       </ProductPageShell>
     </main>
   );

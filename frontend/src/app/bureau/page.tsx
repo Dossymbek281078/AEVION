@@ -63,8 +63,8 @@ export default function BureauPage() {
   const didScrollFocus = useRef(false);
 
   const payloadForObject = useMemo(() => {
-    // ВАЖНО: HMAC считается по JSON.stringify(payload) в backend.
-    // Поэтому используем один и тот же shape и порядок ключей (вставляем их так же).
+    // IMPORTANT: HMAC is computed from JSON.stringify(payload) in backend.
+    // We use the same shape and key order (inserted in the same way).
     return (x: RightObject) => ({
       objectId: x.id,
       title: x.title,
@@ -89,7 +89,7 @@ export default function BureauPage() {
       setCopiedId(x.id);
       window.setTimeout(() => setCopiedId((id) => (id === x.id ? null : id)), 2000);
     } catch {
-      setErr("Не удалось скопировать payload (доступ к буферу обмена)");
+      setErr("Failed to copy payload (clipboard access)");
     }
   };
 
@@ -126,11 +126,11 @@ export default function BureauPage() {
           // ignore
         }
         const res = await fetch(apiUrl("/api/qright/objects"), { headers });
-        if (!res.ok) throw new Error("Backend не отвечает: /api/qright/objects");
+        if (!res.ok) throw new Error("Backend not responding: /api/qright/objects");
         const data = await res.json();
         setObjects(data.items || []);
       } catch (e: any) {
-        setErr(e.message || "Ошибка загрузки объектов");
+        setErr(e.message || "Error loading objects");
       } finally {
         setLoading(false);
       }
@@ -171,16 +171,16 @@ export default function BureauPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Ошибка подписи");
+        throw new Error(data?.error || "Signing error");
       }
       const data: SignResponse = await res.json();
 
       const next = { ...signatureByObjectId, [x.id]: data.signature || "" };
       persistSignatures(next);
-      showToast("Объект подписан (QSign)", "success");
+      showToast("Object signed (QSign)", "success");
     } catch (e: any) {
-      setErr(e.message || "Ошибка подписи");
-      showToast(e.message || "Ошибка подписи", "error");
+      setErr(e.message || "Signing error");
+      showToast(e.message || "Signing error", "error");
     } finally {
       setBusyId(null);
     }
@@ -193,7 +193,7 @@ export default function BureauPage() {
 
     try {
       const signature = signatureByObjectId[x.id];
-      if (!signature) throw new Error("Сначала подпишите объект");
+      if (!signature) throw new Error("Sign the object first");
 
       const payload = payloadForObject(mergedForPayload(x));
 
@@ -204,7 +204,7 @@ export default function BureauPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Ошибка проверки");
+        throw new Error(data?.error || "Verification error");
       }
 
       const data: VerifyResponse = await res.json();
@@ -214,11 +214,11 @@ export default function BureauPage() {
         expected: data.expected,
         provided: data.provided,
       });
-      if (data.valid) showToast("Подпись VALID — целостность подтверждена", "success");
-      else showToast("Подпись INVALID — данные расходятся", "error");
+      if (data.valid) showToast("Signature VALID — integrity confirmed", "success");
+      else showToast("Signature INVALID — data mismatch", "error");
     } catch (e: any) {
-      setErr(e.message || "Ошибка проверки");
-      showToast(e.message || "Ошибка проверки", "error");
+      setErr(e.message || "Verification error");
+      showToast(e.message || "Verification error", "error");
     } finally {
       setBusyId(null);
     }
@@ -269,9 +269,9 @@ export default function BureauPage() {
                   background: "rgba(10,160,80,0.06)",
                 }}
               >
-                <b>Контекст с Globus:</b> {ctxCity || "—"}
-                {ctxCountry ? `, ${ctxCountry}` : ""} — при подписи подставится в payload, если у объекта
-                нет своей локации.
+                <b>Globus context:</b> {ctxCity || "—"}
+                {ctxCountry ? `, ${ctxCountry}` : ""} — location will be used in payload if object has
+                no own location.
               </div>
             )}
           </div>
@@ -288,7 +288,7 @@ export default function BureauPage() {
                 fontWeight: 650,
               }}
             >
-              Сбросить подписи (локально)
+              Reset signatures (local)
             </button>
           </div>
         </div>
@@ -297,11 +297,11 @@ export default function BureauPage() {
       {err && <div style={{ color: "crimson", marginTop: 12 }}>{err}</div>}
 
       <div style={{ marginTop: 18, marginBottom: 12, color: "#666" }}>
-        Объектов QRight: <b>{objects.length}</b>
+        QRight objects: <b>{objects.length}</b>
       </div>
 
       {loading ? (
-        <div style={{ marginTop: 18 }}>Загрузка…</div>
+        <div style={{ marginTop: 18 }}>Loading...</div>
       ) : (
         <div style={{ display: "grid", gap: 14 }}>
           {objects.map((x) => {
@@ -440,7 +440,7 @@ export default function BureauPage() {
                       fontWeight: 750,
                     }}
                   >
-                    {busyId === x.id ? "Подпись..." : "Подписать QRight"}
+                    {busyId === x.id ? "Signing..." : "Sign QRight"}
                   </button>
                   <button
                     onClick={() => verifyObject(x)}
@@ -455,7 +455,7 @@ export default function BureauPage() {
                       fontWeight: 750,
                     }}
                   >
-                    {busyId === x.id ? "Проверка..." : "Проверить подпись"}
+                    {busyId === x.id ? "Verifying..." : "Verify signature"}
                   </button>
 
                   <button

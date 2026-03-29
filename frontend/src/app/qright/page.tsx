@@ -160,7 +160,7 @@ export default function QRightPage() {
       setCity("");
       setKind("idea");
 
-      showToast("Объект зарегистрирован в QRight", "success");
+      showToast("Object registered in QRight", "success");
       await load(listMineOnly);
     } catch (e) {
       showToast((e as Error).message, "error");
@@ -177,81 +177,102 @@ export default function QRightPage() {
       <PipelineSteps current="qright" />
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>QRight</h1>
       <div style={{ color: "#666", marginBottom: 16 }}>
-        Электронное патентирование (MVP): регистрация объекта → хэш → запись в реестр. Дальше — подпись и бюро в один клик.
+        Digital IP registration: register your work → get a cryptographic hash → store in registry. Then sign and certify in one click.
       </div>
 
-      <form onSubmit={submit} style={{ display: "grid", gap: 10, maxWidth: 760 }}>
-        <input
-          placeholder="Название *"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
-        />
-
-        <select
-          value={kind}
-          onChange={(e) => setKind(e.target.value)}
-          style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
-        >
-          <option value="idea">idea</option>
-          <option value="code">code</option>
-          <option value="design">design</option>
-          <option value="music">music</option>
-          <option value="text">text</option>
-          <option value="other">other</option>
-        </select>
-
-        <textarea
-          placeholder="Описание *"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={4}
-          style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
-        />
-
-        <div className="aevion-form-grid" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+      <form onSubmit={submit} style={{ display: "grid", gap: 12, maxWidth: 760 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Title *</div>
           <input
-            placeholder="Имя автора (опционально)"
-            value={ownerName}
-            onChange={(e) => setOwnerName(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
+            placeholder="Name of your work (e.g. 'My AI Music Track')"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            style={{ width: "100%", padding: "12px 14px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 10, fontSize: 14 }}
           />
-          <input
-            placeholder="Email автора (опционально)"
-            value={ownerEmail}
-            onChange={(e) => setOwnerEmail(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Type</div>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            style={{ width: "100%", padding: "12px 14px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 10, fontSize: 14 }}
+          >
+            <option value="idea">Idea / Concept</option>
+            <option value="code">Code / Software</option>
+            <option value="design">Design / Visual</option>
+            <option value="music">Music / Audio</option>
+            <option value="text">Text / Article</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Description *</div>
+          <textarea
+            placeholder="Describe your work — what it is, what makes it unique"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+            style={{ width: "100%", padding: "12px 14px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 10, fontSize: 14 }}
           />
         </div>
 
         <div className="aevion-form-grid" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-          <input
-            placeholder="Страна (опционально)"
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Author name (optional)</div>
+            <input
+              placeholder="Your name"
+              value={ownerName}
+              onChange={(e) => setOwnerName(e.target.value)}
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 10, fontSize: 14 }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Author email (optional)</div>
+            <input
+              placeholder="your@email.com"
+            value={ownerEmail}
+            onChange={(e) => setOwnerEmail(e.target.value)}
+            style={{ width: "100%", padding: "12px 14px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 10, fontSize: 14 }}
           />
-          <input
-            placeholder="Город (опционально)"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
-          />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Country (optional)</div>
+            <input
+              placeholder="e.g. Kazakhstan"
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 10, fontSize: 14 }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>City (optional)</div>
+            <input
+              placeholder="e.g. Astana"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 10, fontSize: 14 }}
+            />
+          </div>
         </div>
 
         <button
           type="submit"
           disabled={saving}
           style={{
-            padding: 10,
-            borderRadius: 8,
-            border: "1px solid #111",
-            background: saving ? "#999" : "#111",
+            padding: "12px 20px",
+            borderRadius: 12,
+            border: "none",
+            background: saving ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)",
             color: "#fff",
             cursor: saving ? "default" : "pointer",
+            fontWeight: 900,
+            fontSize: 15,
+            boxShadow: saving ? "none" : "0 4px 14px rgba(13,148,136,0.35)",
           }}
         >
-          {saving ? "Сохранение..." : "Зарегистрировать объект"}
+          {saving ? "Saving..." : "Register object"}
         </button>
 
         {err && <div style={{ color: "crimson" }}>{err}</div>}
@@ -269,7 +290,7 @@ export default function QRightPage() {
           marginBottom: 10,
         }}
       >
-        <h2 style={{ fontSize: 18, margin: 0 }}>Реестр QRight ({items.length})</h2>
+        <h2 style={{ fontSize: 18, margin: 0 }}>QRight Registry ({items.length})</h2>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
           <input
             type="checkbox"

@@ -3,9 +3,7 @@
 import Link from "next/link";
 
 type Props = {
-  /** Скрыть ссылку Planet (например на самой странице Planet) */
   hidePlanet?: boolean;
-  /** Тёмный фон (/demo hero и т.п.) */
   variant?: "light" | "dark";
 };
 
@@ -25,58 +23,28 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
         fontSize: 13,
         alignItems: "center",
       }}
-      aria-label="Волна 1 — навигация"
+      aria-label="Wave 1 navigation"
     >
       <Link href="/" style={{ color: globus, fontWeight: 800 }}>
         ← Globus
       </Link>
-      <span style={{ color: sep }} aria-hidden>
-        |
-      </span>
-      <Link href="/demo" style={{ color: demoLink, fontWeight: 800 }}>
-        Демо
-      </Link>
-      <span style={{ color: sep }} aria-hidden>
-        |
-      </span>
-      <Link href="/demo/deep" style={{ color: link, fontWeight: 650 }}>
-        Углублённо
-      </Link>
-      <span style={{ color: sep }} aria-hidden>
-        |
-      </span>
-      <Link href="/auth" style={{ color: link, fontWeight: 600 }}>
-        Auth
-      </Link>
-      <Link href="/qright" style={{ color: link, fontWeight: 600 }}>
-        QRight
-      </Link>
-      <Link href="/qsign" style={{ color: link, fontWeight: 600 }}>
-        QSign
-      </Link>
-      <Link href="/bureau" style={{ color: link, fontWeight: 600 }}>
-        Bureau
-      </Link>
-      <span style={{ color: sep }} aria-hidden>
-        |
-      </span>
-      <Link href="/awards/music" style={{ color: link, fontWeight: 600 }}>
-        Премия · музыка
-      </Link>
-      <Link href="/awards/film" style={{ color: link, fontWeight: 600 }}>
-        Премия · кино
-      </Link>
-      <Link href="/bank" style={{ color: link, fontWeight: 600 }}>
-        Bank
-      </Link>
+      <span style={{ color: sep }} aria-hidden>|</span>
+      <Link href="/demo" style={{ color: demoLink, fontWeight: 800 }}>Demo</Link>
+      <Link href="/demo/deep" style={{ color: link, fontWeight: 650 }}>Deep dive</Link>
+      <span style={{ color: sep }} aria-hidden>|</span>
+      <Link href="/auth" style={{ color: link, fontWeight: 600 }}>Auth</Link>
+      <Link href="/qright" style={{ color: link, fontWeight: 600 }}>QRight</Link>
+      <Link href="/qsign" style={{ color: link, fontWeight: 600 }}>QSign</Link>
+      <Link href="/bureau" style={{ color: link, fontWeight: 600 }}>Bureau</Link>
+      <span style={{ color: sep }} aria-hidden>|</span>
+      <Link href="/awards/music" style={{ color: link, fontWeight: 600 }}>Music Awards</Link>
+      <Link href="/awards/film" style={{ color: link, fontWeight: 600 }}>Film Awards</Link>
+      <Link href="/bank" style={{ color: link, fontWeight: 600 }}>Bank</Link>
+      <Link href="/cyberchess" style={{ color: link, fontWeight: 600 }}>Chess</Link>
       {!hidePlanet ? (
         <>
-          <span style={{ color: sep }} aria-hidden>
-            |
-          </span>
-          <Link href="/planet" style={{ color: link, fontWeight: 600 }}>
-            Planet
-          </Link>
+          <span style={{ color: sep }} aria-hidden>|</span>
+          <Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link>
         </>
       ) : null}
     </nav>

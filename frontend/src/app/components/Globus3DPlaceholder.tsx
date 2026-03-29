@@ -23,7 +23,7 @@ export default function Globus3DPlaceholder() {
         padding: 24,
       }}
     >
-      Загрузка 3D Globus…
+      Loading 3D Globus...
     </div>
   );
 }

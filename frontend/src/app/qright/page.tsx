@@ -96,9 +96,9 @@ export default function QRightPage() {
       });
       if (res.status === 401) {
         setListMineOnly(false);
-        throw new Error("Войдите в Auth, чтобы видеть «только мои» записи");
+        throw new Error("Sign in via Auth to see your records only");
       }
-      if (!res.ok) throw new Error("Не удалось загрузить реестр QRight");
+      if (!res.ok) throw new Error("Failed to load QRight registry");
       const data = await res.json();
       setItems(data.items || []);
     } catch (e) {

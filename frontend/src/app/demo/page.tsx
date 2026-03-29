@@ -22,12 +22,12 @@ type ApiProject = {
 };
 
 const marqueePhrases = [
-  "AEVION · единая платформа доверия",
-  "27 продуктовых узлов · один контур",
+  "AEVION · unified trust platform",
+  "27 product nodes · one pipeline",
   "QRight · QSign · Bureau · Planet",
-  "Auth · реестр · подпись · compliance",
-  "Globus · карта экосистемы",
-  "От идеи к сертификату — в одной системе",
+  "Auth · registry · signature · compliance",
+  "Globus · ecosystem map",
+  "From idea to certificate — in one system",
 ];
 
 export default function DemoShowcasePage() {
@@ -44,7 +44,7 @@ export default function DemoShowcasePage() {
         if (!cancelled) setProjects(data.items || []);
       } catch {
         if (!cancelled) {
-          setLoadErr("Каталог подгружается из API; ниже — полный заранее подготовленный нарратив по всем узлам.");
+          setLoadErr("Catalog loading from API; below is a pre-built narrative for all nodes.");
           setProjects([]);
         }
       }
@@ -104,7 +104,7 @@ export default function DemoShowcasePage() {
               marginBottom: 16,
             }}
           >
-            Живая демонстрация · только прокрутка
+            Live demo · just scroll
           </p>
           <h1
             style={{
@@ -119,10 +119,10 @@ export default function DemoShowcasePage() {
               backgroundClip: "text",
             }}
           >
-            Экосистема AEVION
+            AEVION Ecosystem
             <br />
             <span style={{ fontSize: "0.55em", fontWeight: 800, letterSpacing: "-0.02em" }}>
-              доверие, IP, ИИ и финансы на одной карте
+              trust, IP, AI and finance on one map
             </span>
           </h1>
           <p
@@ -134,8 +134,8 @@ export default function DemoShowcasePage() {
               margin: 0,
             }}
           >
-            Ниже — развёрнуто: зачем платформа целиком инвестору и рынку, зачем каждый узел, и как сквозной слой
-            Planet связывает compliance с реестром и подписью. Никаких обязательных кнопок: просто листайте.
+            Below in detail: why the entire platform matters for investors, why each node exists, and how the cross-cutting
+            Planet layer connects compliance with registry and signatures. No mandatory buttons: just scroll.
           </p>
 
           <div style={{ marginTop: 28 }} className="demo-marquee-wrap">
@@ -188,7 +188,7 @@ export default function DemoShowcasePage() {
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.15em", color: "#6ee7b7", marginBottom: 8 }}>
-            СКВОЗНОЙ СЛОЙ
+            CROSS-CUTTING LAYER
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 8px", color: "#fff" }}>
             {planetLayer.code} — {planetLayer.name}
@@ -213,7 +213,7 @@ export default function DemoShowcasePage() {
             textTransform: "uppercase",
           }}
         >
-          27 продуктовых узлов — выгоды по каждому
+          27 product nodes — benefits for each
         </h2>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -266,7 +266,7 @@ export default function DemoShowcasePage() {
                         lineHeight: 1.55,
                       }}
                     >
-                      <strong style={{ color: "#93c5fd" }}>Для инвестора: </strong>
+                      <strong style={{ color: "#93c5fd" }}>For investors: </strong>
                       {narrative.investorAngle}
                     </div>
                   ) : null}
@@ -284,9 +284,9 @@ export default function DemoShowcasePage() {
           }}
         >
           <p style={{ color: "#94a3b8", fontSize: 15, lineHeight: 1.6, marginBottom: 20 }}>
-            Это тот же продукт, что на главной: Globus, реестр, подпись, бюро и Planet — в рабочем MVP.
+            This is the same product as on the homepage: Globus, registry, signatures, bureau and Planet — in a working MVP.
             <br />
-            Дальше — углубление метрик, интеграций и go-to-market по выбранным вертикалям.
+            Next steps: deeper metrics, integrations and go-to-market for selected verticals.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
             <Link
@@ -303,7 +303,7 @@ export default function DemoShowcasePage() {
                 fontSize: 16,
               }}
             >
-              Углублённая демонстрация →
+              Deep dive demo →
             </Link>
             <Link
               href="/"
@@ -319,7 +319,7 @@ export default function DemoShowcasePage() {
                 boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
               }}
             >
-              На главную — карта и интерфейсы
+              Home — map and interfaces
             </Link>
           </div>
         </footer>

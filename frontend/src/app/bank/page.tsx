@@ -60,11 +60,11 @@ const typeColor: Record<string, { bg: string; fg: string; border: string }> = {
 };
 
 const typeLabel: Record<string, string> = {
-  topup: "Пополнение",
-  transfer: "Перевод",
-  royalty: "Роялти",
-  award: "Награда",
-  withdrawal: "Вывод",
+  topup: "Top-up",
+  transfer: "Transfer",
+  royalty: "Royalty",
+  award: "Award",
+  withdrawal: "Withdrawal",
 };
 
 function formatAmount(n: number) {
@@ -121,7 +121,7 @@ export default function AevionBankPage() {
     }
     setSending(true);
     await new Promise((r) => setTimeout(r, 1200));
-    showToast(`Перевод ${amount.toFixed(2)} AEC → ${sendTo} отправлен`, "success");
+    showToast(`Transfer ${amount.toFixed(2)} AEC → ${sendTo} sent`, "success");
     setSendTo("");
     setSendAmount("");
     setSending(false);
@@ -167,8 +167,8 @@ export default function AevionBankPage() {
               Ecosystem digital bank
             </h1>
             <p style={{ margin: 0, fontSize: 15, opacity: 0.88, lineHeight: 1.6, maxWidth: 600 }}>
-              Кошелёк, переводы между авторами, automatic royalties при использовании контента, 
-              выплаты за победы в Awards. Каждая транзакция привязана к Trust Graph.
+              Wallet, P2P transfers between creators, automatic royalties for content usage, 
+              Awards payouts. Every transaction linked to Trust Graph.
             </p>
           </div>
 
@@ -315,7 +315,7 @@ export default function AevionBankPage() {
           }}
         >
           <div style={{ fontWeight: 900, fontSize: 16, color: "#4c1d95", marginBottom: 10 }}>
-            Как работают automatic royalties
+            How automatic royalties work
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
             {[
@@ -426,8 +426,8 @@ export default function AevionBankPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             {[
               { title: "Quantum Shield", desc: "Ed25519 + Shamir Secret Sharing. Every transaction signed with three shards." },
-              { title: "Trust Graph", desc: "Репутация кошелька = Verification history. Fraud visible before transaction." },
-              { title: "Merkle Audit", desc: "Каждый блок Transactions fixed in Merkle tree. Impossible to forge history." },
+              { title: "Trust Graph", desc: "Wallet reputation = verification history. Fraud visible before transaction." },
+              { title: "Merkle Audit", desc: "Every transaction block fixed in Merkle tree. Impossible to forge history." },
               { title: "Planet Compliance", desc: "Automatic AML/KYC check via Planet smart contracts." },
             ].map((s) => (
               <div

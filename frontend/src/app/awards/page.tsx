@@ -3,12 +3,12 @@ import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 
 export const metadata: Metadata = {
-  title: "AEVION Awards — музыка и кино",
+  title: "AEVION Awards — music and film",
   description:
-    "Единый хаб премий AEVION: музыка и кино на слое Planet, с прозрачными метриками заявок и сертификации.",
+    "AEVION Awards hub: music and film on the Planet layer, with transparent submission and certification metrics.",
   openGraph: {
     title: "AEVION Awards",
-    description: "Музыкальная и кинопремия AEVION на инфраструктуре Planet.",
+    description: "AEVION music and film awards on Planet infrastructure.",
   },
 };
 
@@ -80,8 +80,8 @@ export default async function AwardsHomePage() {
             AEVION Awards: music and film
           </h1>
           <p style={{ margin: 0, lineHeight: 1.65, opacity: 0.92 }}>
-            Две продуктовые витрины на одном слое Planet: подача работ, сертификация compliance и прозрачная
-            связь с кворумом участников Y.
+            Two product showcases on Planet layer: work submission, compliance certification
+            and transparent connection with participant quorum Y.
           </p>
 
           <div

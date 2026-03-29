@@ -60,9 +60,9 @@ export function PlanetPulse() {
           lineHeight: 1.5,
         }}
       >
-        <span style={{ fontWeight: 800, color: "#92400e" }}>Planet · метрики</span>
+        <span style={{ fontWeight: 800, color: "#92400e" }}>Planet · metrics</span>
         {" — "}
-        нет ответа от API (запустите backend / проверьте прокси).{" "}
+        no API response (start backend / check proxy).{" "}
         <Link href="/planet" style={{ fontWeight: 700, color: "#0f172a" }}>
           Planet →
         </Link>
@@ -82,23 +82,23 @@ export function PlanetPulse() {
       }}
     >
       <div style={{ fontWeight: 900, fontSize: 14, color: "#0f172a", marginBottom: 8 }}>
-        Planet · доверие и голоса
+        Planet · trust and votes
       </div>
       {y === null ? (
-        <div style={{ fontSize: 13, color: "#64748b" }}>Загрузка метрик…</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>Loading metrics...</div>
       ) : (
         <div style={{ fontSize: 14, color: "#334155", marginBottom: recent.length ? 12 : 0 }}>
-          Участников с символом (<b>Y</b>): <b>{y}</b>
+          Participants with symbol (<b>Y</b>): <b>{y}</b>
           {" · "}
-          Голосовавших: <b>{voters}</b>
+          Voters: <b>{voters}</b>
           {" · "}
-          Сертифицированных версий: <b>{certified}</b>
+          Certified versions: <b>{certified}</b>
         </div>
       )}
       {recent.length > 0 ? (
         <div>
           <div style={{ fontSize: 12, fontWeight: 800, color: "#64748b", marginBottom: 6 }}>
-            Недавно в ленте (сертификат есть)
+            Recent in feed (certified)
           </div>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#475569" }}>
             {recent.map((row) => (
@@ -126,10 +126,10 @@ export function PlanetPulse() {
           Planet lab →
         </Link>
         <Link href="/awards/music" style={{ fontSize: 13, fontWeight: 700, color: "#6d28d9" }}>
-          Премия музыка →
+          Music Awards →
         </Link>
         <Link href="/awards/film" style={{ fontSize: 13, fontWeight: 700, color: "#b45309" }}>
-          Премия кино →
+          Film Awards →
         </Link>
       </div>
     </div>

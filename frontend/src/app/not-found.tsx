@@ -20,7 +20,7 @@ export default function NotFound() {
           404
         </h1>
         <p style={{ color: "#475569", lineHeight: 1.6, margin: "0 0 24px", fontSize: 16 }}>
-          Страница не найдена. Узел мог быть переименован или ссылка устарела.
+          Page not found. The node may have been renamed or the link is outdated.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <Link
@@ -47,7 +47,7 @@ export default function NotFound() {
               textDecoration: "none",
             }}
           >
-            Демо экосистемы
+            Ecosystem demo
           </Link>
         </div>
       </div>

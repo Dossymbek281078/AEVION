@@ -259,7 +259,7 @@ export default function HomePage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Продуктовый MVP · готово к демонстрации
+            Product MVP · ready for demo
           </div>
           <h1
             style={{
@@ -271,7 +271,7 @@ export default function HomePage() {
               letterSpacing: "-0.03em",
             }}
           >
-            Инфраструктура доверия для цифровых активов и интеллектуальной собственности
+            Trust infrastructure for digital assets and intellectual property
           </h1>
           <p
             style={{
@@ -282,22 +282,21 @@ export default function HomePage() {
               margin: 0,
             }}
           >
-            Единый контур для инвестиционной и партнёрской оценки: идентичность, реестр объектов,
-            криптоподпись, патентное бюро и слой compliance — на интерактивной карте экосистемы с{" "}
-            <strong>27 продуктовыми узлами</strong> и открытыми API.
+            A unified platform for identity, IP registration, cryptographic signatures, patent bureau, and compliance — on an interactive ecosystem map with{" "}
+            <strong>27 product nodes</strong>, digital banking, chess, and open APIs.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 28 }}>
             <Link href="/auth" style={btnPrimary}>
-              Начать с идентичности (Auth)
+              Start with identity (Auth)
             </Link>
             <Link href="/qright" style={btnGhost}>
-              Реестр QRight
+              QRight Registry
             </Link>
             <Link href="/awards/music" style={btnGhost}>
-              Премия — музыка
+              Music Awards
             </Link>
             <Link href="/awards/film" style={btnGhost}>
-              Премия — кино
+              Film Awards
             </Link>
             <Link
               href="/demo"
@@ -307,7 +306,7 @@ export default function HomePage() {
                 background: "rgba(255,255,255,0.18)",
               }}
             >
-              Полная демонстрация →
+              Full demo →
             </Link>
           </div>
 
@@ -321,12 +320,12 @@ export default function HomePage() {
             }}
           >
             {[
-              { k: "Узлов на карте", v: loading ? "…" : String(projects.length) },
-              { k: "Записей QRight", v: loading ? "…" : String(qrightObjects.length) },
-              { k: "Planet участников", v: planetStats ? String(planetStats.eligibleParticipants) : "…" },
-              { k: "Сертифицировано", v: planetStats ? String(planetStats.certifiedArtifactVersions) : "…" },
-              { k: "Заявок Planet", v: planetStats ? String(planetStats.submissions) : "…" },
-              { k: "Стек", v: "Next + Node + PG" },
+              { k: "Nodes on map", v: loading ? "…" : String(projects.length) },
+              { k: "QRight records", v: loading ? "…" : String(qrightObjects.length) },
+              { k: "Planet participants", v: planetStats ? String(planetStats.eligibleParticipants) : "…" },
+              { k: "Certified", v: planetStats ? String(planetStats.certifiedArtifactVersions) : "…" },
+              { k: "Planet submissions", v: planetStats ? String(planetStats.submissions) : "…" },
+              { k: "Stack", v: "Next + Node + PG" },
             ].map((row) => (
               <div
                 key={row.k}
@@ -360,32 +359,42 @@ export default function HomePage() {
           {[
             {
               t: "QRight",
-              d: "Реестр объектов с хешем содержимого и привязкой к владельцу и локации.",
+              d: "IP registry with content hash, author binding, and geolocation tracking.",
               href: "/qright",
             },
             {
               t: "QSign",
-              d: "Целостность данных через HMAC — тот же формат payload, что и в бюро.",
+              d: "Cryptographic data integrity via HMAC — same payload format as Bureau.",
               href: "/qsign",
             },
             {
               t: "IP Bureau",
-              d: "Подпись и проверка карточек реестра — готовность к сертификату.",
+              d: "Sign and verify registry records — certificate-ready compliance.",
               href: "/bureau",
             },
             {
               t: "Planet",
-              d: "Compliance, evidence root и прозрачность для регуляторного рассказа.",
+              d: "Compliance layer, evidence root, and transparency for regulatory reporting.",
               href: "/planet",
             },
             {
-              t: "Премия — музыка",
-              d: "Витрина AEVION Music Awards: подача в Planet (music) и голоса участников.",
+              t: "AEVION Bank",
+              d: "Digital wallet, P2P transfers, auto-royalties, and AEC credits economy.",
+              href: "/bank",
+            },
+            {
+              t: "CyberChess",
+              d: "Next-gen chess platform — play AI, solve puzzles, earn ratings and titles.",
+              href: "/cyberchess",
+            },
+            {
+              t: "Music Awards",
+              d: "AEVION Music Awards showcase — submit via Planet and earn community votes.",
               href: "/awards/music",
             },
             {
-              t: "Премия — кино",
-              d: "Витрина AEVION Film Awards: подача в Planet (movie) и голоса участников.",
+              t: "Film Awards",
+              d: "AEVION Film Awards showcase — submit via Planet and earn community votes.",
               href: "/awards/film",
             },
           ].map((c) => (

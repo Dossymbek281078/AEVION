@@ -113,7 +113,7 @@ export default function HomePage() {
           setProjects(projectsData.items || []);
         } else {
           setProjects([]);
-          setProjectsError("Не удалось загрузить узлы Globus (/api/globus/projects).");
+          setProjectsError("Failed to load Globus nodes (/api/globus/projects).");
         }
 
         if (qr.ok) {
@@ -121,7 +121,7 @@ export default function HomePage() {
           setQRightObjects(objectsData.items || []);
         } else {
           setQRightObjects([]);
-          setQrightError("Маркеры QRight на глобусе недоступны (/api/qright/objects).");
+          setQrightError("QRight markers unavailable (/api/qright/objects).");
         }
 
         if (ps && ps.ok) {
@@ -139,9 +139,9 @@ export default function HomePage() {
         setProjects([]);
         setQRightObjects([]);
         setProjectsError(
-          "Сеть: backend недоступен. Запустите API на порту 4001 — фронт по умолчанию проксирует запросы через /api-backend.",
+          "Network: backend unavailable. Start API on port 4001 — frontend proxies requests via /api-backend.",
         );
-        setQrightError("Те же условия для QRight.");
+        setQrightError("Same conditions for QRight.");
       } finally {
         setLoading(false);
       }
@@ -174,8 +174,8 @@ export default function HomePage() {
       {
         id: "aevion-awards-music",
         code: "AWM",
-        name: "Премия — музыка",
-        description: "AEVION Music Awards (Planet, тип music)",
+        name: "Music Awards",
+        description: "AEVION Music Awards (Planet, type music)",
         kind: "product",
         status: "in_progress",
         priority: 2,
@@ -184,14 +184,14 @@ export default function HomePage() {
           tier: "mvp_live",
           primaryPath: "/awards/music",
           apiHints: [],
-          hint: "Витрина премии",
+          hint: "Awards showcase",
         },
       },
       {
         id: "aevion-awards-film",
         code: "AWF",
-        name: "Премия — кино",
-        description: "AEVION Film Awards (Planet, тип movie)",
+        name: "Film Awards",
+        description: "AEVION Film Awards (Planet, type movie)",
         kind: "product",
         status: "in_progress",
         priority: 2,
@@ -200,7 +200,7 @@ export default function HomePage() {
           tier: "mvp_live",
           primaryPath: "/awards/film",
           apiHints: [],
-          hint: "Витрина премии",
+          hint: "Awards showcase",
         },
       },
     ];
@@ -444,10 +444,10 @@ export default function HomePage() {
               }}
             >
               {[
-                { label: "Участников (Y)", value: planetStats.eligibleParticipants },
-                { label: "Голосовавших", value: planetStats.distinctVotersAllTime },
-                { label: "Заявок", value: planetStats.submissions },
-                { label: "Сертификатов", value: planetStats.certifiedArtifactVersions },
+                { label: "Participants (Y)", value: planetStats.eligibleParticipants },
+                { label: "Voters", value: planetStats.distinctVotersAllTime },
+                { label: "Submissions", value: planetStats.submissions },
+                { label: "Certificates", value: planetStats.certifiedArtifactVersions },
               ].map((m) => (
                 <div
                   key={m.label}
@@ -490,7 +490,7 @@ export default function HomePage() {
                   textDecoration: "none",
                 }}
               >
-                Премии Awards →
+                Awards hub →
               </Link>
               <Link
                 href="/awards/music"
@@ -504,7 +504,7 @@ export default function HomePage() {
                   textDecoration: "none",
                 }}
               >
-                🎵 Музыка
+                Music
               </Link>
               <Link
                 href="/awards/film"
@@ -518,7 +518,7 @@ export default function HomePage() {
                   textDecoration: "none",
                 }}
               >
-                🎬 Кино
+                Film
               </Link>
             </div>
           </section>
@@ -535,7 +535,7 @@ export default function HomePage() {
             }}
           >
             <div style={{ fontWeight: 900, fontSize: 15, color: "#0f172a", marginBottom: 12 }}>
-              Недавние артефакты Planet
+              Recent Planet artifacts
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               {recentArtifacts.map((a) => (
@@ -558,7 +558,7 @@ export default function HomePage() {
                     {a.artifactType || "—"}
                   </span>
                   <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", flex: 1 }}>
-                    {a.submissionTitle || "Без названия"}
+                    {a.submissionTitle || "Untitled"}
                   </span>
                   {a.voteCount != null && a.voteCount > 0 ? (
                     <span style={{ fontSize: 12, color: "#64748b" }}>
@@ -581,7 +581,7 @@ export default function HomePage() {
                 textDecoration: "none",
               }}
             >
-              Все артефакты в Planet →
+              All Planet artifacts →
             </Link>
           </section>
         ) : null}
@@ -600,10 +600,10 @@ export default function HomePage() {
               lineHeight: 1.5,
             }}
           >
-            <b>Список узлов:</b> {projectsError}
+            <b>Node list:</b> {projectsError}
             <div style={{ marginTop: 6, fontSize: 13, color: "#722" }}>
-              Глобус справа всё равно отображается. Запустите backend на 4001; при необходимости задайте{" "}
-              <code>BACKEND_PROXY_TARGET</code> в сборке и <code>NEXT_PUBLIC_API_BASE_URL</code> для прямого URL.
+              Globus still renders. Start backend on 4001; if needed set{" "}
+              <code>BACKEND_PROXY_TARGET</code> in build and <code>NEXT_PUBLIC_API_BASE_URL</code> for direct URL.
             </div>
           </div>
         ) : null}
@@ -619,10 +619,10 @@ export default function HomePage() {
           }}
         >
           <div style={{ fontWeight: 800, marginBottom: 8, color: "#111" }}>
-            Демо-контур «волна 1»
+            Demo pipeline — Wave 1
           </div>
           <div style={{ fontSize: 14, color: "#444", marginBottom: 10 }}>
-            Auth → QRight → QSign → Bureau. Слева каталог узлов, справа глобус (липкий столбец).
+            Auth → QRight → QSign → Bureau. Left: node catalog, right: Globus (sticky column).
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {[
@@ -652,8 +652,8 @@ export default function HomePage() {
         </div>
 
         <div style={{ marginBottom: 18, color: "#475569", fontSize: 15 }}>
-          Интерактивный 3D Globus: узлы кликабельны. Любой из модулей открывает тот же продуктовый контур на
-          странице узла.
+          Interactive 3D Globus: nodes are clickable. Any module opens the same product pipeline on
+          the node page.
         </div>
 
         <div
@@ -667,10 +667,10 @@ export default function HomePage() {
         >
           <section style={{ flex: "1 1 420px", minWidth: 0, order: 1 }}>
             <div style={{ fontSize: 14, color: "#64748b", marginBottom: 12 }}>
-              Каталог экосистемы:{" "}
+              Ecosystem catalog:{" "}
               <b style={{ color: "#0f172a" }}>{loading ? "…" : projects.length}</b>
               {loading ? (
-                <span style={{ marginLeft: 8, color: "#94a3b8" }}>загрузка…</span>
+                <span style={{ marginLeft: 8, color: "#94a3b8" }}>loading...</span>
               ) : null}
             </div>
 
@@ -786,7 +786,7 @@ export default function HomePage() {
             </div>
 
             <div style={{ marginTop: 14, color: "#64748b", lineHeight: 1.5, fontSize: 13 }}>
-              Данные из API; поле <code>runtime</code> — для мониторинга и интеграций.
+              Data from API; <code>runtime</code> field is for monitoring and integrations.
             </div>
 
             <div
@@ -887,9 +887,9 @@ export default function HomePage() {
             )}
 
             <div style={{ marginTop: 12, color: "#64748b", lineHeight: 1.6, fontSize: 14 }}>
-              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>Globus · справа</div>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>Globus · right panel</div>
               <div>
-                Локация:{" "}
+                Location:{" "}
                 <b style={{ color: "#0f172a" }}>
                   {(selectedGeo.city || "—") + (selectedGeo.country ? `, ${selectedGeo.country}` : "")}
                 </b>
@@ -917,7 +917,7 @@ export default function HomePage() {
                   fontSize: 14,
                 }}
               >
-                Создать объект в QRight здесь
+                Register object in QRight here
               </button>
             </div>
           </section>

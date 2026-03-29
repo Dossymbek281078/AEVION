@@ -28,11 +28,11 @@ function ProjectFetchFailed({ id, status }: { id: string; status?: number }) {
     <main>
       <ProductPageShell maxWidth={980}>
         <Wave1Nav />
-        <h1 style={{ fontSize: 24, marginTop: 8 }}>Карточка узла временно недоступна</h1>
+        <h1 style={{ fontSize: 24, marginTop: 8 }}>Node card temporarily unavailable</h1>
         <p style={{ color: "#555", lineHeight: 1.6, maxWidth: 560 }}>
-          Не удалось получить данные модуля из API Globus
-          {status != null ? ` (HTTP ${status})` : ""}. Убедитесь, что backend запущен (порт 4001), или
-          откройте главную — список узлов там подгружается тем же контуром.
+          Failed to get module data from Globus API
+          {status != null ? ` (HTTP ${status})` : ""}. Make sure backend is running (port 4001), andли
+          open the home page — node list loads via the same pipeline.
         </p>
         <p style={{ fontSize: 13, color: "#777" }}>
           id: <code>{id}</code>
@@ -50,7 +50,7 @@ function ProjectFetchFailed({ id, status }: { id: string; status?: number }) {
             fontWeight: 650,
           }}
         >
-          На главную Globus
+          Back to Globus
         </Link>
       </ProductPageShell>
     </main>
@@ -217,8 +217,8 @@ export default async function ProjectByIdPage({
             </Link>
           ) : (
             <div style={{ color: "#666", fontSize: 13, maxWidth: 520, lineHeight: 1.6 }}>
-              Отдельная страница MVP для этого модуля ещё в работе — ниже конвейер AEVION даёт уже
-              осмысленные шаги (идентичность → реестр → подпись → бюро).
+              A dedicated MVP page for this module is in progress — the AEVION pipeline below provides
+              meaningful steps (identity → registry → signature → bureau).
             </div>
           )}
 
@@ -234,7 +234,7 @@ export default async function ProjectByIdPage({
               background: "rgba(0,0,0,0.03)",
             }}
           >
-            Создать карточку в QRight на этой локации
+            Create a QRight record at this location
           </Link>
         </div>
 
@@ -248,7 +248,7 @@ export default async function ProjectByIdPage({
           }}
         >
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10, color: "#024" }}>
-            Ускорение: одинаковый осмысленный контур для всех 27 модулей
+            Acceleration: same meaningful pipeline for all 27 modules
           </div>
           <ol style={{ margin: 0, paddingLeft: 18, color: "#333", fontSize: 13, lineHeight: 1.65 }}>
             <li style={{ marginBottom: 8 }}>
@@ -256,28 +256,28 @@ export default async function ProjectByIdPage({
                 Auth
               </Link>
               {" — "}
-              закрепить владельца для QRight и будущих реестров.
+              set owner for QRight and future registries.
             </li>
             <li style={{ marginBottom: 8 }}>
               <Link href={qrightPrefill} style={{ fontWeight: 650, color: "#024" }}>
                 QRight
               </Link>
               {" — "}
-              карточка продукта/идеи с привязкой к локации на Globus.
+              product/idea card linked to Globus location.
             </li>
             <li style={{ marginBottom: 8 }}>
               <Link href={qsignPrefill} style={{ fontWeight: 650, color: "#024" }}>
                 QSign
               </Link>
               {" — "}
-              заготовленный JSON модуля; подпись HMAC одним кликом.
+              pre-built module JSON; HMAC signature in one click.
             </li>
             <li>
               <Link href={bureauPrefill} style={{ fontWeight: 650, color: "#024" }}>
                 IP Bureau
               </Link>
               {" — "}
-              подписать объект реестра с учётом локации (deep link).
+              sign registry object with location context (deep link).
             </li>
           </ol>
         </div>
@@ -298,8 +298,8 @@ export default async function ProjectByIdPage({
             </div>
           </div>
           <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, marginBottom: 12 }}>
-            Подайте артефакт этого модуля в Planet — получите сертификат compliance,
-            публичную карточку и возможность голосования участниками экосистемы.
+            Submit this module artifact to Planet — get a compliance certificate,
+            public card and community voting from ecosystem participants.
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link
@@ -315,7 +315,7 @@ export default async function ProjectByIdPage({
                 textDecoration: "none",
               }}
             >
-              Подать артефакт в Planet →
+              Submit artifact to Planet →
             </Link>
             <Link
               href="/planet"
@@ -330,7 +330,7 @@ export default async function ProjectByIdPage({
                 textDecoration: "none",
               }}
             >
-              Открыть Planet lab
+              Open Planet lab
             </Link>
             <Link
               href="/awards"
@@ -345,7 +345,7 @@ export default async function ProjectByIdPage({
                 textDecoration: "none",
               }}
             >
-              Премии AEVION
+              AEVION Awards
             </Link>
           </div>
         </div>

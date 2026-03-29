@@ -196,7 +196,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
     params.set("productKey", isMusic ? "aevion_award_music_v1" : "aevion_award_film_v1");
     params.set(
       "title",
-      isMusic ? "Заявка на музыкальную премию AEVION" : "Заявка на кинопремию AEVION"
+      isMusic ? "AEVION Music Awards submission" : "AEVION Film Awards submission"
     );
     return `/planet?${params.toString()}`;
   })();
@@ -205,10 +205,10 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
   const oppositeAwardsHref = isMusic ? "/awards/film" : "/awards/music";
 
   const title = isMusic ? "AEVION Music Awards" : "AEVION Film Awards";
-  const tag = isMusic ? "Как Грэмми — для ИИ и цифровой музыки" : "Как Оскар — для ИИ и цифрового кино";
+  const tag = isMusic ? "Like the Grammys — for AI and digital music" : "Like the Oscars — for AI and digital cinema";
   const body = isMusic
-    ? "Отдельная витрина премии для музыкальных работ: подача через Planet (тип music), сертификат compliance и голосование участников экосистемы."
-    : "Отдельная витрина премии для кино и видео: подача через Planet (тип movie), сертификат compliance и голосование участников экосистемы.";
+    ? "Отдельная витрина премии для музыкальных работ: подача через Planet (тип music), сертификат compliance и votesание участников экосистемы."
+    : "Отдельная витрина премии для кино и видео: подача через Planet (тип movie), сертификат compliance и votesание участников экосистемы.";
 
   return (
     <main style={{ padding: 0, minHeight: "100vh", background: "#0f172a" }}>
@@ -235,7 +235,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               marginBottom: 16,
             }}
           >
-            Премия Planet · MVP
+            Planet Awards · MVP
           </div>
           <h1
             style={{
@@ -263,19 +263,19 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
             }}
           >
             {statsErr ? (
-              <span style={{ opacity: 0.85 }}>Статистика Planet недоступна ({statsErr}).</span>
+              <span style={{ opacity: 0.85 }}>Planet stats unavailable ({statsErr}).</span>
             ) : stats ? (
               <>
-                <div style={{ fontWeight: 800, marginBottom: 8, color: accent }}>Экосистема Planet (live)</div>
+                <div style={{ fontWeight: 800, marginBottom: 8, color: accent }}>Planet Ecosystem (live)</div>
                 <div>
-                  Участников с активным символом (кворум <strong>Y</strong>):{" "}
+                  Participants with active symbol (quorum <strong>Y</strong>):{" "}
                   <strong style={{ fontSize: 18 }}>{stats.eligibleParticipants}</strong>
                 </div>
                 <div style={{ marginTop: 6, opacity: 0.9 }}>
-                  Уникальных голосовавших (всё время): <strong>{stats.distinctVotersAllTime}</strong>
+                  Unique voters (all time): <strong>{stats.distinctVotersAllTime}</strong>
                 </div>
                 <div style={{ marginTop: 6, opacity: 0.85, fontSize: 13 }}>
-                  Сертифицированных версий артефактов (вся Planet): {stats.certifiedArtifactVersions}
+                  Certified artifact versions (all Planet): {stats.certifiedArtifactVersions}
                 </div>
                 <div
                   style={{
@@ -293,7 +293,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                       padding: "8px 10px",
                     }}
                   >
-                    <div style={{ fontSize: 11, opacity: 0.75 }}>Трек: заявок</div>
+                    <div style={{ fontSize: 11, opacity: 0.75 }}>Track: submissions</div>
                     <div style={{ marginTop: 2, fontWeight: 900, fontSize: 18 }}>{stats.awardSubmissions}</div>
                   </div>
                   <div
@@ -304,7 +304,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                       padding: "8px 10px",
                     }}
                   >
-                    <div style={{ fontSize: 11, opacity: 0.75 }}>Трек: сертифицировано</div>
+                    <div style={{ fontSize: 11, opacity: 0.75 }}>Track: certified</div>
                     <div style={{ marginTop: 2, fontWeight: 900, fontSize: 18 }}>{stats.awardCertified}</div>
                   </div>
                 </div>
@@ -318,13 +318,13 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                   }}
                 >
                   <div style={{ fontWeight: 800, marginBottom: 6, color: accent }}>
-                    Трек этой премии (productKey prefix)
+                    This award track (productKey prefix)
                   </div>
-                  Заявок: <strong>{stats.awardSubmissions}</strong>
+                  Submissions: <strong>{stats.awardSubmissions}</strong>
                   {" · "}
-                  Сертифицировано: <strong>{stats.awardCertified}</strong>
+                  Certified: <strong>{stats.awardCertified}</strong>
                   <div style={{ marginTop: 4, opacity: 0.8, fontSize: 12 }}>
-                    Фильтр API:{" "}
+                    API filter:{" "}
                     <code style={{ color: "#e2e8f0" }}>
                       ?productKeyPrefix={prefix}
                     </code>
@@ -346,7 +346,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 boxShadow: "0 8px 28px rgba(0,0,0,0.25)",
               }}
             >
-              Подать работу в Planet →
+              Submit work to Planet →
             </Link>
             <Link
               href="/auth"
@@ -357,7 +357,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 border: "1px solid rgba(255,255,255,0.35)",
               }}
             >
-              Войти (нужен токен)
+              Sign in (token required)
             </Link>
             <Link
               href={oppositeAwardsHref}
@@ -368,7 +368,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 border: "1px solid rgba(255,255,255,0.25)",
               }}
             >
-              {isMusic ? "Кинопремия →" : "Музыкальная премия →"}
+              {isMusic ? "Film Awards →" : "Music Awards →"}
             </Link>
             <Link
               href="/awards"
@@ -379,7 +379,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 border: "1px solid rgba(255,255,255,0.25)",
               }}
             >
-              Общий хаб премий →
+              Awards hub →
             </Link>
           </div>
         </div>
@@ -395,7 +395,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
         }}
       >
         <h2 style={{ color: "#f8fafc", fontSize: 17, fontWeight: 800, margin: "0 0 12px" }}>
-          Как подать работу: 3 шага
+          How to submit: 3 steps
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
           <article
@@ -406,10 +406,10 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               padding: "12px 12px 10px",
             }}
           >
-            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Шаг 1</div>
-            <div style={{ marginTop: 4, fontWeight: 800 }}>Войти через Auth</div>
+            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 1</div>
+            <div style={{ marginTop: 4, fontWeight: 800 }}>Sign in via Auth</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
-              Нужен токен участника для отправки артефакта и последующей верификации.
+              You need a participant token to submit artifacts and verify later.
             </p>
           </article>
           <article
@@ -420,7 +420,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               padding: "12px 12px 10px",
             }}
           >
-            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Шаг 2</div>
+            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 2</div>
             <div style={{ marginTop: 4, fontWeight: 800 }}>Отправить в Planet</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
               Выберите тип <code>{artifactType}</code>, укажите продуктовый ключ и пройдите compliance.
@@ -434,7 +434,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               padding: "12px 12px 10px",
             }}
           >
-            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Шаг 3</div>
+            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 3</div>
             <div style={{ marginTop: 4, fontWeight: 800 }}>Проверить публичную карточку</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
               После сертификации артефакт появляется в этой ленте и доступен по публичной ссылке.
@@ -458,11 +458,11 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
         }}
       >
         <h2 style={{ color: "#f8fafc", fontSize: 17, fontWeight: 800, margin: "0 0 8px" }}>
-          Лидерборд и лента (сертифицированные работы трека)
+          Leaderboard и лента (сертифицированные работы трека)
         </h2>
         <p style={{ margin: "0 0 16px", fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>
-          Сортировка и агрегаты голосов из API{" "}
-          <code style={{ color: "#cbd5e1" }}>?sort=rating|votes|created</code>. Покрытие — доля от Y (участники с
+          Сортировка и агрегаты votes из API{" "}
+          <code style={{ color: "#cbd5e1" }}>?sort=rating|votes|created</code>. Coverage — доля от Y (участники с
           активным символом Planet).
         </p>
 
@@ -470,7 +470,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
           {(
             [
               { key: "rating" as const, label: "По среднему баллу" },
-              { key: "votes" as const, label: "По числу голосов" },
+              { key: "votes" as const, label: "По числу votes" },
               { key: "created" as const, label: "Свежие" },
             ] as const
           ).map((opt) => (
@@ -532,7 +532,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                   <th style={{ padding: "10px 12px", fontWeight: 800 }}>Работа</th>
                   <th style={{ padding: "10px 12px", fontWeight: 800 }}>Ср. балл</th>
                   <th style={{ padding: "10px 12px", fontWeight: 800 }}>Голосов</th>
-                  <th style={{ padding: "10px 12px", fontWeight: 800, minWidth: 100 }}>Покрытие</th>
+                  <th style={{ padding: "10px 12px", fontWeight: 800, minWidth: 100 }}>Coverage</th>
                 </tr>
               </thead>
               <tbody>
@@ -572,7 +572,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                             textDecoration: "none",
                           }}
                         >
-                          {row.submissionTitle || "Без названия"}
+                          {row.submissionTitle || "Untitled"}
                         </Link>
                         <div style={{ fontSize: 11, opacity: 0.65, marginTop: 4 }}>
                           v{row.versionNo ?? "?"} ·{" "}
@@ -636,8 +636,8 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
       <section style={{ padding: "32px 24px 48px", maxWidth: 720, margin: "0 auto", color: "#cbd5e1" }}>
         <h2 style={{ color: "#f8fafc", fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Как это связано с Planet</h2>
         <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.7, fontSize: 15 }}>
-          <li>Один backend и один контур голосов для музыки и кино — различаются тип артефакта и витрина.</li>
-          <li>Итоги голосования в перспективе показываются в контексте числа участников Planet (см. AEVION_AWARDS_SPEC).</li>
+          <li>Один backend и один контур votes для музыки и кино — различаются тип артефакта и витрина.</li>
+          <li>Итоги votesания в перспективе показываются в контексте числа участников Planet (см. AEVION_AWARDS_SPEC).</li>
           <li>Бренды премий — собственные AEVION; формулировки «как Грэмми / Оскар» — про подачу, не про чужие ТЗ.</li>
         </ul>
         <p style={{ marginTop: 20, fontSize: 14, opacity: 0.85 }}>

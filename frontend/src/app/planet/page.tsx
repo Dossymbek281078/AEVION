@@ -104,13 +104,13 @@ export default function PlanetCompliancePage() {
   ) => {
     setAwardPreset(preset);
     if (preset === "music") {
-      setTitle(opts?.title || "Заявка на музыкальную премию AEVION");
+      setTitle(opts?.title || "AEVION Music Awards submission");
       setProductKey(opts?.productKey || "aevion_award_music_v1");
       applyMediaTemplate("music");
       return;
     }
     if (preset === "film") {
-      setTitle(opts?.title || "Заявка на кинопремию AEVION");
+      setTitle(opts?.title || "AEVION Film Awards submission");
       setProductKey(opts?.productKey || "aevion_award_film_v1");
       applyMediaTemplate("film");
       return;
@@ -201,7 +201,7 @@ export default function PlanetCompliancePage() {
     };
   }, []);
 
-  /** Deep links: `/planet?type=music`, `/planet?artifactType=movie` (витрины `/awards/*`). */
+  /** Deep links: `/planet?type=music`, `/planet?artifactType=movie` (showcases `/awards/*`). */
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sp = new URLSearchParams(window.location.search);
@@ -276,7 +276,7 @@ export default function PlanetCompliancePage() {
 
       setRes((await r.json()) as PlanetResponse);
     } catch (e: any) {
-      showToast(e?.message || "Ошибка отправки", "error");
+      showToast(e?.message || "Submission error", "error");
     } finally {
       setBusy(false);
     }
@@ -323,7 +323,7 @@ export default function PlanetCompliancePage() {
       }
       setRes((await r.json()) as PlanetResponse);
     } catch (e: any) {
-      showToast(e?.message || "Ошибка пересдачи", "error");
+      showToast(e?.message || "Resubmission error", "error");
     } finally {
       setBusy(false);
     }
@@ -376,8 +376,8 @@ export default function PlanetCompliancePage() {
             color: "#334155",
           }}
         >
-          <strong>Planet</strong>: участников с активным символом (метрика Y) —{" "}
-          <strong>{planetStats.eligibleParticipants}</strong>; уникальных голосовавших —{" "}
+          <strong>Planet</strong>: participants with active symbol (metric Y) —{" "}
+          <strong>{planetStats.eligibleParticipants}</strong>; unique voters —{" "}
           <strong>{planetStats.distinctVotersAllTime}</strong>. API:{" "}
           <code style={{ fontSize: 12 }}>GET {backendOrigin}/api/planet/stats</code>
         </div>
@@ -395,11 +395,11 @@ export default function PlanetCompliancePage() {
             color: "#334155",
           }}
         >
-          <strong>{awardPreset === "music" ? "Музыкальная премия" : "Кинопремия"}</strong> — вы перешли с витрины{" "}
+          <strong>{awardPreset === "music" ? "Music Awards" : "Film Awards"}</strong> — you came from the showcase{" "}
           <Link href={awardPreset === "music" ? "/awards/music" : "/awards/film"} style={{ fontWeight: 800 }}>
             AEVION Awards
           </Link>
-          . Тип артефакта и productKey презаполнены; после сертификации работа участвует в голосовании участников Planet.
+          . Artifact type and productKey are prefilled; after certification the work participates in Planet voting.
         </div>
       ) : null}
 
@@ -413,7 +413,7 @@ export default function PlanetCompliancePage() {
             background: "linear-gradient(135deg, rgba(15,118,110,0.06), rgba(99,102,241,0.05))",
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>Быстрый режим подачи</div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Quick submission mode</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
@@ -466,7 +466,7 @@ export default function PlanetCompliancePage() {
                 fontSize: 13,
               }}
             >
-              Сброс в generic mode
+              Reset to generic mode
             </button>
             <button
               type="button"
@@ -488,7 +488,7 @@ export default function PlanetCompliancePage() {
                 fontSize: 13,
               }}
             >
-              Очистить сохранённый черновик
+              Clear saved draft
             </button>
           </div>
         </div>
@@ -502,7 +502,7 @@ export default function PlanetCompliancePage() {
             background: "rgba(15,23,42,0.02)",
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Номинации для этого типа артефакта</div>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Nominations for this artifact type</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {nominationOptions.map((n) => (
               <span
@@ -562,7 +562,7 @@ export default function PlanetCompliancePage() {
             <div style={{ fontWeight: 800, marginBottom: 6 }}>productKey</div>
             <input value={productKey} onChange={(e) => setProductKey(e.target.value)} style={{ width: "100%", padding: 10 }} />
             <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
-              Рекомендация для трека:{" "}
+              Recommendation for track:{" "}
               <code>
                 {artifactType === "music"
                   ? "aevion_award_music_v1"
@@ -586,19 +586,19 @@ export default function PlanetCompliancePage() {
           {(artifactType === "movie" || artifactType === "music") ? (
             <>
               <label style={{ gridColumn: "1 / span 2" }}>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>mediaFingerprint (hex64 или произвольный id)</div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>mediaFingerprint (hex64 or arbitrary id)</div>
                 <input value={mediaFingerprint} onChange={(e) => setMediaFingerprint(e.target.value)} style={{ width: "100%", padding: 10 }} />
               </label>
               <label>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>artist (опц., для шинглов)</div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>artist (optional, for singles)</div>
                 <input value={mediaArtist} onChange={(e) => setMediaArtist(e.target.value)} style={{ width: "100%", padding: 10 }} />
               </label>
               <label>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>ISRC (опц.)</div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>ISRC (optional)</div>
                 <input value={mediaIsrc} onChange={(e) => setMediaIsrc(e.target.value)} style={{ width: "100%", padding: 10 }} />
               </label>
               <label style={{ gridColumn: "1 / span 2" }}>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>duration (сек, опц.)</div>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>duration (sec, optional)</div>
                 <input
                   value={mediaDurationSec}
                   onChange={(e) => setMediaDurationSec(e.target.value)}
@@ -621,7 +621,7 @@ export default function PlanetCompliancePage() {
                     fontSize: 12,
                   }}
                 >
-                  Подставить рекомендованные media поля
+                  Apply recommended media fields
                 </button>
               </div>
             </>
@@ -700,7 +700,7 @@ export default function PlanetCompliancePage() {
                   href={`/planet/artifact/${res.artifactVersionId}`}
                   style={{ fontWeight: 800, color: "#0a5" }}
                 >
-                  Публичная витрина + голосование →
+                  Public showcase + voting →
                 </Link>
               </div>
             </div>
@@ -715,7 +715,7 @@ export default function PlanetCompliancePage() {
               padding: "10px 12px",
             }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>Следующее действие</div>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>Next action</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <Link
                 href={`/planet/artifact/${res.artifactVersionId}`}
@@ -729,7 +729,7 @@ export default function PlanetCompliancePage() {
                   background: "rgba(15,118,110,0.08)",
                 }}
               >
-                Открыть карточку артефакта
+                Open artifact card
               </Link>
               <Link
                 href={awardsBackHref}
@@ -743,7 +743,7 @@ export default function PlanetCompliancePage() {
                   background: "#fff",
                 }}
               >
-                Вернуться в витрину премии
+                Back to awards showcase
               </Link>
               <button
                 type="button"
@@ -758,7 +758,7 @@ export default function PlanetCompliancePage() {
                   cursor: "pointer",
                 }}
               >
-                Новая заявка (очистить результат)
+                New submission (clear result)
               </button>
             </div>
           </div>

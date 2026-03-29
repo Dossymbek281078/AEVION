@@ -107,16 +107,16 @@ export default function AevionBankPage() {
 
   const handleSend = async () => {
     if (!sendTo.trim() || !sendAmount.trim()) {
-      showToast("Укажите получателя и сумму", "error");
+      showToast("Enter recipient and amount", "error");
       return;
     }
     const amount = parseFloat(sendAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      showToast("Некорректная сумма", "error");
+      showToast("Invalid amount", "error");
       return;
     }
     if (amount > wallet.balance - wallet.frozen) {
-      showToast("Недостаточно доступных средств", "error");
+      showToast("Insufficient available funds", "error");
       return;
     }
     setSending(true);
@@ -164,10 +164,10 @@ export default function AevionBankPage() {
               AEVION Bank · digital finance layer
             </div>
             <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 8px", letterSpacing: "-0.03em" }}>
-              Цифровой банк экосистемы
+              Ecosystem digital bank
             </h1>
             <p style={{ margin: 0, fontSize: 15, opacity: 0.88, lineHeight: 1.6, maxWidth: 600 }}>
-              Кошелёк, переводы между авторами, автоматические роялти при использовании контента, 
+              Кошелёк, переводы между авторами, automatic royalties при использовании контента, 
               выплаты за победы в Awards. Каждая транзакция привязана к Trust Graph.
             </p>
           </div>
@@ -183,10 +183,10 @@ export default function AevionBankPage() {
               borderTop: "1px solid rgba(15,23,42,0.06)",
             }}
           >
-            <StatCard label="Баланс" value={`${wallet.balance.toFixed(2)} AEC`} accent="#0f766e" />
-            <StatCard label="Доступно" value={`${(wallet.balance - wallet.frozen).toFixed(2)} AEC`} />
-            <StatCard label="Заморожено" value={`${wallet.frozen.toFixed(2)} AEC`} accent="#b45309" />
-            <StatCard label="Ожидает роялти" value={`${wallet.pendingRoyalties.toFixed(2)} AEC`} accent="#7c3aed" />
+            <StatCard label="Balance" value={`${wallet.balance.toFixed(2)} AEC`} accent="#0f766e" />
+            <StatCard label="Available" value={`${(wallet.balance - wallet.frozen).toFixed(2)} AEC`} />
+            <StatCard label="Frozen" value={`${wallet.frozen.toFixed(2)} AEC`} accent="#b45309" />
+            <StatCard label="Pending royalties" value={`${wallet.pendingRoyalties.toFixed(2)} AEC`} accent="#7c3aed" />
           </div>
         </div>
 
@@ -204,7 +204,7 @@ export default function AevionBankPage() {
               textDecoration: "none",
             }}
           >
-            Заработать через Planet →
+            Earn via Planet →
           </Link>
           <Link
             href="/awards"
@@ -218,7 +218,7 @@ export default function AevionBankPage() {
               textDecoration: "none",
             }}
           >
-            Awards — премии
+            Awards
           </Link>
           <Link
             href="/qright"
@@ -232,7 +232,7 @@ export default function AevionBankPage() {
               textDecoration: "none",
             }}
           >
-            Зарегистрировать IP
+            Register IP
           </Link>
         </div>
 
@@ -246,14 +246,14 @@ export default function AevionBankPage() {
             background: "#fff",
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Перевод P2P</div>
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>P2P Transfer</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ flex: "1 1 200px" }}>
-              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>Получатель</div>
+              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>Recipient</div>
               <input
                 value={sendTo}
                 onChange={(e) => setSendTo(e.target.value)}
-                placeholder="ID или email автора"
+                placeholder="Creator ID or email"
                 style={{
                   width: "100%",
                   padding: "10px 14px",
@@ -264,7 +264,7 @@ export default function AevionBankPage() {
               />
             </div>
             <div style={{ flex: "0 1 140px" }}>
-              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>Сумма AEC</div>
+              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>Amount AEC</div>
               <input
                 value={sendAmount}
                 onChange={(e) => setSendAmount(e.target.value)}
@@ -296,11 +296,11 @@ export default function AevionBankPage() {
                 whiteSpace: "nowrap" as const,
               }}
             >
-              {sending ? "Отправка..." : "Отправить"}
+              {sending ? "Sending..." : "Send"}
             </button>
           </div>
           <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8" }}>
-            Комиссия: 0.1% · Мгновенный перевод · Привязан к Trust Graph
+            Fee: 0.1% · Instant transfer · Linked to Trust Graph
           </div>
         </section>
 
@@ -315,14 +315,14 @@ export default function AevionBankPage() {
           }}
         >
           <div style={{ fontWeight: 900, fontSize: 16, color: "#4c1d95", marginBottom: 10 }}>
-            Как работают автоматические роялти
+            Как работают automatic royalties
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
             {[
-              { step: "1", title: "Автор создаёт", desc: "Трек, фильм или код регистрируется в QRight + Planet" },
-              { step: "2", title: "Кто-то использует", desc: "Лицензия через маркетплейс или прямое использование" },
-              { step: "3", title: "Роялти начисляются", desc: "AEVION Bank автоматически распределяет % автору" },
-              { step: "4", title: "Мгновенный вывод", desc: "На карту, крипто-кошелёк или траты внутри экосистемы" },
+              { step: "1", title: "Creator makes", desc: "Track, film or code is registered in QRight + Planet" },
+              { step: "2", title: "Someone uses it", desc: "License via marketplace or direct usage" },
+              { step: "3", title: "Royalties credited", desc: "AEVION Bank automatically distributes % to creator" },
+              { step: "4", title: "Instant withdrawal", desc: "To card, crypto wallet or spend within ecosystem" },
             ].map((s) => (
               <div
                 key={s.step}
@@ -351,7 +351,7 @@ export default function AevionBankPage() {
           }}
         >
           <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 14 }}>
-            История транзакций
+            Transaction history
           </div>
           <div style={{ display: "grid", gap: 8 }}>
             {transactions.map((tx) => {
@@ -422,13 +422,13 @@ export default function AevionBankPage() {
             background: "linear-gradient(135deg, rgba(15,23,42,0.03), rgba(15,118,110,0.04))",
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Безопасность AEVION Bank</div>
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>AEVION Bank security</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             {[
-              { title: "Quantum Shield", desc: "Ed25519 + Shamir Secret Sharing. Каждая транзакция подписана тремя шардами." },
-              { title: "Trust Graph", desc: "Репутация кошелька = история верификаций. Мошенничество видно до транзакции." },
-              { title: "Merkle Audit", desc: "Каждый блок транзакций фиксируется в Merkle tree. Невозможно подделать историю." },
-              { title: "Planet Compliance", desc: "Автоматическая проверка AML/KYC через смарт-контракты Planet." },
+              { title: "Quantum Shield", desc: "Ed25519 + Shamir Secret Sharing. Every transaction signed with three shards." },
+              { title: "Trust Graph", desc: "Репутация кошелька = Verification history. Fraud visible before transaction." },
+              { title: "Merkle Audit", desc: "Каждый блок Transactions fixed in Merkle tree. Impossible to forge history." },
+              { title: "Planet Compliance", desc: "Automatic AML/KYC check via Planet smart contracts." },
             ].map((s) => (
               <div
                 key={s.title}

@@ -77,7 +77,7 @@ export default async function AwardsHomePage() {
             AEVION Awards Hub
           </div>
           <h1 style={{ margin: "0 0 10px", fontWeight: 900, letterSpacing: "-0.02em" }}>
-            Премии AEVION: музыка и кино
+            AEVION Awards: music and film
           </h1>
           <p style={{ margin: 0, lineHeight: 1.65, opacity: 0.92 }}>
             Две продуктовые витрины на одном слое Planet: подача работ, сертификация compliance и прозрачная
@@ -94,7 +94,7 @@ export default async function AwardsHomePage() {
               fontSize: 14,
             }}
           >
-            Участников Planet с активным символом (Y): <strong>{y}</strong>
+            Planet participants with active symbol (Y): <strong>{y}</strong>
           </div>
         </div>
 
@@ -109,20 +109,20 @@ export default async function AwardsHomePage() {
           >
             <h2 style={{ margin: "0 0 8px", fontWeight: 900 }}>AEVION Music Awards</h2>
             <p style={{ margin: 0, lineHeight: 1.6, fontSize: 14, opacity: 0.9 }}>
-              Трек для музыкальных работ и цифрового саунда.
+              Track for music and digital sound.
             </p>
             <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-              Заявки: <strong>{musicSubmissions}</strong> · Сертифицировано: <strong>{musicCertified}</strong>
+              Submissions: <strong>{musicSubmissions}</strong> · Certified: <strong>{musicCertified}</strong>
             </div>
             <Link href="/awards/music" style={{ marginTop: 14, display: "inline-block", color: "#ddd6fe", fontWeight: 800 }}>
-              Открыть витрину музыки →
+              Open music showcase →
             </Link>
             <div>
               <Link
                 href={musicSubmitHref}
                 style={{ marginTop: 8, display: "inline-block", color: "#c4b5fd", fontWeight: 700, fontSize: 13 }}
               >
-                Подать работу в Planet →
+                Submit work to Planet →
               </Link>
             </div>
           </section>
@@ -137,20 +137,20 @@ export default async function AwardsHomePage() {
           >
             <h2 style={{ margin: "0 0 8px", fontWeight: 900 }}>AEVION Film Awards</h2>
             <p style={{ margin: 0, lineHeight: 1.6, fontSize: 14, opacity: 0.9 }}>
-              Трек для ИИ-фильмов, видео и цифрового кино.
+              Track for AI films, video and digital cinema.
             </p>
             <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-              Заявки: <strong>{filmSubmissions}</strong> · Сертифицировано: <strong>{filmCertified}</strong>
+              Submissions: <strong>{filmSubmissions}</strong> · Certified: <strong>{filmCertified}</strong>
             </div>
             <Link href="/awards/film" style={{ marginTop: 14, display: "inline-block", color: "#fde68a", fontWeight: 800 }}>
-              Открыть витрину кино →
+              Open film showcase →
             </Link>
             <div>
               <Link
                 href={filmSubmitHref}
                 style={{ marginTop: 8, display: "inline-block", color: "#fde68a", fontWeight: 700, fontSize: 13 }}
               >
-                Подать работу в Planet →
+                Submit work to Planet →
               </Link>
             </div>
           </section>

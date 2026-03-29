@@ -44,49 +44,49 @@ export default function AuthPage() {
   const signIn = async () => {
     setErr(null); setMe(null); setBusy(true);
     try {
-      if (!email.trim() || !password.trim()) throw new Error("Email и пароль обязательны");
+      if (!email.trim() || !password.trim()) throw new Error("Email and password required");
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Ошибка входа");
+      if (!res.ok) throw new Error(data?.error || "Sign in error");
       const nextToken = data.token as string;
       setToken(nextToken);
       try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
-      showToast("Вход выполнен", "success");
+      showToast("Sign in выполнен", "success");
     } catch (e: any) {
       setErr(e?.message || "Ошибка");
-      showToast(e?.message || "Ошибка входа", "error");
+      showToast(e?.message || "Sign in error", "error");
     } finally { setBusy(false); }
   };
 
   const register = async () => {
     setErr(null); setMe(null); setBusy(true);
     try {
-      if (!name.trim() || !email.trim() || !password.trim()) throw new Error("Имя, email и пароль обязательны");
+      if (!name.trim() || !email.trim() || !password.trim()) throw new Error("Name, email и пароль обязательны");
       const res = await fetch(apiUrl("/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Ошибка регистрации");
+      if (!res.ok) throw new Error(data?.error || "Registration error");
       const nextToken = data.token as string;
       setToken(nextToken);
       try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
-      showToast("Аккаунт создан! Добро пожаловать в AEVION", "success");
+      showToast("Account created! Welcome to AEVION", "success");
     } catch (e: any) {
       setErr(e?.message || "Ошибка");
-      showToast(e?.message || "Ошибка регистрации", "error");
+      showToast(e?.message || "Registration error", "error");
     } finally { setBusy(false); }
   };
 
   const logout = () => {
     try { localStorage.removeItem(TOKEN_KEY); } catch {}
     setToken(""); setMe(null);
-    showToast("Вы вышли из системы", "info");
+    showToast("Signed out", "info");
   };
 
   const inputStyle = {
@@ -106,10 +106,10 @@ export default function AuthPage() {
         <div style={{ borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden" }}>
           <div style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "28px 24px 20px", color: "#fff" }}>
             <h1 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-              Идентичность AEVION
+              AEVION Identity
             </h1>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }}>
-              Единая учётная запись для всех модулей экосистемы. Зарегистрируйтесь или войдите, чтобы получить JWT-токен.
+              Single account for all ecosystem modules. Register or sign in to get a JWT token.
             </p>
           </div>
           <div style={{ padding: "24px 24px 28px" }}>
@@ -121,12 +121,12 @@ export default function AuthPage() {
                     <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{me.user.email} · {me.user.role || "USER"}</div>
                   </div>
                   <button onClick={logout} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)", color: "#dc2626", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    Выйти
+                    Sign out
                   </button>
                 </div>
                 <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Link href="/qright" style={{ padding: "8px 14px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
-                    Создать объект в QRight →
+                    Create object in QRight →
                   </Link>
                   <Link href="/planet" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #0f766e", color: "#0f766e", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
                     🌍 Planet Lab
@@ -138,7 +138,7 @@ export default function AuthPage() {
             <div style={{ display: "inline-flex", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", marginBottom: 20 }}>
               {(["register", "login"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)} disabled={busy} style={{ padding: "10px 20px", border: "none", background: mode === m ? "#0f172a" : "#fff", color: mode === m ? "#fff" : "#64748b", fontWeight: mode === m ? 800 : 600, fontSize: 14, cursor: "pointer" }}>
-                  {m === "register" ? "Регистрация" : "Вход"}
+                  {m === "register" ? "Register" : "Sign in"}
                 </button>
               ))}
             </div>
@@ -146,8 +146,8 @@ export default function AuthPage() {
             <div style={{ display: "grid", gap: 14, maxWidth: 440 }}>
               {mode === "register" ? (
                 <div>
-                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ваше имя" style={inputStyle} disabled={busy} />
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Name</div>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" style={inputStyle} disabled={busy} />
                 </div>
               ) : null}
               <div>
@@ -155,11 +155,11 @@ export default function AuthPage() {
                 <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" type="email" style={inputStyle} disabled={busy} />
               </div>
               <div>
-                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Минимум 6 символов" style={inputStyle} disabled={busy} />
+                <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Password</div>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Minimum 6 characters" style={inputStyle} disabled={busy} />
               </div>
               <button onClick={mode === "login" ? signIn : register} disabled={busy} style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: busy ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)", color: "#fff", cursor: busy ? "default" : "pointer", fontWeight: 900, fontSize: 15, boxShadow: busy ? "none" : "0 4px 14px rgba(13,148,136,0.35)" }}>
-                {busy ? "Подождите..." : mode === "register" ? "Создать аккаунт" : "Войти"}
+                {busy ? "Please wait..." : mode === "register" ? "Create account" : "Sign in"}
               </button>
             </div>
 
@@ -172,7 +172,7 @@ export default function AuthPage() {
             {token ? (
               <details style={{ marginTop: 20 }}>
                 <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#64748b" }}>
-                  JWT-токен (для разработчиков)
+                  JWT token (for developers)
                 </summary>
                 <textarea readOnly value={token} rows={3} style={{ width: "100%", fontFamily: "monospace", fontSize: 11, padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.1)", marginTop: 8, color: "#475569", background: "#f8fafc" }} />
               </details>

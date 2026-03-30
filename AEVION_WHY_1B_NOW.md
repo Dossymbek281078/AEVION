@@ -199,4 +199,4 @@ In 5 years, AEVION's Trust Graph will be the definitive source of truth for digi
 
 *Live demo: aevion.vercel.app*
 *Code: github.com/Dossymbek281078/AEVION*
-*Contact: info@aevion.app · Astana, Kazakhstan*
+*Contact: yahiin1978@gmail.com · Astana, Kazakhstan*

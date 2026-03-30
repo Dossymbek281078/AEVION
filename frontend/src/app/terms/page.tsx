@@ -43,7 +43,7 @@ export default function TermsPage() {
           <p>We may update these terms at any time. Continued use after changes constitutes acceptance of the new terms.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>10. Contact</h2>
-          <p>For questions about these terms, contact us at info@aevion.app or through the Help Center.</p>
+          <p>For questions about these terms, contact us at yahiin1978@gmail.com or through the Help Center.</p>
         </div>
       </ProductPageShell>
     </main>

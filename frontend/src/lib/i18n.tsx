@@ -129,7 +129,7 @@ const translations: Record<Lang, Record<string, string>> = {
 
     /* Help */
     "help.title": "Help Center",
-    "help.subtitle": "Everything you need to know about using AEVION. Can't find an answer? Email us at info@aevion.app",
+    "help.subtitle": "Everything you need to know about using AEVION. Can't find an answer? Email us at yahiin1978@gmail.com",
     "help.still": "Still need help?",
 
     /* Misc */
@@ -235,7 +235,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "footer.rights": "Все права защищены.",
 
     "help.title": "Центр помощи",
-    "help.subtitle": "Всё что нужно знать об использовании AEVION. Не нашли ответ? Напишите нам на info@aevion.app",
+    "help.subtitle": "Всё что нужно знать об использовании AEVION. Не нашли ответ? Напишите нам на yahiin1978@gmail.com",
     "help.still": "Остались вопросы?",
 
     "planet.dashboard": "Planet Ecosystem — live",

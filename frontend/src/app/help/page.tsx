@@ -62,7 +62,7 @@ export default function HelpPage() {
               Help Center
             </h1>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.9, lineHeight: 1.5 }}>
-              Everything you need to know about using AEVION. Can&apos;t find an answer? Email us at info@aevion.app
+              Everything you need to know about using AEVION. Can&apos;t find an answer? Email us at yahiin1978@gmail.com
             </p>
           </div>
         </div>
@@ -164,7 +164,7 @@ export default function HelpPage() {
         >
           <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>Still need help?</div>
           <p style={{ margin: 0, fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
-            Email us at <a href="mailto:info@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>info@aevion.app</a> and 
+            Email us at <a href="mailto:yahiin1978@gmail.com" style={{ color: "#0d9488", fontWeight: 700 }}>yahiin1978@gmail.com</a> and 
             we will get back to you within 24 hours. You can also check our{" "}
             <Link href="/demo" style={{ color: "#0d9488", fontWeight: 700 }}>full demo</Link> for a walkthrough of all features.
           </p>

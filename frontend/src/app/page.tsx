@@ -427,6 +427,67 @@ export default function HomePage() {
           ))}
         </section>
 
+        {/* How it works — 4-step pipeline */}
+        <section style={{ marginBottom: 28, padding: "28px 24px", borderRadius: 20, background: "linear-gradient(135deg, #0f172a, #1e293b)", color: "#fff" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#5eead4", marginBottom: 8 }}>HOW IT WORKS</div>
+          <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 20px", letterSpacing: "-0.02em" }}>From idea to monetization in 4 steps</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            {[
+              { step: "1", title: "Register", desc: "Upload your work to QRight — get a SHA-256 hash and timestamp proof of existence.", icon: "📝", color: "#0d9488" },
+              { step: "2", title: "Sign", desc: "QSign creates an HMAC-SHA256 signature — cryptographic proof that your data hasn't been tampered with.", icon: "🔐", color: "#2563eb" },
+              { step: "3", title: "Certify", desc: "IP Bureau generates a certificate-ready document. Planet validators verify and community votes.", icon: "📜", color: "#7c3aed" },
+              { step: "4", title: "Earn", desc: "AEVION Bank distributes royalties automatically when someone uses your content. Instant, transparent.", icon: "💰", color: "#059669" },
+            ].map((s) => (
+              <div key={s.step} style={{ padding: "18px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)" }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>{s.icon}</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: s.color, marginBottom: 4 }}>STEP {s.step}</div>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>{s.title}</div>
+                <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>{s.desc}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/qright" style={{ padding: "10px 18px", borderRadius: 10, background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 13, textDecoration: "none" }}>
+              Try it now — register your first IP →
+            </Link>
+          </div>
+        </section>
+
+        {/* Why invest */}
+        <section style={{ marginBottom: 28, padding: "24px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#7c3aed", marginBottom: 8 }}>FOR INVESTORS</div>
+          <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }}>Why AEVION is worth $1B+</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+            {[
+              { title: "First-mover monopoly", desc: "The world's first electronic patent bureau. Any future competitor building similar systems creates a derivative work — our IP is self-protected.", metric: "Only 1", sub: "in the world" },
+              { title: "$340B addressable market", desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: "$340B", sub: "TAM" },
+              { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
+              { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.vercel.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },
+              { title: "Quantum-resistant", desc: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Ready for post-quantum migration. No other IP platform has this.", metric: "3-layer", sub: "crypto shield" },
+              { title: "Year 5: $2B+ revenue", desc: "Platform subscriptions + transaction fees + API licensing + advertising + banking services. Revenue compounds, not grows linearly.", metric: "$2B+", sub: "Year 5 ARR" },
+            ].map((card) => (
+              <div key={card.title} style={{ padding: "18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{card.title}</div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 900, fontSize: 20, color: "#7c3aed" }}>{card.metric}</div>
+                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>{card.sub}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>{card.desc}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/demo" style={{ padding: "10px 18px", borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", fontWeight: 800, fontSize: 13, textDecoration: "none", boxShadow: "0 4px 14px rgba(124,58,237,0.3)" }}>
+              Full investor demo →
+            </Link>
+            <Link href="/qright" style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.2)", color: "#0f172a", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>
+              Try the pipeline yourself →
+            </Link>
+          </div>
+        </section>
+
         {planetStats ? (
           <section
             style={{

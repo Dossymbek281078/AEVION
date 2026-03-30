@@ -78,7 +78,7 @@ export default function AuthPage() {
       try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
       showToast("Account created! Welcome to AEVION", "success");
     } catch (e: any) {
-      setErr(e?.message || "Ошибка");
+      setErr(e?.message || "Error");
       showToast(e?.message || "Registration error", "error");
     } finally { setBusy(false); }
   };
@@ -177,6 +177,29 @@ export default function AuthPage() {
                 <textarea readOnly value={token} rows={3} style={{ width: "100%", fontFamily: "monospace", fontSize: 11, padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.1)", marginTop: 8, color: "#475569", background: "#f8fafc" }} />
               </details>
             ) : null}
+          </div>
+        </div>
+
+        {/* What you get */}
+        <div style={{ marginTop: 20, padding: "18px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>What your AEVION identity unlocks</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            {[
+              { icon: "📝", title: "IP Registration", desc: "Register and protect your digital works with SHA-256 hash" },
+              { icon: "🔐", title: "Cryptographic Signing", desc: "Sign documents with military-grade HMAC-SHA256" },
+              { icon: "💰", title: "Digital Wallet", desc: "Earn AEC credits, receive royalties automatically" },
+              { icon: "♟️", title: "Chess & Gaming", desc: "Play CyberChess, earn ratings and compete in tournaments" },
+              { icon: "🏆", title: "Awards", desc: "Submit music and film to AEVION Awards, win prizes" },
+              { icon: "📊", title: "Trust Score", desc: "Build your reputation across the entire ecosystem" },
+            ].map((item) => (
+              <div key={item.title} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{item.title}</div>
+                  <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>{item.desc}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </ProductPageShell>

@@ -23,6 +23,14 @@ type RightObject = {
   createdAt: string;
 };
 
+const DEMO_ITEMS: RightObject[] = [
+  { id: "demo-1", title: "AI Music Generator v2.1", kind: "code", description: "Neural network for music generation with transformer architecture. Supports MIDI output and multi-track rendering.", ownerName: "Dosymbek A.", ownerEmail: "d@aevion.app", country: "Kazakhstan", city: "Astana", contentHash: "sha256:a3f8c1d9e4b7f2a6c8d0e5f3b9a1c7d4e6f8a2b4c6d8e0f1a3b5c7d9e1f3a5", createdAt: "2026-03-15T10:30:00Z" },
+  { id: "demo-2", title: "Quantum Shield Protocol Whitepaper", kind: "text", description: "Technical specification for three-layer cryptographic protection: Ed25519 + Shamir's Secret Sharing + HMAC-SHA256.", ownerName: "AEVION Research", ownerEmail: "research@aevion.app", country: "Kazakhstan", city: "Astana", contentHash: "sha256:b4e9d2c8f5a1b7e3d9c5f1a7b3e9d5c1f7a3b9e5d1c7f3a9b5e1d7c3f9a5b1", createdAt: "2026-03-10T14:20:00Z" },
+  { id: "demo-3", title: "CyberChess AI Engine", kind: "code", description: "Chess engine with minimax + alpha-beta pruning, piece-square tables, 6 difficulty levels from 400 to 2400 ELO.", ownerName: "Dosymbek A.", ownerEmail: "d@aevion.app", country: "Kazakhstan", city: "Astana", contentHash: "sha256:c5f0e3d9a6b2c8f4e0d6a2b8c4f0e6d2a8b4c0f6e2d8a4b0c6f2e8d4a0b6c2", createdAt: "2026-03-20T09:15:00Z" },
+  { id: "demo-4", title: "AEVION Bank Smart Contract", kind: "code", description: "Automated royalty distribution contract with Trust Graph integration. Handles P2P transfers, staking, and AEC minting.", ownerName: "AEVION Finance", ownerEmail: "finance@aevion.app", country: "Kazakhstan", city: "Astana", contentHash: "sha256:d6a1f4e0b7c3d9a5f1e7b3c9d5a1f7e3b9c5d1a7f3e9b5c1d7a3f9e5b1c7d3", createdAt: "2026-03-22T16:45:00Z" },
+  { id: "demo-5", title: "Planet Compliance Validator", kind: "code", description: "Automated compliance checking module: canonization, evidence root generation, and certificate signing pipeline.", ownerName: "AEVION Research", ownerEmail: "research@aevion.app", country: "Kazakhstan", city: "Astana", contentHash: "sha256:e7b2a5f1c8d4e0a6f2b8c4d0e6a2f8b4c0d6e2a8f4b0c6d2e8a4f0b6c2d8e4", createdAt: "2026-03-25T11:00:00Z" },
+];
+
 export default function QRightPage() {
   const { showToast } = useToast();
   const [items, setItems] = useState<RightObject[]>([]);
@@ -104,7 +112,8 @@ export default function QRightPage() {
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       if (/failed to fetch|networkerror|load failed|network request failed/i.test(m)) {
-        setErr("Backend недоступен. Запустите Globus API (порт 4001) — фронт по умолчанию ходит через прокси /api-backend.");
+        setErr(null); // Don't show error — show demo data instead
+        setItems(DEMO_ITEMS);
       } else {
         setErr(m);
       }

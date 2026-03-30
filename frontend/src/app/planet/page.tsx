@@ -361,7 +361,7 @@ export default function PlanetCompliancePage() {
       <Wave1Nav hidePlanet />
       <h1 style={{ fontSize: 28, marginBottom: 6 }}>Planet / Evidence / Certificate (MVP)</h1>
       <div style={{ color: "#555", marginBottom: 16 }}>
-        Single pipeline: canonization → validators → evidenceRoot → подписанный сертификат. Для code/web сегменты показываются по вашему коду.
+        Single pipeline: canonization → validators → evidenceRoot → signed certificate. Code/web segments shown based on your code.
       </div>
 
       {planetStats ? (

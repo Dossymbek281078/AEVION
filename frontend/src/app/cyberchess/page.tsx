@@ -45,11 +45,26 @@ const AI_LVS:AILv[]=[
 const RANKS=[{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
 const PUZZLES=[
-  {fen:"r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4",sol:["h5f7"],name:"Scholar's Mate",r:400},
-  {fen:"r1b1k2r/ppppqppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 4 5",sol:["c4f7"],name:"Fork Trick",r:800},
-  {fen:"r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",sol:["d2d4"],name:"Center Control",r:600},
-  {fen:"rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",sol:["d8h4"],name:"Fool's Mate",r:200},
-  {fen:"r2qk2r/ppp2ppp/2n1bn2/2b1p3/4P3/1BP2N2/PP1P1PPP/RNBQK2R w KQkq - 6 6",sol:["d1a4"],name:"Pin Attack",r:1000},
+  // Beginner (200-500)
+  {fen:"rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",sol:["d8h4"],name:"Fool's Mate",r:200,theme:"Checkmate"},
+  {fen:"r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4",sol:["h5f7"],name:"Scholar's Mate",r:400,theme:"Checkmate"},
+  {fen:"r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",sol:["d2d4"],name:"Center Control",r:500,theme:"Opening"},
+  // Intermediate (600-900)
+  {fen:"rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3",sol:["c4f7"],name:"Italian Game Trap",r:600,theme:"Tactics"},
+  {fen:"r1b1k2r/ppppqppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 4 5",sol:["c4f7"],name:"Fork Trick",r:700,theme:"Fork"},
+  {fen:"r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",sol:["d2d4"],name:"Open Center",r:800,theme:"Opening"},
+  {fen:"rnb1kbnr/pppp1ppp/8/4p3/5PPq/8/PPPPP2P/RNBQKBNR w KQkq - 1 3",sol:["g2g3"],name:"Block the Check",r:850,theme:"Defense"},
+  // Advanced (1000-1400)
+  {fen:"r2qk2r/ppp2ppp/2n1bn2/2b1p3/4P3/1BP2N2/PP1P1PPP/RNBQK2R w KQkq - 6 6",sol:["d1a4"],name:"Pin Attack",r:1000,theme:"Pin"},
+  {fen:"r1bqk2r/pppp1Bpp/2n2n2/2b1p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 0 4",sol:["e8f7"],name:"Recapture Decision",r:1100,theme:"Tactics"},
+  {fen:"r1b1kb1r/ppppqppp/2n5/1B2p3/4n3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 5",sol:["b5c6"],name:"Discovered Attack",r:1200,theme:"Discovery"},
+  // Expert (1400-1800)
+  {fen:"r1bqr1k1/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQR1K1 w - - 0 8",sol:["c3d5"],name:"Knight Outpost",r:1400,theme:"Positional"},
+  {fen:"2rq1rk1/pp1bppbp/2np1np1/8/2BNP3/2N1BP2/PPPQ2PP/R4RK1 w - - 0 11",sol:["d4f5"],name:"Sacrifice Attack",r:1600,theme:"Sacrifice"},
+  // Master (1800+)
+  {fen:"r1b2rk1/2q1bppp/p2p1n2/np2p3/3PP3/2N2N1P/PPB2PP1/R1BQR1K1 w - - 0 13",sol:["d4d5"],name:"Space Advantage",r:1800,theme:"Strategy"},
+  {fen:"r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",sol:["c3d5"],name:"Central Domination",r:2000,theme:"Positional"},
+  {fen:"r2q1rk1/ppp1ppbp/2np1np1/8/2PPP1b1/2N2N2/PP2BPPP/R1BQ1RK1 w - - 0 8",sol:["d4d5"],name:"Pawn Storm",r:2200,theme:"Attack"},
 ];
 
 /* ═══ ENGINE ═══ */
@@ -349,24 +364,32 @@ export default function CyberChessPage(){
               </div>
             ):null}
 
-            <div translate="no" style={{display:"grid",gridTemplateColumns:"repeat(8, 1fr)",width:"min(460px,calc(100vw - 48px))",aspectRatio:"1",borderRadius:10,overflow:"hidden",border:"2px solid #292524",touchAction:"none"}}>
+            <div translate="no" style={{display:"flex",width:"min(480px,calc(100vw - 32px))"}}>
+              {/* Rank numbers left */}
+              <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:4,width:18}}>
+                {rows.map(r=><div key={r} style={{fontSize:10,color:"#94a3b8",fontWeight:700,textAlign:"center",lineHeight:1}}>{8-r}</div>)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(8, 1fr)",flex:1,aspectRatio:"1",borderRadius:10,overflow:"hidden",border:"2px solid #292524",touchAction:"none"}}>
               {rows.flatMap(r=>cols.map(c=>{
                 const p=gs.board[r][c];const isL=(r+c)%2===0;const isSel=sel?.[0]===r&&sel?.[1]===c;const isV=vm.has(`${r},${c}`);const isCap=isV&&p!==null;
                 const isLast=last&&((last.from[0]===r&&last.from[1]===c)||(last.to[0]===r&&last.to[1]===c));
                 const isChk=chk&&p?.type==="K"&&p.color===gs.turn;
                 let bg=isL?"#e8dcc8":"#a38b6e";
-                if(isChk)bg="rgba(220,38,38,0.5)";else if(isSel)bg="rgba(59,130,246,0.45)";else if(isCap)bg="rgba(220,38,38,0.3)";else if(isV)bg=isL?"rgba(16,185,129,0.3)":"rgba(16,185,129,0.35)";else if(isLast)bg=isL?"rgba(245,158,11,0.25)":"rgba(245,158,11,0.3)";
+                if(isChk)bg="rgba(220,38,38,0.6)";else if(isSel)bg="rgba(59,130,246,0.45)";else if(isCap)bg="rgba(220,38,38,0.3)";else if(isV)bg=isL?"rgba(16,185,129,0.3)":"rgba(16,185,129,0.35)";else if(isLast)bg=isL?"rgba(245,158,11,0.25)":"rgba(245,158,11,0.3)";
                 return(
                   <div key={`${r}-${c}`} onClick={()=>click(r,c)}
                     onDragStart={(e)=>{e.dataTransfer.effectAllowed="move";dStart(r,c)}} onDragOver={e=>e.preventDefault()} onDrop={()=>dDrop(r,c)}
                     draggable={!!p&&p.color===playerColor&&gs.turn===playerColor&&!over&&!think}
-                    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(26px,5vw,44px)",background:bg,cursor:!over&&!think&&isPlayerTurn&&p?.color===playerColor?"grab":"pointer",userSelect:"none",position:"relative",lineHeight:1}}>
+                    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(26px,5vw,44px)",background:bg,cursor:!over&&!think&&isPlayerTurn&&p?.color===playerColor?"grab":"pointer",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s ease",boxShadow:isChk?"inset 0 0 12px rgba(220,38,38,0.7)":"none"}}>
                     {isV&&!p?<div style={{width:"24%",height:"24%",borderRadius:"50%",background:"rgba(16,185,129,0.5)",position:"absolute"}}/>:null}
-                    {p?U[`${p.color}${p.type}`]:""}
+                    {p?<span style={{filter:isChk?"drop-shadow(0 0 6px rgba(220,38,38,0.8))":"none",transition:"transform 0.12s ease",transform:isSel?"scale(1.1)":"scale(1)"}}>{U[`${p.color}${p.type}`]}</span>:""}
                   </div>)}))}
+              </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8, 1fr)",width:"min(460px,calc(100vw - 48px))",marginTop:3}}>
+            <div style={{display:"flex",paddingLeft:22,width:"min(480px,calc(100vw - 32px))"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(8, 1fr)",flex:1,marginTop:3}}>
               {cols.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:"#94a3b8",fontWeight:700}}>{F[c]}</div>)}
+              </div>
             </div>
             {kb?<div style={{marginTop:6,fontSize:13,fontFamily:"monospace",color:"#64748b",textAlign:"center"}}>Keyboard: <strong>{kb}</strong>_</div>:null}
             <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
@@ -377,16 +400,29 @@ export default function CyberChessPage(){
 
           {/* Side panel */}
           <div style={{flex:"1 1 260px",minWidth:220}}>
-            <div style={{padding:"10px 14px",borderRadius:10,marginBottom:12,border:`1px solid ${over?"rgba(220,38,38,0.25)":chk?"rgba(220,38,38,0.35)":think?"rgba(245,158,11,0.3)":"rgba(16,185,129,0.25)"}`,background:over?"rgba(220,38,38,0.06)":chk?"rgba(220,38,38,0.06)":think?"rgba(245,158,11,0.06)":"rgba(16,185,129,0.06)"}}>
-              <div style={{fontWeight:800,fontSize:14}}>{over?over:chk?"Check!":think?"AI thinking...":isPlayerTurn?"Your move":`AI's move`}</div>
+            <div style={{padding:over?"16px 14px":"10px 14px",borderRadius:over?14:10,marginBottom:12,border:`1px solid ${over?(over.includes("You win")?"rgba(16,185,129,0.4)":"rgba(220,38,38,0.25)"):chk?"rgba(220,38,38,0.35)":think?"rgba(245,158,11,0.3)":"rgba(16,185,129,0.25)"}`,background:over?(over.includes("You win")?"linear-gradient(135deg,rgba(16,185,129,0.12),rgba(13,148,136,0.08))":"rgba(220,38,38,0.06)"):chk?"rgba(220,38,38,0.06)":think?"rgba(245,158,11,0.06)":"rgba(16,185,129,0.06)"}}>
+              {over?(
+                <div>
+                  <div style={{fontWeight:900,fontSize:18,marginBottom:4}}>{over.includes("You win")?"🏆 ":"💀 "}{over}</div>
+                  <div style={{fontSize:12,color:"#64748b"}}>{hist.length} moves · Rating: {rating} {rk.i} {rk.t}</div>
+                </div>
+              ):(
+                <div style={{fontWeight:800,fontSize:14}}>{chk?"⚠️ Check!":think?"🤔 AI thinking...":isPlayerTurn?"Your move":`AI's move`}</div>
+              )}
             </div>
 
             {tab==="puzzles"?(
               <div style={{marginBottom:12}}>
-                <div style={{fontSize:12,color:"#64748b",fontWeight:700,marginBottom:6}}>Puzzles</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                <div style={{fontSize:12,color:"#64748b",fontWeight:700,marginBottom:6}}>Puzzles ({PUZZLES.length})</div>
+                <div style={{display:"flex",flexDirection:"column",gap:3,maxHeight:180,overflowY:"auto",border:"1px solid rgba(15,23,42,0.08)",borderRadius:10,padding:6}}>
                   {PUZZLES.map((pz,i)=><button key={i} onClick={()=>{setPzIdx(i);setGs(fenToGS(pz.fen));setSel(null);setVm(new Set());setOver(null);setHist([]);showToast(`Puzzle: ${pz.name} (${pz.r})`,"info")}}
-                    style={{padding:"5px 10px",borderRadius:8,border:pzIdx===i?"2px solid #7c3aed":"1px solid rgba(15,23,42,0.12)",background:pzIdx===i?"rgba(124,58,237,0.08)":"#fff",fontSize:11,fontWeight:pzIdx===i?800:600,cursor:"pointer",color:pzIdx===i?"#7c3aed":"#64748b"}}>{pz.name} ({pz.r})</button>)}
+                    style={{padding:"6px 10px",borderRadius:8,border:pzIdx===i?"2px solid #7c3aed":"1px solid rgba(15,23,42,0.08)",background:pzIdx===i?"rgba(124,58,237,0.08)":"#fff",fontSize:12,fontWeight:pzIdx===i?800:600,cursor:"pointer",color:pzIdx===i?"#7c3aed":"#334155",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span>{pz.name}</span>
+                    <span style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:"rgba(124,58,237,0.1)",color:"#7c3aed"}}>{(pz as any).theme||"Tactics"}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:pz.r<600?"#059669":pz.r<1000?"#2563eb":pz.r<1500?"#7c3aed":"#dc2626"}}>{pz.r}</span>
+                    </span>
+                  </button>)}
                 </div>
               </div>):null}
 

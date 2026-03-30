@@ -13,7 +13,7 @@ export function nominationLabel(
 
 export function planetNominationOptions(artifactType: string | undefined): NominationOption[] {
   const t = (artifactType || "").toLowerCase();
-  const general: NominationOption = { id: "general", label: "Общая оценка" };
+  const general: NominationOption = { id: "general", label: "General rating" };
 
   if (t === "music") {
     return [
@@ -38,8 +38,8 @@ export function planetNominationOptions(artifactType: string | undefined): Nomin
   if (t === "code" || t === "web") {
     return [
       general,
-      { id: "award.code.quality", label: "Качество / архитектура" },
-      { id: "award.code.innovation", label: "Новизна / идея" },
+      { id: "award.code.quality", label: "Quality / architecture" },
+      { id: "award.code.innovation", label: "Innovation / idea" },
     ];
   }
 

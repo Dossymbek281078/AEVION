@@ -41,7 +41,15 @@ const DEMO_TX: Transaction[] = [
   { id: "tx5", type: "royalty", amount: 12.50, from: "Planet License #3192", to: "you", description: "Code module usage royalty", timestamp: "2026-03-25T22:45:00Z" },
   { id: "tx6", type: "withdrawal", amount: -200.00, from: "you", to: "Bank account ***4523", description: "Withdrawal to external bank", timestamp: "2026-03-24T16:00:00Z" },
   { id: "tx7", type: "royalty", amount: 89.75, from: "Planet License #5501", to: "you", description: "Film clip royalty (3 uses this week)", timestamp: "2026-03-23T11:20:00Z" },
+  { id: "tx8", type: "royalty", amount: 23.40, from: "Planet License #2847", to: "you", description: "Design template licensing fee", timestamp: "2026-03-22T08:10:00Z" },
+  { id: "tx9", type: "transfer", amount: -35.00, from: "you", to: "creator_0x3d1b", description: "Split royalty with co-author", timestamp: "2026-03-21T15:30:00Z" },
+  { id: "tx10", type: "award", amount: 150.00, from: "AEVION Film Awards", to: "you", description: "Best Short Film nomination prize", timestamp: "2026-03-20T20:00:00Z" },
+  { id: "tx11", type: "topup", amount: 500.00, from: "Crypto wallet", to: "you", description: "AEC purchase via USDT", timestamp: "2026-03-19T12:00:00Z" },
+  { id: "tx12", type: "royalty", amount: 67.30, from: "Planet License #6102", to: "you", description: "Algorithm usage in fintech app", timestamp: "2026-03-18T17:45:00Z" },
 ];
+
+// Sparkline data: daily balance for last 14 days
+const SPARKLINE = [1200, 1250, 1400, 1380, 1500, 1520, 1680, 1750, 1900, 2100, 2050, 2350, 2600, 2847];
 
 const typeIcon: Record<string, string> = {
   topup: "+",
@@ -70,6 +78,22 @@ const typeLabel: Record<string, string> = {
 function formatAmount(n: number) {
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toFixed(2)} AEC`;
+}
+
+function Sparkline({ data, width = 280, height = 60 }: { data: number[]; width?: number; height?: number }) {
+  if (!data.length) return null;
+  const min = Math.min(...data) * 0.95;
+  const max = Math.max(...data) * 1.02;
+  const range = max - min || 1;
+  const points = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * height}`).join(" ");
+  const fillPoints = `0,${height} ${points} ${width},${height}`;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+      <polyline points={fillPoints} fill="rgba(13,148,136,0.12)" stroke="none" />
+      <polyline points={points} fill="none" stroke="#0d9488" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={width} cy={height - ((data[data.length - 1] - min) / range) * height} r="4" fill="#0d9488" />
+    </svg>
+  );
 }
 
 function StatCard({ label, value, accent }: { label: string; value: string; accent?: string }) {
@@ -178,32 +202,34 @@ export default function AevionBankPage() {
               display: "flex",
               gap: 12,
               flexWrap: "wrap",
-              padding: "20px 28px 24px",
+              padding: "20px 28px 12px",
               background: "rgba(15,23,42,0.02)",
               borderTop: "1px solid rgba(15,23,42,0.06)",
+              alignItems: "center",
             }}
           >
-            <StatCard label="Balance" value={`${wallet.balance.toFixed(2)} AEC`} accent="#0f766e" />
-            <StatCard label="Available" value={`${(wallet.balance - wallet.frozen).toFixed(2)} AEC`} />
-            <StatCard label="Frozen" value={`${wallet.frozen.toFixed(2)} AEC`} accent="#b45309" />
-            <StatCard label="Pending royalties" value={`${wallet.pendingRoyalties.toFixed(2)} AEC`} accent="#7c3aed" />
+            <div style={{ flex: "1 1 280px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>BALANCE GROWTH (14 DAYS)</div>
+              <Sparkline data={SPARKLINE} width={280} height={50} />
+              <div style={{ fontSize: 11, color: "#059669", fontWeight: 700, marginTop: 2 }}>+137% this month</div>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "2 1 400px" }}>
+              <StatCard label="Balance" value={`${wallet.balance.toFixed(2)} AEC`} accent="#0f766e" />
+              <StatCard label="Available" value={`${(wallet.balance - wallet.frozen).toFixed(2)} AEC`} />
+              <StatCard label="Frozen" value={`${wallet.frozen.toFixed(2)} AEC`} accent="#b45309" />
+              <StatCard label="Pending royalties" value={`${wallet.pendingRoyalties.toFixed(2)} AEC`} accent="#7c3aed" />
+            </div>
           </div>
         </div>
 
         {/* Quick actions */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
-          <Link
-            href="/planet"
-            style={{
-              padding: "10px 16px",
-              borderRadius: 12,
-              background: "#0f766e",
-              color: "#fff",
-              fontWeight: 800,
-              fontSize: 13,
-              textDecoration: "none",
-            }}
-          >
+          <Link href="/qright"
+            style={{ padding: "10px 16px", borderRadius: 12, background: "linear-gradient(135deg,#0d9488,#0ea5e9)", color: "#fff", fontWeight: 800, fontSize: 13, textDecoration: "none", boxShadow: "0 4px 14px rgba(13,148,136,0.3)" }}>
+            Register IP → Start earning
+          </Link>
+          <Link href="/planet"
+            style={{ padding: "10px 16px", borderRadius: 12, background: "#0f766e", color: "#fff", fontWeight: 800, fontSize: 13, textDecoration: "none" }}>
             Earn via Planet →
           </Link>
           <Link
@@ -392,7 +418,7 @@ export default function AevionBankPage() {
                       {tx.description}
                     </div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                      {typeLabel[tx.type]} · {new Date(tx.timestamp).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      {typeLabel[tx.type]} · {new Date(tx.timestamp).toLocaleDateString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </div>
                   <div

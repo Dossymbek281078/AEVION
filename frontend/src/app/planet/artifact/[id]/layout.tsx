@@ -10,11 +10,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
 
   const fallback: Metadata = {
-    title: "Артефакт Planet — AEVION",
-    description: "Публичная витрина артефакта: compliance, votesание, сертификат.",
+    title: "Artifact Planet — AEVION",
+    description: "Публичная витрина artifactа: compliance, votesание, сертификат.",
     openGraph: {
       title: "AEVION Planet Artifact",
-      description: "Публичная витрина артефакта с compliance и votesанием участников Planet.",
+      description: "Публичная витрина artifactа с compliance и votesанием участников Planet.",
     },
   };
 
@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const artifact = data?.artifact;
     if (!artifact) return fallback;
 
-    const title = artifact.submissionTitle || "Артефакт Planet";
+    const title = artifact.submissionTitle || "Artifact Planet";
     const type = artifact.artifactType || "artifact";
     const version = artifact.versionNo ?? 1;
     const status = artifact.status || "pending";
@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const description = [
       `${type} · v${version} · ${status}`,
       voteCount > 0 ? `Голосов: ${voteCount}` : null,
-      voteAvg != null ? `Средняя оценка: ${Number(voteAvg).toFixed(1)}` : null,
+      voteAvg != null ? `Средняя rating: ${Number(voteAvg).toFixed(1)}` : null,
       "Публичная витрина AEVION Planet",
     ]
       .filter(Boolean)

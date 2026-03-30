@@ -57,7 +57,7 @@ export default function AuthPage() {
       try { localStorage.setItem(TOKEN_KEY, nextToken); } catch {}
       showToast("Sign in выполнен", "success");
     } catch (e: any) {
-      setErr(e?.message || "Ошибка");
+      setErr(e?.message || "Error");
       showToast(e?.message || "Sign in error", "error");
     } finally { setBusy(false); }
   };

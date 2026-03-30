@@ -131,7 +131,7 @@ export default function QRightPage() {
     e.preventDefault();
 
     if (!title.trim() || !description.trim()) {
-      setErr("Название и описание обязательны");
+      setErr("Title и описание обязательны");
       return;
     }
 
@@ -158,7 +158,7 @@ export default function QRightPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Ошибка при регистрации объекта");
+        throw new Error(data?.error || "Error при регистрации объекта");
       }
 
       setTitle("");

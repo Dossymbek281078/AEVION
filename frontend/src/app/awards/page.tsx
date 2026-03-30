@@ -46,9 +46,9 @@ export default async function AwardsHomePage() {
   const musicCertified = musicStats?.scopedToProductKeyPrefix?.certifiedArtifactVersions ?? 0;
   const filmCertified = filmStats?.scopedToProductKeyPrefix?.certifiedArtifactVersions ?? 0;
   const musicSubmitHref =
-    "/planet?type=music&preset=music&productKey=aevion_award_music_v1&title=%D0%97%D0%B0%D1%8F%D0%B2%D0%BA%D0%B0%20%D0%BD%D0%B0%20%D0%BC%D1%83%D0%B7%D1%8B%D0%BA%D0%B0%D0%BB%D1%8C%D0%BD%D1%83%D1%8E%20%D0%BF%D1%80%D0%B5%D0%BC%D0%B8%D1%8E%20AEVION";
+    "/planet?type=music&preset=music&productKey=aevion_award_music_v1&title=AEVION%20Music%20Awards%20Submission";
   const filmSubmitHref =
-    "/planet?type=movie&preset=film&productKey=aevion_award_film_v1&title=%D0%97%D0%B0%D1%8F%D0%B2%D0%BA%D0%B0%20%D0%BD%D0%B0%20%D0%BA%D0%B8%D0%BD%D0%BE%D0%BF%D1%80%D0%B5%D0%BC%D0%B8%D1%8E%20AEVION";
+    "/planet?type=movie&preset=film&productKey=aevion_award_film_v1&title=AEVION%20Film%20Awards%20Submission";
 
   return (
     <main style={{ minHeight: "100vh", background: "#020617", color: "#e2e8f0", padding: 24 }}>

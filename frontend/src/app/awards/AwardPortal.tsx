@@ -437,7 +437,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
             <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 3</div>
             <div style={{ marginTop: 4, fontWeight: 800 }}>Проверить публичную карточку</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
-              После сертификации артефакт появляется в этой ленте и доступен по публичной ссылке.
+              После сертификации artifact появляется в этой ленте и доступен по публичной ссылке.
             </p>
           </article>
         </div>
@@ -636,7 +636,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
       <section style={{ padding: "32px 24px 48px", maxWidth: 720, margin: "0 auto", color: "#cbd5e1" }}>
         <h2 style={{ color: "#f8fafc", fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Как это связано с Planet</h2>
         <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.7, fontSize: 15 }}>
-          <li>Один backend и один контур votes для музыки и кино — различаются тип артефакта и витрина.</li>
+          <li>Один backend и один контур votes для музыки и кино — различаются тип artifactа и витрина.</li>
           <li>Итоги votesания в перспективе показываются в контексте числа участников Planet (см. AEVION_AWARDS_SPEC).</li>
           <li>Бренды премий — собственные AEVION; формулировки «как Грэмми / Оскар» — про подачу, не про чужие ТЗ.</li>
         </ul>

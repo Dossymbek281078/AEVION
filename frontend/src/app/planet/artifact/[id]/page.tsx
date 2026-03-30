@@ -130,7 +130,7 @@ export default function PlanetArtifactPublicPage() {
     try {
       if (!token) throw new Error("Нужен вход: /auth");
       const normalizedScore = clampScore(Number.isFinite(score) ? score : 5);
-      if (!Number.isFinite(normalizedScore)) throw new Error("Некорректная оценка");
+      if (!Number.isFinite(normalizedScore)) throw new Error("Некорректная rating");
       const r = await fetch(apiUrl(`/api/planet/artifacts/${id}/vote`), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -142,7 +142,7 @@ export default function PlanetArtifactPublicPage() {
       setScore(normalizedScore);
       await loadPublic();
     } catch (e: any) {
-      showToast(e?.message || "Ошибка votesания", "error");
+      showToast(e?.message || "Error votesания", "error");
     } finally {
       setBusy(false);
     }
@@ -151,7 +151,7 @@ export default function PlanetArtifactPublicPage() {
   const finalizeSnapshot = async () => {
     setBusy(true);
     try {
-      if (!token) throw new Error("Нужен вход (только владелец артефакта)");
+      if (!token) throw new Error("Нужен вход (только владелец artifactа)");
       const r = await fetch(apiUrl(`/api/planet/artifacts/${id}/votes/snapshot`), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -163,7 +163,7 @@ export default function PlanetArtifactPublicPage() {
       setProofJson(null);
       await loadPublic();
     } catch (e: any) {
-      showToast(e?.message || "Ошибка снапшота", "error");
+      showToast(e?.message || "Error снапшота", "error");
     } finally {
       setBusy(false);
     }
@@ -194,7 +194,7 @@ export default function PlanetArtifactPublicPage() {
       setProofJson(JSON.stringify(j, null, 2));
       showToast("Merkle-proof загружен", "info");
     } catch (e: any) {
-      showToast(e?.message || "Ошибка proof", "error");
+      showToast(e?.message || "Error proof", "error");
     } finally {
       setBusy(false);
     }
@@ -242,9 +242,9 @@ export default function PlanetArtifactPublicPage() {
         </button>
       </div>
 
-      <h1 style={{ fontSize: 26, marginBottom: 8 }}>Публичная витрина артефакта</h1>
+      <h1 style={{ fontSize: 26, marginBottom: 8 }}>Публичная витрина artifactа</h1>
       <div style={{ color: "#666", marginBottom: 16, lineHeight: 1.5 }}>
-        Видно всем только если есть сертификат (compliance passed). Голоса отображаются по{" "}
+        Видно всем только если есть сертификат (compliance passed). Votes отображаются по{" "}
         <b>CodeSymbol</b>, без email/имени. Снапшот сезона фиксирует Merkle root для проверки.
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
@@ -304,7 +304,7 @@ export default function PlanetArtifactPublicPage() {
             opacity: busy ? 0.75 : 1,
           }}
         >
-          Голосовать
+          Vote
         </button>
         <a
           href="#votes"
@@ -361,7 +361,7 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.certificate ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Сертификат (public payload)</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Certificate (public payload)</div>
           <pre style={{ background: "#f5f5f5", padding: 12, borderRadius: 10, fontSize: 11, overflow: "auto" }}>
             {JSON.stringify(data.certificate.publicPayloadJson || data.certificate, null, 2)}
           </pre>
@@ -370,7 +370,7 @@ export default function PlanetArtifactPublicPage() {
 
       {planetStats ? (
         <section style={{ ...cardStyle, background: "#fafafa" }}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Участники Planet (для «X из Y»)</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Participantи Planet (для «X из Y»)</div>
           <div style={{ fontSize: 14, lineHeight: 1.55 }}>
             <strong>Y</strong> (активный CodeSymbol): <b>{planetStats.eligibleParticipants}</b>
             <br />
@@ -391,7 +391,7 @@ export default function PlanetArtifactPublicPage() {
           {planetStats?.eligibleParticipants ? (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
-                Покрытие votesания: {voteCount} из {planetStats.eligibleParticipants} ({voteProgressPercent}%)
+                Coverage votesания: {voteCount} из {planetStats.eligibleParticipants} ({voteProgressPercent}%)
               </div>
               <div
                 style={{
@@ -419,7 +419,7 @@ export default function PlanetArtifactPublicPage() {
 
       {categoryRows.length > 0 ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Голоса по номинациям</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Votes по номинациям</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 12 }}>
             {categoryRows.slice(0, 3).map((row) => (
               <article
@@ -549,7 +549,7 @@ export default function PlanetArtifactPublicPage() {
       </section>
 
       <section id="season" style={cardStyle}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Сезон и снапшот (владелец артефакта)</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>Сезон и снапшот (владелец artifactа)</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <input
             value={seasonId}
@@ -583,7 +583,7 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.votes?.length ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Голоса (только CodeSymbol)</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Votes (только CodeSymbol)</div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 680 }}>
               <thead>

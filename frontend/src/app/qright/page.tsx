@@ -184,6 +184,21 @@ export default function QRightPage() {
       <ProductPageShell>
       <Wave1Nav />
       <PipelineSteps current="qright" />
+
+      {/* Pipeline flow */}
+      <div style={{ marginBottom: 20, padding: "14px 16px", borderRadius: 14, background: "linear-gradient(135deg, rgba(13,148,136,0.06), rgba(124,58,237,0.04))", border: "1px solid rgba(13,148,136,0.15)" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", marginBottom: 6 }}>YOUR IP PIPELINE</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 13 }}>
+          <span style={{ padding: "4px 10px", borderRadius: 8, background: "#0d9488", color: "#fff", fontWeight: 800 }}>1. Register here</span>
+          <span style={{ color: "#94a3b8" }}>→</span>
+          <span style={{ padding: "4px 10px", borderRadius: 8, border: "1px solid #0f172a", fontWeight: 700, color: "#0f172a" }}>2. Sign (QSign)</span>
+          <span style={{ color: "#94a3b8" }}>→</span>
+          <span style={{ padding: "4px 10px", borderRadius: 8, border: "1px solid #7c3aed", fontWeight: 700, color: "#7c3aed" }}>3. Certify (Bureau)</span>
+          <span style={{ color: "#94a3b8" }}>→</span>
+          <span style={{ padding: "4px 10px", borderRadius: 8, border: "1px solid #0f766e", fontWeight: 700, color: "#0f766e" }}>4. Validate (Planet)</span>
+        </div>
+      </div>
+
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>QRight</h1>
       <div style={{ color: "#666", marginBottom: 16 }}>
         Digital IP registration: register your work → get a cryptographic hash → store in registry. Then sign and certify in one click.
@@ -311,75 +326,55 @@ export default function QRightPage() {
       </div>
 
       {loading ? (
-        <div>Loading...</div>
+        <div style={{textAlign:"center",padding:24,color:"#94a3b8"}}>Loading registry...</div>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: 12 }}>
           {items.map((x) => (
-            <div key={x.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 12, color: "#666" }}>
-                {x.kind} • {new Date(x.createdAt).toLocaleString()}
+            <div key={x.id} style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 14, padding: 16, background: "#fff", boxShadow: "0 2px 8px rgba(15,23,42,0.04)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{x.kind}</span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(x.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a" }}>{x.title}</div>
+                </div>
+                <div style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>
+                  ✓ REGISTERED
+                </div>
               </div>
-              <div style={{ fontWeight: 700, marginTop: 4 }}>{x.title}</div>
-              <div style={{ marginTop: 6 }}>{x.description}</div>
-              {x.country || x.city ? (
-                <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
-                  Location: {x.city ? x.city : "—"}
-                  {x.country ? `, ${x.country}` : ""}
+              
+              <div style={{ marginTop: 8, fontSize: 13, color: "#475569", lineHeight: 1.5 }}>{x.description}</div>
+              
+              {(x.country || x.city) ? (
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
+                  📍 {x.city || "—"}{x.country ? `, ${x.country}` : ""}
                 </div>
               ) : null}
-              {x.ownerName || x.ownerEmail || x.ownerUserId ? (
-                <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
-                  Владелец: {x.ownerName || "—"}
-                  {x.ownerEmail ? ` · ${x.ownerEmail}` : ""}
-                  {x.ownerUserId ? ` · id ${x.ownerUserId.slice(0, 8)}…` : ""}
+              
+              {(x.ownerName || x.ownerEmail) ? (
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                  👤 {x.ownerName || "—"}{x.ownerEmail ? ` · ${x.ownerEmail}` : ""}{x.ownerUserId ? ` · ID ${x.ownerUserId.slice(0, 8)}…` : ""}
                 </div>
               ) : null}
-              <div style={{ fontSize: 11, color: "#666", marginTop: 6, wordBreak: "break-all" }}>
-                hash: {x.contentHash}
+              
+              <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>SHA-256 CONTENT HASH</div>
+                <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{x.contentHash}</div>
               </div>
-              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Link
-                  href={qsignUrlForQRightObject(x)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1px solid #111",
-                    background: "#111",
-                    color: "#fff",
-                    textDecoration: "none",
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  Открыть в QSign
+              
+              <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Link href={qsignUrlForQRightObject(x)}
+                  style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>
+                  Sign with QSign →
                 </Link>
-                <Link
-                  href={bureauUrlFocusObject(x)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1px solid #0a5",
-                    color: "#0a5",
-                    textDecoration: "none",
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  IP Bureau (фокус)
+                <Link href={bureauUrlFocusObject(x)}
+                  style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #0d9488", color: "#0d9488", textDecoration: "none", fontWeight: 700, fontSize: 12, background: "rgba(13,148,136,0.06)" }}>
+                  Certify in Bureau →
                 </Link>
-                <Link
-                  href={`/planet?title=${encodeURIComponent(x.title)}&productKey=${encodeURIComponent(`planet_qright_${x.kind}`)}`}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1px solid #0f766e",
-                    color: "#0f766e",
-                    textDecoration: "none",
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  🌍 Planet
+                <Link href={`/planet?title=${encodeURIComponent(x.title)}&productKey=${encodeURIComponent(`planet_qright_${x.kind}`)}`}
+                  style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #7c3aed", color: "#7c3aed", textDecoration: "none", fontWeight: 700, fontSize: 12, background: "rgba(124,58,237,0.06)" }}>
+                  Submit to Planet →
                 </Link>
               </div>
             </div>

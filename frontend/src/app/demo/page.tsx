@@ -238,12 +238,12 @@ export default function DemoShowcasePage() {
                     <span style={{ fontSize: 12, fontWeight: 800, color: "#64748b" }}>{p.code}</span>
                     <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#f8fafc" }}>{title}</h3>
                   </div>
-                  {p.description ? (
+                  {!narrative?.tagline && p.description ? (
                     <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.5, margin: "0 0 12px" }}>
                       {p.description}
                     </p>
                   ) : null}
-                  {showTagline ? (
+                  {narrative?.tagline ? (
                     <p style={{ fontSize: 15, fontWeight: 700, color: "#5eead4", margin: "0 0 12px" }}>{narrative.tagline}</p>
                   ) : null}
                   <ul style={{ margin: 0, paddingLeft: 20, color: "#e2e8f0", lineHeight: 1.65, fontSize: 14 }}>

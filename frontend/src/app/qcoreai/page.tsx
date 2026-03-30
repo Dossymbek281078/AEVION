@@ -74,8 +74,8 @@ export default function QCoreAIPage() {
 
       <h1 style={{ fontSize: 26, marginBottom: 8 }}>QCoreAI</h1>
       <p style={{ color: "#555", marginBottom: 16, lineHeight: 1.5 }}>
-        Минимальный чат через backend. С ключом <code>OPENAI_API_KEY</code> — ответы модели; без ключа —
-        осмысленная заглушка. Совместимый API: задайте <code>OPENAI_BASE_URL</code> (например локальный
+        Minimal chat via backend. С ключом <code>OPENAI_API_KEY</code> — ответы модели; без ключа —
+        meaningful stub. Совместимый API: задайте <code>OPENAI_BASE_URL</code> (например локальный
         прокси).
       </p>
 
@@ -133,7 +133,7 @@ export default function QCoreAIPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
-          placeholder="Сообщение…"
+          placeholder="Message..."
           disabled={busy}
           style={{
             flex: 1,

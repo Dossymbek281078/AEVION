@@ -11,10 +11,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const fallback: Metadata = {
     title: "Артефакт Planet — AEVION",
-    description: "Публичная витрина артефакта: compliance, голосование, сертификат.",
+    description: "Публичная витрина артефакта: compliance, votesание, сертификат.",
     openGraph: {
       title: "AEVION Planet Artifact",
-      description: "Публичная витрина артефакта с compliance и голосованием участников Planet.",
+      description: "Публичная витрина артефакта с compliance и votesанием участников Planet.",
     },
   };
 

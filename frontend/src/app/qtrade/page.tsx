@@ -75,38 +75,38 @@ export default function QTradePage() {
         setAccounts(accData.items || []);
       } else {
         setAccounts([]);
-        failed.push("счета");
+        failed.push("accounts");
       }
       if (txRes.ok) {
         const txData = await txRes.json().catch(() => ({}));
         setTransfers(txData.items || []);
       } else {
         setTransfers([]);
-        failed.push("переводы");
+        failed.push("transfers");
       }
       if (opRes.ok) {
         const opData = await opRes.json().catch(() => ({}));
         setOperations(opData.items || []);
       } else {
         setOperations([]);
-        failed.push("операции");
+        failed.push("operations");
       }
       if (sumRes.ok) {
         const sumData = await sumRes.json().catch(() => null);
         setSummary(sumData);
       } else {
         setSummary(null);
-        failed.push("метрики");
+        failed.push("metrics");
       }
       if (failed.length) {
-        setErr(`Не удалось загрузить: ${failed.join(" и ")}. Запустите backend (4001).`);
+        setErr(`Failed to load: ${failed.join(" and ")}. Start backend (4001).`);
       }
     } catch {
       setAccounts([]);
       setTransfers([]);
       setOperations([]);
       setSummary(null);
-      setErr("Сеть: backend недоступен или не запущен");
+      setErr("Network: backend unavailable or not running");
     } finally {
       setLoading(false);
     }
@@ -119,7 +119,7 @@ export default function QTradePage() {
   const createAccount = async (e: FormEvent) => {
     e.preventDefault();
     if (!owner.trim()) {
-      setErr("owner обязателен");
+      setErr("owner is required");
       return;
     }
     setErr(null);
@@ -131,7 +131,7 @@ export default function QTradePage() {
     });
 
     if (!res.ok) {
-      setErr("Ошибка создания счёта");
+      setErr("Error creating account");
       return;
     }
 
@@ -144,7 +144,7 @@ export default function QTradePage() {
     setErr(null);
     const a = Number(topupAmount);
     if (!topupAccount || !Number.isFinite(a) || a <= 0) {
-      setErr("Выбери счёт и сумму > 0");
+      setErr("Select account and amount > 0");
       return;
     }
 
@@ -156,7 +156,7 @@ export default function QTradePage() {
 
     const data = await res.json().catch(() => null);
     if (!res.ok) {
-      setErr(data?.error || "Ошибка пополнения");
+      setErr(data?.error || "Top-up error");
       return;
     }
 
@@ -170,7 +170,7 @@ export default function QTradePage() {
 
     const a = Number(amount);
     if (!from || !to || !Number.isFinite(a) || a <= 0) {
-      setErr("Заполни from/to и amount > 0");
+      setErr("Fill from/to and amount > 0");
       return;
     }
 
@@ -183,7 +183,7 @@ export default function QTradePage() {
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
-      setErr(data?.error || "Ошибка перевода");
+      setErr(data?.error || "Transfer error");
       return;
     }
 
@@ -196,7 +196,7 @@ export default function QTradePage() {
       <Wave1Nav />
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>QTrade</h1>
       <div style={{ color: "#666", marginBottom: 16 }}>
-        Счета, пополнение и переводы (MVP). Данные сохраняются на диск backend (
+        Accounts, top-ups and transfers (MVP). Data saved to backend disk (
         <code style={{ fontSize: 13 }}>.aevion-data/qtrade.json</code>
         , или каталог <code style={{ fontSize: 13 }}>AEVION_DATA_DIR</code>
         ).
@@ -204,9 +204,9 @@ export default function QTradePage() {
 
       <div style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
         {[
-          { href: "/api/qtrade/accounts.csv", label: "Счета CSV" },
-          { href: "/api/qtrade/transfers.csv", label: "Переводы CSV" },
-          { href: "/api/qtrade/operations.csv", label: "Операции CSV" },
+          { href: "/api/qtrade/accounts.csv", label: "Accounts CSV" },
+          { href: "/api/qtrade/transfers.csv", label: "Transfers CSV" },
+          { href: "/api/qtrade/operations.csv", label: "Operations CSV" },
         ].map((x) => (
           <a
             key={x.href}
@@ -242,7 +242,7 @@ export default function QTradePage() {
           }}
         >
           <div style={{ border: "1px solid #ddd", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Всего баланса</div>
+            <div style={{ fontSize: 12, color: "#666" }}>Total balance</div>
             <div style={{ fontWeight: 800, fontSize: 18 }}>{summary.totalBalance}</div>
           </div>
           <div style={{ border: "1px solid #ddd", borderRadius: 10, padding: 10 }}>
@@ -254,7 +254,7 @@ export default function QTradePage() {
             <div style={{ fontWeight: 800, fontSize: 18 }}>{summary.totalTransferVolume}</div>
           </div>
           <div style={{ border: "1px solid #ddd", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Операций</div>
+            <div style={{ fontSize: 12, color: "#666" }}>Operations</div>
             <div style={{ fontWeight: 800, fontSize: 18 }}>{summary.operations}</div>
           </div>
         </div>
@@ -268,10 +268,10 @@ export default function QTradePage() {
         }}
       >
         <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Создать счёт</h2>
+          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Create account</h2>
           <form onSubmit={createAccount} style={{ display: "grid", gap: 10 }}>
             <input
-              placeholder="Owner (например AEVION Test)"
+              placeholder="Owner (e.g. AEVION Test)"
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
               style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
@@ -287,20 +287,20 @@ export default function QTradePage() {
                 width: 180,
               }}
             >
-              Создать
+              Create
             </button>
           </form>
         </section>
 
         <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Пополнить</h2>
+          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Top up</h2>
           <form onSubmit={topup} style={{ display: "grid", gap: 10 }}>
             <select
               value={topupAccount}
               onChange={(e) => setTopupAccount(e.target.value)}
               style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
             >
-              <option value="">Счёт</option>
+              <option value="">Account</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.owner} — {a.balance} [{a.id}]
@@ -308,7 +308,7 @@ export default function QTradePage() {
               ))}
             </select>
             <input
-              placeholder="Сумма"
+              placeholder="Amount"
               value={topupAmount}
               onChange={(e) => setTopupAmount(e.target.value)}
               type="number"
@@ -327,13 +327,13 @@ export default function QTradePage() {
                 width: 180,
               }}
             >
-              Пополнить
+              Top up
             </button>
           </form>
         </section>
 
         <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Перевод</h2>
+          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Transfer</h2>
           <form onSubmit={transfer} style={{ display: "grid", gap: 10 }}>
             <select
               value={from}
@@ -379,7 +379,7 @@ export default function QTradePage() {
                 width: 180,
               }}
             >
-              Перевести
+              Transfer
             </button>
           </form>
         </section>
@@ -388,11 +388,11 @@ export default function QTradePage() {
       <hr style={{ margin: "24px 0" }} />
 
       <h2 style={{ fontSize: 18, marginBottom: 10 }}>
-        Счета ({accounts.length})
+        Accounts ({accounts.length})
       </h2>
 
       {loading ? (
-        <div>Загрузка…</div>
+        <div>Loading...</div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           {accounts.map((a) => (
@@ -414,7 +414,7 @@ export default function QTradePage() {
       <hr style={{ margin: "24px 0" }} />
 
       <h2 style={{ fontSize: 18, marginBottom: 10 }}>
-        Переводы ({transfers.length})
+        Transferы ({transfers.length})
       </h2>
 
       {loading ? null : transfers.length === 0 ? (

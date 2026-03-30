@@ -421,7 +421,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
             }}
           >
             <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 2</div>
-            <div style={{ marginTop: 4, fontWeight: 800 }}>Отправить в Planet</div>
+            <div style={{ marginTop: 4, fontWeight: 800 }}>Send в Planet</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
               Выберите тип <code>{artifactType}</code>, укажите продуктовый ключ и пройдите compliance.
             </p>
@@ -458,7 +458,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
         }}
       >
         <h2 style={{ color: "#f8fafc", fontSize: 17, fontWeight: 800, margin: "0 0 8px" }}>
-          Leaderboard и лента (сертифицированные работы трека)
+          Leaderboard и лента (certifiedные работы трека)
         </h2>
         <p style={{ margin: "0 0 16px", fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>
           Сортировка и агрегаты votes из API{" "}

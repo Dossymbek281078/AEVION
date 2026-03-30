@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Демонстрация экосистемы",
+  title: "Ecosystem demonstration",
   description:
     "Полный разбор выгод AEVION: платформа целиком, Planet, все 27 узлов — для инвесторов и партнёров.",
 };

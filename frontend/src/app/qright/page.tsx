@@ -297,12 +297,12 @@ export default function QRightPage() {
             checked={listMineOnly}
             onChange={(e) => setListMineOnly(e.target.checked)}
           />
-          Только мои (нужен вход в Auth)
+          My records only (Auth login required)
         </label>
       </div>
 
       {loading ? (
-        <div>Загрузка...</div>
+        <div>Loading...</div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           {items.map((x) => (

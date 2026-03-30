@@ -142,7 +142,7 @@ export default function PlanetArtifactPublicPage() {
       setScore(normalizedScore);
       await loadPublic();
     } catch (e: any) {
-      showToast(e?.message || "Ошибка голосования", "error");
+      showToast(e?.message || "Ошибка votesания", "error");
     } finally {
       setBusy(false);
     }
@@ -250,7 +250,7 @@ export default function PlanetArtifactPublicPage() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         {[
           ["#summary", "Сводка"],
-          ["#votes", "Голосование"],
+          ["#votes", "Voting"],
           ["#season", "Сезон"],
           ["#snapshot", "Снапшот"],
         ].map(([href, label]) => (
@@ -374,7 +374,7 @@ export default function PlanetArtifactPublicPage() {
           <div style={{ fontSize: 14, lineHeight: 1.55 }}>
             <strong>Y</strong> (активный CodeSymbol): <b>{planetStats.eligibleParticipants}</b>
             <br />
-            Уникальных голосовавших (всё время): <b>{planetStats.distinctVotersAllTime}</b>
+            Уникальных votesавших (всё время): <b>{planetStats.distinctVotersAllTime}</b>
           </div>
           <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
             Метрики из <code>GET /api/planet/stats</code> — см. <code>AEVION_AWARDS_SPEC.md</code>.
@@ -384,14 +384,14 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.voteStats?.count > 0 ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Статистика голосов</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Статистика votes</div>
           <div style={{ fontSize: 14, marginBottom: 10 }}>
             Голосов: <b>{voteCount}</b>, среднее: <b>{voteAverage ?? "—"}</b>
           </div>
           {planetStats?.eligibleParticipants ? (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
-                Покрытие голосования: {voteCount} из {planetStats.eligibleParticipants} ({voteProgressPercent}%)
+                Покрытие votesания: {voteCount} из {planetStats.eligibleParticipants} ({voteProgressPercent}%)
               </div>
               <div
                 style={{
@@ -485,13 +485,13 @@ export default function PlanetArtifactPublicPage() {
       ) : null}
 
       <section id="votes" style={cardStyle}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Голосование (внутри системы)</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>Voting (внутри системы)</div>
         <div style={{ fontSize: 13, color: "#555", marginBottom: 10 }}>
           Ваш текущий CodeSymbol: <b>{codeSymbol || "— (войдите и обновите страницу)"}</b>
         </div>
         {data?.artifact?.artifactType ? (
           <div style={{ fontSize: 12, color: "#666", marginBottom: 10 }}>
-            Номинации для типа <b>{data.artifact.artifactType}</b> (стабильные <code>categoryId</code> для премий).
+            Nominations для типа <b>{data.artifact.artifactType}</b> (стабильные <code>categoryId</code> для премий).
           </div>
         ) : null}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -529,7 +529,7 @@ export default function PlanetArtifactPublicPage() {
             disabled={busy}
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", fontWeight: 800 }}
           >
-            Проголосовать
+            Проvotesать
           </button>
           <Link
             href={artifactType === "music" ? "/awards/music" : artifactType === "movie" ? "/awards/film" : "/awards"}
@@ -563,7 +563,7 @@ export default function PlanetArtifactPublicPage() {
             disabled={busy}
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #b80", background: "#fff", color: "#b80", fontWeight: 800 }}
           >
-            Зафиксировать снапшот голосов
+            Зафиксировать снапшот votes
           </button>
           <button
             type="button"

@@ -19,3 +19,16 @@ model QRightObject {
   city         String?
   createdAt    DateTime @default(now())
 }
+model QuantumShield {
+  id          String   @id @default(uuid())
+  objectId    String?
+  objectTitle String?
+  algorithm   String   @default("Shamir's Secret Sharing + Ed25519")
+  threshold   Int      @default(2)
+  totalShards Int      @default(3)
+  shards      String
+  signature   String?
+  publicKey   String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+}

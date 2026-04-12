@@ -21,23 +21,12 @@ type Certificate = {
 };
 
 const KIND_ICONS: Record<string, string> = {
-  music: "🎵",
-  code: "💻",
-  design: "🎨",
-  text: "📝",
-  video: "🎬",
-  idea: "💡",
-  other: "📦",
+  music: "🎵", code: "💻", design: "🎨", text: "📝", video: "🎬", idea: "💡", other: "📦",
 };
 
 const KIND_LABELS: Record<string, string> = {
-  music: "Music / Audio",
-  code: "Code / Software",
-  design: "Design / Visual",
-  text: "Text / Article",
-  video: "Video / Film",
-  idea: "Idea / Concept",
-  other: "Other",
+  music: "Music / Audio", code: "Code / Software", design: "Design / Visual",
+  text: "Text / Article", video: "Video / Film", idea: "Idea / Concept", other: "Other",
 };
 
 const LEGAL_FRAMEWORKS = [
@@ -67,11 +56,8 @@ export default function BureauPage() {
           const totalVerifications = certs.reduce((sum: number, c: Certificate) => sum + (c.verifiedCount || 0), 0);
           setStats({ total: certs.length, totalVerifications });
         }
-      } catch {
-        /* silent */
-      } finally {
-        setLoading(false);
-      }
+      } catch {}
+      finally { setLoading(false); }
     })();
   }, []);
 
@@ -89,7 +75,7 @@ export default function BureauPage() {
 
         {/* ── Hero Header ── */}
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 28 }}>
-          <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)", padding: "32px 28px 28px", color: "#fff", position: "relative" }}>
+          <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)", padding: "32px 28px 28px", color: "#fff" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
               <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>⚖️</div>
               <div>
@@ -98,7 +84,7 @@ export default function BureauPage() {
               </div>
             </div>
             <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.8, lineHeight: 1.6, maxWidth: 640 }}>
-              The world's first fully digital patent bureau. Register, sign, and certify your intellectual property with military-grade cryptography — backed by international copyright law.
+              The world&apos;s first fully digital patent bureau. Register, sign, and certify your intellectual property with military-grade cryptography — backed by international copyright law.
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link href="/qright" style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -152,9 +138,7 @@ export default function BureauPage() {
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>Certificate Registry ({certificates.length})</div>
-            <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>
-              + New Certificate
-            </Link>
+            <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
           </div>
 
           {loading ? (
@@ -164,14 +148,12 @@ export default function BureauPage() {
               <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>No certificates yet</div>
               <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
-              <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>
-                🛡️ Protect Your Work
-              </Link>
+              <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>🛡️ Protect Your Work</Link>
             </div>
           ) : (
             <div style={{ display: "grid", gap: 12 }}>
               {certificates.map((cert) => (
-                <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff", transition: "box-shadow 0.2s" }}>
+                <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
                     <div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
@@ -180,19 +162,14 @@ export default function BureauPage() {
                         <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
                       </div>
                       <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
-                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                        by {cert.author}{cert.location ? ` · ${cert.location}` : ""}
-                      </div>
+                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
                       <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
-                      {cert.verifiedCount > 0 && (
-                        <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>
-                      )}
+                      {cert.verifiedCount > 0 && <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>}
                     </div>
                   </div>
 
-                  {/* Hash */}
                   <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
@@ -201,17 +178,18 @@ export default function BureauPage() {
                     <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
                   </div>
 
-                  {/* Actions */}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <Link href={`/verify/${cert.id}`} style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      ✓ Verify Certificate
-                    </Link>
-                    <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>
-                      Copy Verify Link
-                    </button>
-                    <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>
-                      Copy ID
-                    </button>
+                    <Link href={`/verify/${cert.id}`} style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>✓ Verify</Link>
+                    <a
+                      href={apiUrl(`/api/pipeline/certificate/${cert.id}/pdf`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ padding: "7px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+                    >
+                      📄 PDF
+                    </a>
+                    <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Link</button>
+                    <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy ID</button>
                   </div>
                 </div>
               ))}
@@ -223,8 +201,7 @@ export default function BureauPage() {
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Legal Framework</div>
           <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
-            AEVION IP Bureau operates under established international copyright and digital signature laws.
-            Our certificates serve as cryptographic proof of prior art — admissible evidence in IP disputes worldwide.
+            AEVION IP Bureau operates under established international copyright and digital signature laws. Our certificates serve as cryptographic proof of prior art — admissible evidence in IP disputes worldwide.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
             {LEGAL_FRAMEWORKS.map((l) => (
@@ -244,9 +221,7 @@ export default function BureauPage() {
         <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", marginBottom: 28 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>Legal Disclaimer</div>
           <div style={{ fontSize: 11, color: "#78716c", lineHeight: 1.6 }}>
-            Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time.
-            They do not constitute a patent, trademark, or government-issued copyright registration.
-            They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
+            Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time. They do not constitute a patent, trademark, or government-issued copyright registration. They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
           </div>
         </div>
 
@@ -254,15 +229,7 @@ export default function BureauPage() {
         <div style={{ padding: "16px 18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)", marginBottom: 40 }}>
           <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 10 }}>Technology Stack</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {[
-              "SHA-256 (NIST FIPS 180-4)",
-              "HMAC-SHA256",
-              "Ed25519 (RFC 8032)",
-              "Shamir's Secret Sharing",
-              "Threshold 2-of-3",
-              "PostgreSQL",
-              "Public Verification API",
-            ].map((t) => (
+            {["SHA-256 (NIST FIPS 180-4)", "HMAC-SHA256", "Ed25519 (RFC 8032)", "Shamir's Secret Sharing", "Threshold 2-of-3", "PostgreSQL", "Public Verification API"].map((t) => (
               <span key={t} style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)", color: "#334155" }}>{t}</span>
             ))}
           </div>

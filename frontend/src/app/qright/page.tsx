@@ -12,6 +12,7 @@ type CertificateData = {
   objectId: string;
   title: string;
   kind: string;
+  description?: string;
   author: string;
   email?: string | null;
   location?: string | null;
@@ -64,7 +65,6 @@ export default function QRightPage() {
   const { showToast } = useToast();
   const TOKEN_KEY = "aevion_auth_token_v1";
 
-  /* ── Form state ── */
   const [step, setStep] = useState<Step>("form");
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState("music");
@@ -75,13 +75,9 @@ export default function QRightPage() {
   const [city, setCity] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
-  /* ── Processing animation ── */
   const [processingStep, setProcessingStep] = useState(0);
-
-  /* ── Result ── */
   const [result, setResult] = useState<PipelineResult | null>(null);
 
-  /* ── Registry ── */
   const [showRegistry, setShowRegistry] = useState(false);
   const [items, setItems] = useState<RightObject[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -96,7 +92,6 @@ export default function QRightPage() {
     }
   };
 
-  /* ── Prefill from URL params ── */
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("title")) setTitle(sp.get("title")!);
@@ -105,7 +100,6 @@ export default function QRightPage() {
     if (sp.get("city")) setCity(sp.get("city")!);
   }, []);
 
-  /* ── Prefill user from Auth ── */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(TOKEN_KEY);
@@ -121,7 +115,6 @@ export default function QRightPage() {
     } catch {}
   }, []);
 
-  /* ── Submit pipeline ── */
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim()) {
@@ -133,7 +126,6 @@ export default function QRightPage() {
     setStep("processing");
     setProcessingStep(0);
 
-    /* Animate processing steps */
     const timers = [
       setTimeout(() => setProcessingStep(1), 600),
       setTimeout(() => setProcessingStep(2), 1400),
@@ -158,7 +150,6 @@ export default function QRightPage() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
 
-      /* Wait for animation to finish */
       await new Promise((r) => setTimeout(r, 2800));
       setProcessingStep(4);
       await new Promise((r) => setTimeout(r, 500));
@@ -174,7 +165,6 @@ export default function QRightPage() {
     }
   };
 
-  /* ── Load registry ── */
   const loadRegistry = async () => {
     setLoadingItems(true);
     try {
@@ -187,7 +177,6 @@ export default function QRightPage() {
     setLoadingItems(false);
   };
 
-  /* ── Reset form ── */
   const reset = () => {
     setStep("form");
     setTitle("");
@@ -197,7 +186,6 @@ export default function QRightPage() {
     setProcessingStep(0);
   };
 
-  /* ── Copy to clipboard ── */
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
       () => showToast(`${label} copied!`, "success"),
@@ -236,7 +224,6 @@ export default function QRightPage() {
         {/* ── Step: FORM ── */}
         {step === "form" && (
           <>
-            {/* How it works */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
               {[
                 { n: "1", title: "Describe", desc: "Tell us about your work", color: "#0d9488" },
@@ -253,7 +240,6 @@ export default function QRightPage() {
             </div>
 
             <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
-              {/* Title */}
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>
                   What are you protecting? *
@@ -266,11 +252,8 @@ export default function QRightPage() {
                 />
               </div>
 
-              {/* Type selector */}
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 8, display: "block" }}>
-                  Type of work
-                </label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 8, display: "block" }}>Type of work</label>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {KIND_OPTIONS.map((opt) => (
                     <button
@@ -278,18 +261,12 @@ export default function QRightPage() {
                       type="button"
                       onClick={() => setKind(opt.value)}
                       style={{
-                        padding: "8px 14px",
-                        borderRadius: 10,
+                        padding: "8px 14px", borderRadius: 10,
                         border: kind === opt.value ? "2px solid #0d9488" : "1px solid rgba(15,23,42,0.12)",
                         background: kind === opt.value ? "rgba(13,148,136,0.08)" : "#fff",
-                        fontSize: 12,
-                        fontWeight: kind === opt.value ? 800 : 600,
+                        fontSize: 12, fontWeight: kind === opt.value ? 800 : 600,
                         color: kind === opt.value ? "#0d9488" : "#475569",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        transition: "all 0.15s",
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: 4, transition: "all 0.15s",
                       }}
                     >
                       <span>{opt.icon}</span> {opt.label}
@@ -298,11 +275,8 @@ export default function QRightPage() {
                 </div>
               </div>
 
-              {/* Description */}
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>
-                  Describe your work *
-                </label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>Describe your work *</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -312,7 +286,6 @@ export default function QRightPage() {
                 />
               </div>
 
-              {/* Author info (collapsible) */}
               <details style={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", padding: "12px 16px" }}>
                 <summary style={{ fontSize: 13, fontWeight: 700, color: "#475569", cursor: "pointer" }}>
                   Author details (optional — auto-filled if logged in)
@@ -338,26 +311,10 @@ export default function QRightPage() {
               </details>
 
               {err && (
-                <div style={{ color: "#dc2626", fontSize: 13, padding: "10px 14px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)" }}>
-                  {err}
-                </div>
+                <div style={{ color: "#dc2626", fontSize: 13, padding: "10px 14px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)" }}>{err}</div>
               )}
 
-              <button
-                type="submit"
-                style={{
-                  padding: "16px 24px",
-                  borderRadius: 14,
-                  border: "none",
-                  background: "linear-gradient(135deg, #0d9488, #06b6d4)",
-                  color: "#fff",
-                  fontWeight: 900,
-                  fontSize: 16,
-                  cursor: "pointer",
-                  boxShadow: "0 4px 20px rgba(13,148,136,0.35)",
-                  transition: "transform 0.15s",
-                }}
-              >
+              <button type="submit" style={{ padding: "16px 24px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 900, fontSize: 16, cursor: "pointer", boxShadow: "0 4px 20px rgba(13,148,136,0.35)" }}>
                 🛡️ Protect My Work
               </button>
             </form>
@@ -371,26 +328,10 @@ export default function QRightPage() {
             <div style={{ fontWeight: 900, fontSize: 20, color: "#0f172a", marginBottom: 24 }}>Protecting your work...</div>
             <div style={{ maxWidth: 360, margin: "0 auto", display: "grid", gap: 12 }}>
               {PROCESSING_STEPS.map((s, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 16px",
-                    borderRadius: 12,
-                    background: processingStep > i ? "rgba(16,185,129,0.08)" : processingStep === i ? "rgba(13,148,136,0.06)" : "rgba(15,23,42,0.02)",
-                    border: `1px solid ${processingStep > i ? "rgba(16,185,129,0.25)" : processingStep === i ? "rgba(13,148,136,0.2)" : "rgba(15,23,42,0.06)"}`,
-                    transition: "all 0.4s",
-                  }}
-                >
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 12, background: processingStep > i ? "rgba(16,185,129,0.08)" : processingStep === i ? "rgba(13,148,136,0.06)" : "rgba(15,23,42,0.02)", border: `1px solid ${processingStep > i ? "rgba(16,185,129,0.25)" : processingStep === i ? "rgba(13,148,136,0.2)" : "rgba(15,23,42,0.06)"}`, transition: "all 0.4s" }}>
                   <span style={{ fontSize: 20 }}>{processingStep > i ? "✅" : s.icon}</span>
-                  <span style={{ fontSize: 13, fontWeight: processingStep >= i ? 700 : 500, color: processingStep > i ? "#059669" : processingStep === i ? "#0d9488" : "#94a3b8" }}>
-                    {s.label}
-                  </span>
-                  {processingStep === i && (
-                    <span style={{ marginLeft: "auto", width: 16, height: 16, border: "2px solid #0d9488", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />
-                  )}
+                  <span style={{ fontSize: 13, fontWeight: processingStep >= i ? 700 : 500, color: processingStep > i ? "#059669" : processingStep === i ? "#0d9488" : "#94a3b8" }}>{s.label}</span>
+                  {processingStep === i && <span style={{ marginLeft: "auto", width: 16, height: 16, border: "2px solid #0d9488", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />}
                 </div>
               ))}
             </div>
@@ -401,14 +342,12 @@ export default function QRightPage() {
         {/* ── Step: DONE ── */}
         {step === "done" && result && (
           <div>
-            {/* Success banner */}
             <div style={{ textAlign: "center", padding: "32px 20px", marginBottom: 24, borderRadius: 16, background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(13,148,136,0.06))", border: "1px solid rgba(16,185,129,0.2)" }}>
               <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
               <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>Your Work is Protected!</div>
               <div style={{ fontSize: 14, color: "#475569" }}>{result.message}</div>
             </div>
 
-            {/* Certificate card */}
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 20 }}>
               <div style={{ background: "#0f172a", padding: "20px 24px", color: "#fff" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -440,7 +379,6 @@ export default function QRightPage() {
                   </div>
                 </div>
 
-                {/* Technical details */}
                 <div style={{ display: "grid", gap: 8 }}>
                   {[
                     { label: "Content Hash (SHA-256)", value: result.certificate.contentHash },
@@ -454,12 +392,7 @@ export default function QRightPage() {
                         <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>{item.label}</div>
                         <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" }}>{item.value}</div>
                       </div>
-                      <button
-                        onClick={() => copy(item.value, item.label)}
-                        style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}
-                      >
-                        Copy
-                      </button>
+                      <button onClick={() => copy(item.value, item.label)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
                     </div>
                   ))}
                 </div>
@@ -470,8 +403,22 @@ export default function QRightPage() {
               </div>
             </div>
 
-            {/* Actions */}
+            {/* Actions with PDF button */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+              <a
+                href={apiUrl(`/api/pipeline/certificate/${result.certificate.id}/pdf`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                📄 Download PDF Certificate
+              </a>
+              <Link
+                href={`/verify/${result.certificate.id}`}
+                style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #0d9488", color: "#0d9488", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+              >
+                ✓ Verify Certificate
+              </Link>
               <button
                 onClick={reset}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}
@@ -479,16 +426,16 @@ export default function QRightPage() {
                 🛡️ Protect Another Work
               </button>
               <Link
-                href={`/quantum-shield`}
-                style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #0f172a", color: "#0f172a", fontWeight: 800, fontSize: 14, cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                href="/quantum-shield"
+                style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a", fontWeight: 700, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
               >
-                View Shield Dashboard →
+                Shield Dashboard →
               </Link>
               <button
                 onClick={() => copy(JSON.stringify(result.certificate, null, 2), "Certificate JSON")}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", color: "#475569", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
               >
-                Export Certificate JSON
+                Export JSON
               </button>
             </div>
           </div>

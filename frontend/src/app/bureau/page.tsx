@@ -1,514 +1,273 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
-import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 
-type RightObject = {
+type Certificate = {
   id: string;
   title: string;
   kind: string;
-  description: string;
-  ownerName?: string;
-  ownerEmail?: string;
-  ownerUserId?: string;
-  country?: string;
-  city?: string;
+  author: string;
+  location?: string | null;
   contentHash: string;
-  createdAt: string;
+  algorithm: string;
+  protectedAt: string;
+  verifiedCount: number;
+  verifyUrl: string;
 };
 
-type SignResponse = {
-  payload: unknown;
-  signature: string;
-  algo: string;
-  createdAt: string;
+const KIND_ICONS: Record<string, string> = {
+  music: "🎵",
+  code: "💻",
+  design: "🎨",
+  text: "📝",
+  video: "🎬",
+  idea: "💡",
+  other: "📦",
 };
 
-type VerifyResponse = {
-  valid: boolean;
-  expected: string;
-  provided: string;
+const KIND_LABELS: Record<string, string> = {
+  music: "Music / Audio",
+  code: "Code / Software",
+  design: "Design / Visual",
+  text: "Text / Article",
+  video: "Video / Film",
+  idea: "Idea / Concept",
+  other: "Other",
 };
 
-const STORAGE_KEY = "aevion_ip_bureau_signatures_v2";
-const AUTH_TOKEN_KEY = "aevion_auth_token_v1";
+const LEGAL_FRAMEWORKS = [
+  { name: "Berne Convention", desc: "Automatic copyright protection in 181 member states — no registration required", scope: "International", color: "#0d9488" },
+  { name: "WIPO Copyright Treaty", desc: "Extends protection to digital works: software, databases, digital content", scope: "International", color: "#3b82f6" },
+  { name: "TRIPS Agreement (WTO)", desc: "Minimum IP protection standards across 164 WTO member states", scope: "164 countries", color: "#8b5cf6" },
+  { name: "eIDAS Regulation", desc: "Electronic signatures have legal effect equivalent to handwritten", scope: "European Union", color: "#0ea5e9" },
+  { name: "ESIGN Act", desc: "Electronic signatures carry same legal standing as handwritten", scope: "United States", color: "#6366f1" },
+  { name: "KZ Digital Signature Law", desc: "Electronic digital signatures are legally equivalent to handwritten", scope: "Kazakhstan", color: "#f59e0b" },
+];
 
 export default function BureauPage() {
   const { showToast } = useToast();
-  const [objects, setObjects] = useState<RightObject[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  const [signatureByObjectId, setSignatureByObjectId] = useState<
-    Record<string, string>
-  >({});
-
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [verifyState, setVerifyState] = useState<{
-    objectId: string;
-    valid: boolean;
-    expected: string;
-    provided: string;
-  } | null>(null);
-
-  /** Fallback country/city from Globus deep link: /bureau?country=&city= */
-  const [ctxCountry, setCtxCountry] = useState("");
-  const [ctxCity, setCtxCity] = useState("");
-  const [focusObjectId, setFocusObjectId] = useState<string | null>(null);
-  const didScrollFocus = useRef(false);
-
-  const payloadForObject = useMemo(() => {
-    // IMPORTANT: HMAC is computed from JSON.stringify(payload) in backend.
-    // We use the same shape and key order (inserted in the same way).
-    return (x: RightObject) => ({
-      objectId: x.id,
-      title: x.title,
-      contentHash: x.contentHash,
-      country: x.country || null,
-      city: x.city || null,
-    });
-  }, []);
-
-  const mergedForPayload = (x: RightObject): RightObject => ({
-    ...x,
-    country: x.country || ctxCountry || undefined,
-    city: x.city || ctxCity || undefined,
-  });
-
-  const copyPayloadJson = async (x: RightObject) => {
-    setErr(null);
-    const payload = payloadForObject(mergedForPayload(x));
-    const text = JSON.stringify(payload);
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(x.id);
-      window.setTimeout(() => setCopiedId((id) => (id === x.id ? null : id)), 2000);
-    } catch {
-      setErr("Failed to copy payload (clipboard access)");
-    }
-  };
+  const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setSignatureByObjectId(JSON.parse(raw));
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const c = sp.get("country");
-    const ci = sp.get("city");
-    const focus = sp.get("focus");
-    if (c) setCtxCountry(c);
-    if (ci) setCtxCity(ci);
-    if (focus) setFocusObjectId(focus);
-    didScrollFocus.current = false;
-  }, []);
-
-  useEffect(() => {
-    const load = async () => {
+    (async () => {
       try {
         setLoading(true);
-        setErr(null);
-        const headers: HeadersInit = {};
-        try {
-          const t = localStorage.getItem(AUTH_TOKEN_KEY);
-          if (t) headers.Authorization = `Bearer ${t}`;
-        } catch {
-          // ignore
+        const res = await fetch(apiUrl("/api/pipeline/certificates"));
+        if (res.ok) {
+          const data = await res.json();
+          const certs = data.certificates || [];
+          setCertificates(certs);
+          const totalVerifications = certs.reduce((sum: number, c: Certificate) => sum + (c.verifiedCount || 0), 0);
+          setStats({ total: certs.length, totalVerifications });
         }
-        const res = await fetch(apiUrl("/api/qright/objects"), { headers });
-        if (!res.ok) throw new Error("Backend not responding: /api/qright/objects");
-        const data = await res.json();
-        setObjects(data.items || []);
-      } catch (e: any) {
-        setErr(e.message || "Error loading objects");
+      } catch {
+        /* silent */
       } finally {
         setLoading(false);
       }
-    };
-
-    load();
+    })();
   }, []);
 
-  useEffect(() => {
-    if (loading || !focusObjectId || didScrollFocus.current) return;
-    const el = document.getElementById(`bureau-object-${focusObjectId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      didScrollFocus.current = true;
-    }
-  }, [loading, focusObjectId, objects.length]);
-
-  const persistSignatures = (next: Record<string, string>) => {
-    setSignatureByObjectId(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
-  };
-
-  const signObject = async (x: RightObject) => {
-    setVerifyState(null);
-    setBusyId(x.id);
-    setErr(null);
-
-    try {
-      const payload = payloadForObject(mergedForPayload(x));
-      const res = await fetch(apiUrl("/api/qsign/sign"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Signing error");
-      }
-      const data: SignResponse = await res.json();
-
-      const next = { ...signatureByObjectId, [x.id]: data.signature || "" };
-      persistSignatures(next);
-      showToast("Object signed (QSign)", "success");
-    } catch (e: any) {
-      setErr(e.message || "Signing error");
-      showToast(e.message || "Signing error", "error");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const verifyObject = async (x: RightObject) => {
-    setErr(null);
-    setVerifyState(null);
-    setBusyId(x.id);
-
-    try {
-      const signature = signatureByObjectId[x.id];
-      if (!signature) throw new Error("Sign the object first");
-
-      const payload = payloadForObject(mergedForPayload(x));
-
-      const res = await fetch(apiUrl("/api/qsign/verify"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload, signature }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Verification error");
-      }
-
-      const data: VerifyResponse = await res.json();
-      setVerifyState({
-        objectId: x.id,
-        valid: !!data.valid,
-        expected: data.expected,
-        provided: data.provided,
-      });
-      if (data.valid) showToast("Signature VALID — integrity confirmed", "success");
-      else showToast("Signature INVALID — data mismatch", "error");
-    } catch (e: any) {
-      setErr(e.message || "Verification error");
-      showToast(e.message || "Verification error", "error");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const resetAll = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-    setSignatureByObjectId({});
-    setVerifyState(null);
+  const copy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => showToast(`${label} copied!`, "success"),
+      () => showToast("Copy failed", "error")
+    );
   };
 
   return (
     <main>
-      <ProductPageShell>
-      <Wave1Nav />
-      <PipelineSteps current="bureau" />
-      <div
-        style={{
-          border: "1px solid rgba(0,0,0,0.12)",
-          borderRadius: 16,
-          padding: 18,
-          background:
-            "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0))",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 12, color: "#666" }}>IP / Legal</div>
-            <h1 style={{ fontSize: 28, marginTop: 6, marginBottom: 6 }}>
-              AEVION IP Bureau
-            </h1>
-            <div style={{ color: "#555", lineHeight: 1.5 }}>
-              QRight registry + signature verification via QSign. Certificate-ready format in MVP.
-            </div>
-            {(ctxCountry || ctxCity) && (
-              <div
-                style={{
-                  marginTop: 12,
-                  fontSize: 13,
-                  color: "#333",
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(10,160,80,0.35)",
-                  background: "rgba(10,160,80,0.06)",
-                }}
-              >
-                <b>Globus context:</b> {ctxCity || "—"}
-                {ctxCountry ? `, ${ctxCountry}` : ""} — location will be used in payload if object has
-                no own location.
+      <ProductPageShell maxWidth={920}>
+        <Wave1Nav />
+
+        {/* ── Hero Header ── */}
+        <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 28 }}>
+          <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)", padding: "32px 28px 28px", color: "#fff", position: "relative" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+              <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>⚖️</div>
+              <div>
+                <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>AEVION Digital IP Bureau</h1>
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.75 }}>Cryptographic Proof of Authorship & Prior Art</p>
               </div>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={resetAll}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #111",
-                background: "#fff",
-                cursor: "pointer",
-                fontWeight: 650,
-              }}
-            >
-              Reset signatures (local)
-            </button>
+            </div>
+            <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.8, lineHeight: 1.6, maxWidth: 640 }}>
+              The world's first fully digital patent bureau. Register, sign, and certify your intellectual property with military-grade cryptography — backed by international copyright law.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link href="/qright" style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                🛡️ Protect Your Work
+              </Link>
+              <Link href="/quantum-shield" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+                Quantum Shield Dashboard
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
 
-      {err && <div style={{ color: "crimson", marginTop: 12 }}>{err}</div>}
-
-      <div style={{ marginTop: 18, marginBottom: 12, color: "#666" }}>
-        QRight objects: <b>{objects.length}</b>
-      </div>
-
-      {loading ? (
-        <div style={{ marginTop: 18 }}>Loading...</div>
-      ) : (
-        <div style={{ display: "grid", gap: 14 }}>
-          {objects.map((x) => {
-            const signature = signatureByObjectId[x.id] || "";
-            const verifiedThis = verifyState?.objectId === x.id ? verifyState : null;
-            const statusColor = verifiedThis
-              ? verifiedThis.valid
-                ? "#0a5"
-                : "#c00"
-              : "#999";
-
-            const isFocused = focusObjectId === x.id;
-            return (
-              <article
-                key={x.id}
-                id={`bureau-object-${x.id}`}
-                style={{
-                  border: isFocused
-                    ? "2px solid rgba(10,160,80,0.65)"
-                    : "1px solid rgba(0,0,0,0.12)",
-                  borderRadius: 16,
-                  padding: 16,
-                  background: isFocused ? "rgba(10,160,80,0.04)" : "#fff",
-                  boxShadow: isFocused ? "0 0 0 4px rgba(10,160,80,0.12)" : undefined,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={{ fontSize: 12, color: "#666" }}>
-                      {x.kind} • {new Date(x.createdAt).toLocaleString()}
-                    </div>
-                    <div style={{ fontSize: 20, fontWeight: 850, marginTop: 6 }}>
-                      {x.title}
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 12, color: "#666" }}>contentHash</div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#111",
-                        wordBreak: "break-all",
-                        fontFamily: "monospace",
-                        marginTop: 6,
-                      }}
-                    >
-                      {x.contentHash}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 10, color: "#555", lineHeight: 1.5 }}>
-                  {x.description}
-                </div>
-
-                {(x.country || x.city) && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
-                    Location: {x.city ? x.city : "—"}
-                    {x.country ? `, ${x.country}` : ""}
-                  </div>
-                )}
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 10,
-                  }}
-                >
-                  <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: 12 }}>
-                    <div style={{ fontSize: 12, color: "#666" }}>Owner</div>
-                    <div style={{ fontWeight: 700, marginTop: 6 }}>
-                      {x.ownerName || "—"}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                      {x.ownerEmail || "—"}
-                    </div>
-                    {x.ownerUserId ? (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "#999",
-                          marginTop: 6,
-                          fontFamily: "monospace",
-                          wordBreak: "break-all",
-                        }}
-                        title={x.ownerUserId}
-                      >
-                        userId: {x.ownerUserId.slice(0, 8)}…
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: 12 }}>
-                    <div style={{ fontSize: 12, color: "#666" }}>Certificate Status</div>
-                    <div style={{ fontSize: 13, fontWeight: 800, marginTop: 6, color: statusColor }}>
-                      {verifiedThis
-                        ? verifiedThis.valid
-                          ? "VALID (confirmed)"
-                          : "INVALID (mismatch)"
-                        : signature
-                        ? "SIGNED (locally)"
-                        : "NOT SIGNED"}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => copyPayloadJson(x)}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      border: "1px solid rgba(0,0,0,0.2)",
-                      background: copiedId === x.id ? "rgba(10,160,80,0.12)" : "#fff",
-                      color: "#111",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {copiedId === x.id ? "Copied" : "Copy payload JSON"}
-                  </button>
-                  <button
-                    onClick={() => signObject(x)}
-                    disabled={busyId === x.id}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      border: "1px solid #111",
-                      background: busyId === x.id ? "#999" : "#111",
-                      color: "#fff",
-                      cursor: busyId === x.id ? "default" : "pointer",
-                      fontWeight: 750,
-                    }}
-                  >
-                    {busyId === x.id ? "Signing..." : "Sign QRight"}
-                  </button>
-                  <button
-                    onClick={() => verifyObject(x)}
-                    disabled={busyId === x.id}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      border: "1px solid #0a5",
-                      background: "#0a5",
-                      color: "#fff",
-                      cursor: busyId === x.id ? "default" : "pointer",
-                      fontWeight: 750,
-                    }}
-                  >
-                    {busyId === x.id ? "Verifying..." : "Verify signature"}
-                  </button>
-
-                  <button
-                    disabled
-                    title="Placeholder for future PDF export"
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      border: "1px dashed rgba(0,0,0,0.25)",
-                      background: "rgba(0,0,0,0.03)",
-                      color: "rgba(0,0,0,0.35)",
-                      cursor: "not-allowed",
-                      fontWeight: 750,
-                    }}
-                  >
-                    PDF export (soon)
-                  </button>
-                </div>
-
-                {signature ? (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
-                      Signature (QSign)
-                    </div>
-                    <textarea
-                      readOnly
-                      value={signature}
-                      rows={3}
-                      style={{
-                        width: "100%",
-                        fontFamily: "monospace",
-                        padding: 10,
-                        borderRadius: 12,
-                        border: "1px solid rgba(0,0,0,0.12)",
-                        fontSize: 12,
-                      }}
-                    />
-                    {verifiedThis && (
-                      <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
-                        expected: {verifiedThis.expected}
-                        <br />
-                        provided: {verifiedThis.provided}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
+        {/* ── Stats ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+          {[
+            { value: stats.total, label: "Certificates Issued", color: "#0d9488" },
+            { value: stats.totalVerifications, label: "Total Verifications", color: "#3b82f6" },
+            { value: LEGAL_FRAMEWORKS.length, label: "Legal Frameworks", color: "#8b5cf6" },
+            { value: "3-Layer", label: "Cryptographic Protection", color: "#f59e0b" },
+          ].map((s) => (
+            <div key={s.label} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 900, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", marginTop: 4 }}>{s.label}</div>
+            </div>
+          ))}
         </div>
-      )}
+
+        {/* ── How It Works ── */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 14 }}>How AEVION IP Bureau Works</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            {[
+              { n: "1", title: "Register", desc: "Describe your work — we create a SHA-256 content hash", icon: "📋", color: "#0d9488" },
+              { n: "2", title: "Sign", desc: "HMAC-SHA256 cryptographic signature proves integrity", icon: "🔏", color: "#3b82f6" },
+              { n: "3", title: "Shield", desc: "Ed25519 + Shamir's Secret Sharing for quantum-grade protection", icon: "🛡️", color: "#8b5cf6" },
+              { n: "4", title: "Certify", desc: "IP Certificate with legal basis — publicly verifiable", icon: "📜", color: "#f59e0b" },
+            ].map((s) => (
+              <div key={s.n} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: s.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900 }}>{s.n}</div>
+                  <span style={{ fontSize: 16 }}>{s.icon}</span>
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{s.title}</div>
+                <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>{s.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Certificate Registry ── */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>Certificate Registry ({certificates.length})</div>
+            <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>
+              + New Certificate
+            </Link>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading certificates...</div>
+          ) : certificates.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>No certificates yet</div>
+              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
+              <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>
+                🛡️ Protect Your Work
+              </Link>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 12 }}>
+              {certificates.map((cert) => (
+                <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff", transition: "box-shadow 0.2s" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+                    <div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 16 }}>{KIND_ICONS[cert.kind] || "📦"}</span>
+                        <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{KIND_LABELS[cert.kind] || cert.kind}</span>
+                        <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
+                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                        by {cert.author}{cert.location ? ` · ${cert.location}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
+                      <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
+                      {cert.verifiedCount > 0 && (
+                        <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Hash */}
+                  <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
+                      <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
+                    </div>
+                    <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <Link href={`/verify/${cert.id}`} style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      ✓ Verify Certificate
+                    </Link>
+                    <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>
+                      Copy Verify Link
+                    </button>
+                    <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>
+                      Copy ID
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Legal Framework ── */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Legal Framework</div>
+          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
+            AEVION IP Bureau operates under established international copyright and digital signature laws.
+            Our certificates serve as cryptographic proof of prior art — admissible evidence in IP disputes worldwide.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            {LEGAL_FRAMEWORKS.map((l) => (
+              <div key={l.name} style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
+                  <div style={{ fontWeight: 800, fontSize: 12, color: "#0f172a" }}>{l.name}</div>
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5, marginBottom: 6 }}>{l.desc}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: l.color }}>{l.scope}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Disclaimer ── */}
+        <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", marginBottom: 28 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>Legal Disclaimer</div>
+          <div style={{ fontSize: 11, color: "#78716c", lineHeight: 1.6 }}>
+            Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time.
+            They do not constitute a patent, trademark, or government-issued copyright registration.
+            They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
+          </div>
+        </div>
+
+        {/* ── Technology Stack ── */}
+        <div style={{ padding: "16px 18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)", marginBottom: 40 }}>
+          <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 10 }}>Technology Stack</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              "SHA-256 (NIST FIPS 180-4)",
+              "HMAC-SHA256",
+              "Ed25519 (RFC 8032)",
+              "Shamir's Secret Sharing",
+              "Threshold 2-of-3",
+              "PostgreSQL",
+              "Public Verification API",
+            ].map((t) => (
+              <span key={t} style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)", color: "#334155" }}>{t}</span>
+            ))}
+          </div>
+        </div>
       </ProductPageShell>
     </main>
   );
 }
-

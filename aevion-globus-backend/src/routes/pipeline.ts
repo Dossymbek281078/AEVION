@@ -428,7 +428,160 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     res.status(500).json({ error: msg });
   }
 });
+/**
+ * GET /api/pipeline/certificate/:certId/pdf
+ *
+ * Generate a PDF certificate with QR code for public verification.
+ */
+pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
+  try {
+    await ensureTables();
 
+    const { certId } = req.params;
+    const { rows } = await pool.query(`SELECT * FROM "IPCertificate" WHERE "id" = $1`, [certId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Certificate not found" });
+    }
+
+    const cert = rows[0];
+    const PDFDocument = (await import("pdfkit")).default;
+    const QRCode = await import("qrcode");
+
+    const verifyUrl = `https://aevion.vercel.app/verify/${cert.id}`;
+    const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 160, margin: 1 });
+    const qrBase64 = qrDataUrl.replace(/^data:image\/png;base64,/, "");
+    const qrBuffer = Buffer.from(qrBase64, "base64");
+
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="AEVION-Certificate-${cert.id}.pdf"`);
+    doc.pipe(res);
+
+    const W = doc.page.width - 100; // usable width (margin 50 each side)
+    const pageW = doc.page.width;
+
+    /* ── Header bar ── */
+    doc.rect(0, 0, pageW, 90).fill("#0f172a");
+    doc.fontSize(24).font("Helvetica-Bold").fillColor("#ffffff").text("AEVION", 50, 28);
+    doc.fontSize(10).font("Helvetica").fillColor("#94a3b8").text("Digital IP Bureau — Protection Certificate", 50, 58);
+
+    /* ── Teal accent line ── */
+    doc.rect(0, 90, pageW, 4).fill("#0d9488");
+
+    /* ── Certificate title ── */
+    doc.moveDown(2);
+    const yTitle = 120;
+    doc.fontSize(11).font("Helvetica").fillColor("#0d9488").text("CERTIFICATE OF INTELLECTUAL PROPERTY PROTECTION", 50, yTitle, { align: "center", width: W });
+    doc.moveDown(0.5);
+    doc.fontSize(22).font("Helvetica-Bold").fillColor("#0f172a").text(cert.title, 50, yTitle + 22, { align: "center", width: W });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font("Helvetica").fillColor("#64748b").text(`Type: ${cert.kind}  ·  Status: ${cert.status.toUpperCase()}`, 50, yTitle + 52, { align: "center", width: W });
+
+    /* ── Divider ── */
+    const yDiv1 = yTitle + 75;
+    doc.rect(50, yDiv1, W, 1).fill("#e2e8f0");
+
+    /* ── Author info ── */
+    const yInfo = yDiv1 + 16;
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("AUTHOR", 50, yInfo);
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#0f172a").text(cert.authorName || "Anonymous", 50, yInfo + 14);
+
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("LOCATION", 280, yInfo);
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#0f172a").text(
+      [cert.city, cert.country].filter(Boolean).join(", ") || "Not specified",
+      280, yInfo + 14
+    );
+
+    const yDate = yInfo + 40;
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("PROTECTED AT", 50, yDate);
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#0f172a").text(
+      new Date(cert.protectedAt).toLocaleString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+      50, yDate + 14
+    );
+
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("CERTIFICATE ID", 280, yDate);
+    doc.fontSize(10).font("Courier").fillColor("#0f172a").text(cert.id, 280, yDate + 14);
+
+    /* ── Description ── */
+    const yDesc = yDate + 45;
+    doc.rect(50, yDesc, W, 1).fill("#e2e8f0");
+    const yDescText = yDesc + 12;
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("DESCRIPTION", 50, yDescText);
+    doc.fontSize(10).font("Helvetica").fillColor("#334155").text(
+      (cert.description || "").slice(0, 500),
+      50, yDescText + 14, { width: W, lineGap: 3 }
+    );
+
+    /* ── Cryptographic proof ── */
+    const yCrypto = yDescText + 14 + Math.min((cert.description || "").length, 500) * 0.15 + 40;
+    doc.rect(50, yCrypto, W, 1).fill("#e2e8f0");
+
+    const yCryptoTitle = yCrypto + 12;
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#0f172a").text("Cryptographic Proof", 50, yCryptoTitle);
+
+    const fields = [
+      { label: "CONTENT HASH (SHA-256)", value: cert.contentHash },
+      { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
+      { label: "Ed25519 SIGNATURE", value: (cert.signatureEd25519 || "").slice(0, 64) + "..." },
+      { label: "ALGORITHM", value: cert.algorithm },
+      { label: "QUANTUM SHIELD ID", value: cert.shieldId || "N/A" },
+      { label: "PROTECTION", value: `${cert.shardCount} shards, threshold ${cert.shardThreshold} (Shamir's Secret Sharing)` },
+    ];
+
+    let yField = yCryptoTitle + 22;
+    for (const f of fields) {
+      doc.fontSize(7).font("Helvetica-Bold").fillColor("#94a3b8").text(f.label, 50, yField);
+      doc.fontSize(8).font("Courier").fillColor("#334155").text(f.value, 50, yField + 10, { width: W });
+      yField += 26;
+    }
+
+    /* ── QR Code + verify URL ── */
+    const yQR = yField + 10;
+    doc.rect(50, yQR, W, 1).fill("#e2e8f0");
+
+    const qrY = yQR + 14;
+    doc.image(qrBuffer, pageW / 2 - 50, qrY, { width: 100, height: 100 });
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#0d9488").text("Scan to verify this certificate", 50, qrY + 105, { align: "center", width: W });
+    doc.fontSize(8).font("Helvetica").fillColor("#64748b").text(verifyUrl, 50, qrY + 118, { align: "center", width: W });
+
+    /* ── Legal basis ── */
+    const yLegal = qrY + 142;
+    doc.rect(50, yLegal, W, 1).fill("#e2e8f0");
+    const yLegalTitle = yLegal + 10;
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#0f172a").text("Legal Framework", 50, yLegalTitle);
+    doc.fontSize(7).font("Helvetica").fillColor("#475569").text(
+      "Berne Convention (Art. 5(2)) · WIPO Copyright Treaty · TRIPS Agreement (WTO) · eIDAS Regulation (EU) · ESIGN Act (USA) · KZ Digital Signature Law (No. 370-II)",
+      50, yLegalTitle + 14, { width: W, lineGap: 2 }
+    );
+
+    /* ── Disclaimer ── */
+    const yDisclaimer = yLegalTitle + 40;
+    doc.fontSize(6.5).font("Helvetica").fillColor("#94a3b8").text(
+      "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. " +
+      "It does not constitute a patent, trademark, or government-issued copyright registration. " +
+      "It serves as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.",
+      50, yDisclaimer, { width: W, lineGap: 2 }
+    );
+
+    /* ── Footer bar ── */
+    const footerY = doc.page.height - 40;
+    doc.rect(0, footerY, pageW, 40).fill("#0f172a");
+    doc.fontSize(8).font("Helvetica").fillColor("#64748b").text(
+      "AEVION Digital IP Bureau  ·  aevion.vercel.app  ·  Powered by SHA-256, Ed25519, Shamir's Secret Sharing",
+      50, footerY + 14, { align: "center", width: W }
+    );
+
+    doc.end();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "PDF generation failed";
+    console.error("[Pipeline] PDF error:", msg);
+    if (!res.headersSent) {
+      res.status(500).json({ error: msg });
+    }
+  }
+});
 /* GET /api/pipeline/health */
 pipelineRouter.get("/health", (_req, res) => {
   res.json({

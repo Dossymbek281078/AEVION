@@ -39,12 +39,32 @@ const PROVIDER_COLORS: Record<string, string> = {
   grok: "#ef4444",
 };
 
+/* ── Pretty model name ── */
+const prettyModel = (m: string) => {
+  const map: Record<string, string> = {
+    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
+    "gpt-4o": "GPT-4o",
+    "gpt-4o-mini": "GPT-4o Mini",
+    "gpt-4-turbo": "GPT-4 Turbo",
+    "gemini-2.5-flash": "Gemini 2.5 Flash",
+    "gemini-2.0-flash-001": "Gemini 2.0 Flash",
+    "gemini-2.0-flash": "Gemini 2.0 Flash",
+    "gemini-1.5-pro": "Gemini 1.5 Pro",
+    "deepseek-chat": "DeepSeek Chat",
+    "deepseek-reasoner": "DeepSeek Reasoner",
+    "grok-3": "Grok 3",
+    "grok-3-mini": "Grok 3 Mini",
+  };
+  return map[m] || m;
+};
+
 export default function QCoreAIPage() {
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "system",
       content:
-        "You are QCoreAI, the AI assistant for the AEVION ecosystem. Answer concisely and helpfully in English. You know about all 29 AEVION modules: QRight (IP registry), QSign (cryptographic signatures), IP Bureau (patent bureau), Planet (compliance and certification), AEVION Bank (digital wallet and royalties), CyberChess (chess platform), Awards (music and film), Auth (identity), and more.",
+        "You are QCoreAI, the AI assistant for the AEVION ecosystem. Answer concisely and helpfully. You know about all 29 AEVION modules: QRight (IP registry), QSign (cryptographic signatures), IP Bureau (patent bureau), Planet (compliance and certification), AEVION Bank (digital wallet and royalties), CyberChess (chess platform), Awards (music and film), Auth (identity), and more. You respond in the same language the user writes in.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -150,7 +170,6 @@ export default function QCoreAIPage() {
 
         const reply = typeof data?.reply === "string" ? data.reply : JSON.stringify(data, null, 2);
 
-        /* Track which provider/model actually responded */
         if (data?.provider) setActiveProviderName(data.provider);
         if (data?.model) setActiveModel(data.model);
 
@@ -175,24 +194,6 @@ export default function QCoreAIPage() {
   const configuredProviders = providers.filter((p) => p.configured);
   const unconfiguredProviders = providers.filter((p) => !p.configured);
 
-  /* ── Pretty model name ── */
-  const prettyModel = (m: string) => {
-    const map: Record<string, string> = {
-      "claude-sonnet-4-20250514": "Claude Sonnet 4",
-      "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
-      "gpt-4o": "GPT-4o",
-      "gpt-4o-mini": "GPT-4o Mini",
-      "gpt-4-turbo": "GPT-4 Turbo",
-      "gemini-2.0-flash": "Gemini 2.0 Flash",
-      "gemini-1.5-pro": "Gemini 1.5 Pro",
-      "deepseek-chat": "DeepSeek Chat",
-      "deepseek-reasoner": "DeepSeek Reasoner",
-      "grok-3": "Grok 3",
-      "grok-3-mini": "Grok 3 Mini",
-    };
-    return map[m] || m;
-  };
-
   return (
     <main>
       <ProductPageShell maxWidth={840}>
@@ -203,7 +204,7 @@ export default function QCoreAIPage() {
           <div
             style={{
               background: "linear-gradient(135deg, #0f172a, #1e1b4b, #312e81)",
-              padding: "24px 24px 18px",
+              padding: "24px 24px 20px",
               color: "#fff",
             }}
           >
@@ -290,7 +291,7 @@ export default function QCoreAIPage() {
                     }}
                   >
                     {configuredProviders.length > 0 && (
-                      <div style={{ padding: "8px 12px 4px", fontSize: 10, fontWeight: 700, color: "#22d3ee", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      <div style={{ padding: "8px 12px 4px", fontSize: 10, fontWeight: 700, color: "#22d3ee", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
                         Available
                       </div>
                     )}
@@ -310,7 +311,7 @@ export default function QCoreAIPage() {
                           fontSize: 13,
                           fontWeight: selectedProvider === p.id ? 700 : 500,
                           cursor: "pointer",
-                          textAlign: "left",
+                          textAlign: "left" as const,
                           transition: "background 0.15s",
                         }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = selectedProvider === p.id ? "rgba(6,182,212,0.2)" : "rgba(255,255,255,0.06)")}
@@ -325,7 +326,7 @@ export default function QCoreAIPage() {
                     {unconfiguredProviders.length > 0 && (
                       <>
                         <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
-                        <div style={{ padding: "8px 12px 4px", fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        <div style={{ padding: "8px 12px 4px", fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
                           Not configured
                         </div>
                         {unconfiguredProviders.map((p) => (
@@ -416,7 +417,7 @@ export default function QCoreAIPage() {
                             fontSize: 13,
                             fontWeight: selectedModel === m ? 700 : 500,
                             cursor: "pointer",
-                            textAlign: "left",
+                            textAlign: "left" as const,
                             transition: "background 0.15s",
                           }}
                           onMouseEnter={(e) => (e.currentTarget.style.background = selectedModel === m ? "rgba(6,182,212,0.2)" : "rgba(255,255,255,0.06)")}
@@ -569,8 +570,7 @@ export default function QCoreAIPage() {
                   color: "#94a3b8",
                 }}
               >
-                Thinking
-                <span style={{ display: "inline-block", animation: "qcoreDots 1.4s infinite" }}> ...</span>
+                Thinking...
               </div>
             </div>
           ) : null}
@@ -631,6 +631,7 @@ export default function QCoreAIPage() {
         <div
           style={{
             marginTop: 20,
+            marginBottom: 40,
             padding: "14px 16px",
             borderRadius: 14,
             border: "1px solid rgba(15,23,42,0.08)",

@@ -48,8 +48,8 @@ function getProviders(): Provider[] {
     {
       id: "gemini",
       name: "Gemini (Google)",
-      models: ["gemini-2.0-flash", "gemini-3-flash-preview", "gemini-1.5-pro"],
-defaultModel: "gemini-2.0-flash",
+      models: ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"],
+defaultModel: "gemini-2.5-flash",
       envKey: "GEMINI_API_KEY",
       configured: !!process.env.GEMINI_API_KEY?.trim(),
     },

@@ -12,6 +12,7 @@ import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { qcoreaiRouter } from "./routes/qcoreai";
 import { quantumShieldRouter } from "./routes/quantum-shield";
+import { pipelineRouter } from "./routes/pipeline";
 
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -135,7 +136,7 @@ app.use("/api/qsign", qsignRouter);
 // Quantum Shield
 // ==========================
 app.use("/api/quantum-shield", quantumShieldRouter);
-
+app.use("/api/pipeline", pipelineRouter);
 // ==========================
 // Auth
 // ==========================

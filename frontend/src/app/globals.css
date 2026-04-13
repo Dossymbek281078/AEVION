@@ -215,4 +215,207 @@ code {
   .aevion-quick-cards {
     grid-template-columns: 1fr !important;
   }
+/* ══════════════════════════════════════════════════════════
+   AEVION MOBILE ADAPTATION — Full Platform
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Global: all 4-column grids → 2 on tablet, 1 on phone ── */
+@media (max-width: 768px) {
+  main [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  main [style*="gridTemplateColumns"] {
+    /* fallback — inline styles don't match CSS selectors,
+       so we use class overrides below */
+  }
 }
+
+@media (max-width: 480px) {
+  main [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── ProductPageShell: reduce padding on mobile ── */
+@media (max-width: 640px) {
+  main > div > div {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+
+/* ── Hero sections: smaller text ── */
+@media (max-width: 640px) {
+  main h1 {
+    font-size: 24px !important;
+    line-height: 1.15 !important;
+  }
+  main h2 {
+    font-size: 20px !important;
+  }
+}
+
+/* ── Stat cards grids → 2 columns on mobile ── */
+@media (max-width: 640px) {
+  .aevion-stats-grid,
+  .aevion-hero-stats {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .aevion-stats-grid,
+  .aevion-hero-stats {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Flex button rows: wrap properly ── */
+@media (max-width: 640px) {
+  main [style*="display: flex"][style*="gap"] {
+    flex-wrap: wrap !important;
+  }
+  main a[style*="padding: \"14px 28px\""],
+  main a[style*="padding: \"14px 24px\""],
+  main button[style*="padding: \"14px"] {
+    width: 100% !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+}
+
+/* ── Globe section: stack vertically ── */
+@media (max-width: 768px) {
+  main section > div[style*="display: flex"][style*="flex-wrap: wrap"] {
+    flex-direction: column !important;
+  }
+  main section > div[style*="display: flex"] > div[style*="flex: \"1 1 400px\""],
+  main section > div[style*="display: flex"] > div[style*="flex: \"1 1 320px\""] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* ── Investment cards: single column on mobile ── */
+@media (max-width: 640px) {
+  main div[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Certificate/operation cards: compact ── */
+@media (max-width: 480px) {
+  main div[style*="borderRadius: 14"][style*="padding: 16"] {
+    padding: 12px !important;
+  }
+  main div[style*="borderRadius: 16"][style*="padding: 20"] {
+    padding: 14px !important;
+  }
+}
+
+/* ── Monospace text: smaller on mobile, break words ── */
+@media (max-width: 640px) {
+  main [style*="font-family: monospace"],
+  main [style*="fontFamily: \"monospace\""],
+  main code {
+    font-size: 10px !important;
+    word-break: break-all !important;
+  }
+}
+
+/* ── Wave1Nav: horizontal scroll on mobile ── */
+@media (max-width: 640px) {
+  nav[style*="gap"],
+  .aevion-nav-pills,
+  main > div > div > div[style*="display: flex"][style*="gap: 8"] {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  nav[style*="gap"]::-webkit-scrollbar,
+  .aevion-nav-pills::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Top navigation bar: compact on mobile ── */
+@media (max-width: 768px) {
+  header nav,
+  nav[style*="font-size"] {
+    font-size: 11px !important;
+    gap: 4px !important;
+  }
+  header nav a,
+  nav a[style*="padding"] {
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* ── Form inputs: full width ── */
+@media (max-width: 640px) {
+  main input[style*="width: \"100%\""],
+  main select[style*="width: \"100%\""],
+  main textarea[style*="width: \"100%\""] {
+    font-size: 16px !important; /* prevents iOS zoom */
+  }
+}
+
+/* ── Demo page steps: stack icon and content ── */
+@media (max-width: 520px) {
+  main div[style*="display: flex"][style*="gap: 20"] {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+}
+
+/* ── Header gradient sections: less padding on mobile ── */
+@media (max-width: 640px) {
+  main div[style*="padding: \"32px 28px\""],
+  main div[style*="padding: \"28px 28px\""] {
+    padding: 20px 16px !important;
+  }
+  main section[style*="padding: \"48px 24px\""] {
+    padding: 28px 16px 36px !important;
+  }
+  main section[style*="padding: \"32px 28px\""] {
+    padding: 20px 16px !important;
+  }
+}
+
+/* ── Scrollbar hiding for horizontal scroll areas ── */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Tap targets: minimum 44px for mobile ── */
+@media (max-width: 640px) {
+  main button,
+  main a[style*="borderRadius"] {
+    min-height: 44px;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+}
+
+/* ── Print styles ── */
+@media print {
+  nav, header, footer, .aevion-nav-pills, .demo-aurora, .demo-marquee-wrap {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  main section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}}

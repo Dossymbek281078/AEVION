@@ -38,6 +38,9 @@ const AI_LEVELS: AILevel[] = [
   { name: "Master", elo: 2400, depth: 6, label: "Мастер", color: "#f59e0b", randomness: 2 },
 ];
 
+/* Stockfish search depth per AI level index (only for levels 3-5) */
+const SF_DEPTH: Record<number, number> = { 3: 8, 4: 12, 5: 16 };
+
 const RANKS = [
   { min: 0, t: "Beginner", i: "●" }, { min: 600, t: "Novice", i: "◆" },
   { min: 900, t: "Amateur", i: "■" }, { min: 1200, t: "Club", i: "▲" },
@@ -64,9 +67,63 @@ const PUZZLES = [
   { fen: "r2q1rk1/ppp1ppbp/2np1np1/8/2PPP1b1/2N2N2/PP2BPPP/R1BQ1RK1 w - - 0 8", sol: ["d4d5"], name: "Pawn Storm", r: 2200, theme: "Attack" },
 ];
 
-/* ═══ AI ENGINE (minimax with alpha-beta) ═══ */
-const PIECE_VALUES: Record<PieceSymbol, number> = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
+/* ═══ STOCKFISH WEB WORKER ═══ */
+class StockfishEngine {
+  private worker: Worker | null = null;
+  private ready = false;
+  private onMoveCallback: ((from: string, to: string, promo?: string) => void) | null = null;
 
+  init() {
+    if (this.worker) return;
+    try {
+      this.worker = new Worker("/stockfish.js");
+      this.worker.onmessage = (e) => {
+        const line = typeof e.data === "string" ? e.data : "";
+        if (line.startsWith("bestmove")) {
+          const parts = line.split(" ");
+          const move = parts[1];
+          if (move && move.length >= 4 && this.onMoveCallback) {
+            const from = move.slice(0, 2);
+            const to = move.slice(2, 4);
+            const promo = move.length > 4 ? move[4] : undefined;
+            this.onMoveCallback(from, to, promo);
+            this.onMoveCallback = null;
+          }
+        }
+        if (line === "uciok") {
+          this.ready = true;
+          this.send("isready");
+        }
+      };
+      this.send("uci");
+    } catch {
+      this.worker = null;
+    }
+  }
+
+  private send(cmd: string) {
+    this.worker?.postMessage(cmd);
+  }
+
+  isReady() { return this.ready && this.worker !== null; }
+
+  findMove(fen: string, depth: number, callback: (from: string, to: string, promo?: string) => void) {
+    if (!this.worker) { callback("", ""); return; }
+    this.onMoveCallback = callback;
+    this.send("ucinewgame");
+    this.send(`position fen ${fen}`);
+    this.send(`go depth ${depth}`);
+  }
+
+  destroy() {
+    this.worker?.terminate();
+    this.worker = null;
+    this.ready = false;
+  }
+}
+
+/* ═══ MINIMAX AI ENGINE (for levels 1-3) ═══ */
+const PIECE_VALUES: Record<PieceSymbol, number> = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
 const PST_P = [0,0,0,0,0,0,0,0,50,50,50,50,50,50,50,50,10,10,20,30,30,20,10,10,5,5,10,25,25,10,5,5,0,0,0,20,20,0,0,0,5,-5,-10,0,0,-10,-5,5,5,10,10,-20,-20,10,10,5,0,0,0,0,0,0,0,0];
 const PST_N = [-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,0,0,0,-20,-40,-30,0,10,15,15,10,0,-30,-30,5,15,20,20,15,5,-30,-30,0,15,20,20,15,0,-30,-30,5,10,15,15,10,5,-30,-40,-20,0,5,5,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50];
 const PST_B = [-20,-10,-10,-10,-10,-10,-10,-20,-10,0,0,0,0,0,0,-10,-10,0,5,10,10,5,0,-10,-10,5,5,10,10,5,5,-10,-10,0,10,10,10,10,0,-10,-10,10,10,10,10,10,10,-10,-10,5,0,0,0,0,5,-10,-20,-10,-10,-10,-10,-10,-10,-20];
@@ -78,14 +135,11 @@ const PST: Record<PieceSymbol, number[]> = { p: PST_P, n: PST_N, b: PST_B, r: PS
 function evaluate(chess: Chess): number {
   let score = 0;
   const board = chess.board();
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const sq = board[r][c];
-      if (!sq) continue;
-      const idx = sq.color === "w" ? r * 8 + c : (7 - r) * 8 + c;
-      const val = PIECE_VALUES[sq.type] + (PST[sq.type]?.[idx] || 0);
-      score += sq.color === "w" ? val : -val;
-    }
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const sq = board[r][c];
+    if (!sq) continue;
+    const idx = sq.color === "w" ? r * 8 + c : (7 - r) * 8 + c;
+    score += (sq.color === "w" ? 1 : -1) * (PIECE_VALUES[sq.type] + (PST[sq.type]?.[idx] || 0));
   }
   return score;
 }
@@ -93,29 +147,14 @@ function evaluate(chess: Chess): number {
 function minimax(chess: Chess, depth: number, alpha: number, beta: number, maximizing: boolean): number {
   if (depth === 0) return evaluate(chess);
   const moves = chess.moves({ verbose: true });
-  if (moves.length === 0) {
-    if (chess.isCheckmate()) return maximizing ? -100000 : 100000;
-    return 0; // stalemate/draw
-  }
+  if (!moves.length) return chess.isCheckmate() ? (maximizing ? -100000 : 100000) : 0;
   if (maximizing) {
     let best = -Infinity;
-    for (const m of moves) {
-      chess.move(m);
-      best = Math.max(best, minimax(chess, depth - 1, alpha, beta, false));
-      chess.undo();
-      alpha = Math.max(alpha, best);
-      if (beta <= alpha) break;
-    }
+    for (const m of moves) { chess.move(m); best = Math.max(best, minimax(chess, depth - 1, alpha, beta, false)); chess.undo(); alpha = Math.max(alpha, best); if (beta <= alpha) break; }
     return best;
   } else {
     let best = Infinity;
-    for (const m of moves) {
-      chess.move(m);
-      best = Math.min(best, minimax(chess, depth - 1, alpha, beta, true));
-      chess.undo();
-      beta = Math.min(beta, best);
-      if (beta <= alpha) break;
-    }
+    for (const m of moves) { chess.move(m); best = Math.min(best, minimax(chess, depth - 1, alpha, beta, true)); chess.undo(); beta = Math.min(beta, best); if (beta <= alpha) break; }
     return best;
   }
 }
@@ -139,28 +178,25 @@ function playSound(type: "move" | "capture" | "check" | "castle" | "gameover") {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     gain.gain.value = 0.05;
     const freqs = { move: 600, capture: 300, check: 800, castle: 500, gameover: 200 };
     const types: Record<string, OscillatorType> = { move: "sine", capture: "sawtooth", check: "square", castle: "sine", gameover: "triangle" };
-    osc.frequency.value = freqs[type];
-    osc.type = types[type];
-    osc.start();
-    osc.stop(ctx.currentTime + (type === "gameover" ? 0.3 : 0.08));
+    osc.frequency.value = freqs[type]; osc.type = types[type];
+    osc.start(); osc.stop(ctx.currentTime + (type === "gameover" ? 0.3 : 0.08));
   } catch {}
 }
 
-/* ═══ RATING STORAGE ═══ */
+/* ═══ RATING ═══ */
 const RK = "aevion_chess_rating_v2";
 const SK = "aevion_chess_stats_v2";
 function loadRating(): number { try { return parseInt(localStorage.getItem(RK) || "800"); } catch { return 800; } }
 function saveRating(r: number) { try { localStorage.setItem(RK, String(Math.round(r))); } catch {} }
-function loadStats(): { w: number; l: number; d: number } { try { return JSON.parse(localStorage.getItem(SK) || '{"w":0,"l":0,"d":0}'); } catch { return { w: 0, l: 0, d: 0 }; } }
+function loadStats() { try { return JSON.parse(localStorage.getItem(SK) || '{"w":0,"l":0,"d":0}'); } catch { return { w: 0, l: 0, d: 0 }; } }
 function saveStats(s: { w: number; l: number; d: number }) { try { localStorage.setItem(SK, JSON.stringify(s)); } catch {} }
 function getRank(elo: number) { return [...RANKS].reverse().find((t) => elo >= t.min) || RANKS[0]; }
 
-/* ═══ TIMER HOOK ═══ */
+/* ═══ TIMER ═══ */
 function useTimer(initial: number, increment: number, active: boolean, onTimeout: () => void) {
   const [time, setTime] = useState(initial);
   const ref = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -179,25 +215,15 @@ function useTimer(initial: number, increment: number, active: boolean, onTimeout
   return { time, addInc, reset };
 }
 
-function fmtTime(s: number): string {
-  if (s <= 0) return "0:00";
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${sec < 10 ? "0" : ""}${sec}`;
-}
-
-/* ═══ PIECE COMPONENT ═══ */
-function getPieceChar(type: PieceSymbol, color: ChessColor): string {
-  return PIECE_MAP[`${color}${type}`] || "?";
-}
+function fmtTime(s: number): string { if (s <= 0) return "0:00"; return `${Math.floor(s / 60)}:${(s % 60 < 10 ? "0" : "") + (s % 60)}`; }
+function getPieceChar(type: PieceSymbol, color: ChessColor): string { return PIECE_MAP[`${color}${type}`] || "?"; }
 
 /* ═══ MAIN COMPONENT ═══ */
 export default function CyberChessPage() {
   const { showToast } = useToast();
 
-  // Game state
   const [game, setGame] = useState(() => new Chess());
-  const [boardKey, setBoardKey] = useState(0); // force re-render
+  const [boardKey, setBoardKey] = useState(0);
   const [selectedSq, setSelectedSq] = useState<Square | null>(null);
   const [validMoves, setValidMoves] = useState<Set<string>>(new Set());
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
@@ -208,17 +234,16 @@ export default function CyberChessPage() {
   const [capturedB, setCapturedB] = useState<string[]>([]);
   const [promoModal, setPromoModal] = useState<{ from: Square; to: Square } | null>(null);
 
-  // Settings
   const [aiLevelIdx, setAiLevelIdx] = useState(2);
   const [playerColor, setPlayerColor] = useState<ChessColor>("w");
-  const [tcIdx, setTcIdx] = useState(9); // no limit
+  const [tcIdx, setTcIdx] = useState(9);
   const [started, setStarted] = useState(false);
   const [showSetup, setShowSetup] = useState(true);
   const [flip, setFlip] = useState(false);
   const [tab, setTab] = useState<"play" | "puzzles">("play");
   const [pzIdx, setPzIdx] = useState(0);
+  const [sfStatus, setSfStatus] = useState<"off" | "loading" | "ready">("off");
 
-  // Rating
   const [rating, setRating] = useState(800);
   const [stats, setStats] = useState({ w: 0, l: 0, d: 0 });
 
@@ -228,48 +253,61 @@ export default function CyberChessPage() {
   const aiColor: ChessColor = playerColor === "w" ? "b" : "w";
   const isPlayerTurn = game.turn() === playerColor;
   const isCheck = game.isCheck();
+  const useStockfishAI = aiLevelIdx >= 3;
 
-  // Timers
   const pTimer = useTimer(tc.initial, tc.increment, started && isPlayerTurn && !gameOver && tc.initial > 0, () => { setGameOver("Time out — AI wins"); playSound("gameover"); });
   const aTimer = useTimer(tc.initial, tc.increment, started && !isPlayerTurn && !gameOver && tc.initial > 0, () => { setGameOver("AI ran out of time — you win!"); playSound("gameover"); });
 
   const hRef = useRef<HTMLDivElement>(null);
+  const sfRef = useRef<StockfishEngine | null>(null);
 
   useEffect(() => { setRating(loadRating()); setStats(loadStats()); }, []);
   useEffect(() => { hRef.current?.scrollTo({ top: hRef.current.scrollHeight, behavior: "smooth" }); }, [history]);
 
-  /* ── Execute a move ── */
+  /* ── Init Stockfish when needed ── */
+  useEffect(() => {
+    if (useStockfishAI && !sfRef.current) {
+      setSfStatus("loading");
+      const sf = new StockfishEngine();
+      sf.init();
+      sfRef.current = sf;
+      // Poll for ready
+      const check = setInterval(() => {
+        if (sf.isReady()) { setSfStatus("ready"); clearInterval(check); }
+      }, 200);
+      const timeout = setTimeout(() => { clearInterval(check); if (!sf.isReady()) setSfStatus("off"); }, 10000);
+      return () => { clearInterval(check); clearTimeout(timeout); };
+    }
+    if (!useStockfishAI) {
+      setSfStatus("off");
+    }
+  }, [useStockfishAI]);
+
+  /* ── Execute move ── */
   const executeMove = useCallback((from: Square, to: Square, promotion?: "q" | "r" | "b" | "n") => {
     const movingPiece = game.get(from);
     if (!movingPiece) return false;
-
     const move = game.move({ from, to, promotion: promotion || "q" });
     if (!move) return false;
 
-    // Sound
     if (move.captured) playSound("capture");
     else if (move.san.includes("O-")) playSound("castle");
     else if (game.isCheck()) playSound("check");
     else playSound("move");
 
-    // Track captures
     if (move.captured) {
       const capChar = getPieceChar(move.captured, move.color === "w" ? "b" : "w");
       if (move.color === playerColor) setCapturedB((x) => [...x, capChar]);
       else setCapturedW((x) => [...x, capChar]);
     }
 
-    // Timer increment
-    if (move.color === playerColor) pTimer.addInc();
-    else aTimer.addInc();
+    if (move.color === playerColor) pTimer.addInc(); else aTimer.addInc();
 
     setHistory((h) => [...h, move.san]);
     setLastMove({ from: move.from, to: move.to });
-    setSelectedSq(null);
-    setValidMoves(new Set());
+    setSelectedSq(null); setValidMoves(new Set());
     setBoardKey((k) => k + 1);
 
-    // Check game over
     if (game.isGameOver()) {
       let result = "";
       if (game.isCheckmate()) {
@@ -292,10 +330,8 @@ export default function CyberChessPage() {
         else result = "Draw by 50-move rule";
         setStats((s) => { const n = { ...s, d: s.d + 1 }; saveStats(n); return n; });
       }
-      setGameOver(result);
-      playSound("gameover");
+      setGameOver(result); playSound("gameover");
     }
-
     return true;
   }, [game, rating, lv.elo, playerColor, aiColor, pTimer, aTimer, showToast, boardKey]);
 
@@ -303,6 +339,20 @@ export default function CyberChessPage() {
   useEffect(() => {
     if (game.turn() !== aiColor || gameOver || !started || tab !== "play") return;
     setThinking(true);
+
+    // Stockfish for levels 4-6
+    if (useStockfishAI && sfRef.current?.isReady()) {
+      const depth = SF_DEPTH[aiLevelIdx] || 10;
+      sfRef.current.findMove(game.fen(), depth, (from, to, promo) => {
+        if (from && to) {
+          executeMove(from as Square, to as Square, (promo || undefined) as any);
+        }
+        setThinking(false);
+      });
+      return;
+    }
+
+    // Minimax fallback for levels 1-3 (or if Stockfish not ready)
     const t = setTimeout(() => {
       const cloned = new Chess(game.fen());
       const best = findBestMove(cloned, lv.depth, lv.randomness);
@@ -316,33 +366,19 @@ export default function CyberChessPage() {
   const handleClick = useCallback((sq: Square) => {
     if (gameOver || thinking || game.turn() !== playerColor) return;
     const piece = game.get(sq);
-
     if (selectedSq) {
       if (validMoves.has(sq)) {
-        // Check promotion
         const movingPiece = game.get(selectedSq);
-        if (movingPiece?.type === "p" && (sq[1] === "1" || sq[1] === "8")) {
-          setPromoModal({ from: selectedSq, to: sq });
-          return;
-        }
-        executeMove(selectedSq, sq);
-        return;
+        if (movingPiece?.type === "p" && (sq[1] === "1" || sq[1] === "8")) { setPromoModal({ from: selectedSq, to: sq }); return; }
+        executeMove(selectedSq, sq); return;
       }
       if (piece?.color === playerColor) {
-        setSelectedSq(sq);
-        const moves = game.moves({ square: sq, verbose: true });
-        setValidMoves(new Set(moves.map((m) => m.to)));
-        return;
+        setSelectedSq(sq); setValidMoves(new Set(game.moves({ square: sq, verbose: true }).map((m) => m.to))); return;
       }
-      setSelectedSq(null);
-      setValidMoves(new Set());
-      return;
+      setSelectedSq(null); setValidMoves(new Set()); return;
     }
-
     if (piece?.color === playerColor) {
-      setSelectedSq(sq);
-      const moves = game.moves({ square: sq, verbose: true });
-      setValidMoves(new Set(moves.map((m) => m.to)));
+      setSelectedSq(sq); setValidMoves(new Set(game.moves({ square: sq, verbose: true }).map((m) => m.to)));
     }
   }, [game, selectedSq, validMoves, gameOver, thinking, playerColor, executeMove]);
 
@@ -351,25 +387,17 @@ export default function CyberChessPage() {
   const handleDragStart = (sq: Square) => {
     const piece = game.get(sq);
     if (piece?.color === playerColor && game.turn() === playerColor && !gameOver && !thinking) {
-      dragRef.current = sq;
-      setSelectedSq(sq);
-      const moves = game.moves({ square: sq, verbose: true });
-      setValidMoves(new Set(moves.map((m) => m.to)));
+      dragRef.current = sq; setSelectedSq(sq);
+      setValidMoves(new Set(game.moves({ square: sq, verbose: true }).map((m) => m.to)));
     }
   };
   const handleDrop = (sq: Square) => {
     if (!dragRef.current) return;
     if (validMoves.has(sq)) {
       const movingPiece = game.get(dragRef.current);
-      if (movingPiece?.type === "p" && (sq[1] === "1" || sq[1] === "8")) {
-        setPromoModal({ from: dragRef.current, to: sq });
-      } else {
-        executeMove(dragRef.current, sq);
-      }
-    } else {
-      setSelectedSq(null);
-      setValidMoves(new Set());
-    }
+      if (movingPiece?.type === "p" && (sq[1] === "1" || sq[1] === "8")) { setPromoModal({ from: dragRef.current, to: sq }); }
+      else executeMove(dragRef.current, sq);
+    } else { setSelectedSq(null); setValidMoves(new Set()); }
     dragRef.current = null;
   };
 
@@ -377,8 +405,7 @@ export default function CyberChessPage() {
   const newGame = (color?: ChessColor) => {
     const c = color || playerColor;
     const g = new Chess();
-    setGame(g);
-    setBoardKey((k) => k + 1);
+    setGame(g); setBoardKey((k) => k + 1);
     setSelectedSq(null); setValidMoves(new Set()); setLastMove(null);
     setGameOver(null); setHistory([]); setCapturedW([]); setCapturedB([]);
     setPromoModal(null); setThinking(false);
@@ -391,25 +418,21 @@ export default function CyberChessPage() {
   const loadPuzzle = (idx: number) => {
     const pz = PUZZLES[idx];
     const g = new Chess(pz.fen);
-    setGame(g);
-    setBoardKey((k) => k + 1);
-    setPzIdx(idx);
+    setGame(g); setBoardKey((k) => k + 1); setPzIdx(idx);
     setSelectedSq(null); setValidMoves(new Set()); setLastMove(null);
     setGameOver(null); setHistory([]); setCapturedW([]); setCapturedB([]);
     setStarted(true); setShowSetup(false);
-    setPlayerColor(g.turn());
-    setFlip(g.turn() === "b");
+    setPlayerColor(g.turn()); setFlip(g.turn() === "b");
     showToast(`Puzzle: ${pz.name} (${pz.r})`, "info");
   };
 
-  /* ── Board rendering ── */
   const board = game.board();
-  const rows = flip ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
-  const cols = flip ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
-
+  const rows = flip ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const cols = flip ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
   const LIGHT = "#f0d9b5";
   const DARK = "#b58863";
 
+  /* ═══ RENDER ═══ */
   return (
     <main>
       <ProductPageShell maxWidth={1040}>
@@ -420,9 +443,12 @@ export default function CyberChessPage() {
           <div style={{ background: "linear-gradient(135deg, #1c1917, #292524, #44403c)", padding: "24px 24px 18px", color: "#fff" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <div>
-                <div style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", marginBottom: 8 }}>CyberChess by AEVION</div>
+                <div style={{ display: "inline-flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)" }}>CyberChess by AEVION</span>
+                  {useStockfishAI && <span style={{ padding: "3px 8px", borderRadius: 999, fontSize: 9, fontWeight: 800, background: sfStatus === "ready" ? "rgba(16,185,129,0.2)" : "rgba(245,158,11,0.2)", color: sfStatus === "ready" ? "#10b981" : "#f59e0b", border: `1px solid ${sfStatus === "ready" ? "rgba(16,185,129,0.4)" : "rgba(245,158,11,0.4)"}` }}>⚡ STOCKFISH 18 {sfStatus === "loading" ? "LOADING..." : sfStatus === "ready" ? "ACTIVE" : ""}</span>}
+                </div>
                 <h1 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 4px", letterSpacing: "-0.03em" }}>Next-gen Chess Platform</h1>
-                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>chess.js engine · 6 AI levels · 15 puzzles · ELO rating · timers</p>
+                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>chess.js + Stockfish 18 WASM · 6 AI levels · 15 puzzles · ELO rating</p>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 12, color: "#94a3b8" }}>Your rating</div>
@@ -467,9 +493,16 @@ export default function CyberChessPage() {
               <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, marginBottom: 6 }}>AI Opponent</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {AI_LEVELS.map((l, i) => (
-                  <button key={i} onClick={() => setAiLevelIdx(i)} style={{ padding: "5px 10px", borderRadius: 8, border: aiLevelIdx === i ? `2px solid ${l.color}` : "1px solid rgba(15,23,42,0.12)", background: aiLevelIdx === i ? `${l.color}18` : "#fff", fontSize: 11, fontWeight: aiLevelIdx === i ? 800 : 600, cursor: "pointer", color: aiLevelIdx === i ? l.color : "#64748b" }}>{l.name} ({l.elo})</button>
+                  <button key={i} onClick={() => setAiLevelIdx(i)} style={{ padding: "5px 10px", borderRadius: 8, border: aiLevelIdx === i ? `2px solid ${l.color}` : "1px solid rgba(15,23,42,0.12)", background: aiLevelIdx === i ? `${l.color}18` : "#fff", fontSize: 11, fontWeight: aiLevelIdx === i ? 800 : 600, cursor: "pointer", color: aiLevelIdx === i ? l.color : "#64748b" }}>
+                    {l.name} ({l.elo}){i >= 3 ? " ⚡" : ""}
+                  </button>
                 ))}
               </div>
+              {aiLevelIdx >= 3 && (
+                <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", fontSize: 11, color: "#7c3aed" }}>
+                  ⚡ Levels 4-6 use <b>Stockfish 18 WASM</b> — the same engine that powers chess.com and lichess. Depth: {SF_DEPTH[aiLevelIdx] || 10} plies.
+                </div>
+              )}
             </div>
             <button onClick={() => newGame()} style={{ padding: "12px 28px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#0d9488,#0ea5e9)", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 14px rgba(13,148,136,0.35)" }}>
               ♟ Start Game
@@ -493,7 +526,7 @@ export default function CyberChessPage() {
                 </div>
               )}
 
-              {/* Chess Board */}
+              {/* Board */}
               <div translate="no" style={{ display: "flex", width: "min(480px, calc(100vw - 32px))" }}>
                 <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-around", paddingRight: 4, width: 18 }}>
                   {rows.map((r) => <div key={r} style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, textAlign: "center" }}>{8 - r}</div>)}
@@ -541,13 +574,11 @@ export default function CyberChessPage() {
                   }))}
                 </div>
               </div>
-              {/* File labels */}
               <div style={{ display: "flex", paddingLeft: 22, width: "min(480px, calc(100vw - 32px))" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", flex: 1, marginTop: 3 }}>
                   {cols.map((c) => <div key={c} style={{ textAlign: "center", fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{FILES[c]}</div>)}
                 </div>
               </div>
-              {/* Board controls */}
               <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                 <button onClick={() => setFlip(!flip)} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>🔄 Flip</button>
                 <button onClick={() => { setShowSetup(true); setStarted(false); setGameOver(null); }} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#0f172a", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>♟ New Game</button>
@@ -569,13 +600,23 @@ export default function CyberChessPage() {
                     <div style={{ fontSize: 12, color: "#64748b" }}>{history.length} moves · Rating: {rating} {rk.i} {rk.t}</div>
                   </div>
                 ) : (
-                  <div style={{ fontWeight: 800, fontSize: 14 }}>
-                    {isCheck ? "⚠️ Check!" : thinking ? "🤔 AI thinking..." : isPlayerTurn ? "Your move" : "AI's move"}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontWeight: 800, fontSize: 14 }}>
+                      {isCheck ? "⚠️ Check!" : thinking ? (useStockfishAI ? "⚡ Stockfish thinking..." : "🤔 AI thinking...") : isPlayerTurn ? "Your move" : "AI's move"}
+                    </span>
+                    {thinking && useStockfishAI && <span style={{ fontSize: 10, color: "#8b5cf6", fontWeight: 700 }}>depth {SF_DEPTH[aiLevelIdx] || 10}</span>}
                   </div>
                 )}
               </div>
 
-              {/* Puzzles list */}
+              {/* Engine info */}
+              {started && !showSetup && (
+                <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 12, border: "1px solid rgba(15,23,42,0.06)", background: "rgba(15,23,42,0.02)", fontSize: 11, color: "#64748b" }}>
+                  Engine: <b style={{ color: "#0f172a" }}>{useStockfishAI ? `Stockfish 18 (depth ${SF_DEPTH[aiLevelIdx] || 10})` : `Minimax α-β (depth ${lv.depth})`}</b> · {lv.name} ({lv.elo} ELO)
+                </div>
+              )}
+
+              {/* Puzzles */}
               {tab === "puzzles" && (
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, marginBottom: 6 }}>Puzzles ({PUZZLES.length})</div>
@@ -600,11 +641,9 @@ export default function CyberChessPage() {
                 </div>
               )}
 
-              {/* Captured pieces */}
               {capturedB.length > 0 && <div style={{ marginBottom: 8 }}><div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Captured by you</div><div style={{ fontSize: 20, letterSpacing: 1 }} translate="no">{capturedB.join("")}</div></div>}
               {capturedW.length > 0 && <div style={{ marginBottom: 8 }}><div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Captured by AI</div><div style={{ fontSize: 20, letterSpacing: 1 }} translate="no">{capturedW.join("")}</div></div>}
 
-              {/* Move history */}
               <div ref={hRef} style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 10, padding: 10, maxHeight: 200, overflowY: "auto", marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginBottom: 4 }}>Moves ({history.length})</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
@@ -616,7 +655,6 @@ export default function CyberChessPage() {
                 </div>
               </div>
 
-              {/* Stats */}
               <div style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 10, padding: 12, marginBottom: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Your Stats</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 12, textAlign: "center" }}>
@@ -626,9 +664,8 @@ export default function CyberChessPage() {
                 </div>
               </div>
 
-              {/* Game features */}
               <div style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
-                <strong>Features:</strong> Full chess rules (chess.js) · castling, en passant, promotion · threefold repetition · 50-move draw · insufficient material · drag & drop · click to move · sound effects
+                <strong>Features:</strong> chess.js + Stockfish 18 WASM · levels 1-3: minimax AI · levels 4-6: real Stockfish engine · all chess rules · drag &amp; drop · sound effects
               </div>
             </div>
           </div>

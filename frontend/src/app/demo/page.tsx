@@ -1,329 +1,235 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import {
-  DEMO_MODULE_ORDER,
-  ecosystemIntro,
-  moduleBenefits,
-  planetLayer,
-} from "@/data/demoNarrative";
+import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 
-type ApiProject = {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  kind: string;
-  status: string;
-  priority: number;
-};
+type Stats = { works: number; certificates: number; shields: number; verifications: number; modules: number };
 
-const marqueePhrases = [
-  "AEVION · unified trust platform",
-  "27 product nodes · one pipeline",
-  "QRight · QSign · Bureau · Planet",
-  "Auth · registry · signature · compliance",
-  "Globus · ecosystem map",
-  "From idea to certificate — in one system",
-];
-
-export default function DemoShowcasePage() {
-  const [projects, setProjects] = useState<ApiProject[]>([]);
-  const [loadErr, setLoadErr] = useState<string | null>(null);
+export default function DemoPage() {
+  const [stats, setStats] = useState<Stats>({ works: 0, certificates: 0, shields: 0, verifications: 0, modules: 29 });
 
   useEffect(() => {
-    let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(apiUrl("/api/globus/projects"));
-        if (!r.ok) throw new Error("API");
-        const data = await r.json();
-        if (!cancelled) setProjects(data.items || []);
-      } catch {
-        if (!cancelled) {
-          setLoadErr("Catalog loading from API; below is a pre-built narrative for all nodes.");
-          setProjects([]);
-        }
-      }
+        const [qr, cert, shield] = await Promise.all([
+          fetch(apiUrl("/api/qright/objects")).then(r => r.ok ? r.json() : { items: [] }).catch(() => ({ items: [] })),
+          fetch(apiUrl("/api/pipeline/certificates")).then(r => r.ok ? r.json() : { certificates: [] }).catch(() => ({ certificates: [] })),
+          fetch(apiUrl("/api/quantum-shield/stats")).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+        ]);
+        const certs = cert.certificates || [];
+        setStats({
+          works: (qr.items || []).length,
+          certificates: certs.length,
+          shields: (shield as any).totalRecords || 0,
+          verifications: certs.reduce((s: number, c: any) => s + (c.verifiedCount || 0), 0),
+          modules: 29,
+        });
+      } catch {}
     })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  const displayRows = useMemo(() => {
-    const byId = new Map(projects.map((p) => [p.id, p]));
-    return DEMO_MODULE_ORDER.map((id) => {
-      const n = moduleBenefits[id];
-      if (!n) return null;
-      const api = byId.get(id);
-      if (api) return api;
-      return {
-        id,
-        code: id.replace(/-/g, "").toUpperCase().slice(0, 12),
-        name: "",
-        description: "",
-        kind: "",
-        status: "",
-        priority: 99,
-      } as ApiProject;
-    }).filter((x): x is ApiProject => x !== null);
-  }, [projects]);
-
-  const marqueeText = useMemo(() => {
-    const line = marqueePhrases.join("   ·   ");
-    return `${line}   ·   ${line}`;
-  }, []);
+  const steps = [
+    {
+      n: "1",
+      title: "Create an Account",
+      desc: "Register with name, email, and password. You get a JWT token that works across all 29 modules.",
+      action: "Create Account →",
+      href: "/auth",
+      color: "#0f172a",
+      icon: "👤",
+      time: "10 seconds",
+    },
+    {
+      n: "2",
+      title: "Protect Your Work",
+      desc: "Describe your creative work — music, code, design, or any content. One click gives you SHA-256 hash, HMAC-SHA256 signature, Ed25519 digital signature, and Shamir's Secret Sharing protection.",
+      action: "Protect a Work →",
+      href: "/qright",
+      color: "#0d9488",
+      icon: "🛡️",
+      time: "5 seconds",
+    },
+    {
+      n: "3",
+      title: "Get Your Certificate",
+      desc: "Instantly receive an IP Protection Certificate with QR code, legal basis under Berne Convention, WIPO, and TRIPS. Download as PDF or share the public verification link.",
+      action: "View IP Bureau →",
+      href: "/bureau",
+      color: "#3b82f6",
+      icon: "📜",
+      time: "Instant",
+    },
+    {
+      n: "4",
+      title: "Verify Publicly",
+      desc: "Anyone can verify your certificate — a court, an investor, or another creator. Just scan the QR code or open the verification link. All integrity checks displayed.",
+      action: "Try Verification →",
+      href: "/qsign",
+      color: "#8b5cf6",
+      icon: "🔍",
+      time: "2 seconds",
+    },
+    {
+      n: "5",
+      title: "Manage Your Wallet",
+      desc: "AEVION Bank gives you digital wallets with AEC credits. Transfer between accounts, track operations, export CSV. Royalties from content usage are paid automatically.",
+      action: "Open Bank →",
+      href: "/bank",
+      color: "#f59e0b",
+      icon: "🏦",
+      time: "Ready",
+    },
+    {
+      n: "6",
+      title: "Ask AI Assistant",
+      desc: "QCoreAI gives you access to 5 AI providers — Claude, GPT-4, Gemini, DeepSeek, Grok. Switch models with one click. Get help with anything.",
+      action: "Chat with AI →",
+      href: "/qcoreai",
+      color: "#06b6d4",
+      icon: "🤖",
+      time: "Ready",
+    },
+  ];
 
   return (
-    <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
-      <section
-        style={{
-          position: "relative",
-          minHeight: "88vh",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "48px 24px 64px",
-          overflow: "hidden",
-        }}
-      >
-        <div className="demo-aurora" aria-hidden />
-        <div style={{ position: "relative", zIndex: 1, maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+    <main style={{ padding: 0 }}>
+      {/* ── Dark Hero ── */}
+      <section style={{ background: "linear-gradient(145deg, #020617, #0f172a 40%, #1e1b4b 100%)", color: "#fff", padding: "48px 24px 56px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Wave1Nav variant="dark" />
-          <p
-            style={{
-              fontSize: 12,
-              fontWeight: 800,
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-              color: "rgba(148,163,184,0.95)",
-              marginBottom: 16,
-            }}
-          >
-            Live demo · just scroll
-          </p>
-          <h1
-            style={{
-              fontSize: "clamp(32px, 6vw, 56px)",
-              fontWeight: 900,
-              lineHeight: 1.05,
-              margin: "0 0 20px",
-              letterSpacing: "-0.04em",
-              background: "linear-gradient(120deg, #fff 0%, #99f6e4 45%, #7dd3fc 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
-            AEVION Ecosystem
-            <br />
-            <span style={{ fontSize: "0.55em", fontWeight: 800, letterSpacing: "-0.02em" }}>
-              trust, IP, AI and finance on one map
-            </span>
+          <div style={{ marginTop: 20, marginBottom: 8, fontSize: 11, fontWeight: 800, letterSpacing: "0.15em", textTransform: "uppercase", color: "#5eead4" }}>INTERACTIVE DEMO · INVESTOR WALKTHROUGH</div>
+          <h1 style={{ fontSize: "clamp(30px, 5vw, 48px)", fontWeight: 900, lineHeight: 1.08, margin: "0 0 16px", letterSpacing: "-0.03em" }}>
+            See AEVION in Action
           </h1>
-          <p
-            style={{
-              fontSize: "clamp(16px, 2.4vw, 20px)",
-              lineHeight: 1.55,
-              maxWidth: 720,
-              color: "rgba(226,232,240,0.92)",
-              margin: 0,
-            }}
-          >
-            Below in detail: why the entire platform matters for investors, why each node exists, and how the cross-cutting
-            Planet layer connects compliance with registry and signatures. No mandatory buttons: just scroll.
+          <p style={{ fontSize: 17, opacity: 0.85, maxWidth: 640, lineHeight: 1.6, margin: "0 0 32px" }}>
+            Follow 6 steps to experience the full platform — from account creation to IP protection, PDF certificates, digital banking, and AI. Every step uses real APIs with real data.
           </p>
 
-          <div style={{ marginTop: 28 }} className="demo-marquee-wrap">
-            <div className="demo-marquee-track" aria-hidden>
-              <span style={{ paddingRight: 48, whiteSpace: "nowrap", fontSize: 15, fontWeight: 700, color: "#5eead4" }}>
-                {marqueeText}
-              </span>
-              <span style={{ paddingRight: 48, whiteSpace: "nowrap", fontSize: 15, fontWeight: 700, color: "#5eead4" }}>
-                {marqueeText}
-              </span>
-            </div>
+          {/* Live stats */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12 }}>
+            {[
+              { label: "Protected Works", value: stats.works, color: "#0d9488" },
+              { label: "IP Certificates", value: stats.certificates, color: "#3b82f6" },
+              { label: "Quantum Shields", value: stats.shields, color: "#8b5cf6" },
+              { label: "Verifications", value: stats.verifications, color: "#f59e0b" },
+              { label: "Modules", value: stats.modules, color: "#10b981" },
+            ].map((s) => (
+              <div key={s.label} style={{ padding: "14px 16px", borderRadius: 14, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.6, textTransform: "uppercase" }}>{s.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 900, marginTop: 6, color: s.color }}>{s.value}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px 80px" }}>
-        {loadErr ? (
-          <p style={{ color: "#fbbf24", fontSize: 14, marginBottom: 24 }}>{loadErr}</p>
-        ) : null}
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 60px" }}>
+        {/* ── Step-by-step Guide ── */}
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#0d9488", marginBottom: 8 }}>GUIDED TOUR</div>
+        <h2 style={{ fontSize: 26, fontWeight: 900, color: "#0f172a", margin: "0 0 28px" }}>6 Steps to Full IP Protection</h2>
 
-        <article
-          style={{
-            marginBottom: 48,
-            padding: 28,
-            borderRadius: 20,
-            border: "1px solid rgba(148,163,184,0.2)",
-            background: "linear-gradient(165deg, rgba(15,23,42,0.9), rgba(15,118,110,0.15))",
-          }}
-        >
-          <h2 style={{ fontSize: 26, fontWeight: 900, margin: "0 0 12px", color: "#fff" }}>
-            {ecosystemIntro.title}
-          </h2>
-          <p style={{ fontSize: 17, lineHeight: 1.65, color: "#cbd5e1", margin: "0 0 20px" }}>{ecosystemIntro.lead}</p>
-          <ul style={{ margin: 0, paddingLeft: 22, color: "#e2e8f0", lineHeight: 1.75, fontSize: 15 }}>
-            {ecosystemIntro.bullets.map((b) => (
-              <li key={b.slice(0, 40)} style={{ marginBottom: 10 }}>
-                {b}
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article
-          style={{
-            marginBottom: 56,
-            padding: 28,
-            borderRadius: 20,
-            border: "1px solid rgba(52,211,153,0.35)",
-            background: "rgba(6,78,59,0.25)",
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.15em", color: "#6ee7b7", marginBottom: 8 }}>
-            CROSS-CUTTING LAYER
-          </div>
-          <h2 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 8px", color: "#fff" }}>
-            {planetLayer.code} — {planetLayer.name}
-          </h2>
-          <p style={{ fontSize: 16, lineHeight: 1.6, color: "#d1fae5", marginBottom: 16 }}>{planetLayer.summary}</p>
-          <ul style={{ margin: 0, paddingLeft: 22, color: "#ecfdf5", lineHeight: 1.7, fontSize: 15 }}>
-            {planetLayer.benefits.map((b) => (
-              <li key={b.slice(0, 40)} style={{ marginBottom: 8 }}>
-                {b}
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <h2
-          style={{
-            fontSize: 13,
-            fontWeight: 800,
-            letterSpacing: "0.2em",
-            color: "#94a3b8",
-            margin: "0 0 20px",
-            textTransform: "uppercase",
-          }}
-        >
-          27 product nodes — benefits for each
-        </h2>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          {displayRows.map((p, idx) => {
-              const narrative = moduleBenefits[p.id];
-              if (!narrative) return null;
-              const title = p.name?.trim() || narrative.tagline;
-              const showTagline = !!(p.name?.trim() && narrative.tagline);
-              return (
-                <article
-                  key={p.id}
-                  className="demo-card-enter"
-                  style={{
-                    padding: 24,
-                    borderRadius: 16,
-                    border: "1px solid rgba(51,65,85,0.6)",
-                    background: "rgba(15,23,42,0.65)",
-                    animationDelay: `${Math.min(idx * 0.03, 1.2)}s`,
-                  }}
-                >
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "baseline", marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "#64748b" }}>{p.code}</span>
-                    <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#f8fafc" }}>{title}</h3>
-                  </div>
-                  {!narrative?.tagline && p.description ? (
-                    <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.5, margin: "0 0 12px" }}>
-                      {p.description}
-                    </p>
-                  ) : null}
-                  {narrative?.tagline ? (
-                    <p style={{ fontSize: 15, fontWeight: 700, color: "#5eead4", margin: "0 0 12px" }}>{narrative.tagline}</p>
-                  ) : null}
-                  <ul style={{ margin: 0, paddingLeft: 20, color: "#e2e8f0", lineHeight: 1.65, fontSize: 14 }}>
-                    {narrative.benefits.map((b) => (
-                      <li key={b.slice(0, 48)} style={{ marginBottom: 6 }}>
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
-                  {narrative.investorAngle ? (
-                    <div
-                      style={{
-                        marginTop: 14,
-                        padding: "12px 14px",
-                        borderRadius: 10,
-                        background: "rgba(59,130,246,0.12)",
-                        border: "1px solid rgba(59,130,246,0.25)",
-                        fontSize: 13,
-                        color: "#bfdbfe",
-                        lineHeight: 1.55,
-                      }}
-                    >
-                      <strong style={{ color: "#93c5fd" }}>For investors: </strong>
-                      {narrative.investorAngle}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
+        <div style={{ display: "grid", gap: 16, marginBottom: 40 }}>
+          {steps.map((step) => (
+            <div key={step.n} style={{ display: "flex", gap: 20, padding: "24px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+              {/* Step number */}
+              <div style={{ flexShrink: 0 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: step.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 900 }}>
+                  {step.icon}
+                </div>
+                <div style={{ textAlign: "center", fontSize: 10, fontWeight: 800, color: "#94a3b8", marginTop: 6 }}>STEP {step.n}</div>
+              </div>
+              {/* Content */}
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                  <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 900, color: "#0f172a" }}>{step.title}</h3>
+                  <span style={{ padding: "4px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: `${step.color}12`, color: step.color }}>{step.time}</span>
+                </div>
+                <p style={{ margin: "0 0 14px", fontSize: 14, color: "#475569", lineHeight: 1.6 }}>{step.desc}</p>
+                <Link href={step.href} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 10, background: step.color, color: "#fff", fontWeight: 800, fontSize: 13, textDecoration: "none" }}>
+                  {step.action}
+                </Link>
+              </div>
+            </div>
+          ))}
         </div>
 
-        <footer
-          style={{
-            marginTop: 56,
-            paddingTop: 32,
-            borderTop: "1px solid rgba(51,65,85,0.5)",
-            textAlign: "center",
-          }}
-        >
-          <p style={{ color: "#94a3b8", fontSize: 15, lineHeight: 1.6, marginBottom: 20 }}>
-            This is the same product as on the homepage: Globus, registry, signatures, bureau and Planet — in a working MVP.
-            <br />
-            Next steps: deeper metrics, integrations and go-to-market for selected verticals.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
-            <Link
-              href="/demo/deep"
-              style={{
-                display: "inline-block",
-                padding: "14px 28px",
-                borderRadius: 12,
-                background: "rgba(148,163,184,0.12)",
-                border: "1px solid rgba(148,163,184,0.35)",
-                color: "#e2e8f0",
-                fontWeight: 750,
-                textDecoration: "none",
-                fontSize: 16,
-              }}
-            >
-              Deep dive demo →
+        {/* ── Technology Stack ── */}
+        <div style={{ marginBottom: 40 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", marginBottom: 14 }}>Technology & Security</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            {[
+              { title: "3-Layer Cryptography", items: ["SHA-256 content hashing (NIST)", "HMAC-SHA256 integrity signatures", "Ed25519 digital signatures (RFC 8032)"], color: "#0d9488" },
+              { title: "Quantum Shield", items: ["Shamir's Secret Sharing", "Threshold 2-of-3 recovery", "Distributed shard storage"], color: "#8b5cf6" },
+              { title: "Legal Framework", items: ["Berne Convention (181 countries)", "WIPO Copyright Treaty", "TRIPS, eIDAS, ESIGN, KZ Law"], color: "#3b82f6" },
+              { title: "Platform Stack", items: ["Next.js 16 + Express + PostgreSQL", "Railway (backend) + Vercel (frontend)", "Real-time WebSocket + REST API"], color: "#f59e0b" },
+            ].map((section) => (
+              <div key={section.title} style={{ padding: "18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: section.color }} />
+                  <span style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>{section.title}</span>
+                </div>
+                {section.items.map((item) => (
+                  <div key={item} style={{ fontSize: 12, color: "#64748b", lineHeight: 1.6, paddingLeft: 14, position: "relative" }}>
+                    <span style={{ position: "absolute", left: 0, color: section.color }}>•</span>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Investment Opportunity ── */}
+        <div style={{ padding: "28px", borderRadius: 20, background: "linear-gradient(135deg, #0f172a, #1e1b4b)", color: "#fff", marginBottom: 40 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#a78bfa", marginBottom: 8 }}>INVESTMENT</div>
+          <h2 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 20px" }}>Two Options for Investors</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ padding: "20px", borderRadius: 14, border: "1px solid rgba(13,148,136,0.3)", background: "rgba(13,148,136,0.08)" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#5eead4", marginBottom: 4 }}>OPTION A</div>
+              <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 8 }}>$10M Co-Development</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
+                Investor: 49% equity. Founder: 51%. Joint development of the platform. Investor gets board seat, revenue share, and exit rights.
+              </div>
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "rgba(255,255,255,0.08)" }}>Board seat</span>
+                <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "rgba(255,255,255,0.08)" }}>Revenue share</span>
+                <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "rgba(255,255,255,0.08)" }}>Co-development</span>
+              </div>
+            </div>
+            <div style={{ padding: "20px", borderRadius: 14, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.08)" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#a78bfa", marginBottom: 4 }}>OPTION B</div>
+              <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 8 }}>$100M Full Acquisition</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
+                Investor: 90% equity. Founder: 10% + Chief Product Advisor role at $1.2M/year. Full control of the platform and IP.
+              </div>
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "rgba(255,255,255,0.08)" }}>Full control</span>
+                <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "rgba(255,255,255,0.08)" }}>All IP rights</span>
+                <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "rgba(255,255,255,0.08)" }}>Founder retained</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Footer CTA ── */}
+        <div style={{ textAlign: "center", padding: "40px 20px", borderRadius: 20, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff" }}>
+          <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 12 }}>Ready to try AEVION?</div>
+          <div style={{ fontSize: 15, opacity: 0.9, marginBottom: 24, maxWidth: 480, margin: "0 auto 24px" }}>
+            Start with Step 1 — create an account and protect your first work. The entire pipeline takes under a minute.
+          </div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <Link href="/auth" style={{ padding: "14px 28px", borderRadius: 14, background: "#fff", color: "#0f172a", fontWeight: 900, fontSize: 16, textDecoration: "none" }}>
+              Start Demo — Create Account
             </Link>
-            <Link
-              href="/"
-              style={{
-                display: "inline-block",
-                padding: "14px 28px",
-                borderRadius: 12,
-                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
-                color: "#fff",
-                fontWeight: 800,
-                textDecoration: "none",
-                fontSize: 16,
-                boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
-              }}
-            >
-              Home — map and interfaces
+            <Link href="/" style={{ padding: "14px 28px", borderRadius: 14, border: "2px solid rgba(255,255,255,0.5)", color: "#fff", fontWeight: 700, fontSize: 16, textDecoration: "none" }}>
+              Back to Homepage
             </Link>
           </div>
-        </footer>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

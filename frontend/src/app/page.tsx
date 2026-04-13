@@ -47,7 +47,7 @@ export default function HomePage() {
         const totalVerifications = certs.reduce((s: number, c: any) => s + (c.verifiedCount || 0), 0);
         setStats({
           certificates: certs.length,
-          shields: shield.totalRecords || 0,
+          shields: (shield as any).totalRecords || 0,
           verifications: totalVerifications,
           accounts: 3,
         });

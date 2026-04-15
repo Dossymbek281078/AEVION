@@ -112,14 +112,26 @@ function mm(ch:Chess,d:number,a:number,b:number,mx:boolean):number{if(d===0)retu
 function findBest(ch:Chess,depth:number,rand:number):Move|null{const mv=ch.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{ch.move(m);const s=mm(ch,Math.min(depth,4)-1,-Infinity,Infinity,ch.turn()==="w");ch.undo();return{move:m,score:s+(Math.random()-0.5)*rand}});sc.sort((a,b)=>ch.turn()==="w"?b.score-a.score:a.score-b.score);return sc[0].move}
 
 /* ═══ SOUND ═══ */
-function snd(t:"move"|"capture"|"check"|"castle"|"gameover"|"premove"|"resign"|"draw"){try{const x=new AudioContext();const now=x.currentTime;
-  if(t==="move"||t==="premove"){const b=x.createBufferSource();const buf=x.createBuffer(1,1200,44100);const d=buf.getChannelData(0);for(let i=0;i<1200;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/200)*0.12;b.buffer=buf;b.connect(x.destination);b.start(now)}
-  else if(t==="capture"){const b=x.createBufferSource();const buf=x.createBuffer(1,2400,44100);const d=buf.getChannelData(0);for(let i=0;i<2400;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/400)*0.18;b.buffer=buf;b.connect(x.destination);b.start(now)}
-  else if(t==="castle"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.setValueAtTime(330,now);o.frequency.linearRampToValueAtTime(440,now+0.06);g.gain.setValueAtTime(0.06,now);g.gain.linearRampToValueAtTime(0,now+0.12);o.type="sine";o.start(now);o.stop(now+0.12)}
-  else if(t==="check"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.setValueAtTime(520,now);o.frequency.linearRampToValueAtTime(680,now+0.08);g.gain.setValueAtTime(0.07,now);g.gain.linearRampToValueAtTime(0,now+0.15);o.type="sine";o.start(now);o.stop(now+0.15)}
-  else if(t==="gameover"||t==="resign"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.setValueAtTime(440,now);o.frequency.linearRampToValueAtTime(220,now+0.3);g.gain.setValueAtTime(0.06,now);g.gain.linearRampToValueAtTime(0,now+0.4);o.type="sine";o.start(now);o.stop(now+0.4)}
-  else if(t==="draw"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.value=350;g.gain.setValueAtTime(0.05,now);g.gain.linearRampToValueAtTime(0,now+0.2);o.type="sine";o.start(now);o.stop(now+0.2)}
-}catch{}}
+const sndCache: Record<string, HTMLAudioElement> = {};
+function snd(t: "move"|"capture"|"check"|"castle"|"gameover"|"premove"|"resign"|"draw") {
+  try {
+    const map: Record<string, string> = {
+      move: "/sounds/move.mp3",
+      premove: "/sounds/move.mp3",
+      castle: "/sounds/move.mp3",
+      capture: "/sounds/capture.mp3",
+      check: "/sounds/notify.mp3",
+      gameover: "/sounds/notify.mp3",
+      resign: "/sounds/notify.mp3",
+      draw: "/sounds/notify.mp3",
+    };
+    const url = map[t] || map.move;
+    if (!sndCache[url]) sndCache[url] = new Audio(url);
+    const a = sndCache[url].cloneNode() as HTMLAudioElement;
+    a.volume = t === "premove" ? 0.3 : t === "capture" ? 0.7 : 0.5;
+    a.play().catch(() => {});
+  } catch {}
+}
 
 /* ═══ RATING ═══ */
 const RK="aevion_chess_rating_v2",SK="aevion_chess_stats_v2";
@@ -175,6 +187,7 @@ export default function CyberChessPage(){
   const[promo,sPromo]=useState<{from:Square;to:Square}|null>(null);
   const[pms,sPms]=useState<Premove[]>([]);
   const[pmSel,sPmSel]=useState<Square|null>(null);
+  const[pmLimit,sPmLimit]=useState(3);
   const[aiLv,sAiLv]=useState(2);
   const[pCol,sPCol]=useState<ChessColor>("w");
   const[tcI,sTcI]=useState(9);
@@ -202,15 +215,15 @@ export default function CyberChessPage(){
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{const p=game.get(from);if(!p)return false;const mv=game.move({from,to,promotion:pr||"q"});if(!mv)return false;if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(game.isCheck())snd("check");else snd("move");if(mv.captured){const cc=pc(mv.captured,mv.color==="w"?"b":"w");if(mv.color===pCol)sCapB(x=>[...x,cc]);else sCapW(x=>[...x,cc])}if(mv.color===pCol)pT.addInc();else aT.addInc();sHist(h=>[...h,mv.san]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);if(game.isGameOver()){let r="";if(game.isCheckmate()){const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";if(w){const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);sSts(s=>{const n={...s,w:s.w+1};svS(n);return n});showToast(`+${nr-rat} rating`,"success")}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);sSts(s=>{const n={...s,l:s.l+1};svS(n);return n})}}else if(game.isDraw()){r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";sSts(s=>{const n={...s,d:s.d+1};svS(n);return n})}sOver(r);snd("gameover");sPms([])}return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk]);
 
-  const tryPm=useCallback(()=>{if(game.turn()!==pCol||over||pms.length===0)return;const q=[...pms];sPms([]);for(const p of q){if(game.turn()!==pCol||over)break;const mvs=game.moves({verbose:true});if(mvs.find(m=>m.from===p.from&&m.to===p.to)){exec(p.from,p.to,p.promo);snd("premove");break}}},[game,over,pms,pCol,exec]);
+  const tryPm=useCallback(()=>{if(game.turn()!==pCol||over||pms.length===0)return;const pm=pms[0];const rest=pms.slice(1);sPms(rest);const mvs=game.moves({verbose:true});const match=mvs.find(m=>m.from===pm.from&&m.to===pm.to);if(match){exec(pm.from,pm.to,pm.promo);snd("premove")}},[game,over,pms,pCol,exec]);
 
-  useEffect(()=>{if(over||!on||tab!=="play")return;if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(()=>tryPm(),50);return()=>clearTimeout(t)}return}sThink(true);if(useSF&&sfR.current?.isReady()){sfR.current.findMove(game.fen(),SF_DEPTH[aiLv]||10,(f,t,p)=>{if(f&&t)exec(f as Square,t as Square,(p||undefined) as any);sThink(false)});return}const t=setTimeout(()=>{const c=new Chess(game.fen());const b=findBest(c,lv.depth,lv.randomness);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},80);return()=>clearTimeout(t)},[bk,over,on,tab]);
+  useEffect(()=>{if(over||!on||tab!=="play")return;if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(()=>tryPm(),30);return()=>clearTimeout(t)}return}sThink(true);if(useSF&&sfR.current?.isReady()){sfR.current.findMove(game.fen(),SF_DEPTH[aiLv]||10,(f,t,p)=>{if(f&&t)exec(f as Square,t as Square,(p||undefined) as any);sThink(false)});return}const t=setTimeout(()=>{const c=new Chess(game.fen());const b=findBest(c,lv.depth,lv.randomness);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},80);return()=>clearTimeout(t)},[bk,over,on,tab]);
 
-  const click=useCallback((sq:Square)=>{if(over)return;if(game.turn()!==pCol&&!over&&on){const p=game.get(sq);if(pmSel){const pp=game.get(pmSel);const pre:Premove={from:pmSel,to:sq};if(pp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.promo="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}if(p?.color===pCol){sPmSel(sq);return}sPmSel(null);return}if(think)return;const p=game.get(sq);if(sel){if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}sSel(null);sVm(new Set());return}if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}},[game,sel,vm,over,think,pCol,exec,on,pmSel]);
+  const click=useCallback((sq:Square)=>{if(over)return;if(game.turn()!==pCol&&!over&&on){const p=game.get(sq);if(pmSel){if(pms.length>=pmLimit){showToast(`Max ${pmLimit} premoves`,"error");sPmSel(null);return}const pp=game.get(pmSel);const pre:Premove={from:pmSel,to:sq};if(pp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.promo="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}if(p?.color===pCol){sPmSel(sq);return}sPmSel(null);return}if(think)return;const p=game.get(sq);if(sel){if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}sSel(null);sVm(new Set());return}if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}},[game,sel,vm,over,think,pCol,exec,on,pmSel,pms,pmLimit]);
 
   const dR=useRef<Square|null>(null);
   const dS=(sq:Square)=>{const p=game.get(sq);if(p?.color===pCol&&!over){dR.current=sq;if(game.turn()===pCol&&!think){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
-  const dD=(sq:Square)=>{if(!dR.current)return;const f=dR.current;dR.current=null;if(game.turn()!==pCol&&on&&!over){const p=game.get(f);const pre:Premove={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.promo="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
+  const dD=(sq:Square)=>{if(!dR.current)return;const f=dR.current;dR.current=null;if(game.turn()!==pCol&&on&&!over){if(pms.length>=pmLimit){sPmSel(null);return}const p=game.get(f);const pre:Premove={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.promo="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
   const ldPz=(i:number)=>{const pz=fPz[i]||PUZZLES[0];const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");showToast(`${pz.name} (${pz.r})`,"info")};
@@ -283,6 +296,14 @@ export default function CyberChessPage(){
                   <div style={{fontSize:10,color:S.textDim}}>{l.elo}{i>=3?" ⚡":""}</div>
                 </button>))}
             </div>
+          </div>
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:11,color:S.textDim,fontWeight:700,marginBottom:8,textTransform:"uppercase" as const,letterSpacing:"0.08em"}}>Premove Limit</div>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <input type="range" min={1} max={20} value={pmLimit} onChange={e=>sPmLimit(Number(e.target.value))} style={{flex:1,accentColor:S.accent,cursor:"pointer"}}/>
+              <span style={{fontSize:14,fontWeight:900,color:S.accent,minWidth:28,textAlign:"center"}}>{pmLimit}</span>
+            </div>
+            <div style={{fontSize:10,color:S.textDim,marginTop:4}}>How many moves you can queue during opponent&apos;s turn (1 = lichess style, 20 = chess.com style)</div>
           </div>
           <button onClick={()=>newG()} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${S.accent},#059669)`,color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",letterSpacing:"0.02em"}}>Start Game</button>
         </div>

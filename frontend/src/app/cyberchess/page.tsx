@@ -13,7 +13,7 @@ const PIECE_MAP: Record<string, string> = {
   bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟",
 };
 type TimeControl = {name:string;initial:number;increment:number;label:string};
-type AILevel = {name:string;elo:number;depth:number;label:string;color:string;randomness:number};
+type AILevel = {name:string;elo:number;depth:number;label:string;color:string;randomness:number;thinkMs:number};
 type Premove = {from:Square;to:Square;promo?:"q"|"r"|"b"|"n"};
 
 const TIME_CONTROLS: TimeControl[] = [
@@ -24,12 +24,12 @@ const TIME_CONTROLS: TimeControl[] = [
   {name:"30+0",initial:1800,increment:0,label:"Classical"},{name:"∞",initial:0,increment:0,label:"Unlimited"},
 ];
 const AI_LEVELS: AILevel[] = [
-  {name:"Beginner",elo:400,depth:1,label:"I",color:"#94a3b8",randomness:200},
-  {name:"Casual",elo:800,depth:2,label:"II",color:"#10b981",randomness:80},
-  {name:"Club",elo:1200,depth:3,label:"III",color:"#3b82f6",randomness:30},
-  {name:"Advanced",elo:1600,depth:4,label:"IV",color:"#a78bfa",randomness:12},
-  {name:"Expert",elo:2000,depth:5,label:"V",color:"#f87171",randomness:5},
-  {name:"Master",elo:2400,depth:6,label:"VI",color:"#fbbf24",randomness:2},
+  {name:"Beginner",elo:400,depth:1,label:"I",color:"#94a3b8",randomness:200,thinkMs:3000},
+  {name:"Casual",elo:800,depth:2,label:"II",color:"#10b981",randomness:80,thinkMs:2000},
+  {name:"Club",elo:1200,depth:3,label:"III",color:"#3b82f6",randomness:30,thinkMs:1200},
+  {name:"Advanced",elo:1600,depth:4,label:"IV",color:"#a78bfa",randomness:12,thinkMs:800},
+  {name:"Expert",elo:2000,depth:5,label:"V",color:"#f87171",randomness:5,thinkMs:400},
+  {name:"Master",elo:2400,depth:6,label:"VI",color:"#fbbf24",randomness:2,thinkMs:200},
 ];
 const SF_DEPTH: Record<number,number> = {3:8,4:12,5:16};
 const RANKS = [
@@ -112,24 +112,49 @@ function mm(ch:Chess,d:number,a:number,b:number,mx:boolean):number{if(d===0)retu
 function findBest(ch:Chess,depth:number,rand:number):Move|null{const mv=ch.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{ch.move(m);const s=mm(ch,Math.min(depth,4)-1,-Infinity,Infinity,ch.turn()==="w");ch.undo();return{move:m,score:s+(Math.random()-0.5)*rand}});sc.sort((a,b)=>ch.turn()==="w"?b.score-a.score:a.score-b.score);return sc[0].move}
 
 /* ═══ SOUND ═══ */
-const sndCache: Record<string, HTMLAudioElement> = {};
 function snd(t: "move"|"capture"|"check"|"castle"|"gameover"|"premove"|"resign"|"draw") {
   try {
-    const map: Record<string, string> = {
-      move: "/sounds/move.mp3",
-      premove: "/sounds/move.mp3",
-      castle: "/sounds/move.mp3",
-      capture: "/sounds/capture.mp3",
-      check: "/sounds/notify.mp3",
-      gameover: "/sounds/notify.mp3",
-      resign: "/sounds/notify.mp3",
-      draw: "/sounds/notify.mp3",
-    };
-    const url = map[t] || map.move;
-    if (!sndCache[url]) sndCache[url] = new Audio(url);
-    const a = sndCache[url].cloneNode() as HTMLAudioElement;
-    a.volume = t === "premove" ? 0.3 : t === "capture" ? 0.7 : 0.5;
-    a.play().catch(() => {});
+    const x = new AudioContext(), now = x.currentTime;
+    const g = x.createGain(); g.connect(x.destination);
+    if (t === "move" || t === "premove" || t === "castle") {
+      // Clean soft click
+      g.gain.setValueAtTime(t === "premove" ? 0.08 : 0.15, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      const o = x.createOscillator(); o.connect(g); o.type = "sine";
+      o.frequency.setValueAtTime(800, now);
+      o.frequency.exponentialRampToValueAtTime(400, now + 0.06);
+      o.start(now); o.stop(now + 0.08);
+    } else if (t === "capture") {
+      // Slightly thicker thud
+      g.gain.setValueAtTime(0.2, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      const o = x.createOscillator(); o.connect(g); o.type = "sine";
+      o.frequency.setValueAtTime(500, now);
+      o.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+      o.start(now); o.stop(now + 0.12);
+    } else if (t === "check") {
+      // Two-tone alert
+      g.gain.setValueAtTime(0.12, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      const o = x.createOscillator(); o.connect(g); o.type = "sine";
+      o.frequency.setValueAtTime(660, now);
+      o.frequency.setValueAtTime(880, now + 0.1);
+      o.start(now); o.stop(now + 0.2);
+    } else if (t === "gameover" || t === "resign") {
+      // Gentle descending tone
+      g.gain.setValueAtTime(0.1, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      const o = x.createOscillator(); o.connect(g); o.type = "sine";
+      o.frequency.setValueAtTime(500, now);
+      o.frequency.exponentialRampToValueAtTime(250, now + 0.5);
+      o.start(now); o.stop(now + 0.5);
+    } else if (t === "draw") {
+      g.gain.setValueAtTime(0.08, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      const o = x.createOscillator(); o.connect(g); o.type = "sine";
+      o.frequency.value = 440;
+      o.start(now); o.stop(now + 0.3);
+    }
   } catch {}
 }
 
@@ -217,7 +242,20 @@ export default function CyberChessPage(){
 
   const tryPm=useCallback(()=>{if(game.turn()!==pCol||over||pms.length===0)return;const pm=pms[0];const rest=pms.slice(1);sPms(rest);const mvs=game.moves({verbose:true});const match=mvs.find(m=>m.from===pm.from&&m.to===pm.to);if(match){exec(pm.from,pm.to,pm.promo);snd("premove")}},[game,over,pms,pCol,exec]);
 
-  useEffect(()=>{if(over||!on||tab!=="play")return;if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(()=>tryPm(),30);return()=>clearTimeout(t)}return}sThink(true);if(useSF&&sfR.current?.isReady()){sfR.current.findMove(game.fen(),SF_DEPTH[aiLv]||10,(f,t,p)=>{if(f&&t)exec(f as Square,t as Square,(p||undefined) as any);sThink(false)});return}const t=setTimeout(()=>{const c=new Chess(game.fen());const b=findBest(c,lv.depth,lv.randomness);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},80);return()=>clearTimeout(t)},[bk,over,on,tab]);
+  useEffect(()=>{if(over||!on||tab!=="play")return;if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(()=>tryPm(),30);return()=>clearTimeout(t)}return}
+    sThink(true);
+    // Think delay: base thinkMs ± 30% random variation to feel human
+    const baseDelay = lv.thinkMs;
+    const variation = baseDelay * 0.3;
+    const delay = Math.max(100, baseDelay + (Math.random() - 0.5) * 2 * variation);
+
+    if(useSF&&sfR.current?.isReady()){
+      const sfDelay = Math.max(150, delay * 0.5); // Stockfish gets less artificial delay since it actually computes
+      const t=setTimeout(()=>{sfR.current!.findMove(game.fen(),SF_DEPTH[aiLv]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)})},sfDelay);
+      return()=>clearTimeout(t);
+    }
+    const t=setTimeout(()=>{const c=new Chess(game.fen());const b=findBest(c,lv.depth,lv.randomness);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},delay);
+    return()=>clearTimeout(t)},[bk,over,on,tab]);
 
   const click=useCallback((sq:Square)=>{if(over)return;if(game.turn()!==pCol&&!over&&on){const p=game.get(sq);if(pmSel){if(pms.length>=pmLimit){showToast(`Max ${pmLimit} premoves`,"error");sPmSel(null);return}const pp=game.get(pmSel);const pre:Premove={from:pmSel,to:sq};if(pp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.promo="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}if(p?.color===pCol){sPmSel(sq);return}sPmSel(null);return}if(think)return;const p=game.get(sq);if(sel){if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}sSel(null);sVm(new Set());return}if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}},[game,sel,vm,over,think,pCol,exec,on,pmSel,pms,pmLimit]);
 

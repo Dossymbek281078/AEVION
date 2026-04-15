@@ -14,12 +14,12 @@ type Pre = {from:Square;to:Square;pr?:"q"|"r"|"b"|"n"};
 
 const TCS: TC[] = [{name:"1+0",ini:60,inc:0},{name:"3+0",ini:180,inc:0},{name:"3+2",ini:180,inc:2},{name:"5+0",ini:300,inc:0},{name:"5+3",ini:300,inc:3},{name:"10+0",ini:600,inc:0},{name:"10+5",ini:600,inc:5},{name:"15+10",ini:900,inc:10},{name:"30+0",ini:1800,inc:0},{name:"∞",ini:0,inc:0}];
 const ALS: AL[] = [
-  {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:3000},
-  {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:2000},
-  {name:"Club",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:1200},
-  {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:800},
-  {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:400},
-  {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:200},
+  {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:6000},
+  {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:4500},
+  {name:"Club",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:3000},
+  {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:2000},
+  {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:1200},
+  {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:600},
 ];
 const SFD: Record<number,number> = {3:8,4:12,5:16};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];

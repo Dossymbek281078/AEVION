@@ -112,7 +112,14 @@ function mm(ch:Chess,d:number,a:number,b:number,mx:boolean):number{if(d===0)retu
 function findBest(ch:Chess,depth:number,rand:number):Move|null{const mv=ch.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{ch.move(m);const s=mm(ch,Math.min(depth,4)-1,-Infinity,Infinity,ch.turn()==="w");ch.undo();return{move:m,score:s+(Math.random()-0.5)*rand}});sc.sort((a,b)=>ch.turn()==="w"?b.score-a.score:a.score-b.score);return sc[0].move}
 
 /* ═══ SOUND ═══ */
-function snd(t:"move"|"capture"|"check"|"castle"|"gameover"|"premove"){try{const x=new AudioContext();const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);g.gain.value=t==="premove"?0.03:0.05;o.frequency.value={move:600,capture:300,check:800,castle:500,gameover:200,premove:440}[t];o.type={move:"sine",capture:"sawtooth",check:"square",castle:"sine",gameover:"triangle",premove:"sine"}[t] as OscillatorType;o.start();o.stop(x.currentTime+(t==="gameover"?0.3:t==="premove"?0.05:0.08))}catch{}}
+function snd(t:"move"|"capture"|"check"|"castle"|"gameover"|"premove"|"resign"|"draw"){try{const x=new AudioContext();const now=x.currentTime;
+  if(t==="move"||t==="premove"){const b=x.createBufferSource();const buf=x.createBuffer(1,1200,44100);const d=buf.getChannelData(0);for(let i=0;i<1200;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/200)*0.12;b.buffer=buf;b.connect(x.destination);b.start(now)}
+  else if(t==="capture"){const b=x.createBufferSource();const buf=x.createBuffer(1,2400,44100);const d=buf.getChannelData(0);for(let i=0;i<2400;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/400)*0.18;b.buffer=buf;b.connect(x.destination);b.start(now)}
+  else if(t==="castle"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.setValueAtTime(330,now);o.frequency.linearRampToValueAtTime(440,now+0.06);g.gain.setValueAtTime(0.06,now);g.gain.linearRampToValueAtTime(0,now+0.12);o.type="sine";o.start(now);o.stop(now+0.12)}
+  else if(t==="check"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.setValueAtTime(520,now);o.frequency.linearRampToValueAtTime(680,now+0.08);g.gain.setValueAtTime(0.07,now);g.gain.linearRampToValueAtTime(0,now+0.15);o.type="sine";o.start(now);o.stop(now+0.15)}
+  else if(t==="gameover"||t==="resign"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.setValueAtTime(440,now);o.frequency.linearRampToValueAtTime(220,now+0.3);g.gain.setValueAtTime(0.06,now);g.gain.linearRampToValueAtTime(0,now+0.4);o.type="sine";o.start(now);o.stop(now+0.4)}
+  else if(t==="draw"){const o=x.createOscillator();const g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.value=350;g.gain.setValueAtTime(0.05,now);g.gain.linearRampToValueAtTime(0,now+0.2);o.type="sine";o.start(now);o.stop(now+0.2)}
+}catch{}}
 
 /* ═══ RATING ═══ */
 const RK="aevion_chess_rating_v2",SK="aevion_chess_stats_v2";
@@ -129,20 +136,20 @@ function pc(t:PieceSymbol,c:ChessColor){return PIECE_MAP[`${c}${t}`]||"?"}
 
 /* ═══ STYLES ═══ */
 const S = {
-  bg: "#161622",
-  surface: "#1e1e30",
-  surfaceHover: "#262640",
-  border: "rgba(255,255,255,0.06)",
-  text: "#e2e8f0",
-  textDim: "#7c8298",
+  bg: "#1e2433",
+  surface: "#283042",
+  surfaceHover: "#313b52",
+  border: "rgba(255,255,255,0.08)",
+  text: "#e8ecf4",
+  textDim: "#8b95ab",
   accent: "#10b981",
   accentDim: "rgba(16,185,129,0.15)",
   gold: "#fbbf24",
   danger: "#f87171",
   blue: "#60a5fa",
   purple: "#a78bfa",
-  boardLight: "#e8dcc8",
-  boardDark: "#a38b6e",
+  boardLight: "#ecd8b8",
+  boardDark: "#ae8a68",
   premove: "rgba(96,165,250,0.4)",
   premoveSel: "rgba(96,165,250,0.6)",
   selected: "rgba(16,185,129,0.5)",
@@ -299,9 +306,9 @@ export default function CyberChessPage(){
                   let bg=lt?S.boardLight:S.boardDark;
                   if(iCk)bg=S.check;else if(iPMS)bg=S.premoveSel;else if(iPM)bg=S.premove;else if(iS)bg=S.selected;else if(iCap)bg=S.capture;else if(iV)bg=S.valid;else if(iL)bg=S.lastMove;
                   return(<div key={sq} onClick={()=>click(sq)} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
-                    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(28px,5.5vw,48px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.08s",boxShadow:iCk?"inset 0 0 16px rgba(248,113,113,0.7)":"none"}}>
+                    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(28px,5.5vw,48px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,boxShadow:iCk?"inset 0 0 16px rgba(248,113,113,0.7)":"none"}}>
                     {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(16,185,129,0.5)",position:"absolute"}}/>}
-                    {p&&<span style={{filter:iCk?"drop-shadow(0 0 8px rgba(248,113,113,0.9))":p.color==="w"?"drop-shadow(0 1px 2px rgba(0,0,0,0.4))":"drop-shadow(0 1px 2px rgba(0,0,0,0.3))",transition:"transform 0.08s",transform:iS||iPMS?"scale(1.1)":"scale(1)"}}>{pc(p.type,p.color)}</span>}
+                    {p&&<span style={{filter:iCk?"drop-shadow(0 0 8px rgba(248,113,113,0.9))":p.color==="w"?"drop-shadow(0 1px 2px rgba(0,0,0,0.4))":"drop-shadow(0 1px 2px rgba(0,0,0,0.3))",transform:iS||iPMS?"scale(1.08)":"none"}}>{pc(p.type,p.color)}</span>}
                   </div>)}))}
               </div>
             </div>
@@ -314,11 +321,19 @@ export default function CyberChessPage(){
             {tc.initial>0&&<div style={{marginTop:6,width:"min(460px,calc(100vw - 48px))"}}>{timerBar("You",pT.time,myTurn&&on&&!over,false)}</div>}
             {/* Controls */}
             <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-              <button onClick={()=>sFlip(!flip)} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${S.border}`,background:S.surface,color:S.textDim,fontSize:11,fontWeight:700,cursor:"pointer"}}>Flip</button>
+              <button onClick={()=>sFlip(!flip)} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${S.border}`,background:S.surface,color:S.textDim,fontSize:11,fontWeight:700,cursor:"pointer"}}>⇄ Flip</button>
               <button onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}} style={{padding:"7px 14px",borderRadius:8,border:"none",background:S.accent,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>New Game</button>
               {over&&<button onClick={()=>newG()} style={{padding:"7px 14px",borderRadius:8,border:"none",background:S.gold,color:"#000",fontSize:11,fontWeight:800,cursor:"pointer"}}>Rematch</button>}
               {pms.length>0&&<button onClick={()=>{sPms([]);sPmSel(null)}} style={{padding:"7px 14px",borderRadius:8,border:`1px solid rgba(96,165,250,0.3)`,background:"rgba(96,165,250,0.1)",color:S.blue,fontSize:11,fontWeight:700,cursor:"pointer"}}>Clear premoves ({pms.length})</button>}
             </div>
+            {/* Game actions: resign, draw, takeback */}
+            {on&&!over&&!setup&&(
+              <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                <button onClick={()=>{if(confirm("Resign this game?")){sOver("You resigned");snd("resign");const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);sSts(s=>{const n={...s,l:s.l+1};svS(n);return n});sPms([])}}} style={{padding:"7px 14px",borderRadius:8,border:`1px solid rgba(248,113,113,0.3)`,background:"rgba(248,113,113,0.08)",color:S.danger,fontSize:11,fontWeight:700,cursor:"pointer"}}>🏳 Resign</button>
+                <button onClick={()=>{if(confirm("Offer draw? (AI will accept if position is roughly equal)")){const score=ev(game);if(Math.abs(score)<150){sOver("Draw by agreement");snd("draw");sSts(s=>{const n={...s,d:s.d+1};svS(n);return n});sPms([])}else{showToast("AI declined the draw","error")}}}} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${S.border}`,background:S.surface,color:S.textDim,fontSize:11,fontWeight:700,cursor:"pointer"}}>½ Draw</button>
+                <button onClick={()=>{if(hist.length>=2){game.undo();game.undo();sHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);showToast("Took back last move","info")}else{showToast("No moves to take back","error")}}} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${S.border}`,background:S.surface,color:S.textDim,fontSize:11,fontWeight:700,cursor:"pointer"}}>↩ Takeback</button>
+              </div>
+            )}
           </div>
 
           {/* ── Right Panel ── */}

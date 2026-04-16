@@ -91,13 +91,36 @@ function ev(c:Chess){let s=0;const b=c.board();for(let r=0;r<8;r++)for(let j=0;j
 function mm(c:Chess,d:number,a:number,b:number,mx:boolean):number{if(!d)return ev(c);const mv=c.moves({verbose:true});if(!mv.length)return c.isCheckmate()?(mx?-1e5:1e5):0;if(mx){let v=-Infinity;for(const m of mv){c.move(m);v=Math.max(v,mm(c,d-1,a,b,false));c.undo();a=Math.max(a,v);if(b<=a)break}return v}let v=Infinity;for(const m of mv){c.move(m);v=Math.min(v,mm(c,d-1,a,b,true));c.undo();b=Math.min(b,v);if(b<=a)break}return v}
 function best(c:Chess,d:number,rn:number):Move|null{const mv=c.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{c.move(m);const s=mm(c,Math.min(d,4)-1,-Infinity,Infinity,c.turn()==="w");c.undo();return{m,s:s+(Math.random()-.5)*rn}});sc.sort((a,b)=>c.turn()==="w"?b.s-a.s:a.s-b.s);return sc[0].m}
 
-/* ═══ Sound ═══ */
-function snd(t:string){try{const x=new AudioContext(),n=x.currentTime,g=x.createGain(),o=x.createOscillator();
-  o.connect(g);g.connect(x.destination);o.type="sine";
-  if(t==="move"||t==="premove"||t==="castle"){g.gain.setValueAtTime(t==="premove"?0.06:0.12,n);g.gain.exponentialRampToValueAtTime(0.001,n+0.07);o.frequency.setValueAtTime(880,n);o.frequency.exponentialRampToValueAtTime(440,n+0.05);o.start(n);o.stop(n+0.07)}
-  else if(t==="capture"){g.gain.setValueAtTime(0.18,n);g.gain.exponentialRampToValueAtTime(0.001,n+0.1);o.frequency.setValueAtTime(600,n);o.frequency.exponentialRampToValueAtTime(150,n+0.08);o.start(n);o.stop(n+0.1)}
-  else if(t==="check"){g.gain.setValueAtTime(0.1,n);g.gain.exponentialRampToValueAtTime(0.001,n+0.18);o.frequency.setValueAtTime(660,n);o.frequency.setValueAtTime(990,n+0.09);o.start(n);o.stop(n+0.18)}
-  else{g.gain.setValueAtTime(0.08,n);g.gain.exponentialRampToValueAtTime(0.001,n+0.4);o.frequency.setValueAtTime(440,n);o.frequency.exponentialRampToValueAtTime(220,n+0.35);o.start(n);o.stop(n+0.4)}
+/* ═══ Sound — neutral percussive (filtered noise bursts, no melody) ═══ */
+function snd(t:string){try{
+  const x=new AudioContext(),n=x.currentTime;
+  // Generate short noise burst
+  const dur = t==="capture"?0.12 : t==="check"?0.08 : t==="premove"?0.04 : t==="x"?0.25 : 0.05;
+  const bufSize = Math.floor(x.sampleRate * dur);
+  const buf = x.createBuffer(1, bufSize, x.sampleRate);
+  const data = buf.getChannelData(0);
+  // White noise with fast exponential decay envelope
+  for(let i=0; i<bufSize; i++){
+    const env = Math.exp(-i/(bufSize*0.2)); // sharp attack, quick decay
+    data[i] = (Math.random()*2-1) * env;
+  }
+  const src = x.createBufferSource();
+  src.buffer = buf;
+  // Low-pass filter to remove harsh highs → wooden/tapping quality
+  const filt = x.createBiquadFilter();
+  filt.type = "lowpass";
+  filt.frequency.value = t==="capture" ? 800 : t==="check" ? 2000 : t==="premove" ? 1500 : 1200;
+  filt.Q.value = 1;
+  // High-pass to remove rumble
+  const hp = x.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 200;
+  const g = x.createGain();
+  const vol = t==="premove"?0.15 : t==="capture"?0.3 : t==="x"?0.18 : 0.22;
+  g.gain.setValueAtTime(vol, n);
+  g.gain.exponentialRampToValueAtTime(0.001, n+dur);
+  src.connect(hp); hp.connect(filt); filt.connect(g); g.connect(x.destination);
+  src.start(n);
 }catch{}}
 
 /* ═══ Rating ═══ */

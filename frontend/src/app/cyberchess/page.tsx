@@ -283,7 +283,7 @@ export default function CyberChessPage(){
                 return<div key={sq} onClick={()=>click(sq)} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(26px,5.2vw,44px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1}}>
                   {iV&&!p&&<div style={{width:"26%",height:"26%",borderRadius:"50%",background:"rgba(5,150,105,0.45)",position:"absolute"}}/>}
-                  {p&&<span style={{filter:p.color==="w"?"drop-shadow(0 1px 1px rgba(0,0,0,0.3))":"drop-shadow(0 1px 1px rgba(0,0,0,0.2))",transform:iS||iPS?"scale(1.08)":"none"}}>{pc(p.type,p.color)}</span>}
+                  {p&&<span style={{color:p.color==="w"?"#f8fafc":"#1e293b",textShadow:p.color==="w"?"0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 2px rgba(0,0,0,0.6)":"0 0 1px #fff, 0 1px 2px rgba(0,0,0,0.4)",fontWeight:900,transform:iS||iPS?"scale(1.08)":"none"}}>{pc(p.type,p.color)}</span>}
                 </div>}))}
             </div>
           </div>

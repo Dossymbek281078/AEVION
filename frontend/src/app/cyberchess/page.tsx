@@ -35,46 +35,7 @@ const ALS: AL[] = [
 const SFD: Record<number,number> = {3:8,4:12,5:16};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
-const PUZZLES = [
-  {fen:"rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",sol:["d8h4"],name:"Fool's Mate",r:200,theme:"Mate in 1"},
-  {fen:"r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4",sol:["h5f7"],name:"Scholar's Mate",r:400,theme:"Mate in 1"},
-  {fen:"5rk1/ppp2ppp/8/8/8/8/PPP2PPP/R3R1K1 w - - 0 1",sol:["e1e8"],name:"Back Rank Mate",r:300,theme:"Mate in 1"},
-  {fen:"6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1",sol:["e1e8"],name:"Simple Back Rank",r:250,theme:"Mate in 1"},
-  {fen:"r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 4 4",sol:["f3f7"],name:"Queen Mate Threat",r:450,theme:"Mate in 1"},
-  {fen:"rnb1kbnr/pppp1ppp/8/4p3/5PPq/8/PPPPP2P/RNBQKBNR w KQkq - 1 3",sol:["g2g3"],name:"Block the Check",r:350,theme:"Defense"},
-  {fen:"r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",sol:["d2d4"],name:"Center Control",r:500,theme:"Opening"},
-  {fen:"rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3",sol:["c4f7"],name:"Italian Trap",r:600,theme:"Tactics"},
-  {fen:"r1b1k2r/ppppqppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 4 5",sol:["c4f7"],name:"Fork Trick",r:700,theme:"Fork"},
-  {fen:"r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",sol:["d2d4"],name:"Open Center",r:800,theme:"Opening"},
-  {fen:"r1bqkbnr/ppp2ppp/2np4/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4",sol:["c4f7"],name:"Fried Liver",r:650,theme:"Tactics"},
-  {fen:"r1bqk2r/pppp1ppp/2n2n2/4p3/1bB1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 4 4",sol:["e1g1"],name:"Castle Safety",r:550,theme:"Opening"},
-  {fen:"r2qk2r/ppp2ppp/2n1bn2/2b1p3/4P3/1BP2N2/PP1P1PPP/RNBQK2R w KQkq - 6 6",sol:["d1a4"],name:"Pin Attack",r:1000,theme:"Pin"},
-  {fen:"r1bqk2r/pppp1Bpp/2n2n2/2b1p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 0 4",sol:["e8f7"],name:"Recapture",r:1100,theme:"Tactics"},
-  {fen:"r2qkb1r/ppp2ppp/2n1bn2/3pp3/8/1B3N2/PPPP1PPP/RNBQ1RK1 w kq - 0 6",sol:["b3d5"],name:"Bishop Pin",r:900,theme:"Pin"},
-  {fen:"r2qkbnr/ppp2ppp/2n1p3/3pPb2/3P4/5N2/PPP2PPP/RNBQKB1R w KQkq - 0 5",sol:["f1b5"],name:"Pin Knight",r:950,theme:"Pin"},
-  {fen:"r1b1kb1r/ppppqppp/2n5/1B2p3/4n3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 5",sol:["b5c6"],name:"Discovery",r:1200,theme:"Discovery"},
-  {fen:"r1bqk2r/ppp2ppp/2n2n2/3pp3/1bP5/2N2N2/PP1PPPPP/R1BQKB1R w KQkq d6 0 5",sol:["c4d5"],name:"Center Fork",r:1150,theme:"Fork"},
-  {fen:"r1b1kbnr/pppp1ppp/2n5/4p1q1/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",sol:["f3e5"],name:"Knight Fork",r:1100,theme:"Fork"},
-  {fen:"r1bqr1k1/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQR1K1 w - - 0 8",sol:["c3d5"],name:"Knight Outpost",r:1400,theme:"Positional"},
-  {fen:"r1bq1rk1/pppnbppp/4pn2/3p4/2PP4/2N2NP1/PP2PPBP/R1BQ1RK1 w - - 0 7",sol:["c4d5"],name:"Catalan Break",r:1250,theme:"Positional"},
-  {fen:"r2q1rk1/pp2bppp/2n1pn2/3p4/3P1B2/2N2N2/PPP1BPPP/R2Q1RK1 w - - 0 8",sol:["f3e5"],name:"Outpost Knight",r:1350,theme:"Positional"},
-  {fen:"r2q1rk1/pp1n1ppp/2p1pn2/3p1b2/1bPP4/2N1PN2/PP2BPPP/R1BQ1RK1 w - - 0 7",sol:["a2a3"],name:"Kick Bishop",r:1500,theme:"Positional"},
-  {fen:"2rq1rk1/pp1bppbp/2np1np1/8/2BNP3/2N1BP2/PPPQ2PP/R4RK1 w - - 0 11",sol:["d4f5"],name:"Sacrifice",r:1600,theme:"Sacrifice"},
-  {fen:"r1b2rk1/2q1bppp/p2p1n2/np2p3/3PP3/2N2N1P/PPB2PP1/R1BQR1K1 w - - 0 13",sol:["d4d5"],name:"Space",r:1800,theme:"Strategy"},
-  {fen:"r1bq1rk1/pp3ppp/2nbpn2/3p4/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w - - 0 7",sol:["c4d5"],name:"Central Tension",r:1500,theme:"Strategy"},
-  {fen:"r1bq1rk1/pp2ppbp/2np1np1/8/3NP3/2N1BP2/PPPQ2PP/R3KB1R w KQ - 0 8",sol:["e1c1"],name:"Opposite Castle",r:1750,theme:"Attack"},
-  {fen:"r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",sol:["c3d5"],name:"Domination",r:2000,theme:"Positional"},
-  {fen:"r2q1rk1/ppp1ppbp/2np1np1/8/2PPP1b1/2N2N2/PP2BPPP/R1BQ1RK1 w - - 0 8",sol:["d4d5"],name:"Pawn Storm",r:2200,theme:"Attack"},
-  {fen:"r2qr1k1/pp1bbppp/2n1pn2/3p4/3P1B2/2N1PN2/PP2BPPP/R2Q1RK1 w - - 0 9",sol:["f3e5"],name:"Knight Invasion",r:1900,theme:"Attack"},
-  {fen:"8/8/4k3/8/8/8/4KP2/8 w - - 0 1",sol:["f2f4"],name:"K+P vs K",r:800,theme:"Endgame"},
-  {fen:"8/5pk1/8/8/8/8/R4PK1/8 w - - 0 1",sol:["a2a7"],name:"Rook 7th",r:900,theme:"Endgame"},
-  {fen:"8/8/1k6/8/8/1K6/1R6/8 w - - 0 1",sol:["b2a2"],name:"Rook Cutoff",r:1000,theme:"Endgame"},
-  {fen:"8/p7/1p6/8/P7/1P2k3/4p3/4K3 w - - 0 1",sol:["a4a5"],name:"Pawn Race",r:1300,theme:"Endgame"},
-  {fen:"8/5p2/5k2/5p2/5P2/5K2/5P2/8 w - - 0 1",sol:["f3e3"],name:"Opposition",r:1400,theme:"Endgame"},
-  {fen:"6k1/pp3ppp/8/8/8/8/PPP2PPP/R5K1 w - - 0 1",sol:["a1a8"],name:"Back Rank",r:1000,theme:"Mate in 2"},
-  {fen:"6k1/5ppp/8/8/8/4Q3/5PPP/6K1 w - - 0 1",sol:["e3e8"],name:"Queen Mate",r:1050,theme:"Mate in 2"},
-];
-const PZ_TH = [...new Set(PUZZLES.map(p=>p.theme))].sort();
+type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string};
 
 /* ═══ Stockfish ═══ */
 class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number)=>void)|null=null;
@@ -188,6 +149,7 @@ export default function CyberChessPage(){
   const[analyzing,sAnalyzing]=useState(false);
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
+  const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -197,7 +159,9 @@ export default function CyberChessPage(){
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
   const fPz=pzF==="all"?PUZZLES:PUZZLES.filter(p=>p.theme===pzF);
 
-  useEffect(()=>{sRat(ldR());sSts(ldS())},[]);
+  useEffect(()=>{sRat(ldR());sSts(ldS());
+    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]))
+  },[]);
   useEffect(()=>{hR.current?.scrollTo({top:hR.current.scrollHeight,behavior:"smooth"})},[hist]);
   // Always load Stockfish for eval bar (not just for AI play)
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
@@ -288,7 +252,7 @@ export default function CyberChessPage(){
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
-  const ldPz=(i:number)=>{const pz=fPz[i]||PUZZLES[0];const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);showToast(`${pz.name} (${pz.r})`,"info")};
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);showToast(`${pz.name} (${pz.r})`,"info")};
 
   /* ── Post-game analysis ── */
   const runAnalysis=useCallback(async()=>{
@@ -546,7 +510,7 @@ export default function CyberChessPage(){
           {tab==="puzzles"&&<div style={{background:T.surface,borderRadius:7,border:`1px solid ${T.border}`,padding:8}}>
             <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:6}}>
               <button onClick={()=>{sPzF("all");sPzI(0)}} style={{padding:"2px 7px",borderRadius:4,fontSize:9,fontWeight:pzF==="all"?800:600,border:"none",background:pzF==="all"?T.accent:"transparent",color:pzF==="all"?"#fff":T.dim,cursor:"pointer"}}>All</button>
-              {PZ_TH.map(th=><button key={th} onClick={()=>{sPzF(th);sPzI(0)}} style={{padding:"2px 7px",borderRadius:4,fontSize:9,fontWeight:pzF===th?800:600,border:"none",background:pzF===th?T.purple:"transparent",color:pzF===th?"#fff":T.dim,cursor:"pointer"}}>{th}</button>)}
+              {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><button key={th} onClick={()=>{sPzF(th);sPzI(0)}} style={{padding:"2px 7px",borderRadius:4,fontSize:9,fontWeight:pzF===th?800:600,border:"none",background:pzF===th?T.purple:"transparent",color:pzF===th?"#fff":T.dim,cursor:"pointer"}}>{th}</button>)}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:180,overflowY:"auto"}}>
               {fPz.map((pz,i)=><button key={i} onClick={()=>ldPz(i)} style={{padding:"5px 7px",borderRadius:5,border:"none",background:pzI===i?"rgba(124,58,237,0.08)":"transparent",fontSize:11,fontWeight:pzI===i?700:500,cursor:"pointer",color:pzI===i?T.purple:T.text,textAlign:"left",display:"flex",justifyContent:"space-between"}}><span>{pz.name}</span><span style={{fontSize:9,fontWeight:800,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger}}>{pz.r}</span></button>)}

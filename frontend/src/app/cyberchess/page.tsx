@@ -181,7 +181,7 @@ export default function CyberChessPage(){
     if(over||!on||tab!=="play")return;
     if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(doPremove,30);return()=>clearTimeout(t)}return}
     sThink(true);
-    const delay=lv.thinkMs*(0.7+Math.random()*0.6);
+    const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(game.fen(),SFD[aiI]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)}),Math.max(100,delay*0.4));
       return()=>clearTimeout(t)}

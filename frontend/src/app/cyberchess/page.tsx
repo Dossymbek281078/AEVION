@@ -9,11 +9,21 @@ import Piece from "./Pieces";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
-type TC = {name:string;ini:number;inc:number};
+type TC = {name:string;ini:number;inc:number;cat:"Bullet"|"Blitz"|"Rapid"|"Classical"};
 type AL = {name:string;elo:number;depth:number;color:string;rand:number;thinkMs:number};
 type Pre = {from:Square;to:Square;pr?:"q"|"r"|"b"|"n"};
 
-const TCS: TC[] = [{name:"1+0",ini:60,inc:0},{name:"3+0",ini:180,inc:0},{name:"3+2",ini:180,inc:2},{name:"5+0",ini:300,inc:0},{name:"5+3",ini:300,inc:3},{name:"10+0",ini:600,inc:0},{name:"10+5",ini:600,inc:5},{name:"15+10",ini:900,inc:10},{name:"30+0",ini:1800,inc:0},{name:"∞",ini:0,inc:0}];
+const TCS: TC[] = [
+  // Bullet
+  {name:"1+0",ini:60,inc:0,cat:"Bullet"},{name:"1+1",ini:60,inc:1,cat:"Bullet"},{name:"1+2",ini:60,inc:2,cat:"Bullet"},
+  {name:"2+0",ini:120,inc:0,cat:"Bullet"},{name:"2+1",ini:120,inc:1,cat:"Bullet"},{name:"2+2",ini:120,inc:2,cat:"Bullet"},
+  // Blitz
+  {name:"3+0",ini:180,inc:0,cat:"Blitz"},{name:"3+1",ini:180,inc:1,cat:"Blitz"},{name:"3+2",ini:180,inc:2,cat:"Blitz"},
+  {name:"5+0",ini:300,inc:0,cat:"Blitz"},{name:"5+1",ini:300,inc:1,cat:"Blitz"},{name:"5+2",ini:300,inc:2,cat:"Blitz"},
+  // Rapid
+  {name:"10+0",ini:600,inc:0,cat:"Rapid"},{name:"10+1",ini:600,inc:1,cat:"Rapid"},{name:"10+2",ini:600,inc:2,cat:"Rapid"},
+  {name:"15+0",ini:900,inc:0,cat:"Rapid"},{name:"15+1",ini:900,inc:1,cat:"Rapid"},{name:"15+2",ini:900,inc:2,cat:"Rapid"},
+];
 const ALS: AL[] = [
   {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:6000},
   {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:4500},
@@ -158,7 +168,11 @@ export default function CyberChessPage(){
   const[pmLim,sPmLim]=useState(5);
   const[aiI,sAiI]=useState(2);
   const[pCol,sPCol]=useState<ChessColor>("w");
-  const[tcI,sTcI]=useState(9);
+  const[tcI,sTcI]=useState(9); // 5+0 default
+  const[customMin,sCustomMin]=useState(5);
+  const[customInc,sCustomInc]=useState(0);
+  const[useCustom,sUseCustom]=useState(false);
+  const[showCustom,sShowCustom]=useState(false);
   const[on,sOn]=useState(false);
   const[setup,sSetup]=useState(true);
   const[flip,sFlip]=useState(false);
@@ -175,7 +189,8 @@ export default function CyberChessPage(){
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
 
-  const tc=TCS[tcI],lv=ALS[aiI],rk=gRank(rat);
+  const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
+  const lv=ALS[aiI],rk=gRank(rat);
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
@@ -325,19 +340,93 @@ export default function CyberChessPage(){
         {(["play","puzzles"] as const).map(t=><button key={t} onClick={()=>{sTab(t);t==="play"?sSetup(true):ldPz(0)}} style={{padding:"7px 18px",border:"none",borderRadius:7,background:tab===t?T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:12,cursor:"pointer"}}>{t==="play"?"Play":"Puzzles"}</button>)}
       </div>
 
-      {/* Setup */}
-      {setup&&tab==="play"&&<div style={{background:T.surface,borderRadius:14,padding:24,marginBottom:18,maxWidth:460,border:`1px solid ${T.border}`}}>
-        <div style={{fontWeight:900,fontSize:17,color:T.text,marginBottom:18}}>New Game</div>
-        <div style={{marginBottom:16}}><div style={{fontSize:10,color:T.dim,fontWeight:700,marginBottom:6,textTransform:"uppercase" as const,letterSpacing:"0.08em"}}>Color</div>
-          <div style={{display:"flex",gap:8}}>{([["w","♔","White"],["b","♚","Black"]] as const).map(([v,ic,l])=><button key={v} onClick={()=>sPCol(v as ChessColor)} style={{flex:1,padding:"12px",borderRadius:10,border:pCol===v?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:pCol===v?"rgba(5,150,105,0.08)":"#fff",color:pCol===v?T.accent:T.dim,fontWeight:800,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><span style={{fontSize:18}}>{ic}</span>{l}</button>)}</div></div>
-        <div style={{marginBottom:16}}><div style={{fontSize:10,color:T.dim,fontWeight:700,marginBottom:6,textTransform:"uppercase" as const,letterSpacing:"0.08em"}}>Time</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4}}>{TCS.map((t,i)=><button key={i} onClick={()=>sTcI(i)} style={{padding:"7px 4px",borderRadius:7,border:tcI===i?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:tcI===i?"rgba(5,150,105,0.08)":"#fff",color:tcI===i?T.accent:T.dim,fontSize:11,fontWeight:tcI===i?800:600,cursor:"pointer"}}>{t.name}</button>)}</div></div>
-        <div style={{marginBottom:16}}><div style={{fontSize:10,color:T.dim,fontWeight:700,marginBottom:6,textTransform:"uppercase" as const,letterSpacing:"0.08em"}}>Opponent</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>{ALS.map((l,i)=><button key={i} onClick={()=>sAiI(i)} style={{padding:"9px 6px",borderRadius:9,border:aiI===i?`2px solid ${l.color}`:`1px solid ${T.border}`,background:aiI===i?`${l.color}12`:"#fff",cursor:"pointer",textAlign:"center"}}><div style={{fontSize:12,fontWeight:800,color:aiI===i?l.color:T.dim}}>{l.name}</div><div style={{fontSize:10,color:T.dim}}>{l.elo}{i>=3?" ⚡":""}</div></button>)}</div></div>
-        <div style={{marginBottom:18}}><div style={{fontSize:10,color:T.dim,fontWeight:700,marginBottom:6,textTransform:"uppercase" as const,letterSpacing:"0.08em"}}>Premove limit</div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}><input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:T.accent}}/><span style={{fontSize:14,fontWeight:900,color:T.accent,minWidth:24,textAlign:"center"}}>{pmLim}</span></div>
-          <div style={{fontSize:9,color:T.dim,marginTop:3}}>1 = lichess · 20 = chess.com style</div></div>
-        <button onClick={()=>newG()} style={{width:"100%",padding:"13px",borderRadius:11,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>Start Game</button>
+      {/* LAUNCHPAD DASHBOARD */}
+      {setup&&tab==="play"&&<div style={{marginBottom:16}}>
+        {/* Category strip */}
+        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          {(["Bullet","Blitz","Rapid"] as const).map(cat=>{
+            const catColor={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Classical:"#3b82f6"}[cat];
+            const catTcs=TCS.map((t,i)=>({t,i})).filter(x=>x.t.cat===cat);
+            return(<div key={cat} style={{flex:"1 1 280px",background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,padding:14,position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:catColor}}/>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+                <div style={{width:8,height:8,borderRadius:4,background:catColor}}/>
+                <div style={{fontSize:12,fontWeight:900,color:T.text,letterSpacing:"0.05em"}}>{cat.toUpperCase()}</div>
+                <div style={{fontSize:9,color:T.dim,marginLeft:"auto"}}>{cat==="Bullet"?"< 3 min":cat==="Blitz"?"3-8 min":"10-15 min"}</div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>
+                {catTcs.map(({t,i})=><button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} style={{padding:"10px 4px",borderRadius:8,border:!useCustom&&tcI===i?`2px solid ${catColor}`:`1px solid ${T.border}`,background:!useCustom&&tcI===i?`${catColor}15`:"#fff",color:!useCustom&&tcI===i?catColor:T.text,fontSize:13,fontWeight:!useCustom&&tcI===i?900:700,cursor:"pointer",fontFamily:"monospace"}}>{t.name}</button>)}
+              </div>
+            </div>);
+          })}
+          {/* Custom card */}
+          <div style={{flex:"1 1 140px",background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,padding:14,position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:T.purple}}/>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+              <div style={{width:8,height:8,borderRadius:4,background:T.purple}}/>
+              <div style={{fontSize:12,fontWeight:900,color:T.text,letterSpacing:"0.05em"}}>CUSTOM</div>
+            </div>
+            {showCustom?<div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:10,color:T.dim,width:28}}>Min</span>
+                <input type="number" min={1} max={60} value={customMin} onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))} style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,width:"100%"}}/>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:10,color:T.dim,width:28}}>Inc</span>
+                <input type="number" min={0} max={60} value={customInc} onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))} style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,width:"100%"}}/>
+              </div>
+              <button onClick={()=>{sUseCustom(true);sShowCustom(false)}} style={{padding:"6px",borderRadius:6,border:"none",background:T.purple,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>Use {customMin}+{customInc}</button>
+            </div>:<button onClick={()=>sShowCustom(true)} style={{width:"100%",padding:"16px 4px",borderRadius:8,border:useCustom?`2px solid ${T.purple}`:`1px dashed ${T.border}`,background:useCustom?`${T.purple}15`:"#fff",color:useCustom?T.purple:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>{useCustom?`${customMin}+${customInc}`:"⚙ Set..."}</button>}
+          </div>
+        </div>
+
+        {/* Center preview card */}
+        <div style={{background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:14,border:`1px solid ${T.border}`,padding:20,marginBottom:12,boxShadow:"0 4px 14px rgba(0,0,0,0.04)"}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:20,alignItems:"center"}}>
+            {/* Preview left */}
+            <div style={{flex:"1 1 220px"}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>FORMAT</div>
+              <div style={{fontSize:36,fontWeight:900,color:T.text,fontFamily:"monospace",lineHeight:1,marginBottom:4}}>{tc.name}</div>
+              <div style={{fontSize:11,color:T.dim}}>{tc.cat} · ~{Math.round(tc.ini/60*2+tc.inc*0.5)} min estimated</div>
+            </div>
+            {/* Color selector */}
+            <div>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>COLOR</div>
+              <div style={{display:"flex",gap:6}}>
+                {([["w","♔"],["b","♚"]] as const).map(([v,ic])=><button key={v} onClick={()=>sPCol(v as ChessColor)} style={{width:44,height:44,borderRadius:10,border:pCol===v?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:pCol===v?"rgba(5,150,105,0.08)":"#fff",fontSize:22,cursor:"pointer",padding:0}}>{ic}</button>)}
+                <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} style={{width:44,height:44,borderRadius:10,border:`1px dashed ${T.border}`,background:"#fff",fontSize:16,cursor:"pointer",color:T.dim}} title="Random">🎲</button>
+              </div>
+            </div>
+            {/* AI opponent */}
+            <div style={{flex:"1 1 260px"}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>OPPONENT · {lv.name} {lv.elo}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <input type="range" min={0} max={5} value={aiI} onChange={e=>sAiI(+e.target.value)} style={{flex:1,accentColor:lv.color}}/>
+                <div style={{fontSize:11,fontWeight:900,color:lv.color,minWidth:70,textAlign:"right"}}>{lv.name}{aiI>=3?" ⚡":""}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          <button onClick={()=>newG()} style={{flex:"2 1 240px",padding:"14px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>▶ Quick Start</button>
+          <button onClick={()=>{
+            // Match Me: pick AI level close to user rating
+            const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
+            sAiI(targetIdx);
+            setTimeout(()=>newG(),50);
+          }} style={{flex:"1 1 160px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚡ Match Me<div style={{fontSize:9,color:T.dim,fontWeight:600,marginTop:2}}>AI ≈ {rat} ELO</div></button>
+          <button onClick={()=>sShowCustom(!showCustom)} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚙ Custom Time</button>
+        </div>
+
+        {/* Premove limit — subtle */}
+        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{fontSize:10,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Premove Queue</div>
+          <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,minWidth:120,accentColor:T.accent}}/>
+          <div style={{fontSize:14,fontWeight:900,color:T.accent,minWidth:32,textAlign:"center"}}>{pmLim}</div>
+          <div style={{fontSize:9,color:T.dim,flex:"1 1 200px"}}>{pmLim===1?"1 move · lichess style":pmLim>=15?`${pmLim} moves · chess.com style`:`${pmLim} moves queue`}</div>
+        </div>
       </div>}
 
       {/* Board + Panel */}

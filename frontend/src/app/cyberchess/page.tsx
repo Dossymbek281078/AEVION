@@ -66,10 +66,16 @@ const PUZZLES = [
 const PZ_TH = [...new Set(PUZZLES.map(p=>p.theme))].sort();
 
 /* ═══ Stockfish ═══ */
-class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish.js");this.w.onmessage=e=>{const l=String(e.data||"");if(l.startsWith("bestmove")){const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}if(l==="uciok"){this.ok=true;this.w!.postMessage("isready")}};this.w.postMessage("uci")}catch{this.w=null}}
+class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number)=>void)|null=null;
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish.js");this.w.onmessage=e=>{const l=String(e.data||"");
+    if(l.startsWith("info")&&l.includes("score")){
+      const cpM=l.match(/score cp (-?\d+)/);const mM=l.match(/score mate (-?\d+)/);
+      if(this.ecb){if(mM)this.ecb(0,parseInt(mM[1]));else if(cpM)this.ecb(parseInt(cpM[1]),0)}}
+    if(l.startsWith("bestmove")){const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
+    if(l==="uciok"){this.ok=true;this.w!.postMessage("isready")}};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void){if(!this.w)return cb("","");this.cb=cb;this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}}
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=(f,t,p)=>done();this.ecb=ecb;this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}}
 
 /* ═══ Minimax ═══ */
 const PV:Record<PieceSymbol,number>={p:100,n:320,b:330,r:500,q:900,k:0};
@@ -138,6 +144,12 @@ export default function CyberChessPage(){
   const[sfOk,sSfOk]=useState(false);
   const[rat,sRat]=useState(800);
   const[sts,sSts]=useState({w:0,l:0,d:0});
+  const[evalCp,sEvalCp]=useState(0); // centipawns from white's POV
+  const[evalMate,sEvalMate]=useState(0); // positive = white mates in N, negative = black mates in N
+  const[fenHist,sFenHist]=useState<string[]>([new Chess().fen()]); // positions for analysis
+  const[analyzing,sAnalyzing]=useState(false);
+  const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
+  const[showAnal,sShowAnal]=useState(false);
 
   const tc=TCS[tcI],lv=ALS[aiI],rk=gRank(rat);
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
@@ -148,7 +160,17 @@ export default function CyberChessPage(){
 
   useEffect(()=>{sRat(ldR());sSts(ldS())},[]);
   useEffect(()=>{hR.current?.scrollTo({top:hR.current.scrollHeight,behavior:"smooth"})},[hist]);
-  useEffect(()=>{if(useSF&&!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),10000);return()=>{clearInterval(c);clearTimeout(t)}}if(!useSF)sSfOk(false)},[useSF]);
+  // Always load Stockfish for eval bar (not just for AI play)
+  useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
+  // Live eval on position change
+  useEffect(()=>{
+    if(!on||over||!sfR.current?.ready()||setup)return;
+    sfR.current.eval(game.fen(),10,(cp,mate)=>{
+      // Stockfish returns scores from side-to-move POV; convert to white POV
+      const sign=game.turn()==="w"?1:-1;
+      sEvalCp(cp*sign);sEvalMate(mate*sign);
+    },()=>{});
+  },[bk,on,over,setup]);
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
     const p=game.get(from);if(!p)return false;
@@ -156,7 +178,7 @@ export default function CyberChessPage(){
     if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(game.isCheck())snd("check");else snd("move");
     if(mv.captured){const cc=pc(mv.captured,mv.color==="w"?"b":"w");if(mv.color===pCol)sCapB(x=>[...x,cc]);else sCapW(x=>[...x,cc])}
     if(mv.color===pCol)pT.addInc();else aT.addInc();
-    sHist(h=>[...h,mv.san]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
+    sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
     if(game.isGameOver()){
       let r="";
       if(game.isCheckmate()){const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
@@ -226,8 +248,37 @@ export default function CyberChessPage(){
     if((game.turn()!==pCol||think)&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
-  const ldPz=(i:number)=>{const pz=fPz[i]||PUZZLES[0];const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");showToast(`${pz.name} (${pz.r})`,"info")};
+  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const ldPz=(i:number)=>{const pz=fPz[i]||PUZZLES[0];const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);showToast(`${pz.name} (${pz.r})`,"info")};
+
+  /* ── Post-game analysis ── */
+  const runAnalysis=useCallback(async()=>{
+    if(!sfR.current?.ready()||fenHist.length<3){showToast("Need Stockfish and a finished game","error");return}
+    sAnalyzing(true);sAnalysis([]);
+    const results:{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]=[];
+    let prevCp=0;
+    for(let i=0;i<fenHist.length;i++){
+      const fen=fenHist[i];const turn=fen.split(" ")[1];
+      const{cp,mate}=await new Promise<{cp:number;mate:number}>(res=>{
+        let lastCp=0,lastMate=0;
+        sfR.current!.eval(fen,12,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+      });
+      if(i>0){
+        // Evaluate quality of move played that led to this position
+        // Move was by the side that just played (opposite of current turn)
+        const moverWasWhite=turn==="b";const prev=moverWasWhite?prevCp:-prevCp;const curr=moverWasWhite?cp:-cp;
+        const drop=prev-curr;
+        let quality:"great"|"good"|"inacc"|"mistake"|"blunder"="good";
+        if(drop>=300)quality="blunder";
+        else if(drop>=150)quality="mistake";
+        else if(drop>=70)quality="inacc";
+        else if(drop<=-50)quality="great";
+        results.push({move:i,cp,mate,quality});
+      }
+      prevCp=cp;
+    }
+    sAnalysis(results);sAnalyzing(false);sShowAnal(true);
+  },[fenHist,showToast]);
 
   const pmSet=new Set<string>();pms.forEach(p=>{pmSet.add(p.from);pmSet.add(p.to)});
   const bd=game.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
@@ -273,8 +324,26 @@ export default function CyberChessPage(){
             <div style={{padding:"6px 14px",borderRadius:8,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>You {fmt(pT.time)}</div>
           </div>}
 
-          <div translate="no" style={{display:"flex",width:"min(460px,calc(100vw - 32px))"}}>
-            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:5,width:16}}>{rws.map(r=><div key={r} style={{fontSize:9,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
+          <div translate="no" style={{display:"flex",width:"min(480px,calc(100vw - 32px))",gap:4}}>
+            {/* Eval bar */}
+            {sfOk&&on&&!setup&&(()=>{
+              const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
+              const pct=50+cp/30; // -1500..1500 → 0..100
+              const wPct=Math.max(2,Math.min(98,pct));
+              const label=evalMate!==0?`M${Math.abs(evalMate)}`:(cp/100).toFixed(1);
+              const whiteTop=flip;
+              return(<div style={{width:18,borderRadius:3,overflow:"hidden",border:"1px solid #888",background:"#262626",position:"relative",display:"flex",flexDirection:"column"}}>
+                {whiteTop?<>
+                  <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
+                  <div style={{flex:1,background:"#262626"}}/>
+                </>:<>
+                  <div style={{flex:1,background:"#262626"}}/>
+                  <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
+                </>}
+                <div style={{position:"absolute",bottom:pct>50?"auto":2,top:pct>50?2:"auto",left:0,right:0,textAlign:"center",fontSize:8,fontWeight:900,color:pct>50?"#262626":"#f0f0f0",fontFamily:"monospace"}}>{label}</div>
+              </div>);
+            })()}
+            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:5,paddingLeft:2,width:14}}>{rws.map(r=><div key={r} style={{fontSize:9,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:5,overflow:"hidden",border:"2px solid #b58863",boxShadow:"0 4px 20px rgba(0,0,0,0.1)"}}>
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
@@ -300,7 +369,10 @@ export default function CyberChessPage(){
           {on&&!over&&!setup&&<div style={{display:"flex",gap:5,marginTop:5}}>
             {btn("🏳 Resign",()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
             {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
-            {btn("↩ Take back",()=>{if(hist.length>=2){game.undo();game.undo();sHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1)}else showToast("No moves","error")},T.surface,T.dim)}
+            {btn("↩ Take back",()=>{if(hist.length>=2){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1)}else showToast("No moves","error")},T.surface,T.dim)}
+          </div>}
+          {over&&fenHist.length>2&&<div style={{display:"flex",gap:5,marginTop:5}}>
+            {btn(analyzing?"⚡ Analyzing...":showAnal?"🔽 Hide analysis":"🔍 Analyze game",runAnalysis,T.purple,"#fff","none")}
           </div>}
         </div>
 
@@ -317,6 +389,32 @@ export default function CyberChessPage(){
 
           {on&&!setup&&<div style={{padding:"6px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,fontSize:10,color:T.dim}}>
             <span style={{color:useSF?T.purple:T.blue}}>●</span> {useSF?`Stockfish depth ${SFD[aiI]||10}`:`Minimax depth ${lv.depth}`} · {lv.name} {lv.elo}
+            {sfOk&&!over&&<span style={{marginLeft:8,color:evalMate!==0?(evalMate>0?T.accent:T.danger):Math.abs(evalCp)<30?T.dim:evalCp>0?T.accent:T.danger,fontWeight:700}}>
+              Eval: {evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp/100).toFixed(2)}
+            </span>}
+          </div>}
+
+          {showAnal&&analysis.length>0&&<div style={{padding:"10px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:11,fontWeight:800,color:T.text,marginBottom:6}}>Game Analysis</div>
+            <div style={{display:"flex",gap:8,fontSize:10,color:T.dim,marginBottom:8,flexWrap:"wrap"}}>
+              <span>🟢 {analysis.filter(a=>a.quality==="great").length} great</span>
+              <span>⚪ {analysis.filter(a=>a.quality==="good").length} good</span>
+              <span>🟡 {analysis.filter(a=>a.quality==="inacc").length} inacc</span>
+              <span>🟠 {analysis.filter(a=>a.quality==="mistake").length} mistake</span>
+              <span>🔴 {analysis.filter(a=>a.quality==="blunder").length} blunder</span>
+            </div>
+            <div style={{maxHeight:140,overflowY:"auto",display:"flex",flexDirection:"column",gap:2}}>
+              {analysis.map((a,i)=>{
+                const qColor={great:T.accent,good:T.dim,inacc:"#ca8a04",mistake:"#ea580c",blunder:T.danger}[a.quality];
+                const qIcon={great:"🟢",good:"⚪",inacc:"🟡",mistake:"🟠",blunder:"🔴"}[a.quality];
+                const san=hist[i]||"";const moveNum=Math.floor(i/2)+1;const isWhite=i%2===0;
+                const evalStr=a.mate!==0?`M${Math.abs(a.mate)}`:(a.cp/100).toFixed(1);
+                return(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 8px",borderRadius:5,background:a.quality==="blunder"?"#fee2e2":a.quality==="mistake"?"#fed7aa":a.quality==="inacc"?"#fef3c7":"transparent",fontSize:11}}>
+                  <span style={{fontFamily:"monospace",color:T.text}}>{qIcon} {isWhite?`${moveNum}.`:`${moveNum}...`} {san}</span>
+                  <span style={{fontFamily:"monospace",fontWeight:700,color:qColor}}>{evalStr}</span>
+                </div>);
+              })}
+            </div>
           </div>}
 
           {pms.length>0&&<div style={{padding:"6px 10px",borderRadius:7,background:"#eff6ff",border:"1px solid #bfdbfe",fontSize:10,color:T.blue}}>

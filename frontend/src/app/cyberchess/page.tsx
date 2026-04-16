@@ -35,7 +35,7 @@ const ALS: AL[] = [
 const SFD: Record<number,number> = {3:8,4:12,5:16};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
 
-type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string};
+type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
 
 /* ═══ Stockfish ═══ */
 class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number)=>void)|null=null;
@@ -150,6 +150,20 @@ export default function CyberChessPage(){
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
+  // Puzzle system
+  const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush">("learn");
+  const[pzTimeLeft,sPzTimeLeft]=useState(0);
+  const[pzAttempt,sPzAttempt]=useState<"idle"|"wrong"|"correct"|"shown">("idle");
+  const[pzCurrent,sPzCurrent]=useState<Puzzle|null>(null);
+  const[pzSolvedCount,sPzSolvedCount]=useState(0);
+  const[pzFailedCount,sPzFailedCount]=useState(0);
+  // Multi-dimensional filters
+  const[pzFilterGoal,sPzFilterGoal]=useState<string>("all"); // all, Mate, Best move
+  const[pzFilterMate,sPzFilterMate]=useState<number>(0); // 0=any, 1=M1, 2=M2, 3=M3...
+  const[pzFilterPhase,sPzFilterPhase]=useState<string>("all");
+  const[pzFilterTheme,sPzFilterTheme]=useState<string>("all");
+  const[pzFilterSide,sPzFilterSide]=useState<string>("all");
+  const[pzFilterRating,sPzFilterRating]=useState<[number,number]>([0,3000]);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -157,7 +171,15 @@ export default function CyberChessPage(){
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
-  const fPz=pzF==="all"?PUZZLES:PUZZLES.filter(p=>p.theme===pzF);
+  const fPz=PUZZLES.filter(p=>{
+    if(pzFilterGoal!=="all"&&p.goal!==pzFilterGoal)return false;
+    if(pzFilterMate>0&&p.mateIn!==pzFilterMate)return false;
+    if(pzFilterPhase!=="all"&&p.phase!==pzFilterPhase)return false;
+    if(pzFilterTheme!=="all"&&p.theme!==pzFilterTheme)return false;
+    if(pzFilterSide!=="all"&&p.side!==pzFilterSide)return false;
+    if(p.r<pzFilterRating[0]||p.r>pzFilterRating[1])return false;
+    return true;
+  });
 
   useEffect(()=>{sRat(ldR());sSts(ldS());
     fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]))
@@ -177,6 +199,21 @@ export default function CyberChessPage(){
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
     const p=game.get(from);if(!p)return false;
+    // Puzzle mode: verify solution before executing
+    if(tab==="puzzles"&&pzCurrent&&pzAttempt==="idle"){
+      const attemptUci=`${from}${to}${pr||""}`;
+      const expectedUci=pzCurrent.sol[0];
+      if(attemptUci===expectedUci||attemptUci.slice(0,4)===expectedUci.slice(0,4)){
+        sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Correct! ${pzCurrent.name}`,"success");
+        // Execute the move to show it
+        const mv=game.move({from,to,promotion:pr||"q"});
+        if(mv){sLm({from:mv.from,to:mv.to});sBk(k=>k+1)}
+        return true;
+      }else{
+        sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");showToast(`✗ Not the best. Try again or see solution`,"error");
+        return false;
+      }
+    }
     const mv=game.move({from,to,promotion:pr||"q"});if(!mv)return false;
     if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(game.isCheck())snd("check");else snd("move");
     if(mv.captured){const cc=pc(mv.captured,mv.color==="w"?"b":"w");if(mv.color===pCol)sCapB(x=>[...x,cc]);else sCapW(x=>[...x,cc])}
@@ -189,7 +226,7 @@ export default function CyberChessPage(){
         else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}}
       else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
       sOver(r);snd("x");sOn(false);sPms([])}
-    return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk,sts]);
+    return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -252,7 +289,26 @@ export default function CyberChessPage(){
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);showToast(`${pz.name} (${pz.r})`,"info")};
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
+    // Set timer based on mode
+    if(pzMode==="timed3")sPzTimeLeft(180);
+    else if(pzMode==="timed5")sPzTimeLeft(300);
+    else sPzTimeLeft(0);
+    showToast(`${pz.name} · ${pz.theme} · ${pz.r}`,"info")};
+
+  // Next puzzle helper
+  const nextPz=useCallback(()=>{const nextIdx=(pzI+1)%Math.max(1,fPz.length);ldPz(nextIdx)},[pzI,fPz.length]);
+  const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
+
+  // Puzzle timer
+  useEffect(()=>{
+    if(tab!=="puzzles"||pzMode==="learn"||!pzCurrent||pzAttempt==="correct"||pzTimeLeft<=0)return;
+    const t=setInterval(()=>sPzTimeLeft(v=>{
+      if(v<=1){sPzFailedCount(c=>c+1);sPzAttempt("wrong");return 0}
+      return v-1;
+    }),1000);
+    return()=>clearInterval(t);
+  },[tab,pzMode,pzCurrent,pzAttempt,pzTimeLeft]);
 
   /* ── Post-game analysis ── */
   const runAnalysis=useCallback(async()=>{
@@ -507,13 +563,122 @@ export default function CyberChessPage(){
             <div style={{display:"flex",flexWrap:"wrap",gap:2}}>{hist.length?hist.map((m,i)=><span key={i} style={{padding:"1px 4px",borderRadius:3,fontSize:10,fontFamily:"monospace",background:i%2?"rgba(5,150,105,0.06)":"rgba(0,0,0,0.03)",color:i%2?T.accent:T.text,fontWeight:600}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{m}</span>):<span style={{fontSize:10,color:T.dim}}>No moves</span>}</div>
           </div>
 
-          {tab==="puzzles"&&<div style={{background:T.surface,borderRadius:7,border:`1px solid ${T.border}`,padding:8}}>
-            <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:6}}>
-              <button onClick={()=>{sPzF("all");sPzI(0)}} style={{padding:"2px 7px",borderRadius:4,fontSize:9,fontWeight:pzF==="all"?800:600,border:"none",background:pzF==="all"?T.accent:"transparent",color:pzF==="all"?"#fff":T.dim,cursor:"pointer"}}>All</button>
-              {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><button key={th} onClick={()=>{sPzF(th);sPzI(0)}} style={{padding:"2px 7px",borderRadius:4,fontSize:9,fontWeight:pzF===th?800:600,border:"none",background:pzF===th?T.purple:"transparent",color:pzF===th?"#fff":T.dim,cursor:"pointer"}}>{th}</button>)}
+          {tab==="puzzles"&&<div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12}}>
+            {/* Puzzle attempt status */}
+            {pzCurrent&&<div style={{padding:"10px 12px",borderRadius:8,marginBottom:10,background:pzAttempt==="correct"?"#ecfdf5":pzAttempt==="wrong"?"#fef2f2":pzAttempt==="shown"?"#fef3c7":"#f3f4f6",border:`1px solid ${pzAttempt==="correct"?"#a7f3d0":pzAttempt==="wrong"?"#fecaca":pzAttempt==="shown"?"#fde68a":T.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <div style={{fontSize:12,fontWeight:900,color:T.text}}>{pzCurrent.name}</div>
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                  {pzTimeLeft>0&&<span style={{fontSize:11,fontWeight:900,color:pzTimeLeft<30?T.danger:T.text,fontFamily:"monospace"}}>{fmt(pzTimeLeft)}</span>}
+                  <span style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:4,background:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger,color:"#fff"}}>{pzCurrent.r}</span>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:T.dim,display:"flex",gap:6,flexWrap:"wrap"}}>
+                <span>{pzCurrent.side==="w"?"⚪ White to move":"⚫ Black to move"}</span>
+                <span>·</span>
+                <span>{pzCurrent.goal==="Mate"?`♛ Mate in ${pzCurrent.mateIn}`:"Find best move"}</span>
+                <span>·</span>
+                <span>{pzCurrent.phase}</span>
+                <span>·</span>
+                <span>{pzCurrent.theme}</span>
+              </div>
+              {pzAttempt==="correct"&&<div style={{fontSize:11,fontWeight:800,color:T.accent,marginTop:6}}>✓ Correct! Well done</div>}
+              {pzAttempt==="wrong"&&<div style={{fontSize:11,fontWeight:800,color:T.danger,marginTop:6}}>✗ Not the best move</div>}
+              {pzAttempt==="shown"&&<div style={{fontSize:11,fontWeight:800,color:"#92400e",marginTop:6}}>💡 Solution: {pzCurrent.sol[0]}</div>}
+              <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
+                <button onClick={nextPz} style={{padding:"5px 10px",borderRadius:6,border:"none",background:T.accent,color:"#fff",fontSize:10,fontWeight:800,cursor:"pointer"}}>▶ Next</button>
+                <button onClick={randomPz} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Random</button>
+                {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<button onClick={()=>{sPzAttempt("shown");showToast(`Solution: ${pzCurrent.sol[0]}`,"info")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:"#92400e",fontSize:10,fontWeight:700,cursor:"pointer"}}>💡 Show solution</button>}
+                {pzAttempt==="wrong"&&<button onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:10,fontWeight:700,cursor:"pointer"}}>↩ Try again</button>}
+              </div>
+            </div>}
+
+            {/* Stats bar */}
+            <div style={{display:"flex",gap:6,marginBottom:10}}>
+              <div style={{flex:1,padding:"6px 10px",borderRadius:6,background:"#ecfdf5",border:"1px solid #a7f3d0",textAlign:"center"}}>
+                <div style={{fontSize:16,fontWeight:900,color:T.accent}}>{pzSolvedCount}</div>
+                <div style={{fontSize:9,color:T.dim,fontWeight:700}}>SOLVED</div>
+              </div>
+              <div style={{flex:1,padding:"6px 10px",borderRadius:6,background:"#fef2f2",border:"1px solid #fecaca",textAlign:"center"}}>
+                <div style={{fontSize:16,fontWeight:900,color:T.danger}}>{pzFailedCount}</div>
+                <div style={{fontSize:9,color:T.dim,fontWeight:700}}>FAILED</div>
+              </div>
+              <div style={{flex:1,padding:"6px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,textAlign:"center"}}>
+                <div style={{fontSize:16,fontWeight:900,color:T.text}}>{fPz.length}</div>
+                <div style={{fontSize:9,color:T.dim,fontWeight:700}}>AVAILABLE</div>
+              </div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:180,overflowY:"auto"}}>
-              {fPz.map((pz,i)=><button key={i} onClick={()=>ldPz(i)} style={{padding:"5px 7px",borderRadius:5,border:"none",background:pzI===i?"rgba(124,58,237,0.08)":"transparent",fontSize:11,fontWeight:pzI===i?700:500,cursor:"pointer",color:pzI===i?T.purple:T.text,textAlign:"left",display:"flex",justifyContent:"space-between"}}><span>{pz.name}</span><span style={{fontSize:9,fontWeight:800,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger}}>{pz.r}</span></button>)}
+
+            {/* Mode selector */}
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase" as const}}>Mode</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
+                {([["learn","📚 Learn"],["timed3","⏱ 3 min"],["timed5","⏱ 5 min"],["rush","⚡ Rush"]] as const).map(([m,l])=><button key={m} onClick={()=>sPzMode(m)} style={{padding:"6px 4px",borderRadius:6,border:pzMode===m?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:pzMode===m?"rgba(124,58,237,0.08)":"#fff",color:pzMode===m?T.purple:T.dim,fontSize:10,fontWeight:pzMode===m?800:600,cursor:"pointer"}}>{l}</button>)}
+              </div>
+            </div>
+
+            {/* Goal filter */}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Goal</div>
+              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                {["all","Mate","Best move"].map(g=><button key={g} onClick={()=>{sPzFilterGoal(g);if(g!=="Mate")sPzFilterMate(0);sPzI(0)}} style={{padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:pzFilterGoal===g?800:600,border:"none",background:pzFilterGoal===g?T.accent:"#f3f4f6",color:pzFilterGoal===g?"#fff":T.dim,cursor:"pointer"}}>{g==="all"?"All":g}</button>)}
+              </div>
+            </div>
+
+            {/* Mate-in filter (only if Goal=Mate) */}
+            {pzFilterGoal==="Mate"&&<div style={{marginBottom:8}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Mate in</div>
+              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                {[0,1,2,3,4,5].map(n=><button key={n} onClick={()=>{sPzFilterMate(n);sPzI(0)}} style={{padding:"3px 10px",borderRadius:5,fontSize:9,fontWeight:pzFilterMate===n?800:600,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,cursor:"pointer"}}>{n===0?"Any":`M${n}`}</button>)}
+              </div>
+            </div>}
+
+            {/* Phase filter */}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Phase</div>
+              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                {["all","Opening","Middlegame","Endgame"].map(ph=><button key={ph} onClick={()=>{sPzFilterPhase(ph);sPzI(0)}} style={{padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:pzFilterPhase===ph?800:600,border:"none",background:pzFilterPhase===ph?T.blue:"#f3f4f6",color:pzFilterPhase===ph?"#fff":T.dim,cursor:"pointer"}}>{ph==="all"?"All":ph}</button>)}
+              </div>
+            </div>
+
+            {/* Side filter */}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Side to move</div>
+              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                {[["all","Any"],["w","⚪ White"],["b","⚫ Black"]].map(([s,l])=><button key={s} onClick={()=>{sPzFilterSide(s);sPzI(0)}} style={{padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:pzFilterSide===s?800:600,border:"none",background:pzFilterSide===s?T.text:"#f3f4f6",color:pzFilterSide===s?"#fff":T.dim,cursor:"pointer"}}>{l}</button>)}
+              </div>
+            </div>
+
+            {/* Theme filter */}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Theme</div>
+              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                <button onClick={()=>{sPzFilterTheme("all");sPzI(0)}} style={{padding:"3px 7px",borderRadius:5,fontSize:9,fontWeight:pzFilterTheme==="all"?800:600,border:"none",background:pzFilterTheme==="all"?T.purple:"#f3f4f6",color:pzFilterTheme==="all"?"#fff":T.dim,cursor:"pointer"}}>All</button>
+                {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><button key={th} onClick={()=>{sPzFilterTheme(th);sPzI(0)}} style={{padding:"3px 7px",borderRadius:5,fontSize:9,fontWeight:pzFilterTheme===th?800:600,border:"none",background:pzFilterTheme===th?T.purple:"#f3f4f6",color:pzFilterTheme===th?"#fff":T.dim,cursor:"pointer"}}>{th}</button>)}
+              </div>
+            </div>
+
+            {/* Rating range */}
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Rating: {pzFilterRating[0]}-{pzFilterRating[1]}</div>
+              <div style={{display:"flex",gap:6}}>
+                <input type="range" min={0} max={3000} step={100} value={pzFilterRating[0]} onChange={e=>{sPzFilterRating([+e.target.value,pzFilterRating[1]]);sPzI(0)}} style={{flex:1,accentColor:T.accent}}/>
+                <input type="range" min={0} max={3000} step={100} value={pzFilterRating[1]} onChange={e=>{sPzFilterRating([pzFilterRating[0],+e.target.value]);sPzI(0)}} style={{flex:1,accentColor:T.accent}}/>
+              </div>
+            </div>
+
+            {/* Puzzle list */}
+            <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Puzzles ({fPz.length})</div>
+            <div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:200,overflowY:"auto"}}>
+              {fPz.length===0?<div style={{padding:"20px",textAlign:"center",color:T.dim,fontSize:11}}>No puzzles match filters</div>:
+              fPz.slice(0,50).map((pz,i)=><button key={i} onClick={()=>ldPz(i)} style={{padding:"5px 7px",borderRadius:5,border:"none",background:pzI===i?"rgba(124,58,237,0.08)":"transparent",fontSize:11,fontWeight:pzI===i?700:500,cursor:"pointer",color:pzI===i?T.purple:T.text,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>{pz.mateIn?`♛ M${pz.mateIn}`:"→"} {pz.name}</span>
+                <span style={{display:"flex",gap:4,alignItems:"center"}}>
+                  <span style={{fontSize:8,color:T.dim}}>{pz.phase?.[0]||"?"}</span>
+                  <span style={{fontSize:9,fontWeight:800,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger}}>{pz.r}</span>
+                </span>
+              </button>)}
+              {fPz.length>50&&<div style={{padding:"6px",textAlign:"center",fontSize:9,color:T.dim}}>+ {fPz.length-50} more (narrow filter)</div>}
             </div>
           </div>}
 

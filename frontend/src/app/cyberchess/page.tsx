@@ -563,122 +563,90 @@ export default function CyberChessPage(){
             <div style={{display:"flex",flexWrap:"wrap",gap:2}}>{hist.length?hist.map((m,i)=><span key={i} style={{padding:"1px 4px",borderRadius:3,fontSize:10,fontFamily:"monospace",background:i%2?"rgba(5,150,105,0.06)":"rgba(0,0,0,0.03)",color:i%2?T.accent:T.text,fontWeight:600}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{m}</span>):<span style={{fontSize:10,color:T.dim}}>No moves</span>}</div>
           </div>
 
-          {tab==="puzzles"&&<div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12}}>
-            {/* Puzzle attempt status */}
-            {pzCurrent&&<div style={{padding:"10px 12px",borderRadius:8,marginBottom:10,background:pzAttempt==="correct"?"#ecfdf5":pzAttempt==="wrong"?"#fef2f2":pzAttempt==="shown"?"#fef3c7":"#f3f4f6",border:`1px solid ${pzAttempt==="correct"?"#a7f3d0":pzAttempt==="wrong"?"#fecaca":pzAttempt==="shown"?"#fde68a":T.border}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <div style={{fontSize:12,fontWeight:900,color:T.text}}>{pzCurrent.name}</div>
-                <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                  {pzTimeLeft>0&&<span style={{fontSize:11,fontWeight:900,color:pzTimeLeft<30?T.danger:T.text,fontFamily:"monospace"}}>{fmt(pzTimeLeft)}</span>}
-                  <span style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:4,background:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger,color:"#fff"}}>{pzCurrent.r}</span>
+          {tab==="puzzles"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* ── Current Puzzle Card ── */}
+            {pzCurrent?<div style={{padding:"14px 16px",borderRadius:10,background:pzAttempt==="correct"?"#ecfdf5":pzAttempt==="wrong"?"#fef2f2":"#fff",border:`1px solid ${pzAttempt==="correct"?"#86efac":pzAttempt==="wrong"?"#fca5a5":T.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:900,color:T.text,marginBottom:2}}>{pzCurrent.name}</div>
+                  <div style={{fontSize:20,fontWeight:900,color:pzCurrent.side==="w"?"#111":"#555",lineHeight:1.2}}>
+                    {pzCurrent.side==="w"?"⚪":"⚫"} {pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход"}
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                  <span style={{fontSize:11,fontWeight:900,padding:"3px 10px",borderRadius:6,background:pzCurrent.r<600?"#d1fae5":pzCurrent.r<1200?"#dbeafe":pzCurrent.r<1800?"#ede9fe":"#fee2e2",color:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger}}>{pzCurrent.r}</span>
+                  {pzTimeLeft>0&&<span style={{fontSize:13,fontWeight:900,color:pzTimeLeft<30?T.danger:T.text,fontFamily:"monospace"}}>{fmt(pzTimeLeft)}</span>}
                 </div>
               </div>
-              <div style={{fontSize:10,color:T.dim,display:"flex",gap:6,flexWrap:"wrap"}}>
-                <span>{pzCurrent.side==="w"?"⚪ White to move":"⚫ Black to move"}</span>
-                <span>·</span>
-                <span>{pzCurrent.goal==="Mate"?`♛ Mate in ${pzCurrent.mateIn}`:"Find best move"}</span>
-                <span>·</span>
-                <span>{pzCurrent.phase}</span>
-                <span>·</span>
-                <span>{pzCurrent.theme}</span>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>
+                {[pzCurrent.phase,pzCurrent.theme].filter(Boolean).map(t=><span key={t} style={{fontSize:9,padding:"2px 8px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
               </div>
-              {pzAttempt==="correct"&&<div style={{fontSize:11,fontWeight:800,color:T.accent,marginTop:6}}>✓ Correct! Well done</div>}
-              {pzAttempt==="wrong"&&<div style={{fontSize:11,fontWeight:800,color:T.danger,marginTop:6}}>✗ Not the best move</div>}
-              {pzAttempt==="shown"&&<div style={{fontSize:11,fontWeight:800,color:"#92400e",marginTop:6}}>💡 Solution: {pzCurrent.sol[0]}</div>}
-              <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
-                <button onClick={nextPz} style={{padding:"5px 10px",borderRadius:6,border:"none",background:T.accent,color:"#fff",fontSize:10,fontWeight:800,cursor:"pointer"}}>▶ Next</button>
-                <button onClick={randomPz} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Random</button>
-                {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<button onClick={()=>{sPzAttempt("shown");showToast(`Solution: ${pzCurrent.sol[0]}`,"info")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:"#92400e",fontSize:10,fontWeight:700,cursor:"pointer"}}>💡 Show solution</button>}
-                {pzAttempt==="wrong"&&<button onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:10,fontWeight:700,cursor:"pointer"}}>↩ Try again</button>}
+              {/* Result */}
+              {pzAttempt==="correct"&&<div style={{fontSize:13,fontWeight:900,color:T.accent,padding:"6px 0"}}>✓ Отлично! Верный ход</div>}
+              {pzAttempt==="wrong"&&<div style={{fontSize:13,fontWeight:900,color:T.danger,padding:"6px 0"}}>✗ Неверно. Попробуй ещё</div>}
+              {pzAttempt==="shown"&&<div style={{fontSize:13,fontWeight:800,color:"#92400e",padding:"6px 0"}}>💡 Ответ: <span style={{fontFamily:"monospace",background:"#fef3c7",padding:"2px 6px",borderRadius:4}}>{pzCurrent.sol[0]}</span></div>}
+              {/* Actions */}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <button onClick={nextPz} style={{padding:"8px 16px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>▶ Дальше</button>
+                <button onClick={randomPz} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>🎲</button>
+                {pzAttempt==="wrong"&&<button onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.text,fontSize:12,fontWeight:700,cursor:"pointer"}}>↩ Заново</button>}
+                {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<button onClick={()=>sPzAttempt("shown")} style={{padding:"8px 14px",borderRadius:8,border:`1px solid #fde68a`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:700,cursor:"pointer"}}>💡 Подсказка</button>}
               </div>
-            </div>}
+            </div>:<div style={{padding:"20px",textAlign:"center",color:T.dim,fontSize:12}}>Выбери задачу из списка ↓</div>}
 
-            {/* Stats bar */}
-            <div style={{display:"flex",gap:6,marginBottom:10}}>
-              <div style={{flex:1,padding:"6px 10px",borderRadius:6,background:"#ecfdf5",border:"1px solid #a7f3d0",textAlign:"center"}}>
-                <div style={{fontSize:16,fontWeight:900,color:T.accent}}>{pzSolvedCount}</div>
-                <div style={{fontSize:9,color:T.dim,fontWeight:700}}>SOLVED</div>
+            {/* ── Stats row ── */}
+            <div style={{display:"flex",gap:4}}>
+              <div style={{flex:1,padding:"8px",borderRadius:8,background:"#ecfdf5",textAlign:"center"}}><span style={{fontSize:16,fontWeight:900,color:T.accent}}>{pzSolvedCount}</span><div style={{fontSize:8,color:T.dim,fontWeight:700}}>РЕШЕНО</div></div>
+              <div style={{flex:1,padding:"8px",borderRadius:8,background:"#fef2f2",textAlign:"center"}}><span style={{fontSize:16,fontWeight:900,color:T.danger}}>{pzFailedCount}</span><div style={{fontSize:8,color:T.dim,fontWeight:700}}>ОШИБОК</div></div>
+              <div style={{flex:1,padding:"8px",borderRadius:8,background:"#f3f4f6",textAlign:"center"}}><span style={{fontSize:16,fontWeight:900,color:T.text}}>{fPz.length}</span><div style={{fontSize:8,color:T.dim,fontWeight:700}}>ЗАДАЧ</div></div>
+            </div>
+
+            {/* ── Compact Filters ── */}
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,padding:"8px 10px"}}>
+              {/* Row 1: Mode + Goal */}
+              <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap",alignItems:"center"}}>
+                <span style={{fontSize:9,color:T.dim,fontWeight:700,minWidth:32}}>Режим</span>
+                {([["learn","📚"],["timed3","3⏱"],["timed5","5⏱"],["rush","⚡"]] as const).map(([m,l])=>
+                  <button key={m} onClick={()=>sPzMode(m)} style={{padding:"4px 8px",borderRadius:5,border:pzMode===m?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:pzMode===m?"rgba(124,58,237,0.08)":"#fff",color:pzMode===m?T.purple:T.dim,fontSize:10,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
+                <span style={{borderLeft:`1px solid ${T.border}`,height:16,margin:"0 2px"}}/>
+                <span style={{fontSize:9,color:T.dim,fontWeight:700,minWidth:28}}>Цель</span>
+                {["all","Mate","Best move"].map(g=>
+                  <button key={g} onClick={()=>{sPzFilterGoal(g);if(g!=="Mate")sPzFilterMate(0);sPzI(0)}} style={{padding:"4px 8px",borderRadius:5,border:"none",background:pzFilterGoal===g?T.accent:"#f3f4f6",color:pzFilterGoal===g?"#fff":T.dim,fontSize:10,fontWeight:700,cursor:"pointer"}}>{g==="all"?"Все":g==="Mate"?"Мат":"Лучший ход"}</button>)}
+                {pzFilterGoal==="Mate"&&[1,2,3].map(n=>
+                  <button key={n} onClick={()=>{sPzFilterMate(pzFilterMate===n?0:n);sPzI(0)}} style={{padding:"4px 7px",borderRadius:5,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,fontSize:10,fontWeight:700,cursor:"pointer"}}>M{n}</button>)}
               </div>
-              <div style={{flex:1,padding:"6px 10px",borderRadius:6,background:"#fef2f2",border:"1px solid #fecaca",textAlign:"center"}}>
-                <div style={{fontSize:16,fontWeight:900,color:T.danger}}>{pzFailedCount}</div>
-                <div style={{fontSize:9,color:T.dim,fontWeight:700}}>FAILED</div>
-              </div>
-              <div style={{flex:1,padding:"6px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,textAlign:"center"}}>
-                <div style={{fontSize:16,fontWeight:900,color:T.text}}>{fPz.length}</div>
-                <div style={{fontSize:9,color:T.dim,fontWeight:700}}>AVAILABLE</div>
+              {/* Row 2: Phase + Side + Theme */}
+              <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                {["all","Opening","Middlegame","Endgame"].map(ph=>
+                  <button key={ph} onClick={()=>{sPzFilterPhase(ph);sPzI(0)}} style={{padding:"3px 7px",borderRadius:5,border:"none",background:pzFilterPhase===ph?T.blue:"#f3f4f6",color:pzFilterPhase===ph?"#fff":T.dim,fontSize:9,fontWeight:700,cursor:"pointer"}}>{ph==="all"?"Все фазы":ph==="Opening"?"Дебют":ph==="Middlegame"?"Миттельшпиль":"Эндшпиль"}</button>)}
+                <span style={{borderLeft:`1px solid ${T.border}`,height:14,margin:"0 1px"}}/>
+                {[["all","Все"],["w","⚪"],["b","⚫"]].map(([s,l])=>
+                  <button key={s} onClick={()=>{sPzFilterSide(s);sPzI(0)}} style={{padding:"3px 7px",borderRadius:5,border:"none",background:pzFilterSide===s?"#1e293b":"#f3f4f6",color:pzFilterSide===s?"#fff":T.dim,fontSize:9,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
+                <span style={{borderLeft:`1px solid ${T.border}`,height:14,margin:"0 1px"}}/>
+                <select value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{padding:"3px 6px",borderRadius:5,border:`1px solid ${T.border}`,background:"#fff",fontSize:9,color:T.dim,cursor:"pointer"}}>
+                  <option value="all">Все темы</option>
+                  {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{th}</option>)}
+                </select>
               </div>
             </div>
 
-            {/* Mode selector */}
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase" as const}}>Mode</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
-                {([["learn","📚 Learn"],["timed3","⏱ 3 min"],["timed5","⏱ 5 min"],["rush","⚡ Rush"]] as const).map(([m,l])=><button key={m} onClick={()=>sPzMode(m)} style={{padding:"6px 4px",borderRadius:6,border:pzMode===m?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:pzMode===m?"rgba(124,58,237,0.08)":"#fff",color:pzMode===m?T.purple:T.dim,fontSize:10,fontWeight:pzMode===m?800:600,cursor:"pointer"}}>{l}</button>)}
+            {/* ── Puzzle List ── */}
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+              <div style={{maxHeight:220,overflowY:"auto"}}>
+                {fPz.length===0?<div style={{padding:"24px",textAlign:"center",color:T.dim,fontSize:11}}>Нет задач по фильтру</div>:
+                fPz.slice(0,60).map((pz,i)=>(
+                  <button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"7px 10px",border:"none",borderBottom:`1px solid ${T.border}`,background:pzI===i?"rgba(124,58,237,0.06)":"#fff",fontSize:11,cursor:"pointer",color:pzI===i?T.purple:T.text,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",fontWeight:pzI===i?700:500}}>
+                    <span style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:9,color:pz.side==="w"?"#999":"#444"}}>{pz.side==="w"?"○":"●"}</span>
+                      {pz.name}
+                    </span>
+                    <span style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{fontSize:8,color:T.dim,background:"#f3f4f6",padding:"1px 4px",borderRadius:3}}>{pz.phase?.[0]||""}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger,minWidth:30,textAlign:"right"}}>{pz.r}</span>
+                    </span>
+                  </button>))}
               </div>
-            </div>
-
-            {/* Goal filter */}
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Goal</div>
-              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                {["all","Mate","Best move"].map(g=><button key={g} onClick={()=>{sPzFilterGoal(g);if(g!=="Mate")sPzFilterMate(0);sPzI(0)}} style={{padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:pzFilterGoal===g?800:600,border:"none",background:pzFilterGoal===g?T.accent:"#f3f4f6",color:pzFilterGoal===g?"#fff":T.dim,cursor:"pointer"}}>{g==="all"?"All":g}</button>)}
-              </div>
-            </div>
-
-            {/* Mate-in filter (only if Goal=Mate) */}
-            {pzFilterGoal==="Mate"&&<div style={{marginBottom:8}}>
-              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Mate in</div>
-              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                {[0,1,2,3,4,5].map(n=><button key={n} onClick={()=>{sPzFilterMate(n);sPzI(0)}} style={{padding:"3px 10px",borderRadius:5,fontSize:9,fontWeight:pzFilterMate===n?800:600,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,cursor:"pointer"}}>{n===0?"Any":`M${n}`}</button>)}
-              </div>
-            </div>}
-
-            {/* Phase filter */}
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Phase</div>
-              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                {["all","Opening","Middlegame","Endgame"].map(ph=><button key={ph} onClick={()=>{sPzFilterPhase(ph);sPzI(0)}} style={{padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:pzFilterPhase===ph?800:600,border:"none",background:pzFilterPhase===ph?T.blue:"#f3f4f6",color:pzFilterPhase===ph?"#fff":T.dim,cursor:"pointer"}}>{ph==="all"?"All":ph}</button>)}
-              </div>
-            </div>
-
-            {/* Side filter */}
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Side to move</div>
-              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                {[["all","Any"],["w","⚪ White"],["b","⚫ Black"]].map(([s,l])=><button key={s} onClick={()=>{sPzFilterSide(s);sPzI(0)}} style={{padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:pzFilterSide===s?800:600,border:"none",background:pzFilterSide===s?T.text:"#f3f4f6",color:pzFilterSide===s?"#fff":T.dim,cursor:"pointer"}}>{l}</button>)}
-              </div>
-            </div>
-
-            {/* Theme filter */}
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Theme</div>
-              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                <button onClick={()=>{sPzFilterTheme("all");sPzI(0)}} style={{padding:"3px 7px",borderRadius:5,fontSize:9,fontWeight:pzFilterTheme==="all"?800:600,border:"none",background:pzFilterTheme==="all"?T.purple:"#f3f4f6",color:pzFilterTheme==="all"?"#fff":T.dim,cursor:"pointer"}}>All</button>
-                {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><button key={th} onClick={()=>{sPzFilterTheme(th);sPzI(0)}} style={{padding:"3px 7px",borderRadius:5,fontSize:9,fontWeight:pzFilterTheme===th?800:600,border:"none",background:pzFilterTheme===th?T.purple:"#f3f4f6",color:pzFilterTheme===th?"#fff":T.dim,cursor:"pointer"}}>{th}</button>)}
-              </div>
-            </div>
-
-            {/* Rating range */}
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Rating: {pzFilterRating[0]}-{pzFilterRating[1]}</div>
-              <div style={{display:"flex",gap:6}}>
-                <input type="range" min={0} max={3000} step={100} value={pzFilterRating[0]} onChange={e=>{sPzFilterRating([+e.target.value,pzFilterRating[1]]);sPzI(0)}} style={{flex:1,accentColor:T.accent}}/>
-                <input type="range" min={0} max={3000} step={100} value={pzFilterRating[1]} onChange={e=>{sPzFilterRating([pzFilterRating[0],+e.target.value]);sPzI(0)}} style={{flex:1,accentColor:T.accent}}/>
-              </div>
-            </div>
-
-            {/* Puzzle list */}
-            <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:3,textTransform:"uppercase" as const}}>Puzzles ({fPz.length})</div>
-            <div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:200,overflowY:"auto"}}>
-              {fPz.length===0?<div style={{padding:"20px",textAlign:"center",color:T.dim,fontSize:11}}>No puzzles match filters</div>:
-              fPz.slice(0,50).map((pz,i)=><button key={i} onClick={()=>ldPz(i)} style={{padding:"5px 7px",borderRadius:5,border:"none",background:pzI===i?"rgba(124,58,237,0.08)":"transparent",fontSize:11,fontWeight:pzI===i?700:500,cursor:"pointer",color:pzI===i?T.purple:T.text,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span>{pz.mateIn?`♛ M${pz.mateIn}`:"→"} {pz.name}</span>
-                <span style={{display:"flex",gap:4,alignItems:"center"}}>
-                  <span style={{fontSize:8,color:T.dim}}>{pz.phase?.[0]||"?"}</span>
-                  <span style={{fontSize:9,fontWeight:800,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger}}>{pz.r}</span>
-                </span>
-              </button>)}
-              {fPz.length>50&&<div style={{padding:"6px",textAlign:"center",fontSize:9,color:T.dim}}>+ {fPz.length-50} more (narrow filter)</div>}
+              {fPz.length>60&&<div style={{padding:"6px",textAlign:"center",fontSize:9,color:T.dim,borderTop:`1px solid ${T.border}`}}>+ ещё {fPz.length-60}</div>}
             </div>
           </div>}
 

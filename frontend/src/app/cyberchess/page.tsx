@@ -37,17 +37,33 @@ const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:90
 
 type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
 
-/* ═══ Stockfish ═══ */
-class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number)=>void)|null=null;
+/* ═══ Stockfish with MultiPV ═══ */
+type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
+class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];
   init(){if(this.w)return;try{this.w=new Worker("/stockfish.js");this.w.onmessage=e=>{const l=String(e.data||"");
     if(l.startsWith("info")&&l.includes("score")){
       const cpM=l.match(/score cp (-?\d+)/);const mM=l.match(/score mate (-?\d+)/);
-      if(this.ecb){if(mM)this.ecb(0,parseInt(mM[1]));else if(cpM)this.ecb(parseInt(cpM[1]),0)}}
-    if(l.startsWith("bestmove")){const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
+      const pvM=l.match(/multipv (\d+)/);const depM=l.match(/depth (\d+)/);
+      const movesM=l.match(/ pv (.+)/);
+      const cp=cpM?parseInt(cpM[1]):0;const mate=mM?parseInt(mM[1]):0;
+      const pvNum=pvM?parseInt(pvM[1]):1;const depth=depM?parseInt(depM[1]):0;
+      const moves=movesM?movesM[1].trim().split(" "):[];
+      if(this.ecb)this.ecb(cp,mate);
+      if(this.mpvCb){
+        const idx=this.mpvLines.findIndex(x=>x.pv===pvNum);
+        const line={pv:pvNum,cp,mate,depth,moves:moves.slice(0,10)};
+        if(idx>=0)this.mpvLines[idx]=line;else this.mpvLines.push(line);
+        this.mpvLines.sort((a,b)=>a.pv-b.pv);
+      }
+    }
+    if(l.startsWith("bestmove")){
+      if(this.mpvCb){this.mpvCb([...this.mpvLines]);this.mpvCb=null;this.mpvLines=[]}
+      const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
     if(l==="uciok"){this.ok=true;this.w!.postMessage("isready")}};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=(f,t,p)=>done();this.ecb=ecb;this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}}
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}}
 
 /* ═══ Minimax ═══ */
 const PV:Record<PieceSymbol,number>={p:100,n:320,b:330,r:500,q:900,k:0};
@@ -137,16 +153,22 @@ export default function CyberChessPage(){
   const[on,sOn]=useState(false);
   const[setup,sSetup]=useState(true);
   const[flip,sFlip]=useState(false);
-  const[tab,sTab]=useState<"play"|"puzzles">("play");
+  const[tab,sTab]=useState<"play"|"puzzles"|"analysis">("play");
   const[pzI,sPzI]=useState(0);
   const[pzF,sPzF]=useState("all");
   const[sfOk,sSfOk]=useState(false);
   const[rat,sRat]=useState(800);
   const[sts,sSts]=useState({w:0,l:0,d:0});
-  const[evalCp,sEvalCp]=useState(0); // centipawns from white's POV
-  const[evalMate,sEvalMate]=useState(0); // positive = white mates in N, negative = black mates in N
-  const[fenHist,sFenHist]=useState<string[]>([new Chess().fen()]); // positions for analysis
+  const[evalCp,sEvalCp]=useState(0);
+  const[evalMate,sEvalMate]=useState(0);
+  const[fenHist,sFenHist]=useState<string[]>([new Chess().fen()]);
   const[analyzing,sAnalyzing]=useState(false);
+  // MultiPV
+  const[mpvLines,sMpvLines]=useState<PVLine[]>([]);
+  const[mpvCount,sMpvCount]=useState(3);
+  const[mpvDepth,sMpvDepth]=useState(14);
+  const[mpvRunning,sMpvRunning]=useState(false);
+  const[analFen,sAnalFen]=useState("");
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
@@ -353,6 +375,30 @@ export default function CyberChessPage(){
     sAnalysis(results);sAnalyzing(false);sShowAnal(true);
   },[fenHist,showToast]);
 
+  /* ── UCI moves to SAN ── */
+  const uciToSan=(fen:string,uciMoves:string[]):string[]=>{
+    try{const ch=new Chess(fen);return uciMoves.map(uci=>{
+      try{const m=ch.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});
+      return m?m.san:"?"}catch{return "?"}}).filter(s=>s!=="?")}catch{return uciMoves}};
+
+  /* ── MultiPV analysis ── */
+  const runMultiPV=useCallback(()=>{
+    if(!sfR.current?.ready()){showToast("Stockfish loading...","error");return}
+    const fen=game.fen();sAnalFen(fen);sMpvRunning(true);sMpvLines([]);
+    sfR.current.multiPV(fen,mpvDepth,mpvCount,(lines)=>{
+      const turn=fen.split(" ")[1];const sign=turn==="w"?1:-1;
+      sMpvLines(lines.map(l=>({...l,cp:l.cp*sign,mate:l.mate*sign})));
+      sMpvRunning(false);
+    });
+  },[game,mpvDepth,mpvCount,showToast]);
+
+  // Auto-run MultiPV in analysis tab
+  useEffect(()=>{
+    if(tab!=="analysis"||!sfOk)return;
+    const t=setTimeout(()=>runMultiPV(),200);
+    return()=>clearTimeout(t);
+  },[bk,tab,sfOk]);
+
   const pmSet=new Set<string>();pms.forEach(p=>{pmSet.add(p.from);pmSet.add(p.to)});
   const bd=game.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
 
@@ -371,7 +417,7 @@ export default function CyberChessPage(){
 
       {/* Tabs */}
       <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
-        {(["play","puzzles"] as const).map(t=><button key={t} onClick={()=>{sTab(t);t==="play"?sSetup(true):ldPz(0)}} style={{padding:"7px 18px",border:"none",borderRadius:7,background:tab===t?T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:12,cursor:"pointer"}}>{t==="play"?"Play":"Puzzles"}</button>)}
+        {(["play","puzzles","analysis"] as const).map(t=><button key={t} onClick={()=>{sTab(t);if(t==="play")sSetup(true);else if(t==="puzzles")ldPz(0)}} style={{padding:"7px 18px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:12,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":"⚡ Analysis"}</button>)}
       </div>
 
       {/* LAUNCHPAD DASHBOARD */}
@@ -464,7 +510,7 @@ export default function CyberChessPage(){
       </div>}
 
       {/* Board + Panel */}
-      {(!setup||tab==="puzzles")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
         <div style={{flexShrink:0}}>
           {tc.ini>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(440px,calc(100vw - 48px))"}}>
             <div style={{padding:"6px 14px",borderRadius:8,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>AI {fmt(aT.time)}</div>
@@ -662,6 +708,70 @@ export default function CyberChessPage(){
               </div>
               {fPz.length>60&&<div style={{padding:"6px",textAlign:"center",fontSize:9,color:T.dim,borderTop:`1px solid ${T.border}`}}>+ ещё {fPz.length-60}</div>}
             </div>
+          </div>}
+
+          {/* ── MultiPV Analysis Panel ── */}
+          {tab==="analysis"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Controls */}
+            <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={{fontSize:14,fontWeight:900,color:T.text}}>⚡ Engine Analysis</div>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <div style={{width:6,height:6,borderRadius:3,background:sfOk?T.accent:T.danger}}/>
+                  <span style={{fontSize:9,color:T.dim}}>{sfOk?"Stockfish ready":"Loading..."}</span>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:10,color:T.dim,fontWeight:700}}>Lines</span>
+                  {[1,2,3,4,5].map(n=><button key={n} onClick={()=>sMpvCount(n)} style={{width:26,height:26,borderRadius:6,border:mpvCount===n?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:mpvCount===n?"rgba(124,58,237,0.08)":"#fff",color:mpvCount===n?T.purple:T.dim,fontSize:11,fontWeight:800,cursor:"pointer"}}>{n}</button>)}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:10,color:T.dim,fontWeight:700}}>Depth</span>
+                  <input type="range" min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
+                  <span style={{fontSize:11,fontWeight:900,color:T.purple,minWidth:20}}>{mpvDepth}</span>
+                </div>
+                <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
+              </div>
+              {/* FEN input */}
+              <div style={{display:"flex",gap:4}}>
+                <input value={game.fen()} readOnly style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:9,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
+                <button onClick={()=>{const f=prompt("Paste FEN:");if(f){try{const g=new Chess(f);setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(g.turn()==="b")}catch{showToast("Invalid FEN","error")}}}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:9,fontWeight:700,color:T.dim,cursor:"pointer"}}>Paste FEN</button>
+              </div>
+            </div>
+
+            {/* MultiPV Lines */}
+            {mpvLines.length>0&&<div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+              {mpvLines.map((line,i)=>{
+                const evalStr=line.mate!==0?`M${Math.abs(line.mate)}`:(line.cp/100).toFixed(1);
+                const isPositive=line.mate!==0?line.mate>0:line.cp>0;
+                const sanMoves=uciToSan(analFen||game.fen(),line.moves);
+                return(<div key={i} style={{padding:"8px 12px",borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",display:"flex",gap:10,alignItems:"flex-start"}}>
+                  {/* Eval badge */}
+                  <div style={{minWidth:48,padding:"4px 8px",borderRadius:6,background:isPositive?"#ecfdf5":"#1e293b",color:isPositive?T.accent:"#f0f0f0",fontSize:13,fontWeight:900,fontFamily:"monospace",textAlign:"center",flexShrink:0}}>
+                    {isPositive?"+":""}{evalStr}
+                  </div>
+                  {/* Move sequence */}
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:2}}>
+                      {sanMoves.map((san,j)=>{
+                        const moveNum=Math.floor(j/2)+1;const isWhite=j%2===0;
+                        return(<span key={j} style={{fontSize:11,fontFamily:"monospace",fontWeight:j===0?800:500,color:j===0?T.text:isWhite?"#374151":"#6b7280"}}>
+                          {isWhite?`${moveNum}. `:""}{san}{" "}
+                        </span>)
+                      })}
+                    </div>
+                    <div style={{fontSize:8,color:T.dim,marginTop:2}}>Line {line.pv} · depth {line.depth}</div>
+                  </div>
+                </div>)
+              })}
+            </div>}
+            {mpvLines.length===0&&!mpvRunning&&<div style={{padding:"20px",textAlign:"center",color:T.dim,fontSize:11,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>
+              Click ▶ Analyze or make a move to see engine lines
+            </div>}
+            {mpvRunning&&<div style={{padding:"20px",textAlign:"center",color:T.purple,fontSize:12,fontWeight:700,background:"rgba(124,58,237,0.04)",borderRadius:10,border:`1px solid rgba(124,58,237,0.2)`}}>
+              ⚡ Analyzing depth {mpvDepth} with {mpvCount} lines...
+            </div>}
           </div>}
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>

@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
+import AiCoach from "./AiCoach";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -145,6 +146,7 @@ export default function CyberChessPage(){
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(0); // index into BOARD_THEMES
   const bT=BOARD_THEMES[boardTheme]||BOARD_THEMES[0];
+  const[showCoach,sShowCoach]=useState(false);
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
@@ -939,6 +941,23 @@ export default function CyberChessPage(){
               ⚡ Analyzing depth {mpvDepth} with {mpvCount} lines...
             </div>}
           </div>}
+
+          {/* AI Coach Button */}
+          <button onClick={()=>sShowCoach(!showCoach)} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:showCoach?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:showCoach?"rgba(5,150,105,0.06)":T.surface,color:showCoach?T.accent:T.text,fontSize:12,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            🤖 {showCoach?"Скрыть AI Coach":"Shachik AI Coach"}
+          </button>
+
+          {/* AI Coach Component */}
+          <AiCoach
+            fen={game.fen()}
+            moves={hist}
+            evalCp={evalCp}
+            evalMate={evalMate}
+            opening={currentOpening}
+            playerColor={pCol}
+            visible={showCoach}
+            onClose={()=>sShowCoach(false)}
+          />
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:9,color:T.dim}}>{s.l}</div></div>)}

@@ -742,26 +742,52 @@ export default function CyberChessPage(){
             <div style={{fontSize:10,color:T.dim,lineHeight:1.4}}>{currentOpening.desc}</div>
           </div>}
 
-          {showAnal&&analysis.length>0&&<div style={{padding:"10px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>
-            <div style={{fontSize:11,fontWeight:800,color:T.text,marginBottom:6}}>Game Analysis</div>
-            <div style={{display:"flex",gap:8,fontSize:10,color:T.dim,marginBottom:8,flexWrap:"wrap"}}>
-              <span>🟢 {analysis.filter(a=>a.quality==="great").length} great</span>
-              <span>⚪ {analysis.filter(a=>a.quality==="good").length} good</span>
-              <span>🟡 {analysis.filter(a=>a.quality==="inacc").length} inacc</span>
-              <span>🟠 {analysis.filter(a=>a.quality==="mistake").length} mistake</span>
-              <span>🔴 {analysis.filter(a=>a.quality==="blunder").length} blunder</span>
+          {showAnal&&analysis.length>0&&<div style={{borderRadius:8,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+            {/* Summary bar */}
+            <div style={{padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`}}>
+              <span style={{fontSize:11,fontWeight:800,color:T.text}}>Анализ партии</span>
+              <div style={{display:"flex",gap:6,fontSize:9,color:T.dim}}>
+                <span style={{color:T.accent}}>●{analysis.filter(a=>a.quality==="great").length}</span>
+                <span>○{analysis.filter(a=>a.quality==="good").length}</span>
+                <span style={{color:"#ca8a04"}}>●{analysis.filter(a=>a.quality==="inacc").length}</span>
+                <span style={{color:"#ea580c"}}>●{analysis.filter(a=>a.quality==="mistake").length}</span>
+                <span style={{color:T.danger}}>●{analysis.filter(a=>a.quality==="blunder").length}</span>
+              </div>
             </div>
-            <div style={{maxHeight:140,overflowY:"auto",display:"flex",flexDirection:"column",gap:2}}>
-              {analysis.map((a,i)=>{
-                const qColor={great:T.accent,good:T.dim,inacc:"#ca8a04",mistake:"#ea580c",blunder:T.danger}[a.quality];
-                const qIcon={great:"🟢",good:"⚪",inacc:"🟡",mistake:"🟠",blunder:"🔴"}[a.quality];
-                const san=hist[i]||"";const moveNum=Math.floor(i/2)+1;const isWhite=i%2===0;
-                const evalStr=a.mate!==0?`M${Math.abs(a.mate)}`:(a.cp/100).toFixed(1);
-                return(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 8px",borderRadius:5,background:a.quality==="blunder"?"#fee2e2":a.quality==="mistake"?"#fed7aa":a.quality==="inacc"?"#fef3c7":"transparent",fontSize:11}}>
-                  <span style={{fontFamily:"monospace",color:T.text}}>{qIcon} {isWhite?`${moveNum}.`:`${moveNum}...`} {san}</span>
-                  <span style={{fontFamily:"monospace",fontWeight:700,color:qColor}}>{evalStr}</span>
-                </div>);
-              })}
+            {/* Eval graph */}
+            <div style={{height:48,background:"#1e293b",position:"relative",overflow:"hidden"}}>
+              <svg width="100%" height="48" preserveAspectRatio="none" viewBox={`0 0 ${analysis.length} 48`}>
+                {/* Center line */}
+                <line x1="0" y1="24" x2={analysis.length} y2="24" stroke="#475569" strokeWidth="0.3"/>
+                {/* Eval area - white advantage above, black below */}
+                <polyline fill="none" stroke="#10b981" strokeWidth="1.2" points={analysis.map((a,i)=>{
+                  const v=a.mate!==0?(a.mate>0?24:-24):Math.max(-24,Math.min(24,a.cp/100*6));
+                  return `${i},${24-v}`;
+                }).join(" ")}/>
+                {/* Mistake/blunder markers */}
+                {analysis.map((a,i)=>{
+                  if(a.quality==="blunder")return <circle key={i} cx={i} cy={24-Math.max(-24,Math.min(24,(a.cp/100)*6))} r="1.5" fill="#ef4444"/>;
+                  if(a.quality==="mistake")return <circle key={i} cx={i} cy={24-Math.max(-24,Math.min(24,(a.cp/100)*6))} r="1" fill="#f97316"/>;
+                  return null;
+                })}
+              </svg>
+              {/* Labels */}
+              <div style={{position:"absolute",top:2,left:4,fontSize:8,color:"#94a3b8"}}>+</div>
+              <div style={{position:"absolute",bottom:2,left:4,fontSize:8,color:"#94a3b8"}}>−</div>
+            </div>
+            {/* Annotated moves inline */}
+            <div style={{padding:"8px 10px",maxHeight:120,overflowY:"auto"}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:1}}>
+                {analysis.map((a,i)=>{
+                  const san=hist[i]||"";const moveNum=Math.floor(i/2)+1;const isWhite=i%2===0;
+                  const evalStr=a.mate!==0?`M${Math.abs(a.mate)}`:(a.cp/100).toFixed(1);
+                  const qBg=a.quality==="blunder"?"#fecaca":a.quality==="mistake"?"#fed7aa":a.quality==="inacc"?"#fef9c3":"transparent";
+                  const qBorder=a.quality==="blunder"?"1px solid #fca5a5":a.quality==="mistake"?"1px solid #fdba74":a.quality==="inacc"?"1px solid #fde68a":"none";
+                  return(<span key={i} style={{padding:"2px 4px",borderRadius:3,fontSize:10,fontFamily:"monospace",background:qBg,border:qBorder,color:T.text,fontWeight:a.quality==="blunder"||a.quality==="mistake"?700:500,position:"relative",cursor:"default"}} title={`${a.quality} · eval: ${evalStr}`}>
+                    {isWhite?<span style={{color:T.dim,fontSize:9}}>{moveNum}.</span>:null}{san}<sub style={{fontSize:7,color:a.cp>0?T.accent:a.cp<0?T.danger:T.dim,marginLeft:1}}>{evalStr}</sub>
+                  </span>);
+                })}
+              </div>
             </div>
           </div>}
 

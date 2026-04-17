@@ -124,13 +124,27 @@ function fmt(s:number){return s<=0?"0:00":`${Math.floor(s/60)}:${String(s%60).pa
 function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 
 /* ═══ Theme ═══ */
-const T={bg:"#f3f4f6",surface:"#fff",border:"#e5e7eb",text:"#111827",dim:"#6b7280",accent:"#059669",gold:"#d97706",danger:"#dc2626",blue:"#2563eb",purple:"#7c3aed",bL:"#f0d9b5",bD:"#b58863",sel:"rgba(5,150,105,0.45)",valid:"rgba(5,150,105,0.35)",cap:"rgba(220,38,38,0.35)",last:"rgba(217,119,6,0.25)",chk:"rgba(220,38,38,0.55)",pm:"rgba(37,99,235,0.35)",pmS:"rgba(37,99,235,0.5)"};
+const T={bg:"#f3f4f6",surface:"#fff",border:"#e5e7eb",text:"#111827",dim:"#6b7280",accent:"#059669",gold:"#d97706",danger:"#dc2626",blue:"#2563eb",purple:"#7c3aed",sel:"rgba(5,150,105,0.45)",valid:"rgba(5,150,105,0.35)",cap:"rgba(220,38,38,0.35)",last:"rgba(217,119,6,0.25)",chk:"rgba(220,38,38,0.55)",pm:"rgba(37,99,235,0.35)",pmS:"rgba(37,99,235,0.5)"};
+
+type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string};
+const BOARD_THEMES: BoardTheme[] = [
+  {name:"Classic",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
+  {name:"Emerald",light:"#eeeed2",dark:"#769656",border:"#769656",icon:"🌿"},
+  {name:"Ocean",light:"#dee3e6",dark:"#5b8baf",border:"#4a7a9b",icon:"🌊"},
+  {name:"Purple",light:"#e8dff0",dark:"#9370ab",border:"#7b5e99",icon:"💜"},
+  {name:"Wood",light:"#e6c89c",dark:"#a0724a",border:"#8b5e3c",icon:"🪵"},
+  {name:"Dark",light:"#b0b0b0",dark:"#555555",border:"#444444",icon:"🌑"},
+  {name:"Ice",light:"#e8f4f8",dark:"#7eb8d0",border:"#5a9ab5",icon:"❄️"},
+  {name:"Rose",light:"#f5e6e0",dark:"#c47a6c",border:"#b06858",icon:"🌹"},
+];
 
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
+  const[boardTheme,sBoardTheme]=useState(0); // index into BOARD_THEMES
+  const bT=BOARD_THEMES[boardTheme]||BOARD_THEMES[0];
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
@@ -573,6 +587,57 @@ export default function CyberChessPage(){
           <div style={{fontSize:14,fontWeight:900,color:T.accent,minWidth:32,textAlign:"center"}}>{pmLim}</div>
           <div style={{fontSize:9,color:T.dim,flex:"1 1 200px"}}>{pmLim===1?"1 move · lichess style":pmLim>=15?`${pmLim} moves · chess.com style`:`${pmLim} moves queue`}</div>
         </div>
+
+        {/* Board Theme Selector */}
+        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12}}>
+          <div style={{fontSize:10,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const,marginBottom:8}}>Board Theme</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {BOARD_THEMES.map((th,i)=>(
+              <button key={i} onClick={()=>sBoardTheme(i)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:boardTheme===i?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:boardTheme===i?"rgba(5,150,105,0.06)":"#fff",cursor:"pointer"}}>
+                <div style={{width:20,height:20,borderRadius:4,overflow:"hidden",display:"flex",flexShrink:0}}>
+                  <div style={{width:10,height:20,background:th.light}}/>
+                  <div style={{width:10,height:20,background:th.dark}}/>
+                </div>
+                <span style={{fontSize:10,fontWeight:boardTheme===i?800:600,color:boardTheme===i?T.text:T.dim}}>{th.name}</span>
+              </button>))}
+          </div>
+        </div>
+
+        {/* Dashboard Widgets */}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {/* Rating Widget */}
+          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
+            <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Rating</div>
+            <div style={{fontSize:32,fontWeight:900,color:T.gold,lineHeight:1}}>{rat}</div>
+            <div style={{fontSize:11,color:T.dim,marginTop:2}}>{rk.i} {rk.t}</div>
+            <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:8}}>
+              <div><span style={{fontSize:14,fontWeight:900,color:T.accent}}>{sts.w}</span><div style={{fontSize:8,color:T.dim}}>W</div></div>
+              <div><span style={{fontSize:14,fontWeight:900,color:T.danger}}>{sts.l}</span><div style={{fontSize:8,color:T.dim}}>L</div></div>
+              <div><span style={{fontSize:14,fontWeight:900,color:T.dim}}>{sts.d}</span><div style={{fontSize:8,color:T.dim}}>D</div></div>
+            </div>
+          </div>
+          {/* Win Rate Widget */}
+          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
+            <div style={{fontSize:9,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Win Rate</div>
+            {(sts.w+sts.l+sts.d)>0?<>
+              <div style={{fontSize:32,fontWeight:900,color:Math.round(sts.w/(sts.w+sts.l+sts.d)*100)>=50?T.accent:T.danger,lineHeight:1}}>{Math.round(sts.w/(sts.w+sts.l+sts.d)*100)}%</div>
+              <div style={{fontSize:10,color:T.dim,marginTop:2}}>{sts.w+sts.l+sts.d} games played</div>
+              {/* Mini bar */}
+              <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",marginTop:8,background:"#f3f4f6"}}>
+                <div style={{width:`${sts.w/(sts.w+sts.l+sts.d)*100}%`,background:T.accent}}/>
+                <div style={{width:`${sts.d/(sts.w+sts.l+sts.d)*100}%`,background:"#9ca3af"}}/>
+                <div style={{width:`${sts.l/(sts.w+sts.l+sts.d)*100}%`,background:T.danger}}/>
+              </div>
+            </>:<div style={{fontSize:14,color:T.dim,marginTop:8}}>No games yet</div>}
+          </div>
+          {/* Quick Puzzle Widget */}
+          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderRadius:12,border:"1px solid #bfdbfe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}>
+            <div style={{fontSize:9,color:T.blue,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Daily Puzzle</div>
+            <div style={{fontSize:28}}>🧩</div>
+            <div style={{fontSize:11,color:T.dim,marginTop:4}}>{PUZZLES.length} puzzles</div>
+            <div style={{fontSize:10,fontWeight:700,color:T.blue,marginTop:4}}>Solve now →</div>
+          </div>
+        </div>
       </div>}
 
       {/* Board + Panel */}
@@ -603,10 +668,10 @@ export default function CyberChessPage(){
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:5,paddingLeft:2,width:14}}>{rws.map(r=><div key={r} style={{fontSize:9,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:5,overflow:"hidden",border:"2px solid #b58863",boxShadow:"0 4px 20px rgba(0,0,0,0.1)"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:5,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 4px 20px rgba(0,0,0,0.1)"}}>
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
-                let bg=lt?T.bL:T.bD;
+                let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 return<div key={sq} onClick={()=>click(sq)} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(26px,5.2vw,44px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1}}>

@@ -319,7 +319,7 @@ export default function CyberChessPage(){
 
   /* ── AI turn + premove trigger ── */
   useEffect(()=>{
-    if(over||!on||tab!=="play")return;
+    if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(doPremove,30);return()=>clearTimeout(t)}return}
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
@@ -486,7 +486,7 @@ export default function CyberChessPage(){
   const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:11,fontWeight:700,cursor:"pointer"}}>{label}</button>);
 
   return(<main style={{background:T.bg,minHeight:"100vh"}}>
-    <ProductPageShell maxWidth={1060}><Wave1Nav/>
+    <ProductPageShell maxWidth={1160}><Wave1Nav/>
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 10px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -658,12 +658,12 @@ export default function CyberChessPage(){
       {/* Board + Panel */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
         <div style={{flexShrink:0}}>
-          {tc.ini>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(440px,calc(100vw - 48px))"}}>
+          {tc.ini>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(520px,calc(100vw - 48px))"}}>
             <div style={{padding:"6px 14px",borderRadius:8,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"6px 14px",borderRadius:8,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>You {fmt(pT.time)}</div>
           </div>}
 
-          <div translate="no" style={{display:"flex",width:"min(480px,calc(100vw - 32px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(560px,calc(100vw - 32px))",gap:4}}>
             {/* Eval bar */}
             {sfOk&&on&&!setup&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));

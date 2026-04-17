@@ -498,7 +498,7 @@ export default function CyberChessPage(){
 
       {/* Tabs */}
       <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
-        {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{sTab(t);if(t==="play")sSetup(true);else if(t==="puzzles")ldPz(0)}} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:12,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
+        {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{sTab(t);if(t==="play")sSetup(true);else if(t==="puzzles")ldPz(0);else if(t==="coach"){if(!on||setup)newG(pCol)}}} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:12,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
       </div>
 
       {/* LAUNCHPAD DASHBOARD */}

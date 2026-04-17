@@ -196,6 +196,7 @@ export default function CyberChessPage(){
   const[currentOpening,sCurrentOpening]=useState<Opening|null>(null);
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
+  const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush">("learn");
@@ -250,15 +251,14 @@ export default function CyberChessPage(){
   },[hist,openingsDb]);
   // Always load Stockfish for eval bar (not just for AI play)
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
-  // Live eval on position change
+  // Live eval on position change - only in analysis tab
   useEffect(()=>{
-    if(!on||over||!sfR.current?.ready()||setup)return;
+    if(tab!=="analysis"||!sfR.current?.ready()||setup)return;
     sfR.current.eval(game.fen(),10,(cp,mate)=>{
-      // Stockfish returns scores from side-to-move POV; convert to white POV
       const sign=game.turn()==="w"?1:-1;
       sEvalCp(cp*sign);sEvalMate(mate*sign);
     },()=>{});
-  },[bk,on,over,setup]);
+  },[bk,tab,setup]);
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
     const p=game.get(from);if(!p)return false;
@@ -664,8 +664,8 @@ export default function CyberChessPage(){
           </div>}
 
           <div translate="no" style={{display:"flex",width:"min(560px,calc(100vw - 32px))",gap:4}}>
-            {/* Eval bar */}
-            {sfOk&&on&&!setup&&(()=>{
+            {/* Eval bar - only in analysis */}
+            {tab==="analysis"&&sfOk&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
               const pct=50+cp/30; // -1500..1500 → 0..100
               const wPct=Math.max(2,Math.min(98,pct));
@@ -726,7 +726,10 @@ export default function CyberChessPage(){
             </div>}
           </div>
 
-          {on&&!setup&&<div style={{padding:"6px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,fontSize:10,color:T.dim}}>
+          {on&&!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"6px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,fontSize:10,color:T.dim}}>
+            <span style={{color:useSF?T.purple:T.blue}}>●</span> {lv.name} ({lv.elo})
+          </div>}
+          {on&&!setup&&tab==="analysis"&&<div style={{padding:"6px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,fontSize:10,color:T.dim}}>
             <span style={{color:useSF?T.purple:T.blue}}>●</span> {useSF?`Stockfish depth ${SFD[aiI]||10}`:`Minimax depth ${lv.depth}`} · {lv.name} {lv.elo}
             {sfOk&&!over&&<span style={{marginLeft:8,color:evalMate!==0?(evalMate>0?T.accent:T.danger):Math.abs(evalCp)<30?T.dim:evalCp>0?T.accent:T.danger,fontWeight:700}}>
               Eval: {evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp/100).toFixed(2)}
@@ -775,19 +778,28 @@ export default function CyberChessPage(){
               <div style={{position:"absolute",top:2,left:4,fontSize:8,color:"#94a3b8"}}>+</div>
               <div style={{position:"absolute",bottom:2,left:4,fontSize:8,color:"#94a3b8"}}>−</div>
             </div>
-            {/* Annotated moves inline */}
+            {/* Annotated moves inline - clickable */}
             <div style={{padding:"8px 10px",maxHeight:120,overflowY:"auto"}}>
               <div style={{display:"flex",flexWrap:"wrap",gap:1}}>
                 {analysis.map((a,i)=>{
                   const san=hist[i]||"";const moveNum=Math.floor(i/2)+1;const isWhite=i%2===0;
                   const evalStr=a.mate!==0?`M${Math.abs(a.mate)}`:(a.cp/100).toFixed(1);
                   const qBg=a.quality==="blunder"?"#fecaca":a.quality==="mistake"?"#fed7aa":a.quality==="inacc"?"#fef9c3":"transparent";
-                  const qBorder=a.quality==="blunder"?"1px solid #fca5a5":a.quality==="mistake"?"1px solid #fdba74":a.quality==="inacc"?"1px solid #fde68a":"none";
-                  return(<span key={i} style={{padding:"2px 4px",borderRadius:3,fontSize:10,fontFamily:"monospace",background:qBg,border:qBorder,color:T.text,fontWeight:a.quality==="blunder"||a.quality==="mistake"?700:500,position:"relative",cursor:"default"}} title={`${a.quality} · eval: ${evalStr}`}>
+                  const isBrowsing=browseIdx===i;
+                  return(<span key={i} onClick={()=>{
+                    if(fenHist[i+1]){const g=new Chess(fenHist[i+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(i);sLm(null);sSel(null);sVm(new Set())}
+                  }} style={{padding:"2px 4px",borderRadius:3,fontSize:10,fontFamily:"monospace",background:isBrowsing?"#dbeafe":qBg,border:isBrowsing?`2px solid ${T.blue}`:"none",color:T.text,fontWeight:a.quality==="blunder"||a.quality==="mistake"||isBrowsing?700:500,cursor:"pointer"}} title={`${a.quality} · eval: ${evalStr}`}>
                     {isWhite?<span style={{color:T.dim,fontSize:9}}>{moveNum}.</span>:null}{san}<sub style={{fontSize:7,color:a.cp>0?T.accent:a.cp<0?T.danger:T.dim,marginLeft:1}}>{evalStr}</sub>
                   </span>);
                 })}
               </div>
+              {/* Navigation */}
+              {browseIdx>=0&&<div style={{display:"flex",gap:6,marginTop:6,alignItems:"center"}}>
+                <button onClick={()=>{if(browseIdx>0){const ni=browseIdx-1;const g=new Chess(fenHist[ni+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni)}}} style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,cursor:"pointer"}}>◀</button>
+                <span style={{fontSize:10,color:T.dim}}>Ход {Math.floor(browseIdx/2)+1}{browseIdx%2===0?".":"..."} {hist[browseIdx]}</span>
+                <button onClick={()=>{if(browseIdx<analysis.length-1){const ni=browseIdx+1;const g=new Chess(fenHist[ni+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni)}}} style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,cursor:"pointer"}}>▶</button>
+                <button onClick={()=>{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1)}} style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,cursor:"pointer"}}>⏩ Live</button>
+              </div>}
             </div>
           </div>}
 

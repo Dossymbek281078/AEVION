@@ -169,6 +169,12 @@ export default function CyberChessPage(){
   const[mpvDepth,sMpvDepth]=useState(14);
   const[mpvRunning,sMpvRunning]=useState(false);
   const[analFen,sAnalFen]=useState("");
+  // Guess Best Move
+  const[guessMode,sGuessMode]=useState(false);
+  const[guessBest,sGuessBest]=useState<string>(""); // best move UCI from engine
+  const[guessResult,sGuessResult]=useState<"idle"|"correct"|"wrong">("idle");
+  const[guessScore,sGuessScore]=useState({right:0,total:0});
+  const[guessBestSan,sGuessBestSan]=useState("");
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
@@ -221,6 +227,22 @@ export default function CyberChessPage(){
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
     const p=game.get(from);if(!p)return false;
+    // Guess Best Move mode
+    if(tab==="analysis"&&guessMode&&guessResult==="idle"&&guessBest){
+      const attemptUci=`${from}${to}${pr||""}`;
+      const isMatch=attemptUci===guessBest||attemptUci.slice(0,4)===guessBest.slice(0,4);
+      if(isMatch){
+        sGuessResult("correct");sGuessScore(s=>({right:s.right+1,total:s.total+1}));snd("check");
+        showToast(`✓ Лучший ход! ${guessBestSan}`,"success");
+        const mv=game.move({from,to,promotion:pr||"q"});
+        if(mv){sLm({from:mv.from,to:mv.to});sBk(k=>k+1)}
+        return true;
+      }else{
+        sGuessResult("wrong");sGuessScore(s=>({...s,total:s.total+1}));snd("capture");
+        showToast(`✗ Лучше было ${guessBestSan}`,"error");
+        return false;
+      }
+    }
     // Puzzle mode: verify solution before executing
     if(tab==="puzzles"&&pzCurrent&&pzAttempt==="idle"){
       const attemptUci=`${from}${to}${pr||""}`;
@@ -248,7 +270,7 @@ export default function CyberChessPage(){
         else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}}
       else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
       sOver(r);snd("x");sOn(false);sPms([])}
-    return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt]);
+    return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -392,12 +414,36 @@ export default function CyberChessPage(){
     });
   },[game,mpvDepth,mpvCount,showToast]);
 
-  // Auto-run MultiPV in analysis tab
+  // Auto-run MultiPV in analysis tab (but not in guess mode)
   useEffect(()=>{
-    if(tab!=="analysis"||!sfOk)return;
+    if(tab!=="analysis"||!sfOk||guessMode)return;
     const t=setTimeout(()=>runMultiPV(),200);
     return()=>clearTimeout(t);
-  },[bk,tab,sfOk]);
+  },[bk,tab,sfOk,guessMode]);
+
+  // Start guess mode: get best move silently
+  const startGuess=useCallback(()=>{
+    if(!sfR.current?.ready()){showToast("Stockfish loading...","error");return}
+    sGuessMode(true);sGuessResult("idle");sGuessBest("");sGuessBestSan("");
+    sMpvLines([]); // hide lines
+    sfR.current.go(game.fen(),16,(f,t)=>{
+      const uci=`${f}${t}`;sGuessBest(uci);
+      // Convert to SAN
+      try{const ch=new Chess(game.fen());const m=ch.move({from:f as Square,to:t as Square});sGuessBestSan(m?m.san:uci)}catch{sGuessBestSan(uci)}
+    });
+  },[game,showToast]);
+
+  // Next guess position (random from current game or random position)
+  const nextGuess=useCallback(()=>{
+    sGuessResult("idle");sGuessBest("");sGuessBestSan("");
+    // If we have game history, pick random position from it
+    if(fenHist.length>2){
+      const idx=Math.floor(Math.random()*(fenHist.length-1));
+      const g=new Chess(fenHist[idx]);setGame(g);sBk(k=>k+1);
+      sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(g.turn()==="b");
+    }
+    setTimeout(()=>startGuess(),100);
+  },[fenHist,startGuess]);
 
   const pmSet=new Set<string>();pms.forEach(p=>{pmSet.add(p.from);pmSet.add(p.to)});
   const bd=game.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
@@ -732,12 +778,38 @@ export default function CyberChessPage(){
                   <span style={{fontSize:11,fontWeight:900,color:T.purple,minWidth:20}}>{mpvDepth}</span>
                 </div>
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
+                <button onClick={()=>{if(guessMode){sGuessMode(false);runMultiPV()}else startGuess()}} style={{padding:"6px 14px",borderRadius:7,border:guessMode?`2px solid #f59e0b`:`1px solid ${T.border}`,background:guessMode?"#fffbeb":"#fff",color:guessMode?"#92400e":T.dim,fontSize:11,fontWeight:800,cursor:"pointer"}}>{guessMode?"✕ Exit Guess":"🎯 Guess Move"}</button>
               </div>
               {/* FEN input */}
               <div style={{display:"flex",gap:4}}>
                 <input value={game.fen()} readOnly style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:9,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
-                <button onClick={()=>{const f=prompt("Paste FEN:");if(f){try{const g=new Chess(f);setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(g.turn()==="b")}catch{showToast("Invalid FEN","error")}}}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:9,fontWeight:700,color:T.dim,cursor:"pointer"}}>Paste FEN</button>
+                <button onClick={()=>{const f=prompt("Paste FEN:");if(f){try{const g=new Chess(f);setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(g.turn()==="b");if(guessMode)setTimeout(startGuess,100)}catch{showToast("Invalid FEN","error")}}}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:9,fontWeight:700,color:T.dim,cursor:"pointer"}}>Paste FEN</button>
               </div>
+
+              {/* Guess Mode Panel */}
+              {guessMode&&<div style={{marginTop:8,padding:"12px",borderRadius:8,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fde68a"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:900,color:"#92400e"}}>🎯 Найди лучший ход</div>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <span style={{fontSize:11,fontWeight:800,color:T.accent}}>{guessScore.right}</span>
+                    <span style={{fontSize:9,color:T.dim}}>/</span>
+                    <span style={{fontSize:11,fontWeight:800,color:T.text}}>{guessScore.total}</span>
+                    {guessScore.total>0&&<span style={{fontSize:10,fontWeight:700,color:guessScore.right/guessScore.total>=0.7?T.accent:guessScore.right/guessScore.total>=0.4?"#f59e0b":T.danger}}>
+                      {Math.round(guessScore.right/guessScore.total*100)}%
+                    </span>}
+                  </div>
+                </div>
+                <div style={{fontSize:11,color:"#78716c",marginBottom:6}}>
+                  {game.turn()==="w"?"⚪ Ход белых":"⚫ Ход чёрных"} — сделай ход на доске
+                </div>
+                {guessResult==="correct"&&<div style={{padding:"8px 12px",borderRadius:6,background:"#ecfdf5",border:"1px solid #86efac",fontSize:12,fontWeight:800,color:T.accent,marginBottom:6}}>✓ Правильно! Лучший ход: {guessBestSan}</div>}
+                {guessResult==="wrong"&&<div style={{padding:"8px 12px",borderRadius:6,background:"#fef2f2",border:"1px solid #fca5a5",fontSize:12,fontWeight:800,color:T.danger,marginBottom:6}}>✗ Неверно. Лучший ход был: <span style={{fontFamily:"monospace",background:"#fff",padding:"1px 6px",borderRadius:4}}>{guessBestSan}</span></div>}
+                {!guessBest&&<div style={{fontSize:10,color:"#a8a29e"}}>⏳ Engine считает лучший ход...</div>}
+                <div style={{display:"flex",gap:6,marginTop:4}}>
+                  {guessResult!=="idle"&&<button onClick={nextGuess} style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#f59e0b",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>▶ Следующая позиция</button>}
+                  {guessResult!=="idle"&&<button onClick={()=>{sGuessMode(false);runMultiPV()}} style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:11,fontWeight:700,cursor:"pointer"}}>Показать все линии</button>}
+                </div>
+              </div>}
             </div>
 
             {/* MultiPV Lines */}

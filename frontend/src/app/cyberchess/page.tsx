@@ -146,7 +146,6 @@ export default function CyberChessPage(){
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(0); // index into BOARD_THEMES
   const bT=BOARD_THEMES[boardTheme]||BOARD_THEMES[0];
-  const[showCoach,sShowCoach]=useState(false);
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
@@ -169,7 +168,7 @@ export default function CyberChessPage(){
   const[on,sOn]=useState(false);
   const[setup,sSetup]=useState(true);
   const[flip,sFlip]=useState(false);
-  const[tab,sTab]=useState<"play"|"puzzles"|"analysis">("play");
+  const[tab,sTab]=useState<"play"|"puzzles"|"analysis"|"coach">("play");
   const[pzI,sPzI]=useState(0);
   const[pzF,sPzF]=useState("all");
   const[sfOk,sSfOk]=useState(false);
@@ -499,7 +498,7 @@ export default function CyberChessPage(){
 
       {/* Tabs */}
       <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
-        {(["play","puzzles","analysis"] as const).map(t=><button key={t} onClick={()=>{sTab(t);if(t==="play")sSetup(true);else if(t==="puzzles")ldPz(0)}} style={{padding:"7px 18px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:12,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":"⚡ Analysis"}</button>)}
+        {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{sTab(t);if(t==="play")sSetup(true);else if(t==="puzzles")ldPz(0)}} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:12,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
       </div>
 
       {/* LAUNCHPAD DASHBOARD */}
@@ -633,17 +632,31 @@ export default function CyberChessPage(){
             </>:<div style={{fontSize:14,color:T.dim,marginTop:8}}>No games yet</div>}
           </div>
           {/* Quick Puzzle Widget */}
-          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderRadius:12,border:"1px solid #bfdbfe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}>
-            <div style={{fontSize:9,color:T.blue,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Daily Puzzle</div>
+          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderRadius:12,border:"1px solid #bfdbfe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}>
+            <div style={{fontSize:9,color:T.blue,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Задачи</div>
             <div style={{fontSize:28}}>🧩</div>
             <div style={{fontSize:11,color:T.dim,marginTop:4}}>{PUZZLES.length} puzzles</div>
-            <div style={{fontSize:10,fontWeight:700,color:T.blue,marginTop:4}}>Solve now →</div>
+            <div style={{fontSize:10,fontWeight:700,color:T.blue,marginTop:4}}>Решать →</div>
+          </div>
+          {/* AI Coach Widget */}
+          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderRadius:12,border:"1px solid #a7f3d0",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sTab("coach")}>
+            <div style={{fontSize:9,color:T.accent,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>AI Coach</div>
+            <div style={{fontSize:28}}>🎓</div>
+            <div style={{fontSize:11,color:T.dim,marginTop:4}}>Разбор партии</div>
+            <div style={{fontSize:10,fontWeight:700,color:T.accent,marginTop:4}}>Учиться →</div>
+          </div>
+          {/* Library Widget */}
+          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderRadius:12,border:"1px solid #d8b4fe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sTab("analysis")}>
+            <div style={{fontSize:9,color:T.purple,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Анализ</div>
+            <div style={{fontSize:28}}>⚡</div>
+            <div style={{fontSize:11,color:T.dim,marginTop:4}}>MultiPV · Stockfish</div>
+            <div style={{fontSize:10,fontWeight:700,color:T.purple,marginTop:4}}>Анализ →</div>
           </div>
         </div>
       </div>}
 
       {/* Board + Panel */}
-      {(!setup||tab==="puzzles"||tab==="analysis")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
         <div style={{flexShrink:0}}>
           {tc.ini>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(440px,calc(100vw - 48px))"}}>
             <div style={{padding:"6px 14px",borderRadius:8,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>AI {fmt(aT.time)}</div>
@@ -942,22 +955,17 @@ export default function CyberChessPage(){
             </div>}
           </div>}
 
-          {/* AI Coach Button */}
-          <button onClick={()=>sShowCoach(!showCoach)} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:showCoach?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:showCoach?"rgba(5,150,105,0.06)":T.surface,color:showCoach?T.accent:T.text,fontSize:12,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            🤖 {showCoach?"Скрыть AI Coach":"Shachik AI Coach"}
-          </button>
-
-          {/* AI Coach Component */}
-          <AiCoach
+          {/* ── Coach Tab ── */}
+          {tab==="coach"&&<AiCoach
             fen={game.fen()}
             moves={hist}
             evalCp={evalCp}
             evalMate={evalMate}
             opening={currentOpening}
             playerColor={pCol}
-            visible={showCoach}
-            onClose={()=>sShowCoach(false)}
-          />
+            visible={true}
+            onClose={()=>sTab("play")}
+          />}
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:9,color:T.dim}}>{s.l}</div></div>)}

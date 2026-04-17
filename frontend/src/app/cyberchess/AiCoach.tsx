@@ -24,6 +24,8 @@ Rules:
 - Suggest concrete moves with brief explanations
 - If asked about openings, reference ECO codes when possible`;
 
+const BACKEND = "https://aevion-production-a70c.up.railway.app";
+
 export default function AiCoach({ fen, moves, evalCp, evalMate, opening, playerColor, visible, onClose }: Props) {
   const [msgs, sMsgs] = useState<Msg[]>([]);
   const [input, sInput] = useState("");
@@ -62,44 +64,36 @@ Move number: ${Math.ceil(moves.length / 2)}`;
     sError("");
 
     try {
-      const apiMsgs = [
-        { role: "user" as const, content: `[Chess Position Context]\n${buildContext()}\n\n${userMsg || "Analyze this position and give me advice."}` },
-        ...newMsgs.slice(1).map(m => ({ role: m.role, content: m.content })),
-      ];
-
-      // If this isn't the first message, just append
-      if (newMsgs.length > 1) {
-        apiMsgs.length = 0;
-        for (const m of newMsgs) {
-          if (m.role === "user" && apiMsgs.length === 0) {
-            apiMsgs.push({ role: "user", content: `[Chess Position Context]\n${buildContext()}\n\n${m.content}` });
-          } else {
-            apiMsgs.push({ role: m.role, content: m.content });
-          }
+      // Build messages array with chess context in first user message
+      const apiMsgs: { role: "user" | "assistant"; content: string }[] = [];
+      for (let i = 0; i < newMsgs.length; i++) {
+        const m = newMsgs[i];
+        if (i === 0 && m.role === "user") {
+          apiMsgs.push({ role: "user", content: `[Chess Position Context]\n${buildContext()}\n\n${m.content}` });
+        } else {
+          apiMsgs.push({ role: m.role, content: m.content });
         }
       }
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch(`${BACKEND}/api/coach/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
           system: SYSTEM,
           messages: apiMsgs,
         }),
       });
 
       if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`API error: ${res.status} ${err.slice(0, 200)}`);
+        const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(errData.error || `Server error: ${res.status}`);
       }
 
       const data = await res.json();
       const reply = data.content?.map((c: any) => c.text || "").join("") || "No response";
       sMsgs([...newMsgs, { role: "assistant", content: reply }]);
     } catch (e: any) {
-      sError(e.message || "Failed to connect");
+      sError(e.message || "Failed to connect to AI Coach");
     } finally {
       sLoading(false);
     }

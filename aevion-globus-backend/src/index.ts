@@ -13,12 +13,10 @@ import { modulesRouter } from "./routes/modules";
 import { qcoreaiRouter } from "./routes/qcoreai";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
+import { coachRouter } from "./routes/coach";
 
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
-
-// Подключаем ТОЛЬКО QRight (он реально существует)
-// (qrightRouter already imported above)
 
 const app = express();
 const PORT = process.env.PORT || 4001;
@@ -74,7 +72,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.2.0",
+      version: "0.3.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -93,6 +91,7 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/auth/me": { get: {} },
       "/api/qcoreai/chat": { post: { summary: "Chat (OpenAI or stub)" } },
       "/api/qcoreai/health": { get: { summary: "QCoreAI config probe" } },
+      "/api/coach/chat": { post: { summary: "AI Chess Coach proxy to Claude API" } },
       "/api/planet/stats": {
         get: {
           summary: "Planet public stats (participants Y, votes, optional productKeyPrefix scope)",
@@ -137,6 +136,12 @@ app.use("/api/qsign", qsignRouter);
 // ==========================
 app.use("/api/quantum-shield", quantumShieldRouter);
 app.use("/api/pipeline", pipelineRouter);
+
+// ==========================
+// AI Coach (Chess)
+// ==========================
+app.use("/api/coach", coachRouter);
+
 // ==========================
 // Auth
 // ==========================

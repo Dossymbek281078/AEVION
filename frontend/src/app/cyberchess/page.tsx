@@ -310,6 +310,20 @@ export default function CyberChessPage(){
     return()=>clearInterval(t);
   },[tab,pzMode,pzCurrent,pzAttempt,pzTimeLeft]);
 
+  // Auto-load first puzzle when filters change
+  useEffect(()=>{
+    if(tab!=="puzzles"||!fPz.length)return;
+    // Load first puzzle from filtered list
+    const pz=fPz[0];
+    const g=new Chess(pz.fen);
+    setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");
+    sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
+    sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
+    if(pzMode==="timed3")sPzTimeLeft(180);
+    else if(pzMode==="timed5")sPzTimeLeft(300);
+    else sPzTimeLeft(0);
+  },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab]);
+
   /* ── Post-game analysis ── */
   const runAnalysis=useCallback(async()=>{
     if(!sfR.current?.ready()||fenHist.length<3){showToast("Need Stockfish and a finished game","error");return}

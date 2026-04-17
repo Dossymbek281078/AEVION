@@ -119,6 +119,12 @@ function ldS(){try{return JSON.parse(localStorage.getItem(SK)||'{"w":0,"l":0,"d"
 function svS(v:{w:number;l:number;d:number}){try{localStorage.setItem(SK,JSON.stringify(v))}catch{}}
 function gRank(e:number){return[...RANKS].reverse().find(r=>e>=r.min)||RANKS[0]}
 
+/* ═══ Game History ═══ */
+type SavedGame = {id:string;date:string;moves:string[];result:string;playerColor:"w"|"b";aiLevel:string;rating:number;tc:string;category:"Bullet"|"Blitz"|"Rapid"|"Classical";opening?:string};
+const GK="aevion_chess_games_v1";
+function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
+function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;localStorage.setItem(GK,JSON.stringify(all))}catch{}}
+
 /* ═══ Timer ═══ */
 function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){const[t,sT]=useState(ini);const r=useRef<any>(null);useEffect(()=>{sT(ini)},[ini]);useEffect(()=>{if(r.current)clearInterval(r.current);if(act&&ini>0){r.current=setInterval(()=>sT(v=>{if(v<=1){clearInterval(r.current);onT();return 0}return v-1}),1000)}return()=>{if(r.current)clearInterval(r.current)}},[act,ini>0]);return{time:t,addInc:useCallback(()=>{if(inc>0)sT(v=>v+inc)},[inc]),reset:useCallback(()=>sT(ini),[ini])}}
 function fmt(s:number){return s<=0?"0:00":`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`}
@@ -194,6 +200,8 @@ export default function CyberChessPage(){
   type Opening = {eco:string;name:string;moves:string;desc:string};
   const[openingsDb,sOpeningsDb]=useState<Opening[]>([]);
   const[currentOpening,sCurrentOpening]=useState<Opening|null>(null);
+  const[savedGames,sSavedGames]=useState<SavedGame[]>([]);
+  const[gamesFilter,sGamesFilter]=useState<string>("all");
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
@@ -229,7 +237,7 @@ export default function CyberChessPage(){
     return true;
   });
 
-  useEffect(()=>{sRat(ldR());sSts(ldS());
+  useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
     fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>sOpeningsDb(d)).catch(()=>sOpeningsDb([]))
   },[]);
@@ -304,7 +312,11 @@ export default function CyberChessPage(){
         if(w){const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success")}
         else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}}
       else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
-      sOver(r);snd("x");sOn(false);sPms([])}
+      sOver(r);snd("x");sOn(false);sPms([]);
+      // Save to history
+      const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
+      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
+      saveGame(sg);sSavedGames(loadGames())}
     return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan]);
 
   /* ── Premove execution ── */
@@ -653,12 +665,50 @@ export default function CyberChessPage(){
             <div style={{fontSize:10,fontWeight:700,color:T.purple,marginTop:4}}>Анализ →</div>
           </div>
         </div>
+
+        {/* Game History */}
+        {savedGames.length>0&&<div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+          <div style={{padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`}}>
+            <span style={{fontSize:12,fontWeight:800,color:T.text}}>Мои партии ({savedGames.length})</span>
+            <div style={{display:"flex",gap:3}}>
+              {["all","Bullet","Blitz","Rapid"].map(f=><button key={f} onClick={()=>sGamesFilter(f)} style={{padding:"3px 8px",borderRadius:5,border:"none",background:gamesFilter===f?T.accent:"#f3f4f6",color:gamesFilter===f?"#fff":T.dim,fontSize:9,fontWeight:700,cursor:"pointer"}}>{f==="all"?"Все":f}</button>)}
+            </div>
+          </div>
+          <div style={{maxHeight:200,overflowY:"auto"}}>
+            {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map(g=>{
+              const isWin=g.result.includes("You win")||g.result.includes("timed out");
+              const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+              return(<button key={g.id} onClick={()=>{
+                // Load game into analysis
+                sTab("analysis");
+                const ch=new Chess();
+                for(const san of g.moves)try{ch.move(san)}catch{}
+                setGame(ch);sBk(k=>k+1);sHist(g.moves);
+                const fens=[new Chess().fen()];const tmp=new Chess();
+                for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
+                sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
+              }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",fontSize:11}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:12,fontWeight:900,color:isWin?T.accent:isDraw?T.dim:T.danger}}>{isWin?"W":isDraw?"D":"L"}</span>
+                  <div>
+                    <div style={{fontWeight:600,color:T.text}}>{g.opening||"Unknown"}</div>
+                    <div style={{fontSize:9,color:T.dim}}>{g.aiLevel} · {g.tc} · {g.moves.length} ходов</div>
+                  </div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.dim}}>{g.rating}</div>
+                  <span style={{fontSize:8,padding:"1px 5px",borderRadius:3,background:g.category==="Bullet"?"#fecaca":g.category==="Blitz"?"#fef3c7":"#d1fae5",color:g.category==="Bullet"?T.danger:g.category==="Blitz"?"#92400e":T.accent,fontWeight:700}}>{g.category}</span>
+                </div>
+              </button>)
+            })}
+          </div>
+        </div>}
       </div>}
 
       {/* Board + Panel */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
         <div style={{flexShrink:0}}>
-          {tc.ini>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(520px,calc(100vw - 48px))"}}>
+          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(520px,calc(100vw - 48px))"}}>
             <div style={{padding:"6px 14px",borderRadius:8,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"6px 14px",borderRadius:8,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>You {fmt(pT.time)}</div>
           </div>}
@@ -717,8 +767,12 @@ export default function CyberChessPage(){
 
         {/* Right panel */}
         <div style={{flex:"1 1 220px",minWidth:190,display:"flex",flexDirection:"column",gap:8}}>
-          <div style={{padding:"10px 14px",borderRadius:9,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
+          <div style={{padding:"10px 14px",borderRadius:9,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think&&tab!=="analysis"?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
             {over?<><div style={{fontWeight:900,fontSize:14,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:10,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
+            tab==="analysis"?<div style={{display:"flex",alignItems:"center",gap:7}}>
+              <div style={{width:7,height:7,borderRadius:4,background:T.purple}}/>
+              <span style={{fontWeight:700,fontSize:12,color:T.text}}>Анализ · {game.turn()==="w"?"Ход белых":"Ход чёрных"}</span>
+            </div>:
             <div style={{display:"flex",alignItems:"center",gap:7}}>
               <div style={{width:7,height:7,borderRadius:4,background:chk?T.danger:think?T.gold:myT?T.accent:T.dim,animation:think?"pulse 1s infinite":"none"}}/>
               <span style={{fontWeight:700,fontSize:12,color:T.text}}>{chk?"Check!":think?(useSF?"Stockfish...":"Thinking..."):myT?"Your move":"AI thinking"}</span>

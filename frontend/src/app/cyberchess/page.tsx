@@ -175,6 +175,10 @@ export default function CyberChessPage(){
   const[guessResult,sGuessResult]=useState<"idle"|"correct"|"wrong">("idle");
   const[guessScore,sGuessScore]=useState({right:0,total:0});
   const[guessBestSan,sGuessBestSan]=useState("");
+  // Opening detection
+  type Opening = {eco:string;name:string;moves:string;desc:string};
+  const[openingsDb,sOpeningsDb]=useState<Opening[]>([]);
+  const[currentOpening,sCurrentOpening]=useState<Opening|null>(null);
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
@@ -210,9 +214,25 @@ export default function CyberChessPage(){
   });
 
   useEffect(()=>{sRat(ldR());sSts(ldS());
-    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]))
+    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
+    fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>sOpeningsDb(d)).catch(()=>sOpeningsDb([]))
   },[]);
   useEffect(()=>{hR.current?.scrollTo({top:hR.current.scrollHeight,behavior:"smooth"})},[hist]);
+
+  // Detect opening from move history
+  useEffect(()=>{
+    if(!openingsDb.length||!hist.length)return;
+    // Build UCI move string from game history
+    const g=new Chess();const uciMoves:string[]=[];
+    for(const san of hist){try{const m=g.move(san);if(m)uciMoves.push(m.from+m.to+(m.promotion||""))}catch{break}}
+    const movesStr=uciMoves.join(" ");
+    // Find longest matching opening (db is sorted by longest first)
+    let found:Opening|null=null;
+    for(const op of openingsDb){
+      if(movesStr.startsWith(op.moves)||movesStr===op.moves){found=op;break}
+    }
+    if(found)sCurrentOpening(found);
+  },[hist,openingsDb]);
   // Always load Stockfish for eval bar (not just for AI play)
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
   // Live eval on position change
@@ -332,7 +352,7 @@ export default function CyberChessPage(){
     if((game.turn()!==pCol||think)&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
@@ -631,6 +651,15 @@ export default function CyberChessPage(){
             {sfOk&&!over&&<span style={{marginLeft:8,color:evalMate!==0?(evalMate>0?T.accent:T.danger):Math.abs(evalCp)<30?T.dim:evalCp>0?T.accent:T.danger,fontWeight:700}}>
               Eval: {evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp/100).toFixed(2)}
             </span>}
+          </div>}
+
+          {/* Opening detection */}
+          {currentOpening&&on&&!setup&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",border:"1px solid #bfdbfe"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+              <span style={{fontSize:9,fontWeight:900,padding:"2px 6px",borderRadius:4,background:T.blue,color:"#fff",fontFamily:"monospace"}}>{currentOpening.eco}</span>
+              <span style={{fontSize:12,fontWeight:800,color:T.text}}>{currentOpening.name}</span>
+            </div>
+            <div style={{fontSize:10,color:T.dim,lineHeight:1.4}}>{currentOpening.desc}</div>
           </div>}
 
           {showAnal&&analysis.length>0&&<div style={{padding:"10px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>

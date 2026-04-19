@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
-// Прокси API на бекенд: браузер бьёт в same-origin `/api-backend/...` → без CORS.
+// Прокси API на бэкенд: браузер бьёт в same-origin `/api-backend/...` → без CORS.
 // В проде задайте BACKEND_PROXY_TARGET на сборке (URL без завершающего слэша).
 const backendProxyTarget =
   process.env.BACKEND_PROXY_TARGET?.trim() || "http://127.0.0.1:4001";
@@ -12,6 +12,28 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(process.cwd()),
   },
+
+  async headers() {
+    return [
+      {
+        // Cross-Origin Isolation — нужно чтобы браузер разрешил SharedArrayBuffer,
+        // без которого Stockfish 18 (multi-threaded WASM) не запускается.
+        // Применяется ко всем страницам.
+        source: "/:path*",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
+          },
+          {
+            key: "Cross-Origin-Embedder-Policy",
+            value: "require-corp",
+          },
+        ],
+      },
+    ];
+  },
+
   async rewrites() {
     return [
       {

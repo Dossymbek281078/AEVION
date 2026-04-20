@@ -1110,30 +1110,51 @@ export default function CyberChessPage(){
               </div>}
             </div>
 
-            {/* MultiPV Lines */}
+            {/* MultiPV Lines — vertical tree Lichess-style */}
             {mpvLines.length>0&&<div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+              <div style={{padding:"8px 14px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:12,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:T.dim}}>🌳 Engine lines · depth {mpvLines[0]?.depth||mpvDepth}</span>
+                <span style={{fontSize:11,color:T.dim}}>{mpvLines.length} {mpvLines.length===1?"line":"lines"}</span>
+              </div>
               {mpvLines.map((line,i)=>{
                 const evalStr=line.mate!==0?`M${Math.abs(line.mate)}`:(line.cp/100).toFixed(1);
                 const isPositive=line.mate!==0?line.mate>0:line.cp>0;
                 const sanMoves=uciToSan(analFen||game.fen(),line.moves);
-                return(<div key={i} style={{padding:"8px 12px",borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",display:"flex",gap:10,alignItems:"flex-start"}}>
-                  {/* Eval badge */}
-                  <div style={{minWidth:48,padding:"4px 8px",borderRadius:6,background:isPositive?"#ecfdf5":"#1e293b",color:isPositive?T.accent:"#f0f0f0",fontSize:13,fontWeight:900,fontFamily:"monospace",textAlign:"center",flexShrink:0}}>
-                    {isPositive?"+":""}{evalStr}
-                  </div>
-                  {/* Move sequence */}
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:2}}>
-                      {sanMoves.map((san,j)=>{
-                        const moveNum=Math.floor(j/2)+1;const isWhite=j%2===0;
-                        return(<span key={j} style={{fontSize:13,fontFamily:"monospace",fontWeight:j===0?800:500,color:j===0?T.text:isWhite?"#374151":"#6b7280"}}>
-                          {isWhite?`${moveNum}. `:""}{san}{" "}
-                        </span>)
-                      })}
+                const uciMoves=line.moves.split(" ").filter(Boolean);
+                const baseFen=analFen||game.fen();
+                const rankBg=i===0?"linear-gradient(135deg,#ecfdf5,#f0fdf4)":i===1?"linear-gradient(135deg,#eff6ff,#f5f9ff)":"transparent";
+                return(<div key={i} style={{borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",background:rankBg}}>
+                  {/* Line header */}
+                  <div style={{padding:"8px 14px",display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{minWidth:26,height:26,borderRadius:6,background:i===0?T.accent:i===1?T.blue:T.dim,color:"#fff",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
+                    <div style={{minWidth:54,padding:"4px 8px",borderRadius:6,background:isPositive?"#065f46":"#1e293b",color:"#fff",fontSize:13,fontWeight:900,fontFamily:"monospace",textAlign:"center",flexShrink:0}}>
+                      {isPositive?"+":""}{evalStr}
                     </div>
-                    <div style={{fontSize:8,color:T.dim,marginTop:2}}>Line {line.pv} · depth {line.depth}</div>
+                    <span style={{fontSize:11,color:T.dim,letterSpacing:"0.05em"}}>depth {line.depth}</span>
                   </div>
-                </div>)
+                  {/* Moves in tree (clickable, each plays up to that point) */}
+                  <div style={{padding:"6px 14px 12px 52px",display:"flex",flexWrap:"wrap",gap:4,alignItems:"baseline"}}>
+                    {sanMoves.map((san,j)=>{
+                      const moveNum=Math.floor(j/2)+1;const isWhite=j%2===0;
+                      return(<React.Fragment key={j}>
+                        {isWhite&&<span style={{fontSize:11,color:T.dim,fontFamily:"monospace",fontWeight:700,marginRight:2}}>{moveNum}.</span>}
+                        <span onClick={()=>{
+                          try{
+                            const ch=new Chess(baseFen);
+                            for(let k=0;k<=j;k++){
+                              const u=uciMoves[k];
+                              if(!u)break;
+                              ch.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:(u[4]||"q") as any});
+                            }
+                            setGame(ch);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);
+                          }catch{}
+                        }} style={{padding:"3px 7px",borderRadius:5,fontSize:13,fontFamily:"monospace",fontWeight:j===0?900:600,color:j===0?T.text:isWhite?"#374151":"#4b5563",cursor:"pointer",background:j===0?"rgba(5,150,105,0.1)":"transparent",border:j===0?`1px solid rgba(5,150,105,0.25)`:"1px solid transparent"}} onMouseEnter={e=>{if(j>0)e.currentTarget.style.background="rgba(5,150,105,0.08)"}} onMouseLeave={e=>{if(j>0)e.currentTarget.style.background="transparent"}}>
+                          {san}
+                        </span>
+                      </React.Fragment>);
+                    })}
+                  </div>
+                </div>);
               })}
             </div>}
             {mpvLines.length===0&&!mpvRunning&&<div style={{padding:"20px",textAlign:"center",color:T.dim,fontSize:13,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>

@@ -409,13 +409,25 @@ export default function CyberChessPage(){
 
     // ── PREMOVE MODE (only when it's NOT player's turn) ──
     if(isAiTurn&&on){
-      const p=game.get(sq);
+      // Build virtual board to know what piece would be on each square after queued premoves
+      const vGame=new Chess(game.fen());
+      try{
+        for(const pm of curPms){
+          const fenParts=vGame.fen().split(" ");
+          fenParts[1]=pCol;
+          try{vGame.load(fenParts.join(" "));}catch{}
+          const fp=vGame.get(pm.from);
+          if(!fp||fp.color!==pCol)continue;
+          try{vGame.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+        }
+      }catch{}
+      const vp=vGame.get(sq);  // virtual piece at clicked square
 
       // Case 1: a square is already selected for premove
       if(curPmSel){
         // Same square clicked → deselect
         if(sq===curPmSel){sPmSel(null);return}
-        const selPiece=game.get(curPmSel);
+        const selPiece=vGame.get(curPmSel);
         // Check limit
         if(curPms.length>=pmLim){sPmSel(null);return}
         // Create premove (even onto own piece - it may be captured by opponent first)
@@ -427,17 +439,8 @@ export default function CyberChessPage(){
         return;
       }
 
-      // Case 2: no selection → click on own piece starts new premove
-      if(p?.color===pCol){sPmSel(sq);return}
-
-      // Case 2.5: click on destination of existing premove (where our piece WILL be)
-      // → allow chain premove from that square
-      const destIdx=curPms.findIndex(x=>x.to===sq);
-      if(destIdx>=0){
-        // Check: what piece ends up at this square after all queued premoves?
-        // Simpler: just allow selection — user wants to chain from this virtual position
-        sPmSel(sq);return;
-      }
+      // Case 2: no selection → click on own piece (real or virtual) starts new premove
+      if(vp?.color===pCol){sPmSel(sq);return}
 
       // Case 3: click on source square of existing premove → remove that premove
       const pmIdx=curPms.findIndex(x=>x.from===sq);
@@ -605,7 +608,26 @@ export default function CyberChessPage(){
   },[fenHist,startGuess]);
 
   const pmSet=new Set<string>();pms.forEach(p=>{pmSet.add(p.from);pmSet.add(p.to)});
-  const bd=game.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
+  // Virtual board: apply premoves to show ghost/shadow pieces at destinations
+  const virtualGame=(()=>{
+    if(pms.length===0)return game;
+    try{
+      const g=new Chess(game.fen());
+      // Force turn to player color so premoves can be played
+      for(const pm of pms){
+        const fenParts=g.fen().split(" ");
+        fenParts[1]=pCol;
+        // Reset en passant & castling flags that might block
+        try{g.load(fenParts.join(" "));}catch{}
+        const from=g.get(pm.from);
+        if(!from||from.color!==pCol)continue;
+        // Try move, ignore if illegal
+        try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+      }
+      return g;
+    }catch{return game;}
+  })();
+  const bd=virtualGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
 
   const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:13,fontWeight:700,cursor:"pointer"}}>{label}</button>);
 
@@ -848,13 +870,15 @@ export default function CyberChessPage(){
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:14,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)"}}>
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
+                const realP=game.get(sq);
+                const isShadow=pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color);
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(36px,7vw,72px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                   {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
-                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",transition:"transform 0.12s"}}><Piece type={p.type} color={p.color}/></div>}
+                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s"}}><Piece type={p.type} color={p.color}/></div>}
                 </div>}))}
             </div>
           </div>

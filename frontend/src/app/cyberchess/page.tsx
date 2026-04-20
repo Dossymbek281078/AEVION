@@ -361,17 +361,28 @@ export default function CyberChessPage(){
     else sPms(rest); // invalid premove → skip
   },[game,over,pms,pCol,exec]);
 
-  /* ── AI turn + premove trigger ── */
+  /* ── Esc key: clear all premoves ── */
+  useEffect(()=>{
+    const h=(e:KeyboardEvent)=>{
+      if(e.key==="Escape"){
+        if(pms.length>0||pmSel){sPms([]);sPmSel(null);snd("premove")}
+      }
+    };
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[pms.length,pmSel]);
+
+  /* ── Premove trigger (only when it's player's turn) ── */
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(doPremove,50);return()=>clearTimeout(t)}return}
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     if(useSF&&sfR.current?.ready()){
-      const t=setTimeout(()=>sfR.current!.go(game.fen(),SFD[aiI]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)}),Math.max(100,delay*0.4));
+      const t=setTimeout(()=>sfR.current!.go(game.fen(),SFD[aiI]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)}),Math.max(800,delay));
       return()=>clearTimeout(t)}
     const t=setTimeout(()=>{const c=new Chess(game.fen());const b=best(c,lv.depth,lv.rand);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},delay);
-    return()=>clearTimeout(t)},[bk,over,on,tab,game,pms,pCol,doPremove,tc.ini,lv,aiI,useSF]);
+    return()=>clearTimeout(t)},[bk,over,on,tab]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
@@ -657,6 +668,7 @@ export default function CyberChessPage(){
           <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,minWidth:120,accentColor:T.accent}}/>
           <div style={{fontSize:14,fontWeight:900,color:T.accent,minWidth:32,textAlign:"center"}}>{pmLim}</div>
           <div style={{fontSize:9,color:T.dim,flex:"1 1 200px"}}>{pmLim===1?"1 move · lichess style":pmLim>=15?`${pmLim} moves · chess.com style`:`${pmLim} moves queue`}</div>
+          <div style={{fontSize:9,color:T.dim,flex:"1 1 100%",marginTop:4,fontStyle:"italic"}}>ПКМ по доске — отменить последний · Esc — отменить все</div>
         </div>
 
         {/* Board Theme Selector */}
@@ -796,7 +808,7 @@ export default function CyberChessPage(){
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                return<div key={sq} onClick={()=>click(sq)} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
+                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();if(pms.length>0){sPms(p=>p.slice(0,-1));snd("premove")}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(26px,5.2vw,44px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1}}>
                   {iV&&!p&&<div style={{width:"26%",height:"26%",borderRadius:"50%",background:"rgba(5,150,105,0.45)",position:"absolute"}}/>}
                   {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:"drop-shadow(0 1px 2px rgba(0,0,0,0.3))"}}><Piece type={p.type} color={p.color}/></div>}

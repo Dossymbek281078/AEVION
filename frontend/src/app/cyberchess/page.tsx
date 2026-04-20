@@ -364,14 +364,14 @@ export default function CyberChessPage(){
   /* ── AI turn + premove trigger ── */
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
-    if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(doPremove,30);return()=>clearTimeout(t)}return}
+    if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(doPremove,50);return()=>clearTimeout(t)}return}
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(game.fen(),SFD[aiI]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)}),Math.max(100,delay*0.4));
       return()=>clearTimeout(t)}
     const t=setTimeout(()=>{const c=new Chess(game.fen());const b=best(c,lv.depth,lv.rand);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},delay);
-    return()=>clearTimeout(t)},[bk,over,on,tab]);
+    return()=>clearTimeout(t)},[bk,over,on,tab,game,pms,pCol,doPremove,tc.ini,lv,aiI,useSF]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{

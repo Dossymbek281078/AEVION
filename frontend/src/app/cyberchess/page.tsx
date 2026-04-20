@@ -164,7 +164,7 @@ export default function CyberChessPage(){
   const[promo,sPromo]=useState<{from:Square;to:Square}|null>(null);
   const[pms,sPms]=useState<Pre[]>([]);
   const[pmSel,sPmSel]=useState<Square|null>(null);
-  const[pmLim,sPmLim]=useState(5);
+  const[pmLim,sPmLim]=useState(10);
   const[aiI,sAiI]=useState(2);
   const[pCol,sPCol]=useState<ChessColor>("w");
   const[tcI,sTcI]=useState(9); // 5+0 default
@@ -365,24 +365,34 @@ export default function CyberChessPage(){
   useEffect(()=>{
     const h=(e:KeyboardEvent)=>{
       if(e.key==="Escape"){
-        if(pms.length>0||pmSel){sPms([]);sPmSel(null);snd("premove")}
+        if(pms.length>0||pmSel){sPms([]);sPmSel(null)}
       }
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel]);
 
-  /* ── Premove trigger (only when it's player's turn) ── */
+  /* ── Premove trigger (fires instantly when it's player's turn) ── */
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
-    if(game.turn()===pCol){if(pms.length>0){const t=setTimeout(doPremove,50);return()=>clearTimeout(t)}return}
+    if(game.turn()!==pCol||pms.length===0)return;
+    const t=setTimeout(doPremove,20);
+    return()=>clearTimeout(t);
+  },[bk,over,on,tab,pms,pCol,doPremove]);
+
+  /* ── AI turn trigger ── */
+  useEffect(()=>{
+    if(over||!on||(tab!=="play"&&tab!=="coach"))return;
+    if(game.turn()===pCol)return;
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(game.fen(),SFD[aiI]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)}),Math.max(800,delay));
-      return()=>clearTimeout(t)}
+      return()=>clearTimeout(t);
+    }
     const t=setTimeout(()=>{const c=new Chess(game.fen());const b=best(c,lv.depth,lv.rand);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},delay);
-    return()=>clearTimeout(t)},[bk,over,on,tab]);
+    return()=>clearTimeout(t);
+  },[bk,over,on,tab]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
@@ -394,15 +404,19 @@ export default function CyberChessPage(){
       const p=game.get(sq);
       if(pmSel){
         if(sq===pmSel){sPmSel(null);return} // deselect
-        if(pms.length>=pmLim){showToast(`Max ${pmLim} premoves`,"error");sPmSel(null);return}
+        if(pms.length>=pmLim){sPmSel(null);return}
         const pp=game.get(pmSel);
+        // Don't allow premove onto own piece (except rook for castling from king)
+        if(p?.color===pCol&&!(pp?.type==="k"&&p.type==="r")){
+          sPmSel(sq);return} // switch selection to new piece instead
         const pre:Pre={from:pmSel,to:sq};
         if(pp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";
         sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
-      // Click on premoved square → remove that premove
-      const pmIdx=pms.findIndex(p=>p.to===sq||p.from===sq);
-      if(pmIdx>=0){sPms(v=>[...v.slice(0,pmIdx),...v.slice(pmIdx+1)]);return}
+      // No pmSel: if clicking own piece → select for new premove
       if(p?.color===pCol){sPmSel(sq);return}
+      // Click on destination square of existing premove → remove that premove
+      const pmIdx=pms.findIndex(x=>x.to===sq);
+      if(pmIdx>=0){sPms(v=>[...v.slice(0,pmIdx),...v.slice(pmIdx+1)]);snd("premove");return}
       sPmSel(null);return}
 
     // ── NORMAL MODE ──
@@ -662,13 +676,13 @@ export default function CyberChessPage(){
           <button onClick={()=>sShowCustom(!showCustom)} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚙ Custom Time</button>
         </div>
 
-        {/* Premove limit — subtle */}
-        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <div style={{fontSize:10,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Premove Queue</div>
-          <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,minWidth:120,accentColor:T.accent}}/>
-          <div style={{fontSize:14,fontWeight:900,color:T.accent,minWidth:32,textAlign:"center"}}>{pmLim}</div>
-          <div style={{fontSize:9,color:T.dim,flex:"1 1 200px"}}>{pmLim===1?"1 move · lichess style":pmLim>=15?`${pmLim} moves · chess.com style`:`${pmLim} moves queue`}</div>
-          <div style={{fontSize:9,color:T.dim,flex:"1 1 100%",marginTop:4,fontStyle:"italic"}}>ПКМ по доске — отменить последний · Esc — отменить все</div>
+        {/* Premove Queue — slider 1..20 */}
+        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{fontSize:10,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>⚡ Premove Queue</div>
+          <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,minWidth:140,accentColor:T.accent}}/>
+          <div style={{fontSize:15,fontWeight:900,color:T.accent,minWidth:32,textAlign:"center"}}>{pmLim}</div>
+          <div style={{fontSize:9,color:T.dim,flex:"1 1 180px"}}>{pmLim===1?"1 ход · как Lichess":pmLim>=15?`${pmLim} ходов · как Chess.com`:`${pmLim} ходов в очереди`}</div>
+          <div style={{fontSize:9,color:T.dim,flex:"1 1 100%",marginTop:2,fontStyle:"italic"}}>ПКМ — отменить последний · Esc — отменить все</div>
         </div>
 
         {/* Board Theme Selector */}
@@ -776,7 +790,7 @@ export default function CyberChessPage(){
       </div>}
 
       {/* Board + Panel */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         <div style={{flexShrink:0}}>
           {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(720px,calc(100vw - 48px))"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
@@ -808,7 +822,7 @@ export default function CyberChessPage(){
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();if(pms.length>0){sPms(p=>p.slice(0,-1));snd("premove")}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
+                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(32px,6.5vw,60px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                   {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
                   {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",transition:"transform 0.12s"}}><Piece type={p.type} color={p.color}/></div>}

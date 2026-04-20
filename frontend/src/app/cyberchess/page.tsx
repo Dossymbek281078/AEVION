@@ -456,19 +456,21 @@ export default function CyberChessPage(){
     // ── NORMAL MODE (your turn) ──
     if(think)return;
     const p=game.get(sq);
+    // In analysis tab: play both sides freely (use whoever's turn it is)
+    const sideToMove=tab==="analysis"?game.turn():pCol;
     if(sel){
       if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}
-      if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}
+      if(p?.color===sideToMove){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}
       sSel(null);sVm(new Set());return;
     }
-    if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}
-  },[game,sel,vm,over,think,pCol,exec,on,pmLim]);
+    if(p?.color===sideToMove){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}
+  },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab]);
 
   /* ── Drag ── */
   const dRef=useRef<Square|null>(null);
-  const dS=(sq:Square)=>{const p=game.get(sq);if(p?.color===pCol&&!over){dRef.current=sq;if(game.turn()===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
+  const dS=(sq:Square)=>{const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
   const dD=(sq:Square)=>{if(!dRef.current)return;const f=dRef.current;dRef.current=null;
-    if(game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
+    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
@@ -857,17 +859,21 @@ export default function CyberChessPage(){
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
               const pct=50+cp/30; // -1500..1500 → 0..100
               const wPct=Math.max(2,Math.min(98,pct));
-              const label=evalMate!==0?`M${Math.abs(evalMate)}`:(cp/100).toFixed(1);
+              const label=evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp>=0?"+":"")+(evalCp/100).toFixed(2);
               const whiteTop=flip;
-              return(<div style={{width:28,borderRadius:6,overflow:"hidden",border:"1px solid #475569",background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
-                {whiteTop?<>
-                  <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
-                  <div style={{flex:1,background:"#262626"}}/>
-                </>:<>
-                  <div style={{flex:1,background:"#262626"}}/>
-                  <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
-                </>}
-                <div style={{position:"absolute",bottom:pct>50?"auto":3,top:pct>50?3:"auto",left:0,right:0,textAlign:"center",fontSize:10,fontWeight:900,color:pct>50?"#1e293b":"#f0f0f0",fontFamily:"monospace"}}>{label}</div>
+              const isWhiteBetter=evalMate!==0?evalMate>0:evalCp>=0;
+              return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <div style={{fontSize:11,fontWeight:900,color:whiteTop?(isWhiteBetter?T.accent:T.danger):T.dim,fontFamily:"monospace",minHeight:14}}>{whiteTop?label:""}</div>
+                <div style={{width:28,flex:1,borderRadius:6,overflow:"hidden",border:"1px solid #475569",background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+                  {whiteTop?<>
+                    <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
+                    <div style={{flex:1,background:"#262626"}}/>
+                  </>:<>
+                    <div style={{flex:1,background:"#262626"}}/>
+                    <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
+                  </>}
+                </div>
+                <div style={{fontSize:11,fontWeight:900,color:!whiteTop?(isWhiteBetter?T.accent:T.danger):T.dim,fontFamily:"monospace",minHeight:14}}>{!whiteTop?label:""}</div>
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:14,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
@@ -878,7 +884,7 @@ export default function CyberChessPage(){
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
+                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(36px,7vw,72px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                   {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
                   {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s"}}><Piece type={p.type} color={p.color}/></div>}
@@ -1142,10 +1148,55 @@ export default function CyberChessPage(){
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
                 <button onClick={()=>{if(guessMode){sGuessMode(false);runMultiPV()}else startGuess()}} style={{padding:"6px 14px",borderRadius:7,border:guessMode?`2px solid #f59e0b`:`1px solid ${T.border}`,background:guessMode?"#fffbeb":"#fff",color:guessMode?"#92400e":T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>{guessMode?"✕ Exit Guess":"🎯 Guess Move"}</button>
               </div>
-              {/* FEN input */}
-              <div style={{display:"flex",gap:4}}>
-                <input value={game.fen()} readOnly style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:13,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
-                <button onClick={()=>{const f=prompt("Paste FEN:");if(f){try{const g=new Chess(f);setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(g.turn()==="b");if(guessMode)setTimeout(startGuess,100)}catch{showToast("Invalid FEN","error")}}}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,color:T.dim,cursor:"pointer"}}>Paste FEN</button>
+              {/* FEN + Import controls */}
+              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                <input value={game.fen()} readOnly style={{flex:"1 1 240px",minWidth:200,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:13,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
+                <button onClick={()=>{const f=prompt("Paste FEN:");if(f){try{const g=new Chess(f);setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(g.turn()==="b");sHist([]);sFenHist([g.fen()]);if(guessMode)setTimeout(startGuess,100)}catch{showToast("Invalid FEN","error")}}}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>FEN</button>
+                <button onClick={()=>{
+                  const p=prompt("Paste PGN:");if(!p)return;
+                  try{
+                    const g=new Chess();g.loadPgn(p);
+                    const moves=g.history();
+                    const fens=[new Chess().fen()];
+                    const replay=new Chess();
+                    moves.forEach(m=>{replay.move(m);fens.push(replay.fen())});
+                    setGame(g);sBk(k=>k+1);sHist(moves);sFenHist(fens);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(false);sBrowseIdx(-1);
+                    showToast(`Imported ${moves.length} moves`,"success");
+                  }catch(e){showToast("Invalid PGN","error")}
+                }} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>PGN</button>
+                <button onClick={async()=>{
+                  const url=prompt("Paste Lichess or Chess.com URL:\n• lichess.org/abc123\n• chess.com/game/live/12345");
+                  if(!url)return;
+                  try{
+                    let pgn="";
+                    // Lichess: lichess.org/xxxxxxxx or lichess.org/xxxxxxxx/white
+                    const lichessMatch=url.match(/lichess\.org\/([a-zA-Z0-9]{8})/);
+                    if(lichessMatch){
+                      const id=lichessMatch[1];
+                      const r=await fetch(`https://lichess.org/game/export/${id}?moves=true&tags=false&clocks=false&evals=false`,{headers:{Accept:"application/x-chess-pgn"}});
+                      if(!r.ok)throw new Error("Lichess fetch failed");
+                      pgn=await r.text();
+                    }
+                    // Chess.com: chess.com/game/live/12345 or /daily/12345
+                    else if(url.match(/chess\.com\/game\/(live|daily)\/(\d+)/)){
+                      const m=url.match(/chess\.com\/game\/(live|daily)\/(\d+)/)!;
+                      const typ=m[1]==="daily"?"daily":"live";
+                      const r=await fetch(`https://www.chess.com/callback/${typ}/game/${m[2]}`);
+                      if(!r.ok)throw new Error("Chess.com fetch failed");
+                      const j=await r.json();
+                      pgn=j.game?.pgnHeaders?JSON.stringify(j.game):j.pgn||"";
+                    }else{
+                      showToast("Unsupported URL","error");return;
+                    }
+                    const g=new Chess();g.loadPgn(pgn);
+                    const moves=g.history();
+                    const fens=[new Chess().fen()];
+                    const replay=new Chess();
+                    moves.forEach(m=>{replay.move(m);fens.push(replay.fen())});
+                    setGame(g);sBk(k=>k+1);sHist(moves);sFenHist(fens);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(false);sBrowseIdx(-1);
+                    showToast(`Imported ${moves.length} moves`,"success");
+                  }catch(e:any){showToast(`Import failed: ${e.message||"error"}`,"error")}
+                }} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.blue}`,background:"#eff6ff",fontSize:12,fontWeight:800,color:T.blue,cursor:"pointer"}}>🌐 URL</button>
               </div>
 
               {/* Guess Mode Panel */}

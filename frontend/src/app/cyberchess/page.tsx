@@ -178,6 +178,10 @@ export default function CyberChessPage(){
   const[showCustom,sShowCustom]=useState(false);
   const[on,sOn]=useState(false);
   const[setup,sSetup]=useState(true);
+  // Board editor state (Coach tab)
+  const[editorMode,sEditorMode]=useState(false);
+  const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
+  const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
   const[flip,sFlip]=useState(false);
   const[tab,sTab]=useState<"play"|"puzzles"|"analysis"|"coach">("play");
   const[pzI,sPzI]=useState(0);
@@ -405,6 +409,25 @@ export default function CyberChessPage(){
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
+    // ── BOARD EDITOR MODE (Coach tab) ──
+    if(editorMode){
+      try{
+        const g=new Chess(game.fen());
+        if(editorPiece){
+          // Place piece
+          g.put({type:editorPiece.type,color:editorPiece.color},sq);
+        }else{
+          // Remove piece (empty selector = eraser)
+          g.remove(sq);
+        }
+        // Fix turn if needed
+        const parts=g.fen().split(" ");
+        parts[1]=editorTurn;
+        try{g.load(parts.join(" "));setGame(g);sBk(k=>k+1);}
+        catch{showToast("Invalid position","error");}
+      }catch(e){showToast("Editor error","error");}
+      return;
+    }
     if(over)return;
     const isAiTurn=game.turn()!==pCol;
     const curPms=pmsRef.current;
@@ -464,7 +487,7 @@ export default function CyberChessPage(){
       sSel(null);sVm(new Set());return;
     }
     if(p?.color===sideToMove){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}
-  },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab]);
+  },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab,editorMode,editorPiece,editorTurn,showToast]);
 
   /* ── Drag ── */
   const dRef=useRef<Square|null>(null);
@@ -1281,7 +1304,61 @@ export default function CyberChessPage(){
           </div>}
 
           {/* ── Coach Tab ── */}
-          {tab==="coach"&&<AiCoach
+          {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {/* Board Editor Toggle */}
+            <div style={{borderRadius:10,background:T.surface,border:`1px solid ${editorMode?T.accent:T.border}`,overflow:"hidden"}}>
+              <div style={{padding:"10px 14px",borderBottom:editorMode?`1px solid ${T.border}`:"none",background:editorMode?"#ecfdf5":"#f9fafb",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:13,fontWeight:800,color:editorMode?T.accent:T.text}}>🎨 {editorMode?"Редактор позиции":"Расстановка фигур"}</span>
+                </div>
+                <button onClick={()=>{sEditorMode(!editorMode);sEditorPiece(null);sOn(false);sOver(null);sPms([]);sPmSel(null);sHist([]);sFenHist([game.fen()]);}} style={{padding:"5px 12px",borderRadius:6,border:"none",background:editorMode?T.danger:T.accent,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>{editorMode?"✕ Выйти":"✏️ Открыть"}</button>
+              </div>
+              {editorMode&&<div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
+                {/* Piece palette */}
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Белые</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {(["k","q","r","b","n","p"] as const).map(t=>{
+                      const sel=editorPiece?.type===t&&editorPiece?.color==="w";
+                      const sym={k:"♔",q:"♕",r:"♖",b:"♗",n:"♘",p:"♙"}[t];
+                      return<button key={`w${t}`} onClick={()=>sEditorPiece({type:t,color:"w"})} style={{flex:1,padding:"8px 0",borderRadius:6,border:sel?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:sel?"rgba(5,150,105,0.1)":"#fff",fontSize:28,lineHeight:1,cursor:"pointer"}}>{sym}</button>;
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Чёрные</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {(["k","q","r","b","n","p"] as const).map(t=>{
+                      const sel=editorPiece?.type===t&&editorPiece?.color==="b";
+                      const sym={k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"}[t];
+                      return<button key={`b${t}`} onClick={()=>sEditorPiece({type:t,color:"b"})} style={{flex:1,padding:"8px 0",borderRadius:6,border:sel?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:sel?"rgba(5,150,105,0.1)":"#fff",fontSize:28,lineHeight:1,cursor:"pointer"}}>{sym}</button>;
+                    })}
+                  </div>
+                </div>
+                {/* Eraser + clear + presets */}
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  <button onClick={()=>sEditorPiece(null)} style={{padding:"6px 12px",borderRadius:6,border:editorPiece===null?`2px solid ${T.danger}`:`1px solid ${T.border}`,background:editorPiece===null?"#fef2f2":"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>🧽 Ластик</button>
+                  <button onClick={()=>{const g=new Chess();g.clear();const parts=g.fen().split(" ");parts[1]=editorTurn;try{g.load(parts.join(" "));setGame(g);sBk(k=>k+1);}catch{}}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>⚫ Пустая</button>
+                  <button onClick={()=>{const g=new Chess();setGame(g);sBk(k=>k+1);sEditorTurn("w");}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer"}}>⟲ Начальная</button>
+                </div>
+                {/* Turn selector */}
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Чей ход</div>
+                  <div style={{display:"flex",gap:6}}>
+                    {(["w","b"] as const).map(c=><button key={c} onClick={()=>{sEditorTurn(c);try{const parts=game.fen().split(" ");parts[1]=c;const g=new Chess();g.load(parts.join(" "));setGame(g);sBk(k=>k+1);}catch{}}} style={{flex:1,padding:"8px",borderRadius:6,border:editorTurn===c?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:editorTurn===c?"rgba(5,150,105,0.1)":"#fff",fontSize:13,fontWeight:800,color:T.text,cursor:"pointer"}}>{c==="w"?"⚪ Белые":"⚫ Чёрные"}</button>)}
+                  </div>
+                </div>
+                {/* Play from this position */}
+                <div style={{display:"flex",gap:6,paddingTop:6,borderTop:`1px solid ${T.border}`}}>
+                  <button onClick={()=>{try{const v=game.fen();new Chess(v);sEditorMode(false);sEditorPiece(null);sOn(true);sOver(null);sHist([]);sFenHist([v]);sPCol("w");sFlip(false);showToast("Играть белыми","success");}catch{showToast("Невалидная позиция","error")}}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>▶ Играть белыми</button>
+                  <button onClick={()=>{try{const v=game.fen();new Chess(v);sEditorMode(false);sEditorPiece(null);sOn(true);sOver(null);sHist([]);sFenHist([v]);sPCol("b");sFlip(true);showToast("Играть чёрными","success");}catch{showToast("Невалидная позиция","error")}}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",background:"#1e293b",color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>▶ Играть чёрными</button>
+                </div>
+                <div style={{fontSize:11,color:T.dim,fontStyle:"italic",textAlign:"center"}}>Клик по клетке — поставить/убрать фигуру</div>
+              </div>}
+            </div>
+          </div>}
+
+          {tab==="coach"&&!editorMode&&<AiCoach
             fen={game.fen()}
             moves={hist}
             fenHist={fenHist}

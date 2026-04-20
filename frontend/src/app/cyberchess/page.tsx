@@ -389,8 +389,8 @@ export default function CyberChessPage(){
     if(over)return;
     const isAiTurn=game.turn()!==pCol;
 
-    // ── PREMOVE MODE (during AI turn OR thinking) ──
-    if((isAiTurn||think)&&on){
+    // ── PREMOVE MODE (only when it's NOT player's turn) ──
+    if(isAiTurn&&on){
       const p=game.get(sq);
       if(pmSel){
         if(sq===pmSel){sPmSel(null);return} // deselect
@@ -417,9 +417,9 @@ export default function CyberChessPage(){
 
   /* ── Drag ── */
   const dRef=useRef<Square|null>(null);
-  const dS=(sq:Square)=>{const p=game.get(sq);if(p?.color===pCol&&!over){dRef.current=sq;if(game.turn()===pCol&&!think){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
+  const dS=(sq:Square)=>{const p=game.get(sq);if(p?.color===pCol&&!over){dRef.current=sq;if(game.turn()===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
   const dD=(sq:Square)=>{if(!dRef.current)return;const f=dRef.current;dRef.current=null;
-    if((game.turn()!==pCol||think)&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
+    if(game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const tp=game.get(sq);if(tp?.color===pCol)return;const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};

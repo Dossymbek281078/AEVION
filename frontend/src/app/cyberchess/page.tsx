@@ -612,7 +612,7 @@ export default function CyberChessPage(){
   const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:13,fontWeight:700,cursor:"pointer"}}>{label}</button>);
 
   return(<main style={{background:T.bg,minHeight:"100vh"}}>
-    <ProductPageShell maxWidth={1160}><Wave1Nav/>
+    <ProductPageShell maxWidth={1600}><Wave1Nav/>
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 10px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -823,12 +823,12 @@ export default function CyberChessPage(){
       {/* Board + Panel */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         <div style={{flexShrink:0}}>
-          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(720px,calc(100vw - 48px))"}}>
+          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(820px,calc(100vw - 48px))"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
 
-          <div translate="no" style={{display:"flex",width:"min(720px,calc(100vw - 32px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(820px,calc(100vw - 32px))",gap:4}}>
             {/* Eval bar - only in analysis */}
             {tab==="analysis"&&sfOk&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
@@ -854,13 +854,13 @@ export default function CyberChessPage(){
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
-                  style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(32px,6.5vw,60px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
+                  style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(36px,7vw,72px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                   {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
                   {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",transition:"transform 0.12s"}}><Piece type={p.type} color={p.color}/></div>}
                 </div>}))}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(720px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:14,color:T.dim,fontWeight:700}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(820px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:14,color:T.dim,fontWeight:700}}>{FILES[c]}</div>)}</div></div>
 
           {/* Controls */}
           <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
@@ -881,7 +881,7 @@ export default function CyberChessPage(){
         </div>
 
         {/* Right panel */}
-        <div style={{flex:"1 1 360px",minWidth:320,maxWidth:480,display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{flex:"1 1 400px",minWidth:340,maxWidth:640,display:"flex",flexDirection:"column",gap:12}}>
           <div style={{padding:"10px 14px",borderRadius:9,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think&&tab!=="analysis"?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
             {over?<><div style={{fontWeight:900,fontSize:14,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:14,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
             tab==="analysis"?<div style={{display:"flex",alignItems:"center",gap:7}}>

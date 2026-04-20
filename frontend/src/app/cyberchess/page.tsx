@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -778,12 +778,12 @@ export default function CyberChessPage(){
       {/* Board + Panel */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();sPms([]);sPmSel(null)}}>
         <div style={{flexShrink:0}}>
-          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(520px,calc(100vw - 48px))"}}>
-            <div style={{padding:"6px 14px",borderRadius:8,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>AI {fmt(aT.time)}</div>
-            <div style={{padding:"6px 14px",borderRadius:8,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:14,fontFamily:"monospace",border:`1px solid ${T.border}`}}>You {fmt(pT.time)}</div>
+          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(720px,calc(100vw - 48px))"}}>
+            <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
+            <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
 
-          <div translate="no" style={{display:"flex",width:"min(560px,calc(100vw - 32px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(720px,calc(100vw - 32px))",gap:4}}>
             {/* Eval bar - only in analysis */}
             {tab==="analysis"&&sfOk&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
@@ -802,20 +802,20 @@ export default function CyberChessPage(){
                 <div style={{position:"absolute",bottom:pct>50?"auto":2,top:pct>50?2:"auto",left:0,right:0,textAlign:"center",fontSize:8,fontWeight:900,color:pct>50?"#262626":"#f0f0f0",fontFamily:"monospace"}}>{label}</div>
               </div>);
             })()}
-            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:5,paddingLeft:2,width:14}}>{rws.map(r=><div key={r} style={{fontSize:9,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:5,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 4px 20px rgba(0,0,0,0.1)"}}>
+            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:10,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)"}}>
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();if(pms.length>0){sPms(p=>p.slice(0,-1));snd("premove")}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&p.color===pCol&&!over}
-                  style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(26px,5.2vw,44px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1}}>
-                  {iV&&!p&&<div style={{width:"26%",height:"26%",borderRadius:"50%",background:"rgba(5,150,105,0.45)",position:"absolute"}}/>}
-                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:"drop-shadow(0 1px 2px rgba(0,0,0,0.3))"}}><Piece type={p.type} color={p.color}/></div>}
+                  style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(32px,6.5vw,60px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
+                  {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
+                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",transition:"transform 0.12s"}}><Piece type={p.type} color={p.color}/></div>}
                 </div>}))}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:21,width:"min(460px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:3}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:9,color:T.dim,fontWeight:700}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(720px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:10,color:T.dim,fontWeight:700}}>{FILES[c]}</div>)}</div></div>
 
           {/* Controls */}
           <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
@@ -836,7 +836,7 @@ export default function CyberChessPage(){
         </div>
 
         {/* Right panel */}
-        <div style={{flex:"1 1 220px",minWidth:190,display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{flex:"1 1 300px",minWidth:280,maxWidth:420,display:"flex",flexDirection:"column",gap:10}}>
           <div style={{padding:"10px 14px",borderRadius:9,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think&&tab!=="analysis"?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
             {over?<><div style={{fontWeight:900,fontSize:14,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:10,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
             tab==="analysis"?<div style={{display:"flex",alignItems:"center",gap:7}}>
@@ -861,10 +861,10 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Opening detection */}
-          {currentOpening&&on&&!setup&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",border:"1px solid #bfdbfe"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-              <span style={{fontSize:9,fontWeight:900,padding:"2px 6px",borderRadius:4,background:T.blue,color:"#fff",fontFamily:"monospace"}}>{currentOpening.eco}</span>
-              <span style={{fontSize:12,fontWeight:800,color:T.text}}>{currentOpening.name}</span>
+          {currentOpening&&on&&!setup&&<div style={{padding:"10px 14px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0",boxShadow:"0 1px 4px rgba(5,150,105,0.08)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+              <span style={{fontSize:9,fontWeight:900,padding:"2px 7px",borderRadius:4,background:T.accent,color:"#fff",fontFamily:"monospace",letterSpacing:"0.05em"}}>{currentOpening.eco}</span>
+              <span style={{fontSize:13,fontWeight:800,color:T.text}}>{currentOpening.name}</span>
             </div>
             <div style={{fontSize:10,color:T.dim,lineHeight:1.4}}>{currentOpening.desc}</div>
           </div>}
@@ -928,17 +928,32 @@ export default function CyberChessPage(){
             </div>
           </div>}
 
-          {pms.length>0&&<div style={{padding:"6px 10px",borderRadius:7,background:"#eff6ff",border:"1px solid #bfdbfe",fontSize:10,color:T.blue}}>
-            Premoves: {pms.map((p,i)=><span key={i} style={{fontFamily:"monospace",marginLeft:3}}>{p.from}{p.to}</span>)}
+          {pms.length>0&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:9,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.blue}}>⚡ Premove queue · {pms.length}</span>
+              <span style={{fontSize:8,color:T.dim,fontStyle:"italic"}}>ПКМ · Esc</span>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{pms.map((p,i)=><span key={i} style={{padding:"2px 6px",borderRadius:4,fontFamily:"monospace",fontSize:10,fontWeight:700,background:"#fff",color:T.blue,border:"1px solid #dbeafe"}}>{p.from}→{p.to}</span>)}</div>
           </div>}
 
-          {(capB.length>0||capW.length>0)&&<div style={{padding:"6px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`}}>
-            {capB.length>0&&<div style={{fontSize:16,letterSpacing:1}} translate="no">{capB.join("")}</div>}
-            {capW.length>0&&<div style={{fontSize:16,letterSpacing:1,opacity:0.5}} translate="no">{capW.join("")}</div>}
+          {(capB.length>0||capW.length>0)&&<div style={{padding:"8px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:9,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,marginBottom:4}}>⚔ Captured</div>
+            {capB.length>0&&<div style={{fontSize:20,letterSpacing:2,lineHeight:1.1}} translate="no">{capB.join("")}</div>}
+            {capW.length>0&&<div style={{fontSize:20,letterSpacing:2,lineHeight:1.1,opacity:0.5}} translate="no">{capW.join("")}</div>}
           </div>}
 
-          <div ref={hR} style={{padding:"8px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,maxHeight:140,overflowY:"auto"}}>
-            <div style={{display:"flex",flexWrap:"wrap",gap:2}}>{hist.length?hist.map((m,i)=><span key={i} style={{padding:"1px 4px",borderRadius:3,fontSize:10,fontFamily:"monospace",background:i%2?"rgba(5,150,105,0.06)":"rgba(0,0,0,0.03)",color:i%2?T.accent:T.text,fontWeight:600}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{m}</span>):<span style={{fontSize:10,color:T.dim}}>No moves</span>}</div>
+          <div ref={hR} style={{padding:"10px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`,maxHeight:240,overflowY:"auto"}}>
+            <div style={{fontSize:9,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,marginBottom:6}}>📋 Moves {hist.length>0&&<span style={{color:T.accent,marginLeft:4}}>· {Math.ceil(hist.length/2)}</span>}</div>
+            {hist.length?<div style={{display:"grid",gridTemplateColumns:"auto 1fr 1fr",gap:"2px 8px",fontSize:11,fontFamily:"monospace"}}>
+              {Array.from({length:Math.ceil(hist.length/2)}).map((_,i)=>{
+                const white=hist[i*2],black=hist[i*2+1];
+                return <React.Fragment key={i}>
+                  <span style={{color:T.dim,fontWeight:700,textAlign:"right",paddingRight:2}}>{i+1}.</span>
+                  <span style={{color:T.text,fontWeight:600,padding:"1px 5px",borderRadius:3,background:i*2===hist.length-1?"rgba(5,150,105,0.12)":"transparent"}}>{white||""}</span>
+                  <span style={{color:T.text,fontWeight:600,padding:"1px 5px",borderRadius:3,background:i*2+1===hist.length-1?"rgba(5,150,105,0.12)":"transparent"}}>{black||""}</span>
+                </React.Fragment>;
+              })}
+            </div>:<span style={{fontSize:10,color:T.dim}}>No moves yet</span>}
           </div>
 
           {tab==="puzzles"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>

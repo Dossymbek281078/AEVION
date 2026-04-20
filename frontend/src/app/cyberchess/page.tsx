@@ -432,8 +432,17 @@ export default function CyberChessPage(){
       // Case 2: no selection → click on own piece starts new premove
       if(p?.color===pCol){sPmSel(sq);return}
 
-      // Case 3: click on destination of existing premove → remove it
-      const pmIdx=curPms.findIndex(x=>x.to===sq);
+      // Case 2.5: click on destination of existing premove (where our piece WILL be)
+      // → allow chain premove from that square
+      const destIdx=curPms.findIndex(x=>x.to===sq);
+      if(destIdx>=0){
+        // Check: what piece ends up at this square after all queued premoves?
+        // Simpler: just allow selection — user wants to chain from this virtual position
+        sPmSel(sq);return;
+      }
+
+      // Case 3: click on source square of existing premove → remove that premove
+      const pmIdx=curPms.findIndex(x=>x.from===sq);
       if(pmIdx>=0){sPms(v=>[...v.slice(0,pmIdx),...v.slice(pmIdx+1)]);return}
 
       // Case 4: empty click
@@ -1120,7 +1129,7 @@ export default function CyberChessPage(){
                 const evalStr=line.mate!==0?`M${Math.abs(line.mate)}`:(line.cp/100).toFixed(1);
                 const isPositive=line.mate!==0?line.mate>0:line.cp>0;
                 const sanMoves=uciToSan(analFen||game.fen(),line.moves);
-                const uciMoves=line.moves.split(" ").filter(Boolean);
+                const uciMoves=line.moves;
                 const baseFen=analFen||game.fen();
                 const rankBg=i===0?"linear-gradient(135deg,#ecfdf5,#f0fdf4)":i===1?"linear-gradient(135deg,#eff6ff,#f5f9ff)":"transparent";
                 return(<div key={i} style={{borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",background:rankBg}}>

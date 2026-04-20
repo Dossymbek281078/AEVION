@@ -164,6 +164,10 @@ export default function CyberChessPage(){
   const[promo,sPromo]=useState<{from:Square;to:Square}|null>(null);
   const[pms,sPms]=useState<Pre[]>([]);
   const[pmSel,sPmSel]=useState<Square|null>(null);
+  const pmsRef=useRef<Pre[]>([]);
+  const pmSelRef=useRef<Square|null>(null);
+  useEffect(()=>{pmsRef.current=pms},[pms]);
+  useEffect(()=>{pmSelRef.current=pmSel},[pmSel]);
   const[pmLim,sPmLim]=useState(10);
   const[aiI,sAiI]=useState(2);
   const[pCol,sPCol]=useState<ChessColor>("w");
@@ -398,36 +402,52 @@ export default function CyberChessPage(){
   const click=useCallback((sq:Square)=>{
     if(over)return;
     const isAiTurn=game.turn()!==pCol;
+    const curPms=pmsRef.current;
+    const curPmSel=pmSelRef.current;
 
     // ── PREMOVE MODE (only when it's NOT player's turn) ──
     if(isAiTurn&&on){
       const p=game.get(sq);
-      if(pmSel){
-        if(sq===pmSel){sPmSel(null);return} // deselect
-        if(pms.length>=pmLim){sPmSel(null);return}
-        const pp=game.get(pmSel);
-        // Don't allow premove onto own piece (except rook for castling from king)
-        if(p?.color===pCol&&!(pp?.type==="k"&&p.type==="r")){
-          sPmSel(sq);return} // switch selection to new piece instead
-        const pre:Pre={from:pmSel,to:sq};
-        if(pp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";
-        sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
-      // No pmSel: if clicking own piece → select for new premove
-      if(p?.color===pCol){sPmSel(sq);return}
-      // Click on destination square of existing premove → remove that premove
-      const pmIdx=pms.findIndex(x=>x.to===sq);
-      if(pmIdx>=0){sPms(v=>[...v.slice(0,pmIdx),...v.slice(pmIdx+1)]);snd("premove");return}
-      sPmSel(null);return}
 
-    // ── NORMAL MODE ──
+      // Case 1: a square is already selected for premove
+      if(curPmSel){
+        // Same square clicked → deselect
+        if(sq===curPmSel){sPmSel(null);return}
+        const selPiece=game.get(curPmSel);
+        // Clicked on another own piece → switch selection (don't create premove onto own piece)
+        if(p?.color===pCol){sPmSel(sq);return}
+        // Check limit
+        if(curPms.length>=pmLim){sPmSel(null);return}
+        // Create premove
+        const pre:Pre={from:curPmSel,to:sq};
+        if(selPiece?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";
+        sPms(v=>[...v,pre]);
+        sPmSel(null);
+        snd("premove");
+        return;
+      }
+
+      // Case 2: no selection → click on own piece starts new premove
+      if(p?.color===pCol){sPmSel(sq);return}
+
+      // Case 3: click on destination of existing premove → remove it
+      const pmIdx=curPms.findIndex(x=>x.to===sq);
+      if(pmIdx>=0){sPms(v=>[...v.slice(0,pmIdx),...v.slice(pmIdx+1)]);return}
+
+      // Case 4: empty click
+      return;
+    }
+
+    // ── NORMAL MODE (your turn) ──
     if(think)return;
     const p=game.get(sq);
     if(sel){
       if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}
       if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}
-      sSel(null);sVm(new Set());return}
+      sSel(null);sVm(new Set());return;
+    }
     if(p?.color===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}
-  },[game,sel,vm,over,think,pCol,exec,on,pmSel,pms,pmLim,showToast]);
+  },[game,sel,vm,over,think,pCol,exec,on,pmLim]);
 
   /* ── Drag ── */
   const dRef=useRef<Square|null>(null);

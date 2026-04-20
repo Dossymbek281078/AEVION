@@ -1,0 +1,1038 @@
+module.exports = [
+"[project]/src/app/page.tsx [app-ssr] (ecmascript)", ((__turbopack_context__) => {
+"use strict";
+
+__turbopack_context__.s([
+    "default",
+    ()=>HomePage
+]);
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js [app-ssr] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react.js [app-ssr] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/client/app-dir/link.js [app-ssr] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$shared$2f$lib$2f$app$2d$dynamic$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/shared/lib/app-dynamic.js [app-ssr] (ecmascript)");
+;
+"use client";
+;
+;
+;
+;
+const Globe3D = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$shared$2f$lib$2f$app$2d$dynamic$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["default"])(async ()=>{}, {
+    loadableGenerated: {
+        modules: [
+            "[project]/src/components/Globe3D.tsx [app-client] (ecmascript, next/dynamic entry)"
+        ]
+    },
+    ssr: false
+});
+const apps = [
+    {
+        id: "globus",
+        label: "GLOBUS",
+        desc: "Центральный портал экосистемы",
+        href: "/",
+        color: "#4f46e5",
+        icon: "🌍",
+        status: "active"
+    },
+    {
+        id: "qcoreai",
+        label: "QCoreAI",
+        desc: "AI мультичат — код, контент, музыка, кино",
+        href: "/qcore",
+        color: "#8b5cf6",
+        icon: "🧠",
+        status: "active"
+    },
+    {
+        id: "qright",
+        label: "QRight",
+        desc: "Регистрация и защита авторских прав",
+        href: "/qright",
+        color: "#16a34a",
+        icon: "📜",
+        status: "active"
+    },
+    {
+        id: "qsign",
+        label: "QSign",
+        desc: "Цифровая подпись и верификация",
+        href: "/qsign",
+        color: "#2563eb",
+        icon: "✍️",
+        status: "active"
+    },
+    {
+        id: "aipb",
+        label: "IP Bureau",
+        desc: "Электронное патентное бюро",
+        href: "/aevion-ip-bureau",
+        color: "#7c3aed",
+        icon: "🏛️",
+        status: "planning"
+    },
+    {
+        id: "multichat",
+        label: "Multichat",
+        desc: "Мультичат с параллельными агентами",
+        href: "/qcore",
+        color: "#a855f7",
+        icon: "💬",
+        status: "planning"
+    },
+    {
+        id: "qfusionai",
+        label: "QFusionAI",
+        desc: "Гибридный AI движок",
+        href: "#",
+        color: "#6366f1",
+        icon: "🔮",
+        status: "planning"
+    },
+    {
+        id: "qtradeoffline",
+        label: "QTradeOffline",
+        desc: "Офлайн-платежи и переводы",
+        href: "/qtrade",
+        color: "#0d9488",
+        icon: "💱",
+        status: "planning"
+    },
+    {
+        id: "qpaynet",
+        label: "QPayNet",
+        desc: "Платёжное ядро AEVION",
+        href: "#",
+        color: "#059669",
+        icon: "💳",
+        status: "planning"
+    },
+    {
+        id: "qmaskcard",
+        label: "QMaskCard",
+        desc: "Защищённая банковская карта",
+        href: "#",
+        color: "#0891b2",
+        icon: "🃏",
+        status: "idea"
+    },
+    {
+        id: "veilnetx",
+        label: "VeilNetX",
+        desc: "Приватная крипто-сеть",
+        href: "#",
+        color: "#7c3aed",
+        icon: "🔒",
+        status: "planning"
+    },
+    {
+        id: "cyberchess",
+        label: "CyberChess",
+        desc: "Шахматная платформа",
+        href: "/cyberchess",
+        color: "#475569",
+        icon: "♟️",
+        status: "active"
+    },
+    {
+        id: "healthai",
+        label: "HealthAI",
+        desc: "Персональный AI-доктор",
+        href: "#",
+        color: "#dc2626",
+        icon: "🏥",
+        status: "planning"
+    },
+    {
+        id: "qlife",
+        label: "QLife",
+        desc: "Антистарение и биомаркеры",
+        href: "#",
+        color: "#e11d48",
+        icon: "🧬",
+        status: "idea"
+    },
+    {
+        id: "qgood",
+        label: "QGood",
+        desc: "Психология и ментальное здоровье",
+        href: "#",
+        color: "#f59e0b",
+        icon: "🧘",
+        status: "idea"
+    },
+    {
+        id: "psyapp",
+        label: "PsyApp",
+        desc: "Выход из зависимостей",
+        href: "#",
+        color: "#d97706",
+        icon: "🌱",
+        status: "idea"
+    },
+    {
+        id: "qpersona",
+        label: "QPersona",
+        desc: "Цифровой аватар",
+        href: "#",
+        color: "#ec4899",
+        icon: "🤖",
+        status: "idea"
+    },
+    {
+        id: "kids-ai",
+        label: "Kids AI",
+        desc: "Детский обучающий контент",
+        href: "#",
+        color: "#f97316",
+        icon: "🧒",
+        status: "planning"
+    },
+    {
+        id: "voice-of-earth",
+        label: "Voice of Earth",
+        desc: "Международный музыкальный проект",
+        href: "#",
+        color: "#eab308",
+        icon: "🎤",
+        status: "idea"
+    },
+    {
+        id: "startup-exchange",
+        label: "StartupX",
+        desc: "Биржа стартапов и идей",
+        href: "#",
+        color: "#84cc16",
+        icon: "🚀",
+        status: "planning"
+    },
+    {
+        id: "deepsan",
+        label: "DeepSan",
+        desc: "Антихаос-приложение",
+        href: "#",
+        color: "#06b6d4",
+        icon: "🎯",
+        status: "idea"
+    },
+    {
+        id: "mapreality",
+        label: "MapReality",
+        desc: "Карта реальных событий",
+        href: "#",
+        color: "#14b8a6",
+        icon: "🗺️",
+        status: "idea"
+    },
+    {
+        id: "z-tide",
+        label: "Z-Tide",
+        desc: "Энергетическая валюта",
+        href: "#",
+        color: "#a78bfa",
+        icon: "⚡",
+        status: "idea"
+    },
+    {
+        id: "qcontract",
+        label: "QContract",
+        desc: "Саморазрушающиеся документы",
+        href: "#",
+        color: "#f43f5e",
+        icon: "📄",
+        status: "idea"
+    },
+    {
+        id: "shadownet",
+        label: "ShadowNet",
+        desc: "Приватный альтернативный интернет",
+        href: "#",
+        color: "#334155",
+        icon: "🌐",
+        status: "idea"
+    },
+    {
+        id: "lifebox",
+        label: "LifeBox",
+        desc: "Цифровой сейф для будущего",
+        href: "#",
+        color: "#10b981",
+        icon: "🗄️",
+        status: "idea"
+    },
+    {
+        id: "qchaingov",
+        label: "QChainGov",
+        desc: "DAO-управление",
+        href: "#",
+        color: "#8b5cf6",
+        icon: "🏗️",
+        status: "idea"
+    },
+    {
+        id: "ai-music",
+        label: "AI Music",
+        desc: "Создание и защита музыки",
+        href: "/ai-music",
+        color: "#f97316",
+        icon: "🎵",
+        status: "active"
+    },
+    {
+        id: "ai-cinema",
+        label: "AI Cinema",
+        desc: "Создание и защита фильмов",
+        href: "/ai-cinema",
+        color: "#ec4899",
+        icon: "🎬",
+        status: "active"
+    }
+];
+const statusColors = {
+    active: {
+        bg: "#dcfce7",
+        text: "#16a34a",
+        label: "Active"
+    },
+    planning: {
+        bg: "#dbeafe",
+        text: "#2563eb",
+        label: "Planning"
+    },
+    idea: {
+        bg: "#f3e8ff",
+        text: "#7c3aed",
+        label: "Idea"
+    }
+};
+function HomePage() {
+    const [selectedApp, setSelectedApp] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [filter, setFilter] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("all");
+    const selected = apps.find((a)=>a.id === selectedApp);
+    const filtered = filter === "all" ? apps : apps.filter((a)=>a.status === filter);
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        style: {
+            minHeight: "calc(100vh - 49px)",
+            background: "linear-gradient(180deg, #f0f4ff 0%, #e8ecf8 100%)",
+            color: "#1e293b"
+        },
+        children: [
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                style: {
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    padding: "32px 20px 0"
+                },
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h1", {
+                        style: {
+                            fontSize: 42,
+                            fontWeight: 800,
+                            textAlign: "center",
+                            marginBottom: 4,
+                            background: "linear-gradient(135deg, #4f46e5, #7c3aed, #9333ea)",
+                            WebkitBackgroundClip: "text",
+                            WebkitTextFillColor: "transparent"
+                        },
+                        children: "AEVION GLOBUS"
+                    }, void 0, false, {
+                        fileName: "[project]/src/app/page.tsx",
+                        lineNumber: 56,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                        style: {
+                            color: "#64748b",
+                            fontSize: 15,
+                            textAlign: "center",
+                            maxWidth: 520,
+                            marginBottom: 4
+                        },
+                        children: "Планета возможностей · Астана, Казахстан"
+                    }, void 0, false, {
+                        fileName: "[project]/src/app/page.tsx",
+                        lineNumber: 59,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                        style: {
+                            color: "#94a3b8",
+                            fontSize: 13,
+                            textAlign: "center"
+                        },
+                        children: [
+                            apps.length,
+                            " проектов в экосистеме"
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/app/page.tsx",
+                        lineNumber: 62,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/app/page.tsx",
+                lineNumber: 55,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                style: {
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 0,
+                    maxWidth: 1200,
+                    margin: "20px auto 0",
+                    padding: "0 20px",
+                    minHeight: 520
+                },
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        style: {
+                            height: 520,
+                            position: "relative",
+                            background: "radial-gradient(circle at 50% 50%, #c7d2fe22 0%, transparent 70%)",
+                            borderRadius: 20
+                        },
+                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(Globe3D, {
+                            onSelectApp: (app)=>setSelectedApp(app.id)
+                        }, void 0, false, {
+                            fileName: "[project]/src/app/page.tsx",
+                            lineNumber: 67,
+                            columnNumber: 11
+                        }, this)
+                    }, void 0, false, {
+                        fileName: "[project]/src/app/page.tsx",
+                        lineNumber: 66,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        style: {
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "center",
+                            padding: "20px 40px"
+                        },
+                        children: selected ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            style: {
+                                animation: "fadeIn 0.3s"
+                            },
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    style: {
+                                        fontSize: 48,
+                                        marginBottom: 12
+                                    },
+                                    children: selected.icon
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 72,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
+                                    style: {
+                                        fontSize: 28,
+                                        fontWeight: 700,
+                                        color: selected.color,
+                                        marginBottom: 4
+                                    },
+                                    children: selected.label
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 73,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    style: {
+                                        ...statusColors[selected.status],
+                                        padding: "3px 10px",
+                                        borderRadius: 20,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        display: "inline-block",
+                                        marginBottom: 12,
+                                        background: statusColors[selected.status].bg,
+                                        color: statusColors[selected.status].text
+                                    },
+                                    children: statusColors[selected.status].label
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 74,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                    style: {
+                                        fontSize: 15,
+                                        color: "#64748b",
+                                        lineHeight: 1.6,
+                                        marginBottom: 24
+                                    },
+                                    children: selected.desc
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 75,
+                                    columnNumber: 15
+                                }, this),
+                                selected.href !== "#" && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["default"], {
+                                    href: selected.href,
+                                    style: {
+                                        display: "inline-block",
+                                        padding: "12px 28px",
+                                        borderRadius: 10,
+                                        background: selected.color,
+                                        color: "#fff",
+                                        textDecoration: "none",
+                                        fontWeight: 600,
+                                        fontSize: 14
+                                    },
+                                    children: [
+                                        "Открыть ",
+                                        selected.label
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 77,
+                                    columnNumber: 17
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/src/app/page.tsx",
+                            lineNumber: 71,
+                            columnNumber: 13
+                        }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    style: {
+                                        fontSize: 48,
+                                        marginBottom: 12
+                                    },
+                                    children: "🌍"
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 84,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
+                                    style: {
+                                        fontSize: 24,
+                                        fontWeight: 700,
+                                        color: "#4f46e5",
+                                        marginBottom: 8
+                                    },
+                                    children: "Выберите проект"
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 85,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                    style: {
+                                        fontSize: 15,
+                                        color: "#64748b",
+                                        lineHeight: 1.6
+                                    },
+                                    children: "Все 29 проектов базируются в Астане, Казахстан. Кликните на точку или выберите из списка."
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 86,
+                                    columnNumber: 15
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/src/app/page.tsx",
+                            lineNumber: 83,
+                            columnNumber: 13
+                        }, this)
+                    }, void 0, false, {
+                        fileName: "[project]/src/app/page.tsx",
+                        lineNumber: 69,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/app/page.tsx",
+                lineNumber: 65,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                style: {
+                    maxWidth: 1200,
+                    margin: "32px auto",
+                    padding: "0 20px 40px"
+                },
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        style: {
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: 16
+                        },
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                style: {
+                                    fontSize: 18,
+                                    fontWeight: 700,
+                                    color: "#475569"
+                                },
+                                children: [
+                                    "Все проекты (",
+                                    filtered.length,
+                                    ")"
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/src/app/page.tsx",
+                                lineNumber: 94,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                style: {
+                                    display: "flex",
+                                    gap: 0,
+                                    background: "#fff",
+                                    borderRadius: 10,
+                                    padding: 3,
+                                    border: "1px solid #e2e8f0"
+                                },
+                                children: [
+                                    {
+                                        key: "all",
+                                        label: "Все"
+                                    },
+                                    {
+                                        key: "active",
+                                        label: "Active"
+                                    },
+                                    {
+                                        key: "planning",
+                                        label: "Planning"
+                                    },
+                                    {
+                                        key: "idea",
+                                        label: "Idea"
+                                    }
+                                ].map((f)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                        onClick: ()=>setFilter(f.key),
+                                        style: {
+                                            padding: "6px 14px",
+                                            borderRadius: 8,
+                                            border: "none",
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                            cursor: "pointer",
+                                            background: filter === f.key ? "#4f46e5" : "transparent",
+                                            color: filter === f.key ? "#fff" : "#64748b"
+                                        },
+                                        children: f.label
+                                    }, f.key, false, {
+                                        fileName: "[project]/src/app/page.tsx",
+                                        lineNumber: 97,
+                                        columnNumber: 15
+                                    }, this))
+                            }, void 0, false, {
+                                fileName: "[project]/src/app/page.tsx",
+                                lineNumber: 95,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/app/page.tsx",
+                        lineNumber: 93,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        style: {
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                            gap: 10
+                        },
+                        children: filtered.map((app)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["default"], {
+                                href: app.href,
+                                style: {
+                                    textDecoration: "none"
+                                },
+                                onMouseEnter: ()=>setSelectedApp(app.id),
+                                onMouseLeave: ()=>setSelectedApp(null),
+                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    style: {
+                                        padding: "14px",
+                                        borderRadius: 12,
+                                        background: selectedApp === app.id ? "#fff" : "#f8fafc",
+                                        border: `1px solid ${selectedApp === app.id ? app.color + "44" : "#e2e8f0"}`,
+                                        boxShadow: selectedApp === app.id ? `0 4px 16px ${app.color}12` : "none",
+                                        transition: "all 0.2s",
+                                        cursor: "pointer"
+                                    },
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            style: {
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                marginBottom: 6
+                                            },
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    style: {
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 8
+                                                    },
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                            style: {
+                                                                fontSize: 18
+                                                            },
+                                                            children: app.icon
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/src/app/page.tsx",
+                                                            lineNumber: 109,
+                                                            columnNumber: 21
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                            style: {
+                                                                fontWeight: 700,
+                                                                fontSize: 13,
+                                                                color: app.color
+                                                            },
+                                                            children: app.label
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/src/app/page.tsx",
+                                                            lineNumber: 110,
+                                                            columnNumber: 21
+                                                        }, this)
+                                                    ]
+                                                }, void 0, true, {
+                                                    fileName: "[project]/src/app/page.tsx",
+                                                    lineNumber: 108,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                    style: {
+                                                        padding: "2px 6px",
+                                                        borderRadius: 10,
+                                                        fontSize: 9,
+                                                        fontWeight: 600,
+                                                        background: statusColors[app.status].bg,
+                                                        color: statusColors[app.status].text
+                                                    },
+                                                    children: statusColors[app.status].label
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/page.tsx",
+                                                    lineNumber: 112,
+                                                    columnNumber: 19
+                                                }, this)
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/app/page.tsx",
+                                            lineNumber: 107,
+                                            columnNumber: 17
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                            style: {
+                                                fontSize: 11,
+                                                color: "#64748b",
+                                                lineHeight: 1.4,
+                                                margin: 0
+                                            },
+                                            children: app.desc
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/app/page.tsx",
+                                            lineNumber: 114,
+                                            columnNumber: 17
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/app/page.tsx",
+                                    lineNumber: 106,
+                                    columnNumber: 15
+                                }, this)
+                            }, app.id, false, {
+                                fileName: "[project]/src/app/page.tsx",
+                                lineNumber: 105,
+                                columnNumber: 13
+                            }, this))
+                    }, void 0, false, {
+                        fileName: "[project]/src/app/page.tsx",
+                        lineNumber: 103,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/app/page.tsx",
+                lineNumber: 92,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                style: {
+                    textAlign: "center",
+                    padding: "20px 0 30px",
+                    color: "#94a3b8",
+                    fontSize: 12
+                },
+                children: [
+                    "AEVION Platform · Астана, Казахстан · ",
+                    apps.length,
+                    " проектов"
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/app/page.tsx",
+                lineNumber: 121,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("style", {
+                children: `@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`
+            }, void 0, false, {
+                fileName: "[project]/src/app/page.tsx",
+                lineNumber: 122,
+                columnNumber: 7
+            }, this)
+        ]
+    }, void 0, true, {
+        fileName: "[project]/src/app/page.tsx",
+        lineNumber: 54,
+        columnNumber: 5
+    }, this);
+}
+}),
+"[project]/node_modules/@swc/helpers/cjs/_interop_require_default.cjs [app-ssr] (ecmascript)", ((__turbopack_context__, module, exports) => {
+"use strict";
+
+function _interop_require_default(obj) {
+    return obj && obj.__esModule ? obj : {
+        default: obj
+    };
+}
+exports._ = _interop_require_default;
+}),
+"[project]/node_modules/next/dist/shared/lib/lazy-dynamic/dynamic-bailout-to-csr.js [app-ssr] (ecmascript)", ((__turbopack_context__, module, exports) => {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+Object.defineProperty(exports, "BailoutToCSR", {
+    enumerable: true,
+    get: function() {
+        return BailoutToCSR;
+    }
+});
+const _bailouttocsr = __turbopack_context__.r("[project]/node_modules/next/dist/shared/lib/lazy-dynamic/bailout-to-csr.js [app-ssr] (ecmascript)");
+function BailoutToCSR({ reason, children }) {
+    if ("TURBOPACK compile-time truthy", 1) {
+        throw Object.defineProperty(new _bailouttocsr.BailoutToCSRError(reason), "__NEXT_ERROR_CODE", {
+            value: "E394",
+            enumerable: false,
+            configurable: true
+        });
+    }
+    return children;
+} //# sourceMappingURL=dynamic-bailout-to-csr.js.map
+}),
+"[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-dom.js [app-ssr] (ecmascript)", ((__turbopack_context__, module, exports) => {
+"use strict";
+
+module.exports = __turbopack_context__.r("[project]/node_modules/next/dist/server/route-modules/app-page/module.compiled.js [app-ssr] (ecmascript)").vendored['react-ssr'].ReactDOM; //# sourceMappingURL=react-dom.js.map
+}),
+"[project]/node_modules/next/dist/shared/lib/encode-uri-path.js [app-ssr] (ecmascript)", ((__turbopack_context__, module, exports) => {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+Object.defineProperty(exports, "encodeURIPath", {
+    enumerable: true,
+    get: function() {
+        return encodeURIPath;
+    }
+});
+function encodeURIPath(file) {
+    return file.split('/').map((p)=>encodeURIComponent(p)).join('/');
+} //# sourceMappingURL=encode-uri-path.js.map
+}),
+"[project]/node_modules/next/dist/shared/lib/lazy-dynamic/preload-chunks.js [app-ssr] (ecmascript)", ((__turbopack_context__, module, exports) => {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+Object.defineProperty(exports, "PreloadChunks", {
+    enumerable: true,
+    get: function() {
+        return PreloadChunks;
+    }
+});
+const _jsxruntime = __turbopack_context__.r("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js [app-ssr] (ecmascript)");
+const _reactdom = __turbopack_context__.r("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-dom.js [app-ssr] (ecmascript)");
+const _workasyncstorageexternal = __turbopack_context__.r("[externals]/next/dist/server/app-render/work-async-storage.external.js [external] (next/dist/server/app-render/work-async-storage.external.js, cjs)");
+const _encodeuripath = __turbopack_context__.r("[project]/node_modules/next/dist/shared/lib/encode-uri-path.js [app-ssr] (ecmascript)");
+function PreloadChunks({ moduleIds }) {
+    // Early return in client compilation and only load requestStore on server side
+    if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+    ;
+    const workStore = _workasyncstorageexternal.workAsyncStorage.getStore();
+    if (workStore === undefined) {
+        return null;
+    }
+    const allFiles = [];
+    // Search the current dynamic call unique key id in react loadable manifest,
+    // and find the corresponding CSS files to preload
+    if (workStore.reactLoadableManifest && moduleIds) {
+        const manifest = workStore.reactLoadableManifest;
+        for (const key of moduleIds){
+            if (!manifest[key]) continue;
+            const chunks = manifest[key].files;
+            allFiles.push(...chunks);
+        }
+    }
+    if (allFiles.length === 0) {
+        return null;
+    }
+    const dplId = ("TURBOPACK compile-time falsy", 0) ? "TURBOPACK unreachable" : '';
+    return /*#__PURE__*/ (0, _jsxruntime.jsx)(_jsxruntime.Fragment, {
+        children: allFiles.map((chunk)=>{
+            const href = `${workStore.assetPrefix}/_next/${(0, _encodeuripath.encodeURIPath)(chunk)}${dplId}`;
+            const isCss = chunk.endsWith('.css');
+            // If it's stylesheet we use `precedence` o help hoist with React Float.
+            // For stylesheets we actually need to render the CSS because nothing else is going to do it so it needs to be part of the component tree.
+            // The `preload` for stylesheet is not optional.
+            if (isCss) {
+                return /*#__PURE__*/ (0, _jsxruntime.jsx)("link", {
+                    // @ts-ignore
+                    precedence: "dynamic",
+                    href: href,
+                    rel: "stylesheet",
+                    as: "style",
+                    nonce: workStore.nonce
+                }, chunk);
+            } else {
+                // If it's script we use ReactDOM.preload to preload the resources
+                (0, _reactdom.preload)(href, {
+                    as: 'script',
+                    fetchPriority: 'low',
+                    nonce: workStore.nonce
+                });
+                return null;
+            }
+        })
+    });
+} //# sourceMappingURL=preload-chunks.js.map
+}),
+"[project]/node_modules/next/dist/shared/lib/lazy-dynamic/loadable.js [app-ssr] (ecmascript)", ((__turbopack_context__, module, exports) => {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+Object.defineProperty(exports, "default", {
+    enumerable: true,
+    get: function() {
+        return _default;
+    }
+});
+const _jsxruntime = __turbopack_context__.r("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js [app-ssr] (ecmascript)");
+const _react = __turbopack_context__.r("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react.js [app-ssr] (ecmascript)");
+const _dynamicbailouttocsr = __turbopack_context__.r("[project]/node_modules/next/dist/shared/lib/lazy-dynamic/dynamic-bailout-to-csr.js [app-ssr] (ecmascript)");
+const _preloadchunks = __turbopack_context__.r("[project]/node_modules/next/dist/shared/lib/lazy-dynamic/preload-chunks.js [app-ssr] (ecmascript)");
+// Normalize loader to return the module as form { default: Component } for `React.lazy`.
+// Also for backward compatible since next/dynamic allows to resolve a component directly with loader
+// Client component reference proxy need to be converted to a module.
+function convertModule(mod) {
+    // Check "default" prop before accessing it, as it could be client reference proxy that could break it reference.
+    // Cases:
+    // mod: { default: Component }
+    // mod: Component
+    // mod: { default: proxy(Component) }
+    // mod: proxy(Component)
+    const hasDefault = mod && 'default' in mod;
+    return {
+        default: hasDefault ? mod.default : mod
+    };
+}
+const defaultOptions = {
+    loader: ()=>Promise.resolve(convertModule(()=>null)),
+    loading: null,
+    ssr: true
+};
+function Loadable(options) {
+    const opts = {
+        ...defaultOptions,
+        ...options
+    };
+    const Lazy = /*#__PURE__*/ (0, _react.lazy)(()=>opts.loader().then(convertModule));
+    const Loading = opts.loading;
+    function LoadableComponent(props) {
+        const fallbackElement = Loading ? /*#__PURE__*/ (0, _jsxruntime.jsx)(Loading, {
+            isLoading: true,
+            pastDelay: true,
+            error: null
+        }) : null;
+        // If it's non-SSR or provided a loading component, wrap it in a suspense boundary
+        const hasSuspenseBoundary = !opts.ssr || !!opts.loading;
+        const Wrap = hasSuspenseBoundary ? _react.Suspense : _react.Fragment;
+        const wrapProps = hasSuspenseBoundary ? {
+            fallback: fallbackElement
+        } : {};
+        const children = opts.ssr ? /*#__PURE__*/ (0, _jsxruntime.jsxs)(_jsxruntime.Fragment, {
+            children: [
+                ("TURBOPACK compile-time truthy", 1) ? /*#__PURE__*/ (0, _jsxruntime.jsx)(_preloadchunks.PreloadChunks, {
+                    moduleIds: opts.modules
+                }) : "TURBOPACK unreachable",
+                /*#__PURE__*/ (0, _jsxruntime.jsx)(Lazy, {
+                    ...props
+                })
+            ]
+        }) : /*#__PURE__*/ (0, _jsxruntime.jsx)(_dynamicbailouttocsr.BailoutToCSR, {
+            reason: "next/dynamic",
+            children: /*#__PURE__*/ (0, _jsxruntime.jsx)(Lazy, {
+                ...props
+            })
+        });
+        return /*#__PURE__*/ (0, _jsxruntime.jsx)(Wrap, {
+            ...wrapProps,
+            children: children
+        });
+    }
+    LoadableComponent.displayName = 'LoadableComponent';
+    return LoadableComponent;
+}
+const _default = Loadable; //# sourceMappingURL=loadable.js.map
+}),
+"[project]/node_modules/next/dist/shared/lib/app-dynamic.js [app-ssr] (ecmascript)", ((__turbopack_context__, module, exports) => {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+Object.defineProperty(exports, "default", {
+    enumerable: true,
+    get: function() {
+        return dynamic;
+    }
+});
+const _interop_require_default = __turbopack_context__.r("[project]/node_modules/@swc/helpers/cjs/_interop_require_default.cjs [app-ssr] (ecmascript)");
+const _loadable = /*#__PURE__*/ _interop_require_default._(__turbopack_context__.r("[project]/node_modules/next/dist/shared/lib/lazy-dynamic/loadable.js [app-ssr] (ecmascript)"));
+function dynamic(dynamicOptions, options) {
+    const loadableOptions = {};
+    if (typeof dynamicOptions === 'function') {
+        loadableOptions.loader = dynamicOptions;
+    }
+    const mergedOptions = {
+        ...loadableOptions,
+        ...options
+    };
+    return (0, _loadable.default)({
+        ...mergedOptions,
+        modules: mergedOptions.loadableGenerated?.modules
+    });
+}
+if ((typeof exports.default === 'function' || typeof exports.default === 'object' && exports.default !== null) && typeof exports.default.__esModule === 'undefined') {
+    Object.defineProperty(exports.default, '__esModule', {
+        value: true
+    });
+    Object.assign(exports.default, exports);
+    module.exports = exports.default;
+} //# sourceMappingURL=app-dynamic.js.map
+}),
+];
+
+//# sourceMappingURL=_24bec49b._.js.map

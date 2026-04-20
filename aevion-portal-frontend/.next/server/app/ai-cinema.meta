@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/ai-cinema/layout,_N_T_/ai-cinema/page,_N_T_/ai-cinema"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/ai-cinema/__PAGE__",
+    "/ai-cinema",
+    "/_index",
+    "/_head"
+  ]
+}

@@ -151,6 +151,8 @@ export default function CyberChessPage(){
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=8?0:v}catch{return 0}});
+  const[voiceListening,sVoiceListening]=useState(false);
+  const voiceRecRef=useRef<any>(null);
   useEffect(()=>{try{localStorage.setItem("aevion_chess_theme_v1",String(boardTheme))}catch{}},[boardTheme]);
   const bT=BOARD_THEMES[boardTheme]||BOARD_THEMES[0];
   const[sel,sSel]=useState<Square|null>(null);
@@ -264,6 +266,13 @@ export default function CyberChessPage(){
     return true;
   });
 
+  // Auto-load first puzzle when category changes and we're on Puzzles tab
+  useEffect(()=>{
+    if(tab!=="puzzles"||fPz.length===0||PUZZLES.length===0)return;
+    const pz=fPz[0];if(!pz)return;
+    const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  },[pzCategory]);
+
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
     fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
@@ -331,7 +340,7 @@ export default function CyberChessPage(){
 
   // Auto-evaluate each move in analysis tab — progressive: fast pass (d10), then refine (d18)
   useEffect(()=>{
-    if(tab!=="analysis"||!sfR.current?.ready()||hist.length===0)return;
+    if((tab!=="analysis"&&tab!=="coach")||!sfR.current?.ready()||hist.length===0)return;
     let cancelled=false;
 
     const evalAt=(fen:string,depth:number):Promise<{cp:number;mate:number}>=>{
@@ -448,11 +457,23 @@ export default function CyberChessPage(){
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
     if(game.turn()!==pCol||over||!pms.length)return;
-    const[first,...rest]=pms;
+    // Skip invalid premoves at the head of the queue until we find a valid one
     const mvs=game.moves({verbose:true});
-    const ok=mvs.find(m=>m.from===first.from&&m.to===first.to);
-    if(ok){sPms(rest);exec(first.from,first.to,first.pr);snd("premove")}
-    else sPms(rest); // invalid premove → skip
+    let idx=0;
+    while(idx<pms.length){
+      const pm=pms[idx];
+      const ok=mvs.find(m=>m.from===pm.from&&m.to===pm.to);
+      if(ok){
+        const rest=pms.slice(idx+1);
+        sPms(rest);
+        exec(pm.from,pm.to,pm.pr);
+        snd("premove");
+        return;
+      }
+      idx++;
+    }
+    // None of the premoves is valid → clear all
+    sPms([]);
   },[game,over,pms,pCol,exec]);
   const doPremoveRef=useRef(doPremove);
   useEffect(()=>{doPremoveRef.current=doPremove},[doPremove]);
@@ -1027,7 +1048,13 @@ export default function CyberChessPage(){
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}}} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
+                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();
+                  // Find premove at this square (either from or to) and remove it specifically
+                  const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
+                  if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
+                  // Otherwise fallback: remove last premove / clear selection
+                  if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
+                }} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                   {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
                   {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s"}}><Piece type={p.type} color={p.color}/></div>}
@@ -1040,6 +1067,57 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
             {btn("⇄ Flip",()=>sFlip(!flip),T.surface,T.dim)}
             {btn("New Game",()=>{sSetup(true);sOn(false);sOver(null);sPms([])},T.accent,"#fff","none")}
+            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю...":"🎤 Голос",()=>{
+              const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
+              if(!SR){showToast("Браузер не поддерживает голосовой ввод","error");return}
+              if(voiceListening&&voiceRecRef.current){voiceRecRef.current.stop();return}
+              const rec=new SR();rec.lang="ru-RU";rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=3;
+              rec.onstart=()=>{sVoiceListening(true);showToast("Говорите: 'е2 е4' или 'конь f3'","info")};
+              rec.onend=()=>{sVoiceListening(false);voiceRecRef.current=null};
+              rec.onerror=(e:any)=>{sVoiceListening(false);showToast(`Ошибка: ${e.error}`,"error")};
+              rec.onresult=(e:any)=>{
+                // Try all alternatives
+                const alts:string[]=[];
+                for(let i=0;i<e.results[0].length;i++)alts.push(e.results[0][i].transcript);
+                const parseVoice=(text:string):{from?:string;to?:string;san?:string}=>{
+                  let t=text.toLowerCase().trim();
+                  // Russian letters to files
+                  const rusMap:Record<string,string>={"а":"a","б":"b","в":"c","с":"c","д":"d","е":"e","ф":"f","ж":"g","ге":"g","г":"g","х":"h","аш":"h","эйч":"h"};
+                  // Number words
+                  const numMap:Record<string,string>={"один":"1","одну":"1","два":"2","две":"2","три":"3","четыре":"4","пять":"5","шесть":"6","семь":"7","восемь":"8"};
+                  // Piece words
+                  const pieceMap:Record<string,string>={"конь":"N","коня":"N","конём":"N","конем":"N","слон":"B","слона":"B","слоном":"B","ладья":"R","ладью":"R","ладьёй":"R","ферзь":"Q","ферзя":"Q","ферзём":"Q","ферзем":"Q","король":"K","короля":"K","королём":"K","королем":"K"};
+                  // Castling
+                  if(/короткая\s+рокировка|короткую\s+рокировку|o-?o(?!-?o)/i.test(t))return{san:"O-O"};
+                  if(/длинная\s+рокировка|длинную\s+рокировку|o-?o-?o/i.test(t))return{san:"O-O-O"};
+                  // Replace Russian words with letters/numbers
+                  t=t.replace(/\s+/g," ");
+                  for(const[k,v]of Object.entries(rusMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                  for(const[k,v]of Object.entries(numMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                  // Extract piece if mentioned
+                  let piece="";
+                  for(const[k,v]of Object.entries(pieceMap))if(t.includes(k)){piece=v;t=t.replace(k,"").trim();break;}
+                  // Extract 2 squares like "e2 e4" or "e2e4"
+                  const sq=/([a-h])\s*([1-8])/g;const matches:string[]=[];let m;
+                  while((m=sq.exec(t))!==null){matches.push(m[1]+m[2]);if(matches.length===2)break}
+                  if(matches.length===2)return{from:matches[0],to:matches[1]};
+                  if(matches.length===1&&piece)return{san:piece+matches[0]};
+                  if(matches.length===1)return{san:matches[0]};
+                  return{};
+                };
+                let matched=false;
+                for(const alt of alts){
+                  const v=parseVoice(alt);
+                  if(v.from&&v.to){
+                    try{const mv=game.move({from:v.from as Square,to:v.to as Square,promotion:"q"});if(mv){exec(v.from as Square,v.to as Square);showToast(`✓ ${v.from}→${v.to}`,"success");matched=true;break}}catch{}
+                  }else if(v.san){
+                    try{const mv=game.move(v.san);if(mv){game.undo();const legal=game.moves({verbose:true}).find(x=>x.san===mv.san);if(legal){exec(legal.from,legal.to);showToast(`✓ ${v.san}`,"success");matched=true;break}}}catch{}
+                  }
+                }
+                if(!matched)showToast(`Не распознал: "${alts[0]}"`,"error");
+              };
+              voiceRecRef.current=rec;rec.start();
+            },voiceListening?"#fee2e2":T.surface,voiceListening?T.danger:T.dim)}
             {over&&btn("Rematch",()=>newG(),"#f59e0b","#fff","none")}
             {pms.length>0&&btn(`↩ Undo`,()=>sPms(p=>p.slice(0,-1)),"#eff6ff",T.blue,`1px solid rgba(37,99,235,0.3)`)}
             {pms.length>0&&btn(`✕ Clear (${pms.length})`,()=>{sPms([]);sPmSel(null)},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
@@ -1451,6 +1529,64 @@ export default function CyberChessPage(){
 
           {/* ── MultiPV Analysis Panel ── */}
           {tab==="analysis"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Position import for Analysis */}
+            <div style={{borderRadius:10,background:"linear-gradient(135deg,#faf5ff,#f5f3ff)",border:"1px solid #ddd6fe",padding:"10px 12px"}}>
+              <div style={{fontSize:11,fontWeight:800,color:T.purple,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>📥 Источник позиции</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
+                <button onClick={()=>{
+                  const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
+                  showToast("Начальная позиция","info");
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🆕 Начальная</button>
+
+                <button onClick={()=>{
+                  if(savedGames.length===0){showToast("Нет сыгранных партий","error");return}
+                  const last=savedGames[0];
+                  const g=new Chess();const fh:string[]=[g.fen()];const mhist:string[]=[];
+                  for(const san of last.moves){try{const mv=g.move(san);if(mv){mhist.push(mv.san);fh.push(g.fen())}}catch{break}}
+                  setGame(g);sBk(k=>k+1);sHist(mhist);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b");
+                  showToast(`Партия · ${mhist.length} ходов`,"success");
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📜 Последняя партия</button>
+
+                <button onClick={()=>{
+                  if(!pzCurrent){showToast("Нет активного пазла","error");return}
+                  const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
+                  showToast(`Пазл · ${pzCurrent.name}`,"success");
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущий пазл</button>
+
+                <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>
+                  📁 PGN файл
+                  <input type="file" accept=".pgn,.txt" style={{display:"none"}} onChange={e=>{
+                    const f=e.target.files?.[0];if(!f)return;
+                    const r=new FileReader();
+                    r.onload=()=>{try{
+                      const g=new Chess();g.loadPgn(r.result as string);
+                      const h=g.history();const g2=new Chess();const fh:string[]=[g2.fen()];const mh:string[]=[];
+                      for(const san of h){try{const mv=g2.move(san);if(mv){mh.push(mv.san);fh.push(g2.fen())}}catch{break}}
+                      setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+                      showToast(`PGN · ${mh.length} ходов`,"success");
+                    }catch{showToast("Неверный PGN","error")}};
+                    r.readAsText(f);e.target.value="";
+                  }}/>
+                </label>
+
+                <button onClick={()=>{
+                  const fen=prompt("Введите FEN позиции:");
+                  if(!fen)return;
+                  try{const g=new Chess(fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");showToast("FEN загружен","success")}catch{showToast("Неверный FEN","error")}
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🔤 FEN</button>
+
+                <button onClick={()=>{
+                  const pgn=prompt("Вставьте PGN:");if(!pgn)return;
+                  try{
+                    const g=new Chess();g.loadPgn(pgn);
+                    const h=g.history();const g2=new Chess();const fh:string[]=[g2.fen()];const mh:string[]=[];
+                    for(const san of h){try{const mv=g2.move(san);if(mv){mh.push(mv.san);fh.push(g2.fen())}}catch{break}}
+                    setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+                    showToast(`PGN · ${mh.length} ходов`,"success");
+                  }catch{showToast("Неверный PGN","error")}
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📋 PGN текст</button>
+              </div>
+            </div>
             {/* Controls */}
             <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
               <button onClick={()=>sEnginePanelExpanded(!enginePanelExpanded)} style={{width:"100%",padding:"10px 14px",border:"none",background:enginePanelExpanded?"#f9fafb":"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",borderBottom:enginePanelExpanded?`1px solid ${T.border}`:"none"}}>

@@ -181,6 +181,7 @@ export default function CyberChessPage(){
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
   const[coachAIEnabled,sCoachAIEnabled]=useState(true);
+  const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
   const[flip,sFlip]=useState(false);
@@ -313,6 +314,44 @@ export default function CyberChessPage(){
       sEvalCp(cp*sign);sEvalMate(mate*sign);
     },()=>{});
   },[bk,tab,setup,think,over]);
+
+  // Auto-evaluate each move in analysis tab so user sees eval per move without clicking "Analyze all"
+  useEffect(()=>{
+    if(tab!=="analysis"||!sfR.current?.ready()||hist.length===0)return;
+    // Only analyze moves we haven't yet (analysis.length < hist.length)
+    if(analysis.length>=hist.length)return;
+    let cancelled=false;
+    (async()=>{
+      const results=[...analysis];
+      const startIdx=results.length;
+      // Get prev eval (either last analyzed or initial)
+      let prevCp=startIdx>0?results[startIdx-1].cp:0;
+      // Normalize: prevCp should be the eval BEFORE the move to analyze, from the mover's perspective
+      for(let i=startIdx;i<hist.length;i++){
+        if(cancelled)return;
+        const fen=fenHist[i+1];if(!fen)break;
+        const turn=fen.split(" ")[1];
+        const evalResult=await new Promise<{cp:number;mate:number}>(res=>{
+          let lastCp=0,lastMate=0;
+          sfR.current!.eval(fen,10,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+        });
+        const moverWasWhite=turn==="b";
+        const prevFromMover=moverWasWhite?prevCp:-prevCp;
+        const currFromMover=moverWasWhite?evalResult.cp:-evalResult.cp;
+        const drop=prevFromMover-currFromMover;
+        let quality:"great"|"good"|"inacc"|"mistake"|"blunder"="good";
+        if(drop>=300)quality="blunder";
+        else if(drop>=150)quality="mistake";
+        else if(drop>=70)quality="inacc";
+        else if(drop<=-50)quality="great";
+        results.push({move:i+1,cp:evalResult.cp,mate:evalResult.mate,quality});
+        prevCp=evalResult.cp;
+        if(cancelled)return;
+        sAnalysis([...results]);
+      }
+    })();
+    return()=>{cancelled=true};
+  },[tab,hist.length,sfOk]);
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
     const p=game.get(from);if(!p)return false;
@@ -1412,6 +1451,43 @@ export default function CyberChessPage(){
               <button onClick={()=>sCoachAIEnabled(true)} style={{flex:1,padding:"8px",borderRadius:7,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>🤖 С AI тренером</button>
               <button onClick={()=>sCoachAIEnabled(false)} style={{flex:1,padding:"8px",borderRadius:7,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>✏️ Без AI (свободно)</button>
             </div>
+
+            {/* Learning Level */}
+            {coachAIEnabled&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"10px 14px"}}>
+              <div style={{fontSize:11,fontWeight:800,color:T.dim,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>🎓 Уровень обучения</div>
+              <div style={{display:"flex",gap:6}}>
+                {([["beginner","🌱 Новичок","до 1200"],["intermediate","📘 Средний","1200-1800"],["advanced","🏆 Продвинутый","1800+"]] as const).map(([lv,label,elo])=>
+                  <button key={lv} onClick={()=>sCoachLevel(lv)} style={{flex:1,padding:"8px 6px",borderRadius:7,border:coachLevel===lv?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachLevel===lv?"rgba(5,150,105,0.08)":"#fff",color:coachLevel===lv?T.accent:T.dim,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span style={{fontSize:13,fontWeight:800}}>{label}</span>
+                    <span style={{fontSize:10,color:T.dim,fontWeight:600}}>{elo}</span>
+                  </button>)}
+              </div>
+            </div>}
+
+            {/* Learning Recommendations based on level */}
+            {coachAIEnabled&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#fef3c7,#fef9c3)",border:"1px solid #fde68a",padding:"12px 14px"}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>💡 Что изучать</div>
+              {coachLevel==="beginner"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
+                <div style={{marginBottom:6}}><b>Основы:</b> правила ходов, шах и мат, как ставится пат</div>
+                <div style={{marginBottom:6}}><b>Принципы:</b> развивай фигуры, контролируй центр, рокируй рано, не ходи одной фигурой дважды в дебюте</div>
+                <div style={{marginBottom:6}}><b>Задачи:</b> решай маты в 1-2 хода, учись видеть угрозы</div>
+                <div><b>Партии:</b> играй с ботами на уровне Beginner (800-1000) и задавай вопросы Coach'у</div>
+              </div>}
+              {coachLevel==="intermediate"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
+                <div style={{marginBottom:6}}><b>Тактика:</b> вилка, связка, двойной удар, открытое нападение, завлечение</div>
+                <div style={{marginBottom:6}}><b>Дебюты:</b> выбери 1-2 дебюта за белых и за чёрных, учи 10-15 ходов глубины</div>
+                <div style={{marginBottom:6}}><b>Задачи:</b> маты в 3-5 ходов, тактические комбинации</div>
+                <div style={{marginBottom:6}}><b>Эндшпиль:</b> король и ферзь vs король, ладейные эндшпили (правило Лусена, Филидора)</div>
+                <div><b>Партии:</b> анализируй свои партии в Analysis, ищи ошибки</div>
+              </div>}
+              {coachLevel==="advanced"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
+                <div style={{marginBottom:6}}><b>Стратегия:</b> слабые поля, форпосты, пешечная структура, хорошие/плохие слоны</div>
+                <div style={{marginBottom:6}}><b>Дебюты:</b> глубокая подготовка, свои варианты, изучение партий гроссмейстеров</div>
+                <div style={{marginBottom:6}}><b>Эндшпиль:</b> пешечные прорывы, оппозиция, цугцванг, технические эндшпили</div>
+                <div style={{marginBottom:6}}><b>Классика:</b> изучай партии Капабланки, Ботвинника, Фишера, Карлсена</div>
+                <div><b>Тренировка:</b> длинные партии с анализом, решение этюдов</div>
+              </div>}
+            </div>}
             {/* Board Editor Toggle */}
             <div style={{borderRadius:10,background:T.surface,border:`1px solid ${editorMode?T.accent:T.border}`,overflow:"hidden"}}>
               <div style={{padding:"10px 14px",borderBottom:editorMode?`1px solid ${T.border}`:"none",background:editorMode?"#ecfdf5":"#f9fafb",display:"flex",alignItems:"center",justifyContent:"space-between"}}>

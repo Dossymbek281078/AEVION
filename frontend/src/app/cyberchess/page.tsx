@@ -1088,38 +1088,65 @@ export default function CyberChessPage(){
             <div style={{fontSize:14,color:T.dim,lineHeight:1.4}}>{currentOpening.desc}</div>
           </div>}
 
-          {showAnal&&analysis.length>0&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-            <div style={{padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`}}>
-              <span style={{fontSize:14,fontWeight:800,color:T.text}}>📋 Аннотация партии</span>
-              <div style={{display:"flex",gap:8,fontSize:12,color:T.dim}}>
-                <span style={{color:T.accent}} title="Great">●{analysis.filter(a=>a.quality==="great").length}</span>
-                <span title="Good">○{analysis.filter(a=>a.quality==="good").length}</span>
-                <span style={{color:"#ca8a04"}} title="Inaccuracy">●{analysis.filter(a=>a.quality==="inacc").length}</span>
-                <span style={{color:"#ea580c"}} title="Mistake">●{analysis.filter(a=>a.quality==="mistake").length}</span>
-                <span style={{color:T.danger}} title="Blunder">●{analysis.filter(a=>a.quality==="blunder").length}</span>
+          {/* Game Stats — shown after full analysis */}
+          {showAnal&&analysis.length>0&&(()=>{
+            const blunders=analysis.filter(a=>a.quality==="blunder").length;
+            const mistakes=analysis.filter(a=>a.quality==="mistake").length;
+            const inaccs=analysis.filter(a=>a.quality==="inacc").length;
+            const greats=analysis.filter(a=>a.quality==="great").length;
+            // ACPL = average centipawn loss — compute from drops between moves
+            let totalLoss=0,losses=0;
+            for(let i=1;i<analysis.length;i++){
+              const prev=analysis[i-1];const curr=analysis[i];
+              const moverWasWhite=i%2===0; // after i moves, mover is (i-1)'th side
+              const prevFromMover=moverWasWhite?prev.cp:-prev.cp;
+              const currFromMover=moverWasWhite?curr.cp:-curr.cp;
+              const drop=Math.max(0,prevFromMover-currFromMover);
+              totalLoss+=Math.min(drop,1000); // cap at 10 pawns
+              losses++;
+            }
+            const acpl=losses>0?Math.round(totalLoss/losses):0;
+            const accuracy=Math.max(0,Math.min(100,Math.round(100-acpl/8)));
+            return(<div style={{borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0",padding:"12px 14px"}}>
+              <div style={{fontSize:12,fontWeight:800,color:T.accent,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:10}}>📊 Статистика партии</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+                <div style={{background:"#fff",borderRadius:7,padding:"8px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:900,color:T.accent,lineHeight:1}}>{accuracy}%</div>
+                  <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:3,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Точность</div>
+                </div>
+                <div style={{background:"#fff",borderRadius:7,padding:"8px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:900,color:T.purple,lineHeight:1}}>{acpl}</div>
+                  <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:3,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>ACPL</div>
+                </div>
+                <div style={{background:"#fff",borderRadius:7,padding:"8px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:900,color:T.text,lineHeight:1}}>{analysis.length}</div>
+                  <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:3,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Ходов</div>
+                </div>
               </div>
-            </div>
-            <div style={{maxHeight:280,overflowY:"auto"}}>
-              {analysis.map((a,i)=>{
-                const san=hist[i]||"";const moveNum=Math.floor(i/2)+1;const isWhite=i%2===0;
-                const evalStr=a.mate!==0?`M${Math.abs(a.mate)}`:(a.cp/100).toFixed(1);
-                const qColor=a.quality==="blunder"?T.danger:a.quality==="mistake"?"#ea580c":a.quality==="inacc"?"#ca8a04":a.quality==="great"?T.accent:T.dim;
-                const qIcon=a.quality==="blunder"?"??":a.quality==="mistake"?"?":a.quality==="inacc"?"?!":a.quality==="great"?"!":"";
-                const isBrowsing=browseIdx===i;
-                return(<div key={i} onClick={()=>{if(fenHist[i+1]){const g=new Chess(fenHist[i+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(i);sLm(null);sSel(null);sVm(new Set())}}} style={{padding:"7px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:isBrowsing?"#dbeafe":"transparent",borderLeft:isBrowsing?`3px solid ${T.blue}`:"3px solid transparent",borderBottom:i<analysis.length-1?`1px solid ${T.border}`:"none"}}>
-                  <span style={{fontSize:12,color:T.dim,fontWeight:700,minWidth:34,fontFamily:"monospace"}}>{isWhite?`${moveNum}.`:`${moveNum}…`}</span>
-                  <span style={{fontSize:14,fontFamily:"monospace",fontWeight:700,color:T.text,flex:1}}>{san}{qIcon&&<span style={{color:qColor,marginLeft:4,fontWeight:900}}>{qIcon}</span>}</span>
-                  <span style={{fontSize:13,fontFamily:"monospace",fontWeight:800,color:a.cp>0?T.accent:a.cp<0?T.danger:T.dim,minWidth:52,textAlign:"right"}}>{a.cp>0?"+":""}{evalStr}</span>
-                </div>);
-              })}
-            </div>
-            {browseIdx>=0&&<div style={{display:"flex",gap:6,padding:"8px 12px",borderTop:`1px solid ${T.border}`,alignItems:"center",background:"#f9fafb"}}>
-              <button onClick={()=>{if(browseIdx>0){const ni=browseIdx-1;const g=new Chess(fenHist[ni+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni)}}} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,cursor:"pointer"}}>◀</button>
-              <span style={{fontSize:12,color:T.dim,flex:1}}>Ход {Math.floor(browseIdx/2)+1}{browseIdx%2===0?".":"…"} {hist[browseIdx]}</span>
-              <button onClick={()=>{if(browseIdx<analysis.length-1){const ni=browseIdx+1;const g=new Chess(fenHist[ni+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni)}}} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,cursor:"pointer"}}>▶</button>
-              <button onClick={()=>{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1)}} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,cursor:"pointer"}}>⏩ Live</button>
-              <button onClick={()=>sTab("analysis")} style={{padding:"4px 12px",borderRadius:5,border:"none",background:T.purple,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",marginLeft:"auto"}}>⚡ MultiPV</button>
-            </div>}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #a7f3d0"}}>
+                  <div style={{fontSize:16,fontWeight:900,color:T.accent,lineHeight:1}}>!</div>
+                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{greats}</div>
+                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>отличные</div>
+                </div>
+                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #fde68a"}}>
+                  <div style={{fontSize:16,fontWeight:900,color:"#ca8a04",lineHeight:1}}>?!</div>
+                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{inaccs}</div>
+                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>неточности</div>
+                </div>
+                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #fdba74"}}>
+                  <div style={{fontSize:16,fontWeight:900,color:"#ea580c",lineHeight:1}}>?</div>
+                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{mistakes}</div>
+                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>ошибки</div>
+                </div>
+                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #fca5a5"}}>
+                  <div style={{fontSize:16,fontWeight:900,color:T.danger,lineHeight:1}}>??</div>
+                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{blunders}</div>
+                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>зевки</div>
+                </div>
+              </div>
+            </div>);
+          })()}
           </div>}
 
           {pms.length>0&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe"}}>

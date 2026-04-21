@@ -317,8 +317,10 @@ export default function CyberChessPage(){
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
   // Live eval on position change - for play/coach/analysis tabs
   useEffect(()=>{
-    if(setup||over||!sfR.current?.ready())return;
+    if(setup||!sfR.current?.ready())return;
     if(tab!=="analysis"&&tab!=="play"&&tab!=="coach")return;
+    // In play/coach respect over state (game ended), but in analysis keep evaluating
+    if(tab!=="analysis"&&over)return;
     // Don't eval during AI thinking (Stockfish busy computing move)
     if(tab!=="analysis"&&think)return;
     sfR.current.eval(game.fen(),15,(cp,mate)=>{
@@ -782,7 +784,10 @@ export default function CyberChessPage(){
           sTab(t);
           if(t==="play")sSetup(true);
           else if(t==="puzzles"){sOver(null);ldPz(0);}
-          else if(t==="coach"){if(!on||setup)newG(pCol)}
+          else if(t==="coach"){
+            // Always start Coach with a fresh starting position — don't inherit from other tabs
+            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
+          }
           else if(t==="analysis"&&fromPuzzle){
             // Reset to starting position when coming from puzzle
             const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
@@ -1096,7 +1101,7 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Opening detection */}
-          {currentOpening&&on&&!setup&&<div style={{padding:"10px 14px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0",boxShadow:"0 1px 4px rgba(5,150,105,0.08)"}}>
+          {currentOpening&&(on&&!setup||tab==="analysis")&&hist.length>0&&<div style={{padding:"10px 14px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0",boxShadow:"0 1px 4px rgba(5,150,105,0.08)"}}>
             <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
               <span style={{fontSize:13,fontWeight:900,padding:"2px 7px",borderRadius:4,background:T.accent,color:"#fff",fontFamily:"monospace",letterSpacing:"0.05em"}}>{currentOpening.eco}</span>
               <span style={{fontSize:13,fontWeight:800,color:T.text}}>{currentOpening.name}</span>
@@ -1577,6 +1582,56 @@ export default function CyberChessPage(){
 
           {/* ── Coach Tab ── */}
           {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Position import */}
+            <div style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe",padding:"10px 12px"}}>
+              <div style={{fontSize:11,fontWeight:800,color:T.blue,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>📥 Загрузить позицию</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
+                <button onClick={()=>{
+                  const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol("w");sFlip(false);
+                  showToast("Начальная позиция","info");
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🆕 Начальная</button>
+
+                <button onClick={()=>{
+                  // Load latest saved game
+                  if(savedGames.length===0){showToast("Нет сыгранных партий","error");return}
+                  const last=savedGames[0];
+                  const g=new Chess();const fh:string[]=[g.fen()];const mhist:string[]=[];
+                  for(const san of last.moves){try{const mv=g.move(san);if(mv){mhist.push(mv.san);fh.push(g.fen())}}catch{break}}
+                  setGame(g);sBk(k=>k+1);sHist(mhist);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(last.playerColor);sFlip(last.playerColor==="b");
+                  showToast(`Загружена партия · ${mhist.length} ходов`,"success");
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📜 Последняя партия</button>
+
+                <button onClick={()=>{
+                  if(!pzCurrent){showToast("Нет активного пазла","error");return}
+                  const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
+                  showToast(`Из пазла · ${pzCurrent.name}`,"success");
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущий пазл</button>
+
+                <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>
+                  📁 PGN файл
+                  <input type="file" accept=".pgn,.txt" style={{display:"none"}} onChange={e=>{
+                    const f=e.target.files?.[0];if(!f)return;
+                    const r=new FileReader();
+                    r.onload=()=>{try{
+                      const g=new Chess();g.loadPgn(r.result as string);
+                      const h=g.history();const g2=new Chess();const fh:string[]=[g2.fen()];const mh:string[]=[];
+                      for(const san of h){try{const mv=g2.move(san);if(mv){mh.push(mv.san);fh.push(g2.fen())}}catch{break}}
+                      setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);
+                      showToast(`PGN · ${mh.length} ходов`,"success");
+                    }catch{showToast("Неверный PGN","error")}};
+                    r.readAsText(f);e.target.value="";
+                  }}/>
+                </label>
+
+                <button onClick={()=>{
+                  const fen=prompt("Введите FEN позиции:");
+                  if(!fen)return;
+                  try{const g=new Chess(fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");showToast("FEN загружен","success")}catch{showToast("Неверный FEN","error")}
+                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🔤 FEN</button>
+
+                <button onClick={()=>{sEditorMode(true)}} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>✏️ Расставить вручную</button>
+              </div>
+            </div>
             {/* Combined AI Toggle + Level selector */}
             <div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"8px 10px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
               <div style={{display:"flex",gap:4}}>

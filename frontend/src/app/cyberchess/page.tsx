@@ -424,10 +424,32 @@ export default function CyberChessPage(){
       const attemptUci=`${from}${to}${pr||""}`;
       const expectedUci=pzCurrent.sol[0];
       if(attemptUci===expectedUci||attemptUci.slice(0,4)===expectedUci.slice(0,4)){
-        sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Correct! ${pzCurrent.name}`,"success");
-        // Execute the move to show it
+        // Execute user's correct move
         let mv;try{mv=game.move({from,to,promotion:pr||"q"});}catch{mv=null}
-        if(mv){sLm({from:mv.from,to:mv.to});sBk(k=>k+1)}
+        if(mv){sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1)}
+        // Multi-move puzzle: play opponent response + user follow-up from sol[]
+        if(pzCurrent.sol.length>1){
+          // sol[1] is opponent's response — play it immediately (no think)
+          const respUci=pzCurrent.sol[1];
+          const rFrom=respUci.slice(0,2),rTo=respUci.slice(2,4),rPr=respUci.length>4?respUci[4]:undefined;
+          setTimeout(()=>{
+            try{
+              const rmv=game.move({from:rFrom,to:rTo,promotion:rPr||"q"});
+              if(rmv){sLm({from:rmv.from,to:rmv.to});sHist(h=>[...h,rmv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);snd("move")}
+              // If more moves in solution, user must continue
+              if(pzCurrent.sol.length>2){
+                // Shift solution forward so next user move is sol[2]
+                sPzCurrent({...pzCurrent,sol:pzCurrent.sol.slice(2)});
+                showToast("Продолжай решение...","info");
+              }else{
+                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+              }
+            }catch{}
+          },100); // fast response, no thinking delay
+        }else{
+          // Single-move puzzle — solved
+          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+        }
         return true;
       }else{
         sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");showToast(`✗ Not the best. Try again or see solution`,"error");
@@ -1122,13 +1144,25 @@ export default function CyberChessPage(){
             {pms.length>0&&btn(`↩ Undo`,()=>sPms(p=>p.slice(0,-1)),"#eff6ff",T.blue,`1px solid rgba(37,99,235,0.3)`)}
             {pms.length>0&&btn(`✕ Clear (${pms.length})`,()=>{sPms([]);sPmSel(null)},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
           </div>
-          {on&&!over&&!setup&&<div style={{display:"flex",gap:5,marginTop:5}}>
+          {on&&!over&&!setup&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
             {btn("🏳 Resign",()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
             {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
             {btn("↩ Take back",()=>{if(hist.length>=2){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1)}else showToast("No moves","error")},T.surface,T.dim)}
+            {savedGames.length>0&&(tab==="play"||tab==="coach")&&btn(`📜 История (${savedGames.length})`,()=>{
+              sSetup(true);sOn(false);sOver(null);
+            },T.surface,T.dim)}
           </div>}
-          {over&&fenHist.length>2&&<div style={{display:"flex",gap:5,marginTop:5}}>
-            {btn(analyzing?"⚡ Analyzing...":showAnal?"🔽 Hide analysis":"🔍 Analyze game",runAnalysis,T.purple,"#fff","none")}
+          {over&&fenHist.length>2&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
+            {btn("📊 Открыть в Analysis",()=>{
+              // Switch to analysis tab, keep current game's history
+              sTab("analysis");
+              sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+              showToast("Партия открыта в анализе","info");
+            },T.purple,"#fff","none")}
+            {btn(analyzing?"⚡ Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze",runAnalysis,T.accent,"#fff","none")}
+            {savedGames.length>0&&btn(`📜 История (${savedGames.length})`,()=>{
+              sSetup(true);sOn(false);sOver(null);
+            },T.surface,T.dim)}
           </div>}
         </div>
 
@@ -1613,72 +1647,10 @@ export default function CyberChessPage(){
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
                 <button onClick={()=>{if(guessMode){sGuessMode(false);runMultiPV()}else startGuess()}} style={{padding:"6px 14px",borderRadius:7,border:guessMode?`2px solid #f59e0b`:`1px solid ${T.border}`,background:guessMode?"#fffbeb":"#fff",color:guessMode?"#92400e":T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>{guessMode?"✕ Exit Guess":"🎯 Guess Move"}</button>
               </div>
-              {/* FEN + Import controls */}
-              <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-                <input value={game.fen()} readOnly style={{flex:"1 1 240px",minWidth:200,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:13,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
-                <button onClick={()=>{const f=prompt("Paste FEN:");if(f){try{const g=new Chess(f);setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(g.turn()==="b");sHist([]);sFenHist([g.fen()]);if(guessMode)setTimeout(startGuess,100)}catch{showToast("Invalid FEN","error")}}}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>FEN</button>
-                <label style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.blue}`,background:"#eff6ff",fontSize:12,fontWeight:800,color:T.blue,cursor:"pointer"}}>
-                  📂 PGN файл
-                  <input type="file" accept=".pgn,.txt" style={{display:"none"}} onChange={async(e)=>{
-                    const file=e.target.files?.[0];if(!file)return;
-                    try{
-                      const text=await file.text();
-                      const g=new Chess();g.loadPgn(text);
-                      const moves=g.history();
-                      const fens=[new Chess().fen()];
-                      const replay=new Chess();
-                      moves.forEach(m=>{replay.move(m);fens.push(replay.fen())});
-                      setGame(g);sBk(k=>k+1);sHist(moves);sFenHist(fens);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(false);sBrowseIdx(-1);
-                      showToast(`Импортировано ${moves.length} ходов из ${file.name}`,"success");
-                    }catch(err){showToast("Ошибка PGN файла","error")}
-                    e.target.value="";
-                  }}/>
-                </label>
-                <button onClick={()=>{
-                  const p=prompt("Paste PGN:");if(!p)return;
-                  try{
-                    const g=new Chess();g.loadPgn(p);
-                    const moves=g.history();
-                    const fens=[new Chess().fen()];
-                    const replay=new Chess();
-                    moves.forEach(m=>{replay.move(m);fens.push(replay.fen())});
-                    setGame(g);sBk(k=>k+1);sHist(moves);sFenHist(fens);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(false);sBrowseIdx(-1);
-                    showToast(`Imported ${moves.length} moves`,"success");
-                  }catch(e){showToast("Invalid PGN","error")}
-                }} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>📋 PGN текст</button>
-                <button onClick={async()=>{
-                  const url=prompt("Paste Lichess or Chess.com URL:\n• lichess.org/abc123\n• chess.com/game/live/12345");
-                  if(!url)return;
-                  try{
-                    let pgn="";
-                    // Lichess: lichess.org/xxxxxxxx or lichess.org/xxxxxxxx/white
-                    const lichessMatch=url.match(/lichess\.org\/([a-zA-Z0-9]{8})/);
-                    if(lichessMatch){
-                      const id=lichessMatch[1];
-                      const r=await fetch(`https://lichess.org/game/export/${id}?moves=true&tags=false&clocks=false&evals=false`,{headers:{Accept:"application/x-chess-pgn"}});
-                      if(!r.ok)throw new Error("Lichess fetch failed");
-                      pgn=await r.text();
-                    }
-                    // Chess.com: chess.com/game/live/12345 or /daily/12345
-                    else if(url.match(/chess\.com\/game\/(live|daily)\/(\d+)/)){
-                      const m=url.match(/chess\.com\/game\/(live|daily)\/(\d+)/)!;
-                      const typ=m[1]==="daily"?"daily":"live";
-                      const r=await fetch(`https://www.chess.com/callback/${typ}/game/${m[2]}`);
-                      if(!r.ok)throw new Error("Chess.com fetch failed");
-                      const j=await r.json();
-                      pgn=j.game?.pgnHeaders?JSON.stringify(j.game):j.pgn||"";
-                    }else{
-                      showToast("Unsupported URL","error");return;
-                    }
-                    const g=new Chess();g.loadPgn(pgn);
-                    const moves=g.history();
-                    const fens=[new Chess().fen()];
-                    const replay=new Chess();
-                    moves.forEach(m=>{replay.move(m);fens.push(replay.fen())});
-                    setGame(g);sBk(k=>k+1);sHist(moves);sFenHist(fens);sSel(null);sVm(new Set());sLm(null);sPCol(g.turn());sFlip(false);sBrowseIdx(-1);
-                    showToast(`Imported ${moves.length} moves`,"success");
-                  }catch(e:any){showToast(`Import failed: ${e.message||"error"}`,"error")}
-                }} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.blue}`,background:"#eff6ff",fontSize:12,fontWeight:800,color:T.blue,cursor:"pointer"}}>🌐 URL</button>
+              {/* Current FEN display only (import buttons are in "Источник позиции" above) */}
+              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                <input value={game.fen()} readOnly onClick={e=>(e.target as HTMLInputElement).select()} style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
+                <button onClick={()=>{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>📋 Copy</button>
               </div>
 
               {/* Guess Mode Panel */}

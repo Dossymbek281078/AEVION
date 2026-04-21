@@ -180,6 +180,7 @@ export default function CyberChessPage(){
   const[setup,sSetup]=useState(true);
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
+  const[coachAIEnabled,sCoachAIEnabled]=useState(true);
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
   const[flip,sFlip]=useState(false);
@@ -1406,6 +1407,11 @@ export default function CyberChessPage(){
 
           {/* ── Coach Tab ── */}
           {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {/* AI Toggle */}
+            <div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",gap:6}}>
+              <button onClick={()=>sCoachAIEnabled(true)} style={{flex:1,padding:"8px",borderRadius:7,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>🤖 С AI тренером</button>
+              <button onClick={()=>sCoachAIEnabled(false)} style={{flex:1,padding:"8px",borderRadius:7,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>✏️ Без AI (свободно)</button>
+            </div>
             {/* Board Editor Toggle */}
             <div style={{borderRadius:10,background:T.surface,border:`1px solid ${editorMode?T.accent:T.border}`,overflow:"hidden"}}>
               <div style={{padding:"10px 14px",borderBottom:editorMode?`1px solid ${T.border}`:"none",background:editorMode?"#ecfdf5":"#f9fafb",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -1459,7 +1465,7 @@ export default function CyberChessPage(){
             </div>
           </div>}
 
-          {tab==="coach"&&!editorMode&&<AiCoach
+          {tab==="coach"&&!editorMode&&coachAIEnabled&&<AiCoach
             fen={game.fen()}
             moves={hist}
             fenHist={fenHist}

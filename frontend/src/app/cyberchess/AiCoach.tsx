@@ -417,14 +417,7 @@ export default function AiCoach({
       if (delta === null) return;
 
       const quality = classifyDelta(delta);
-
-      const isKeyMoment =
-        quality === "blunder" ||
-        quality === "mistake" ||
-        quality === "great" ||
-        moves.length <= 10;
-
-      if (!isKeyMoment) return;
+      // Comment on every move when live mode is on (was: only key moments)
 
       // Analyze the BEFORE position — this gives us the best alternative moves
       // that were available (so we can say "should have played X instead").
@@ -483,7 +476,7 @@ ${quality === "blunder" || quality === "mistake"
           body: JSON.stringify({
             system: SYSTEM_LIVE,
             messages: [{ role: "user", content: prompt }],
-            maxTokens: 200,
+            maxTokens: 400,
           }),
         });
         if (!res.ok) return;

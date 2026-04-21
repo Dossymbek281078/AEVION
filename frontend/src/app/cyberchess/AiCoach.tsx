@@ -236,7 +236,7 @@ export default function AiCoach({
   const [error, sError] = useState("");
   const [engineThinking, sEngineThinking] = useState(false);
 
-  const [liveMode, sLiveMode] = useState(false);
+  const [liveMode, sLiveMode] = useState(true);
   const [liveComments, sLiveComments] = useState<
     { move: number; san: string; comment: string; quality?: string }[]
   >([]);
@@ -545,12 +545,12 @@ ${quality === "blunder" || quality === "mistake"
       {liveMode && (
         <div style={{ borderBottom: "1px solid #e5e7eb" }}>
           <div style={{ padding: "6px 12px", background: "#fffbeb", fontSize: 10, fontWeight: 700, color: "#92400e" }}>
-            🔴 Live — комментирую только ключевые моменты (зевки, ошибки, отличные ходы, дебют)
+            🔴 Live — комментирую каждый ход после его совершения
           </div>
           <div ref={liveRef} style={{ maxHeight: 200, overflowY: "auto", padding: "6px 12px" }}>
             {liveComments.length === 0 && (
               <div style={{ fontSize: 10, color: "#9ca3af", padding: "8px 0", textAlign: "center" }}>
-                Играй дальше — скажу когда случится что-то важное
+                Жду твой ход — прокомментирую сразу после
               </div>
             )}
             {liveComments.map((c, i) => {

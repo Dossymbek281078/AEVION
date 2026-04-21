@@ -182,6 +182,7 @@ export default function CyberChessPage(){
   const[editorMode,sEditorMode]=useState(false);
   const[coachAIEnabled,sCoachAIEnabled]=useState(true);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
+  const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
@@ -1471,47 +1472,46 @@ export default function CyberChessPage(){
           </div>}
 
           {/* ── Coach Tab ── */}
-          {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {/* AI Toggle */}
-            <div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",gap:6}}>
-              <button onClick={()=>sCoachAIEnabled(true)} style={{flex:1,padding:"8px",borderRadius:7,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>🤖 С AI тренером</button>
-              <button onClick={()=>sCoachAIEnabled(false)} style={{flex:1,padding:"8px",borderRadius:7,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>✏️ Без AI (свободно)</button>
+          {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Combined AI Toggle + Level selector */}
+            <div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"8px 10px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <div style={{display:"flex",gap:4}}>
+                <button onClick={()=>sCoachAIEnabled(true)} style={{padding:"6px 10px",borderRadius:6,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>🤖 AI</button>
+                <button onClick={()=>sCoachAIEnabled(false)} style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>✏️ Свободно</button>
+              </div>
+              {coachAIEnabled&&<><span style={{width:1,height:20,background:T.border}}/>
+              <span style={{fontSize:11,color:T.dim,fontWeight:700}}>Уровень:</span>
+              <div style={{display:"flex",gap:3}}>
+                {([["beginner","🌱","до 1200"],["intermediate","📘","1200-1800"],["advanced","🏆","1800+"]] as const).map(([lv,ic,elo])=>
+                  <button key={lv} onClick={()=>sCoachLevel(lv)} title={elo} style={{padding:"6px 8px",borderRadius:5,border:coachLevel===lv?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachLevel===lv?"rgba(5,150,105,0.08)":"#fff",fontSize:14,cursor:"pointer"}}>{ic}</button>)}
+              </div></>}
             </div>
 
-            {/* Learning Level */}
-            {coachAIEnabled&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"10px 14px"}}>
-              <div style={{fontSize:11,fontWeight:800,color:T.dim,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>🎓 Уровень обучения</div>
-              <div style={{display:"flex",gap:6}}>
-                {([["beginner","🌱 Новичок","до 1200"],["intermediate","📘 Средний","1200-1800"],["advanced","🏆 Продвинутый","1800+"]] as const).map(([lv,label,elo])=>
-                  <button key={lv} onClick={()=>sCoachLevel(lv)} style={{flex:1,padding:"8px 6px",borderRadius:7,border:coachLevel===lv?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachLevel===lv?"rgba(5,150,105,0.08)":"#fff",color:coachLevel===lv?T.accent:T.dim,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span style={{fontSize:13,fontWeight:800}}>{label}</span>
-                    <span style={{fontSize:10,color:T.dim,fontWeight:600}}>{elo}</span>
-                  </button>)}
-              </div>
-            </div>}
-
-            {/* Learning Recommendations based on level */}
-            {coachAIEnabled&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#fef3c7,#fef9c3)",border:"1px solid #fde68a",padding:"12px 14px"}}>
-              <div style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>💡 Что изучать</div>
-              {coachLevel==="beginner"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
-                <div style={{marginBottom:6}}><b>Основы:</b> правила ходов, шах и мат, как ставится пат</div>
-                <div style={{marginBottom:6}}><b>Принципы:</b> развивай фигуры, контролируй центр, рокируй рано, не ходи одной фигурой дважды в дебюте</div>
-                <div style={{marginBottom:6}}><b>Задачи:</b> решай маты в 1-2 хода, учись видеть угрозы</div>
-                <div><b>Партии:</b> играй с ботами на уровне Beginner (800-1000) и задавай вопросы Coach'у</div>
-              </div>}
-              {coachLevel==="intermediate"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
-                <div style={{marginBottom:6}}><b>Тактика:</b> вилка, связка, двойной удар, открытое нападение, завлечение</div>
-                <div style={{marginBottom:6}}><b>Дебюты:</b> выбери 1-2 дебюта за белых и за чёрных, учи 10-15 ходов глубины</div>
-                <div style={{marginBottom:6}}><b>Задачи:</b> маты в 3-5 ходов, тактические комбинации</div>
-                <div style={{marginBottom:6}}><b>Эндшпиль:</b> король и ферзь vs король, ладейные эндшпили (правило Лусена, Филидора)</div>
-                <div><b>Партии:</b> анализируй свои партии в Analysis, ищи ошибки</div>
-              </div>}
-              {coachLevel==="advanced"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
-                <div style={{marginBottom:6}}><b>Стратегия:</b> слабые поля, форпосты, пешечная структура, хорошие/плохие слоны</div>
-                <div style={{marginBottom:6}}><b>Дебюты:</b> глубокая подготовка, свои варианты, изучение партий гроссмейстеров</div>
-                <div style={{marginBottom:6}}><b>Эндшпиль:</b> пешечные прорывы, оппозиция, цугцванг, технические эндшпили</div>
-                <div style={{marginBottom:6}}><b>Классика:</b> изучай партии Капабланки, Ботвинника, Фишера, Карлсена</div>
-                <div><b>Тренировка:</b> длинные партии с анализом, решение этюдов</div>
+            {/* Collapsible Learning Tips */}
+            {coachAIEnabled&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#fef3c7,#fef9c3)",border:"1px solid #fde68a",overflow:"hidden"}}>
+              <button onClick={()=>sCoachTipsExpanded(!coachTipsExpanded)} style={{width:"100%",padding:"8px 12px",border:"none",background:"transparent",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+                <span style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:"0.05em",textTransform:"uppercase" as const}}>💡 Что изучать · {coachLevel==="beginner"?"Новичок":coachLevel==="intermediate"?"Средний":"Продвинутый"}</span>
+                <span style={{fontSize:11,color:"#92400e",transform:coachTipsExpanded?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
+              </button>
+              {coachTipsExpanded&&<div style={{padding:"0 14px 12px"}}>
+                {coachLevel==="beginner"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
+                  <div style={{marginBottom:5}}><b>Основы:</b> правила ходов, шах и мат, пат</div>
+                  <div style={{marginBottom:5}}><b>Принципы:</b> развивай фигуры, контролируй центр, рокируй рано</div>
+                  <div style={{marginBottom:5}}><b>Задачи:</b> маты в 1-2 хода, угрозы</div>
+                  <div><b>Партии:</b> играй с ботами 800-1000 и спрашивай Coach'а</div>
+                </div>}
+                {coachLevel==="intermediate"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
+                  <div style={{marginBottom:5}}><b>Тактика:</b> вилка, связка, двойной удар, завлечение</div>
+                  <div style={{marginBottom:5}}><b>Дебюты:</b> выбери 1-2 за оба цвета, учи 10-15 ходов</div>
+                  <div style={{marginBottom:5}}><b>Эндшпиль:</b> ладейные (Лусена, Филидора), пешечные</div>
+                  <div><b>Партии:</b> анализируй свои в Analysis</div>
+                </div>}
+                {coachLevel==="advanced"&&<div style={{fontSize:12,lineHeight:1.6,color:"#78350f"}}>
+                  <div style={{marginBottom:5}}><b>Стратегия:</b> слабые поля, форпосты, пешечная структура</div>
+                  <div style={{marginBottom:5}}><b>Дебюты:</b> глубокая подготовка, партии гроссмейстеров</div>
+                  <div style={{marginBottom:5}}><b>Эндшпиль:</b> оппозиция, цугцванг, технические позиции</div>
+                  <div><b>Классика:</b> Капабланка, Фишер, Карлсен · этюды</div>
+                </div>}
               </div>}
             </div>}
             {/* Board Editor Toggle */}

@@ -182,6 +182,7 @@ export default function CyberChessPage(){
   const[editorMode,sEditorMode]=useState(false);
   const[coachAIEnabled,sCoachAIEnabled]=useState(true);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
+  const[refiningAnalysis,sRefiningAnalysis]=useState(false);
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
   const[flip,sFlip]=useState(false);
@@ -309,46 +310,71 @@ export default function CyberChessPage(){
     if(tab!=="analysis"&&tab!=="play"&&tab!=="coach")return;
     // Don't eval during AI thinking (Stockfish busy computing move)
     if(tab!=="analysis"&&think)return;
-    sfR.current.eval(game.fen(),10,(cp,mate)=>{
+    sfR.current.eval(game.fen(),15,(cp,mate)=>{
       const sign=game.turn()==="w"?1:-1;
       sEvalCp(cp*sign);sEvalMate(mate*sign);
     },()=>{});
   },[bk,tab,setup,think,over]);
 
-  // Auto-evaluate each move in analysis tab so user sees eval per move without clicking "Analyze all"
+  // Auto-evaluate each move in analysis tab — progressive: fast pass (d10), then refine (d18)
   useEffect(()=>{
     if(tab!=="analysis"||!sfR.current?.ready()||hist.length===0)return;
-    // Only analyze moves we haven't yet (analysis.length < hist.length)
-    if(analysis.length>=hist.length)return;
     let cancelled=false;
-    (async()=>{
-      const results=[...analysis];
-      const startIdx=results.length;
-      // Get prev eval (either last analyzed or initial)
-      let prevCp=startIdx>0?results[startIdx-1].cp:0;
-      // Normalize: prevCp should be the eval BEFORE the move to analyze, from the mover's perspective
-      for(let i=startIdx;i<hist.length;i++){
-        if(cancelled)return;
-        const fen=fenHist[i+1];if(!fen)break;
+
+    const evalAt=(fen:string,depth:number):Promise<{cp:number;mate:number}>=>{
+      return new Promise(res=>{
         const turn=fen.split(" ")[1];
-        const evalResult=await new Promise<{cp:number;mate:number}>(res=>{
-          let lastCp=0,lastMate=0;
-          sfR.current!.eval(fen,10,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
-        });
-        const moverWasWhite=turn==="b";
-        const prevFromMover=moverWasWhite?prevCp:-prevCp;
-        const currFromMover=moverWasWhite?evalResult.cp:-evalResult.cp;
-        const drop=prevFromMover-currFromMover;
-        let quality:"great"|"good"|"inacc"|"mistake"|"blunder"="good";
-        if(drop>=300)quality="blunder";
-        else if(drop>=150)quality="mistake";
-        else if(drop>=70)quality="inacc";
-        else if(drop<=-50)quality="great";
-        results.push({move:i+1,cp:evalResult.cp,mate:evalResult.mate,quality});
-        prevCp=evalResult.cp;
-        if(cancelled)return;
-        sAnalysis([...results]);
+        let lastCp=0,lastMate=0;
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+      });
+    };
+
+    const classifyMove=(prevCp:number,currCp:number,turn:string)=>{
+      const moverWasWhite=turn==="b";
+      const prevFromMover=moverWasWhite?prevCp:-prevCp;
+      const currFromMover=moverWasWhite?currCp:-currCp;
+      const drop=prevFromMover-currFromMover;
+      let quality:"great"|"good"|"inacc"|"mistake"|"blunder"="good";
+      if(drop>=300)quality="blunder";
+      else if(drop>=150)quality="mistake";
+      else if(drop>=70)quality="inacc";
+      else if(drop<=-50)quality="great";
+      return quality;
+    };
+
+    (async()=>{
+      // PHASE 1: Fast pass (depth 10) for moves not yet analyzed
+      if(analysis.length<hist.length){
+        const results=[...analysis];
+        let prevCp=results.length>0?results[results.length-1].cp:0;
+        for(let i=results.length;i<hist.length;i++){
+          if(cancelled)return;
+          const fen=fenHist[i+1];if(!fen)break;
+          const ev=await evalAt(fen,10);
+          const turn=fen.split(" ")[1];
+          results.push({move:i+1,cp:ev.cp,mate:ev.mate,quality:classifyMove(prevCp,ev.cp,turn)});
+          prevCp=ev.cp;
+          if(cancelled)return;
+          sAnalysis([...results]);
+        }
       }
+      // PHASE 2: Refine with depth 18 (slower but much more accurate)
+      if(cancelled)return;
+      const results2=[...(analysis.length>=hist.length?analysis:[])];
+      if(results2.length<hist.length)return; // wait for phase 1 to complete
+      sRefiningAnalysis(true);
+      let prevCp2=0;
+      for(let i=0;i<hist.length;i++){
+        if(cancelled){sRefiningAnalysis(false);return;}
+        const fen=fenHist[i+1];if(!fen)break;
+        const ev=await evalAt(fen,18);
+        const turn=fen.split(" ")[1];
+        results2[i]={move:i+1,cp:ev.cp,mate:ev.mate,quality:classifyMove(prevCp2,ev.cp,turn)};
+        prevCp2=ev.cp;
+        if(cancelled){sRefiningAnalysis(false);return;}
+        sAnalysis([...results2]);
+      }
+      sRefiningAnalysis(false);
     })();
     return()=>{cancelled=true};
   },[tab,hist.length,sfOk]);
@@ -610,7 +636,7 @@ export default function CyberChessPage(){
       const fen=fenHist[i];const turn=fen.split(" ")[1];
       const{cp,mate}=await new Promise<{cp:number;mate:number}>(res=>{
         let lastCp=0,lastMate=0;
-        sfR.current!.eval(fen,12,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+        sfR.current!.eval(fen,20,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
       });
       if(i>0){
         // Evaluate quality of move played that led to this position
@@ -1149,7 +1175,7 @@ export default function CyberChessPage(){
 
           <div ref={hR} style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
             <div style={{padding:"8px 14px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:12,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim}}>Ходы {hist.length>0&&<span style={{color:T.accent,marginLeft:4}}>· {Math.ceil(hist.length/2)}</span>}</span>
+              <span style={{fontSize:12,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim}}>Ходы {hist.length>0&&<span style={{color:T.accent,marginLeft:4}}>· {Math.ceil(hist.length/2)}</span>}{refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const}}>⚡ уточняю d18...</span>}</span>
               {hist.length>0&&<div style={{display:"flex",gap:3}}>
                 <button onClick={()=>{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
                 <button onClick={()=>{const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>

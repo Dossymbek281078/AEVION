@@ -236,6 +236,7 @@ export default function CyberChessPage(){
   const[pzFilterSide,sPzFilterSide]=useState<string>("all");
   const[pzFilterRating,sPzFilterRating]=useState<[number,number]>([0,3000]);
   const[pzFiltersExpanded,sPzFiltersExpanded]=useState(false);
+  const[pzCategory,sPzCategory]=useState<"all"|"tactics"|"mate1"|"mate2"|"mate3"|"mate4plus"|"endgame"|"opening"|"middlegame">("all");
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
@@ -245,6 +246,15 @@ export default function CyberChessPage(){
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
   const fPz=PUZZLES.filter(p=>{
+    // Category filter
+    if(pzCategory==="tactics"&&p.goal!=="Best move")return false;
+    if(pzCategory==="mate1"&&(p.goal!=="Mate"||p.mateIn!==1))return false;
+    if(pzCategory==="mate2"&&(p.goal!=="Mate"||p.mateIn!==2))return false;
+    if(pzCategory==="mate3"&&(p.goal!=="Mate"||p.mateIn!==3))return false;
+    if(pzCategory==="mate4plus"&&(p.goal!=="Mate"||!(p.mateIn&&p.mateIn>=4)))return false;
+    if(pzCategory==="opening"&&p.phase!=="Opening")return false;
+    if(pzCategory==="middlegame"&&p.phase!=="Middlegame")return false;
+    if(pzCategory==="endgame"&&p.phase!=="Endgame")return false;
     if(pzFilterGoal!=="all"&&p.goal!==pzFilterGoal)return false;
     if(pzFilterMate>0&&p.mateIn!==pzFilterMate)return false;
     if(pzFilterPhase!=="all"&&p.phase!==pzFilterPhase)return false;
@@ -767,7 +777,17 @@ export default function CyberChessPage(){
 
       {/* Tabs */}
       <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
-        {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{sTab(t);if(t==="play")sSetup(true);else if(t==="puzzles")ldPz(0);else if(t==="coach"){if(!on||setup)newG(pCol)}}} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:14,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
+        {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{
+          const fromPuzzle=tab==="puzzles"&&pzCurrent;
+          sTab(t);
+          if(t==="play")sSetup(true);
+          else if(t==="puzzles")ldPz(0);
+          else if(t==="coach"){if(!on||setup)newG(pCol)}
+          else if(t==="analysis"&&fromPuzzle){
+            // Reset to starting position when coming from puzzle
+            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
+          }
+        }} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:14,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
       </div>
 
       {/* LAUNCHPAD DASHBOARD */}
@@ -1304,6 +1324,45 @@ export default function CyberChessPage(){
               </div>
             </div>
 
+            {/* ── Category Selector ── */}
+            <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+              <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb"}}>
+                <span style={{fontSize:11,fontWeight:800,color:T.dim,letterSpacing:"0.06em",textTransform:"uppercase" as const}}>📂 Категория</span>
+              </div>
+              <div style={{padding:"8px",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>
+                {([
+                  ["all","🎲 Все задачи",T.text],
+                  ["tactics","⚡ Тактика",T.blue],
+                  ["mate1","♔ Мат в 1",T.accent],
+                  ["mate2","♔ Мат в 2",T.accent],
+                  ["mate3","♔ Мат в 3",T.accent],
+                  ["mate4plus","♔ Мат 4+",T.accent],
+                  ["opening","📖 Дебют",T.purple],
+                  ["middlegame","⚔️ Миттельшпиль",T.purple],
+                  ["endgame","🏁 Эндшпиль",T.purple],
+                ] as const).map(([cat,label,color])=>{
+                  // Count puzzles in this category
+                  const cnt=PUZZLES.filter(p=>{
+                    if(cat==="all")return true;
+                    if(cat==="tactics")return p.goal==="Best move";
+                    if(cat==="mate1")return p.goal==="Mate"&&p.mateIn===1;
+                    if(cat==="mate2")return p.goal==="Mate"&&p.mateIn===2;
+                    if(cat==="mate3")return p.goal==="Mate"&&p.mateIn===3;
+                    if(cat==="mate4plus")return p.goal==="Mate"&&!!p.mateIn&&p.mateIn>=4;
+                    if(cat==="opening")return p.phase==="Opening";
+                    if(cat==="middlegame")return p.phase==="Middlegame";
+                    if(cat==="endgame")return p.phase==="Endgame";
+                    return false;
+                  }).length;
+                  const active=pzCategory===cat;
+                  return<button key={cat} onClick={()=>{sPzCategory(cat);sPzI(0);}} style={{padding:"8px 6px",borderRadius:7,border:active?`2px solid ${color}`:`1px solid ${T.border}`,background:active?`${color}15`:"#fff",color:active?color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                    <span style={{fontSize:13,fontWeight:800}}>{label}</span>
+                    <span style={{fontSize:10,color:T.dim,fontWeight:700}}>{cnt}</span>
+                  </button>;
+                })}
+              </div>
+            </div>
+
             {/* ── Mode Selector ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,padding:"8px 10px"}}>
               <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.08em",textTransform:"uppercase" as const}}>Режим</div>
@@ -1368,17 +1427,23 @@ export default function CyberChessPage(){
               </div>
               <div style={{maxHeight:340,overflowY:"auto"}}>
                 {fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
-                fPz.slice(0,60).map((pz,i)=>(
-                  <button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"10px 14px",border:"none",borderBottom:i<Math.min(fPz.length,60)-1?`1px solid ${T.border}`:"none",background:pzI===i?"rgba(124,58,237,0.06)":"#fff",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",borderLeft:pzI===i?`3px solid ${T.purple}`:"3px solid transparent"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:1}}>
-                      <span style={{fontSize:18,color:pz.side==="w"?"#94a3b8":"#1e293b",flexShrink:0}}>{pz.side==="w"?"○":"●"}</span>
-                      <div style={{minWidth:0,flex:1}}>
-                        <div style={{fontSize:13,fontWeight:pzI===i?800:600,color:pzI===i?T.purple:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pz.name}</div>
-                        <div style={{fontSize:10,color:T.dim,marginTop:2}}>{pz.phase}{pz.theme?" · "+pz.theme:""}</div>
+                fPz.slice(0,60).map((pz,i)=>{
+                  // Build readable name: "Мат в 2 · f5+ Kxf5 · Эндшпиль"
+                  const goalLabel=pz.goal==="Mate"?`Мат в ${pz.mateIn||1}`:"Лучший ход";
+                  const sideLabel=pz.side==="w"?"⚪ Белые":"⚫ Чёрные";
+                  const phaseLabel=pz.phase==="Opening"?"📖 Дебют":pz.phase==="Middlegame"?"⚔️ Миттельшп.":pz.phase==="Endgame"?"🏁 Эндшп.":"";
+                  return(<button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"12px 14px",border:"none",borderBottom:i<Math.min(fPz.length,60)-1?`1px solid ${T.border}`:"none",background:pzI===i?"rgba(124,58,237,0.06)":"#fff",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,borderLeft:pzI===i?`3px solid ${T.purple}`:"3px solid transparent"}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:13,fontWeight:pzI===i?800:700,color:pzI===i?T.purple:T.text,marginBottom:3}}>#{i+1} · {goalLabel}</div>
+                      <div style={{fontSize:11,color:T.dim,display:"flex",gap:8,flexWrap:"wrap"}}>
+                        <span>{sideLabel}</span>
+                        {phaseLabel&&<span>{phaseLabel}</span>}
+                        {pz.theme&&<span style={{color:T.blue,fontWeight:600}}>{pz.theme}</span>}
                       </div>
                     </div>
-                    <span style={{fontSize:14,fontWeight:900,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger,padding:"3px 10px",borderRadius:5,background:pz.r<600?"#d1fae5":pz.r<1200?"#dbeafe":pz.r<1800?"#ede9fe":"#fee2e2",minWidth:52,textAlign:"center",flexShrink:0}}>{pz.r}</span>
-                  </button>))}
+                    <span style={{fontSize:14,fontWeight:900,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger,padding:"4px 12px",borderRadius:6,background:pz.r<600?"#d1fae5":pz.r<1200?"#dbeafe":pz.r<1800?"#ede9fe":"#fee2e2",minWidth:58,textAlign:"center",flexShrink:0}}>{pz.r}</span>
+                  </button>);
+                })}
               </div>
             </div>
           </div>}

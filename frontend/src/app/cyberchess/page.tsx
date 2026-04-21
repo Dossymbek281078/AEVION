@@ -602,7 +602,7 @@ export default function CyberChessPage(){
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
@@ -781,7 +781,7 @@ export default function CyberChessPage(){
           const fromPuzzle=tab==="puzzles"&&pzCurrent;
           sTab(t);
           if(t==="play")sSetup(true);
-          else if(t==="puzzles")ldPz(0);
+          else if(t==="puzzles"){sOver(null);ldPz(0);}
           else if(t==="coach"){if(!on||setup)newG(pCol)}
           else if(t==="analysis"&&fromPuzzle){
             // Reset to starting position when coming from puzzle
@@ -1064,18 +1064,14 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Status bar */}
-          <div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think&&tab!=="analysis"?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
+          {(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think&&tab!=="analysis"?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
             {over?<><div style={{fontWeight:900,fontSize:15,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:13,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
-            tab==="analysis"?<div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:8,height:8,borderRadius:4,background:T.purple}}/>
-              <span style={{fontWeight:700,fontSize:14,color:T.text}}>Анализ · {game.turn()==="w"?"Ход белых":"Ход чёрных"}</span>
-            </div>:
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:8,height:8,borderRadius:4,background:chk?T.danger:think?T.gold:myT?T.accent:T.dim,animation:think?"pulse 1s infinite":"none"}}/>
               <span style={{fontWeight:700,fontSize:14,color:T.text}}>{chk?"Check!":think?(useSF?"Stockfish…":"Thinking…"):myT?"Your move":"Ход AI"}</span>
               {pms.length>0&&<span style={{padding:"2px 8px",borderRadius:5,fontSize:12,fontWeight:800,background:"#dbeafe",color:T.blue,marginLeft:"auto"}}>{pms.length} premove{pms.length>1?"s":""}</span>}
             </div>}
-          </div>
+          </div>}
 
           {/* My player block (bottom = me) */}
           {!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:T.surface,border:`1px solid ${myT&&on&&!over?T.accent:T.border}`,display:"flex",alignItems:"center",gap:10,boxShadow:myT&&on&&!over?"0 0 0 2px rgba(5,150,105,0.15)":"none"}}>
@@ -1425,23 +1421,23 @@ export default function CyberChessPage(){
                 <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Задачи</span>
                 <span style={{fontSize:11,color:T.dim,fontWeight:600}}>{fPz.length>60?`показ. 60 из ${fPz.length}`:`${fPz.length}`}</span>
               </div>
-              <div style={{maxHeight:340,overflowY:"auto"}}>
+              <div style={{maxHeight:520,overflowY:"auto"}}>
                 {fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
-                fPz.slice(0,60).map((pz,i)=>{
+                fPz.slice(0,100).map((pz,i)=>{
                   // Build readable name: "Мат в 2 · f5+ Kxf5 · Эндшпиль"
                   const goalLabel=pz.goal==="Mate"?`Мат в ${pz.mateIn||1}`:"Лучший ход";
                   const sideLabel=pz.side==="w"?"⚪ Белые":"⚫ Чёрные";
                   const phaseLabel=pz.phase==="Opening"?"📖 Дебют":pz.phase==="Middlegame"?"⚔️ Миттельшп.":pz.phase==="Endgame"?"🏁 Эндшп.":"";
-                  return(<button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"12px 14px",border:"none",borderBottom:i<Math.min(fPz.length,60)-1?`1px solid ${T.border}`:"none",background:pzI===i?"rgba(124,58,237,0.06)":"#fff",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,borderLeft:pzI===i?`3px solid ${T.purple}`:"3px solid transparent"}}>
+                  return(<button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"14px 16px",border:"none",borderBottom:i<Math.min(fPz.length,100)-1?`1px solid ${T.border}`:"none",background:pzI===i?"rgba(124,58,237,0.06)":"#fff",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,borderLeft:pzI===i?`4px solid ${T.purple}`:"4px solid transparent"}}>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:13,fontWeight:pzI===i?800:700,color:pzI===i?T.purple:T.text,marginBottom:3}}>#{i+1} · {goalLabel}</div>
-                      <div style={{fontSize:11,color:T.dim,display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <div style={{fontSize:15,fontWeight:pzI===i?900:700,color:pzI===i?T.purple:T.text,marginBottom:4}}>#{i+1} · {goalLabel}</div>
+                      <div style={{fontSize:12,color:T.dim,display:"flex",gap:10,flexWrap:"wrap"}}>
                         <span>{sideLabel}</span>
                         {phaseLabel&&<span>{phaseLabel}</span>}
                         {pz.theme&&<span style={{color:T.blue,fontWeight:600}}>{pz.theme}</span>}
                       </div>
                     </div>
-                    <span style={{fontSize:14,fontWeight:900,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger,padding:"4px 12px",borderRadius:6,background:pz.r<600?"#d1fae5":pz.r<1200?"#dbeafe":pz.r<1800?"#ede9fe":"#fee2e2",minWidth:58,textAlign:"center",flexShrink:0}}>{pz.r}</span>
+                    <span style={{fontSize:16,fontWeight:900,color:pz.r<600?T.accent:pz.r<1200?T.blue:pz.r<1800?T.purple:T.danger,padding:"6px 14px",borderRadius:7,background:pz.r<600?"#d1fae5":pz.r<1200?"#dbeafe":pz.r<1800?"#ede9fe":"#fee2e2",minWidth:68,textAlign:"center",flexShrink:0}}>{pz.r}</span>
                   </button>);
                 })}
               </div>
@@ -1689,9 +1685,9 @@ export default function CyberChessPage(){
             quickEval={quickEvalPromise}
           />}
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
+          {tab==="play"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:13,color:T.dim}}>{s.l}</div></div>)}
-          </div>
+          </div>}
         </div>
       </div>}
 

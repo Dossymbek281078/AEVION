@@ -1088,66 +1088,82 @@ export default function CyberChessPage(){
             <div style={{fontSize:14,color:T.dim,lineHeight:1.4}}>{currentOpening.desc}</div>
           </div>}
 
-          {/* Game Stats — shown after full analysis */}
+          {/* Game Stats — per-side breakdown with eval graph */}
           {showAnal&&analysis.length>0&&(()=>{
-            const blunders=analysis.filter(a=>a.quality==="blunder").length;
-            const mistakes=analysis.filter(a=>a.quality==="mistake").length;
-            const inaccs=analysis.filter(a=>a.quality==="inacc").length;
-            const greats=analysis.filter(a=>a.quality==="great").length;
-            // ACPL = average centipawn loss — compute from drops between moves
-            let totalLoss=0,losses=0;
-            for(let i=1;i<analysis.length;i++){
-              const prev=analysis[i-1];const curr=analysis[i];
-              const moverWasWhite=i%2===0; // after i moves, mover is (i-1)'th side
-              const prevFromMover=moverWasWhite?prev.cp:-prev.cp;
-              const currFromMover=moverWasWhite?curr.cp:-curr.cp;
-              const drop=Math.max(0,prevFromMover-currFromMover);
-              totalLoss+=Math.min(drop,1000); // cap at 10 pawns
-              losses++;
+            // Per-side stats
+            const wStats={great:0,good:0,inacc:0,mistake:0,blunder:0,totalLoss:0,count:0};
+            const bStats={great:0,good:0,inacc:0,mistake:0,blunder:0,totalLoss:0,count:0};
+            for(let i=0;i<analysis.length;i++){
+              const isWhite=i%2===0;
+              const stats=isWhite?wStats:bStats;
+              stats[analysis[i].quality]++;
+              stats.count++;
+              if(i>0){
+                const prev=analysis[i-1].cp;const curr=analysis[i].cp;
+                const prevFromMover=isWhite?prev:-prev;
+                const currFromMover=isWhite?curr:-curr;
+                const drop=Math.max(0,prevFromMover-currFromMover);
+                stats.totalLoss+=Math.min(drop,1000);
+              }
             }
-            const acpl=losses>0?Math.round(totalLoss/losses):0;
-            const accuracy=Math.max(0,Math.min(100,Math.round(100-acpl/8)));
-            return(<div style={{borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0",padding:"12px 14px"}}>
-              <div style={{fontSize:12,fontWeight:800,color:T.accent,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:10}}>📊 Статистика партии</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
-                <div style={{background:"#fff",borderRadius:7,padding:"8px 10px",textAlign:"center"}}>
-                  <div style={{fontSize:22,fontWeight:900,color:T.accent,lineHeight:1}}>{accuracy}%</div>
-                  <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:3,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Точность</div>
+            const wAcpl=wStats.count>0?Math.round(wStats.totalLoss/wStats.count):0;
+            const bAcpl=bStats.count>0?Math.round(bStats.totalLoss/bStats.count):0;
+            const wAcc=Math.max(0,Math.min(100,Math.round(100-wAcpl/8)));
+            const bAcc=Math.max(0,Math.min(100,Math.round(100-bAcpl/8)));
+            const accColor=(acc:number)=>acc>=85?T.accent:acc>=70?T.blue:acc>=50?"#ca8a04":T.danger;
+            // Eval graph points
+            const graphPoints=analysis.map((a,i)=>{
+              const v=a.mate!==0?(a.mate>0?10:-10):Math.max(-10,Math.min(10,a.cp/100));
+              return{i,v,quality:a.quality};
+            });
+            const sideStat=(name:string,color:string,s:typeof wStats,acc:number,acpl:number,icon:string)=>(
+              <div style={{flex:1,padding:"12px",borderRadius:9,background:color==="w"?"#fff":"#1e293b",border:`1px solid ${color==="w"?T.border:"#334155"}`,color:color==="w"?T.text:"#f1f5f9"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:18}}>{icon}</span>
+                    <span style={{fontSize:12,fontWeight:800,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{name}</span>
+                  </div>
+                  <div style={{fontSize:22,fontWeight:900,color:accColor(acc),lineHeight:1,fontFamily:"monospace"}}>{acc}%</div>
                 </div>
-                <div style={{background:"#fff",borderRadius:7,padding:"8px 10px",textAlign:"center"}}>
-                  <div style={{fontSize:22,fontWeight:900,color:T.purple,lineHeight:1}}>{acpl}</div>
-                  <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:3,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>ACPL</div>
+                <div style={{fontSize:10,color:color==="w"?T.dim:"#94a3b8",fontWeight:700,marginBottom:6}}>Потеря сантипешек: <b style={{color:color==="w"?T.text:"#f1f5f9"}}>{acpl}</b></div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4}}>
+                  {[["!",s.great,T.accent,"great"],["○",s.good,color==="w"?T.dim:"#94a3b8","good"],["?!",s.inacc,"#ca8a04","inacc"],["?",s.mistake,"#ea580c","mistake"],["??",s.blunder,T.danger,"blunder"]].map(([sym,v,col,k])=>(
+                    <div key={k as string} style={{padding:"5px 2px",borderRadius:5,background:color==="w"?"#f9fafb":"#0f172a",textAlign:"center",border:`1px solid ${color==="w"?T.border:"#334155"}`}}>
+                      <div style={{fontSize:11,fontWeight:900,color:col as string,lineHeight:1}}>{sym as string}</div>
+                      <div style={{fontSize:13,fontWeight:900,color:color==="w"?T.text:"#f1f5f9",lineHeight:1.2,marginTop:2}}>{v as number}</div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{background:"#fff",borderRadius:7,padding:"8px 10px",textAlign:"center"}}>
-                  <div style={{fontSize:22,fontWeight:900,color:T.text,lineHeight:1}}>{analysis.length}</div>
-                  <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:3,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Ходов</div>
+              </div>);
+            return(<div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {/* Eval graph */}
+              <div style={{borderRadius:10,background:"#0f172a",padding:"10px 12px",border:"1px solid #334155"}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
+                  <span>📈 График оценки</span>
+                  <span style={{fontSize:10,color:"#64748b"}}>{analysis.length} ходов</span>
                 </div>
+                <svg viewBox={`0 0 ${Math.max(100,analysis.length*4)} 80`} preserveAspectRatio="none" style={{width:"100%",height:80,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 50%,#1e293b 100%)",borderRadius:6}}>
+                  <line x1="0" y1="40" x2={analysis.length*4} y2="40" stroke="#475569" strokeWidth="0.5" strokeDasharray="2,2"/>
+                  {/* White area above midline */}
+                  <polygon fill="rgba(5,150,105,0.25)" points={`0,40 ${graphPoints.map(p=>`${p.i*4},${40-p.v*3.5}`).join(" ")} ${(analysis.length-1)*4},40`}/>
+                  {/* Line */}
+                  <polyline fill="none" stroke="#10b981" strokeWidth="1.5" points={graphPoints.map(p=>`${p.i*4},${40-p.v*3.5}`).join(" ")}/>
+                  {/* Mistake/blunder dots */}
+                  {graphPoints.map(p=>{
+                    if(p.quality==="blunder")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="2" fill="#ef4444"/>;
+                    if(p.quality==="mistake")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="1.8" fill="#f97316"/>;
+                    if(p.quality==="great")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="1.5" fill="#10b981"/>;
+                    return null;
+                  })}
+                </svg>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
-                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #a7f3d0"}}>
-                  <div style={{fontSize:16,fontWeight:900,color:T.accent,lineHeight:1}}>!</div>
-                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{greats}</div>
-                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>отличные</div>
-                </div>
-                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #fde68a"}}>
-                  <div style={{fontSize:16,fontWeight:900,color:"#ca8a04",lineHeight:1}}>?!</div>
-                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{inaccs}</div>
-                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>неточности</div>
-                </div>
-                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #fdba74"}}>
-                  <div style={{fontSize:16,fontWeight:900,color:"#ea580c",lineHeight:1}}>?</div>
-                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{mistakes}</div>
-                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>ошибки</div>
-                </div>
-                <div style={{background:"#fff",borderRadius:6,padding:"6px 8px",textAlign:"center",border:"1px solid #fca5a5"}}>
-                  <div style={{fontSize:16,fontWeight:900,color:T.danger,lineHeight:1}}>??</div>
-                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1,marginTop:2}}>{blunders}</div>
-                  <div style={{fontSize:9,color:T.dim,fontWeight:700,marginTop:2}}>зевки</div>
-                </div>
+              {/* Per-side stats */}
+              <div style={{display:"flex",gap:8}}>
+                {sideStat("Белые","w",wStats,wAcc,wAcpl,"⚪")}
+                {sideStat("Чёрные","b",bStats,bAcc,bAcpl,"⚫")}
               </div>
             </div>);
           })()}
-          </div>}
 
           {pms.length>0&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>

@@ -239,6 +239,8 @@ export default function CyberChessPage(){
   const[pzFilterRating,sPzFilterRating]=useState<[number,number]>([0,3000]);
   const[pzFiltersExpanded,sPzFiltersExpanded]=useState(false);
   const[pzCategory,sPzCategory]=useState<"all"|"tactics"|"mate1"|"mate2"|"mate3"|"mate4plus"|"endgame"|"opening"|"middlegame">("all");
+  const[puzzleListOpen,sPuzzleListOpen]=useState(false);
+  const[gamesModalOpen,sGamesModalOpen]=useState(false);
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
@@ -347,7 +349,9 @@ export default function CyberChessPage(){
       return new Promise(res=>{
         const turn=fen.split(" ")[1];
         let lastCp=0,lastMate=0;
-        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+        let done=false;
+        const timeout=setTimeout(()=>{if(!done){done=true;res({cp:lastCp,mate:lastMate})}},8000);
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>{if(!done){done=true;clearTimeout(timeout);res({cp:lastCp,mate:lastMate})}});
       });
     };
 
@@ -1096,7 +1100,15 @@ export default function CyberChessPage(){
               const rec=new SR();rec.lang="ru-RU";rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=3;
               rec.onstart=()=>{sVoiceListening(true);showToast("Говорите: 'е2 е4' или 'конь f3'","info")};
               rec.onend=()=>{sVoiceListening(false);voiceRecRef.current=null};
-              rec.onerror=(e:any)=>{sVoiceListening(false);showToast(`Ошибка: ${e.error}`,"error")};
+              rec.onerror=(e:any)=>{sVoiceListening(false);
+                if(e.error==="network"){
+                  showToast("Голосу нужен интернет (Chrome speech API). Попробуй ввести ход вручную","error");
+                }else if(e.error==="not-allowed"){
+                  showToast("Разреши доступ к микрофону в браузере","error");
+                }else{
+                  showToast(`Ошибка: ${e.error}`,"error");
+                }
+              };
               rec.onresult=(e:any)=>{
                 // Try all alternatives
                 const alts:string[]=[];
@@ -1140,6 +1152,16 @@ export default function CyberChessPage(){
               };
               voiceRecRef.current=rec;rec.start();
             },voiceListening?"#fee2e2":T.surface,voiceListening?T.danger:T.dim)}
+            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn("⌨️ Ход текстом",()=>{
+              const input=prompt("Введи ход в алгебраической нотации (например: e4, Nf3, O-O, exd5):");
+              if(!input)return;
+              const san=input.trim();
+              try{
+                const mv=game.move(san);
+                if(mv){game.undo();const legal=game.moves({verbose:true}).find(x=>x.san===mv.san);if(legal){exec(legal.from,legal.to);showToast(`✓ ${san}`,"success")}}
+                else showToast(`Невозможный ход: ${san}`,"error");
+              }catch{showToast(`Невозможный ход: ${san}`,"error")}
+            },T.surface,T.dim)}
             {over&&btn("Rematch",()=>newG(),"#f59e0b","#fff","none")}
             {pms.length>0&&btn(`↩ Undo`,()=>sPms(p=>p.slice(0,-1)),"#eff6ff",T.blue,`1px solid rgba(37,99,235,0.3)`)}
             {pms.length>0&&btn(`✕ Clear (${pms.length})`,()=>{sPms([]);sPmSel(null)},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
@@ -1149,7 +1171,7 @@ export default function CyberChessPage(){
             {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
             {btn("↩ Take back",()=>{if(hist.length>=2){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1)}else showToast("No moves","error")},T.surface,T.dim)}
             {savedGames.length>0&&(tab==="play"||tab==="coach")&&btn(`📜 История (${savedGames.length})`,()=>{
-              sSetup(true);sOn(false);sOver(null);
+              sGamesModalOpen(true);
             },T.surface,T.dim)}
           </div>}
           {over&&fenHist.length>2&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
@@ -1161,7 +1183,7 @@ export default function CyberChessPage(){
             },T.purple,"#fff","none")}
             {btn(analyzing?"⚡ Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze",runAnalysis,T.accent,"#fff","none")}
             {savedGames.length>0&&btn(`📜 История (${savedGames.length})`,()=>{
-              sSetup(true);sOn(false);sOver(null);
+              sGamesModalOpen(true);
             },T.surface,T.dim)}
           </div>}
         </div>
@@ -1532,12 +1554,13 @@ export default function CyberChessPage(){
               </div>}
             </div>
 
-            {/* ── Puzzle List ── */}
+            {/* ── Puzzle List (collapsible) ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-              <div style={{padding:"8px 14px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Задачи</span>
-                <span style={{fontSize:11,color:T.dim,fontWeight:600}}>{fPz.length>60?`показ. 60 из ${fPz.length}`:`${fPz.length}`}</span>
-              </div>
+              <button onClick={()=>sPuzzleListOpen(!puzzleListOpen)} style={{width:"100%",padding:"10px 14px",borderBottom:puzzleListOpen?`1px solid ${T.border}`:"none",background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center",border:"none",cursor:"pointer"}}>
+                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 Список задач ({fPz.length})</span>
+                <span style={{fontSize:11,color:T.dim,fontWeight:700,transform:puzzleListOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
+              </button>
+              {puzzleListOpen&&<>
               <div style={{maxHeight:520,overflowY:"auto"}}>
                 {fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
                 fPz.slice(0,100).map((pz,i)=>{
@@ -1558,6 +1581,7 @@ export default function CyberChessPage(){
                   </button>);
                 })}
               </div>
+              </>}
             </div>
           </div>}
 
@@ -1861,5 +1885,104 @@ export default function CyberChessPage(){
         </div>
       </div>}
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+    {/* Games History Modal */}
+    {gamesModalOpen&&(()=>{
+      const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);
+      const[categoryFilter,sCategoryFilter]=[gamesFilter,sGamesFilter];
+      const filtered=byCategory(categoryFilter);
+      // Rating history: reverse order (oldest first)
+      const ratingHistory=[...savedGames].reverse().map((g,i)=>({x:i,y:g.rating}));
+      const minR=Math.min(...ratingHistory.map(p=>p.y),rat)-50;
+      const maxR=Math.max(...ratingHistory.map(p=>p.y),rat)+50;
+      const range=Math.max(100,maxR-minR);
+      // Stats by category
+      const catStats=(cat:string)=>{
+        const games=byCategory(cat);
+        const wins=games.filter(g=>g.result.includes("You win")||g.result.includes("win!")).length;
+        const losses=games.filter(g=>g.result.includes("AI wins")||g.result.includes("resigned")).length;
+        const draws=games.length-wins-losses;
+        return{total:games.length,wins,losses,draws};
+      };
+      return<div onClick={()=>sGamesModalOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:900,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div>
+              <div style={{fontSize:22,fontWeight:900,color:T.text}}>📜 Мои партии</div>
+              <div style={{fontSize:13,color:T.dim,marginTop:2}}>{savedGames.length} партий · текущий рейтинг {rat}</div>
+            </div>
+            <button onClick={()=>sGamesModalOpen(false)} style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕ Закрыть</button>
+          </div>
+
+          {/* Rating chart */}
+          {ratingHistory.length>1&&<div style={{background:"#0f172a",borderRadius:10,padding:"14px 16px",marginBottom:14,border:"1px solid #334155"}}>
+            <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
+              <span>📈 Прогресс рейтинга</span>
+              <span style={{fontSize:10,color:"#64748b"}}>{minR} — {maxR}</span>
+            </div>
+            <svg viewBox={`0 0 ${Math.max(100,ratingHistory.length*8)} 80`} preserveAspectRatio="none" style={{width:"100%",height:90,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 100%)",borderRadius:6}}>
+              <line x1="0" y1="40" x2={ratingHistory.length*8} y2="40" stroke="#475569" strokeWidth="0.3" strokeDasharray="2,2"/>
+              <polyline fill="none" stroke="#7c3aed" strokeWidth="1.8" points={ratingHistory.map(p=>`${p.x*8},${80-((p.y-minR)/range)*80}`).join(" ")}/>
+              {ratingHistory.map(p=><circle key={p.x} cx={p.x*8} cy={80-((p.y-minR)/range)*80} r="1.8" fill="#a78bfa"/>)}
+            </svg>
+          </div>}
+
+          {/* Category stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+            {(["all","Bullet","Blitz","Rapid"] as const).map(cat=>{
+              const s=catStats(cat);const active=categoryFilter===cat;
+              const icon=cat==="Bullet"?"⚡":cat==="Blitz"?"🔥":cat==="Rapid"?"⏱":"🎯";
+              const pct=s.total>0?Math.round(s.wins/s.total*100):0;
+              return<button key={cat} onClick={()=>sCategoryFilter(cat)} style={{padding:"12px",borderRadius:9,border:active?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:active?"rgba(5,150,105,0.06)":"#fff",cursor:"pointer",textAlign:"left"}}>
+                <div style={{fontSize:14,fontWeight:900,color:active?T.accent:T.text,marginBottom:6}}>{icon} {cat==="all"?"Все":cat}</div>
+                <div style={{fontSize:22,fontWeight:900,color:T.text,lineHeight:1}}>{s.total}</div>
+                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:4,textTransform:"uppercase" as const,letterSpacing:"0.05em"}}>партий</div>
+                {s.total>0&&<div style={{marginTop:8,display:"flex",gap:6,fontSize:11,fontWeight:800}}>
+                  <span style={{color:T.accent}}>{s.wins}W</span>
+                  <span style={{color:T.danger}}>{s.losses}L</span>
+                  <span style={{color:T.dim}}>{s.draws}D</span>
+                  <span style={{marginLeft:"auto",color:pct>=60?T.accent:pct>=40?T.blue:T.danger}}>{pct}%</span>
+                </div>}
+              </button>;
+            })}
+          </div>
+
+          {/* Games list */}
+          <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:400,overflowY:"auto"}}>
+            {filtered.length===0?<div style={{padding:"40px",textAlign:"center",color:T.dim,fontSize:14}}>Нет партий в этой категории</div>:
+            filtered.map(g=>{
+              const isWin=g.result.includes("You win")||g.result.includes("win!");
+              const isDraw=g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+              const date=new Date(g.date);
+              return<button key={g.id} onClick={()=>{
+                sGamesModalOpen(false);sTab("analysis");
+                const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
+                for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
+                setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+                showToast(`Партия открыта · ${mh.length} ходов`,"success");
+              }} style={{width:"100%",padding:"12px 16px",border:"none",borderBottom:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0,flex:1}}>
+                  <span style={{fontSize:16,fontWeight:900,color:isWin?T.accent:isDraw?T.dim:T.danger,minWidth:24,textAlign:"center"}}>{isWin?"W":isDraw?"D":"L"}</span>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:2}}>{g.opening||"Без дебюта"}</div>
+                    <div style={{fontSize:11,color:T.dim,display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <span>{g.category||"—"}</span>
+                      <span>· {g.aiLevel}</span>
+                      <span>· {g.tc}</span>
+                      <span>· {g.moves.length} ходов</span>
+                      <span>· {g.playerColor==="w"?"⚪":"⚫"}</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
+                  <div style={{fontSize:13,fontWeight:900,color:T.text}}>{g.rating}</div>
+                  <div style={{fontSize:10,color:T.dim,marginTop:2}}>{date.toLocaleDateString("ru-RU")}</div>
+                </div>
+              </button>;
+            })}
+          </div>
+        </div>
+      </div>;
+    })()}
+
     </ProductPageShell></main>);
 }

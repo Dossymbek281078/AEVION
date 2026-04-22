@@ -22,6 +22,7 @@ import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
 import { DeviceManagement } from "./_components/DeviceManagement";
+import { GiftMode } from "./_components/GiftMode";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
@@ -312,6 +313,13 @@ function BankContent() {
           <SocialCircles
             myAccountId={account.id}
             myNickname={me.name || me.email}
+            balance={account.balance}
+            send={send}
+            notify={notify}
+          />
+
+          <GiftMode
+            myAccountId={account.id}
             balance={account.balance}
             send={send}
             notify={notify}

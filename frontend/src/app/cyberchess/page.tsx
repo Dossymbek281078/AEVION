@@ -64,7 +64,9 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
   ready(){return this.ok&&!!this.w}
   go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
   eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}}
+  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
+  terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[]}}}
 
 /* ═══ Minimax ═══ */
 const PV:Record<PieceSymbol,number>={p:100,n:320,b:330,r:500,q:900,k:0};
@@ -327,18 +329,44 @@ export default function CyberChessPage(){
   // Always load Stockfish for eval bar (not just for AI play)
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
   // Live eval on position change - for play/coach/analysis tabs
+  // Hardened: 8s timeout + abort on cleanup (prevents stuck worker when user scrolls history fast)
   useEffect(()=>{
     if(setup||!sfR.current?.ready())return;
     if(tab!=="analysis"&&tab!=="play"&&tab!=="coach")return;
-    // In play/coach respect over state (game ended), but in analysis keep evaluating
     if(tab!=="analysis"&&over)return;
-    // Don't eval during AI thinking (Stockfish busy computing move)
     if(tab!=="analysis"&&think)return;
+    let done=false;
+    const sign=game.turn()==="w"?1:-1;
+    const to=setTimeout(()=>{
+      if(done)return;
+      done=true;
+      console.warn("[auto-eval] timeout 8s — abort, keep previous eval");
+      sfR.current?.stop();
+    },8000);
     sfR.current.eval(game.fen(),15,(cp,mate)=>{
-      const sign=game.turn()==="w"?1:-1;
+      if(done)return;
       sEvalCp(cp*sign);sEvalMate(mate*sign);
-    },()=>{});
-  },[bk,tab,setup,think,over]);
+    },()=>{done=true;clearTimeout(to)});
+    return()=>{done=true;clearTimeout(to);sfR.current?.stop()};
+  },[bk,tab,setup,think,over,sfOk]);
+
+  // History nav: terminate + reinit Stockfish when user stops navigating (debounced 200ms)
+  // Prevents busy worker from showing stale eval after rapid arrow scrolling
+  const navInitRef=useRef(0);
+  useEffect(()=>{
+    navInitRef.current++;
+    if(navInitRef.current<=1)return; // skip initial mount
+    const t=setTimeout(()=>{
+      if(!sfR.current)return;
+      console.log("[auto-eval] history nav → reinit Stockfish");
+      sfR.current.terminate();
+      const s=new SF();s.init();sfR.current=s;sSfOk(false);
+      const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
+      const killCheck=setTimeout(()=>clearInterval(c),15000);
+      return()=>{clearInterval(c);clearTimeout(killCheck)};
+    },200);
+    return()=>clearTimeout(t);
+  },[browseIdx]);
 
   // Auto-evaluate each move in analysis tab — progressive: fast pass (d10), then refine (d18)
   useEffect(()=>{

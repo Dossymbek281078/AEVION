@@ -26,6 +26,7 @@ import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { SavingsGoals } from "./_components/SavingsGoals";
+import { SocialCircles } from "./_components/SocialCircles";
 import { SpendingInsights } from "./_components/SpendingInsights";
 import { SplitBills } from "./_components/SplitBills";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
@@ -307,6 +308,14 @@ function BankContent() {
           <SpendingInsights accountId={account.id} operations={operations} />
 
           <SplitBills myAccountId={account.id} notify={notify} />
+
+          <SocialCircles
+            myAccountId={account.id}
+            myNickname={me.name || me.email}
+            balance={account.balance}
+            send={send}
+            notify={notify}
+          />
 
           <TransactionList
             myId={account.id}

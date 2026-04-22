@@ -19,6 +19,7 @@ import { AccountIdCard } from "./_components/AccountIdCard";
 import { BankHero } from "./_components/BankHero";
 import { ChessWinnings } from "./_components/ChessWinnings";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
+import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
 import { SendForm } from "./_components/SendForm";
@@ -51,11 +52,19 @@ function BankContent() {
     return decodePaymentRequest(sp);
   }, [searchParams]);
 
-  const handleSend = async (to: string, amount: number) => {
-    const ok = await send(to, amount);
-    if (ok) showToast(`Sent ${amount.toFixed(2)} AEC`, "success");
-    return ok;
-  };
+  const handleSend = useCallback(
+    async (to: string, amount: number) => {
+      const ok = await send(to, amount);
+      if (ok) showToast(`Sent ${amount.toFixed(2)} AEC`, "success");
+      return ok;
+    },
+    [send, showToast],
+  );
+
+  const notify = useCallback(
+    (msg: string, type: "success" | "error" | "info" = "info") => showToast(msg, type),
+    [showToast],
+  );
 
   const handleTopup = async (amount: number) => {
     const ok = await topup(amount);
@@ -275,6 +284,13 @@ function BankContent() {
               onError={onError}
             />
           </div>
+
+          <RecurringPayments
+            myAccountId={account.id}
+            balance={account.balance}
+            send={send}
+            notify={notify}
+          />
 
           <TransactionList
             myId={account.id}

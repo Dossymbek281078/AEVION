@@ -482,15 +482,18 @@ export default function CyberChessPage(){
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
-    if(game.turn()!==pCol||over||!pms.length)return;
+    const curPms=pmsRef.current;
+    if(game.turn()!==pCol||over||!curPms.length)return;
     // Skip invalid premoves at the head of the queue until we find a valid one
     const mvs=game.moves({verbose:true});
     let idx=0;
-    while(idx<pms.length){
-      const pm=pms[idx];
-      const ok=mvs.find(m=>m.from===pm.from&&m.to===pm.to);
+    while(idx<curPms.length){
+      const pm=curPms[idx];
+      const ok=mvs.find(m=>m.from===pm.from&&m.to===pm.to&&(pm.pr?m.promotion===pm.pr:!m.promotion));
       if(ok){
-        const rest=pms.slice(idx+1);
+        const rest=curPms.slice(idx+1);
+        if(idx>0)console.log("[premove] drop",idx,"invalid head entr"+(idx===1?"y":"ies"));
+        console.log("[premove] apply",pm.from+"→"+pm.to+(pm.pr?"="+pm.pr:""));
         sPms(rest);
         exec(pm.from,pm.to,pm.pr);
         snd("premove");
@@ -499,8 +502,9 @@ export default function CyberChessPage(){
       idx++;
     }
     // None of the premoves is valid → clear all
+    console.log("[premove] drop all",curPms.length,"queued (none valid)");
     sPms([]);
-  },[game,over,pms,pCol,exec]);
+  },[game,over,pCol,exec]);
   const doPremoveRef=useRef(doPremove);
   useEffect(()=>{doPremoveRef.current=doPremove},[doPremove]);
 
@@ -545,7 +549,7 @@ export default function CyberChessPage(){
     if(game.turn()!==pCol||pms.length===0)return;
     const t=setTimeout(()=>doPremoveRef.current(),20);
     return()=>clearTimeout(t);
-  },[bk,over,on,tab,pms.length,pCol]);
+  },[bk,over,on,tab,pms,pCol]);
 
   /* ── AI turn trigger ── */
   useEffect(()=>{
@@ -612,7 +616,9 @@ export default function CyberChessPage(){
         if(curPms.length>=pmLim){sPmSel(null);return}
         // Create premove (even onto own piece - it may be captured by opponent first)
         const pre:Pre={from:curPmSel,to:sq};
-        if(selPiece?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";
+        const promoRank=pCol==="w"?"8":"1";
+        if(selPiece?.type==="p"&&sq[1]===promoRank)pre.pr="q";
+        console.log("[premove] queued",curPmSel+"→"+sq+(pre.pr?"="+pre.pr:""));
         sPms(v=>[...v,pre]);
         sPmSel(null);
         snd("premove");
@@ -647,7 +653,7 @@ export default function CyberChessPage(){
   const dRef=useRef<Square|null>(null);
   const dS=(sq:Square)=>{const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
   const dD=(sq:Square)=>{if(!dRef.current)return;const f=dRef.current;dRef.current=null;
-    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
+    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";console.log("[premove] queued",f+"→"+sq+(pre.pr?"="+pre.pr:""));sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
@@ -1203,7 +1209,7 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think&&tab!=="analysis"?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
+          {(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
             {over?<><div style={{fontWeight:900,fontSize:15,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:13,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:8,height:8,borderRadius:4,background:chk?T.danger:think?T.gold:myT?T.accent:T.dim,animation:think?"pulse 1s infinite":"none"}}/>

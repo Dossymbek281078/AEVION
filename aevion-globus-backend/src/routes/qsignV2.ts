@@ -331,6 +331,116 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
   }
 });
 
+/* ───────── POST /revoke/:id ─────────
+ * Add a revocation record and stamp revokedAt on the signature row.
+ * The revoker must be the original issuer OR an admin. Revocation is immutable:
+ * attempting to revoke an already-revoked signature returns 409 with existing record.
+ *
+ * Body:
+ *   { reason: string (<= 500 chars),
+ *     causalSignatureId?: string  // link to a newer signature that supersedes this one }
+ */
+
+qsignV2Router.post("/revoke/:id", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  const causalSignatureId =
+    typeof req.body?.causalSignatureId === "string" && req.body.causalSignatureId.trim()
+      ? req.body.causalSignatureId.trim()
+      : null;
+
+  if (!reason) {
+    return res.status(400).json({ error: "reason is required" });
+  }
+  if (reason.length > 500) {
+    return res.status(400).json({ error: "reason must be <= 500 chars" });
+  }
+
+  try {
+    await ensureQSignV2Tables(pool);
+
+    const row = await loadSignatureRow(req.params.id);
+    if (!row) return res.status(404).json({ error: "signature not found" });
+
+    const isIssuer = row.issuerUserId && row.issuerUserId === auth.sub;
+    const isAdmin = auth.role === "admin";
+    if (!isIssuer && !isAdmin) {
+      return res
+        .status(403)
+        .json({ error: "only the original issuer or an admin can revoke this signature" });
+    }
+
+    if (causalSignatureId) {
+      const causal = await loadSignatureRow(causalSignatureId);
+      if (!causal) {
+        return res
+          .status(400)
+          .json({ error: `causalSignatureId '${causalSignatureId}' not found` });
+      }
+      if (causal.id === row.id) {
+        return res.status(400).json({ error: "causalSignatureId must differ from :id" });
+      }
+    }
+
+    const existing = await loadRevocation(row.id);
+    if (existing) {
+      return res.status(409).json({
+        error: "signature already revoked",
+        revocation: {
+          id: existing.id,
+          signatureId: existing.signatureId,
+          reason: existing.reason,
+          causalSignatureId: existing.causalSignatureId,
+          revokerUserId: existing.revokerUserId,
+          revokedAt: new Date(existing.revokedAt).toISOString(),
+        },
+      });
+    }
+
+    const now = new Date();
+    const revocationId = crypto.randomUUID();
+
+    await pool.query("BEGIN");
+    try {
+      await pool.query(
+        `
+        INSERT INTO "QSignRevocation"
+          ("id","signatureId","reason","causalSignatureId","revokerUserId","revokedAt")
+        VALUES ($1,$2,$3,$4,$5,$6)
+        `,
+        [revocationId, row.id, reason, causalSignatureId, auth.sub, now],
+      );
+      await pool.query(`UPDATE "QSignSignature" SET "revokedAt" = $1 WHERE "id" = $2`, [
+        now,
+        row.id,
+      ]);
+      await pool.query("COMMIT");
+    } catch (err) {
+      await pool.query("ROLLBACK");
+      throw err;
+    }
+
+    res.status(201).json({
+      revoked: true,
+      signatureId: row.id,
+      revocation: {
+        id: revocationId,
+        reason,
+        causalSignatureId,
+        revokerUserId: auth.sub,
+        revokedAt: now.toISOString(),
+      },
+      notice:
+        "Historical signatures remain cryptographically valid; verify endpoints will report valid=false due to revocation status.",
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /revoke/:id error", e);
+    res.status(500).json({ error: "revoke_failed", details: e?.message });
+  }
+});
+
 /* ───────── GET /keys (JWKS-like registry) ───────── */
 
 qsignV2Router.get("/keys", async (_req, res) => {
@@ -537,7 +647,8 @@ qsignV2Router.get("/:id/public", async (req, res) => {
   try {
     await ensureQSignV2Tables(pool);
     const id = req.params.id;
-    if (id === "health" || id === "verify" || id === "keys") {
+    const reserved = new Set(["health", "verify", "keys", "revoke", "sign"]);
+    if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
     }
 

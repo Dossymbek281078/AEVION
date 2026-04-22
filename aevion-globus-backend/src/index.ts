@@ -103,6 +103,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qsign/v2/keys/rotate": {
         post: { summary: "[v2] Rotate active key for algo (admin only, overlap window)" },
       },
+      "/api/qsign/v2/revoke/{id}": {
+        post: { summary: "[v2] Revoke signature (issuer or admin, causal link optional)" },
+      },
       "/api/auth/register": { post: {} },
       "/api/auth/login": { post: {} },
       "/api/auth/me": { get: {} },

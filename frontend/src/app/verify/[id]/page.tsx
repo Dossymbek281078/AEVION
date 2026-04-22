@@ -329,7 +329,7 @@ export default function VerifyPage() {
             🛡️ Protect Your Own Work
           </a>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 12 }}>
-            AEVION Digital IP Bureau · Powered by SHA-256, Ed25519, and Shamir&apos;s Secret Sharing
+            AEVION Digital IP Bureau · Powered by SHA-256, Ed25519, and 2-of-3 Shamir&apos;s Secret Sharing
           </div>
         </div>
       </div>

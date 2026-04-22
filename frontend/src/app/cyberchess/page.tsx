@@ -62,9 +62,9 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
     if(l==="uciok"){this.ok=true;this.w!.postMessage("isready")}};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];try{this.w.postMessage("stop")}catch{};this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
   stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
   terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[]}}}
 
@@ -388,25 +388,12 @@ export default function CyberChessPage(){
     return()=>{done=true;clearTimeout(to);sfR.current?.stop()};
   },[bk,tab,setup,think,over,sfOk]);
 
-  // History nav: terminate + reinit Stockfish when user stops navigating (debounced 200ms)
-  // Only in play/coach tabs — in analysis the fast stop() in live-eval cleanup is enough,
-  // and we don't want to terminate the worker while the user explicitly browses moves.
-  const navInitRef=useRef(0);
-  useEffect(()=>{
-    navInitRef.current++;
-    if(navInitRef.current<=1)return; // skip initial mount
-    if(tab==="analysis")return;
-    const t=setTimeout(()=>{
-      if(!sfR.current)return;
-      console.log("[auto-eval] history nav → reinit Stockfish");
-      sfR.current.terminate();
-      const s=new SF();s.init();sfR.current=s;sSfOk(false);
-      const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
-      const killCheck=setTimeout(()=>clearInterval(c),15000);
-      return()=>{clearInterval(c);clearTimeout(killCheck)};
-    },200);
-    return()=>clearTimeout(t);
-  },[browseIdx,tab]);
+  // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
+  // worker on browseIdx/tab changes; deps included `tab` so every tab switch fired
+  // `new SF(); s.init()` which loaded WASM and blocked the main thread ~500ms-1s each.
+  // Symptoms: lag during play, premove setTimeout missing deadlines, clock intervals
+  // getting throttled. The `stop()` call in the live-eval cleanup (plus stop at start
+  // of SF.eval, see class) is enough to abort a stale search without worker recycling.
 
   // Auto-evaluate each move in analysis tab — progressive: fast pass (d10), then refine (d18)
   useEffect(()=>{

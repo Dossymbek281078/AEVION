@@ -147,6 +147,44 @@ const BOARD_THEMES: BoardTheme[] = [
   {name:"Rose",light:"#f5e6e0",dark:"#c47a6c",border:"#b06858",icon:"🌹"},
 ];
 
+/* ═══ StatusBar — game state badge with inline SVG icons ═══ */
+type StatusBarProps = {over:string|null;chk:boolean;think:boolean;myT:boolean;useSF:boolean;pmsLen:number;histLen:number;rat:number;rkI:string};
+function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarProps){
+  const isOver=!!over;
+  const isWin=isOver&&over!.includes("You win");
+  const sz={width:18,height:18,flexShrink:0};
+  const bg=isOver?(isWin?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface;
+  const bc=isOver?(isWin?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border;
+  const col=isOver?(isWin?T.accent:T.danger):chk?T.danger:think?T.gold:myT?T.accent:T.dim;
+  const label=isOver?over:chk?"Check!":think?(useSF?"Stockfish thinking…":"AI thinking…"):myT?"Your move":"AI's turn";
+  const icon=isOver?(isWin
+      ? <svg viewBox="0 0 24 24" fill={col} style={sz}><path d="M7 3h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V3zm-3 1h3v2a3 3 0 0 1-3-3V4zm13 0h3v1a3 3 0 0 1-3 3V4zM9 13h6v2l2 5H7l2-5v-2z"/></svg>
+      : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" style={sz}><circle cx="12" cy="12" r="9"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
+    ):chk
+      ? <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" style={sz}><path d="M12 3L2 20h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17.5" r="0.9" fill={col} stroke="none"/></svg>
+    :think
+      ? <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" style={{...sz,animation:"spin 1.8s linear infinite"}}><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15.5,14"/></svg>
+    :myT
+      ? <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={sz}><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+    : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={sz}><rect x="4" y="7" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1.4" fill={col} stroke="none"/><circle cx="15" cy="13" r="1.4" fill={col} stroke="none"/><line x1="12" y1="3" x2="12" y2="7"/></svg>;
+  return (
+    <div style={{padding:"10px 14px",borderRadius:10,background:bg,border:`1px solid ${bc}`}}>
+      {isOver ? (
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:900,fontSize:15,color:col}}>{icon}<span>{label}</span></div>
+          <div style={{fontSize:13,color:T.dim,marginTop:4,paddingLeft:26}}>{histLen} moves · {rat} {rkI}</div>
+        </div>
+      ) : (
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {icon}
+          <span style={{fontWeight:700,fontSize:14,color:T.text}}>{label}</span>
+          {pmsLen>0 && <span style={{padding:"2px 8px",borderRadius:5,fontSize:12,fontWeight:800,background:"#dbeafe",color:T.blue,marginLeft:"auto"}}>{pmsLen} premove{pmsLen>1?"s":""}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
@@ -1240,14 +1278,7 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
-            {over?<><div style={{fontWeight:900,fontSize:15,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:13,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:8,height:8,borderRadius:4,background:chk?T.danger:think?T.gold:myT?T.accent:T.dim,animation:think?"pulse 1s infinite":"none"}}/>
-              <span style={{fontWeight:700,fontSize:14,color:T.text}}>{chk?"Check!":think?(useSF?"Stockfish…":"Thinking…"):myT?"Your move":"Ход AI"}</span>
-              {pms.length>0&&<span style={{padding:"2px 8px",borderRadius:5,fontSize:12,fontWeight:800,background:"#dbeafe",color:T.blue,marginLeft:"auto"}}>{pms.length} premove{pms.length>1?"s":""}</span>}
-            </div>}
-          </div>}
+          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
 
           {/* My player block (bottom = me) */}
           {!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:T.surface,border:`1px solid ${myT&&on&&!over?T.accent:T.border}`,display:"flex",alignItems:"center",gap:10,boxShadow:myT&&on&&!over?"0 0 0 2px rgba(5,150,105,0.15)":"none"}}>
@@ -1921,7 +1952,7 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:8}}>{(["q","r","b","n"] as const).map(pt=><button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} style={{padding:"8px 12px",borderRadius:10,border:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",width:60,height:60}}><Piece type={pt} color={pCol}/></button>)}</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);

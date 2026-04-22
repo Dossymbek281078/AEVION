@@ -73,6 +73,12 @@ Backend крутится локально на `:4001` (`aevion-globus-backend`)
 
 ---
 
+## 3.1. Где остановились (2026-04-22)
+
+Полный снимок прогресса — в [`BANK_HANDOFF.md`](./BANK_HANDOFF.md). Короткая версия: 20 коммитов от `main`, все 4 фазы плана (ecosystem / financial / security / delight) пройдены, 18 фич + modular rewrite + 1 полироф. Последний коммит `f00a26f`. Build зелёный.
+
+Следующая сессия, по умолчанию — tech debt sprint (пункты 1-6 из handoff): dedup fetches, form primitives, `useLocalList<T>`, Money везде, Trust Score шкала, mock catalog.
+
 ## 4. Что делать в начале каждой задачи
 
 1. Сверить задачу с п.0 — точно ли это Bank UI, а не один из «чужих» модулей.

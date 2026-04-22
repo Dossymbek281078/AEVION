@@ -6,6 +6,8 @@
 //  - No email→accountId resolver → P2P requires full acc_<uuid> input.
 //  - /api/ecosystem/earnings endpoint missing → TotalEarningsDashboard uses seeded mock
 //    for QRight / CyberChess / Planet streams (banking slice is live).
+//  - /api/qright/royalties (+ verify webhook → qtrade transfer) missing → RoyaltyStream is mock.
+//  - /api/cyberchess/{results,upcoming} + tournament.finalized webhook missing → ChessWinnings is mock.
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -15,6 +17,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { AccountIdCard } from "./_components/AccountIdCard";
 import { BankHero } from "./_components/BankHero";
+import { ChessWinnings } from "./_components/ChessWinnings";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
@@ -220,6 +223,7 @@ function BankContent() {
           <TotalEarningsDashboard accountId={account.id} operations={operations} />
           <TrustScoreCard account={account} operations={operations} />
           <RoyaltyStream accountId={account.id} />
+          <ChessWinnings accountId={account.id} />
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}

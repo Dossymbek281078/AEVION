@@ -157,6 +157,110 @@ export function StackedAreaChart({
   );
 }
 
+export type RadarAxis = {
+  key: string;
+  label: string;
+  points: number;
+  max: number;
+};
+
+export function RadarChart({
+  axes,
+  size = 220,
+  color = "#7c3aed",
+  ariaLabel = "Trust factors radar",
+}: {
+  axes: RadarAxis[];
+  size?: number;
+  color?: string;
+  ariaLabel?: string;
+}) {
+  const n = axes.length;
+  if (n < 3) return null;
+  const cx = size / 2;
+  const cy = size / 2;
+  const rMax = size / 2 - 32;
+
+  const point = (i: number, frac: number): [number, number] => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    return [cx + rMax * frac * Math.cos(angle), cy + rMax * frac * Math.sin(angle)];
+  };
+
+  const rings = [0.25, 0.5, 0.75, 1];
+  const dataPoints = axes.map((a, i) => point(i, Math.min(1, a.points / (a.max || 1))));
+
+  const dataPath = dataPoints
+    .map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`)
+    .join(" ") + " Z";
+
+  const labelAnchor = (cos: number): "start" | "middle" | "end" => {
+    if (cos > 0.3) return "start";
+    if (cos < -0.3) return "end";
+    return "middle";
+  };
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      role="img"
+      aria-label={ariaLabel}
+    >
+      {rings.map((r) => {
+        const pts = Array.from({ length: n }, (_, i) => point(i, r).map((v) => v.toFixed(2)).join(",")).join(" ");
+        return (
+          <polygon
+            key={r}
+            points={pts}
+            fill={r === 1 ? "rgba(15,23,42,0.02)" : "none"}
+            stroke="rgba(15,23,42,0.1)"
+            strokeWidth={1}
+          />
+        );
+      })}
+      {axes.map((_, i) => {
+        const [x, y] = point(i, 1);
+        return (
+          <line
+            key={`axis-${i}`}
+            x1={cx}
+            y1={cy}
+            x2={x}
+            y2={y}
+            stroke="rgba(15,23,42,0.08)"
+            strokeWidth={1}
+          />
+        );
+      })}
+      <path d={dataPath} fill={`${color}30`} stroke={color} strokeWidth={2} style={{ transition: "d 400ms ease" }} />
+      {dataPoints.map(([x, y], i) => (
+        <circle key={`dp-${i}`} cx={x} cy={y} r={3} fill={color} />
+      ))}
+      {axes.map((a, i) => {
+        const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const [x, y] = point(i, 1.16);
+        return (
+          <text
+            key={`lbl-${a.key}`}
+            x={x}
+            y={y}
+            textAnchor={labelAnchor(cos)}
+            dy={sin > 0.3 ? "0.8em" : sin < -0.3 ? "-0.2em" : "0.35em"}
+            fontSize={9}
+            fontWeight={700}
+            fill="#475569"
+          >
+            {a.label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function Legend({ items }: { items: Array<{ label: string; color: string; hint?: string }> }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 12 }}>

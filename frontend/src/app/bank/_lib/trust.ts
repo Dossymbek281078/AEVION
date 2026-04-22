@@ -1,16 +1,36 @@
+import type { ChessSummary } from "./chess";
+import type { EcosystemEarningsSummary } from "./ecosystem";
+import type { RoyaltyStreamSummary } from "./royalties";
 import type { Account, Operation } from "./types";
 
 export type TrustTier = "new" | "growing" | "trusted" | "elite";
 
+export type TrustFactor = {
+  key: string;
+  label: string;
+  cluster: "banking" | "ecosystem";
+  points: number;
+  max: number;
+  hint: string;
+};
+
 export type TrustScore = {
   score: number;
   tier: TrustTier;
-  breakdown: Array<{ label: string; points: number; max: number; hint: string }>;
+  factors: TrustFactor[];
 };
 
-// AEVION-specific Trust Graph reputation, computed locally from public on-chain data.
-// Four factors, each capped at 25 points — tier at 25/50/80.
-export function computeTrustScore(account: Account, operations: Operation[]): TrustScore {
+export type TrustInputs = {
+  account: Account;
+  operations: Operation[];
+  royalty?: RoyaltyStreamSummary | null;
+  chess?: ChessSummary | null;
+  ecosystem?: EcosystemEarningsSummary | null;
+};
+
+export function computeEcosystemTrustScore(input: TrustInputs): TrustScore {
+  const { account, operations, royalty, chess, ecosystem } = input;
+
   const ageDays = Math.max(0, (Date.now() - new Date(account.createdAt).getTime()) / 86_400_000);
 
   const transferOps = operations.filter((op) => op.kind === "transfer");
@@ -25,26 +45,87 @@ export function computeTrustScore(account: Account, operations: Operation[]): Tr
     if (op.to === account.id || op.from === account.id) volume += op.amount;
   }
 
-  const opsCount = operations.length;
+  const ipWorks = royalty?.works.length ?? 0;
+  const ipVerifications = royalty?.works.reduce((s, w) => s + w.verifications, 0) ?? 0;
 
-  const age = Math.min(25, (ageDays / 30) * 25);
-  const vol = Math.min(25, (volume / 1000) * 25);
-  const net = Math.min(25, counterparties.size * 5);
-  const act = Math.min(25, opsCount * 2.5);
+  const chessRating = chess?.currentRating ?? 0;
+  const chessTopThree = chess?.topThreeFinishes ?? 0;
 
-  const score = Math.round(age + vol + net + act);
+  const planetBonuses = ecosystem?.perSource.planet.last90d ?? 0;
+  const planetTasksCount = Math.round((ecosystem?.perSource.planet.last90d ?? 0) / 18);
+
+  const factors: TrustFactor[] = [
+    {
+      key: "age",
+      label: "Account age",
+      cluster: "banking",
+      points: Math.round(Math.min(100, (ageDays / 60) * 100)),
+      max: 100,
+      hint: `${Math.round(ageDays)}d`,
+    },
+    {
+      key: "volume",
+      label: "Banking volume",
+      cluster: "banking",
+      points: Math.round(Math.min(100, (volume / 2000) * 100)),
+      max: 100,
+      hint: `${volume.toFixed(0)} AEC`,
+    },
+    {
+      key: "network",
+      label: "Network",
+      cluster: "banking",
+      points: Math.round(Math.min(100, counterparties.size * 10)),
+      max: 100,
+      hint: `${counterparties.size} contacts`,
+    },
+    {
+      key: "activity",
+      label: "Activity",
+      cluster: "banking",
+      points: Math.round(Math.min(100, operations.length * 5)),
+      max: 100,
+      hint: `${operations.length} ops`,
+    },
+    {
+      key: "ip-portfolio",
+      label: "IP portfolio",
+      cluster: "ecosystem",
+      points: Math.round(Math.min(100, ipWorks * 10)),
+      max: 100,
+      hint: `${ipWorks} works`,
+    },
+    {
+      key: "ip-reach",
+      label: "IP reach",
+      cluster: "ecosystem",
+      points: Math.round(Math.min(100, (ipVerifications / 200) * 100)),
+      max: 100,
+      hint: `${ipVerifications} verifications`,
+    },
+    {
+      key: "chess",
+      label: "Chess skill",
+      cluster: "ecosystem",
+      points: Math.round(Math.max(0, Math.min(100, ((chessRating - 1000) / 1400) * 100))),
+      max: 100,
+      hint: chessRating ? `${chessRating} · ${chessTopThree} podiums` : "no games",
+    },
+    {
+      key: "planet",
+      label: "Planet progress",
+      cluster: "ecosystem",
+      points: Math.round(Math.min(100, (planetBonuses / 120) * 100)),
+      max: 100,
+      hint: `${planetTasksCount} tasks`,
+    },
+  ];
+
+  const totalPoints = factors.reduce((s, f) => s + f.points, 0);
+  const score = Math.round(totalPoints / factors.length);
   const tier: TrustTier = score < 25 ? "new" : score < 50 ? "growing" : score < 80 ? "trusted" : "elite";
 
-  return {
-    score,
-    tier,
-    breakdown: [
-      { label: "Account age", points: Math.round(age), max: 25, hint: `${Math.round(ageDays)}d` },
-      { label: "Volume", points: Math.round(vol), max: 25, hint: `${volume.toFixed(0)} AEC` },
-      { label: "Network", points: Math.round(net), max: 25, hint: `${counterparties.size} contacts` },
-      { label: "Activity", points: Math.round(act), max: 25, hint: `${opsCount} ops` },
-    ],
-  };
+  return { score, tier, factors };
 }
 
 export const tierColor: Record<TrustTier, string> = {
@@ -59,4 +140,11 @@ export const tierLabel: Record<TrustTier, string> = {
   growing: "Growing",
   trusted: "Trusted",
   elite: "Elite",
+};
+
+export const tierDescription: Record<TrustTier, string> = {
+  new: "Just started — build reputation via activity across AEVION modules.",
+  growing: "Active participant. Earning trust across banking and ecosystem.",
+  trusted: "Recognised contributor. Transfers, IP and tournaments trusted by peers.",
+  elite: "Top tier. Your Trust Graph unlocks perks across the ecosystem.",
 };

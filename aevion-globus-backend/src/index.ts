@@ -98,6 +98,11 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qsign/v2/verify": { post: { summary: "[v2] Stateless verify by canonical payload" } },
       "/api/qsign/v2/verify/{id}": { get: { summary: "[v2] Verify persisted signature by id" } },
       "/api/qsign/v2/{id}/public": { get: { summary: "[v2] Public shareable JSON view" } },
+      "/api/qsign/v2/keys": { get: { summary: "[v2] Key registry (JWKS-like; no secret material)" } },
+      "/api/qsign/v2/keys/{kid}": { get: { summary: "[v2] Single key detail by kid" } },
+      "/api/qsign/v2/keys/rotate": {
+        post: { summary: "[v2] Rotate active key for algo (admin only, overlap window)" },
+      },
       "/api/auth/register": { post: {} },
       "/api/auth/login": { post: {} },
       "/api/auth/me": { get: {} },

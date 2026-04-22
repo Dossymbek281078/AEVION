@@ -10,6 +10,8 @@ import {
   resolveHmac,
   resolveEd25519,
   getKeyByKid,
+  listKeys,
+  getActiveKey,
 } from "../lib/qsignV2/keyRegistry";
 import type { QSignVerifyResult } from "../lib/qsignV2/types";
 
@@ -326,6 +328,200 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
   } catch (e: any) {
     console.error("[qsign v2] verify/:id error", e);
     res.status(500).json({ error: "verify_failed", details: e?.message });
+  }
+});
+
+/* ───────── GET /keys (JWKS-like registry) ───────── */
+
+qsignV2Router.get("/keys", async (_req, res) => {
+  try {
+    await ensureQSignV2Tables(pool);
+    const all = await listKeys();
+
+    const items = all.map((k) => ({
+      kid: k.kid,
+      algo: k.algo,
+      status: k.status,
+      publicKey: k.algo === "Ed25519" ? k.publicKey : null,
+      createdAt: k.createdAt.toISOString(),
+      retiredAt: k.retiredAt ? k.retiredAt.toISOString() : null,
+      notes: k.notes,
+    }));
+
+    const activeHmac = items.find((k) => k.algo === "HMAC-SHA256" && k.status === "active");
+    const activeEd25519 = items.find((k) => k.algo === "Ed25519" && k.status === "active");
+
+    res.json({
+      algoVersion: ALGO_VERSION,
+      canonicalization: CANONICALIZATION_SPEC,
+      active: {
+        hmac: activeHmac?.kid ?? null,
+        ed25519: activeEd25519?.kid ?? null,
+      },
+      keys: items,
+      total: items.length,
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /keys error", e);
+    res.status(500).json({ error: "keys_list_failed", details: e?.message });
+  }
+});
+
+/* ───────── GET /keys/:kid (single key detail) ───────── */
+
+qsignV2Router.get("/keys/:kid", async (req, res) => {
+  try {
+    await ensureQSignV2Tables(pool);
+    const row = await getKeyByKid(req.params.kid);
+    if (!row) return res.status(404).json({ error: "key not found" });
+    res.json({
+      kid: row.kid,
+      algo: row.algo,
+      status: row.status,
+      publicKey: row.algo === "Ed25519" ? row.publicKey : null,
+      createdAt: row.createdAt.toISOString(),
+      retiredAt: row.retiredAt ? row.retiredAt.toISOString() : null,
+      notes: row.notes,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: "key_lookup_failed", details: e?.message });
+  }
+});
+
+/* ───────── POST /keys/rotate (admin) ─────────
+ * Overlap window: the previous active key for this algo is moved to "retired"
+ * (still valid for verifying historical signatures), a new row becomes "active"
+ * (used for all new signings). Retired keys stay verifiable forever.
+ *
+ * Body:
+ *   {
+ *     algo: "HMAC-SHA256" | "Ed25519",
+ *     kid?: string,          // defaults to algoPrefix-<timestamp>
+ *     secretRef?: string,    // defaults to QSIGN_<ALGO>_<KID>
+ *     publicKey?: string,    // Ed25519: optional, derived from env seed if absent
+ *     notes?: string
+ *   }
+ */
+
+qsignV2Router.post("/keys/rotate", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  if (auth.role !== "admin") {
+    return res.status(403).json({
+      error: "admin role required for key rotation",
+      hint: 'Update the user row in "AEVIONUser" to set role=\'admin\'.',
+    });
+  }
+
+  const algo = req.body?.algo as "HMAC-SHA256" | "Ed25519" | undefined;
+  if (algo !== "HMAC-SHA256" && algo !== "Ed25519") {
+    return res.status(400).json({ error: "algo must be 'HMAC-SHA256' or 'Ed25519'" });
+  }
+
+  const requestedKid = typeof req.body?.kid === "string" ? req.body.kid.trim() : "";
+  const requestedSecretRef =
+    typeof req.body?.secretRef === "string" ? req.body.secretRef.trim() : "";
+  const requestedPublicKey =
+    typeof req.body?.publicKey === "string" ? req.body.publicKey.trim().toLowerCase() : "";
+  const notes = typeof req.body?.notes === "string" ? req.body.notes : null;
+
+  try {
+    await ensureQSignV2Tables(pool);
+
+    // Default kid naming: qsign-hmac-v<N> / qsign-ed25519-v<N>, N = count_of_existing + 1
+    const algoPrefix = algo === "HMAC-SHA256" ? "qsign-hmac" : "qsign-ed25519";
+    const countRes = (await pool.query(
+      `SELECT COUNT(*)::int AS n FROM "QSignKey" WHERE "algo" = $1`,
+      [algo],
+    )) as any;
+    const nextN = (countRes.rows?.[0]?.n ?? 0) + 1;
+    const kid = requestedKid || `${algoPrefix}-v${nextN}`;
+
+    if (!/^[a-z0-9][a-z0-9\-]{2,63}$/i.test(kid)) {
+      return res
+        .status(400)
+        .json({ error: "invalid kid (alphanumeric + hyphens, 3-64 chars)" });
+    }
+
+    // Conflict check
+    const existing = await getKeyByKid(kid);
+    if (existing) {
+      return res
+        .status(409)
+        .json({ error: `kid '${kid}' already exists (status=${existing.status})` });
+    }
+
+    const secretRef =
+      requestedSecretRef ||
+      (algo === "HMAC-SHA256"
+        ? `QSIGN_HMAC_${kid.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_SECRET`
+        : `QSIGN_ED25519_${kid.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_PRIVATE`);
+
+    // Ed25519: require explicit publicKey if env seed isn't present (prevents silent ephemeral key).
+    let publicKey: string | null = null;
+    if (algo === "Ed25519") {
+      const envSeed = process.env[secretRef];
+      if (requestedPublicKey) {
+        if (!/^[0-9a-f]{64}$/.test(requestedPublicKey)) {
+          return res.status(400).json({ error: "publicKey must be 64-char hex" });
+        }
+        publicKey = requestedPublicKey;
+      } else if (envSeed && /^[0-9a-fA-F]{64}$/.test(envSeed)) {
+        publicKey = null; // will be lazily resolved + backfilled on first resolveEd25519()
+      } else {
+        return res.status(400).json({
+          error:
+            "Ed25519 rotation requires either body.publicKey OR env[secretRef] containing a 64-hex seed",
+          secretRef,
+        });
+      }
+    }
+
+    const now = new Date();
+
+    // Demote current active -> retired for this algo
+    await pool.query(
+      `UPDATE "QSignKey"
+         SET "status" = 'retired', "retiredAt" = $1
+       WHERE "algo" = $2 AND "status" = 'active'`,
+      [now, algo],
+    );
+
+    // Insert new active
+    const id = crypto.randomUUID();
+    await pool.query(
+      `
+      INSERT INTO "QSignKey" ("id","kid","algo","publicKey","secretRef","status","notes")
+      VALUES ($1,$2,$3,$4,$5,'active',$6)
+      `,
+      [id, kid, algo, publicKey, secretRef, notes],
+    );
+
+    const demoted = await getActiveKey(algo); // may return the new one
+    const newRow = await getKeyByKid(kid);
+
+    res.status(201).json({
+      rotated: true,
+      algo,
+      newKey: newRow
+        ? {
+            kid: newRow.kid,
+            algo: newRow.algo,
+            status: newRow.status,
+            publicKey: newRow.publicKey,
+            secretRef: newRow.secretRef,
+            createdAt: newRow.createdAt.toISOString(),
+            notes: newRow.notes,
+          }
+        : null,
+      active: demoted?.kid ?? kid,
+      notice:
+        "Previous active key (if any) is now 'retired' and remains valid for verification of historical signatures.",
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /keys/rotate error", e);
+    res.status(500).json({ error: "rotate_failed", details: e?.message });
   }
 });
 

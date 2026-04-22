@@ -17,6 +17,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { AccountIdCard } from "./_components/AccountIdCard";
 import { BankHero } from "./_components/BankHero";
+import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
@@ -34,6 +35,7 @@ import { WalletSummary } from "./_components/WalletSummary";
 import { useAuthMe } from "./_hooks/useAuthMe";
 import { useBank } from "./_hooks/useBank";
 import { operationsCsvUrl } from "./_lib/api";
+import { BiometricProvider } from "./_lib/BiometricContext";
 import { CurrencyProvider } from "./_lib/CurrencyContext";
 import { decodePaymentRequest } from "./_lib/paymentRequest";
 
@@ -241,6 +243,7 @@ function BankContent() {
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}
           />
+          <BiometricCard email={me.email} notify={notify} />
           <PaymentRequestPanel
             accountId={account.id}
             onCopy={(msg) => showToast(msg, "success")}
@@ -333,7 +336,9 @@ export default function AevionBankPage() {
           }
         >
           <CurrencyProvider>
-            <BankContent />
+            <BiometricProvider>
+              <BankContent />
+            </BiometricProvider>
           </CurrencyProvider>
         </Suspense>
       </ProductPageShell>

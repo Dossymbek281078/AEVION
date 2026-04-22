@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBiometric } from "../_lib/BiometricContext";
 import * as contactsLib from "../_lib/contacts";
 import type { Contact } from "../_lib/contacts";
 import type { PaymentRequest } from "../_lib/paymentRequest";
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
+  const { settings: bioSettings, guard: bioGuard } = useBiometric();
   const [to, setTo] = useState<string>(prefill?.to ?? "");
   const [amount, setAmount] = useState<string>(prefill?.amount ? String(prefill.amount) : "");
   const [nickname, setNickname] = useState<string>("");
@@ -72,6 +74,14 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
       return;
     }
     setBusy(true);
+    if (bioSettings && n >= bioSettings.threshold) {
+      const allowed = await bioGuard(n);
+      if (!allowed) {
+        onError("Biometric verification cancelled or failed");
+        setBusy(false);
+        return;
+      }
+    }
     const ok = await onSend(trimmedTo, n);
     if (ok) {
       if (nickname.trim() && !existingContact) {
@@ -306,6 +316,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
         Fee 0.1% · Instant · Available: {balance.toFixed(2)} AEC
+        {bioSettings ? <> · Biometric required ≥ {bioSettings.threshold} AEC</> : null}
       </div>
     </section>
   );

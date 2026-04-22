@@ -11,6 +11,7 @@ import {
 import type { Account, Operation } from "../_lib/types";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
+import { CoinTower } from "./CoinTower";
 import { Sparkline, StatCard } from "./primitives";
 
 export function WalletSummary({
@@ -42,21 +43,24 @@ export function WalletSummary({
         alignItems: "center",
       }}
     >
-      <div style={{ flex: "1 1 280px" }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>
-          BALANCE TREND (14 DAYS)
-        </div>
-        <Sparkline data={sparkline} width={280} height={50} />
-        <div
-          style={{
-            fontSize: 11,
-            color: delta >= 0 ? "#059669" : "#dc2626",
-            fontWeight: 700,
-            marginTop: 2,
-          }}
-        >
-          {delta >= 0 ? "+" : ""}
-          {delta.toFixed(1)}% vs 14 days ago
+      <div style={{ flex: "1 1 280px", display: "flex", gap: 12, alignItems: "flex-end" }}>
+        <CoinTower balance={account.balance} height={140} coinWidth={48} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>
+            BALANCE TREND (14 DAYS)
+          </div>
+          <Sparkline data={sparkline} width={220} height={50} />
+          <div
+            style={{
+              fontSize: 11,
+              color: delta >= 0 ? "#059669" : "#dc2626",
+              fontWeight: 700,
+              marginTop: 2,
+            }}
+          >
+            {delta >= 0 ? "+" : ""}
+            {delta.toFixed(1)}% vs 14 days ago
+          </div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "2 1 400px" }}>

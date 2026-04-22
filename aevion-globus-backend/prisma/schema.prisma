@@ -32,3 +32,58 @@ model QuantumShield {
   status      String   @default("active")
   createdAt   DateTime @default(now())
 }
+
+// =====================================================================
+// QSign v2 — Unique Digital Signature Platform
+// RFC 8785 (JCS) canonicalization + HMAC-SHA256 + Ed25519 (hook: Dilithium3 in v2.1)
+// Rotation: overlap window via status + retiredAt, kid-scoped verification.
+// Keys stored as references to env vars (secretRef) for MVP. KMS adapter — v2.2+.
+// =====================================================================
+
+model QSignKey {
+  id         String    @id @default(uuid())
+  kid        String    @unique                         // stable public identifier, e.g. "qsign-hmac-v1"
+  algo       String                                    // "HMAC-SHA256" | "Ed25519"
+  publicKey  String?                                   // hex-encoded Ed25519 public key; null for HMAC
+  secretRef  String                                    // env var name resolved at runtime
+  status     String    @default("active")              // "active" | "retired"
+  notes      String?
+  createdAt  DateTime  @default(now())
+  retiredAt  DateTime?
+
+  @@index([status])
+}
+
+model QSignSignature {
+  id                 String    @id @default(uuid())
+  hmacKid            String
+  ed25519Kid         String?
+  payloadCanonical   String                             // RFC 8785 JCS stringified payload
+  payloadHash        String                             // sha256 hex of payloadCanonical
+  signatureHmac      String
+  signatureEd25519   String?
+  signatureDilithium String?                            // placeholder for v2.1
+  algoVersion        String    @default("qsign-v2.0")
+  issuerUserId       String?
+  issuerEmail        String?
+  geoLat             Float?
+  geoLng             Float?
+  geoSource          String?                            // "ip" | "gps" | null
+  geoCountry         String?
+  geoCity            String?
+  createdAt          DateTime  @default(now())
+  revokedAt          DateTime?
+
+  @@index([payloadHash])
+  @@index([issuerUserId])
+  @@index([createdAt])
+}
+
+model QSignRevocation {
+  id                String   @id @default(uuid())
+  signatureId       String   @unique
+  reason            String
+  causalSignatureId String?
+  revokerUserId     String?
+  revokedAt         DateTime @default(now())
+}

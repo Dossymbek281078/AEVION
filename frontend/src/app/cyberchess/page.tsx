@@ -389,11 +389,13 @@ export default function CyberChessPage(){
   },[bk,tab,setup,think,over,sfOk]);
 
   // History nav: terminate + reinit Stockfish when user stops navigating (debounced 200ms)
-  // Prevents busy worker from showing stale eval after rapid arrow scrolling
+  // Only in play/coach tabs — in analysis the fast stop() in live-eval cleanup is enough,
+  // and we don't want to terminate the worker while the user explicitly browses moves.
   const navInitRef=useRef(0);
   useEffect(()=>{
     navInitRef.current++;
     if(navInitRef.current<=1)return; // skip initial mount
+    if(tab==="analysis")return;
     const t=setTimeout(()=>{
       if(!sfR.current)return;
       console.log("[auto-eval] history nav → reinit Stockfish");
@@ -404,7 +406,7 @@ export default function CyberChessPage(){
       return()=>{clearInterval(c);clearTimeout(killCheck)};
     },200);
     return()=>clearTimeout(t);
-  },[browseIdx]);
+  },[browseIdx,tab]);
 
   // Auto-evaluate each move in analysis tab — progressive: fast pass (d10), then refine (d18)
   useEffect(()=>{
@@ -743,6 +745,14 @@ export default function CyberChessPage(){
     }),1000);
     return()=>clearInterval(t);
   },[tab,pzMode,pzCurrent,pzAttempt,pzTimeLeft]);
+
+  // Sync timer to current mode (fires on mode switch, even mid-puzzle)
+  useEffect(()=>{
+    if(tab!=="puzzles")return;
+    if(pzMode==="timed3")sPzTimeLeft(180);
+    else if(pzMode==="timed5")sPzTimeLeft(300);
+    else sPzTimeLeft(0);
+  },[pzMode,tab]);
 
   // Auto-load first puzzle when filters change
   useEffect(()=>{
@@ -1251,10 +1261,12 @@ export default function CyberChessPage(){
           </div>}
           {over&&fenHist.length>2&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
             {btn("📊 Открыть в Analysis",()=>{
-              // Switch to analysis tab, keep current game's history
+              // Switch to analysis tab, keep current game's history, auto-kick full analysis
               sTab("analysis");
               sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
-              showToast("Партия открыта в анализе","info");
+              showToast("Партия открыта в анализе — запускаю разбор","info");
+              // Fire runAnalysis after React flushes state — ensures tab is analysis and sfR ready
+              setTimeout(()=>{if(sfR.current?.ready()&&fenHist.length>=3)runAnalysis()},150);
             },T.purple,"#fff","none")}
             {btn(analyzing?"⚡ Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze",runAnalysis,T.accent,"#fff","none")}
             {savedGames.length>0&&btn(`📜 История (${savedGames.length})`,()=>{

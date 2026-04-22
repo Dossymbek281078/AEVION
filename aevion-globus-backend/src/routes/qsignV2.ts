@@ -4,6 +4,7 @@ import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional, type JwtPayload } from "../lib/authJwt";
 import { ensureQSignV2Tables } from "../lib/qsignV2/ensureTables";
 import { canonicalJson, sha256Hex, CANONICALIZATION_SPEC } from "../lib/qsignV2/canonicalize";
+import { resolveGeo, extractClientIp as _extractClientIpImpl } from "../lib/qsignV2/geo";
 import {
   getActiveHmac,
   getActiveEd25519,
@@ -82,13 +83,8 @@ function constantTimeEqHex(a: string, b: string): boolean {
   }
 }
 
-function extractClientIp(req: Request): string | null {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) {
-    return xff.split(",")[0].trim();
-  }
-  return req.socket?.remoteAddress ?? null;
-}
+// Re-exported from lib/qsignV2/geo.ts so downstream routes can reuse the helper.
+const extractClientIp = _extractClientIpImpl;
 
 async function loadSignatureRow(id: string) {
   const r = (await pool.query(`SELECT * FROM "QSignSignature" WHERE "id" = $1`, [id])) as any;
@@ -157,6 +153,9 @@ qsignV2Router.post("/sign", async (req, res) => {
     const signatureHmac = signHmac(hmacKey.secret, canonical);
     const signatureEd25519 = signEd25519Hex(edKey.privateKey, canonical);
 
+    // Geo anchoring: body.gps (explicit client GPS) takes priority; fallback to IP lookup.
+    const geo = resolveGeo(body.gps, req);
+
     const id = crypto.randomUUID();
     await pool.query(
       `
@@ -164,8 +163,9 @@ qsignV2Router.post("/sign", async (req, res) => {
         ("id","hmacKid","ed25519Kid",
          "payloadCanonical","payloadHash",
          "signatureHmac","signatureEd25519","signatureDilithium",
-         "algoVersion","issuerUserId","issuerEmail")
-      VALUES ($1,$2,$3, $4,$5, $6,$7,NULL, $8,$9,$10)
+         "algoVersion","issuerUserId","issuerEmail",
+         "geoLat","geoLng","geoSource","geoCountry","geoCity")
+      VALUES ($1,$2,$3, $4,$5, $6,$7,NULL, $8,$9,$10, $11,$12,$13,$14,$15)
       `,
       [
         id,
@@ -178,6 +178,11 @@ qsignV2Router.post("/sign", async (req, res) => {
         ALGO_VERSION,
         auth.sub,
         auth.email,
+        geo.lat,
+        geo.lng,
+        geo.source,
+        geo.country,
+        geo.city,
       ],
     );
 
@@ -200,6 +205,15 @@ qsignV2Router.post("/sign", async (req, res) => {
       },
       dilithium: null,
       issuer: { userId: auth.sub, email: auth.email },
+      geo: geo.source
+        ? {
+            source: geo.source,
+            country: geo.country,
+            city: geo.city,
+            lat: geo.lat,
+            lng: geo.lng,
+          }
+        : null,
       createdAt: new Date().toISOString(),
       verifyUrl: `/api/qsign/v2/verify/${id}`,
       publicUrl: `/qsign/verify/${id}`,

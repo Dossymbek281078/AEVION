@@ -16,6 +16,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { AccountIdCard } from "./_components/AccountIdCard";
 import { BankHero } from "./_components/BankHero";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
+import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
 import { SendForm } from "./_components/SendForm";
 import { TopupForm } from "./_components/TopupForm";
@@ -218,6 +219,7 @@ function BankContent() {
         <>
           <TotalEarningsDashboard accountId={account.id} operations={operations} />
           <TrustScoreCard account={account} operations={operations} />
+          <RoyaltyStream accountId={account.id} />
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}

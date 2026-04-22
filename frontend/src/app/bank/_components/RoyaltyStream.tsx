@@ -1,0 +1,475 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { formatRelative } from "../_lib/format";
+import {
+  fetchRoyaltyStream,
+  KIND_COLOR,
+  KIND_ICON,
+  KIND_LABEL,
+  simulateRoyaltyEvent,
+  type RoyaltyEvent,
+  type RoyaltyStreamSummary,
+} from "../_lib/royalties";
+
+function usePrefersReducedMotion(): boolean {
+  const [prm, setPrm] = useState<boolean>(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrm(mq.matches);
+    update();
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, []);
+  return prm;
+}
+
+function LivePulse({ active, color = "#dc2626" }: { active: boolean; color?: string }) {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" aria-hidden="true">
+      <circle cx={6} cy={6} r={3} fill={color} />
+      {active ? (
+        <circle cx={6} cy={6} r={3} fill="none" stroke={color} strokeWidth={1.5}>
+          <animate attributeName="r" values="3;6;3" dur="1.4s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.9;0;0.9" dur="1.4s" repeatCount="indefinite" />
+        </circle>
+      ) : null}
+    </svg>
+  );
+}
+
+function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) {
+  const color = KIND_COLOR[ev.workKind];
+  return (
+    <li
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: `1px solid ${color}22`,
+        background: highlight ? `${color}14` : "#fff",
+        transition: "background 600ms ease",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 8,
+          background: `${color}22`,
+          color,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 13,
+          fontWeight: 900,
+          flexShrink: 0,
+        }}
+      >
+        {KIND_ICON[ev.workKind]}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#0f172a",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap" as const,
+          }}
+        >
+          {ev.workTitle}
+        </div>
+        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+          {KIND_LABEL[ev.workKind]} · verified from {ev.verifier} · {formatRelative(ev.timestamp)}
+        </div>
+      </div>
+      <div style={{ fontWeight: 900, fontSize: 13, color, whiteSpace: "nowrap" as const }}>
+        +{ev.amount.toFixed(2)} AEC
+      </div>
+    </li>
+  );
+}
+
+export function RoyaltyStream({ accountId }: { accountId: string }) {
+  const [data, setData] = useState<RoyaltyStreamSummary | null>(null);
+  const [liveEvents, setLiveEvents] = useState<RoyaltyEvent[]>([]);
+  const [paused, setPaused] = useState<boolean>(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const prm = usePrefersReducedMotion();
+  const tickRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRoyaltyStream(accountId).then((s) => {
+      if (!cancelled) setData(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVis = () => setPaused(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", onVis);
+    onVis();
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  useEffect(() => {
+    if (!data || paused) return;
+    const schedule = () => {
+      const delay = 7000 + Math.random() * 5000;
+      tickRef.current = window.setTimeout(() => {
+        const ev = simulateRoyaltyEvent(data.works);
+        setLiveEvents((prev) => [ev, ...prev].slice(0, 10));
+        setHighlightId(ev.id);
+        window.setTimeout(() => setHighlightId(null), 1200);
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      if (tickRef.current != null) window.clearTimeout(tickRef.current);
+    };
+  }, [data, paused]);
+
+  const feed = useMemo(() => {
+    if (!data) return [] as RoyaltyEvent[];
+    const merged = [...liveEvents, ...data.recentEvents];
+    const seen = new Set<string>();
+    const deduped: RoyaltyEvent[] = [];
+    for (const ev of merged) {
+      if (seen.has(ev.id)) continue;
+      seen.add(ev.id);
+      deduped.push(ev);
+      if (deduped.length === 10) break;
+    }
+    return deduped;
+  }, [liveEvents, data]);
+
+  const topWorks = useMemo(() => {
+    if (!data) return [];
+    return [...data.works].sort((a, b) => b.totalRoyalties - a.totalRoyalties).slice(0, 5);
+  }, [data]);
+
+  const maxTop = topWorks[0]?.totalRoyalties ?? 1;
+
+  if (!data) {
+    return (
+      <section
+        style={{
+          border: "1px solid rgba(15,23,42,0.1)",
+          borderRadius: 16,
+          padding: 20,
+          marginBottom: 16,
+          background: "#fff",
+        }}
+      >
+        <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading royalty stream…</div>
+      </section>
+    );
+  }
+
+  const totalRoyalties = data.works.reduce((s, w) => s + w.totalRoyalties, 0);
+  const totalVerifications = data.works.reduce((s, w) => s + w.verifications, 0);
+
+  return (
+    <section
+      style={{
+        border: "1px solid rgba(124,58,237,0.25)",
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
+        background: "linear-gradient(180deg, rgba(124,58,237,0.04) 0%, #ffffff 100%)",
+      }}
+      aria-labelledby="royalty-stream-heading"
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "3px 10px",
+              borderRadius: 999,
+              background: paused ? "rgba(15,23,42,0.06)" : "rgba(220,38,38,0.1)",
+              color: paused ? "#64748b" : "#991b1b",
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+            }}
+          >
+            <LivePulse active={!paused && !prm} color={paused ? "#64748b" : "#dc2626"} />
+            {paused ? "Paused" : "Live"}
+          </div>
+          <h2
+            id="royalty-stream-heading"
+            style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#4c1d95" }}
+          >
+            QRight royalty stream
+          </h2>
+        </div>
+        <button
+          onClick={() => setPaused((p) => !p)}
+          aria-pressed={paused}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid rgba(124,58,237,0.3)",
+            background: "#fff",
+            color: "#4c1d95",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {paused ? "Resume" : "Pause"}
+        </button>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+          gap: 10,
+          marginBottom: 16,
+        }}
+      >
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 12,
+            background: "rgba(124,58,237,0.06)",
+            border: "1px solid rgba(124,58,237,0.15)",
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
+            TOTAL EARNED (90D)
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#4c1d95", letterSpacing: "-0.02em" }}>
+            {totalRoyalties.toFixed(2)} <span style={{ fontSize: 11, color: "#7c3aed" }}>AEC</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+            {totalVerifications} verifications · {data.works.length} works
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 12,
+            background: "rgba(5,150,105,0.06)",
+            border: "1px solid rgba(5,150,105,0.18)",
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
+            AVG / DAY (7D)
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#047857", letterSpacing: "-0.02em" }}>
+            {data.avgPerDay7d.toFixed(2)} <span style={{ fontSize: 11, color: "#059669" }}>AEC</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+            30d avg: {data.avgPerDay30d.toFixed(2)}
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 12,
+            background: "linear-gradient(135deg, rgba(14,165,233,0.08), rgba(124,58,237,0.06))",
+            border: "1px solid rgba(14,165,233,0.2)",
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
+            NEXT 30 DAYS (EST.)
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#0369a1", letterSpacing: "-0.02em" }}>
+            ~{data.estimated30d.toFixed(2)} <span style={{ fontSize: 11, color: "#0284c7" }}>AEC</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+            Based on 7d trend
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: 16,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+              color: "#94a3b8",
+              marginBottom: 8,
+            }}
+          >
+            Recent verifications
+          </div>
+          <ul
+            aria-live="polite"
+            aria-label="Live royalty events"
+            style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}
+          >
+            {feed.length === 0 ? (
+              <li style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>
+                No verifications yet.
+              </li>
+            ) : (
+              feed.map((ev) => (
+                <EventRow key={ev.id} ev={ev} highlight={!prm && ev.id === highlightId} />
+              ))
+            )}
+          </ul>
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+              color: "#94a3b8",
+              marginBottom: 8,
+            }}
+          >
+            Top 5 works by earnings
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
+            {topWorks.map((w, i) => {
+              const color = KIND_COLOR[w.kind];
+              const pct = (w.totalRoyalties / maxTop) * 100;
+              return (
+                <li key={w.id}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 12,
+                      marginBottom: 3,
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 5,
+                        background: `${color}22`,
+                        color,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {KIND_ICON[w.kind]}
+                    </span>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: "#0f172a",
+                        flex: 1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap" as const,
+                      }}
+                    >
+                      #{i + 1} {w.title}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>
+                      {w.verifications}×
+                    </span>
+                    <span style={{ fontWeight: 900, fontSize: 12, color, flexShrink: 0 }}>
+                      {w.totalRoyalties.toFixed(2)}
+                    </span>
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-valuenow={Math.round(pct)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${w.title}: ${w.totalRoyalties.toFixed(2)} AEC`}
+                    style={{
+                      height: 5,
+                      borderRadius: 999,
+                      background: "rgba(15,23,42,0.06)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${pct}%`,
+                        height: "100%",
+                        background: color,
+                        transition: "width 400ms ease",
+                      }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ fontSize: 11, color: "#94a3b8" }}>
+          Each verification of your IP pays a micro-royalty. More work registered = more streams.
+        </div>
+        <Link
+          href="/qright"
+          style={{
+            padding: "8px 14px",
+            borderRadius: 10,
+            background: "linear-gradient(135deg, #7c3aed, #0ea5e9)",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 800,
+            textDecoration: "none",
+            whiteSpace: "nowrap" as const,
+          }}
+        >
+          Register new IP →
+        </Link>
+      </div>
+    </section>
+  );
+}

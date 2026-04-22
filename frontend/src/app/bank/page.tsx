@@ -26,6 +26,7 @@ import { GiftMode } from "./_components/GiftMode";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
+import { SalaryAdvance } from "./_components/SalaryAdvance";
 import { SavingsGoals } from "./_components/SavingsGoals";
 import { SocialCircles } from "./_components/SocialCircles";
 import { SpendingInsights } from "./_components/SpendingInsights";
@@ -242,6 +243,12 @@ function BankContent() {
         <>
           <TotalEarningsDashboard accountId={account.id} operations={operations} />
           <TrustScoreCard account={account} operations={operations} />
+          <SalaryAdvance
+            account={account}
+            operations={operations}
+            topup={handleTopup}
+            notify={notify}
+          />
           <RoyaltyStream accountId={account.id} />
           <ChessWinnings accountId={account.id} />
           <AccountIdCard

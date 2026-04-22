@@ -3,13 +3,14 @@
 import { useMemo } from "react";
 import {
   buildSparkline,
-  formatAmount,
   formatRelative,
   lastActivityMs,
   sparklineDelta,
   stats30d,
 } from "../_lib/format";
 import type { Account, Operation } from "../_lib/types";
+import { useCurrency } from "../_lib/CurrencyContext";
+import { formatCurrency } from "../_lib/currency";
 import { Sparkline, StatCard } from "./primitives";
 
 export function WalletSummary({
@@ -27,6 +28,7 @@ export function WalletSummary({
   const s = useMemo(() => stats30d(operations, account.id), [operations, account.id]);
   const last = useMemo(() => lastActivityMs(operations), [operations]);
   const delta = useMemo(() => sparklineDelta(sparkline), [sparkline]);
+  const { code } = useCurrency();
 
   return (
     <div
@@ -58,12 +60,12 @@ export function WalletSummary({
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "2 1 400px" }}>
-        <StatCard label="Balance" value={`${account.balance.toFixed(2)} AEC`} accent="#0f766e" />
+        <StatCard label="Balance" value={formatCurrency(account.balance, code)} accent="#0f766e" />
         <StatCard
           label="Net flow 30d"
-          value={formatAmount(s.netFlow)}
+          value={formatCurrency(s.netFlow, code, { sign: true })}
           accent={s.netFlow >= 0 ? "#059669" : "#dc2626"}
-          hint={`In ${s.incoming.toFixed(0)} · Out ${s.outgoing.toFixed(0)}`}
+          hint={`In ${formatCurrency(s.incoming, code, { decimals: 0 })} · Out ${formatCurrency(s.outgoing, code, { decimals: 0 })}`}
         />
         <StatCard label="Operations 30d" value={String(s.count)} />
         <StatCard

@@ -11,6 +11,8 @@ import {
   type EcosystemEarningsSummary,
 } from "../_lib/ecosystem";
 import { formatRelative } from "../_lib/format";
+import { useCurrency } from "../_lib/CurrencyContext";
+import { formatCurrency } from "../_lib/currency";
 import type { Operation } from "../_lib/types";
 import { Legend, PieChart, StackedAreaChart, type StackedSeries } from "./charts";
 import { Sparkline } from "./primitives";
@@ -33,6 +35,7 @@ export function TotalEarningsDashboard({
 }) {
   const [summary, setSummary] = useState<EcosystemEarningsSummary | null>(null);
   const [period, setPeriod] = useState<Period>("30d");
+  const { code } = useCurrency();
 
   useEffect(() => {
     let cancelled = false;
@@ -173,16 +176,16 @@ export function TotalEarningsDashboard({
                 TOTAL {PERIOD_LABEL[period]}
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", lineHeight: 1.1 }}>
-                {totals.total.toFixed(0)}
+                {formatCurrency(totals.total, code, { decimals: 0 })}
               </div>
-              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>AEC</div>
+              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{code}</div>
             </div>
           </div>
           <Legend
             items={SOURCES.map((src) => ({
               label: SOURCE_LABEL[src],
               color: SOURCE_COLOR[src],
-              hint: `${totals[src].toFixed(0)}`,
+              hint: formatCurrency(totals[src], code, { decimals: 0 }),
             }))}
           />
         </div>
@@ -229,7 +232,7 @@ export function TotalEarningsDashboard({
                   </span>
                 </div>
                 <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
-                  {totals[src].toFixed(2)} <span style={{ fontSize: 11, color: "#64748b" }}>AEC</span>
+                  {formatCurrency(totals[src], code)}
                 </div>
                 <div style={{ marginTop: 4 }}>
                   <Sparkline data={spark} width={140} height={24} color={SOURCE_COLOR[src]} />
@@ -328,7 +331,7 @@ export function TotalEarningsDashboard({
                   </div>
                 </div>
                 <div style={{ fontWeight: 900, fontSize: 14, color: SOURCE_COLOR[ev.source], whiteSpace: "nowrap" as const }}>
-                  +{ev.amount.toFixed(2)} AEC
+                  {formatCurrency(ev.amount, code, { sign: true })}
                 </div>
               </li>
             ))}

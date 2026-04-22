@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import * as contactsLib from "../_lib/contacts";
-import { describeOp, formatAmount, formatRelative } from "../_lib/format";
+import { useCurrency } from "../_lib/CurrencyContext";
+import { formatCurrency } from "../_lib/currency";
+import { describeOp, formatRelative } from "../_lib/format";
 import type { Operation } from "../_lib/types";
 
 type Filter = "all" | "in" | "out";
@@ -35,6 +37,7 @@ export function TransactionList({
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState<string>("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const { code } = useCurrency();
 
   const contactMap = useMemo(() => contactsLib.contactsById(), [operations]);
 
@@ -235,7 +238,7 @@ export function TransactionList({
                       flexShrink: 0,
                     }}
                   >
-                    {formatAmount(d.signed)}
+                    {formatCurrency(d.signed, code, { sign: true })}
                   </div>
                 </button>
                 {isExpanded ? (
@@ -262,7 +265,7 @@ export function TransactionList({
                     ) : null}
                     <KV label="Timestamp" value={new Date(op.createdAt).toLocaleString()} />
                     <KV label="Kind" value={op.kind} />
-                    <KV label="Amount" value={`${op.amount.toFixed(2)} AEC`} />
+                    <KV label="Amount" value={`${formatCurrency(op.amount, code)} (${op.amount.toFixed(2)} AEC)`} />
                   </div>
                 ) : null}
               </div>

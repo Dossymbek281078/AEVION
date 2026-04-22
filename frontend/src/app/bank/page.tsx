@@ -34,6 +34,7 @@ import { WalletSummary } from "./_components/WalletSummary";
 import { useAuthMe } from "./_hooks/useAuthMe";
 import { useBank } from "./_hooks/useBank";
 import { operationsCsvUrl } from "./_lib/api";
+import { CurrencyProvider } from "./_lib/CurrencyContext";
 import { decodePaymentRequest } from "./_lib/paymentRequest";
 
 function BankContent() {
@@ -331,7 +332,9 @@ export default function AevionBankPage() {
             </div>
           }
         >
-          <BankContent />
+          <CurrencyProvider>
+            <BankContent />
+          </CurrencyProvider>
         </Suspense>
       </ProductPageShell>
     </main>

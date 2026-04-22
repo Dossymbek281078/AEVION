@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useCurrency } from "../_lib/CurrencyContext";
+import { formatCurrency } from "../_lib/currency";
 import { formatRelative } from "../_lib/format";
 import {
   fetchRoyaltyStream,
@@ -42,6 +44,7 @@ function LivePulse({ active, color = "#dc2626" }: { active: boolean; color?: str
 
 function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) {
   const color = KIND_COLOR[ev.workKind];
+  const { code } = useCurrency();
   return (
     <li
       style={{
@@ -91,7 +94,7 @@ function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) 
         </div>
       </div>
       <div style={{ fontWeight: 900, fontSize: 13, color, whiteSpace: "nowrap" as const }}>
-        +{ev.amount.toFixed(2)} AEC
+        {formatCurrency(ev.amount, code, { sign: true })}
       </div>
     </li>
   );
@@ -103,6 +106,7 @@ export function RoyaltyStream({ accountId }: { accountId: string }) {
   const [paused, setPaused] = useState<boolean>(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const prm = usePrefersReducedMotion();
+  const { code } = useCurrency();
   const tickRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -266,7 +270,7 @@ export function RoyaltyStream({ accountId }: { accountId: string }) {
             TOTAL EARNED (90D)
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#4c1d95", letterSpacing: "-0.02em" }}>
-            {totalRoyalties.toFixed(2)} <span style={{ fontSize: 11, color: "#7c3aed" }}>AEC</span>
+            {formatCurrency(totalRoyalties, code)}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
             {totalVerifications} verifications · {data.works.length} works
@@ -284,10 +288,10 @@ export function RoyaltyStream({ accountId }: { accountId: string }) {
             AVG / DAY (7D)
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#047857", letterSpacing: "-0.02em" }}>
-            {data.avgPerDay7d.toFixed(2)} <span style={{ fontSize: 11, color: "#059669" }}>AEC</span>
+            {formatCurrency(data.avgPerDay7d, code)}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            30d avg: {data.avgPerDay30d.toFixed(2)}
+            30d avg: {formatCurrency(data.avgPerDay30d, code)}
           </div>
         </div>
         <div
@@ -302,7 +306,7 @@ export function RoyaltyStream({ accountId }: { accountId: string }) {
             NEXT 30 DAYS (EST.)
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0369a1", letterSpacing: "-0.02em" }}>
-            ~{data.estimated30d.toFixed(2)} <span style={{ fontSize: 11, color: "#0284c7" }}>AEC</span>
+            ~{formatCurrency(data.estimated30d, code)}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
             Based on 7d trend
@@ -409,7 +413,7 @@ export function RoyaltyStream({ accountId }: { accountId: string }) {
                       {w.verifications}×
                     </span>
                     <span style={{ fontWeight: 900, fontSize: 12, color, flexShrink: 0 }}>
-                      {w.totalRoyalties.toFixed(2)}
+                      {formatCurrency(w.totalRoyalties, code, { decimals: code === "KZT" ? 0 : 2 })}
                     </span>
                   </div>
                   <div

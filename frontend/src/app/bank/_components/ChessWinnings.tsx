@@ -10,6 +10,8 @@ import {
   type ChessSummary,
   type TournamentResult,
 } from "../_lib/chess";
+import { useCurrency } from "../_lib/CurrencyContext";
+import { formatCurrency } from "../_lib/currency";
 import { formatRelative } from "../_lib/format";
 import { Sparkline } from "./primitives";
 
@@ -28,6 +30,7 @@ function placeBadge(place: number) {
 function ResultRow({ r }: { r: TournamentResult }) {
   const badge = placeBadge(r.place);
   const deltaColor = r.ratingDelta >= 0 ? "#059669" : "#dc2626";
+  const { code } = useCurrency();
   return (
     <li
       style={{
@@ -90,7 +93,7 @@ function ResultRow({ r }: { r: TournamentResult }) {
             whiteSpace: "nowrap" as const,
           }}
         >
-          {r.prize > 0 ? `+${r.prize.toFixed(2)} AEC` : "—"}
+          {r.prize > 0 ? formatCurrency(r.prize, code, { sign: true }) : "—"}
         </div>
         <div style={{ fontSize: 11, color: deltaColor, fontWeight: 700, marginTop: 1 }}>
           {r.ratingDelta >= 0 ? "+" : ""}
@@ -103,6 +106,7 @@ function ResultRow({ r }: { r: TournamentResult }) {
 
 export function ChessWinnings({ accountId }: { accountId: string }) {
   const [data, setData] = useState<ChessSummary | null>(null);
+  const { code } = useCurrency();
 
   useEffect(() => {
     let cancelled = false;
@@ -235,7 +239,7 @@ export function ChessWinnings({ accountId }: { accountId: string }) {
             TOTAL WON
           </div>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#d97706", letterSpacing: "-0.02em" }}>
-            {data.totalWon.toFixed(0)} <span style={{ fontSize: 11, color: "#b45309" }}>AEC</span>
+            {formatCurrency(data.totalWon, code, { decimals: 0 })}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>all tournaments</div>
         </div>
@@ -380,7 +384,7 @@ export function ChessWinnings({ accountId }: { accountId: string }) {
                       whiteSpace: "nowrap" as const,
                     }}
                   >
-                    {u.prizePool.toFixed(0)} AEC pool
+                    {formatCurrency(u.prizePool, code, { decimals: 0 })} pool
                   </div>
                 </div>
               </li>

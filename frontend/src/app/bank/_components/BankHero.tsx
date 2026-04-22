@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { CurrencySwitcher } from "./Money";
 
 export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }) {
   return (
@@ -35,8 +36,22 @@ export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }
         payouts. Every transaction linked to Trust Graph.
       </p>
       {email ? (
-        <div style={{ marginTop: 14, fontSize: 12, opacity: 0.75 }}>
-          Signed in as <strong>{email}</strong>
+        <div
+          style={{
+            marginTop: 14,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 10,
+            fontSize: 12,
+            opacity: 0.95,
+          }}
+        >
+          <span style={{ opacity: 0.75 }}>
+            Signed in as <strong>{email}</strong>
+          </span>
+          <CurrencySwitcher />
         </div>
       ) : null}
       {extra ? <div style={{ marginTop: 14 }}>{extra}</div> : null}

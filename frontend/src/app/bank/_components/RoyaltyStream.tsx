@@ -471,7 +471,7 @@ export function RoyaltyStream({ accountId }: { accountId: string }) {
             whiteSpace: "nowrap" as const,
           }}
         >
-          Register new IP →
+          Open QRight · register work →
         </Link>
       </div>
     </section>

@@ -18,7 +18,7 @@ export function QuickActions() {
           boxShadow: "0 4px 14px rgba(13,148,136,0.3)",
         }}
       >
-        Register IP → Start earning
+        Protect your work · earn royalties →
       </Link>
       <Link
         href="/planet"

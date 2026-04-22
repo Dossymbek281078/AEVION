@@ -148,8 +148,8 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
             lineHeight: 1.5,
           }}
         >
-          {eligibility.reason}. Register IP in QRight, play CyberChess, complete Planet tasks — your
-          Trust Score grows, and so does your advance limit.
+          {eligibility.reason}. Protect creative work in QRight, play CyberChess, complete Planet
+          tasks — your Trust Score grows, and so does your advance limit.
         </div>
       ) : !advance || advance.closedAt ? (
         <>

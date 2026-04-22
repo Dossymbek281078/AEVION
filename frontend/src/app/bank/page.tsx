@@ -16,6 +16,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { AccountIdCard } from "./_components/AccountIdCard";
+import { AuditPanel } from "./_components/AuditPanel";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
@@ -313,6 +314,8 @@ function BankContent() {
             csvUrl={operationsCsvUrl()}
             onCopyId={(id) => void copyToClipboard(id)}
           />
+
+          <AuditPanel notify={notify} />
         </>
       ) : null}
 

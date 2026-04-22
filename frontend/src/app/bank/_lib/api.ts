@@ -5,6 +5,27 @@
 import { apiUrl } from "@/lib/apiBase";
 import type { Account, Me, Operation } from "./types";
 
+export type Transfer = {
+  id: string;
+  from: string;
+  to: string;
+  amount: number;
+  createdAt: string;
+};
+
+export type SignResult = {
+  payload: unknown;
+  signature: string;
+  algo: string;
+  createdAt: string;
+};
+
+export type VerifyResult = {
+  valid: boolean;
+  expected: string;
+  provided: string;
+};
+
 const TOKEN_KEY = "aevion_auth_token_v1";
 
 function readToken(): string {
@@ -61,22 +82,40 @@ export async function listOperations(): Promise<Operation[]> {
   return Array.isArray(data.items) ? data.items : [];
 }
 
-export async function topUp(accountId: string, amount: number): Promise<void> {
+export async function topUp(accountId: string, amount: number): Promise<{ id: string; balance: number; updatedAt: string }> {
   const res = await fetch(apiUrl("/api/qtrade/topup"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ accountId, amount }),
   });
-  await unwrap(res, "Top-up failed");
+  return unwrap<{ id: string; balance: number; updatedAt: string }>(res, "Top-up failed");
 }
 
-export async function transfer(from: string, to: string, amount: number): Promise<void> {
+export async function transfer(from: string, to: string, amount: number): Promise<Transfer> {
   const res = await fetch(apiUrl("/api/qtrade/transfer"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ from, to, amount }),
   });
-  await unwrap(res, "Transfer failed");
+  return unwrap<Transfer>(res, "Transfer failed");
+}
+
+export async function signPayload(payload: unknown): Promise<SignResult> {
+  const res = await fetch(apiUrl("/api/qsign/sign"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return unwrap<SignResult>(res, "Sign failed");
+}
+
+export async function verifySignature(payload: unknown, signature: string): Promise<VerifyResult> {
+  const res = await fetch(apiUrl("/api/qsign/verify"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payload, signature }),
+  });
+  return unwrap<VerifyResult>(res, "Verify failed");
 }
 
 export function operationsCsvUrl(): string {

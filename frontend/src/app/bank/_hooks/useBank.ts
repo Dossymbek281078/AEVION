@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import * as api from "../_lib/api";
+import { appendSignature } from "../_lib/signatures";
 import type { Account, Me, Operation } from "../_lib/types";
 
 type ErrorHandler = (msg: string) => void;
@@ -64,7 +65,22 @@ export function useBank(me: Me | null, onError: ErrorHandler) {
         return false;
       }
       try {
-        await api.transfer(account.id, to, amount);
+        const tx = await api.transfer(account.id, to, amount);
+        try {
+          const sig = await api.signPayload(tx);
+          appendSignature({
+            id: tx.id,
+            kind: "transfer",
+            payload: tx as unknown as Record<string, unknown>,
+            signature: sig.signature,
+            algo: sig.algo,
+            signedAt: sig.createdAt,
+            verified: "unknown",
+            verifiedAt: null,
+          });
+        } catch {
+          // signing best-effort; transfer already succeeded
+        }
         await load();
         return true;
       } catch (e) {
@@ -82,7 +98,29 @@ export function useBank(me: Me | null, onError: ErrorHandler) {
         return false;
       }
       try {
-        await api.topUp(account.id, amount);
+        const result = await api.topUp(account.id, amount);
+        try {
+          const payload = {
+            kind: "topup" as const,
+            accountId: account.id,
+            amount,
+            balanceAfter: result.balance,
+            updatedAt: result.updatedAt,
+          };
+          const sig = await api.signPayload(payload);
+          appendSignature({
+            id: `topup_${result.id}_${result.updatedAt}`,
+            kind: "topup",
+            payload,
+            signature: sig.signature,
+            algo: sig.algo,
+            signedAt: sig.createdAt,
+            verified: "unknown",
+            verifiedAt: null,
+          });
+        } catch {
+          // signing best-effort; top-up already succeeded
+        }
         await load();
         return true;
       } catch (e) {

@@ -1,0 +1,330 @@
+"use client";
+
+import { useState } from "react";
+import { useSignatures } from "../_hooks/useSignatures";
+import { formatRelative } from "../_lib/format";
+import type { SignedOperation, VerifyState } from "../_lib/signatures";
+
+const STATE_COLOR: Record<VerifyState, string> = {
+  unknown: "#94a3b8",
+  valid: "#059669",
+  invalid: "#dc2626",
+  error: "#d97706",
+};
+
+const STATE_LABEL: Record<VerifyState, string> = {
+  unknown: "Unverified",
+  valid: "Valid",
+  invalid: "Tampered",
+  error: "Error",
+};
+
+export function AuditPanel({
+  notify,
+}: {
+  notify: (msg: string, type?: "success" | "error" | "info") => void;
+}) {
+  const { items, verifyOne, verifyAll, verifying, clear } = useSignatures();
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  return (
+    <section
+      style={{
+        border: "1px solid rgba(15,23,42,0.1)",
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 24,
+        background: "#fff",
+      }}
+      aria-labelledby="audit-heading"
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            aria-hidden="true"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              background: "rgba(15,118,110,0.12)",
+              color: "#0f766e",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 14,
+              fontWeight: 900,
+            }}
+          >
+            ✎
+          </span>
+          <div>
+            <h2
+              id="audit-heading"
+              style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
+            >
+              Audit log · QSign signatures
+            </h2>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+              Each operation HMAC-signed via <code>/api/qsign/sign</code>; verify any time
+              against <code>/api/qsign/verify</code>.
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button
+            onClick={async () => {
+              if (items.length === 0) {
+                notify("No signed operations yet", "info");
+                return;
+              }
+              await verifyAll();
+              notify(`Verified ${items.length} signatures`, "success");
+            }}
+            disabled={verifying || items.length === 0}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(15,118,110,0.3)",
+              background: verifying || items.length === 0 ? "rgba(15,23,42,0.04)" : "#0f766e",
+              color: verifying || items.length === 0 ? "#94a3b8" : "#fff",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: verifying || items.length === 0 ? "default" : "pointer",
+            }}
+          >
+            {verifying ? "Verifying…" : "Verify all"}
+          </button>
+          {items.length > 0 ? (
+            <button
+              onClick={() => {
+                if (confirm("Clear local audit log? Backend keeps the operation history.")) {
+                  clear();
+                  notify("Audit log cleared", "info");
+                }
+              }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.12)",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#334155",
+                cursor: "pointer",
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div
+          style={{
+            padding: 20,
+            textAlign: "center" as const,
+            fontSize: 13,
+            color: "#94a3b8",
+            border: "1px dashed rgba(15,23,42,0.1)",
+            borderRadius: 10,
+          }}
+        >
+          No signatures yet. Make a transfer or top-up — each operation gets HMAC-signed
+          automatically.
+        </div>
+      ) : (
+        <ul role="list" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
+          {items.slice(0, 20).map((sig) => (
+            <SignatureRow
+              key={sig.id}
+              sig={sig}
+              expanded={expanded === sig.id}
+              onToggle={() => setExpanded((v) => (v === sig.id ? null : sig.id))}
+              onVerify={async () => {
+                await verifyOne(sig);
+                notify(`Re-verified ${sig.id.slice(0, 12)}…`, "info");
+              }}
+            />
+          ))}
+        </ul>
+      )}
+
+      {items.length > 20 ? (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 11,
+            color: "#94a3b8",
+            textAlign: "center" as const,
+          }}
+        >
+          Showing 20 of {items.length} signatures
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SignatureRow({
+  sig,
+  expanded,
+  onToggle,
+  onVerify,
+}: {
+  sig: SignedOperation;
+  expanded: boolean;
+  onToggle: () => void;
+  onVerify: () => void;
+}) {
+  const color = STATE_COLOR[sig.verified];
+  return (
+    <li
+      style={{
+        border: `1px solid ${color}33`,
+        borderRadius: 10,
+        background: sig.verified === "invalid" ? "rgba(220,38,38,0.04)" : "#fff",
+        overflow: "hidden",
+      }}
+    >
+      <button
+        onClick={onToggle}
+        aria-expanded={expanded}
+        style={{
+          width: "100%",
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto auto",
+          alignItems: "center",
+          gap: 10,
+          padding: "10px 12px",
+          background: "transparent",
+          border: "none",
+          textAlign: "left" as const,
+          cursor: "pointer",
+        }}
+      >
+        <span
+          aria-label={STATE_LABEL[sig.verified]}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: color,
+          }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#0f172a",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap" as const,
+              fontFamily: "ui-monospace, monospace",
+            }}
+          >
+            {sig.id}
+          </div>
+          <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 1 }}>
+            {sig.kind} · {sig.algo} · signed {formatRelative(sig.signedAt)}
+            {sig.verifiedAt ? ` · checked ${formatRelative(sig.verifiedAt)}` : ""}
+          </div>
+        </div>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase" as const,
+          }}
+        >
+          {STATE_LABEL[sig.verified]}
+        </span>
+        <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{expanded ? "▲" : "▼"}</span>
+      </button>
+      {expanded ? (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderTop: "1px solid rgba(15,23,42,0.05)",
+            background: "rgba(15,23,42,0.02)",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              fontSize: 11,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ color: "#64748b", fontWeight: 700, minWidth: 80 }}>Signature</span>
+            <code
+              style={{
+                flex: 1,
+                fontFamily: "ui-monospace, monospace",
+                color: "#0f172a",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap" as const,
+              }}
+            >
+              {sig.signature}
+            </code>
+          </div>
+          <div style={{ fontSize: 11 }}>
+            <span style={{ color: "#64748b", fontWeight: 700, minWidth: 80, display: "inline-block" }}>
+              Payload
+            </span>
+            <pre
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                background: "#fff",
+                padding: 8,
+                borderRadius: 6,
+                border: "1px solid rgba(15,23,42,0.08)",
+                marginTop: 4,
+                overflow: "auto",
+                maxHeight: 140,
+                fontSize: 11,
+              }}
+            >
+{JSON.stringify(sig.payload, null, 2)}
+            </pre>
+          </div>
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+            <button
+              onClick={onVerify}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 6,
+                border: "1px solid rgba(15,118,110,0.3)",
+                background: "#fff",
+                color: "#0f766e",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Verify now
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </li>
+  );
+}

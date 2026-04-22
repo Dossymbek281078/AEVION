@@ -1,230 +1,43 @@
 import { Router } from "express";
+
+import { verifyBearerOptional } from "../lib/authJwt";
+import {
+  callProvider,
+  getProviders,
+  resolveProvider,
+  sanitizeMessages,
+} from "../services/qcoreai/providers";
+import { AgentOverride } from "../services/qcoreai/agents";
+import { runMultiAgent, OrchestratorEvent } from "../services/qcoreai/orchestrator";
+import {
+  buildHistoryContext,
+  createRun,
+  deleteSession,
+  ensureSession,
+  finishRun,
+  getRun,
+  getSession,
+  insertMessage,
+  listMessages,
+  listRuns,
+  listSessions,
+  renameSessionIfDefault,
+  touchSession,
+} from "../services/qcoreai/store";
+
 export const qcoreaiRouter = Router();
 
-type ChatMessage = { role: string; content: string };
+/* ═══════════════════════════════════════════════════════════════════════
+   Legacy single-shot chat (kept for backwards compatibility)
+   POST /api/qcoreai/chat
+   ═══════════════════════════════════════════════════════════════════════ */
 
-function sanitizeMessages(raw: unknown): ChatMessage[] | null {
-  if (!Array.isArray(raw)) return null;
-  const out: ChatMessage[] = [];
-  for (const m of raw) {
-    if (!m || typeof m !== "object") continue;
-    const role = (m as any).role;
-    const content = (m as any).content;
-    if (role !== "user" && role !== "assistant" && role !== "system") continue;
-    if (typeof content !== "string" || !content.trim()) continue;
-    out.push({ role, content: content.slice(0, 32000) });
-  }
-  return out.length ? out : null;
-}
-
-/* ═══ Provider definitions ═══ */
-type Provider = {
-  id: string;
-  name: string;
-  models: string[];
-  defaultModel: string;
-  envKey: string;
-  configured: boolean;
-};
-
-function getProviders(): Provider[] {
-  return [
-    {
-      id: "anthropic",
-      name: "Claude (Anthropic)",
-      models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"],
-      defaultModel: "claude-sonnet-4-20250514",
-      envKey: "ANTHROPIC_API_KEY",
-      configured: !!process.env.ANTHROPIC_API_KEY?.trim(),
-    },
-    {
-      id: "openai",
-      name: "GPT (OpenAI)",
-      models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-      defaultModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      envKey: "OPENAI_API_KEY",
-      configured: !!process.env.OPENAI_API_KEY?.trim(),
-    },
-    {
-      id: "gemini",
-      name: "Gemini (Google)",
-      models: ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"],
-defaultModel: "gemini-2.5-flash",
-      envKey: "GEMINI_API_KEY",
-      configured: !!process.env.GEMINI_API_KEY?.trim(),
-    },
-    {
-      id: "deepseek",
-      name: "DeepSeek",
-      models: ["deepseek-chat", "deepseek-reasoner"],
-      defaultModel: "deepseek-chat",
-      envKey: "DEEPSEEK_API_KEY",
-      configured: !!process.env.DEEPSEEK_API_KEY?.trim(),
-    },
-    {
-      id: "grok",
-      name: "Grok (xAI)",
-      models: ["grok-3", "grok-3-mini"],
-      defaultModel: "grok-3-mini",
-      envKey: "GROK_API_KEY",
-      configured: !!process.env.GROK_API_KEY?.trim(),
-    },
-  ];
-}
-
-/* ═══ Anthropic (Claude) ═══ */
-async function callAnthropic(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
-
-  const systemMsg = messages.find((m) => m.role === "system");
-  const chatMsgs = messages.filter((m) => m.role !== "system");
-
-  const body: any = {
-    model,
-    max_tokens: 4096,
-    temperature,
-    messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
-  };
-  if (systemMsg) body.system = systemMsg.content;
-
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `Anthropic ${r.status}`);
-
-  const reply = data.content?.map((b: any) => b.text || "").join("") || "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ OpenAI (GPT) ═══ */
-async function callOpenAI(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) throw new Error("OPENAI_API_KEY not configured");
-
-  const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const r = await fetch(`${base}/chat/completions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `OpenAI ${r.status}`);
-
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ Gemini (Google) ═══ */
-async function callGemini(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) throw new Error("GEMINI_API_KEY not configured");
-
-  const systemMsg = messages.find((m) => m.role === "system");
-  const chatMsgs = messages.filter((m) => m.role !== "system");
-
-  const contents = chatMsgs.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
-  const body: any = {
-    contents,
-    generationConfig: { temperature, maxOutputTokens: 4096 },
-  };
-  if (systemMsg) {
-    body.systemInstruction = { parts: [{ text: systemMsg.content }] };
-  }
-
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-  );
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `Gemini ${r.status}`);
-
-  const reply = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
-  return { reply, model, usage: null };
-}
-
-/* ═══ DeepSeek ═══ */
-async function callDeepSeek(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!key) throw new Error("DEEPSEEK_API_KEY not configured");
-
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `DeepSeek ${r.status}`);
-
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ Grok (xAI) ═══ */
-async function callGrok(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.GROK_API_KEY?.trim();
-  if (!key) throw new Error("GROK_API_KEY not configured");
-
-  const r = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `Grok ${r.status}`);
-
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ Router: resolve provider ═══ */
-function resolveProvider(providerId?: string): string {
-  if (providerId) {
-    const p = getProviders().find((p) => p.id === providerId);
-    if (p?.configured) return p.id;
-  }
-  // Auto-select first configured provider (priority: anthropic > openai > gemini > deepseek > grok)
-  for (const p of getProviders()) {
-    if (p.configured) return p.id;
-  }
-  return "stub";
-}
-
-async function callProvider(providerId: string, messages: ChatMessage[], model: string, temperature: number) {
-  switch (providerId) {
-    case "anthropic": return callAnthropic(messages, model, temperature);
-    case "openai": return callOpenAI(messages, model, temperature);
-    case "gemini": return callGemini(messages, model, temperature);
-    case "deepseek": return callDeepSeek(messages, model, temperature);
-    case "grok": return callGrok(messages, model, temperature);
-    default: throw new Error("No AI provider configured");
-  }
-}
-
-/* ═══ POST /api/qcoreai/chat ═══ */
 qcoreaiRouter.post("/chat", async (req, res) => {
   try {
     const messages = sanitizeMessages(req.body?.messages);
     if (!messages) {
       return res.status(400).json({ error: "messages required" });
     }
-
     const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
     const providerId = resolveProvider(requestedProvider);
 
@@ -234,7 +47,10 @@ qcoreaiRouter.post("/chat", async (req, res) => {
         mode: "stub",
         provider: "none",
         model: "none",
-        reply: `[QCoreAI — no AI provider configured]\n\nYour question: "${lastUser?.content?.slice(0, 200) || ""}"\n\nTo enable AI responses, add one of these API keys to the backend environment:\n- ANTHROPIC_API_KEY (Claude)\n- OPENAI_API_KEY (GPT-4)\n- GEMINI_API_KEY (Gemini)\n- DEEPSEEK_API_KEY (DeepSeek)\n- GROK_API_KEY (Grok)`,
+        reply:
+          `[QCoreAI — no AI provider configured]\n\nYour question: "${lastUser?.content?.slice(0, 200) || ""}"\n\n` +
+          `To enable AI responses, add one of these API keys to the backend environment:\n` +
+          `- ANTHROPIC_API_KEY (Claude)\n- OPENAI_API_KEY (GPT-4)\n- GEMINI_API_KEY (Gemini)\n- DEEPSEEK_API_KEY (DeepSeek)\n- GROK_API_KEY (Grok)`,
         usage: null,
       });
     }
@@ -244,7 +60,6 @@ qcoreaiRouter.post("/chat", async (req, res) => {
     const temperature = typeof req.body?.temperature === "number" ? req.body.temperature : 0.6;
 
     const result = await callProvider(providerId, messages, modelName, temperature);
-
     res.json({
       mode: providerId,
       provider: provider.name,
@@ -259,7 +74,10 @@ qcoreaiRouter.post("/chat", async (req, res) => {
   }
 });
 
-/* ═══ GET /api/qcoreai/providers ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   Providers + health
+   ═══════════════════════════════════════════════════════════════════════ */
+
 qcoreaiRouter.get("/providers", (_req, res) => {
   const providers = getProviders().map((p) => ({
     id: p.id,
@@ -271,7 +89,6 @@ qcoreaiRouter.get("/providers", (_req, res) => {
   res.json({ providers });
 });
 
-/* ═══ GET /api/qcoreai/health ═══ */
 qcoreaiRouter.get("/health", (_req, res) => {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
@@ -282,5 +99,336 @@ qcoreaiRouter.get("/health", (_req, res) => {
     totalProviders: providers.length,
     activeProvider: resolveProvider(),
     at: new Date().toISOString(),
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sessions CRUD
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/sessions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const rows = await listSessions(auth?.sub ?? null, 50);
+    res.json({ items: rows, total: rows.length, scope: auth ? "mine" : "anonymous" });
+  } catch (err: any) {
+    res.status(500).json({ error: "list sessions failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/sessions/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(req.params.id, auth?.sub ?? null);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    const runs = await listRuns(session.id, 200);
+    res.json({ session, runs });
+  } catch (err: any) {
+    res.status(500).json({ error: "get session failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/sessions/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const ok = await deleteSession(req.params.id, auth?.sub ?? null);
+    if (!ok) return res.status(404).json({ error: "session not found" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete session failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/runs/:id", async (req, res) => {
+  try {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const messages = await listMessages(run.id);
+    res.json({ run, messages });
+  } catch (err: any) {
+    res.status(500).json({ error: "get run failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Multi-agent pipeline (Server-Sent Events)
+   POST /api/qcoreai/multi-agent
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function parseAgentOverride(raw: any): AgentOverride | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: AgentOverride = {};
+  if (typeof raw.provider === "string") out.provider = raw.provider;
+  if (typeof raw.model === "string") out.model = raw.model;
+  if (typeof raw.temperature === "number") out.temperature = raw.temperature;
+  if (typeof raw.systemPrompt === "string" && raw.systemPrompt.trim().length > 0) {
+    out.systemPrompt = raw.systemPrompt.slice(0, 8000);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+qcoreaiRouter.post("/multi-agent", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+
+  const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
+  if (!userInput) {
+    return res.status(400).json({ error: "input required" });
+  }
+
+  const strategy: "sequential" | "parallel" =
+    req.body?.strategy === "parallel" ? "parallel" : "sequential";
+
+  const maxRevisions =
+    typeof req.body?.maxRevisions === "number" ? Math.max(0, Math.min(2, req.body.maxRevisions)) : 1;
+
+  const overrides: {
+    analyst?: AgentOverride;
+    writer?: AgentOverride;
+    writerB?: AgentOverride;
+    critic?: AgentOverride;
+  } = {
+    analyst: parseAgentOverride(req.body?.overrides?.analyst),
+    writer: parseAgentOverride(req.body?.overrides?.writer),
+    writerB: parseAgentOverride(req.body?.overrides?.writerB),
+    critic: parseAgentOverride(req.body?.overrides?.critic),
+  };
+
+  let sessionId: string;
+  let runId: string;
+  try {
+    const session = await ensureSession({
+      sessionId: typeof req.body?.sessionId === "string" ? req.body.sessionId : null,
+      userId,
+      seedTitle: userInput,
+    });
+    sessionId = session.id;
+    const run = await createRun({
+      sessionId,
+      userInput,
+      agentConfig: { strategy, maxRevisions, overrides },
+      strategy,
+    });
+    runId = run.id;
+    // Persist the user turn as message #0 immediately.
+    await insertMessage({
+      runId,
+      role: "user",
+      content: userInput,
+      ordering: 0,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: "session init failed", details: err?.message });
+  }
+
+  // Start SSE
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  if (typeof (res as any).flushHeaders === "function") (res as any).flushHeaders();
+
+  const send = (data: any) => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Heartbeat every 20s so proxies don't drop idle connection.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(`: ping\n\n`);
+  }, 20000);
+
+  let aborted = false;
+  req.on("close", () => {
+    aborted = true;
+    clearInterval(heartbeat);
+  });
+
+  send({ type: "session", sessionId, runId });
+
+  // History context for follow-up turns in the same session.
+  const history = await buildHistoryContext(sessionId, 6);
+
+  const runStart = Date.now();
+  let ordering = 1; // 0 is the user message
+  /**
+   * In parallel mode two agents stream concurrently, so we can't use a single
+   * "currentStage" slot. Key pending starts by role+stage+instance so that
+   * agent_end can look up the matching provider/model.
+   */
+  const pendingByKey = new Map<string, { provider: string; model: string }>();
+  const stageKey = (role: string, stage: string, instance?: string) =>
+    `${role}|${stage}|${instance || ""}`;
+  let finalContent: string | null = null;
+  let hadError: string | null = null;
+
+  try {
+    for await (const evt of runMultiAgent({
+      userInput,
+      strategy,
+      overrides,
+      maxRevisions,
+      history,
+    }) as AsyncGenerator<OrchestratorEvent>) {
+      if (aborted) break;
+      send(evt);
+
+      switch (evt.type) {
+        case "agent_start":
+          pendingByKey.set(stageKey(evt.role, evt.stage, evt.instance), {
+            provider: evt.provider,
+            model: evt.model,
+          });
+          break;
+        case "agent_end": {
+          const key = stageKey(evt.role, evt.stage, evt.instance);
+          const meta = pendingByKey.get(key);
+          await insertMessage({
+            runId,
+            role: evt.role,
+            stage: evt.stage,
+            instance: evt.instance ?? null,
+            provider: meta?.provider ?? null,
+            model: meta?.model ?? null,
+            content: evt.content,
+            tokensIn: evt.tokensIn ?? null,
+            tokensOut: evt.tokensOut ?? null,
+            durationMs: evt.durationMs,
+            ordering: ordering++,
+          });
+          pendingByKey.delete(key);
+          break;
+        }
+        case "final":
+          finalContent = evt.content;
+          await insertMessage({
+            runId,
+            role: "final",
+            content: evt.content,
+            ordering: ordering++,
+          });
+          break;
+        case "error":
+          hadError = evt.message;
+          break;
+        default:
+          break;
+      }
+    }
+  } catch (err: any) {
+    hadError = err?.message || "orchestrator crashed";
+    send({ type: "error", message: hadError });
+  } finally {
+    clearInterval(heartbeat);
+  }
+
+  const totalDurationMs = Date.now() - runStart;
+
+  // Persist run finalization.
+  try {
+    if (hadError && !finalContent) {
+      await finishRun(runId, "error", { error: hadError, finalContent: null, totalDurationMs });
+    } else {
+      await finishRun(runId, "done", { error: hadError, finalContent, totalDurationMs });
+    }
+    await renameSessionIfDefault(sessionId, userInput);
+    await touchSession(sessionId);
+  } catch (e: any) {
+    console.error("[QCoreAI] finishRun error:", e?.message);
+  }
+
+  if (!aborted) {
+    send({ type: "sse_end" });
+    res.end();
+  } else {
+    try { res.end(); } catch { /* noop */ }
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Role defaults (for UI to pre-populate config dropdowns)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/agents", (_req, res) => {
+  const providers = getProviders();
+  const resolveDefault = (preferProvider: string, preferModel: string) => {
+    const pref = providers.find((p) => p.id === preferProvider);
+    if (pref?.configured) {
+      const model = pref.models.includes(preferModel) ? preferModel : pref.defaultModel;
+      return { provider: pref.id, model };
+    }
+    const any = providers.find((p) => p.configured);
+    return any ? { provider: any.id, model: any.defaultModel } : null;
+  };
+  // For writerB, prefer a provider *different* from the primary writer if any exist.
+  const primaryWriter = resolveDefault("anthropic", "claude-sonnet-4-20250514");
+  let writerBDefault: { provider: string; model: string } | null = null;
+  if (primaryWriter) {
+    const other = providers.find((p) => p.configured && p.id !== primaryWriter.provider);
+    if (other) {
+      writerBDefault = { provider: other.id, model: other.defaultModel };
+    } else {
+      // Same provider, different model if any.
+      const same = providers.find((p) => p.id === primaryWriter.provider);
+      if (same) {
+        const altModel = same.models.find((m) => m !== primaryWriter.model) || same.defaultModel;
+        writerBDefault = { provider: same.id, model: altModel };
+      }
+    }
+  }
+
+  res.json({
+    strategies: [
+      {
+        id: "sequential",
+        label: "Sequential",
+        description: "Analyst → Writer → Critic → (optional) Writer revision. Classic reflection loop.",
+        agents: ["analyst", "writer", "critic"],
+      },
+      {
+        id: "parallel",
+        label: "Parallel drafts",
+        description:
+          "Analyst → two Writers stream in parallel on different models → Judge synthesizes the final. Diversity of voice.",
+        agents: ["analyst", "writer", "writerB", "critic"],
+      },
+    ],
+    roles: [
+      {
+        id: "analyst",
+        label: "Analyst",
+        description: "Decomposes your request, extracts facts, lists risks, builds a plan.",
+        default: resolveDefault("anthropic", "claude-sonnet-4-20250514"),
+        temperature: 0.3,
+      },
+      {
+        id: "writer",
+        label: "Writer",
+        description: "Drafts the final answer following the Analyst's plan.",
+        default: primaryWriter,
+        temperature: 0.7,
+      },
+      {
+        id: "writerB",
+        label: "Writer B",
+        description:
+          "Parallel mode only: second Writer with a different model/voice (concise, bottom-line first).",
+        default: writerBDefault,
+        temperature: 0.7,
+      },
+      {
+        id: "critic",
+        label: "Critic / Judge",
+        description:
+          "Sequential: approves draft or requests revisions. Parallel: picks or merges the two drafts.",
+        default: resolveDefault("anthropic", "claude-haiku-4-5-20251001"),
+        temperature: 0.2,
+      },
+    ],
   });
 });

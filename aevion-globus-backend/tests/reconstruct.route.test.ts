@@ -8,6 +8,7 @@ beforeAll(() => {
     "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
     "hex",
   ).toString("base64");
+  process.env.ENABLE_DEMO_ENDPOINTS = "true";
 });
 
 const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
@@ -172,6 +173,54 @@ describe("POST /api/pipeline/reconstruct", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.reason).toBe("INVALID_SHARD_FORMAT");
+  });
+});
+
+describe("POST /api/pipeline/demo-generate + demo-reconstruct", () => {
+  test("demo-generate returns 3 authenticated shards + public key, sets X-Demo header", async () => {
+    const res = await request(makeApp())
+      .post("/api/pipeline/demo-generate")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-demo"]).toBe("true");
+    expect(res.body.demo).toBe(true);
+    expect(res.body.shards.length).toBe(3);
+    expect(typeof res.body.publicKeySpkiHex).toBe("string");
+  });
+
+  test("demo-reconstruct succeeds with 2 shards from demo-generate output", async () => {
+    const gen = await request(makeApp())
+      .post("/api/pipeline/demo-generate")
+      .send({});
+
+    expect(gen.status).toBe(200);
+
+    const res = await request(makeApp())
+      .post("/api/pipeline/demo-reconstruct")
+      .send({
+        shieldId: gen.body.shieldId,
+        publicKeySpkiHex: gen.body.publicKeySpkiHex,
+        shards: [gen.body.shards[0], gen.body.shards[2]],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.valid).toBe(true);
+    expect(res.body.reconstructed).toBe(true);
+  });
+
+  test("demo endpoints return 404 when ENABLE_DEMO_ENDPOINTS=false", async () => {
+    const original = process.env.ENABLE_DEMO_ENDPOINTS;
+    process.env.ENABLE_DEMO_ENDPOINTS = "false";
+    try {
+      const res = await request(makeApp())
+        .post("/api/pipeline/demo-generate")
+        .send({});
+      expect(res.status).toBe(404);
+      expect(res.body.reason).toBe("DEMO_DISABLED");
+    } finally {
+      process.env.ENABLE_DEMO_ENDPOINTS = original;
+    }
   });
 });
 

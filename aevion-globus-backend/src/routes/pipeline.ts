@@ -4,6 +4,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import {
+  areDemoEndpointsEnabled,
   HMAC_KEY_VERSION,
   SHAMIR_SHARDS,
   SHAMIR_THRESHOLD,
@@ -16,11 +17,17 @@ import {
   wipeBuffer,
   type AuthenticatedShard,
 } from "../lib/shamir/shield";
+import {
+  clientIp,
+  createInMemoryRateLimiter,
+} from "../lib/rateLimit/inMemoryWindow";
 
 export const pipelineRouter = Router();
 const pool = getPool();
 
 const SIGN_SECRET = process.env.QSIGN_SECRET || "dev-qsign-secret";
+
+const demoRateLimiter = createInMemoryRateLimiter({ max: 10 });
 
 /* ── Ensure tables ── */
 let tablesReady = false;
@@ -584,6 +591,154 @@ pipelineRouter.post("/reconstruct", async (req, res) => {
       .status(500)
       .json({ valid: false, reconstructed: false, reason: "INTERNAL_ERROR" });
   }
+});
+
+/**
+ * POST /api/pipeline/demo-generate
+ *
+ * Investor/press demo: creates an ephemeral Ed25519 keypair, splits it via
+ * real Shamir SSS (2-of-3), authenticates shards with HMAC, and returns the
+ * entire payload in the response. Nothing persisted.
+ *
+ * Gated by ENABLE_DEMO_ENDPOINTS env (default off). Rate-limited 10 req/min/IP.
+ */
+pipelineRouter.post("/demo-generate", (req, res) => {
+  if (!areDemoEndpointsEnabled()) {
+    return res.status(404).json({
+      error: "Not Found",
+      reason: "DEMO_DISABLED" satisfies QRightErrorCode,
+    });
+  }
+
+  const ip = clientIp({ ip: req.ip, headers: req.headers });
+  const rl = demoRateLimiter.check(ip);
+  if (!rl.allowed) {
+    res.setHeader("Retry-After", Math.ceil(rl.retryAfterMs / 1000).toString());
+    return res.status(429).json({
+      error: "Too Many Requests",
+      reason: "RATE_LIMITED" satisfies QRightErrorCode,
+      retryAfterMs: rl.retryAfterMs,
+    });
+  }
+
+  try {
+    res.setHeader("X-Demo", "true");
+
+    const shieldId = "qs-demo-" + crypto.randomBytes(8).toString("hex");
+    const { privateKeyRaw, publicKeySpkiHex, publicKeyRawHex } =
+      generateEphemeralEd25519();
+
+    let shards: AuthenticatedShard[];
+    try {
+      shards = splitAndAuthenticate(privateKeyRaw, shieldId);
+    } finally {
+      wipeBuffer(privateKeyRaw);
+    }
+
+    return res.status(200).json({
+      demo: true,
+      ephemeral: true,
+      shieldId,
+      publicKeySpkiHex,
+      publicKeyRawHex,
+      threshold: SHAMIR_THRESHOLD,
+      totalShards: SHAMIR_SHARDS,
+      hmacKeyVersion: HMAC_KEY_VERSION,
+      shards,
+      note: "This shield is NOT persisted. Reconstruction against /api/pipeline/reconstruct will return SHIELD_NOT_FOUND because the record does not exist in the DB. The shards below are, however, cryptographically valid — HMAC verifies, and combining 2 of 3 reconstructs the Ed25519 private key.",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "demo generation failed";
+    console.error("[Demo] generate error:", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/pipeline/demo-reconstruct
+ *
+ * Stateless sibling of /reconstruct for the demo UI. Takes an ephemeral
+ * shieldId + publicKeySpkiHex + shards and verifies reconstruction without
+ * touching the DB. Gated + rate-limited identically to /demo-generate.
+ */
+pipelineRouter.post("/demo-reconstruct", (req, res) => {
+  if (!areDemoEndpointsEnabled()) {
+    return res.status(404).json({
+      error: "Not Found",
+      reason: "DEMO_DISABLED" satisfies QRightErrorCode,
+    });
+  }
+
+  const ip = clientIp({ ip: req.ip, headers: req.headers });
+  const rl = demoRateLimiter.check(ip);
+  if (!rl.allowed) {
+    res.setHeader("Retry-After", Math.ceil(rl.retryAfterMs / 1000).toString());
+    return res.status(429).json({
+      error: "Too Many Requests",
+      reason: "RATE_LIMITED" satisfies QRightErrorCode,
+      retryAfterMs: rl.retryAfterMs,
+    });
+  }
+
+  res.setHeader("X-Demo", "true");
+
+  const body = req.body as {
+    shieldId?: unknown;
+    publicKeySpkiHex?: unknown;
+    shards?: unknown;
+  };
+  const shieldId = typeof body.shieldId === "string" ? body.shieldId : null;
+  const publicKeySpkiHex =
+    typeof body.publicKeySpkiHex === "string" ? body.publicKeySpkiHex : null;
+  const shardsInput = Array.isArray(body.shards) ? body.shards : [];
+
+  if (!shieldId || !publicKeySpkiHex) {
+    return res.status(400).json({
+      valid: false,
+      reconstructed: false,
+      reason: "INVALID_SHARD_FORMAT" satisfies QRightErrorCode,
+    });
+  }
+
+  if (shardsInput.length < SHAMIR_THRESHOLD) {
+    return res.status(400).json({
+      valid: false,
+      reconstructed: false,
+      reason: "INSUFFICIENT_SHARDS" satisfies QRightErrorCode,
+    });
+  }
+
+  for (const s of shardsInput) {
+    if (!isShardInput(s)) {
+      return res.status(400).json({
+        valid: false,
+        reconstructed: false,
+        reason: "INVALID_SHARD_FORMAT" satisfies QRightErrorCode,
+      });
+    }
+  }
+
+  const result = combineAndVerify(
+    shardsInput as Parameters<typeof combineAndVerify>[0],
+    shieldId,
+    publicKeySpkiHex,
+  );
+
+  if (!result.ok) {
+    return res.status(400).json({
+      valid: false,
+      reconstructed: false,
+      reason: result.reason ?? "RECONSTRUCTION_FAILED",
+    });
+  }
+
+  return res.status(200).json({
+    demo: true,
+    valid: true,
+    reconstructed: true,
+    shieldId,
+    verifiedAt: new Date().toISOString(),
+  });
 });
 
 /**

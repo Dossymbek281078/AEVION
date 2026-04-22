@@ -1794,8 +1794,52 @@ export default function CyberChessPage(){
 
           {/* ── Coach Tab ── */}
           {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Mode selector — 5 ways to start a Coach session */}
+            {(()=>{
+              const modeBtn=(icon:string,title:string,sub:string,onClick:()=>void,active?:boolean)=>(
+                <button onClick={onClick} style={{padding:"11px 8px",borderRadius:9,border:active?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:active?"rgba(5,150,105,0.08)":"#fff",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",gap:4,alignItems:"center",minHeight:86,transition:"all 0.15s",boxShadow:active?"0 2px 8px rgba(5,150,105,0.12)":"none"}}>
+                  <span style={{fontSize:22,lineHeight:1}}>{icon}</span>
+                  <span style={{fontSize:12,fontWeight:800,color:active?T.accent:T.text,lineHeight:1.2}}>{title}</span>
+                  <span style={{fontSize:10,color:T.dim,lineHeight:1.3}}>{sub}</span>
+                </button>
+              );
+              const isVsAI=coachAIEnabled&&!editorMode&&on;
+              const isSolo=!coachAIEnabled&&!editorMode;
+              return (
+                <div style={{borderRadius:10,background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:800,color:T.accent,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>🎓 Как учимся</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:6}}>
+                    {modeBtn("🤖","Против AI","играй с ботом, Coach комментирует",()=>{
+                      sCoachAIEnabled(true);sEditorMode(false);
+                      const cl=pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();
+                      showToast("Новая игра против AI","success");
+                    },isVsAI)}
+                    {modeBtn("✋","За обоих","двигай сам обе стороны",()=>{
+                      sCoachAIEnabled(false);sEditorMode(false);
+                      const g=new Chess();setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([g.fen()]);sCapW([]);sCapB([]);sPromo(null);sPms([]);sPmSel(null);sOn(false);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);
+                      showToast("Свободная игра за обоих","info");
+                    },isSolo&&hist.length===0)}
+                    {modeBtn("📥","Импорт","PGN / FEN / расстановка",()=>{
+                      sCoachAIEnabled(false);
+                      const el=document.getElementById("coach-import-section");
+                      if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
+                      showToast("Выбери источник ниже","info");
+                    })}
+                    {modeBtn("🧩","Из пазлов","активный пазл",()=>{
+                      if(!pzCurrent){showToast("Сначала выбери пазл во вкладке Puzzles","info");sTab("puzzles");return}
+                      const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(false);sEditorMode(false);
+                      showToast(`Пазл: ${pzCurrent.name}`,"success");
+                    })}
+                    {modeBtn("📜",savedGames.length>0?`Библиотека · ${savedGames.length}`:"Библиотека","твои партии",()=>{
+                      if(savedGames.length===0){showToast("Нет сыгранных партий — сыграй хотя бы одну","error");return}
+                      sGamesModalOpen(true);
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
             {/* Position import */}
-            <div style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe",padding:"10px 12px"}}>
+            <div id="coach-import-section" style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe",padding:"10px 12px"}}>
               <div style={{fontSize:11,fontWeight:800,color:T.blue,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>📥 Загрузить позицию</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
                 <button onClick={()=>{

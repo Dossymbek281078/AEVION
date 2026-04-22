@@ -22,6 +22,7 @@ import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { SavingsGoals } from "./_components/SavingsGoals";
+import { SpendingInsights } from "./_components/SpendingInsights";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
 import { SendForm } from "./_components/SendForm";
 import { TopupForm } from "./_components/TopupForm";
@@ -294,6 +295,8 @@ function BankContent() {
             send={send}
             notify={notify}
           />
+
+          <SpendingInsights accountId={account.id} operations={operations} />
 
           <TransactionList
             myId={account.id}

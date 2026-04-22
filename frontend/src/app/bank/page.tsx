@@ -1,9 +1,11 @@
 "use client";
 
-// Backend gaps (handled in aevion-globus-backend session, NOT here):
+// Backend gaps (handled in aevion-globus-backend / aevion-backend-modules sessions, NOT here):
 //  - /api/qtrade/* has no JWT middleware → we filter by owner client-side. Unsafe.
-//  - /operations and /transfers have no pagination → we show max 50 client-side.
+//  - /api/qtrade/operations and /transfers have no pagination → max 50 client-side.
 //  - No email→accountId resolver → P2P requires full acc_<uuid> input.
+//  - /api/ecosystem/earnings endpoint missing → TotalEarningsDashboard uses seeded mock
+//    for QRight / CyberChess / Planet streams (banking slice is live).
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -17,6 +19,7 @@ import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
 import { SendForm } from "./_components/SendForm";
 import { TopupForm } from "./_components/TopupForm";
+import { TotalEarningsDashboard } from "./_components/TotalEarningsDashboard";
 import { TransactionList } from "./_components/TransactionList";
 import { TrustScoreCard } from "./_components/TrustScoreCard";
 import { WalletSummary } from "./_components/WalletSummary";
@@ -213,6 +216,7 @@ function BankContent() {
 
       {hasWallet && account ? (
         <>
+          <TotalEarningsDashboard accountId={account.id} operations={operations} />
           <TrustScoreCard account={account} operations={operations} />
           <AccountIdCard
             accountId={account.id}

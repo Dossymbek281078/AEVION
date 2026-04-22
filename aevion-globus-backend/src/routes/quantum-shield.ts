@@ -1,13 +1,29 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { getPool } from "../lib/dbPool";
+import {
+  HMAC_KEY_VERSION,
+  SHAMIR_SHARDS,
+  SHAMIR_THRESHOLD,
+} from "../config/qright";
+import {
+  generateEphemeralEd25519,
+  splitAndAuthenticate,
+  verifyShardHmac,
+  wipeBuffer,
+  type AuthenticatedShard,
+} from "../lib/shamir/shield";
+// _legacyGenerateShards is intentionally imported (not called) to preserve the
+// symbol export for any legacy test or analytics code that references it.
+import { _legacyGenerateShards } from "../lib/shamir/legacy";
+void _legacyGenerateShards;
 
 export const quantumShieldRouter = Router();
 const pool = getPool();
 
 let ensuredTable = false;
 
-async function ensureShieldTable() {
+async function ensureShieldTable(): Promise<void> {
   if (ensuredTable) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QuantumShield" (
@@ -24,72 +40,152 @@ async function ensureShieldTable() {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(
+    `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "legacy" BOOLEAN NOT NULL DEFAULT false;`,
+  );
+  await pool.query(
+    `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "hmac_key_version" INTEGER NOT NULL DEFAULT 1;`,
+  );
   ensuredTable = true;
 }
 
-function generateShards(data: string, total: number): string[] {
-  const shards: string[] = [];
-  for (let i = 0; i < total; i++) {
-    const shardId = crypto.randomBytes(16).toString("hex");
-    const shardData = crypto.createHash("sha256").update(data + ":shard:" + i + ":" + shardId).digest("hex");
-    shards.push(JSON.stringify({
-      index: i + 1, id: shardId, data: shardData,
-      location: ["Author Vault", "AEVION Platform", "Witness Node"][i % 3],
-      status: "active", createdAt: new Date().toISOString(), lastVerified: new Date().toISOString(),
-    }));
+function parseShards(raw: unknown): AuthenticatedShard[] {
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as AuthenticatedShard[]) : [];
+  } catch {
+    return [];
   }
-  return shards;
 }
 
-// ── List handler (reused by / and /records) ──
-async function handleList(_req: any, res: any) {
+/* ── List handler (reused by / and /records) ── */
+async function handleList(_req: Request, res: Response): Promise<void> {
   try {
     await ensureShieldTable();
-    const { rows } = await pool.query(`SELECT * FROM "QuantumShield" ORDER BY "createdAt" DESC LIMIT 100`);
-    const records = rows.map((r: any) => {
-      let shards: any[] = []; try { shards = JSON.parse(r.shards); } catch {}
-      const activeCount = shards.filter((s: any) => s.status === "active").length;
-      let status = "active";
-      if (activeCount < r.threshold) status = "critical";
-      else if (activeCount < r.totalShards) status = "warning";
-      return { id: r.id, objectId: r.objectId, objectTitle: r.objectTitle, algorithm: r.algorithm, threshold: r.threshold, totalShards: r.totalShards, shards, signature: r.signature, publicKey: r.publicKey, status, createdAt: r.createdAt };
+    const { rows } = await pool.query(
+      `SELECT * FROM "QuantumShield" ORDER BY "createdAt" DESC LIMIT 100`,
+    );
+    const records = rows.map((r: Record<string, unknown>) => {
+      const shards = parseShards(r.shards);
+      const status =
+        (r.status as string) ||
+        (r.legacy === true ? "legacy" : "active");
+      return {
+        id: r.id,
+        objectId: r.objectId,
+        objectTitle: r.objectTitle,
+        algorithm: r.algorithm,
+        threshold: r.threshold,
+        totalShards: r.totalShards,
+        shards,
+        signature: r.signature,
+        publicKey: r.publicKey,
+        legacy: r.legacy === true,
+        hmacKeyVersion: r.hmac_key_version ?? 1,
+        status,
+        createdAt: r.createdAt,
+      };
     });
     res.json({ records, items: records, total: records.length });
   } catch (err) {
-    console.error("[QuantumShield] list error:", err);
+    console.error(
+      "[QuantumShield] list error:",
+      err instanceof Error ? err.message : String(err),
+    );
     res.status(500).json({ error: "Failed to fetch shield records" });
   }
 }
 
-// ── Create handler (reused by POST / and POST /create) ──
-async function handleCreate(req: any, res: any) {
+/* ── Create handler (reused by POST / and POST /create) ── */
+async function handleCreate(req: Request, res: Response): Promise<void> {
   try {
     await ensureShieldTable();
-    const { objectId, objectTitle, payload, threshold = 2, totalShards = 3 } = req.body;
-    const title = objectTitle || (payload ? JSON.stringify(payload).slice(0, 80) : null);
-    if (!title) return res.status(400).json({ error: "objectTitle or payload is required" });
+    const { objectId, objectTitle, payload } = req.body as {
+      objectId?: string;
+      objectTitle?: string;
+      payload?: unknown;
+    };
+    const title =
+      objectTitle || (payload ? JSON.stringify(payload).slice(0, 80) : null);
+    if (!title) {
+      res.status(400).json({ error: "objectTitle or payload is required" });
+      return;
+    }
 
     const id = "qs-" + crypto.randomBytes(8).toString("hex");
-    const dataToProtect = JSON.stringify({ objectId, objectTitle: title, payload, timestamp: Date.now() });
-    const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-    const signature = crypto.sign(null, Buffer.from(dataToProtect), privateKey).toString("hex");
-    const pubKeyHex = publicKey.export({ type: "spki", format: "der" }).toString("hex");
-    const shards = generateShards(dataToProtect, totalShards);
-    const shardsJson = "[" + shards.join(",") + "]";
+    const { privateKeyRaw, publicKeySpkiHex } = generateEphemeralEd25519();
+
+    const dataToSign = JSON.stringify({
+      objectId,
+      objectTitle: title,
+      payload,
+      timestamp: Date.now(),
+    });
+    const pkcs8Prefix = Buffer.from(
+      "302e020100300506032b657004220420",
+      "hex",
+    );
+    const pkcs8 = Buffer.concat([pkcs8Prefix, privateKeyRaw]);
+    const signingKey = crypto.createPrivateKey({
+      key: pkcs8,
+      format: "der",
+      type: "pkcs8",
+    });
+    const signature = crypto
+      .sign(null, Buffer.from(dataToSign), signingKey)
+      .toString("hex");
+    wipeBuffer(pkcs8);
+
+    let shards: AuthenticatedShard[];
+    try {
+      shards = splitAndAuthenticate(privateKeyRaw, id);
+    } finally {
+      wipeBuffer(privateKeyRaw);
+    }
 
     await pool.query(
-      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NOW())`,
-      [id, objectId || null, title, "Shamir's Secret Sharing + Ed25519", threshold, totalShards, shardsJson, signature, pubKeyHex]
+      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,NOW())`,
+      [
+        id,
+        objectId || null,
+        title,
+        "Shamir's Secret Sharing + Ed25519",
+        SHAMIR_THRESHOLD,
+        SHAMIR_SHARDS,
+        JSON.stringify(shards),
+        signature,
+        publicKeySpkiHex,
+        HMAC_KEY_VERSION,
+      ],
     );
 
-    res.status(201).json({ id, objectId, objectTitle: title, algorithm: "Shamir's Secret Sharing + Ed25519", threshold, totalShards, shards: JSON.parse(shardsJson), signature, publicKey: pubKeyHex, status: "active", createdAt: new Date().toISOString() });
+    res.status(201).json({
+      id,
+      objectId,
+      objectTitle: title,
+      algorithm: "Shamir's Secret Sharing + Ed25519",
+      threshold: SHAMIR_THRESHOLD,
+      totalShards: SHAMIR_SHARDS,
+      hmacKeyVersion: HMAC_KEY_VERSION,
+      shards,
+      signature,
+      publicKey: publicKeySpkiHex,
+      status: "active",
+      legacy: false,
+      createdAt: new Date().toISOString(),
+    });
   } catch (err) {
-    console.error("[QuantumShield] create error:", err);
+    console.error(
+      "[QuantumShield] create error:",
+      err instanceof Error ? err.message : String(err),
+    );
     res.status(500).json({ error: "Failed to create shield record" });
   }
 }
 
-// ── Routes ──
+/* ── Routes ── */
 quantumShieldRouter.get("/", handleList);
 quantumShieldRouter.get("/records", handleList);
 
@@ -99,11 +195,20 @@ quantumShieldRouter.post("/create", handleCreate);
 quantumShieldRouter.get("/stats", async (_req, res) => {
   try {
     await ensureShieldTable();
-    const { rows } = await pool.query(`SELECT COUNT(*) as total, SUM("totalShards") as "totalShards", AVG("threshold") as "avgThreshold" FROM "QuantumShield"`);
+    const { rows } = await pool.query(
+      `SELECT COUNT(*) as total, SUM("totalShards") as "totalShards", AVG("threshold") as "avgThreshold" FROM "QuantumShield"`,
+    );
     const r = rows[0];
-    res.json({ totalRecords: parseInt(r.total) || 0, totalShards: parseInt(r.totalShards) || 0, avgThreshold: Math.round(parseFloat(r.avgThreshold) || 0) });
+    res.json({
+      totalRecords: parseInt(r.total) || 0,
+      totalShards: parseInt(r.totalShards) || 0,
+      avgThreshold: Math.round(parseFloat(r.avgThreshold) || 0),
+    });
   } catch (err) {
-    console.error("[QuantumShield] stats error:", err);
+    console.error(
+      "[QuantumShield] stats error:",
+      err instanceof Error ? err.message : String(err),
+    );
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
@@ -111,13 +216,26 @@ quantumShieldRouter.get("/stats", async (_req, res) => {
 quantumShieldRouter.get("/:id", async (req, res) => {
   try {
     await ensureShieldTable();
-    const { rows } = await pool.query(`SELECT * FROM "QuantumShield" WHERE "id" = $1`, [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: "Shield record not found" });
-    const r = rows[0];
-    let shards: any[] = []; try { shards = JSON.parse(r.shards); } catch {}
-    res.json({ ...r, shards });
+    const { rows } = await pool.query(
+      `SELECT * FROM "QuantumShield" WHERE "id" = $1`,
+      [req.params.id],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Shield record not found" });
+    }
+    const r = rows[0] as Record<string, unknown>;
+    const shards = parseShards(r.shards);
+    res.json({
+      ...r,
+      shards,
+      legacy: r.legacy === true,
+      hmacKeyVersion: r.hmac_key_version ?? 1,
+    });
   } catch (err) {
-    console.error("[QuantumShield] get error:", err);
+    console.error(
+      "[QuantumShield] get error:",
+      err instanceof Error ? err.message : String(err),
+    );
     res.status(500).json({ error: "Failed to fetch shield record" });
   }
 });
@@ -125,49 +243,142 @@ quantumShieldRouter.get("/:id", async (req, res) => {
 quantumShieldRouter.post("/:id/verify", async (req, res) => {
   try {
     await ensureShieldTable();
-    const { rows } = await pool.query(`SELECT * FROM "QuantumShield" WHERE "id" = $1`, [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: "Shield record not found" });
-    const r = rows[0];
-    let shards: any[] = []; try { shards = JSON.parse(r.shards); } catch {}
+    const { rows } = await pool.query(
+      `SELECT * FROM "QuantumShield" WHERE "id" = $1`,
+      [req.params.id],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Shield record not found" });
+    }
+    const r = rows[0] as Record<string, unknown>;
+    const shards = parseShards(r.shards);
     const now = new Date().toISOString();
-    const updatedShards = shards.map((s: any) => s.status === "active" ? { ...s, lastVerified: now } : s);
-    await pool.query(`UPDATE "QuantumShield" SET "shards" = $1 WHERE "id" = $2`, [JSON.stringify(updatedShards), req.params.id]);
-    const activeCount = updatedShards.filter((s: any) => s.status === "active").length;
-    res.json({ success: true, valid: true, verifiedAt: now, activeShards: activeCount, threshold: r.threshold, secure: activeCount >= r.threshold });
+    const updatedShards = shards.map((s) => ({ ...s, lastVerified: now }));
+    await pool.query(
+      `UPDATE "QuantumShield" SET "shards" = $1 WHERE "id" = $2`,
+      [JSON.stringify(updatedShards), req.params.id],
+    );
+    res.json({
+      success: true,
+      valid: true,
+      verifiedAt: now,
+      activeShards: updatedShards.length,
+      threshold: r.threshold,
+      secure: updatedShards.length >= (r.threshold as number),
+    });
   } catch (err) {
-    console.error("[QuantumShield] verify error:", err);
+    console.error(
+      "[QuantumShield] verify error:",
+      err instanceof Error ? err.message : String(err),
+    );
     res.status(500).json({ error: "Failed to verify shards" });
   }
 });
 
+/**
+ * @deprecated Legacy "verify shards by string match" endpoint. Does NOT
+ * perform Shamir reconstruction. Use `POST /api/pipeline/reconstruct` for
+ * authenticated reconstruction. Kept for backward compatibility; will be
+ * removed in a future release.
+ */
 quantumShieldRouter.post("/verify", async (req, res) => {
   try {
     await ensureShieldTable();
-    const { recordId, shards: shardInputs } = req.body;
+    const { recordId, shards: shardInputs } = req.body as {
+      recordId?: string;
+      shards?: unknown[];
+    };
     if (recordId) {
-      const { rows } = await pool.query(`SELECT * FROM "QuantumShield" WHERE "id" = $1`, [recordId]);
-      if (rows.length === 0) return res.status(404).json({ error: "Record not found", valid: false });
-      const r = rows[0];
-      let storedShards: any[] = []; try { storedShards = JSON.parse(r.shards); } catch {}
-      const matchCount = (shardInputs || []).filter((input: string) => storedShards.some((s: any) => s.data === input || s.id === input)).length;
-      const valid = matchCount >= r.threshold;
-      return res.json({ valid, matched: matchCount, threshold: r.threshold, recovered: valid, recordId });
+      const { rows } = await pool.query(
+        `SELECT * FROM "QuantumShield" WHERE "id" = $1`,
+        [recordId],
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({
+          error: "Record not found",
+          valid: false,
+          deprecated: true,
+        });
+      }
+      const r = rows[0] as Record<string, unknown>;
+      const storedShards = parseShards(r.shards);
+      const inputs = Array.isArray(shardInputs) ? shardInputs : [];
+
+      // Preferred path: if inputs look like AuthenticatedShard objects, run
+      // HMAC verification (does not reconstruct, but at least catches tamper).
+      let hmacValidCount = 0;
+      for (const input of inputs) {
+        if (
+          input &&
+          typeof input === "object" &&
+          typeof (input as { sssShare?: unknown }).sssShare === "string"
+        ) {
+          const shardLike = input as {
+            index: number;
+            sssShare: string;
+            hmac: string;
+            hmacKeyVersion: number;
+          };
+          if (verifyShardHmac(shardLike, recordId)) {
+            hmacValidCount += 1;
+          }
+        }
+      }
+
+      // Legacy path: string match against stored shard fields (for old clients).
+      const matchCount = inputs.filter((input) =>
+        typeof input === "string"
+          ? storedShards.some(
+              (s) =>
+                (s as { sssShare?: string }).sssShare === input ||
+                (s as unknown as { data?: string }).data === input ||
+                (s as unknown as { id?: string }).id === input,
+            )
+          : false,
+      ).length;
+
+      const effectiveMatches = Math.max(hmacValidCount, matchCount);
+      const valid = effectiveMatches >= (r.threshold as number);
+      return res.json({
+        valid,
+        matched: effectiveMatches,
+        threshold: r.threshold,
+        recovered: valid,
+        recordId,
+        deprecated: true,
+        note: "Use POST /api/pipeline/reconstruct for authenticated reconstruction (combines shards via Lagrange interpolation and re-signs with recovered Ed25519 key).",
+      });
     }
-    res.json({ valid: false, error: "recordId required" });
+    res.json({
+      valid: false,
+      error: "recordId required",
+      deprecated: true,
+    });
   } catch (err) {
-    console.error("[QuantumShield] verify error:", err);
-    res.status(500).json({ error: "Verification failed" });
+    console.error(
+      "[QuantumShield] verify error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Verification failed", deprecated: true });
   }
 });
 
 quantumShieldRouter.delete("/:id", async (req, res) => {
   try {
     await ensureShieldTable();
-    const result = await pool.query(`DELETE FROM "QuantumShield" WHERE "id" = $1`, [req.params.id]);
-    if (result.rowCount === 0) return res.status(404).json({ error: "Shield record not found" });
+    const result = await pool.query(
+      `DELETE FROM "QuantumShield" WHERE "id" = $1`,
+      [req.params.id],
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Shield record not found" });
+    }
     res.json({ success: true, deleted: req.params.id });
   } catch (err) {
-    console.error("[QuantumShield] delete error:", err);
+    console.error(
+      "[QuantumShield] delete error:",
+      err instanceof Error ? err.message : String(err),
+    );
     res.status(500).json({ error: "Failed to delete shield record" });
   }
 });

@@ -1,8 +1,21 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
+import {
+  HMAC_KEY_VERSION,
+  SHAMIR_SHARDS,
+  SHAMIR_THRESHOLD,
+} from "../config/qright";
+import { QRightError, type QRightErrorCode } from "../lib/errors/QRightError";
+import {
+  combineAndVerify,
+  generateEphemeralEd25519,
+  splitAndAuthenticate,
+  wipeBuffer,
+  type AuthenticatedShard,
+} from "../lib/shamir/shield";
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -11,7 +24,7 @@ const SIGN_SECRET = process.env.QSIGN_SECRET || "dev-qsign-secret";
 
 /* ── Ensure tables ── */
 let tablesReady = false;
-async function ensureTables() {
+async function ensureTables(): Promise<void> {
   if (tablesReady) return;
 
   await pool.query(`
@@ -29,9 +42,15 @@ async function ensureTables() {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "country" TEXT;`);
-  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "city" TEXT;`);
-  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "ownerUserId" TEXT;`);
+  await pool.query(
+    `ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "country" TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "city" TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "ownerUserId" TEXT;`,
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QuantumShield" (
@@ -48,6 +67,12 @@ async function ensureTables() {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(
+    `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "legacy" BOOLEAN NOT NULL DEFAULT false;`,
+  );
+  await pool.query(
+    `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "hmac_key_version" INTEGER NOT NULL DEFAULT 1;`,
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "IPCertificate" (
@@ -80,29 +105,36 @@ async function ensureTables() {
 }
 
 /* ── Legal basis references ── */
-function getLegalBasis(country?: string | null) {
+function getLegalBasis(country?: string | null): Record<string, unknown> {
+  // TODO: Disclaimer text below is pending rewrite — do not edit without the
+  // updated wording from product/legal. Target line: `disclaimer` key in this
+  // object (see `pipeline.ts:getLegalBasis`).
   const basis: Record<string, unknown> = {
     framework: "AEVION Digital IP Bureau",
     version: "1.0",
     type: "Proof of Prior Art / Proof of Existence",
-    description: "This certificate constitutes cryptographic proof that the described intellectual property existed at the recorded timestamp, authored by the named party. It serves as evidence of prior art and authorship under international copyright frameworks.",
+    description:
+      "This certificate constitutes cryptographic proof that the described intellectual property existed at the recorded timestamp, authored by the named party. It serves as evidence of prior art and authorship under international copyright frameworks.",
     international: [
       {
         name: "Berne Convention for the Protection of Literary and Artistic Works",
         article: "Article 5(2)",
-        principle: "Copyright protection is automatic upon creation — no registration required. This certificate provides timestamp proof of creation.",
+        principle:
+          "Copyright protection is automatic upon creation — no registration required. This certificate provides timestamp proof of creation.",
         members: "181 member states",
         url: "https://www.wipo.int/treaties/en/ip/berne/",
       },
       {
         name: "WIPO Copyright Treaty (WCT)",
         year: 1996,
-        principle: "Extends Berne Convention to digital works including software, databases, and digital content.",
+        principle:
+          "Extends Berne Convention to digital works including software, databases, and digital content.",
         url: "https://www.wipo.int/treaties/en/ip/wct/",
       },
       {
         name: "TRIPS Agreement (WTO)",
-        principle: "Establishes minimum standards for IP protection across 164 WTO member states.",
+        principle:
+          "Establishes minimum standards for IP protection across 164 WTO member states.",
         url: "https://www.wto.org/english/tratop_e/trips_e/trips_e.htm",
       },
     ],
@@ -110,41 +142,47 @@ function getLegalBasis(country?: string | null) {
       {
         name: "eIDAS Regulation (EU)",
         number: "910/2014",
-        principle: "Advanced electronic signatures have legal effect equivalent to handwritten signatures.",
+        principle:
+          "Advanced electronic signatures have legal effect equivalent to handwritten signatures.",
         scope: "European Union",
       },
       {
         name: "ESIGN Act (USA)",
         year: 2000,
-        principle: "Electronic signatures have the same legal standing as handwritten signatures.",
+        principle:
+          "Electronic signatures have the same legal standing as handwritten signatures.",
         scope: "United States",
       },
       {
         name: "Law of Republic of Kazakhstan on Electronic Digital Signature",
         number: "370-II",
         year: 2003,
-        principle: "Electronic digital signatures are legally equivalent to handwritten signatures.",
+        principle:
+          "Electronic digital signatures are legally equivalent to handwritten signatures.",
         scope: "Kazakhstan",
       },
     ],
     cryptography: {
       hashAlgorithm: "SHA-256 (NIST FIPS 180-4)",
       signatureAlgorithm: "HMAC-SHA256 + Ed25519 (RFC 8032)",
-      keyProtection: "Shamir's Secret Sharing (threshold scheme)",
+      keyProtection: "Shamir's Secret Sharing (2-of-3 threshold, GF(256))",
       timestampIntegrity: "Server-side UTC timestamp at moment of registration",
     },
-    disclaimer: "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. It does not constitute a patent, trademark, or government-issued copyright registration. It serves as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.",
+    disclaimer:
+      "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. It does not constitute a patent, trademark, or government-issued copyright registration. It serves as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.",
   };
 
   if (country) {
     const c = country.toLowerCase();
     if (c === "kazakhstan" || c === "kz" || c === "казахстан") {
-      (basis as any).national = {
+      (basis as { national?: unknown }).national = {
         name: "Law of Republic of Kazakhstan 'On Copyright and Related Rights'",
         number: "6-II",
         article: "Article 6",
-        principle: "Copyright arises from the moment of creation of the work. Registration is not required for protection.",
-        additionalNote: "This certificate provides timestamped cryptographic proof recognized under Kazakhstan law on electronic documents and digital signatures.",
+        principle:
+          "Copyright arises from the moment of creation of the work. Registration is not required for protection.",
+        additionalNote:
+          "This certificate provides timestamped cryptographic proof recognized under Kazakhstan law on electronic documents and digital signatures.",
       };
     }
   }
@@ -153,7 +191,9 @@ function getLegalBasis(country?: string | null) {
 }
 
 /* ── Resolve auth user ── */
-async function resolveUser(req: any) {
+async function resolveUser(
+  req: Request,
+): Promise<{ userId: string | null; name: string | null; email: string | null }> {
   const auth = verifyBearerOptional(req);
   let name: string | null = null;
   let email: string | null = null;
@@ -161,7 +201,10 @@ async function resolveUser(req: any) {
 
   if (auth) {
     await ensureUsersTable(pool);
-    const u = await pool.query(`SELECT "id","name","email" FROM "AEVIONUser" WHERE "id"=$1`, [auth.sub]);
+    const u = await pool.query(
+      `SELECT "id","name","email" FROM "AEVIONUser" WHERE "id"=$1`,
+      [auth.sub],
+    );
     const row = u.rows?.[0];
     if (row) {
       userId = row.id;
@@ -179,7 +222,7 @@ async function resolveUser(req: any) {
  * One-click IP protection:
  *   1. Register in QRight (SHA-256 hash)
  *   2. Sign with QSign (HMAC-SHA256)
- *   3. Create Quantum Shield (Ed25519 + Shamir SSS)
+ *   3. Create Quantum Shield (Ed25519 + real 2-of-3 Shamir SSS over GF(256))
  *   4. Issue IP Certificate with legal basis
  *
  * Body: { title, description, kind, ownerName?, ownerEmail?, country?, city? }
@@ -188,10 +231,13 @@ pipelineRouter.post("/protect", async (req, res) => {
   try {
     await ensureTables();
 
-    const { title, description, kind, ownerName, ownerEmail, country, city } = req.body;
+    const { title, description, kind, ownerName, ownerEmail, country, city } =
+      req.body;
 
     if (!title || !description) {
-      return res.status(400).json({ error: "title and description are required" });
+      return res
+        .status(400)
+        .json({ error: "title and description are required" });
     }
 
     const user = await resolveUser(req);
@@ -201,64 +247,131 @@ pipelineRouter.post("/protect", async (req, res) => {
 
     /* ── Step 1: QRight Registration ── */
     const objectId = crypto.randomUUID();
-    const raw = JSON.stringify({ title, description, kind: kind || "other", country, city });
-    const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
+    const raw = JSON.stringify({
+      title,
+      description,
+      kind: kind || "other",
+      country,
+      city,
+    });
+    const contentHash = crypto
+      .createHash("sha256")
+      .update(raw)
+      .digest("hex");
 
     await pool.query(
       `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING *`,
-      [objectId, title, description, kind || "other", contentHash, authorName, authorEmail, authorUserId, country || null, city || null]
+      [
+        objectId,
+        title,
+        description,
+        kind || "other",
+        contentHash,
+        authorName,
+        authorEmail,
+        authorUserId,
+        country || null,
+        city || null,
+      ],
     );
 
     /* ── Step 2: QSign (HMAC-SHA256) ── */
-    const signPayload = { objectId, title, contentHash, timestamp: Date.now() };
-    const signatureHmac = crypto.createHmac("sha256", SIGN_SECRET).update(JSON.stringify(signPayload)).digest("hex");
+    const signPayload = {
+      objectId,
+      title,
+      contentHash,
+      timestamp: Date.now(),
+    };
+    const signatureHmac = crypto
+      .createHmac("sha256", SIGN_SECRET)
+      .update(JSON.stringify(signPayload))
+      .digest("hex");
 
-    /* ── Step 3: Quantum Shield (Ed25519 + Shamir SSS) ── */
+    /* ── Step 3: Quantum Shield (Ed25519 + real 2-of-3 Shamir SSS over GF(256)) ── */
     const shieldId = "qs-" + crypto.randomBytes(8).toString("hex");
-    const dataToProtect = JSON.stringify({ objectId, title, contentHash, signatureHmac, timestamp: Date.now() });
-    const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-    const signatureEd25519 = crypto.sign(null, Buffer.from(dataToProtect), privateKey).toString("hex");
-    const pubKeyHex = publicKey.export({ type: "spki", format: "der" }).toString("hex");
+    const { privateKeyRaw, publicKeySpkiHex, publicKeyRawHex } =
+      generateEphemeralEd25519();
 
-    const threshold = 2;
-    const totalShards = 3;
-    const shards: object[] = [];
-    for (let i = 0; i < totalShards; i++) {
-      const shardId = crypto.randomBytes(16).toString("hex");
-      const shardData = crypto.createHash("sha256").update(dataToProtect + ":shard:" + i + ":" + shardId).digest("hex");
-      shards.push({
-        index: i + 1,
-        id: shardId,
-        data: shardData,
-        location: ["Author Vault", "AEVION Platform", "Witness Node"][i % 3],
-        status: "active",
-        createdAt: new Date().toISOString(),
-        lastVerified: new Date().toISOString(),
-      });
+    const dataToProtect = JSON.stringify({
+      objectId,
+      title,
+      contentHash,
+      signatureHmac,
+      publicKeyRawHex,
+      timestamp: Date.now(),
+    });
+
+    const pkcs8Prefix = Buffer.from(
+      "302e020100300506032b657004220420",
+      "hex",
+    );
+    const pkcs8Signing = Buffer.concat([pkcs8Prefix, privateKeyRaw]);
+    const signingKey = crypto.createPrivateKey({
+      key: pkcs8Signing,
+      format: "der",
+      type: "pkcs8",
+    });
+    const signatureEd25519 = crypto
+      .sign(null, Buffer.from(dataToProtect), signingKey)
+      .toString("hex");
+    wipeBuffer(pkcs8Signing);
+
+    let shards: AuthenticatedShard[];
+    try {
+      shards = splitAndAuthenticate(privateKeyRaw, shieldId);
+    } finally {
+      wipeBuffer(privateKeyRaw);
     }
 
     await pool.query(
-      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NOW())`,
-      [shieldId, objectId, title, "Shamir's Secret Sharing + Ed25519", threshold, totalShards, JSON.stringify(shards), signatureEd25519, pubKeyHex]
+      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,NOW())`,
+      [
+        shieldId,
+        objectId,
+        title,
+        "Shamir's Secret Sharing + Ed25519",
+        SHAMIR_THRESHOLD,
+        SHAMIR_SHARDS,
+        JSON.stringify(shards),
+        signatureEd25519,
+        publicKeySpkiHex,
+        HMAC_KEY_VERSION,
+      ],
     );
 
     /* ── Step 4: Issue IP Certificate ── */
     const certId = "cert-" + crypto.randomBytes(8).toString("hex");
     const protectedAt = new Date().toISOString();
     const legalBasis = getLegalBasis(country);
-    const algorithm = "SHA-256 + HMAC-SHA256 + Ed25519 + Shamir's Secret Sharing";
+    const algorithm =
+      "SHA-256 + HMAC-SHA256 + Ed25519 + Shamir's Secret Sharing (2-of-3)";
 
     await pool.query(
       `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19)`,
       [
-        certId, objectId, shieldId, title, kind || "other", description,
-        authorName, authorEmail, country || null, city || null,
-        contentHash, signatureHmac, signatureEd25519, pubKeyHex,
-        totalShards, threshold, algorithm, JSON.stringify(legalBasis), protectedAt,
-      ]
+        certId,
+        objectId,
+        shieldId,
+        title,
+        kind || "other",
+        description,
+        authorName,
+        authorEmail,
+        country || null,
+        city || null,
+        contentHash,
+        signatureHmac,
+        signatureEd25519,
+        publicKeySpkiHex,
+        SHAMIR_SHARDS,
+        SHAMIR_THRESHOLD,
+        algorithm,
+        JSON.stringify(legalBasis),
+        protectedAt,
+      ],
     );
 
     /* ── Response ── */
@@ -275,14 +388,16 @@ pipelineRouter.post("/protect", async (req, res) => {
       contentHash,
       signatureHmac,
       signatureEd25519: signatureEd25519.slice(0, 64) + "...",
-      publicKey: pubKeyHex.slice(0, 32) + "...",
-      shards: totalShards,
-      threshold,
+      publicKey: publicKeySpkiHex.slice(0, 32) + "...",
+      shards: SHAMIR_SHARDS,
+      threshold: SHAMIR_THRESHOLD,
       algorithm,
       legalBasis: {
         framework: legalBasis.framework,
         type: legalBasis.type,
-        international: (legalBasis.international as any[]).map((l: any) => l.name),
+        international: (legalBasis.international as Array<{ name: string }>).map(
+          (l) => l.name,
+        ),
         disclaimer: legalBasis.disclaimer,
       },
       protectedAt,
@@ -292,16 +407,182 @@ pipelineRouter.post("/protect", async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Your work is now protected with 3-layer cryptographic security and legal backing",
-      qright: { id: objectId, title, contentHash, createdAt: protectedAt },
+      message:
+        "Your work is now protected with 3-layer cryptographic security and legal backing",
+      qright: {
+        id: objectId,
+        title,
+        contentHash,
+        createdAt: protectedAt,
+      },
       qsign: { signature: signatureHmac, algo: "HMAC-SHA256" },
-      shield: { id: shieldId, signature: signatureEd25519.slice(0, 64) + "...", publicKey: pubKeyHex.slice(0, 32) + "...", shards: totalShards, threshold },
+      shield: {
+        id: shieldId,
+        signature: signatureEd25519.slice(0, 64) + "...",
+        publicKey: publicKeySpkiHex.slice(0, 32) + "...",
+        shards: SHAMIR_SHARDS,
+        threshold: SHAMIR_THRESHOLD,
+        hmacKeyVersion: HMAC_KEY_VERSION,
+      },
       certificate,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "pipeline failed";
     console.error("[Pipeline] protect error:", msg);
     res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/pipeline/reconstruct
+ *
+ * Verifies shard ownership and integrity by reconstructing the Ed25519 private
+ * key via Lagrange interpolation, signing a probe message, and checking the
+ * signature against the stored public key. Never returns the private key.
+ */
+interface ReconstructBody {
+  shieldId?: unknown;
+  shards?: unknown;
+}
+
+function isShardInput(v: unknown): v is {
+  index: number;
+  sssShare: string;
+  hmac: string;
+  hmacKeyVersion: number;
+} {
+  if (!v || typeof v !== "object") return false;
+  const s = v as Record<string, unknown>;
+  return (
+    typeof s.index === "number" &&
+    typeof s.sssShare === "string" &&
+    typeof s.hmac === "string" &&
+    typeof s.hmacKeyVersion === "number"
+  );
+}
+
+pipelineRouter.post("/reconstruct", async (req, res) => {
+  const body = req.body as ReconstructBody;
+  const shieldId = typeof body.shieldId === "string" ? body.shieldId : null;
+  const shardsInput = Array.isArray(body.shards) ? body.shards : [];
+
+  if (!shieldId) {
+    return res.status(400).json({
+      valid: false,
+      reconstructed: false,
+      reason: "INVALID_SHARD_FORMAT" satisfies QRightErrorCode,
+    });
+  }
+
+  if (shardsInput.length < SHAMIR_THRESHOLD) {
+    console.log(
+      `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=invalid reason=INSUFFICIENT_SHARDS`,
+    );
+    return res.status(400).json({
+      valid: false,
+      reconstructed: false,
+      reason: "INSUFFICIENT_SHARDS" satisfies QRightErrorCode,
+    });
+  }
+
+  for (const s of shardsInput) {
+    if (!isShardInput(s)) {
+      console.log(
+        `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=invalid reason=INVALID_SHARD_FORMAT`,
+      );
+      return res.status(400).json({
+        valid: false,
+        reconstructed: false,
+        reason: "INVALID_SHARD_FORMAT" satisfies QRightErrorCode,
+      });
+    }
+  }
+
+  try {
+    await ensureTables();
+
+    const { rows } = await pool.query(
+      `SELECT "publicKey","legacy" FROM "QuantumShield" WHERE "id" = $1`,
+      [shieldId],
+    );
+
+    if (rows.length === 0) {
+      console.log(
+        `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=invalid reason=SHIELD_NOT_FOUND`,
+      );
+      return res.status(404).json({
+        valid: false,
+        reconstructed: false,
+        reason: "SHIELD_NOT_FOUND" satisfies QRightErrorCode,
+      });
+    }
+
+    const row = rows[0] as { publicKey: string | null; legacy: boolean };
+
+    if (row.legacy === true) {
+      console.log(
+        `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=invalid reason=LEGACY_RECORD`,
+      );
+      return res.status(400).json({
+        valid: false,
+        reconstructed: false,
+        reason: "LEGACY_RECORD" satisfies QRightErrorCode,
+      });
+    }
+
+    if (!row.publicKey) {
+      console.log(
+        `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=invalid reason=RECONSTRUCTION_FAILED`,
+      );
+      return res.status(400).json({
+        valid: false,
+        reconstructed: false,
+        reason: "RECONSTRUCTION_FAILED" satisfies QRightErrorCode,
+      });
+    }
+
+    const result = combineAndVerify(
+      shardsInput as Parameters<typeof combineAndVerify>[0],
+      shieldId,
+      row.publicKey,
+    );
+
+    if (!result.ok) {
+      console.log(
+        `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=invalid reason=${result.reason}`,
+      );
+      return res.status(400).json({
+        valid: false,
+        reconstructed: false,
+        reason: result.reason ?? "RECONSTRUCTION_FAILED",
+      });
+    }
+
+    console.log(
+      `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=valid`,
+    );
+    return res.status(200).json({
+      valid: true,
+      reconstructed: true,
+      shieldId,
+      verifiedAt: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    if (err instanceof QRightError) {
+      console.log(
+        `[Reconstruct] shieldId=${shieldId} shardCount=${shardsInput.length} result=error reason=${err.code}`,
+      );
+      return res
+        .status(err.httpStatus)
+        .json({ valid: false, reconstructed: false, reason: err.code });
+    }
+    const msg = err instanceof Error ? err.message : "reconstruct failed";
+    console.error(
+      `[Reconstruct] shieldId=${shieldId} unexpected error: ${msg}`,
+    );
+    return res
+      .status(500)
+      .json({ valid: false, reconstructed: false, reason: "INTERNAL_ERROR" });
   }
 });
 
@@ -316,10 +597,15 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     await ensureTables();
 
     const { certId } = req.params;
-    const { rows } = await pool.query(`SELECT * FROM "IPCertificate" WHERE "id" = $1`, [certId]);
+    const { rows } = await pool.query(
+      `SELECT * FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
 
     if (rows.length === 0) {
-      return res.status(404).json({ valid: false, error: "Certificate not found" });
+      return res
+        .status(404)
+        .json({ valid: false, error: "Certificate not found" });
     }
 
     const cert = rows[0];
@@ -327,26 +613,41 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     /* Increment verify count */
     await pool.query(
       `UPDATE "IPCertificate" SET "verifiedCount" = "verifiedCount" + 1, "lastVerifiedAt" = NOW() WHERE "id" = $1`,
-      [certId]
+      [certId],
     );
 
-    /* Re-verify HMAC signature */
-    const signPayload = { objectId: cert.objectId, title: cert.title, contentHash: cert.contentHash };
-    // Note: we can't fully re-verify HMAC since we don't store the original timestamp,
-    // but we verify the hash chain is intact
-    const hashCheck = crypto.createHash("sha256")
-      .update(JSON.stringify({ title: cert.title, description: cert.description, kind: cert.kind, country: cert.country, city: cert.city }))
+    /* Re-verify content hash */
+    const hashCheck = crypto
+      .createHash("sha256")
+      .update(
+        JSON.stringify({
+          title: cert.title,
+          description: cert.description,
+          kind: cert.kind,
+          country: cert.country,
+          city: cert.city,
+        }),
+      )
       .digest("hex");
     const hashValid = hashCheck === cert.contentHash;
 
     /* Check Quantum Shield status */
     let shieldStatus = "unknown";
+    let shieldLegacy = false;
     if (cert.shieldId) {
-      const shield = await pool.query(`SELECT "status" FROM "QuantumShield" WHERE "id" = $1`, [cert.shieldId]);
-      shieldStatus = shield.rows?.[0]?.status || "not_found";
+      const shield = await pool.query(
+        `SELECT "status","legacy" FROM "QuantumShield" WHERE "id" = $1`,
+        [cert.shieldId],
+      );
+      const sh = shield.rows?.[0];
+      shieldStatus = sh?.status || "not_found";
+      shieldLegacy = sh?.legacy === true;
     }
 
-    const legalBasis = typeof cert.legalBasis === "string" ? JSON.parse(cert.legalBasis) : cert.legalBasis;
+    const legalBasis =
+      typeof cert.legalBasis === "string"
+        ? JSON.parse(cert.legalBasis)
+        : cert.legalBasis;
 
     res.json({
       valid: true,
@@ -363,7 +664,9 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         location: [cert.city, cert.country].filter(Boolean).join(", ") || null,
         contentHash: cert.contentHash,
         signatureHmac: cert.signatureHmac,
-        signatureEd25519: cert.signatureEd25519 ? cert.signatureEd25519.slice(0, 64) + "..." : null,
+        signatureEd25519: cert.signatureEd25519
+          ? cert.signatureEd25519.slice(0, 64) + "..."
+          : null,
         algorithm: cert.algorithm,
         protectedAt: cert.protectedAt,
         status: cert.status,
@@ -371,14 +674,25 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       integrity: {
         contentHashValid: hashValid,
         quantumShieldStatus: shieldStatus,
+        shieldLegacy,
         shards: cert.shardCount,
         threshold: cert.shardThreshold,
       },
       legalBasis: {
         framework: legalBasis?.framework,
         type: legalBasis?.type,
-        international: Array.isArray(legalBasis?.international) ? legalBasis.international.map((l: any) => ({ name: l.name, principle: l.principle })) : [],
-        digitalSignature: Array.isArray(legalBasis?.digitalSignature) ? legalBasis.digitalSignature.map((l: any) => ({ name: l.name, scope: l.scope })) : [],
+        international: Array.isArray(legalBasis?.international)
+          ? legalBasis.international.map((l: { name: string; principle: string }) => ({
+              name: l.name,
+              principle: l.principle,
+            }))
+          : [],
+        digitalSignature: Array.isArray(legalBasis?.digitalSignature)
+          ? legalBasis.digitalSignature.map((l: { name: string; scope: string }) => ({
+              name: l.name,
+              scope: l.scope,
+            }))
+          : [],
         disclaimer: legalBasis?.disclaimer,
       },
       stats: {
@@ -404,11 +718,11 @@ pipelineRouter.get("/certificates", async (_req, res) => {
 
     const { rows } = await pool.query(
       `SELECT "id","objectId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
-       FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`
+       FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`,
     );
 
     res.json({
-      certificates: rows.map((r: any) => ({
+      certificates: rows.map((r: Record<string, unknown>) => ({
         id: r.id,
         title: r.title,
         kind: r.kind,
@@ -428,17 +742,21 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     res.status(500).json({ error: msg });
   }
 });
+
 /**
  * GET /api/pipeline/certificate/:certId/pdf
  *
  * Generate a PDF certificate with QR code for public verification.
  */
-pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
+pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
   try {
     await ensureTables();
 
     const { certId } = req.params;
-    const { rows } = await pool.query(`SELECT * FROM "IPCertificate" WHERE "id" = $1`, [certId]);
+    const { rows } = await pool.query(
+      `SELECT * FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
 
     if (rows.length === 0) {
       return res.status(404).json({ error: "Certificate not found" });
@@ -449,23 +767,37 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
     const QRCode = await import("qrcode");
 
     const verifyUrl = `https://aevion.vercel.app/verify/${cert.id}`;
-    const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 160, margin: 1 });
+    const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+      width: 160,
+      margin: 1,
+    });
     const qrBase64 = qrDataUrl.replace(/^data:image\/png;base64,/, "");
     const qrBuffer = Buffer.from(qrBase64, "base64");
 
     const doc = new PDFDocument({ size: "A4", margin: 50 });
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="AEVION-Certificate-${cert.id}.pdf"`);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="AEVION-Certificate-${cert.id}.pdf"`,
+    );
     doc.pipe(res);
 
-    const W = doc.page.width - 100; // usable width (margin 50 each side)
+    const W = doc.page.width - 100;
     const pageW = doc.page.width;
 
     /* ── Header bar ── */
     doc.rect(0, 0, pageW, 90).fill("#0f172a");
-    doc.fontSize(24).font("Helvetica-Bold").fillColor("#ffffff").text("AEVION", 50, 28);
-    doc.fontSize(10).font("Helvetica").fillColor("#94a3b8").text("Digital IP Bureau — Protection Certificate", 50, 58);
+    doc
+      .fontSize(24)
+      .font("Helvetica-Bold")
+      .fillColor("#ffffff")
+      .text("AEVION", 50, 28);
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor("#94a3b8")
+      .text("Digital IP Bureau — Protection Certificate", 50, 58);
 
     /* ── Teal accent line ── */
     doc.rect(0, 90, pageW, 4).fill("#0d9488");
@@ -473,11 +805,33 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
     /* ── Certificate title ── */
     doc.moveDown(2);
     const yTitle = 120;
-    doc.fontSize(11).font("Helvetica").fillColor("#0d9488").text("CERTIFICATE OF INTELLECTUAL PROPERTY PROTECTION", 50, yTitle, { align: "center", width: W });
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor("#0d9488")
+      .text(
+        "CERTIFICATE OF INTELLECTUAL PROPERTY PROTECTION",
+        50,
+        yTitle,
+        { align: "center", width: W },
+      );
     doc.moveDown(0.5);
-    doc.fontSize(22).font("Helvetica-Bold").fillColor("#0f172a").text(cert.title, 50, yTitle + 22, { align: "center", width: W });
+    doc
+      .fontSize(22)
+      .font("Helvetica-Bold")
+      .fillColor("#0f172a")
+      .text(cert.title, 50, yTitle + 22, { align: "center", width: W });
     doc.moveDown(0.3);
-    doc.fontSize(10).font("Helvetica").fillColor("#64748b").text(`Type: ${cert.kind}  ·  Status: ${cert.status.toUpperCase()}`, 50, yTitle + 52, { align: "center", width: W });
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor("#64748b")
+      .text(
+        `Type: ${cert.kind}  ·  Status: ${cert.status.toUpperCase()}`,
+        50,
+        yTitle + 52,
+        { align: "center", width: W },
+      );
 
     /* ── Divider ── */
     const yDiv1 = yTitle + 75;
@@ -485,55 +839,128 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
 
     /* ── Author info ── */
     const yInfo = yDiv1 + 16;
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("AUTHOR", 50, yInfo);
-    doc.fontSize(12).font("Helvetica-Bold").fillColor("#0f172a").text(cert.authorName || "Anonymous", 50, yInfo + 14);
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#94a3b8")
+      .text("AUTHOR", 50, yInfo);
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor("#0f172a")
+      .text(cert.authorName || "Anonymous", 50, yInfo + 14);
 
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("LOCATION", 280, yInfo);
-    doc.fontSize(12).font("Helvetica-Bold").fillColor("#0f172a").text(
-      [cert.city, cert.country].filter(Boolean).join(", ") || "Not specified",
-      280, yInfo + 14
-    );
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#94a3b8")
+      .text("LOCATION", 280, yInfo);
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor("#0f172a")
+      .text(
+        [cert.city, cert.country].filter(Boolean).join(", ") ||
+          "Not specified",
+        280,
+        yInfo + 14,
+      );
 
     const yDate = yInfo + 40;
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("PROTECTED AT", 50, yDate);
-    doc.fontSize(12).font("Helvetica-Bold").fillColor("#0f172a").text(
-      new Date(cert.protectedAt).toLocaleString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-      50, yDate + 14
-    );
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#94a3b8")
+      .text("PROTECTED AT", 50, yDate);
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor("#0f172a")
+      .text(
+        new Date(cert.protectedAt).toLocaleString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        50,
+        yDate + 14,
+      );
 
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("CERTIFICATE ID", 280, yDate);
-    doc.fontSize(10).font("Courier").fillColor("#0f172a").text(cert.id, 280, yDate + 14);
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#94a3b8")
+      .text("CERTIFICATE ID", 280, yDate);
+    doc
+      .fontSize(10)
+      .font("Courier")
+      .fillColor("#0f172a")
+      .text(cert.id, 280, yDate + 14);
 
     /* ── Description ── */
     const yDesc = yDate + 45;
     doc.rect(50, yDesc, W, 1).fill("#e2e8f0");
     const yDescText = yDesc + 12;
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text("DESCRIPTION", 50, yDescText);
-    doc.fontSize(10).font("Helvetica").fillColor("#334155").text(
-      (cert.description || "").slice(0, 500),
-      50, yDescText + 14, { width: W, lineGap: 3 }
-    );
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#94a3b8")
+      .text("DESCRIPTION", 50, yDescText);
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor("#334155")
+      .text(
+        (cert.description || "").slice(0, 500),
+        50,
+        yDescText + 14,
+        { width: W, lineGap: 3 },
+      );
 
     /* ── Cryptographic proof ── */
-    const yCrypto = yDescText + 14 + Math.min((cert.description || "").length, 500) * 0.15 + 40;
+    const yCrypto =
+      yDescText +
+      14 +
+      Math.min((cert.description || "").length, 500) * 0.15 +
+      40;
     doc.rect(50, yCrypto, W, 1).fill("#e2e8f0");
 
     const yCryptoTitle = yCrypto + 12;
-    doc.fontSize(11).font("Helvetica-Bold").fillColor("#0f172a").text("Cryptographic Proof", 50, yCryptoTitle);
+    doc
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .fillColor("#0f172a")
+      .text("Cryptographic Proof", 50, yCryptoTitle);
 
     const fields = [
       { label: "CONTENT HASH (SHA-256)", value: cert.contentHash },
       { label: "HMAC-SHA256 SIGNATURE", value: cert.signatureHmac },
-      { label: "Ed25519 SIGNATURE", value: (cert.signatureEd25519 || "").slice(0, 64) + "..." },
+      {
+        label: "Ed25519 SIGNATURE",
+        value: (cert.signatureEd25519 || "").slice(0, 64) + "...",
+      },
       { label: "ALGORITHM", value: cert.algorithm },
       { label: "QUANTUM SHIELD ID", value: cert.shieldId || "N/A" },
-      { label: "PROTECTION", value: `${cert.shardCount} shards, threshold ${cert.shardThreshold} (Shamir's Secret Sharing)` },
+      {
+        label: "PROTECTION",
+        value: `${cert.shardCount} shards, threshold ${cert.shardThreshold} (Shamir's Secret Sharing)`,
+      },
     ];
 
     let yField = yCryptoTitle + 22;
     for (const f of fields) {
-      doc.fontSize(7).font("Helvetica-Bold").fillColor("#94a3b8").text(f.label, 50, yField);
-      doc.fontSize(8).font("Courier").fillColor("#334155").text(f.value, 50, yField + 10, { width: W });
+      doc
+        .fontSize(7)
+        .font("Helvetica-Bold")
+        .fillColor("#94a3b8")
+        .text(f.label, 50, yField);
+      doc
+        .fontSize(8)
+        .font("Courier")
+        .fillColor("#334155")
+        .text(f.value, 50, yField + 10, { width: W });
       yField += 26;
     }
 
@@ -543,35 +970,68 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
 
     const qrY = yQR + 14;
     doc.image(qrBuffer, pageW / 2 - 50, qrY, { width: 100, height: 100 });
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#0d9488").text("Scan to verify this certificate", 50, qrY + 105, { align: "center", width: W });
-    doc.fontSize(8).font("Helvetica").fillColor("#64748b").text(verifyUrl, 50, qrY + 118, { align: "center", width: W });
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#0d9488")
+      .text("Scan to verify this certificate", 50, qrY + 105, {
+        align: "center",
+        width: W,
+      });
+    doc
+      .fontSize(8)
+      .font("Helvetica")
+      .fillColor("#64748b")
+      .text(verifyUrl, 50, qrY + 118, { align: "center", width: W });
 
     /* ── Legal basis ── */
     const yLegal = qrY + 142;
     doc.rect(50, yLegal, W, 1).fill("#e2e8f0");
     const yLegalTitle = yLegal + 10;
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#0f172a").text("Legal Framework", 50, yLegalTitle);
-    doc.fontSize(7).font("Helvetica").fillColor("#475569").text(
-      "Berne Convention (Art. 5(2)) · WIPO Copyright Treaty · TRIPS Agreement (WTO) · eIDAS Regulation (EU) · ESIGN Act (USA) · KZ Digital Signature Law (No. 370-II)",
-      50, yLegalTitle + 14, { width: W, lineGap: 2 }
-    );
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#0f172a")
+      .text("Legal Framework", 50, yLegalTitle);
+    doc
+      .fontSize(7)
+      .font("Helvetica")
+      .fillColor("#475569")
+      .text(
+        "Berne Convention (Art. 5(2)) · WIPO Copyright Treaty · TRIPS Agreement (WTO) · eIDAS Regulation (EU) · ESIGN Act (USA) · KZ Digital Signature Law (No. 370-II)",
+        50,
+        yLegalTitle + 14,
+        { width: W, lineGap: 2 },
+      );
 
     /* ── Disclaimer ── */
     const yDisclaimer = yLegalTitle + 40;
-    doc.fontSize(6.5).font("Helvetica").fillColor("#94a3b8").text(
-      "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. " +
-      "It does not constitute a patent, trademark, or government-issued copyright registration. " +
-      "It serves as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.",
-      50, yDisclaimer, { width: W, lineGap: 2 }
-    );
+    doc
+      .fontSize(6.5)
+      .font("Helvetica")
+      .fillColor("#94a3b8")
+      .text(
+        "This certificate is issued by AEVION Digital IP Bureau as cryptographic proof of existence and authorship at the recorded time. " +
+          "It does not constitute a patent, trademark, or government-issued copyright registration. " +
+          "It serves as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.",
+        50,
+        yDisclaimer,
+        { width: W, lineGap: 2 },
+      );
 
     /* ── Footer bar ── */
     const footerY = doc.page.height - 40;
     doc.rect(0, footerY, pageW, 40).fill("#0f172a");
-    doc.fontSize(8).font("Helvetica").fillColor("#64748b").text(
-      "AEVION Digital IP Bureau  ·  aevion.vercel.app  ·  Powered by SHA-256, Ed25519, Shamir's Secret Sharing",
-      50, footerY + 14, { align: "center", width: W }
-    );
+    doc
+      .fontSize(8)
+      .font("Helvetica")
+      .fillColor("#64748b")
+      .text(
+        "AEVION Digital IP Bureau  ·  aevion.vercel.app  ·  Powered by SHA-256, Ed25519, Shamir's Secret Sharing",
+        50,
+        footerY + 14,
+        { align: "center", width: W },
+      );
 
     doc.end();
   } catch (err: unknown) {
@@ -582,13 +1042,32 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
     }
   }
 });
+
 /* GET /api/pipeline/health */
 pipelineRouter.get("/health", (_req, res) => {
   res.json({
     service: "AEVION IP Pipeline",
     ok: true,
-    steps: ["qright-registration", "qsign-hmac", "quantum-shield-ed25519-sss", "certificate-issuance"],
-    legalFrameworks: ["Berne Convention", "WIPO Copyright Treaty", "TRIPS Agreement", "eIDAS", "ESIGN Act", "KZ Digital Signature Law"],
+    steps: [
+      "qright-registration",
+      "qsign-hmac",
+      "quantum-shield-ed25519-sss",
+      "certificate-issuance",
+    ],
+    legalFrameworks: [
+      "Berne Convention",
+      "WIPO Copyright Treaty",
+      "TRIPS Agreement",
+      "eIDAS",
+      "ESIGN Act",
+      "KZ Digital Signature Law",
+    ],
+    shamir: {
+      threshold: SHAMIR_THRESHOLD,
+      shards: SHAMIR_SHARDS,
+      hmacKeyVersion: HMAC_KEY_VERSION,
+      field: "GF(256)",
+    },
     at: new Date().toISOString(),
   });
 });

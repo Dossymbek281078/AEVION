@@ -17,6 +17,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { AccountIdCard } from "./_components/AccountIdCard";
 import { ActivityTimeline } from "./_components/ActivityTimeline";
+import { AdvisorChat } from "./_components/AdvisorChat";
 import { AuditPanel } from "./_components/AuditPanel";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
@@ -243,6 +244,7 @@ function BankContent() {
         <>
           <TotalEarningsDashboard accountId={account.id} operations={operations} />
           <TrustScoreCard account={account} operations={operations} />
+          <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
           <SalaryAdvance
             account={account}
             operations={operations}

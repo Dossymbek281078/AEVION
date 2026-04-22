@@ -21,6 +21,7 @@ import { AuditPanel } from "./_components/AuditPanel";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
+import { DeviceManagement } from "./_components/DeviceManagement";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
@@ -319,6 +320,8 @@ function BankContent() {
           <ActivityTimeline myId={account.id} operations={operations} />
 
           <AuditPanel notify={notify} />
+
+          <DeviceManagement accountId={account.id} notify={notify} />
         </>
       ) : null}
 

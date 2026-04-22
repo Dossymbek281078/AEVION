@@ -23,6 +23,7 @@ import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { SavingsGoals } from "./_components/SavingsGoals";
 import { SpendingInsights } from "./_components/SpendingInsights";
+import { SplitBills } from "./_components/SplitBills";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
 import { SendForm } from "./_components/SendForm";
 import { TopupForm } from "./_components/TopupForm";
@@ -297,6 +298,8 @@ function BankContent() {
           />
 
           <SpendingInsights accountId={account.id} operations={operations} />
+
+          <SplitBills myAccountId={account.id} notify={notify} />
 
           <TransactionList
             myId={account.id}

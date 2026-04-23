@@ -131,6 +131,14 @@ const GK="aevion_chess_games_v1";
 function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
 function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;localStorage.setItem(GK,JSON.stringify(all))}catch{}}
 
+/* ═══ Chessy — in-game currency ═══ */
+type ChessyState={v:1;balance:number;lifetime:number;lastDaily?:string;streak:number;welcome:boolean;owned:Record<string,boolean>;ach:Record<string,number>};
+const CK="aevion_chessy_v1";
+const CHESSY_DEFAULT:ChessyState={v:1,balance:0,lifetime:0,streak:0,welcome:false,owned:{},ach:{}};
+function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};const r=JSON.parse(s);if(!r||r.v!==1)return {...CHESSY_DEFAULT};return {...CHESSY_DEFAULT,...r,owned:r.owned||{},ach:r.ach||{}}}catch{return {...CHESSY_DEFAULT}}}
+function svChessy(s:ChessyState){try{localStorage.setItem(CK,JSON.stringify(s))}catch{}}
+function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
+
 /* ═══ Resume snapshot — autosave in-progress game ═══ */
 type ResumeSnap={v:1;fen:string;hist:string[];fenHist:string[];pCol:"w"|"b";aiI:number;tcI:number;useCustom:boolean;customMin:number;customInc:number;timeP:number;timeA:number;capW:string[];capB:string[];ts:number};
 const RSK="aevion_chess_resume_v1";
@@ -297,6 +305,28 @@ export default function CyberChessPage(){
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
+  const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
+  const[showShop,sShowShop]=useState(false);
+  useEffect(()=>{svChessy(chessy)},[chessy]);
+  const addChessy=useCallback((n:number,reason:string)=>{
+    if(n<=0)return;
+    sChessy(c=>({...c,balance:c.balance+n,lifetime:c.lifetime+n}));
+    showToast(`+${n} Chessy · ${reason}`,"success");
+  },[showToast]);
+  const spendChessy=useCallback((n:number,reason:string)=>{
+    let ok=false;
+    sChessy(c=>{if(c.balance<n)return c;ok=true;return {...c,balance:c.balance-n}});
+    if(ok)showToast(`−${n} Chessy · ${reason}`,"info");
+    else showToast(`Недостаточно Chessy (нужно ${n})`,"error");
+    return ok;
+  },[showToast]);
+  const unlockAch=useCallback((key:string,reward:number,label:string)=>{
+    sChessy(c=>{
+      if(c.ach[key])return c;
+      setTimeout(()=>showToast(`🏆 ${label} · +${reward} Chessy`,"success"),300);
+      return {...c,balance:c.balance+reward,lifetime:c.lifetime+reward,ach:{...c.ach,[key]:Date.now()}};
+    });
+  },[showToast]);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -332,6 +362,19 @@ export default function CyberChessPage(){
 
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
+    // Chessy welcome + daily bonus
+    const c=ldChessy();const tk=todayKey();
+    if(!c.welcome){
+      sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
+      setTimeout(()=>showToast("🎉 +50 Chessy · добро пожаловать!","success"),800);
+    }else if(c.lastDaily!==tk){
+      // Compute streak: consecutive days? Simple check — yesterday continues, else reset to 1
+      const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
+      const newStreak=c.lastDaily===yk?c.streak+1:1;
+      const bonus=newStreak>=7?100:newStreak>=3?30:5;
+      sChessy(x=>({...x,balance:x.balance+bonus,lifetime:x.lifetime+bonus,lastDaily:tk,streak:newStreak}));
+      setTimeout(()=>showToast(`☀ +${bonus} Chessy · ${newStreak}-й день подряд`,"success"),800);
+    }
     fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
     fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
       // Build FEN-indexed opening database for transposition detection
@@ -939,6 +982,15 @@ export default function CyberChessPage(){
           <div><div style={{fontSize:15,fontWeight:900,color:T.text}}>CyberChess</div><div style={{fontSize:14,color:T.dim}}>Stockfish 18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}</div></div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <button
+            onClick={()=>sShowShop(true)}
+            title={`Chessy · баланс ${chessy.balance}`}
+            aria-label="Chessy shop"
+            style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:20,border:"1px solid #fcd34d",background:"linear-gradient(135deg,#fef3c7,#fde68a)",cursor:"pointer"}}
+          >
+            <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fbbf24" stroke="#b45309" strokeWidth="1.5"/><text x="12" y="16" textAnchor="middle" fontSize="11" fontWeight="900" fill="#78350f">C</text></svg>
+            <span style={{fontSize:14,fontWeight:900,color:"#78350f"}}>{chessy.balance}</span>
+          </button>
           <button
             onClick={()=>sShowHelp(true)}
             title="Keyboard shortcuts (?)"

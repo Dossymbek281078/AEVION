@@ -286,8 +286,13 @@ export default function AiCoach({
     try { window.speechSynthesis.cancel(); } catch {}
     sTtsSpeaking(false);
   }, []);
-  // Stop speech when the coach panel closes
-  useEffect(() => { if (!visible) stopSpeak(); }, [visible, stopSpeak]);
+  // Stop speech when the coach panel closes or the component unmounts.
+  // Without the unmount cleanup, Chrome/Safari keep the utterance playing
+  // after the Coach disappears.
+  useEffect(() => {
+    if (!visible) stopSpeak();
+    return () => { try { window.speechSynthesis?.cancel(); } catch {} };
+  }, [visible, stopSpeak]);
   // Auto-speak the latest assistant reply when TTS is on
   const lastSpokenIdxRef = useRef<number>(-1);
   useEffect(() => {
@@ -355,6 +360,11 @@ export default function AiCoach({
           ? (rAfter.mate > 0 ? 10000 : -10000) * signAfter
           : rAfter.cp * signAfter;
         prevEvalCache.current.set(fenAfter, evalAfter);
+        // Bound cache growth — strip oldest entries once we pass 500 FENs.
+        if (prevEvalCache.current.size > 500) {
+          const it = prevEvalCache.current.keys();
+          for (let k = 0; k < 100; k++) { const n = it.next(); if (n.done) break; prevEvalCache.current.delete(n.value); }
+        }
 
         const moverWasWhite = fenBefore.split(" ")[1] === "w";
         // Delta = how much the position worsened for the mover.

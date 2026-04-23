@@ -153,6 +153,37 @@ type DailyState={v:1;date:string;idx:number;solved:boolean};
 const DK="aevion_daily_puzzle_v1";
 function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)return null;const r=JSON.parse(s);return r?.v===1?r:null}catch{return null}}
 function svDaily(s:DailyState){try{localStorage.setItem(DK,JSON.stringify(s))}catch{}}
+
+/* ═══ PGN utilities ═══ */
+function buildPGN(moves:string[],meta:{white?:string;black?:string;result?:string;date?:string;event?:string}={}):string{
+  const d=meta.date||new Date().toISOString().slice(0,10).replace(/-/g,".");
+  const headers=[
+    `[Event "${meta.event||"AEVION CyberChess"}"]`,
+    `[Site "aevion.app/cyberchess"]`,
+    `[Date "${d}"]`,
+    `[White "${meta.white||"White"}"]`,
+    `[Black "${meta.black||"Black"}"]`,
+    `[Result "${meta.result||"*"}"]`,
+  ];
+  const body:string[]=[];
+  for(let i=0;i<moves.length;i+=2){
+    const n=i/2+1;const w=moves[i];const b=moves[i+1];
+    body.push(b?`${n}. ${w} ${b}`:`${n}. ${w}`);
+  }
+  return headers.join("\n")+"\n\n"+body.join(" ")+(meta.result?` ${meta.result}`:" *");
+}
+// Parse SAN moves out of a PGN (ignoring headers, comments, variations, NAGs)
+function parsePGN(pgn:string):string[]{
+  // Strip headers [...]
+  let body=pgn.replace(/^\s*\[[^\]]*\][^\n]*\n/gm,"");
+  // Strip comments {...} and variations (...)
+  body=body.replace(/\{[^}]*\}/g,"").replace(/\([^)]*\)/g,"");
+  // Strip NAGs $1..$n and result tokens
+  body=body.replace(/\$\d+/g,"").replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g,"");
+  // Strip move numbers "1." or "1..."
+  body=body.replace(/\d+\.(\.\.)?/g,"");
+  return body.split(/\s+/).filter(t=>t&&!/^\d+$/.test(t));
+}
 const ACH_LABELS:Record<string,string>={
   first_win:"🏆 Первая победа",
   wins_10:"🎖 10 побед",
@@ -351,6 +382,9 @@ export default function CyberChessPage(){
   const[showShop,sShowShop]=useState(false);
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
+  const[hotseat,sHotseat]=useState(false);
+  const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
   useEffect(()=>{svChessy(chessy)},[chessy]);
   const addChessy=useCallback((n:number,reason:string)=>{
     if(n<=0)return;
@@ -413,6 +447,24 @@ export default function CyberChessPage(){
     const next:DailyState={v:1,date:tk,idx,solved:false};
     svDaily(next);sDailyState(next);
   },[PUZZLES.length]);
+
+  // Watch-URL: on mount, if ?pgn=... is present, load the PGN into Analysis tab read-only.
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{
+      const params=new URLSearchParams(window.location.search);
+      const pgn=params.get("pgn");
+      if(!pgn)return;
+      const sans=parsePGN(decodeURIComponent(pgn));
+      if(!sans.length)return;
+      const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
+      for(const san of sans){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}else break}catch{break}}
+      if(!mh.length)return;
+      setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(0);
+      try{const first=new Chess();setGame(first);sBk(k=>k+1)}catch{}
+      showToast(`▶ Просмотр партии · ${mh.length} ходов`,"info");
+    }catch{}
+  },[]);
 
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
@@ -481,6 +533,8 @@ export default function CyberChessPage(){
   },[hist,openingsDb]);
   // Always load Stockfish for eval bar (not just for AI play)
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
+  // Terminate Stockfish worker on unmount so the WASM process doesn't outlive the page.
+  useEffect(()=>()=>{try{sfR.current?.terminate()}catch{};sfR.current=null},[]);
   // Live eval on position change - for play/coach/analysis tabs
   // Hardened: 8s timeout + abort on cleanup (prevents stuck worker when user scrolls history fast)
   useEffect(()=>{
@@ -652,36 +706,46 @@ export default function CyberChessPage(){
     sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
     if(game.isGameOver()){
       let r="";
-      if(game.isCheckmate()){const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
-        if(w){
-          const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);
-          const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success");
-          // Chessy reward: scale by AI difficulty × time category
-          const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
-          const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
-          const reward=Math.max(5,Math.round(10*aiMul*timeMul));
-          setTimeout(()=>addChessy(reward,`победа над ${lv.name}`),400);
-          // Achievements
-          const newWinCount=sts.w+1;
-          setTimeout(()=>{
-            if(newWinCount===1)unlockAch("first_win",50,"Первая победа");
-            if(newWinCount===10)unlockAch("wins_10",100,"10 побед");
-            if(newWinCount===50)unlockAch("wins_50",300,"50 побед");
-            if(aiI>=5)unlockAch("beat_master",200,"Победа над Master");
-            if(aiI>=4)unlockAch("beat_expert",100,"Победа над Expert");
-          },900);
+      if(game.isCheckmate()){
+        if(hotseat){
+          // Local 2-player: no rating change, small shared Chessy for playing a full game
+          const winner=game.turn()==="w"?"Чёрные":"Белые";
+          r=`Checkmate — ${winner} победили`;
+          setTimeout(()=>addChessy(3,"партия сыграна"),400);
+        }else{
+          const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
+          if(w){
+            const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);
+            const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success");
+            // Chessy reward: scale by AI difficulty × time category
+            const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
+            const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
+            const reward=Math.max(5,Math.round(10*aiMul*timeMul));
+            setTimeout(()=>addChessy(reward,`победа над ${lv.name}`),400);
+            // Achievements
+            const newWinCount=sts.w+1;
+            setTimeout(()=>{
+              if(newWinCount===1)unlockAch("first_win",50,"Первая победа");
+              if(newWinCount===10)unlockAch("wins_10",100,"10 побед");
+              if(newWinCount===50)unlockAch("wins_50",300,"50 побед");
+              if(aiI>=5)unlockAch("beat_master",200,"Победа над Master");
+              if(aiI>=4)unlockAch("beat_expert",100,"Победа над Expert");
+            },900);
+          }
+          else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
         }
-        else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}}
-      else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);
+      }
+      else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";
+        if(!hotseat){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
         // Draw gives small consolation
         setTimeout(()=>addChessy(2,"ничья"),400);
       }
       sOver(r);snd("x");sOn(false);sPms([]);
       // Save to history
       const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
-      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
+      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
       saveGame(sg);sSavedGames(loadGames())}
-    return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch]);
+    return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -767,9 +831,10 @@ export default function CyberChessPage(){
     return()=>clearTimeout(t);
   },[over,tab,sfOk,fenHist.length]);
 
-  /* ── Clear annotations on tab switch and on a new move ── */
+  /* ── Clear annotations on tab switch, on a new move, and on history browse ── */
   useEffect(()=>{clearAnnotations()},[tab,clearAnnotations]);
   useEffect(()=>{clearAnnotations()},[bk,clearAnnotations]);
+  useEffect(()=>{clearAnnotations()},[browseIdx,clearAnnotations]);
 
   /* ── Replay auto-advance ── */
   useEffect(()=>{
@@ -803,6 +868,7 @@ export default function CyberChessPage(){
   // can't try to apply itself on a position the user has already moved on.
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
+    if(hotseat)return; // two-player hotseat: no AI moves
     if(game.turn()===pCol)return;
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
@@ -847,7 +913,7 @@ export default function CyberChessPage(){
       return;
     }
     if(over)return;
-    const isAiTurn=game.turn()!==pCol;
+    const isAiTurn=!hotseat&&game.turn()!==pCol;
     const curPms=pmsRef.current;
     const curPmSel=pmSelRef.current;
 
@@ -900,7 +966,7 @@ export default function CyberChessPage(){
     if(think)return;
     const p=game.get(sq);
     // In analysis tab: play both sides freely (use whoever's turn it is)
-    const sideToMove=tab==="analysis"?game.turn():pCol;
+    const sideToMove=(tab==="analysis"||hotseat)?game.turn():pCol;
     if(sel){
       if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}
       if(p?.color===sideToMove){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}
@@ -1120,8 +1186,13 @@ export default function CyberChessPage(){
 
   return(<main style={{background:T.bg,minHeight:"100vh"}}>
     <ProductPageShell maxWidth={2000}><Wave1Nav/>
+      {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
+      {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6}}>
+        <div style={{padding:"6px 12px",background:"rgba(124,58,237,0.2)",border:"1px solid rgba(124,58,237,0.4)",borderRadius:8,color:"#a78bfa",fontSize:12,fontWeight:800,letterSpacing:"0.05em"}}>📺 STREAMER MODE</div>
+        <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
+      </div>}
       {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 10px"}}>
+      {!streamerMode&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 10px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:34,height:34,borderRadius:9,background:"linear-gradient(135deg,#059669,#10b981)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,color:"#fff"}}>♞</div>
           <div><div style={{fontSize:15,fontWeight:900,color:T.text}}>CyberChess</div><div style={{fontSize:14,color:T.dim}}>Stockfish 18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}</div></div>
@@ -1136,6 +1207,12 @@ export default function CyberChessPage(){
             <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fbbf24" stroke="#b45309" strokeWidth="1.5"/><text x="12" y="16" textAnchor="middle" fontSize="11" fontWeight="900" fill="#78350f">C</text></svg>
             <span style={{fontSize:14,fontWeight:900,color:"#78350f"}}>{chessy.balance}</span>
           </button>
+          <button
+            onClick={()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode — OBS-ready","info")}}
+            title={streamerMode?"Вернуть обычный вид":"Streamer mode для стримов (OBS)"}
+            aria-label="Streamer mode"
+            style={{width:38,height:38,borderRadius:10,border:streamerMode?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:streamerMode?"rgba(124,58,237,0.08)":T.surface,color:streamerMode?T.purple:T.dim,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontSize:14,fontWeight:900}}
+          >📺</button>
           <button
             onClick={()=>sShowHelp(true)}
             title="Keyboard shortcuts (?)"
@@ -1154,7 +1231,7 @@ export default function CyberChessPage(){
           </button>
           <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:900,color:T.gold}}>{rat}</div><div style={{fontSize:14,color:T.dim}}>{rk.i} {rk.t}</div></div>
         </div>
-      </div>
+      </div>}
 
       {/* Resume offer banner */}
       {resumeOffer&&(()=>{
@@ -1172,7 +1249,7 @@ export default function CyberChessPage(){
       })()}
 
       {/* Tabs */}
-      <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
+      {!streamerMode&&<div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
         {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{
           const fromPuzzle=tab==="puzzles"&&pzCurrent;
           sTab(t);
@@ -1187,10 +1264,10 @@ export default function CyberChessPage(){
             const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
           }
         }} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:14,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
-      </div>
+      </div>}
 
       {/* LAUNCHPAD DASHBOARD */}
-      {setup&&tab==="play"&&<div style={{marginBottom:16}}>
+      {setup&&tab==="play"&&!streamerMode&&<div style={{marginBottom:16}}>
         {/* Category strip */}
         <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
           {(["Bullet","Blitz","Rapid"] as const).map(cat=>{
@@ -1260,16 +1337,17 @@ export default function CyberChessPage(){
 
         {/* Action buttons */}
         <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-          <button onClick={()=>newG()} style={{flex:"2 1 240px",padding:"14px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>▶ Quick Start</button>
+          <button onClick={()=>{sHotseat(false);newG()}} style={{flex:"2 1 240px",padding:"14px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>▶ Quick Start</button>
           <button onClick={()=>{
             // Match Me: pick AI level close to user rating, but cap at 4 (Expert)
             // unless user owns Master AI unlock.
             const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
             const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
-            sAiI(capped);
+            sAiI(capped);sHotseat(false);
             setTimeout(()=>newG(),50);
           }} style={{flex:"1 1 160px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚡ Match Me<div style={{fontSize:13,color:T.dim,fontWeight:600,marginTop:2}}>AI ≈ {rat} ELO</div></button>
           <button onClick={()=>sShowCustom(!showCustom)} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚙ Custom Time</button>
+          <button onClick={()=>{sHotseat(true);setTimeout(()=>newG(),50)}} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid #bfdbfe`,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",color:T.blue,fontWeight:800,fontSize:13,cursor:"pointer"}}>👥 Vs Человек<div style={{fontSize:13,color:T.dim,fontWeight:600,marginTop:2}}>за одним экраном</div></button>
         </div>
 
         {/* Daily Puzzle card */}
@@ -1612,14 +1690,22 @@ export default function CyberChessPage(){
           {on&&!over&&!setup&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
             {btn("🏳 Resign",()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
             {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
-            {btn(`↩ Take back · 3`,()=>{
+            {btn(`↩ Take back${tab==="play"&&!hotseat?" · 3":""}`,()=>{
               if(hist.length<2){showToast("No moves","error");return}
               if(think){showToast("AI думает — подожди","error");return}
-              if(tab!=="play"){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);return}
-              if(chessy.balance<3){showToast("Недостаточно Chessy (нужно 3)","error");return}
-              // Do the undo first, charge only on success
-              try{game.undo();game.undo();}catch{showToast("Takeback failed","error");return}
-              spendChessy(3,"takeback");
+              // Free take-back in analysis/coach/hotseat, costs 3 Chessy only in paid single-player
+              const needChessy=tab==="play"&&!hotseat;
+              if(needChessy&&chessy.balance<3){showToast("Недостаточно Chessy (нужно 3)","error");return}
+              // Try both undoes BEFORE any state/Chessy mutation so we never end up with a half-undo.
+              const u1=game.undo();
+              if(!u1){showToast("Takeback failed","error");return}
+              const u2=game.undo();
+              if(!u2){
+                // Roll back the first undo so internal chess state matches hist/fenHist
+                try{game.move(u1.san)}catch{}
+                showToast("Takeback failed","error");return;
+              }
+              if(needChessy)spendChessy(3,"takeback");
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
             },T.surface,T.dim)}
             {savedGames.length>0&&(tab==="play"||tab==="coach")&&btn(`📜 История (${savedGames.length})`,()=>{
@@ -1639,6 +1725,15 @@ export default function CyberChessPage(){
             {savedGames.length>0&&btn(`📜 История (${savedGames.length})`,()=>{
               sGamesModalOpen(true);
             },T.surface,T.dim)}
+            {btn("🔗 Share PGN",()=>{
+              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+              const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
+              const pgn=buildPGN(hist,{white,black,result});
+              const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
+              const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
+              try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
+            },"#eff6ff",T.blue,"1px solid #bfdbfe")}
           </div>}
         </div>
 
@@ -2491,11 +2586,16 @@ export default function CyberChessPage(){
               const isDraw=g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
               const date=new Date(g.date);
               return<button key={g.id} onClick={()=>{
-                sGamesModalOpen(false);sTab("analysis");
+                sGamesModalOpen(false);
+                // Preserve Coach tab if the user opened the modal from Coach;
+                // otherwise route to Analysis where the richer tools live.
+                const destTab=tab==="coach"?"coach":"analysis";
+                sTab(destTab);
                 const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
                 for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
-                setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
-                showToast(`Партия открыта · ${mh.length} ходов`,"success");
+                setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.playerColor);sFlip(g.playerColor==="b");
+                if(destTab==="coach"){sCoachAIEnabled(false);sEditorMode(false);}
+                showToast(`Партия открыта · ${mh.length} ходов${destTab==="coach"?" · Coach готов к разбору":""}`,"success");
               }} style={{width:"100%",padding:"12px 16px",border:"none",borderBottom:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
                 <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0,flex:1}}>
                   <span style={{fontSize:16,fontWeight:900,color:isWin?T.accent:isDraw?T.dim:T.danger,minWidth:24,textAlign:"center"}}>{isWin?"W":isDraw?"D":"L"}</span>

@@ -350,6 +350,7 @@ export default function CyberChessPage(){
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   const[showShop,sShowShop]=useState(false);
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
+  const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   useEffect(()=>{svChessy(chessy)},[chessy]);
   const addChessy=useCallback((n:number,reason:string)=>{
     if(n<=0)return;
@@ -415,11 +416,13 @@ export default function CyberChessPage(){
 
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
-    // Chessy welcome + daily bonus
+    // Chessy welcome + daily bonus + first-time tour
     const c=ldChessy();const tk=todayKey();
+    let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
     if(!c.welcome){
       sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
       setTimeout(()=>showToast("🎉 +50 Chessy · добро пожаловать!","success"),800);
+      if(!tourSeen)setTimeout(()=>sTourStep(0),1400);
     }else if(c.lastDaily!==tk){
       // Compute streak: consecutive days? Simple check — yesterday continues, else reset to 1
       const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
@@ -2575,6 +2578,40 @@ export default function CyberChessPage(){
               {Object.keys(chessy.ach).map(k=><span key={k} title={new Date(chessy.ach[k]).toLocaleDateString("ru-RU")} style={{padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:T.text}}>{ACH_LABELS[k]||k}</span>)}
             </div>
           </div>}
+        </div>
+      </div>;
+    })()}
+
+    {/* First-time welcome tour */}
+    {tourStep>=0&&(()=>{
+      const slides=[
+        {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
+          <p style={{margin:"0 0 10px"}}>Полноценный шахматный тренажёр с ИИ-коучем, ежедневными задачами и собственной валютой.</p>
+          <p style={{margin:0,color:T.dim,fontSize:14}}>Ты уже получил <b style={{color:"#b45309"}}>+50 Chessy</b> за регистрацию.</p>
+        </>},
+        {icon:"💰",title:"Зарабатывай Chessy",body:<>
+          <p style={{margin:"0 0 10px"}}>За победы, решённые пазлы, достижения и ежедневный заход. Streak 7 дней — +100.</p>
+          <p style={{margin:0,color:T.dim,fontSize:14}}>Трать на премиум: разблокировка Master AI, эксклюзивные темы доски, глубокий разбор партии от тренера.</p>
+        </>},
+        {icon:"🎓",title:"ИИ-тренер Алексей",body:<>
+          <p style={{margin:"0 0 10px"}}>Задай любой вопрос по позиции — тренер ответит на основе Stockfish-анализа, без фантазий.</p>
+          <p style={{margin:0,color:T.dim,fontSize:14}}>Можно <b>включить голос</b> в Coach — ответы будут зачитываться вслух. Этого нет на lichess и chess.com.</p>
+        </>},
+      ];
+      const s=slides[tourStep];const last=tourStep===slides.length-1;
+      const finish=()=>{try{localStorage.setItem("aevion_tour_seen_v1","1")}catch{}sTourStep(-1)};
+      return <div role="dialog" aria-label="Welcome tour" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:20}}>
+        <div style={{background:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:28,boxShadow:"0 25px 70px rgba(0,0,0,0.4)",textAlign:"center"}}>
+          <div style={{fontSize:52,lineHeight:1,marginBottom:10}}>{s.icon}</div>
+          <div style={{fontSize:20,fontWeight:900,color:T.text,marginBottom:12,lineHeight:1.25}}>{s.title}</div>
+          <div style={{fontSize:15,color:T.text,lineHeight:1.6,textAlign:"left"}}>{s.body}</div>
+          <div style={{display:"flex",justifyContent:"center",gap:5,margin:"18px 0"}}>
+            {slides.map((_,i)=><div key={i} style={{width:i===tourStep?22:7,height:7,borderRadius:3,background:i===tourStep?T.accent:"#e5e7eb",transition:"width 0.2s"}}/>)}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={finish} style={{flex:1,padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:14,fontWeight:700,cursor:"pointer"}}>Пропустить</button>
+            <button onClick={()=>{if(last)finish();else sTourStep(tourStep+1)}} style={{flex:2,padding:"10px 14px",borderRadius:8,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer"}}>{last?"Поехали! ▶":"Дальше →"}</button>
+          </div>
         </div>
       </div>;
     })()}

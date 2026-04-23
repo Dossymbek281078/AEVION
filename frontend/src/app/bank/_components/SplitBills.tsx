@@ -7,6 +7,7 @@ import type { Contact } from "../_lib/contacts";
 import { formatRelative } from "../_lib/format";
 import { absoluteRequestUrl } from "../_lib/paymentRequest";
 import { billStatus, splitEqually, type SplitBill } from "../_lib/splits";
+import { btnSecondary, Field, inputStyle } from "./formPrimitives";
 
 type Props = {
   myAccountId: string;
@@ -614,31 +615,3 @@ function BillRow({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "grid", gap: 4 }}>
-      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid rgba(15,23,42,0.15)",
-  fontSize: 13,
-  background: "#fff",
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: "8px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(15,23,42,0.12)",
-  background: "#fff",
-  color: "#334155",
-  fontWeight: 700,
-  fontSize: 12,
-  cursor: "pointer",
-};

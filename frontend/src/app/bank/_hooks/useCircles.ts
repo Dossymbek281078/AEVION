@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import {
   loadCircles,
   saveCircles,
@@ -9,37 +9,37 @@ import {
   type CircleMessage,
   type CircleMessageKind,
 } from "../_lib/circles";
+import { useLocalList } from "./useLocalList";
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function useCircles() {
-  const [items, setItems] = useState<Circle[]>([]);
+  const { items, setItems, add: pushItem, removeWhere } = useLocalList<Circle>({
+    load: loadCircles,
+    save: saveCircles,
+  });
 
-  useEffect(() => {
-    setItems(loadCircles());
-  }, []);
+  const add = useCallback(
+    (name: string, members: CircleMember[]): Circle => {
+      const c: Circle = {
+        id: newId("circle"),
+        name: name.trim(),
+        createdAt: new Date().toISOString(),
+        members,
+        messages: [],
+      };
+      pushItem(c);
+      return c;
+    },
+    [pushItem],
+  );
 
-  useEffect(() => {
-    saveCircles(items);
-  }, [items]);
-
-  const add = useCallback((name: string, members: CircleMember[]): Circle => {
-    const c: Circle = {
-      id: newId("circle"),
-      name: name.trim(),
-      createdAt: new Date().toISOString(),
-      members,
-      messages: [],
-    };
-    setItems((prev) => [c, ...prev]);
-    return c;
-  }, []);
-
-  const remove = useCallback((id: string) => {
-    setItems((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+  const remove = useCallback(
+    (id: string) => removeWhere((c) => c.id === id),
+    [removeWhere],
+  );
 
   const postMessage = useCallback(
     (
@@ -71,7 +71,7 @@ export function useCircles() {
         ),
       );
     },
-    [],
+    [setItems],
   );
 
   return { items, add, remove, postMessage };

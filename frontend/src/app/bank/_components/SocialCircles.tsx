@@ -9,6 +9,7 @@ import { formatCurrency } from "../_lib/currency";
 import { formatRelative } from "../_lib/format";
 import { absoluteRequestUrl } from "../_lib/paymentRequest";
 import type { Circle } from "../_lib/circles";
+import { btnSecondary, inputStyle } from "./formPrimitives";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
@@ -640,21 +641,3 @@ function Bubble({
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid rgba(15,23,42,0.15)",
-  fontSize: 13,
-  background: "#fff",
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: "8px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(15,23,42,0.12)",
-  background: "#fff",
-  color: "#334155",
-  fontWeight: 700,
-  fontSize: 12,
-  cursor: "pointer",
-};

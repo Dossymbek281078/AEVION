@@ -14,6 +14,7 @@ import {
   type Gift,
   type GiftThemeId,
 } from "../_lib/gifts";
+import { inputStyle } from "./formPrimitives";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
@@ -435,10 +436,3 @@ function MiniGift({
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid rgba(15,23,42,0.15)",
-  fontSize: 13,
-  background: "#fff",
-};

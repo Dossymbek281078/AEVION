@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   addPeriod,
   loadRecurring,
@@ -8,6 +8,7 @@ import {
   type Recurring,
   type RecurrencePeriod,
 } from "../_lib/recurring";
+import { useLocalList } from "./useLocalList";
 
 const EXECUTOR_INTERVAL_MS = 30_000;
 
@@ -32,20 +33,15 @@ function newId(): string {
 }
 
 export function useRecurring(opts: Options) {
-  const [items, setItems] = useState<Recurring[]>([]);
+  const { items, setItems, add: pushItem, removeWhere } = useLocalList<Recurring>({
+    load: loadRecurring,
+    save: saveRecurring,
+  });
   const itemsRef = useRef<Recurring[]>(items);
   itemsRef.current = items;
   const optsRef = useRef<Options>(opts);
   optsRef.current = opts;
   const runningRef = useRef<boolean>(false);
-
-  useEffect(() => {
-    setItems(loadRecurring());
-  }, []);
-
-  useEffect(() => {
-    saveRecurring(items);
-  }, [items]);
 
   const runDue = useCallback(async () => {
     if (runningRef.current) return;
@@ -81,7 +77,7 @@ export function useRecurring(opts: Options) {
     } finally {
       runningRef.current = false;
     }
-  }, []);
+  }, [setItems]);
 
   useEffect(() => {
     void runDue();
@@ -100,34 +96,41 @@ export function useRecurring(opts: Options) {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [runDue]);
 
-  const add = useCallback((input: CreateInput): Recurring => {
-    const now = new Date();
-    const starts = input.startsAt ? new Date(input.startsAt) : now;
-    const rec: Recurring = {
-      id: newId(),
-      toAccountId: input.toAccountId.trim(),
-      recipientNickname: input.recipientNickname.trim(),
-      amount: input.amount,
-      period: input.period,
-      label: input.label.trim(),
-      startsAt: starts.toISOString(),
-      nextRunAt: starts.toISOString(),
-      lastRunAt: null,
-      active: true,
-      createdAt: now.toISOString(),
-      runs: 0,
-    };
-    setItems((prev) => [rec, ...prev]);
-    return rec;
-  }, []);
+  const add = useCallback(
+    (input: CreateInput): Recurring => {
+      const now = new Date();
+      const starts = input.startsAt ? new Date(input.startsAt) : now;
+      const rec: Recurring = {
+        id: newId(),
+        toAccountId: input.toAccountId.trim(),
+        recipientNickname: input.recipientNickname.trim(),
+        amount: input.amount,
+        period: input.period,
+        label: input.label.trim(),
+        startsAt: starts.toISOString(),
+        nextRunAt: starts.toISOString(),
+        lastRunAt: null,
+        active: true,
+        createdAt: now.toISOString(),
+        runs: 0,
+      };
+      pushItem(rec);
+      return rec;
+    },
+    [pushItem],
+  );
 
-  const remove = useCallback((id: string) => {
-    setItems((prev) => prev.filter((r) => r.id !== id));
-  }, []);
+  const remove = useCallback(
+    (id: string) => removeWhere((r) => r.id === id),
+    [removeWhere],
+  );
 
-  const toggle = useCallback((id: string) => {
-    setItems((prev) => prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
-  }, []);
+  const toggle = useCallback(
+    (id: string) => {
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
+    },
+    [setItems],
+  );
 
   return { items, add, remove, toggle, runNow: runDue };
 }

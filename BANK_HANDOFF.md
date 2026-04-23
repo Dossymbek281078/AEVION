@@ -1,4 +1,4 @@
-# AEVION Bank — Session Handoff (2026-04-22)
+# AEVION Bank — Session Handoff (last updated 2026-04-23)
 
 Snapshot to pick up work on the bank track. Read this first next session, then [`CLAUDE.md`](./CLAUDE.md) for session rules.
 
@@ -8,11 +8,11 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 
 - **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer` — не отдельное приложение, дерево совпадает со всем `aevion-core`).
 - **Ветка:** `bank-payment-layer`.
-- **Remote:** `github.com/Dossymbek281078/AEVION`.
-- **Last commit:** `f00a26f fix(bank): rename "Register IP" CTAs to remove IP-address ambiguity`.
-- **Ahead of `main`:** 20 commits (1 modular rewrite + 18 features + 1 polish fix).
+- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `3b9b6f7`.
+- **Last commit:** `3b9b6f7 feat(bank): animated balance ticker + direction indicator`.
+- **Ahead of `main`:** 28 commits (1 modular rewrite + 21 features + 5 refactors + 1 polish).
 - **PR URL (unmerged):** https://github.com/Dossymbek281078/AEVION/pull/new/bank-payment-layer
-- **Build:** green. `cd frontend ; npm run build` проходит за ~2.5s, все 23 route собираются.
+- **Build:** green. `npm run verify` (from `aevion-core` root) passes.
 
 ## Shipped feature list (chronological)
 
@@ -38,6 +38,13 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 | 17 | `1c96f7e` | Salary Advance — Trust-Score-gated credit, real topup, auto-repay tick |
 | 18 | `eb5f140` | AI Advisor chat — QCoreAI с system prompt из полного контекста |
 | polish | `f00a26f` | "Register IP" → "Protect your work" (CTA clarity) |
+| refactor | `66d0313` | useLocalList + formPrimitives + .gitattributes (eol=lf) |
+| refactor | `cf50655` | EcosystemDataProvider (fetch fan-out) + mockCatalog dedup |
+| refactor | `470fe8f` | Money component universal (currency switcher everywhere) |
+| 19 | `d55cd63` | Trust Score v3 — nonlinear curve + path-to-next-tier UI |
+| 20 | `cfd43c6` | Wealth Forecast — 3 scenarios × 3 horizons + goal ETAs |
+| 21 | `487bf47` | Achievements — 18 unlockable badges across 4 tracks |
+| 22 | `3b9b6f7` | Animated balance ticker + direction indicator |
 
 ## Architecture
 
@@ -73,17 +80,22 @@ frontend/src/app/bank/
     ├── TransactionList.tsx    StaticSections.tsx
 ```
 
-## Tech debt (tracked, not yet fixed)
+## Tech debt (tracked)
 
-1. **Fetch duplication** — TrustScoreCard, RoyaltyStream, ChessWinnings, TotalEarningsDashboard, AdvisorChat, SalaryAdvance каждый вызывает `fetchRoyaltyStream/Chess/Ecosystem` независимо. На mock безболезненно; при реальном HTTP нужен общий cache / `useEcosystemData` hook.
-2. **Form primitives duplication** — `Field`, `inputStyle`, `btnSecondary` скопированы в `RecurringPayments`, `SavingsGoals`, `SplitBills`, `GiftMode`, `SocialCircles`. Вынести в `_components/formPrimitives.tsx`.
-3. **localStorage hooks шаблон** дублируется (`useRecurring`, `useSavings`, `useSplits`, `useCircles`, `useSignatures`). Обобщить в `useLocalList<T>(key, isItem)`.
-4. **Money компонент не везде** — `RecurringPayments`, `SavingsGoals`, `SplitBills`, `SpendingInsights` остались с AEC-only отображением. CurrencySwitcher на них не действует.
-5. **Trust Score шкала** — все 8 факторов max 100, одинаковый вес. Реальному юзеру тяжело выйти из "new". Нужны nonlinear thresholds / tier-adaptive weights.
-6. **Mock catalog дублируется** — названия QRight works в `ecosystem.ts` и `royalties.ts`. Вынести в `_lib/mockCatalog.ts`.
-7. **Audit panel retention** — хранит 50 подписей; нет экспорта в файл. Могут захотеть.
-8. **CRLF warnings** на каждом коммите. Добавить `.gitattributes` c `* text=auto eol=lf`.
-9. **`useAdvance` auto-repay** — только visual tick (1%/4s). На real ops не реагирует. Надо wire into new incoming transfers.
+Cleared this session (2026-04-23):
+1. ~~Fetch duplication~~ — `EcosystemDataProvider` + `useEcosystemData()` fan-out; 6 consumers dropped their individual fetches.
+2. ~~Form primitives duplication~~ — `_components/formPrimitives.tsx` (Field, inputStyle, btnSecondary, btnDanger); 5 components now share.
+3. ~~localStorage hook pattern~~ — `_hooks/useLocalList.ts`; `useRecurring/useSavings/useSplits/useCircles` delegate storage.
+4. ~~Money everywhere~~ — RecurringPayments, SavingsGoals, SplitBills, SpendingInsights now use `<Money>` (or `formatCurrency(n, code)` in string contexts). CurrencySwitcher is universal.
+5. ~~Trust Score linear~~ — v3 with sub-linear `pow(r, 0.55)` curve, weighted factors, softer targets, engagement bonus. Adds `nextTier`, `pointsToNextTier`, `checklist` fields.
+6. ~~Mock catalog duplication~~ — `_lib/mockCatalog.ts` exports `QRIGHT_WORKS_BY_KIND`, `QRIGHT_FLAT_WORKS`, `CHESS_TOURNAMENT_NAMES`, `PLANET_TASKS`.
+8. ~~CRLF warnings~~ — `.gitattributes` with `* text=auto eol=lf`.
+
+Still open:
+7. **Audit panel retention** — хранит 50 подписей; нет экспорта в файл.
+9. **`useAdvance` auto-repay** — только visual tick (1 %/4s). На real ops не реагирует. Надо wire into new incoming transfers.
+10. **Mobile responsive polish** — WealthForecast + Achievements на &lt;480px тесно. Grid minmax нужно подправить.
+11. **AchievementsPanel: shared refresh signal** — сейчас polls every 15s + focus/storage events. Было бы чище: emit events из useSavings/useSplits/useCircles/useSignatures по записи в storage.
 
 ## Backend dependencies queue (другая сессия)
 
@@ -121,29 +133,33 @@ Open: **http://localhost:3000/bank**
 ## E2E demo sequence для инвестора
 
 1. Login (`/auth`) → Bank показывает "Create your AEVION Bank account" → клик → wallet creates.
-2. Top up 500 AEC → баланс появляется, CoinTower заполняется на 5 монет, TotalEarnings и sparkline обновляются, AuditPanel показывает первую QSign-подпись.
-3. Переключи currency на USD/EUR/KZT — Hero, WalletSummary, RoyaltyStream, ChessWinnings, TransactionList все пересчитываются.
-4. Enable Biometric (Touch ID / Windows Hello) с threshold 100 AEC. Попробуй Send 150 AEC — браузер запросит биометрию.
-5. Create savings goal "MacBook Pro" target 1000, add 200 AEC → прогресс 20%, forecast обновляется.
-6. Create recurring "Netflix" 15 AEC weekly → появится в списке, executor запустится через 30s.
-7. Create circle с контактом → напиши сообщение → Request 50 AEC → copy link.
-8. Send gift с темой Thanks → посмотри preview → Send → gift появляется в sent history.
-9. Request salary advance 500 AEC (при tier ≥ growing) → balance +500, outstanding тикает вниз каждые 4s.
-10. Ask AI Advisor: "Should I take an advance?" → ответ учитывает балансе + trust + outstanding + goals.
-11. ActivityTimeline отмечает "First recipient" / "Large" аномалии по свежим переводам.
-12. Export CSV (TransactionList → Export CSV) → скачивается файл с реальными операциями.
+2. Top up 500 AEC → balance animates up with a green ▲, CoinTower заполняется на 5 монет, TotalEarnings + WealthForecast sparkline обновляются, AuditPanel показывает первую QSign-подпись.
+3. Переключи currency на USD/EUR/KZT — **всё** (Hero, WalletSummary, RoyaltyStream, ChessWinnings, TransactionList, RecurringPayments, SavingsGoals, SplitBills, SpendingInsights, WealthForecast) пересчитывается универсально.
+4. Посмотри WealthForecast: переключи scenario "Optimistic" → 1 year → видишь proyected balance. Включи один goal → появляется ETA к calendar-дате.
+5. Enable Biometric (Touch ID / Windows Hello) с threshold 100 AEC → Achievement "Biometric shield" unlocks. Попробуй Send 150 AEC — браузер запросит биометрию, потом появится "Signed & sealed" achievement.
+6. Create savings goal "MacBook Pro" target 1000, add 200 AEC → прогресс 20%, forecast обновляется, WealthForecast ETA появляется.
+7. Create recurring "Netflix" 15 AEC weekly → появится в списке, executor запустится через 30s.
+8. Create circle с контактом → напиши сообщение → Request 50 AEC → copy link → achievement "Circle host" unlocks.
+9. Send gift с темой Thanks → посмотри preview → Send → gift появляется в sent history.
+10. Request salary advance 500 AEC (при tier ≥ growing) → balance +500, outstanding тикает вниз каждые 4s.
+11. TrustScoreCard: посмотри progress bar "Growing → Trusted" + "Fastest wins" — список шагов до следующего tier.
+12. AchievementsPanel: фильтр по Creator / Security / Banking / Ecosystem. Видны earned (green ✓) vs locked с прогресс-баром.
+13. Ask AI Advisor: "Should I take an advance?" → ответ учитывает balance + trust + outstanding + goals.
+14. ActivityTimeline отмечает "First recipient" / "Large" аномалии по свежим переводам.
+15. Export CSV (TransactionList → Export CSV) → скачивается файл с реальными операциями.
 
 ## Next session picks
 
 Outstanding choices before we write more code:
 
-1. **Tech debt sprint** (пункты 1-6 выше) — потратить 1-2 часа на рефакторинг прежде чем наращивать фичи.
-2. **Phase 5 (если такая будет)** — ещё delight features? Mobile-responsive polish? Empty-state copywriting?
-3. **Real backend wiring** — координация с backend-сессией, чтобы mock'и постепенно подменить на реальные endpoints. Нужно синхронное планирование.
-4. **Investor-demo script** — рассказ + скринкаст по 12 шагам выше.
-5. **Accessibility audit + Lighthouse** — прогнать по странице, добить красные места.
+1. **Real backend wiring** — координация с backend-сессией, чтобы mock'и постепенно подменить на реальные endpoints. Нужно синхронное планирование (см. "Backend dependencies queue" ниже).
+2. **Mobile responsive pass** — `<480px` checks on WealthForecast, AchievementsPanel, TrustScoreCard radar. Grid minmax tuning, possibly a mobile bottom-tab-bar for section jumps.
+3. **Accessibility audit + Lighthouse** — прогнать по странице, добить красные места (WealthForecast tiles, CoinTower SVG, radar chart alt-text).
+4. **Investor-demo script** — scripted `?demo=1` mode that seeds recurring/goals/circles/signatures so the page is always full; great for screencasts.
+5. **Snapshot export** — one-click PNG of your wealth state (balance + trust + achievements); viral share coefficient.
+6. **Referral program** — "invite and earn X AEC" loop; classic fintech growth lever.
 
-По умолчанию: начни с **п. 1 (tech debt sprint)** — чтобы дальнейшие фичи не тонули в copy-paste.
+По умолчанию: начни с **п. 2 (mobile pass)** — чтобы демо на телефоне не ломалось.
 
 ## Important gotchas
 

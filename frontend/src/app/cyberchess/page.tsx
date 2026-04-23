@@ -86,8 +86,16 @@ const MK="aevion_chess_mute_v1";
 let _muted:boolean|null=null;
 function isMuted(){if(_muted===null){try{_muted=typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{_muted=false}}return !!_muted}
 function setMuted(v:boolean){_muted=v;try{localStorage.setItem(MK,v?"1":"0")}catch{}}
+// Shared AudioContext — creating one per sound leaks and trips browser limits.
+let _audioCtx:AudioContext|null=null;
+function getAudioCtx():AudioContext|null{
+  if(typeof window==="undefined")return null;
+  if(!_audioCtx){try{_audioCtx=new(window.AudioContext||(window as any).webkitAudioContext)()}catch{_audioCtx=null}}
+  if(_audioCtx&&_audioCtx.state==="suspended"){_audioCtx.resume().catch(()=>{})}
+  return _audioCtx;
+}
 function snd(t:string){if(isMuted())return;try{
-  const x=new AudioContext(),n=x.currentTime;
+  const x=getAudioCtx();if(!x)return;const n=x.currentTime;
   // Generate short noise burst
   const dur = t==="capture"?0.12 : t==="check"?0.08 : t==="premove"?0.04 : t==="x"?0.25 : 0.05;
   const bufSize = Math.floor(x.sampleRate * dur);
@@ -817,12 +825,12 @@ export default function CyberChessPage(){
     if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";console.log("[premove] queued",f+"→"+sq+(pre.pr?"="+pre.pr:""));sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();clearResume();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
   const resumeGame=(s:ResumeSnap)=>{
     try{
       sTab("play");
       sTcI(s.tcI);sUseCustom(s.useCustom);sCustomMin(s.customMin);sCustomInc(s.customInc);
-      sPCol(s.pCol);sAiI(s.aiI);sFlip(s.pCol==="b");
+      sPCol(s.pCol);sAiI(chessy.owned.master_ai?s.aiI:Math.min(s.aiI,4));sFlip(s.pCol==="b");
       const g=new Chess(s.fen);setGame(g);sBk(k=>k+1);
       sHist(s.hist);sFenHist(s.fenHist);sCapW(s.capW);sCapB(s.capB);
       sLm(null);sSel(null);sVm(new Set());sPromo(null);sThink(false);sPms([]);sPmSel(null);
@@ -1152,9 +1160,11 @@ export default function CyberChessPage(){
         <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
           <button onClick={()=>newG()} style={{flex:"2 1 240px",padding:"14px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>▶ Quick Start</button>
           <button onClick={()=>{
-            // Match Me: pick AI level close to user rating
+            // Match Me: pick AI level close to user rating, but cap at 4 (Expert)
+            // unless user owns Master AI unlock.
             const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
-            sAiI(targetIdx);
+            const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
+            sAiI(capped);
             setTimeout(()=>newG(),50);
           }} style={{flex:"1 1 160px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚡ Match Me<div style={{fontSize:13,color:T.dim,fontWeight:600,marginTop:2}}>AI ≈ {rat} ELO</div></button>
           <button onClick={()=>sShowCustom(!showCustom)} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚙ Custom Time</button>

@@ -13,6 +13,7 @@ import {
   simulateRoyaltyEvent,
   type RoyaltyEvent,
 } from "../_lib/royalties";
+import { SkeletonBlock } from "./Skeleton";
 
 function usePrefersReducedMotion(): boolean {
   const [prm, setPrm] = useState<boolean>(false);
@@ -159,14 +160,14 @@ export function RoyaltyStream() {
     return (
       <section
         style={{
-          border: "1px solid rgba(15,23,42,0.1)",
+          border: "1px solid rgba(124,58,237,0.2)",
           borderRadius: 16,
           padding: 20,
           marginBottom: 16,
-          background: "#fff",
+          background: "linear-gradient(180deg, rgba(124,58,237,0.03) 0%, #ffffff 100%)",
         }}
       >
-        <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading royalty stream…</div>
+        <SkeletonBlock label="Loading QRight royalty stream" />
       </section>
     );
   }

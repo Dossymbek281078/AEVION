@@ -13,6 +13,7 @@ import { formatCurrency } from "../_lib/currency";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { formatRelative } from "../_lib/format";
 import { Sparkline } from "./primitives";
+import { SkeletonBlock } from "./Skeleton";
 
 function placeBadge(place: number) {
   const palette: Record<number, { bg: string; fg: string; label: string }> = {
@@ -124,14 +125,14 @@ export function ChessWinnings() {
     return (
       <section
         style={{
-          border: "1px solid rgba(15,23,42,0.1)",
+          border: "1px solid rgba(217,119,6,0.2)",
           borderRadius: 16,
           padding: 20,
           marginBottom: 16,
-          background: "#fff",
+          background: "linear-gradient(180deg, rgba(217,119,6,0.03) 0%, #ffffff 100%)",
         }}
       >
-        <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading tournament history…</div>
+        <SkeletonBlock label="Loading CyberChess tournament history" />
       </section>
     );
   }

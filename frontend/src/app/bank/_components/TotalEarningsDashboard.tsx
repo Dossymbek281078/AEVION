@@ -14,6 +14,7 @@ import { formatCurrency } from "../_lib/currency";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { Legend, PieChart, StackedAreaChart, type StackedSeries } from "./charts";
 import { Sparkline } from "./primitives";
+import { SkeletonBlock } from "./Skeleton";
 
 type Period = "30d" | "90d" | "365d";
 const PERIOD_DAYS: Record<Period, number> = { "30d": 30, "90d": 90, "365d": 365 };
@@ -51,11 +52,10 @@ export function TotalEarningsDashboard() {
           borderRadius: 16,
           padding: 20,
           marginBottom: 16,
-          background: "#fff",
-          minHeight: 320,
+          background: "linear-gradient(180deg, #ffffff 0%, rgba(13,148,136,0.03) 100%)",
         }}
       >
-        <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading ecosystem earnings…</div>
+        <SkeletonBlock label="Loading ecosystem earnings" minHeight={280} />
       </section>
     );
   }

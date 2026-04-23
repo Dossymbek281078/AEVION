@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSavings } from "../_hooks/useSavings";
 import {
   forecastGoal,
@@ -307,6 +307,19 @@ function GoalCard({
   const color = ICON_COLOR[g.icon];
   const completed = forecast.status === "completed";
 
+  // Celebrate the null → set transition on completedAt.
+  const prevCompleted = useRef<boolean>(!!g.completedAt);
+  const [celebrate, setCelebrate] = useState<boolean>(false);
+  useEffect(() => {
+    const now = !!g.completedAt;
+    if (now && !prevCompleted.current) {
+      setCelebrate(true);
+      const id = window.setTimeout(() => setCelebrate(false), 1800);
+      return () => window.clearTimeout(id);
+    }
+    prevCompleted.current = now;
+  }, [g.completedAt]);
+
   const statusColor =
     forecast.status === "completed"
       ? "#059669"
@@ -336,8 +349,11 @@ function GoalCard({
         display: "flex",
         flexDirection: "column",
         gap: 10,
+        position: "relative" as const,
+        overflow: "hidden",
       }}
     >
+      {celebrate ? <ConfettiBurst color={color} /> : null}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span
           aria-hidden="true"
@@ -487,6 +503,64 @@ function GoalCard({
         </div>
       )}
     </div>
+  );
+}
+
+function ConfettiBurst({ color }: { color: string }) {
+  const pieces = useMemo(() => {
+    const palette = [color, "#059669", "#d97706", "#0ea5e9", "#db2777"];
+    return Array.from({ length: 14 }, (_, i) => ({
+      key: i,
+      left: 50 + (Math.random() - 0.5) * 40,
+      tx: (Math.random() - 0.5) * 220,
+      ty: -60 - Math.random() * 140,
+      rot: (Math.random() - 0.5) * 520,
+      size: 6 + Math.random() * 6,
+      delay: Math.random() * 120,
+      color: palette[i % palette.length],
+    }));
+  }, [color]);
+
+  return (
+    <>
+      <style>{`
+        @keyframes aevion-goal-confetti {
+          0%   { transform: translate(-50%, -50%) translate(0,0) rotate(0deg); opacity: 1; }
+          100% { transform: translate(-50%, -50%) translate(var(--tx), var(--ty)) rotate(var(--rot)); opacity: 0; }
+        }
+      `}</style>
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 2,
+        }}
+      >
+        {pieces.map((p) => (
+          <span
+            key={p.key}
+            style={
+              {
+                position: "absolute",
+                top: "62%",
+                left: `${p.left}%`,
+                width: p.size,
+                height: p.size,
+                borderRadius: 2,
+                background: p.color,
+                transform: "translate(-50%, -50%)",
+                animation: `aevion-goal-confetti 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) ${p.delay}ms forwards`,
+                "--tx": `${p.tx}px`,
+                "--ty": `${p.ty}px`,
+                "--rot": `${p.rot}deg`,
+              } as React.CSSProperties
+            }
+          />
+        ))}
+      </div>
+    </>
   );
 }
 

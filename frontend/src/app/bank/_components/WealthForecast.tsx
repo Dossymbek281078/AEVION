@@ -9,6 +9,7 @@ import { SOURCE_COLOR, SOURCE_LABEL } from "../_lib/ecosystem";
 import { loadGoals, type SavingsGoal } from "../_lib/savings";
 import type { Account } from "../_lib/types";
 import { Money } from "./Money";
+import { SkeletonBlock } from "./Skeleton";
 
 type Horizon = "d30" | "d90" | "d365";
 const HORIZON_LABEL: Record<Horizon, string> = { d30: "30 days", d90: "3 months", d365: "1 year" };
@@ -33,15 +34,14 @@ export function WealthForecast({ account }: { account: Account }) {
     return (
       <section
         style={{
-          border: "1px solid rgba(15,23,42,0.1)",
+          border: "1px solid rgba(14,165,233,0.2)",
           borderRadius: 16,
           padding: 20,
           marginBottom: 16,
-          background: "#fff",
-          minHeight: 200,
+          background: "linear-gradient(180deg, rgba(14,165,233,0.04) 0%, #ffffff 100%)",
         }}
       >
-        <div style={{ fontSize: 13, color: "#94a3b8" }}>Computing forecast…</div>
+        <SkeletonBlock label="Computing wealth forecast" minHeight={240} />
       </section>
     );
   }

@@ -1132,7 +1132,37 @@ export default function BureauPage() {
 /* ──────────────────────────────────────────────────────────────
    Certificate preview modal
    ────────────────────────────────────────────────────────────── */
+type InclusionProof = {
+  version: string;
+  certId: string;
+  leaf: string;
+  leafIndex: number;
+  leafCount: number;
+  path: Array<{ hash: string; side: "L" | "R" }>;
+  merkleRoot: string;
+  verifyAlgorithm: string;
+  publishedAt: string;
+};
+
 function CertificatePreviewModal({ cert, onClose, onCopy }: { cert: Certificate; onClose: () => void; onCopy: (text: string, label: string) => void }) {
+  const [proof, setProof] = useState<InclusionProof | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
+  const [proofError, setProofError] = useState<string | null>(null);
+
+  async function loadProof() {
+    try {
+      setProofBusy(true);
+      setProofError(null);
+      const res = await fetch(apiUrl(`/api/pipeline/bureau/proof/${cert.id}`));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setProof(await res.json());
+    } catch (e) {
+      setProofError(e instanceof Error ? e.message : "proof failed");
+    } finally {
+      setProofBusy(false);
+    }
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -1211,9 +1241,37 @@ function CertificatePreviewModal({ cert, onClose, onCopy }: { cert: Certificate;
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link href={`/verify/${cert.id}`} style={{ padding: "9px 16px", borderRadius: 10, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>✓ Open full verification</Link>
               <a href={apiUrl(`/api/pipeline/certificate/${cert.id}/pdf`)} target="_blank" rel="noopener noreferrer" style={{ padding: "9px 16px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>📄 PDF</a>
+              <button onClick={loadProof} disabled={proofBusy} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(13,148,136,0.35)", background: "rgba(13,148,136,0.08)", fontWeight: 800, fontSize: 12, cursor: proofBusy ? "wait" : "pointer", color: "#0d9488" }}>
+                {proofBusy ? "Loading…" : "🔐 Merkle proof"}
+              </button>
               <button onClick={() => onCopy(verifyUrl, "Verify URL")} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Link</button>
               <button onClick={() => onCopy(cert.contentHash, "Hash")} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Hash</button>
             </div>
+
+            {(proof || proofError) && (
+              <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 10, background: "#0f172a", color: "#e2e8f0" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: "#5eead4", letterSpacing: "0.06em", textTransform: "uppercase" }}>Merkle inclusion proof</div>
+                    {proof && <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>leaf #{proof.leafIndex} of {proof.leafCount} · path length {proof.path.length}</div>}
+                  </div>
+                  {proof && (
+                    <button onClick={() => onCopy(JSON.stringify(proof, null, 2), "Proof JSON")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(148,163,184,0.3)", background: "transparent", color: "#5eead4", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>Copy JSON</button>
+                  )}
+                </div>
+                {proofError ? (
+                  <div style={{ fontSize: 11, color: "#fca5a5" }}>⚠ {proofError}</div>
+                ) : proof ? (
+                  <pre style={{ margin: 0, fontSize: 10.5, fontFamily: "ui-monospace, Menlo, monospace", color: "#e2e8f0", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 180, overflowY: "auto" }}>
+{`root:  ${proof.merkleRoot}
+leaf:  ${proof.leaf}
+index: ${proof.leafIndex} / ${proof.leafCount - 1}
+path:${proof.path.length === 0 ? " (empty — lone leaf)" : ""}
+${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
+                  </pre>
+                ) : null}
+              </div>
+            )}
           </div>
 
           {/* QR panel */}

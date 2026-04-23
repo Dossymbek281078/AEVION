@@ -852,6 +852,155 @@ pipelineRouter.get("/bureau/anchor", async (_req, res) => {
 });
 
 /**
+ * GET /api/pipeline/bureau/proof/:certId
+ *
+ * Merkle inclusion proof — returns the leaf hash, the leaf's index in
+ * the sorted leaf set, the sibling path (hash + side L|R for every
+ * level), and the resulting root. Clients reproduce:
+ *   acc = leaf
+ *   for each {hash, side} in path:
+ *     acc = sha256(side==="L" ? hash||acc : acc||hash)
+ *   acc must equal merkleRoot.
+ */
+pipelineRouter.get("/bureau/proof/:certId", async (req, res) => {
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+    const { certId } = req.params;
+
+    let leaves: Array<{ id: string; contentHash: string }>;
+    if (useDb) {
+      const r = await pool.query(`SELECT "id","contentHash" FROM "IPCertificate" WHERE "status" = 'active'`);
+      leaves = r.rows.map((x: any) => ({ id: x.id, contentHash: x.contentHash }));
+    } else {
+      leaves = memListCertificates({ limit: 5000 }).map((c: any) => ({ id: c.id, contentHash: c.contentHash }));
+    }
+
+    const sorted = [...leaves].sort((a, b) => a.contentHash.localeCompare(b.contentHash));
+    const leafIndex = sorted.findIndex((l) => l.id === certId);
+    if (leafIndex < 0) {
+      return res.status(404).json({ error: "Certificate not in active registry" });
+    }
+
+    const sha = (bufs: Uint8Array[]) => {
+      const h = crypto.createHash("sha256");
+      for (const b of bufs) h.update(b);
+      return Buffer.from(h.digest());
+    };
+
+    // Build proof path while computing root.
+    let layer: Buffer[] = sorted.map((l) => Buffer.from(l.contentHash, "hex"));
+    let idx = leafIndex;
+    const path: Array<{ hash: string; side: "L" | "R" }> = [];
+
+    while (layer.length > 1) {
+      const next: Buffer[] = [];
+      for (let i = 0; i < layer.length; i += 2) {
+        const l = layer[i];
+        const r = layer[i + 1] || layer[i];
+        next.push(sha([l, r]));
+      }
+      const isRight = idx % 2 === 1;
+      const siblingIdx = isRight ? idx - 1 : idx + 1;
+      const sibling = layer[siblingIdx] || layer[idx]; // duplicate-last on odd
+      path.push({ hash: sibling.toString("hex"), side: isRight ? "L" : "R" });
+      idx = Math.floor(idx / 2);
+      layer = next;
+    }
+
+    const root = layer[0]?.toString("hex") ?? "";
+    const leaf = sorted[leafIndex].contentHash;
+
+    res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
+    res.json({
+      version: "aevion-merkle-v1",
+      certId,
+      leaf,
+      leafIndex,
+      leafCount: sorted.length,
+      path,
+      merkleRoot: root,
+      verifyAlgorithm: "acc := leaf; for step in path: acc := sha256(step.side==='L' ? step.hash||acc : acc||step.hash); assert acc == merkleRoot",
+      publishedAt: new Date().toISOString(),
+      source: useDb ? "postgres" : "memory",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "proof failed";
+    console.error("[Pipeline] proof error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/bureau/snapshot.json
+ *
+ * Deterministic, audit-friendly dump of the entire active registry plus
+ * the current Merkle anchor. Use for external verification, legal
+ * evidence packages, or offline archival.
+ */
+pipelineRouter.get("/bureau/snapshot.json", async (_req, res) => {
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+
+    let rows: any[];
+    if (useDb) {
+      const r = await pool.query(
+        `SELECT "id","objectId","title","kind","authorName","country","city","contentHash","algorithm","protectedAt","verifiedCount"
+         FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" ASC`
+      );
+      rows = r.rows;
+    } else {
+      rows = [...memListCertificates({ limit: 5000, sort: "recent" })].reverse();
+    }
+
+    const sorted = [...rows].sort((a: any, b: any) => String(a.contentHash).localeCompare(String(b.contentHash)));
+    const sha = (bufs: Uint8Array[]) => {
+      const h = crypto.createHash("sha256");
+      for (const b of bufs) h.update(b);
+      return Buffer.from(h.digest());
+    };
+    let layer: Buffer[] = sorted.map((r: any) => Buffer.from(r.contentHash, "hex"));
+    if (layer.length === 0) layer = [sha([Buffer.from("AEVION-EMPTY-ANCHOR")])];
+    while (layer.length > 1) {
+      const next: Buffer[] = [];
+      for (let i = 0; i < layer.length; i += 2) {
+        next.push(sha([layer[i], layer[i + 1] || layer[i]]));
+      }
+      layer = next;
+    }
+    const root = layer[0].toString("hex");
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.setHeader("Content-Disposition", `inline; filename="aevion-registry-snapshot-${new Date().toISOString().slice(0,10)}.json"`);
+    res.status(200).send(JSON.stringify({
+      version: "aevion-snapshot-v1",
+      generatedAt: new Date().toISOString(),
+      source: useDb ? "postgres" : "memory",
+      anchor: { algorithm: "SHA-256(hex) pairwise", leafCount: rows.length, merkleRoot: root },
+      certificates: rows.map((r: any) => ({
+        id: r.id,
+        objectId: r.objectId,
+        title: r.title,
+        kind: r.kind,
+        author: r.authorName || "Anonymous",
+        country: r.country || null,
+        city: r.city || null,
+        contentHash: r.contentHash,
+        algorithm: r.algorithm,
+        protectedAt: r.protectedAt,
+        verifiedCount: r.verifiedCount || 0,
+      })),
+    }, null, 2));
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "snapshot failed";
+    console.error("[Pipeline] snapshot error:", msg);
+    if (!res.headersSent) res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * GET /api/pipeline/badge/:certId
  *
  * Embeddable SVG badge "Protected by AEVION" for external sites.

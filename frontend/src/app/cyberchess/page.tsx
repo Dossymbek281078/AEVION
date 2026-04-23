@@ -329,6 +329,17 @@ export default function CyberChessPage(){
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
   const[replaying,sReplaying]=useState(false);
   const[replaySpeed,sReplaySpeed]=useState(1000);
+  type Arrow={from:Square;to:Square;c:string};
+  type SqHL={sq:Square;c:string};
+  const[arrows,sArrows]=useState<Arrow[]>([]);
+  const[sqHL,sSqHL]=useState<SqHL[]>([]);
+  const rcStartRef=useRef<Square|null>(null);
+  const annotColor=(e:{shiftKey?:boolean;ctrlKey?:boolean;altKey?:boolean})=>{
+    if(e.shiftKey)return "#ef4444"; // red
+    if(e.ctrlKey||e.altKey)return "#3b82f6"; // blue
+    return "#22c55e"; // green default
+  };
+  const clearAnnotations=useCallback(()=>{sArrows([]);sSqHL([])},[]);
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   const[showShop,sShowShop]=useState(false);
   useEffect(()=>{svChessy(chessy)},[chessy]);
@@ -725,6 +736,10 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>runAnalysis(),400);
     return()=>clearTimeout(t);
   },[over,tab,sfOk,fenHist.length]);
+
+  /* ── Clear annotations on tab switch and on a new move ── */
+  useEffect(()=>{clearAnnotations()},[tab,clearAnnotations]);
+  useEffect(()=>{clearAnnotations()},[bk,clearAnnotations]);
 
   /* ── Replay auto-advance ── */
   useEffect(()=>{
@@ -1368,18 +1383,55 @@ export default function CyberChessPage(){
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:14,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative"}}>
+              {/* Arrow / highlight overlay */}
+              {(arrows.length>0||sqHL.length>0)&&(()=>{
+                const sqXY=(sq:Square):[number,number]=>{
+                  const f=FILES.indexOf(sq[0]);const r=8-parseInt(sq[1]);
+                  const c=flip?7-f:f;const rr=flip?7-r:r;
+                  return [c*12.5+6.25,rr*12.5+6.25];
+                };
+                return <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:5}}>
+                  <defs>
+                    {["#22c55e","#ef4444","#3b82f6","#eab308"].map(c=><marker key={c} id={`ah-${c.slice(1)}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="3" markerHeight="3" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={c}/></marker>)}
+                  </defs>
+                  {sqHL.map((h,i)=>{const[x,y]=sqXY(h.sq);return <circle key={i} cx={x} cy={y} r="5.5" fill="none" stroke={h.c} strokeWidth="1" opacity="0.85"/>;})}
+                  {arrows.map((a,i)=>{const[x1,y1]=sqXY(a.from);const[x2,y2]=sqXY(a.to);
+                    // Shorten so the arrowhead doesn't overlap the destination center
+                    const dx=x2-x1,dy=y2-y1,len=Math.max(0.01,Math.hypot(dx,dy));
+                    const tx=x2-(dx/len)*3.5,ty=y2-(dy/len)*3.5;
+                    return <line key={i} x1={x1} y1={y1} x2={tx} y2={ty} stroke={a.c} strokeWidth="1.8" strokeLinecap="round" markerEnd={`url(#ah-${a.c.slice(1)})`} opacity="0.85"/>;
+                  })}
+                </svg>;
+              })()}
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
                 const realP=game.get(sq);
                 const isShadow=pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color);
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();
-                  // Find premove at this square (either from or to) and remove it specifically
+                // Annotation mode: when the game is finished OR we're in analysis/coach (viewer mode),
+                // right-click draws arrows & highlights. During a live play game, right-click still
+                // removes premoves as before.
+                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
+                return<div key={sq} onClick={()=>{if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();click(sq)}} onMouseDown={e=>{if(e.button===2){rcStartRef.current=sq;e.preventDefault()}}} onMouseUp={e=>{
+                  if(e.button!==2)return;
+                  const start=rcStartRef.current;rcStartRef.current=null;
+                  if(!annotActive)return;
+                  if(!start)return;
+                  const col=annotColor(e);
+                  if(start===sq){
+                    // Toggle highlight on this square
+                    sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
+                  }else{
+                    // Arrow from start → sq; toggle if exact same arrow exists
+                    sArrows(a=>{const i=a.findIndex(x=>x.from===start&&x.to===sq&&x.c===col);if(i>=0)return a.filter((_,j)=>j!==i);return [...a,{from:start,to:sq,c:col}]});
+                  }
+                }} onContextMenu={e=>{e.preventDefault();e.stopPropagation();
+                  if(annotActive)return; // annotations already handled on mouseUp
+                  // Play mode: remove premove at this square (either from or to)
                   const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
                   if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
-                  // Otherwise fallback: remove last premove / clear selection
                   if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
                 }} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>

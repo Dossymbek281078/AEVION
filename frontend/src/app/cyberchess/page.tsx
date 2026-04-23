@@ -288,6 +288,7 @@ export default function CyberChessPage(){
   const[puzzleListOpen,sPuzzleListOpen]=useState(false);
   const[gamesModalOpen,sGamesModalOpen]=useState(false);
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
+  const[showHelp,sShowHelp]=useState(false);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -580,6 +581,8 @@ export default function CyberChessPage(){
       if(target?.tagName==="INPUT"||target?.tagName==="TEXTAREA"||target?.tagName==="SELECT")return;
       if(e.key==="m"||e.key==="M"){e.preventDefault();sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})}
       if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
+      if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
+      if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on)){e.preventDefault();newGRef.current()}}
       if(hist.length===0)return;
       if(e.key==="ArrowLeft"){
         e.preventDefault();
@@ -720,6 +723,8 @@ export default function CyberChessPage(){
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
+  const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
@@ -901,6 +906,12 @@ export default function CyberChessPage(){
           <div><div style={{fontSize:15,fontWeight:900,color:T.text}}>CyberChess</div><div style={{fontSize:14,color:T.dim}}>Stockfish 18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}</div></div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <button
+            onClick={()=>sShowHelp(true)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+            style={{width:38,height:38,borderRadius:10,border:`1px solid ${T.border}`,background:T.surface,color:T.dim,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontSize:16,fontWeight:900}}
+          >?</button>
           <button
             onClick={()=>{sMuted(v=>!v);showToast(muted?"Sound on":"Muted","info")}}
             title={muted?"Unmute sounds (M)":"Mute sounds (M)"}
@@ -2114,6 +2125,36 @@ export default function CyberChessPage(){
         </div>
       </div>;
     })()}
+
+    {/* Keyboard Shortcuts Help Overlay */}
+    {showHelp&&<div onClick={()=>sShowHelp(false)} role="dialog" aria-label="Keyboard shortcuts" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:520,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:20,fontWeight:900,color:T.text}}>⌨ Горячие клавиши</div>
+            <div style={{fontSize:13,color:T.dim,marginTop:2}}>Работают во всех вкладках</div>
+          </div>
+          <button onClick={()=>sShowHelp(false)} aria-label="Close" style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 16px",fontSize:14,alignItems:"center"}}>
+          {[
+            ["←  / →","Листать ходы назад / вперёд"],
+            ["Home / End","К первому / последнему ходу"],
+            ["F","Перевернуть доску"],
+            ["M","Вкл./выкл. звук"],
+            ["N","Новая партия (в Play, до старта)"],
+            ["Esc","Сбросить все премувы"],
+            ["?","Показать / скрыть эту подсказку"],
+          ].map(([k,v])=><React.Fragment key={k}>
+            <kbd style={{fontFamily:"monospace",fontWeight:900,fontSize:13,padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,color:T.text,whiteSpace:"nowrap"}}>{k}</kbd>
+            <span style={{color:T.text}}>{v}</span>
+          </React.Fragment>)}
+        </div>
+        <div style={{marginTop:16,padding:"10px 12px",background:"#f9fafb",borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,color:T.dim,lineHeight:1.5}}>
+          💡 Совет: все сочетания игнорируются, пока фокус в поле ввода.
+        </div>
+      </div>
+    </div>}
 
     </ProductPageShell></main>);
 }

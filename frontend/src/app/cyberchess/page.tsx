@@ -715,6 +715,15 @@ export default function CyberChessPage(){
   },[bk,tab,on,over,setup,hist.length]);
   useEffect(()=>{if(over)clearResume()},[over]);
 
+  /* ── Auto post-game analysis in Play/Coach for instant accuracy card ── */
+  useEffect(()=>{
+    if(!over||(tab!=="play"&&tab!=="coach"))return;
+    if(!sfR.current?.ready()||fenHist.length<3)return;
+    if(analysis.length>=hist.length||analyzing)return;
+    const t=setTimeout(()=>runAnalysis(),400);
+    return()=>clearTimeout(t);
+  },[over,tab,sfOk,fenHist.length]);
+
   /* ── Puzzle achievement tracker ── */
   useEffect(()=>{
     if(pzSolvedCount===10)unlockAch("puzzles_10",30,"10 пазлов решено");
@@ -1494,6 +1503,40 @@ export default function CyberChessPage(){
 
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {/* Post-game accuracy card (auto-appears once Stockfish finishes scoring each ply) */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&(()=>{
+            const wS={g:0,good:0,ina:0,mi:0,bl:0,loss:0,c:0};const bS={...wS};
+            for(let i=0;i<analysis.length;i++){
+              const isW=i%2===0;const s=isW?wS:bS;
+              const q=analysis[i].quality;
+              if(q==="great")s.g++;else if(q==="good")s.good++;else if(q==="inacc")s.ina++;else if(q==="mistake")s.mi++;else if(q==="blunder")s.bl++;
+              s.c++;
+              if(i>0){const prev=analysis[i-1].cp;const cur=analysis[i].cp;const pfm=isW?prev:-prev;const cfm=isW?cur:-cur;s.loss+=Math.max(0,Math.min(1000,pfm-cfm))}
+            }
+            const acc=(s:typeof wS)=>s.c===0?0:Math.max(0,Math.min(100,Math.round(100-(s.loss/s.c)/8)));
+            const meS=pCol==="w"?wS:bS;const aiS=pCol==="w"?bS:wS;
+            const meAcc=acc(meS);const aiAcc=acc(aiS);
+            const ac=(a:number)=>a>=85?T.accent:a>=70?T.blue:a>=50?"#ca8a04":T.danger;
+            const row=(lbl:string,s:typeof wS,a:number,flag:string)=>(
+              <div style={{flex:1,padding:"10px 12px",background:"#fff",borderRadius:8,border:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:6}}>
+                  <div style={{fontSize:12,fontWeight:800,color:T.dim,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{flag} {lbl}</div>
+                  <div style={{fontSize:22,fontWeight:900,color:ac(a),fontFamily:"monospace",lineHeight:1}}>{a}%</div>
+                </div>
+                <div style={{display:"flex",gap:8,fontSize:12,fontWeight:700}}>
+                  <span style={{color:T.accent}}>!{s.g}</span>
+                  <span style={{color:"#ca8a04"}}>?!{s.ina}</span>
+                  <span style={{color:"#ea580c"}}>?{s.mi}</span>
+                  <span style={{color:T.danger}}>??{s.bl}</span>
+                </div>
+              </div>);
+            return <div style={{marginTop:8,display:"flex",gap:8,padding:"12px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0"}}>
+              <div style={{flex:"0 0 100%",marginBottom:4,fontSize:13,fontWeight:800,color:"#065f46",letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📊 Точность партии</div>
+              {row("Ты",meS,meAcc,pCol==="w"?"⚪":"⚫")}
+              {row("AI",aiS,aiAcc,pCol==="w"?"⚫":"⚪")}
+            </div>;
+          })()}
+          {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
 
           {/* My player block (bottom = me) */}
           {!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:T.surface,border:`1px solid ${myT&&on&&!over?T.accent:T.border}`,display:"flex",alignItems:"center",gap:10,boxShadow:myT&&on&&!over?"0 0 0 2px rgba(5,150,105,0.15)":"none"}}>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import { apiUrl } from "@/lib/apiBase";
+import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════════════════
    Types
@@ -13,7 +13,7 @@ import { apiUrl } from "@/lib/apiBase";
 type AgentRole = "analyst" | "writer" | "critic";
 type ConfigRoleId = "analyst" | "writer" | "writerB" | "critic";
 type Stage = "draft" | "revision" | "judge";
-type Strategy = "sequential" | "parallel";
+type Strategy = "sequential" | "parallel" | "debate";
 
 type ProviderInfo = {
   id: string;
@@ -38,6 +38,13 @@ type StrategyInfo = {
   agents: ConfigRoleId[];
 };
 
+type PricingRow = {
+  provider: string;
+  model: string;
+  inputPer1M: number;
+  outputPer1M: number;
+};
+
 type AgentTurn = {
   role: AgentRole;
   stage: Stage;
@@ -50,6 +57,7 @@ type AgentTurn = {
   durationMs?: number;
   tokensIn?: number;
   tokensOut?: number;
+  costUsd?: number;
 };
 
 type RunState = {
@@ -60,8 +68,12 @@ type RunState = {
   verdict?: { approved: boolean; feedback: string };
   finalContent?: string;
   error?: string;
-  status: "running" | "done" | "error";
+  status: "running" | "done" | "error" | "stopped";
   startedAt: number;
+  totalDurationMs?: number;
+  totalCostUsd?: number;
+  strategy?: Strategy;
+  agentConfig?: any;
   persisted?: boolean;
 };
 
@@ -85,39 +97,78 @@ type SSEPayload =
     }
   | { type: "agent_start"; role: AgentRole; stage: Stage; provider: string; model: string; instance?: string }
   | { type: "chunk"; role: AgentRole; stage: Stage; text: string; instance?: string }
-  | { type: "agent_end"; role: AgentRole; stage: Stage; content: string; tokensIn?: number; tokensOut?: number; durationMs: number; instance?: string }
+  | {
+      type: "agent_end";
+      role: AgentRole;
+      stage: Stage;
+      content: string;
+      tokensIn?: number;
+      tokensOut?: number;
+      durationMs: number;
+      costUsd?: number;
+      instance?: string;
+    }
   | { type: "verdict"; approved: boolean; feedback: string }
   | { type: "final"; content: string }
   | { type: "error"; message: string; role?: AgentRole }
-  | { type: "done"; totalDurationMs: number }
+  | { type: "done"; totalDurationMs: number; totalCostUsd: number }
   | { type: "sse_end" };
 
 /* ═══════════════════════════════════════════════════════════════════════
    Role styling
    ═══════════════════════════════════════════════════════════════════════ */
 
-const ROLE_STYLE: Record<ConfigRoleId, { color: string; bg: string; tag: string; label: string; desc: string }> = {
+type RoleVisual = { color: string; bg: string; tag: string; label: string; desc: string };
+
+const ROLE_STYLE: Record<string, RoleVisual> = {
   analyst: { color: "#2563eb", bg: "rgba(37,99,235,0.08)",  tag: "A",  label: "Analyst",  desc: "Decomposes your request: plan, facts, risks" },
   writer:  { color: "#059669", bg: "rgba(5,150,105,0.08)",  tag: "W",  label: "Writer",   desc: "Drafts the final answer from the Analyst's plan" },
   writerB: { color: "#0891b2", bg: "rgba(8,145,178,0.08)",  tag: "W²", label: "Writer B", desc: "Parallel mode: second voice on a different model" },
-  critic:  { color: "#d97706", bg: "rgba(217,119,6,0.08)",  tag: "C",  label: "Critic",   desc: "Approves draft or requests fixes (sequential) · synthesizes drafts (parallel)" },
+  critic:  { color: "#d97706", bg: "rgba(217,119,6,0.08)",  tag: "C",  label: "Critic",   desc: "Approves draft or requests fixes (sequential) · synthesizes drafts (parallel/debate)" },
+  pro:     { color: "#16a34a", bg: "rgba(22,163,74,0.08)",  tag: "✚",  label: "Pro",      desc: "Debate mode: argues the case IN FAVOR" },
+  con:     { color: "#dc2626", bg: "rgba(220,38,38,0.08)",  tag: "✕",  label: "Con",      desc: "Debate mode: argues the counter-case" },
+  moderator: { color: "#7c3aed", bg: "rgba(124,58,237,0.08)", tag: "M", label: "Moderator", desc: "Debate mode: synthesizes a balanced answer" },
+  judge:   { color: "#d97706", bg: "rgba(217,119,6,0.08)",  tag: "J",  label: "Judge",    desc: "Parallel mode: picks or merges drafts" },
 };
 
 const FINAL_STYLE = { color: "#7c3aed", bg: "rgba(124,58,237,0.08)" };
 
-/** Pick the visual style for a turn using role + stage + instance. */
-function turnStyle(role: AgentRole, stage: Stage, instance?: string) {
-  if (role === "critic" && stage === "judge") {
-    return { ...ROLE_STYLE.critic, tag: "J", label: "Judge" };
-  }
-  if (role === "writer" && instance === "b") {
-    return ROLE_STYLE.writerB;
-  }
-  if (role === "writer") {
-    return ROLE_STYLE.writer;
-  }
+/** Pick the visual style for a turn using role + stage + instance + strategy. */
+function turnStyle(role: AgentRole, stage: Stage, instance?: string, strategy?: Strategy): RoleVisual {
+  if (role === "writer" && instance === "pro") return ROLE_STYLE.pro;
+  if (role === "writer" && instance === "con") return ROLE_STYLE.con;
+  if (role === "writer" && instance === "b") return ROLE_STYLE.writerB;
+  if (role === "writer") return ROLE_STYLE.writer;
   if (role === "analyst") return ROLE_STYLE.analyst;
+  if (role === "critic" && stage === "judge") {
+    return strategy === "debate" ? ROLE_STYLE.moderator : ROLE_STYLE.judge;
+  }
   return ROLE_STYLE.critic;
+}
+
+/** Label a role slot for display based on the active strategy. */
+function roleSlotLabel(id: ConfigRoleId, strategy: Strategy): string {
+  if (id === "writer" && strategy === "debate") return "Pro";
+  if (id === "writerB" && strategy === "debate") return "Con";
+  if (id === "writer" && strategy === "parallel") return "Writer A";
+  if (id === "writerB" && strategy === "parallel") return "Writer B";
+  if (id === "critic" && strategy === "debate") return "Moderator";
+  if (id === "critic" && strategy === "parallel") return "Judge";
+  if (id === "critic") return "Critic";
+  if (id === "writer") return "Writer";
+  if (id === "writerB") return "Writer B";
+  return "Analyst";
+}
+
+/** Pick role style for a config slot depending on strategy. */
+function roleSlotStyle(id: ConfigRoleId, strategy: Strategy): RoleVisual {
+  if (strategy === "debate") {
+    if (id === "writer") return ROLE_STYLE.pro;
+    if (id === "writerB") return ROLE_STYLE.con;
+    if (id === "critic") return ROLE_STYLE.moderator;
+  }
+  if (strategy === "parallel" && id === "critic") return ROLE_STYLE.judge;
+  return ROLE_STYLE[id] || ROLE_STYLE.analyst;
 }
 
 const prettyModel = (m: string) => {
@@ -189,6 +240,25 @@ function formatDuration(ms?: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function formatMoney(v?: number | null, precision = 4): string {
+  if (v == null || !isFinite(v)) return "—";
+  if (v === 0) return "$0";
+  if (v < 0.0001) return "<$0.0001";
+  return `$${v.toFixed(precision)}`;
+}
+
+/** Sum tokensIn/Out across a run's turns — used for live dashboard. */
+function runStats(run: RunState): { tokensIn: number; tokensOut: number; costUsd: number; durationMs: number } {
+  let tokensIn = 0, tokensOut = 0, costUsd = 0, durationMs = 0;
+  for (const t of run.turns) {
+    tokensIn += t.tokensIn ?? 0;
+    tokensOut += t.tokensOut ?? 0;
+    costUsd += t.costUsd ?? 0;
+    durationMs += t.durationMs ?? 0;
+  }
+  return { tokensIn, tokensOut, costUsd, durationMs };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Component
    ═══════════════════════════════════════════════════════════════════════ */
@@ -197,6 +267,7 @@ export default function QCoreMultiAgentPage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [roleDefaults, setRoleDefaults] = useState<RoleDefault[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
+  const [pricing, setPricing] = useState<PricingRow[]>([]);
   const [strategy, setStrategy] = useState<Strategy>("sequential");
   const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
     analyst: { provider: "", model: "" },
@@ -217,21 +288,24 @@ export default function QCoreMultiAgentPage() {
   const timelineRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  /* ── Load providers + role defaults + sessions on mount ── */
+  /* ── Load providers + role defaults + sessions + pricing on mount ── */
   useEffect(() => {
     (async () => {
       try {
-        const [provRes, agRes, sessRes] = await Promise.all([
+        const [provRes, agRes, sessRes, priceRes] = await Promise.all([
           fetch(apiUrl("/api/qcoreai/providers")),
           fetch(apiUrl("/api/qcoreai/agents")),
           fetch(apiUrl("/api/qcoreai/sessions"), { headers: bearerHeader() }),
+          fetch(apiUrl("/api/qcoreai/pricing")),
         ]);
         const provData = await provRes.json().catch(() => ({}));
         const agData = await agRes.json().catch(() => ({}));
         const sessData = await sessRes.json().catch(() => ({}));
+        const priceData = await priceRes.json().catch(() => ({}));
 
         if (provData?.providers) setProviders(provData.providers);
         if (Array.isArray(agData?.strategies)) setStrategies(agData.strategies);
+        if (Array.isArray(priceData?.table)) setPricing(priceData.table);
         if (Array.isArray(agData?.roles)) {
           setRoleDefaults(agData.roles);
           const next: Record<ConfigRoleId, { provider: string; model: string }> = {
@@ -276,6 +350,10 @@ export default function QCoreMultiAgentPage() {
         error: r.error ?? undefined,
         status: r.status,
         startedAt: Date.parse(r.startedAt) || Date.now(),
+        totalDurationMs: r.totalDurationMs ?? undefined,
+        totalCostUsd: r.totalCostUsd ?? undefined,
+        strategy: r.strategy || undefined,
+        agentConfig: r.agentConfig ?? undefined,
         persisted: true,
       }));
       setRuns(hydrated);
@@ -304,6 +382,7 @@ export default function QCoreMultiAgentPage() {
           durationMs: m.durationMs ?? undefined,
           tokensIn: m.tokensIn ?? undefined,
           tokensOut: m.tokensOut ?? undefined,
+          costUsd: m.costUsd ?? undefined,
         }));
       setRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, turns } : r)));
     } catch (e: any) {
@@ -338,8 +417,25 @@ export default function QCoreMultiAgentPage() {
     }
   }, [activeSessionId, newSession]);
 
+  const renameSessionPrompt = useCallback(async (s: SessionSummary) => {
+    const next = typeof window !== "undefined" ? window.prompt("Rename session", s.title) : null;
+    if (!next || !next.trim() || next.trim() === s.title) return;
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ title: next.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, title: data.session.title } : x)));
+    } catch (e: any) {
+      setGlobalError(e?.message || "Rename failed");
+    }
+  }, []);
+
   /* ── Send a new prompt (starts a run, streams SSE) ── */
-  const send = useCallback(async (text?: string) => {
+  const send = useCallback(async (text?: string, opts?: { strategy?: Strategy; overrides?: Record<ConfigRoleId, { provider: string; model: string }>; maxRevisions?: number }) => {
     const msg = (text || input).trim();
     if (!msg || busy) return;
 
@@ -347,7 +443,10 @@ export default function QCoreMultiAgentPage() {
     setGlobalError(null);
     setBusy(true);
 
-    // Prepend a placeholder run so user sees activity immediately.
+    const useStrategy = opts?.strategy || strategy;
+    const useOverrides = opts?.overrides || overrides;
+    const useMaxRevisions = opts?.maxRevisions ?? maxRevisions;
+
     const tempRunId = `tmp_${Date.now()}`;
     setRuns((prev) => [
       ...prev,
@@ -358,6 +457,7 @@ export default function QCoreMultiAgentPage() {
         turns: [],
         status: "running",
         startedAt: Date.now(),
+        strategy: useStrategy,
       },
     ]);
 
@@ -368,13 +468,13 @@ export default function QCoreMultiAgentPage() {
       const body = {
         input: msg,
         sessionId: activeSessionId,
-        strategy,
-        maxRevisions,
+        strategy: useStrategy,
+        maxRevisions: useMaxRevisions,
         overrides: {
-          analyst: overrides.analyst,
-          writer: overrides.writer,
-          writerB: overrides.writerB,
-          critic: overrides.critic,
+          analyst: useOverrides.analyst,
+          writer: useOverrides.writer,
+          writerB: useOverrides.writerB,
+          critic: useOverrides.critic,
         },
       };
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
@@ -428,7 +528,6 @@ export default function QCoreMultiAgentPage() {
               prev.map((r) => {
                 if (r.id !== realRunId) return r;
                 const turns = r.turns.slice();
-                // In parallel mode multiple turns can stream concurrently — match by role+stage+instance.
                 for (let i = turns.length - 1; i >= 0; i--) {
                   const t = turns[i];
                   if (
@@ -465,6 +564,7 @@ export default function QCoreMultiAgentPage() {
                       durationMs: payload.durationMs,
                       tokensIn: payload.tokensIn,
                       tokensOut: payload.tokensOut,
+                      costUsd: payload.costUsd,
                     };
                     break;
                   }
@@ -492,7 +592,12 @@ export default function QCoreMultiAgentPage() {
             break;
           case "done":
             setRuns((prev) =>
-              prev.map((r) => (r.id === realRunId ? { ...r, status: r.error ? "error" : "done" } : r))
+              prev.map((r) => (r.id === realRunId ? {
+                ...r,
+                status: r.error ? "error" : "done",
+                totalDurationMs: payload.totalDurationMs,
+                totalCostUsd: payload.totalCostUsd,
+              } : r))
             );
             break;
           case "sse_end":
@@ -500,16 +605,20 @@ export default function QCoreMultiAgentPage() {
         }
       }
 
-      // Refresh sessions list (might have created a new one).
       try {
         const sessRes = await fetch(apiUrl("/api/qcoreai/sessions"), { headers: bearerHeader() });
         const sessData = await sessRes.json();
         if (Array.isArray(sessData?.items)) setSessions(sessData.items);
       } catch { /* noop */ }
     } catch (e: any) {
-      const msg = e?.name === "AbortError" ? "Stopped." : e?.message || "Stream failed";
-      setGlobalError(msg);
-      setRuns((prev) => prev.map((r) => (r.status === "running" ? { ...r, status: "error", error: msg } : r)));
+      const isAbort = e?.name === "AbortError";
+      const msgText = isAbort ? "Stopped by user." : e?.message || "Stream failed";
+      if (!isAbort) setGlobalError(msgText);
+      setRuns((prev) => prev.map((r) => (r.status === "running" ? {
+        ...r,
+        status: isAbort ? "stopped" : "error",
+        error: isAbort ? undefined : msgText,
+      } : r)));
     } finally {
       abortRef.current = null;
       setBusy(false);
@@ -523,8 +632,40 @@ export default function QCoreMultiAgentPage() {
     }
   }, []);
 
+  /** Restore a past run's config + resend its prompt — the "Rerun" button. */
+  const rerun = useCallback((run: RunState) => {
+    const cfg = run.agentConfig || {};
+    const nextStrategy: Strategy =
+      cfg.strategy === "parallel" ? "parallel" :
+      cfg.strategy === "debate" ? "debate" :
+      (run.strategy as Strategy) || strategy;
+    let nextOverrides = overrides;
+    if (cfg.overrides && typeof cfg.overrides === "object") {
+      const pick = (k: ConfigRoleId) => {
+        const v = cfg.overrides?.[k];
+        return v && typeof v === "object" && v.provider
+          ? { provider: v.provider, model: v.model || "" }
+          : overrides[k];
+      };
+      nextOverrides = {
+        analyst: pick("analyst"),
+        writer: pick("writer"),
+        writerB: pick("writerB"),
+        critic: pick("critic"),
+      };
+    }
+    const nextMaxRev = typeof cfg.maxRevisions === "number" ? cfg.maxRevisions : maxRevisions;
+    setStrategy(nextStrategy);
+    setOverrides(nextOverrides);
+    setMaxRevisions(nextMaxRev);
+    send(run.userInput, { strategy: nextStrategy, overrides: nextOverrides, maxRevisions: nextMaxRev });
+  }, [send, strategy, overrides, maxRevisions]);
+
   const configuredProviders = useMemo(() => providers.filter((p) => p.configured), [providers]);
   const anyConfigured = configuredProviders.length > 0;
+
+  /* ── Live run stats for the header (last run in the timeline) ── */
+  const liveRun = runs.find((r) => r.status === "running");
 
   return (
     <main>
@@ -556,7 +697,7 @@ export default function QCoreMultiAgentPage() {
                   QCoreAI · Multi-Agent
                 </h1>
                 <p style={{ margin: 0, fontSize: 13, opacity: 0.78 }}>
-                  Analyst + Writer + Critic — inspectable AI pipeline with streaming and persistent sessions.
+                  Analyst + Writer + Critic — inspectable AI pipeline with live streaming, cost tracking, and three strategies.
                 </p>
               </div>
               <Link
@@ -576,8 +717,9 @@ export default function QCoreMultiAgentPage() {
                 Single chat →
               </Link>
             </div>
+
+            {/* Strategy + role pills */}
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-              {/* Strategy toggle */}
               <div
                 style={{
                   display: "flex",
@@ -587,7 +729,7 @@ export default function QCoreMultiAgentPage() {
                   border: "1px solid rgba(255,255,255,0.14)",
                 }}
               >
-                {(["sequential", "parallel"] as Strategy[]).map((s) => (
+                {(["sequential", "parallel", "debate"] as Strategy[]).map((s) => (
                   <button
                     key={s}
                     onClick={() => setStrategy(s)}
@@ -604,18 +746,18 @@ export default function QCoreMultiAgentPage() {
                       transition: "background 0.15s",
                     }}
                   >
-                    {s === "sequential" ? "Sequential" : "Parallel"}
+                    {s === "sequential" ? "Sequential" : s === "parallel" ? "Parallel" : "Debate"}
                   </button>
                 ))}
               </div>
 
-              {/* Active roles pills */}
-              {(strategy === "parallel"
-                ? (["analyst", "writer", "writerB", "critic"] as ConfigRoleId[])
-                : (["analyst", "writer", "critic"] as ConfigRoleId[])
+              {(strategy === "sequential"
+                ? (["analyst", "writer", "critic"] as ConfigRoleId[])
+                : (["analyst", "writer", "writerB", "critic"] as ConfigRoleId[])
               ).map((roleId) => {
-                const s = ROLE_STYLE[roleId];
+                const s = roleSlotStyle(roleId, strategy);
                 const ov = overrides[roleId];
+                const label = roleSlotLabel(roleId, strategy);
                 return (
                   <div
                     key={roleId}
@@ -637,11 +779,12 @@ export default function QCoreMultiAgentPage() {
                     >
                       {s.tag}
                     </span>
-                    <span style={{ fontWeight: 700 }}>{roleId === "critic" && strategy === "parallel" ? "Judge" : s.label}</span>
+                    <span style={{ fontWeight: 700 }}>{label}</span>
                     <span style={{ opacity: 0.7 }}>{ov.provider ? prettyModel(ov.model) : "—"}</span>
                   </div>
                 );
               })}
+
               <button
                 onClick={() => setConfigOpen((v) => !v)}
                 style={{
@@ -653,6 +796,10 @@ export default function QCoreMultiAgentPage() {
               >
                 {configOpen ? "Hide config ▲" : "Configure agents ▼"}
               </button>
+
+              {liveRun && (
+                <LiveCostBadge run={liveRun} />
+              )}
             </div>
           </div>
 
@@ -673,13 +820,14 @@ export default function QCoreMultiAgentPage() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
                 {roleDefaults
-                  .filter((r) => (strategy === "parallel" ? true : r.id !== "writerB"))
+                  .filter((r) => (strategy === "sequential" ? r.id !== "writerB" : true))
                   .map((r) => (
                     <RoleConfigCard
                       key={r.id}
                       role={r}
                       strategy={strategy}
                       providers={providers}
+                      pricing={pricing}
                       value={overrides[r.id]}
                       onChange={(v) => setOverrides((prev) => ({ ...prev, [r.id]: v }))}
                     />
@@ -713,7 +861,7 @@ export default function QCoreMultiAgentPage() {
         </div>
 
         {/* ── Main 2-column layout ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, alignItems: "start" }}>
+        <div className="qc-layout">
           {/* Sessions sidebar */}
           <aside
             style={{
@@ -747,7 +895,7 @@ export default function QCoreMultiAgentPage() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {sessions.map((s) => (
-                  <div key={s.id} style={{ display: "flex", alignItems: "stretch", gap: 4 }}>
+                  <div key={s.id} style={{ display: "flex", alignItems: "stretch", gap: 2 }}>
                     <button
                       onClick={() => loadSession(s.id)}
                       style={{
@@ -765,10 +913,21 @@ export default function QCoreMultiAgentPage() {
                       {s.title || "(untitled)"}
                     </button>
                     <button
+                      onClick={() => renameSessionPrompt(s)}
+                      title="Rename session"
+                      style={{
+                        width: 24, borderRadius: 6,
+                        border: "1px solid transparent", background: "transparent",
+                        color: "#94a3b8", cursor: "pointer", fontSize: 12,
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <button
                       onClick={() => removeSession(s.id)}
                       title="Delete session"
                       style={{
-                        width: 28, borderRadius: 8,
+                        width: 24, borderRadius: 6,
                         border: "1px solid transparent", background: "transparent",
                         color: "#94a3b8", cursor: "pointer", fontSize: 14,
                       }}
@@ -797,13 +956,23 @@ export default function QCoreMultiAgentPage() {
               }}
             >
               {runs.length === 0 ? (
-                <EmptyState onSuggest={(s) => send(s)} canSend={anyConfigured} />
+                <EmptyState
+                  strategies={strategies}
+                  onSuggest={(s, strat) => {
+                    if (strat) setStrategy(strat);
+                    send(s, strat ? { strategy: strat } : undefined);
+                  }}
+                  onPickStrategy={(s) => setStrategy(s)}
+                  currentStrategy={strategy}
+                  canSend={anyConfigured}
+                />
               ) : (
                 runs.map((run) => (
                   <RunCard
                     key={run.id}
                     run={run}
                     onLoadDetails={run.persisted && run.turns.length === 0 ? () => expandRunDetails(run.id) : undefined}
+                    onRerun={() => rerun(run)}
                   />
                 ))
               )}
@@ -832,7 +1001,13 @@ export default function QCoreMultiAgentPage() {
                     send();
                   }
                 }}
-                placeholder="Describe your task — the Analyst will decompose, Writer will draft, Critic will check."
+                placeholder={
+                  strategy === "debate"
+                    ? "Ask a decision or trade-off question — Pro and Con will argue it out, Moderator synthesizes."
+                    : strategy === "parallel"
+                    ? "Describe your task — Analyst plans, two Writers draft on different models, Judge synthesizes."
+                    : "Describe your task — Analyst decomposes, Writer drafts, Critic reviews and revises."
+                }
                 disabled={busy}
                 rows={3}
                 style={{
@@ -873,6 +1048,24 @@ export default function QCoreMultiAgentPage() {
             </div>
           </section>
         </div>
+
+        <style jsx global>{`
+          .qc-layout {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            gap: 16px;
+            align-items: start;
+          }
+          .qc-pair-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+          }
+          @media (max-width: 880px) {
+            .qc-layout { grid-template-columns: 1fr; }
+            .qc-pair-grid { grid-template-columns: 1fr; }
+          }
+        `}</style>
       </ProductPageShell>
     </main>
   );
@@ -882,24 +1075,62 @@ export default function QCoreMultiAgentPage() {
    Subcomponents
    ═══════════════════════════════════════════════════════════════════════ */
 
+function LiveCostBadge({ run }: { run: RunState }) {
+  const stats = runStats(run);
+  return (
+    <div
+      title="Live cost + tokens (rolling sum across agents in this run)"
+      style={{
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        padding: "6px 10px",
+        borderRadius: 10,
+        background: "rgba(16,185,129,0.18)",
+        border: "1px solid rgba(16,185,129,0.4)",
+        color: "#fff",
+        fontSize: 11,
+        fontWeight: 700,
+      }}
+    >
+      <span
+        style={{ width: 8, height: 8, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 0 0 rgba(52,211,153,0.7)", animation: "qc-live-pulse 1.5s infinite" }}
+      />
+      <span>{formatMoney(stats.costUsd, 4)}</span>
+      <span style={{ opacity: 0.8 }}>· {stats.tokensIn + stats.tokensOut} tok</span>
+      <span style={{ opacity: 0.8 }}>· {formatDuration(stats.durationMs)}</span>
+      <style jsx>{`
+        @keyframes qc-live-pulse {
+          0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.7); }
+          70% { box-shadow: 0 0 0 8px rgba(52,211,153,0); }
+          100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function RoleConfigCard({
   role,
   strategy,
   providers,
+  pricing,
   value,
   onChange,
 }: {
   role: RoleDefault;
   strategy: Strategy;
   providers: ProviderInfo[];
+  pricing: PricingRow[];
   value: { provider: string; model: string };
   onChange: (v: { provider: string; model: string }) => void;
 }) {
-  const s = ROLE_STYLE[role.id];
+  const s = roleSlotStyle(role.id, strategy);
+  const label = roleSlotLabel(role.id, strategy);
   const currentProvider = providers.find((p) => p.id === value.provider);
   const availableModels = currentProvider?.models || [];
   const configured = providers.filter((p) => p.configured);
-  const displayLabel = role.id === "critic" && strategy === "parallel" ? "Judge" : s.label;
+  const priceRow = pricing.find((p) => p.provider === value.provider && p.model === value.model);
 
   return (
     <div
@@ -919,9 +1150,9 @@ function RoleConfigCard({
             fontWeight: 900, fontSize: 12,
           }}
         >
-          {role.id === "critic" && strategy === "parallel" ? "J" : s.tag}
+          {s.tag}
         </span>
-        <span style={{ fontWeight: 800, fontSize: 13, color: "#0f172a" }}>{displayLabel}</span>
+        <span style={{ fontWeight: 800, fontSize: 13, color: "#0f172a" }}>{label}</span>
       </div>
       <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>{role.description}</div>
 
@@ -965,52 +1196,161 @@ function RoleConfigCard({
           <option key={m} value={m}>{prettyModel(m)}</option>
         ))}
       </select>
-    </div>
-  );
-}
-
-function EmptyState({ onSuggest, canSend }: { onSuggest: (s: string) => void; canSend: boolean }) {
-  const SUGGESTIONS = [
-    "Explain how QRight protects my IP — in a way I can repeat to a non-technical customer.",
-    "I'm designing the Planet Compliance flow. What edge cases should I test first?",
-    "Compare single-chat vs multi-agent AI for a customer-support tool. Recommend one.",
-  ];
-  return (
-    <div style={{ textAlign: "center", padding: "40px 20px" }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
-        How the pipeline works
-      </div>
-      <div style={{ fontSize: 12, color: "#475569", marginBottom: 18, maxWidth: 540, margin: "0 auto 18px" }}>
-        Your prompt is read by the <b>Analyst</b> (plan & risks) → handed to the <b>Writer</b> (drafts the answer)
-        → reviewed by the <b>Critic</b>. If the Critic asks for changes, the Writer revises. Everything streams live.
-      </div>
-      {canSend && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              onClick={() => onSuggest(s)}
-              style={{
-                padding: "8px 14px", borderRadius: 10,
-                border: "1px solid rgba(15,23,42,0.12)", background: "#fff",
-                fontSize: 12, color: "#334155", cursor: "pointer",
-                fontWeight: 600, maxWidth: 320, textAlign: "left",
-              }}
-            >
-              {s}
-            </button>
-          ))}
+      {priceRow && (
+        <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>
+          <b>${priceRow.inputPer1M.toFixed(2)}</b>/M input · <b>${priceRow.outputPer1M.toFixed(2)}</b>/M output
         </div>
       )}
     </div>
   );
 }
 
-function RunCard({ run, onLoadDetails }: { run: RunState; onLoadDetails?: () => void }) {
+function EmptyState({
+  strategies,
+  onSuggest,
+  onPickStrategy,
+  currentStrategy,
+  canSend,
+}: {
+  strategies: StrategyInfo[];
+  onSuggest: (s: string, strategy?: Strategy) => void;
+  onPickStrategy: (s: Strategy) => void;
+  currentStrategy: Strategy;
+  canSend: boolean;
+}) {
+  const CARDS: { id: Strategy; title: string; blurb: string; example: string; accent: string }[] = [
+    {
+      id: "sequential",
+      title: "Sequential",
+      blurb: "Analyst → Writer → Critic. Best for well-defined questions you want polished.",
+      example: "Draft a one-page pitch for AEVION QRight aimed at fintech compliance officers.",
+      accent: "#0d9488",
+    },
+    {
+      id: "parallel",
+      title: "Parallel drafts",
+      blurb: "Two Writers on different models stream at once → Judge merges. Best for open-ended creative work.",
+      example: "Propose three distinct architectures for a privacy-preserving IP registry and compare them.",
+      accent: "#4338ca",
+    },
+    {
+      id: "debate",
+      title: "Debate",
+      blurb: "Pro vs Con → Moderator. Best for decisions, trade-offs, and stress-testing recommendations.",
+      example: "Should AEVION launch QTrade before or after the QRight v2 public beta? Defend both sides.",
+      accent: "#7c3aed",
+    },
+  ];
+
+  return (
+    <div style={{ padding: "24px 8px" }}>
+      <div style={{ textAlign: "center", marginBottom: 22 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+          Pick a strategy — or try an example
+        </div>
+        <div style={{ fontSize: 13, color: "#475569", maxWidth: 620, margin: "0 auto" }}>
+          Three agents coordinate on every answer. You see every step, every model, every token, and the running cost live.
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+        {CARDS.map((c) => {
+          const isActive = c.id === currentStrategy;
+          const meta = strategies.find((s) => s.id === c.id);
+          return (
+            <div
+              key={c.id}
+              style={{
+                border: `1px solid ${isActive ? c.accent : "rgba(15,23,42,0.12)"}`,
+                borderRadius: 14,
+                background: isActive ? `${c.accent}0d` : "#fff",
+                padding: 16,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                transition: "transform 0.15s, box-shadow 0.15s",
+                boxShadow: isActive ? `0 6px 20px ${c.accent}22` : "0 1px 4px rgba(15,23,42,0.04)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: c.accent, color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontWeight: 900, fontSize: 12,
+                  }}
+                >
+                  {c.id === "sequential" ? "→" : c.id === "parallel" ? "‖" : "⚖"}
+                </span>
+                <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>{c.title}</div>
+                {isActive && (
+                  <span
+                    style={{
+                      marginLeft: "auto", fontSize: 10, fontWeight: 800, color: c.accent,
+                      padding: "2px 8px", borderRadius: 999, background: `${c.accent}1f`, border: `1px solid ${c.accent}55`,
+                    }}
+                  >
+                    ACTIVE
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>{meta?.description || c.blurb}</div>
+              <button
+                onClick={() => canSend && onSuggest(c.example, c.id)}
+                disabled={!canSend}
+                style={{
+                  textAlign: "left",
+                  fontSize: 12, color: "#0f172a",
+                  padding: "10px 12px", borderRadius: 10,
+                  background: "#fff", border: "1px dashed rgba(15,23,42,0.18)",
+                  fontStyle: "italic", cursor: canSend ? "pointer" : "default",
+                  lineHeight: 1.45,
+                }}
+              >
+                "{c.example}"
+              </button>
+              <button
+                onClick={() => onPickStrategy(c.id)}
+                style={{
+                  marginTop: "auto",
+                  padding: "6px 10px", borderRadius: 8,
+                  border: `1px solid ${c.accent}66`,
+                  background: isActive ? c.accent : "#fff",
+                  color: isActive ? "#fff" : c.accent,
+                  fontSize: 11, fontWeight: 800, cursor: "pointer",
+                  alignSelf: "flex-start",
+                }}
+              >
+                {isActive ? "Selected" : `Use ${c.title.toLowerCase()}`}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RunCard({
+  run,
+  onLoadDetails,
+  onRerun,
+}: {
+  run: RunState;
+  onLoadDetails?: () => void;
+  onRerun?: () => void;
+}) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
+  const stats = runStats(run);
+  const displayStrategy = (run.strategy as Strategy) || "sequential";
+  const totalDur = run.totalDurationMs ?? stats.durationMs;
+  const totalCost = run.totalCostUsd ?? stats.costUsd;
+  const totalTok = stats.tokensIn + stats.tokensOut;
+
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div style={{ marginBottom: 24 }}>
       {/* User message */}
       <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
         <div
@@ -1025,23 +1365,15 @@ function RunCard({ run, onLoadDetails }: { run: RunState; onLoadDetails?: () => 
         </div>
       </div>
 
-      {/* Agent turns (pair up parallel writers) */}
+      {/* Agent turns (pair up parallel/debate writers) */}
       {grouped.map((item, i) =>
         "pair" in item ? (
-          <div
-            key={`pair-${i}`}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 10,
-              marginBottom: 0,
-            }}
-          >
-            <AgentTurnCard turn={item.pair[0]} />
-            <AgentTurnCard turn={item.pair[1]} />
+          <div key={`pair-${i}`} className="qc-pair-grid" style={{ marginBottom: 0 }}>
+            <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} />
+            <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} />
           </div>
         ) : (
-          <AgentTurnCard key={i} turn={item} />
+          <AgentTurnCard key={i} turn={item} strategy={displayStrategy} />
         )
       )}
 
@@ -1062,7 +1394,7 @@ function RunCard({ run, onLoadDetails }: { run: RunState; onLoadDetails?: () => 
       )}
 
       {/* Final */}
-      {run.finalContent && <FinalCard content={run.finalContent} />}
+      {run.finalContent && <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />}
 
       {/* Error */}
       {run.error && !run.finalContent && (
@@ -1078,31 +1410,122 @@ function RunCard({ run, onLoadDetails }: { run: RunState; onLoadDetails?: () => 
         </div>
       )}
 
-      {/* "View agents" for past runs */}
-      {!hasAgents && run.finalContent && onLoadDetails && (
-        <div style={{ marginTop: 8 }}>
-          <button
-            onClick={onLoadDetails}
-            style={{
-              padding: "6px 12px", borderRadius: 8,
-              background: "transparent", border: "1px dashed #94a3b8",
-              color: "#475569", fontSize: 11, fontWeight: 600, cursor: "pointer",
-            }}
+      {/* Run footer: stats + rerun + export + trace */}
+      {(run.status !== "running" || hasAgents) && (
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+            fontSize: 11,
+            color: "#475569",
+          }}
+        >
+          {run.status === "stopped" && (
+            <span
+              style={{
+                padding: "2px 8px", borderRadius: 999,
+                background: "#fef3c7", color: "#92400e",
+                fontSize: 10, fontWeight: 800, border: "1px solid #fde68a",
+              }}
+            >
+              STOPPED
+            </span>
+          )}
+          {run.status === "error" && (
+            <span
+              style={{
+                padding: "2px 8px", borderRadius: 999,
+                background: "#fee2e2", color: "#991b1b",
+                fontSize: 10, fontWeight: 800, border: "1px solid #fecaca",
+              }}
+            >
+              ERROR
+            </span>
+          )}
+          <span title="Total wall-clock time (parallel stages count once)">
+            ⏱ {formatDuration(totalDur)}
+          </span>
+          <span title="Total tokens (in + out) across all agents">
+            🔤 {totalTok.toLocaleString()} tok
+          </span>
+          <span
+            title="Total USD cost across all agents in this run"
+            style={{ fontWeight: 700, color: totalCost > 0 ? "#0f172a" : "#94a3b8" }}
           >
-            Show agent trace
-          </button>
+            💲 {formatMoney(totalCost)}
+          </span>
+
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {onRerun && run.status !== "running" && (
+              <button
+                onClick={onRerun}
+                style={{
+                  padding: "5px 10px", borderRadius: 8,
+                  background: "#fff", border: "1px solid #cbd5e1",
+                  color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                }}
+                title="Re-run this prompt with the same settings"
+              >
+                ↻ Rerun
+              </button>
+            )}
+            {run.persisted && run.id && !run.id.startsWith("tmp_") && (
+              <>
+                <a
+                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
+                  target="_blank" rel="noreferrer"
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid #cbd5e1",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Download as Markdown"
+                >
+                  ⬇ Markdown
+                </a>
+                <a
+                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=json`}
+                  target="_blank" rel="noreferrer"
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid #cbd5e1",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Download as JSON"
+                >
+                  ⬇ JSON
+                </a>
+              </>
+            )}
+            {!hasAgents && run.finalContent && onLoadDetails && (
+              <button
+                onClick={onLoadDetails}
+                style={{
+                  padding: "5px 10px", borderRadius: 8,
+                  background: "transparent", border: "1px dashed #94a3b8",
+                  color: "#475569", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Show agent trace
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function AgentTurnCard({ turn }: { turn: AgentTurn }) {
-  const s = turnStyle(turn.role, turn.stage, turn.instance);
+function AgentTurnCard({ turn, strategy }: { turn: AgentTurn; strategy: Strategy }) {
+  const s = turnStyle(turn.role, turn.stage, turn.instance, strategy);
   const streaming = turn.status === "streaming";
   const stageBadge =
     turn.stage === "revision" ? " (revision)" :
     turn.stage === "judge" ? "" :
+    turn.instance === "pro" || turn.instance === "con" ? "" :
     turn.instance ? ` · ${turn.instance.toUpperCase()}` : "";
   return (
     <div
@@ -1134,10 +1557,10 @@ function AgentTurnCard({ turn }: { turn: AgentTurn }) {
             {prettyModel(turn.model)}
           </span>
         )}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", fontSize: 11, color: "#94a3b8" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", fontSize: 11, color: "#94a3b8", flexWrap: "wrap" }}>
           {streaming && (
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.color, animation: "pulse 1.2s ease-in-out infinite" }} />
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.color, animation: "qc-pulse 1.2s ease-in-out infinite" }} />
               streaming
             </span>
           )}
@@ -1145,15 +1568,18 @@ function AgentTurnCard({ turn }: { turn: AgentTurn }) {
           {!streaming && (turn.tokensIn != null || turn.tokensOut != null) && (
             <span>{(turn.tokensIn ?? 0)}→{(turn.tokensOut ?? 0)} tok</span>
           )}
+          {!streaming && turn.costUsd != null && turn.costUsd > 0 && (
+            <span style={{ color: "#0f172a", fontWeight: 700 }}>{formatMoney(turn.costUsd)}</span>
+          )}
         </div>
       </div>
       <div style={{ fontSize: 13, lineHeight: 1.55, color: "#0f172a" }}>
         <Markdown source={turn.content || (streaming ? "…" : "")} />
-        {streaming && <span style={{ animation: "blink 1s step-end infinite" }}>▌</span>}
+        {streaming && <span style={{ animation: "qc-blink 1s step-end infinite" }}>▌</span>}
       </div>
-      <style jsx>{`
-        @keyframes pulse { 0%,100% { opacity: 0.4 } 50% { opacity: 1 } }
-        @keyframes blink { 50% { opacity: 0 } }
+      <style jsx global>{`
+        @keyframes qc-pulse { 0%,100% { opacity: 0.4 } 50% { opacity: 1 } }
+        @keyframes qc-blink { 50% { opacity: 0 } }
       `}</style>
     </div>
   );
@@ -1165,28 +1591,30 @@ function AgentTurnCard({ turn }: { turn: AgentTurn }) {
 
 type TurnGroup = AgentTurn | { pair: [AgentTurn, AgentTurn] };
 
-/** Group parallel writer drafts (instance a + b, same stage="draft") into pairs. */
+/** Group parallel/debate writer drafts into pairs. Keeps stable left/right ordering. */
 function groupTurns(turns: AgentTurn[]): TurnGroup[] {
   const out: TurnGroup[] = [];
   const consumed = new Set<number>();
+  const LEFT = new Set(["a", "pro"]);
+  const RIGHT = new Set(["b", "con"]);
   for (let i = 0; i < turns.length; i++) {
     if (consumed.has(i)) continue;
     const t = turns[i];
-    if (t.role === "writer" && t.stage === "draft" && (t.instance === "a" || t.instance === "b")) {
+    if (t.role === "writer" && t.stage === "draft" && (LEFT.has(t.instance || "") || RIGHT.has(t.instance || ""))) {
       let peerIdx = -1;
       for (let j = i + 1; j < turns.length; j++) {
         if (consumed.has(j)) continue;
         const p = turns[j];
-        if (p.role === "writer" && p.stage === "draft" && p.instance && p.instance !== t.instance) {
-          peerIdx = j;
-          break;
-        }
+        if (p.role !== "writer" || p.stage !== "draft") continue;
+        const bothA = LEFT.has(t.instance || "") && RIGHT.has(p.instance || "");
+        const bothB = RIGHT.has(t.instance || "") && LEFT.has(p.instance || "");
+        if (bothA || bothB) { peerIdx = j; break; }
       }
       if (peerIdx >= 0) {
         const peer = turns[peerIdx];
-        const a = t.instance === "a" ? t : peer;
-        const b = t.instance === "b" ? t : peer;
-        out.push({ pair: [a, b] });
+        const left = LEFT.has(t.instance || "") ? t : peer;
+        const right = RIGHT.has(t.instance || "") ? t : peer;
+        out.push({ pair: [left, right] });
         consumed.add(i);
         consumed.add(peerIdx);
         continue;
@@ -1197,16 +1625,14 @@ function groupTurns(turns: AgentTurn[]): TurnGroup[] {
   return out;
 }
 
-function FinalCard({ content }: { content: string }) {
+function FinalCard({ content, runId, stopped }: { content: string; runId: string; stopped?: boolean }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* noop */
-    }
+    } catch { /* noop */ }
   };
   return (
     <div
@@ -1215,22 +1641,24 @@ function FinalCard({ content }: { content: string }) {
         padding: "14px 16px",
         borderRadius: 14,
         background: "#fff",
-        border: `2px solid ${FINAL_STYLE.color}`,
-        boxShadow: "0 4px 16px rgba(124,58,237,0.08)",
+        border: `2px solid ${stopped ? "#f59e0b" : FINAL_STYLE.color}`,
+        boxShadow: `0 4px 16px ${stopped ? "rgba(245,158,11,0.08)" : "rgba(124,58,237,0.08)"}`,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <span
           style={{
             width: 24, height: 24, borderRadius: 6,
-            background: FINAL_STYLE.color, color: "#fff",
+            background: stopped ? "#f59e0b" : FINAL_STYLE.color, color: "#fff",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 13, fontWeight: 900,
           }}
         >
           ★
         </span>
-        <span style={{ fontWeight: 800, fontSize: 13, color: "#581c87" }}>Final answer</span>
+        <span style={{ fontWeight: 800, fontSize: 13, color: stopped ? "#92400e" : "#581c87" }}>
+          {stopped ? "Partial answer (stopped)" : "Final answer"}
+        </span>
         <button
           onClick={copy}
           style={{
@@ -1255,17 +1683,22 @@ function FinalCard({ content }: { content: string }) {
   );
 }
 
-/* Minimal Markdown renderer — no external dependencies.
- * Supported: # / ## / ### / #### headings, **bold**, *italic*, `inline code`,
- * - / * / 1. lists, ``` fenced code blocks, blank lines as paragraph breaks.
- * Unsupported features fall back to plain text. */
+/* ═══════════════════════════════════════════════════════════════════════
+   Minimal Markdown renderer.
+   Supported: #/##/###/#### headings, **bold**, *italic*, `inline code`,
+   - / * / 1. lists, > blockquotes, ``` fenced code, | pipe | tables.
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function Markdown({ source }: { source: string }) {
   if (!source) return null;
   const lines = source.split("\n");
   const blocks: React.ReactNode[] = [];
   let listBuffer: string[] = [];
   let orderedList = false;
+  let quoteBuffer: string[] = [];
   let codeBuffer: string[] | null = null;
+  let tableBuffer: string[] | null = null;
+
   const flushList = () => {
     if (listBuffer.length === 0) return;
     const items = listBuffer;
@@ -1287,8 +1720,126 @@ function Markdown({ source }: { source: string }) {
     listBuffer = [];
     orderedList = false;
   };
+
+  const flushQuote = () => {
+    if (quoteBuffer.length === 0) return;
+    blocks.push(
+      <blockquote
+        key={`q-${blocks.length}`}
+        style={{
+          margin: "6px 0",
+          padding: "4px 12px",
+          borderLeft: "3px solid #7c3aed",
+          background: "rgba(124,58,237,0.05)",
+          color: "#334155",
+          fontStyle: "italic",
+          borderRadius: "0 6px 6px 0",
+        }}
+      >
+        {quoteBuffer.map((q, i) => (
+          <div key={i} style={{ margin: "2px 0" }}><InlineMD text={q} /></div>
+        ))}
+      </blockquote>
+    );
+    quoteBuffer = [];
+  };
+
+  const flushTable = () => {
+    if (!tableBuffer || tableBuffer.length < 2) {
+      // Not a valid table — render as plain paragraphs.
+      if (tableBuffer) {
+        for (const l of tableBuffer) {
+          blocks.push(
+            <p key={`p-${blocks.length}`} style={{ margin: "4px 0" }}>
+              <InlineMD text={l} />
+            </p>
+          );
+        }
+      }
+      tableBuffer = null;
+      return;
+    }
+    const rows = tableBuffer.map((l) => splitTableRow(l));
+    tableBuffer = null;
+    // Validate: second row must be separator (--- cells).
+    const sep = rows[1];
+    const isSeparator = sep.every((c) => /^:?-{3,}:?$/.test(c.trim()));
+    if (!isSeparator) {
+      // Render as paragraphs.
+      for (const r of rows) {
+        blocks.push(
+          <p key={`p-${blocks.length}`} style={{ margin: "4px 0" }}>
+            <InlineMD text={r.join(" | ")} />
+          </p>
+        );
+      }
+      return;
+    }
+    const header = rows[0];
+    const body = rows.slice(2);
+    blocks.push(
+      <div
+        key={`tbl-${blocks.length}`}
+        style={{ overflowX: "auto", margin: "8px 0" }}
+      >
+        <table
+          style={{
+            borderCollapse: "collapse",
+            fontSize: 12,
+            minWidth: "50%",
+            border: "1px solid rgba(15,23,42,0.12)",
+            background: "#fff",
+          }}
+        >
+          <thead>
+            <tr>
+              {header.map((h, i) => (
+                <th
+                  key={i}
+                  style={{
+                    textAlign: "left",
+                    padding: "6px 10px",
+                    background: "#f8fafc",
+                    borderBottom: "1px solid rgba(15,23,42,0.15)",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                  }}
+                >
+                  <InlineMD text={h} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {body.map((row, ri) => (
+              <tr key={ri} style={{ background: ri % 2 ? "#fafbfc" : "#fff" }}>
+                {row.map((c, ci) => (
+                  <td
+                    key={ci}
+                    style={{
+                      padding: "5px 10px",
+                      borderTop: "1px solid rgba(15,23,42,0.08)",
+                      color: "#0f172a",
+                      verticalAlign: "top",
+                    }}
+                  >
+                    <InlineMD text={c} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const flushAll = () => { flushList(); flushQuote(); flushTable(); };
+
   for (const rawLine of lines) {
     const line = rawLine.replace(/\r$/, "");
+
+    // Code fence
     if (/^```/.test(line)) {
       if (codeBuffer) {
         blocks.push(
@@ -1301,16 +1852,39 @@ function Markdown({ source }: { source: string }) {
         );
         codeBuffer = null;
       } else {
-        flushList();
+        flushAll();
         codeBuffer = [];
       }
       continue;
     }
     if (codeBuffer) { codeBuffer.push(line); continue; }
-    if (/^\s*$/.test(line)) { flushList(); continue; }
+
+    // Table row?
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      flushList();
+      flushQuote();
+      if (!tableBuffer) tableBuffer = [];
+      tableBuffer.push(line.trim());
+      continue;
+    }
+    if (tableBuffer) flushTable();
+
+    // Blank line
+    if (/^\s*$/.test(line)) { flushAll(); continue; }
+
+    // Blockquote
+    const quote = /^\s*>\s?(.*)$/.exec(line);
+    if (quote) {
+      flushList();
+      quoteBuffer.push(quote[1]);
+      continue;
+    }
+    if (quoteBuffer.length) flushQuote();
+
+    // Heading
     const heading = /^(#{1,4})\s+(.+)$/.exec(line);
     if (heading) {
-      flushList();
+      flushAll();
       const level = heading[1].length;
       const sizes = [17, 15, 14, 13];
       blocks.push(
@@ -1323,6 +1897,8 @@ function Markdown({ source }: { source: string }) {
       );
       continue;
     }
+
+    // Bullets
     const bullet = /^\s*[-*•]\s+(.+)$/.exec(line);
     if (bullet) {
       if (orderedList) flushList();
@@ -1336,14 +1912,15 @@ function Markdown({ source }: { source: string }) {
       listBuffer.push(ordered[1]);
       continue;
     }
-    flushList();
+
+    flushAll();
     blocks.push(
       <p key={`p-${blocks.length}`} style={{ margin: "4px 0" }}>
         <InlineMD text={line} />
       </p>
     );
   }
-  flushList();
+  flushAll();
   if (codeBuffer) {
     blocks.push(
       <pre
@@ -1355,6 +1932,12 @@ function Markdown({ source }: { source: string }) {
     );
   }
   return <>{blocks}</>;
+}
+
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  // Split on unescaped pipes. We don't support escaped pipes here (rare in agent output).
+  return trimmed.split("|").map((c) => c.trim());
 }
 
 function InlineMD({ text }: { text: string }) {

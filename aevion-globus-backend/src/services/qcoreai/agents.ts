@@ -99,6 +99,39 @@ const JUDGE_PROMPT = [
   "Match the user's language.",
 ].join("\n");
 
+const PRO_PROMPT = [
+  "You are the Pro advocate in a structured debate about the user's question.",
+  "Your job: argue the strongest possible case FOR the most natural solution / position / recommendation that the user's question invites.",
+  "Be assertive and specific — cite concrete benefits, real-world evidence, and realistic timelines.",
+  "Acknowledge one or two trade-offs briefly, but end with a clear, confident recommendation IN FAVOR.",
+  "Do not mention the other advocate or the multi-agent process. Do not hedge into balance — that is the Moderator's job.",
+  "Match the user's language. Use light markdown (short headings, tight bullets).",
+].join("\n");
+
+const CON_PROMPT = [
+  "You are the Con advocate in a structured debate about the user's question.",
+  "Your job: stress-test the naive answer with the strongest possible counter-case.",
+  "Call out risks, hidden assumptions, failure modes, edge cases, and better alternatives.",
+  "Be constructive, not contrarian for its own sake — concede points the Pro side gets right, but make your objections land.",
+  "End with a clear recommendation AGAINST (or for a safer alternative), with the critical condition that would change your mind.",
+  "Do not mention the other advocate or the multi-agent process. Match the user's language.",
+].join("\n");
+
+const MODERATOR_PROMPT = [
+  "You are the Moderator of a structured debate. You receive:",
+  "  - the user's question,",
+  "  - the Analyst's brief,",
+  "  - the Pro advocate's argument,",
+  "  - the Con advocate's argument.",
+  "",
+  "Produce a single honest, balanced answer for the user:",
+  "  1. State the bottom-line recommendation up front (one line).",
+  "  2. Acknowledge the strongest point from each side.",
+  "  3. Give the nuanced, defensible answer — including the conditions under which the recommendation flips.",
+  "",
+  "Output ONLY the final answer. No 'Pro said / Con said' commentary, no meta. Match the user's language.",
+].join("\n");
+
 export const WRITER_REVISE_INSTRUCTION = [
   "Rewrite your previous draft applying ALL fixes requested by the Critic.",
   "Keep the parts that were fine; only change what the Critic flagged.",
@@ -247,6 +280,41 @@ export function buildJudge(override?: AgentOverride): AgentConfig | null {
     role: "critic",
     systemPrompt: override?.systemPrompt?.trim() || JUDGE_PROMPT,
     // Judge benefits from a slightly higher temperature to merge smoothly.
+    temperature: typeof override?.temperature === "number" ? override.temperature : 0.4,
+  };
+}
+
+/** Build the Pro advocate — writer role with PRO_PROMPT. Used by the debate strategy. */
+export function buildPro(override?: AgentOverride): AgentConfig | null {
+  const built = buildAgent("writer", override);
+  if (!built) return null;
+  return {
+    ...built,
+    systemPrompt: override?.systemPrompt?.trim() || PRO_PROMPT,
+    temperature: typeof override?.temperature === "number" ? override.temperature : 0.65,
+  };
+}
+
+/** Build the Con advocate — writer role with CON_PROMPT. Picks a different model than Pro where possible. */
+export function buildCon(pro: AgentConfig, override?: AgentOverride): AgentConfig | null {
+  // Reuse the Writer-B mechanic (prefer different provider / different model).
+  const alt = buildWriterB(pro, override);
+  if (!alt) return null;
+  return {
+    ...alt,
+    systemPrompt: override?.systemPrompt?.trim() || CON_PROMPT,
+    temperature: typeof override?.temperature === "number" ? override.temperature : 0.7,
+  };
+}
+
+/** Build the Moderator — like Judge but with a balancing/synthesis prompt. */
+export function buildModerator(override?: AgentOverride): AgentConfig | null {
+  const built = buildAgent("critic", override);
+  if (!built) return null;
+  return {
+    ...built,
+    role: "critic",
+    systemPrompt: override?.systemPrompt?.trim() || MODERATOR_PROMPT,
     temperature: typeof override?.temperature === "number" ? override.temperature : 0.4,
   };
 }

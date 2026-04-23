@@ -1,19 +1,23 @@
 /**
  * Multi-agent orchestrator.
  *
- * Two strategies:
+ * Three strategies:
  *
  *  sequential (default)
- *     Analyst → Writer → Critic → (optional) Writer revision
+ *     Analyst → Writer → Critic → (optional) Writer revision.
  *     Classic reflection loop. Critic gates revision via APPROVE/REVISE.
  *
  *  parallel
- *     Analyst → [Writer-A ‖ Writer-B] → Judge
+ *     Analyst → [Writer-A ‖ Writer-B] → Judge.
  *     Two writers stream in parallel on DIFFERENT models (diversity of voice),
  *     then a Judge synthesizes the final answer by picking or merging.
  *
- * Everything yields strongly-typed OrchestratorEvent objects. Route handler
- * forwards them over SSE and persists key milestones to Postgres.
+ *  debate
+ *     Analyst → [Pro-advocate ‖ Con-advocate] → Moderator.
+ *     Two writers take opposing stances. Moderator produces a balanced answer.
+ *
+ * Every strategy yields strongly-typed OrchestratorEvent objects. The SSE
+ * route handler forwards them as-is and persists key milestones to Postgres.
  */
 
 import { streamProvider, ChatMessage } from "./providers";
@@ -22,14 +26,18 @@ import {
   AgentOverride,
   AgentRole,
   buildAgent,
+  buildCon,
   buildJudge,
+  buildModerator,
+  buildPro,
   buildWriterB,
   parseCriticVerdict,
   WRITER_REVISE_INSTRUCTION,
 } from "./agents";
+import { costUsd } from "./pricing";
 
 export type AgentStage = "draft" | "revision" | "judge";
-export type PipelineStrategy = "sequential" | "parallel";
+export type PipelineStrategy = "sequential" | "parallel" | "debate";
 
 export type OrchestratorInput = {
   userInput: string;
@@ -37,7 +45,7 @@ export type OrchestratorInput = {
   overrides?: {
     analyst?: AgentOverride;
     writer?: AgentOverride;
-    writerB?: AgentOverride; // only used in parallel mode
+    writerB?: AgentOverride; // parallel + debate (con side)
     critic?: AgentOverride;
   };
   /** sequential mode only: 0 = no revision, 1 = up to one pass (default), 2 = cap. */
@@ -62,7 +70,7 @@ export type OrchestratorEvent =
       stage: AgentStage;
       provider: string;
       model: string;
-      /** "a" | "b" in parallel mode; undefined for single-instance stages. */
+      /** Disambiguates concurrent streams: "a"/"b" (parallel) or "pro"/"con" (debate). */
       instance?: string;
     }
   | {
@@ -80,12 +88,14 @@ export type OrchestratorEvent =
       tokensIn?: number;
       tokensOut?: number;
       durationMs: number;
+      /** Cost of just this call in USD (0 when model is unpriced or tokens unknown). */
+      costUsd?: number;
       instance?: string;
     }
   | { type: "verdict"; approved: boolean; feedback: string }
   | { type: "final"; content: string }
   | { type: "error"; message: string; role?: AgentRole }
-  | { type: "done"; totalDurationMs: number };
+  | { type: "done"; totalDurationMs: number; totalCostUsd: number };
 
 /* ═══════════════════════════════════════════════════════════════════════
    Helpers
@@ -132,6 +142,7 @@ async function* streamAgent(
     tokensIn,
     tokensOut,
     durationMs: Date.now() - t0,
+    costUsd: costUsd(agent.provider, agent.model, tokensIn, tokensOut),
     instance,
   };
   return content;
@@ -200,6 +211,10 @@ async function* runSequential(
   const { analyst, writer, critic } = agents;
   const maxRevisions = Math.max(0, Math.min(2, input.maxRevisions ?? 1));
   const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  let totalCost = 0;
+  const tally = (e: OrchestratorEvent) => {
+    if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
+  };
 
   yield {
     type: "plan",
@@ -218,7 +233,7 @@ async function* runSequential(
   ];
   let analystContent: string;
   try {
-    analystContent = yield* forward(streamAgent(analyst, "draft", analystMessages));
+    analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
   } catch (e) {
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
     return;
@@ -233,7 +248,7 @@ async function* runSequential(
   ];
   let writerDraft: string;
   try {
-    writerDraft = yield* forward(streamAgent(writer, "draft", writerMessages));
+    writerDraft = yield* forwardTally(streamAgent(writer, "draft", writerMessages), tally);
   } catch (e) {
     yield { type: "error", role: "writer", message: `Writer failed: ${errMsg(e)}` };
     return;
@@ -247,11 +262,11 @@ async function* runSequential(
   ];
   let criticContent: string;
   try {
-    criticContent = yield* forward(streamAgent(critic, "draft", criticMessages));
+    criticContent = yield* forwardTally(streamAgent(critic, "draft", criticMessages), tally);
   } catch (e) {
     yield { type: "error", role: "critic", message: `Critic failed: ${errMsg(e)}` };
     yield { type: "final", content: writerDraft };
-    yield { type: "done", totalDurationMs: Date.now() - t0 };
+    yield { type: "done", totalDurationMs: Date.now() - t0, totalCostUsd: totalCost };
     return;
   }
 
@@ -269,7 +284,7 @@ async function* runSequential(
       { role: "user", content: reviseUser },
     ];
     try {
-      finalContent = yield* forward(streamAgent(writer, "revision", reviseMessages));
+      finalContent = yield* forwardTally(streamAgent(writer, "revision", reviseMessages), tally);
     } catch (e) {
       yield { type: "error", role: "writer", message: `Writer revision failed: ${errMsg(e)}` };
       finalContent = writerDraft;
@@ -277,7 +292,7 @@ async function* runSequential(
   }
 
   yield { type: "final", content: finalContent };
-  yield { type: "done", totalDurationMs: Date.now() - t0 };
+  yield { type: "done", totalDurationMs: Date.now() - t0, totalCostUsd: totalCost };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -291,6 +306,10 @@ async function* runParallel(
 ): AsyncGenerator<OrchestratorEvent> {
   const { analyst, writerA, writerB, judge } = agents;
   const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  let totalCost = 0;
+  const tally = (e: OrchestratorEvent) => {
+    if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
+  };
 
   yield {
     type: "plan",
@@ -310,7 +329,7 @@ async function* runParallel(
   ];
   let analystContent: string;
   try {
-    analystContent = yield* forward(streamAgent(analyst, "draft", analystMessages));
+    analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
   } catch (e) {
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
     return;
@@ -335,7 +354,7 @@ async function* runParallel(
   let draftA = "";
   let draftB = "";
   try {
-    const results = yield* mergeStreams<OrchestratorEvent, string>([streamA, streamB]);
+    const results = yield* mergeStreamsTally([streamA, streamB], tally);
     draftA = results[0] ?? "";
     draftB = results[1] ?? "";
   } catch (e) {
@@ -351,15 +370,129 @@ async function* runParallel(
   ];
   let finalContent: string;
   try {
-    finalContent = yield* forward(streamAgent(judge, "judge", judgeMessages));
+    finalContent = yield* forwardTally(streamAgent(judge, "judge", judgeMessages), tally);
   } catch (e) {
     yield { type: "error", role: "critic", message: `Judge failed: ${errMsg(e)}` };
-    // Pick the longer draft as a defensive fallback.
     finalContent = draftA.length >= draftB.length ? draftA : draftB;
   }
 
   yield { type: "final", content: finalContent };
-  yield { type: "done", totalDurationMs: Date.now() - t0 };
+  yield { type: "done", totalDurationMs: Date.now() - t0, totalCostUsd: totalCost };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Strategy: debate (Analyst → [Pro ‖ Con] → Moderator)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function* runDebate(
+  input: OrchestratorInput,
+  agents: { analyst: AgentConfig; pro: AgentConfig; con: AgentConfig; moderator: AgentConfig },
+  t0: number
+): AsyncGenerator<OrchestratorEvent> {
+  const { analyst, pro, con, moderator } = agents;
+  const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  let totalCost = 0;
+  const tally = (e: OrchestratorEvent) => {
+    if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
+  };
+
+  yield {
+    type: "plan",
+    strategy: "debate",
+    analyst: { provider: analyst.provider, model: analyst.model },
+    writer: { provider: pro.provider, model: pro.model },
+    writerB: { provider: con.provider, model: con.model },
+    critic: { provider: moderator.provider, model: moderator.model },
+    maxRevisions: 0,
+  };
+
+  /* Stage 1: Analyst */
+  const analystMessages: ChatMessage[] = [
+    { role: "system", content: analyst.systemPrompt },
+    ...history,
+    { role: "user", content: input.userInput },
+  ];
+  let analystContent: string;
+  try {
+    analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
+  } catch (e) {
+    yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
+    return;
+  }
+
+  /* Stage 2: Pro + Con in parallel */
+  const debateUser = buildDebatePrompt(input.userInput, analystContent);
+  const proMessages: ChatMessage[] = [
+    { role: "system", content: pro.systemPrompt },
+    ...history,
+    { role: "user", content: debateUser },
+  ];
+  const conMessages: ChatMessage[] = [
+    { role: "system", content: con.systemPrompt },
+    ...history,
+    { role: "user", content: debateUser },
+  ];
+
+  const streamPro = streamAgent(pro, "draft", proMessages, "pro");
+  const streamCon = streamAgent(con, "draft", conMessages, "con");
+
+  let proArg = "";
+  let conArg = "";
+  try {
+    const results = yield* mergeStreamsTally([streamPro, streamCon], tally);
+    proArg = results[0] ?? "";
+    conArg = results[1] ?? "";
+  } catch (e) {
+    yield { type: "error", role: "writer", message: `Debate advocates failed: ${errMsg(e)}` };
+    return;
+  }
+
+  /* Stage 3: Moderator synthesizes */
+  const modUser = buildModeratorPrompt(input.userInput, analystContent, proArg, conArg);
+  const modMessages: ChatMessage[] = [
+    { role: "system", content: moderator.systemPrompt },
+    { role: "user", content: modUser },
+  ];
+  let finalContent: string;
+  try {
+    finalContent = yield* forwardTally(streamAgent(moderator, "judge", modMessages), tally);
+  } catch (e) {
+    yield { type: "error", role: "critic", message: `Moderator failed: ${errMsg(e)}` };
+    // Defensive: concat the arguments so the user at least sees both sides.
+    finalContent = `**Pro**\n\n${proArg}\n\n**Con**\n\n${conArg}`;
+  }
+
+  yield { type: "final", content: finalContent };
+  yield { type: "done", totalDurationMs: Date.now() - t0, totalCostUsd: totalCost };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Tally-aware wrappers — re-yield events AND observe them for cost totals.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function* forwardTally<T>(
+  gen: AsyncGenerator<OrchestratorEvent, T, unknown>,
+  observe: (e: OrchestratorEvent) => void
+): AsyncGenerator<OrchestratorEvent, T, unknown> {
+  while (true) {
+    const r = await gen.next();
+    if (r.done) return r.value;
+    observe(r.value);
+    yield r.value;
+  }
+}
+
+async function* mergeStreamsTally<R>(
+  streams: AsyncGenerator<OrchestratorEvent, R, unknown>[],
+  observe: (e: OrchestratorEvent) => void
+): AsyncGenerator<OrchestratorEvent, R[], unknown> {
+  const gen = mergeStreams<OrchestratorEvent, R>(streams);
+  while (true) {
+    const r = await gen.next();
+    if (r.done) return r.value;
+    observe(r.value);
+    yield r.value;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -370,17 +503,17 @@ export async function* runMultiAgent(
   input: OrchestratorInput
 ): AsyncGenerator<OrchestratorEvent> {
   const t0 = Date.now();
-  const strategy: PipelineStrategy = input.strategy === "parallel" ? "parallel" : "sequential";
+  const strategy: PipelineStrategy =
+    input.strategy === "parallel" ? "parallel" :
+    input.strategy === "debate" ? "debate" :
+    "sequential";
 
   const analyst = buildAgent("analyst", input.overrides?.analyst);
   const writer = buildAgent("writer", input.overrides?.writer);
 
   if (strategy === "parallel") {
     if (!analyst || !writer) {
-      yield {
-        type: "error",
-        message: noProviderMsg(),
-      };
+      yield { type: "error", message: noProviderMsg() };
       return;
     }
     const writerB = buildWriterB(writer, input.overrides?.writerB);
@@ -390,6 +523,26 @@ export async function* runMultiAgent(
       return;
     }
     yield* runParallel(input, { analyst, writerA: writer, writerB, judge }, t0);
+    return;
+  }
+
+  if (strategy === "debate") {
+    if (!analyst) {
+      yield { type: "error", message: noProviderMsg() };
+      return;
+    }
+    const pro = buildPro(input.overrides?.writer);
+    if (!pro) {
+      yield { type: "error", message: noProviderMsg() };
+      return;
+    }
+    const con = buildCon(pro, input.overrides?.writerB);
+    const moderator = buildModerator(input.overrides?.critic);
+    if (!con || !moderator) {
+      yield { type: "error", message: noProviderMsg() };
+      return;
+    }
+    yield* runDebate(input, { analyst, pro, con, moderator }, t0);
     return;
   }
 
@@ -468,6 +621,42 @@ function buildJudgePrompt(
     "",
     "Produce the final answer now. Either pick the stronger draft verbatim or synthesize a merged version.",
     "Output ONLY the final answer. No preamble. No meta commentary.",
+  ].join("\n");
+}
+
+function buildDebatePrompt(userInput: string, analystContent: string): string {
+  return [
+    "User question:",
+    userInput,
+    "",
+    "Analyst brief (shared context):",
+    analystContent,
+    "",
+    "Now make your case. Be concrete, specific, and forceful.",
+  ].join("\n");
+}
+
+function buildModeratorPrompt(
+  userInput: string,
+  analystContent: string,
+  proArg: string,
+  conArg: string
+): string {
+  return [
+    "User question:",
+    userInput,
+    "",
+    "Analyst brief:",
+    analystContent,
+    "",
+    "Pro advocate argued:",
+    proArg,
+    "",
+    "Con advocate argued:",
+    conArg,
+    "",
+    "Produce the balanced final answer now. Bottom-line recommendation first.",
+    "Output ONLY the final answer. No 'Pro said / Con said' commentary.",
   ].join("\n");
 }
 

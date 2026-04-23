@@ -145,14 +145,17 @@ export default function MultichatEnginePage() {
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
-              Three specialized agents coordinate on every answer. The <b>Analyst</b> builds a plan, the <b>Writer</b> drafts
-              the reply, the <b>Critic</b> reviews it — and if something is off, the Writer rewrites. You see every step live.
+              Three specialized agents coordinate on every answer. Pick <b>Sequential</b> for a classic reflection loop,
+              <b> Parallel</b> for two writers on different models merged by a Judge, or <b>Debate</b> where a Pro and a Con
+              advocate argue and a Moderator synthesizes a balanced recommendation.
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
               {[
+                { t: "3 strategies", c: "#7c3aed" },
                 { t: "Live streaming", c: "#0369a1" },
+                { t: "Live cost + tokens", c: "#15803d" },
                 { t: "Mixed models per role", c: "#4338ca" },
-                { t: "Persisted sessions", c: "#15803d" },
+                { t: "Export JSON + Markdown", c: "#b45309" },
               ].map((b) => (
                 <span
                   key={b.t}

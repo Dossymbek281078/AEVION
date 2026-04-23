@@ -8,7 +8,12 @@ import {
   sanitizeMessages,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
-import { runMultiAgent, OrchestratorEvent } from "../services/qcoreai/orchestrator";
+import {
+  runMultiAgent,
+  OrchestratorEvent,
+  PipelineStrategy,
+} from "../services/qcoreai/orchestrator";
+import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import {
   buildHistoryContext,
   createRun,
@@ -21,6 +26,7 @@ import {
   listMessages,
   listRuns,
   listSessions,
+  renameSession,
   renameSessionIfDefault,
   touchSession,
 } from "../services/qcoreai/store";
@@ -75,7 +81,7 @@ qcoreaiRouter.post("/chat", async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Providers + health
+   Providers + pricing + health
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/providers", (_req, res) => {
@@ -87,6 +93,17 @@ qcoreaiRouter.get("/providers", (_req, res) => {
     configured: p.configured,
   }));
   res.json({ providers });
+});
+
+qcoreaiRouter.get("/pricing", (_req, res) => {
+  res.json({
+    currency: "USD",
+    unit: "per 1,000,000 tokens",
+    table: getPricingTable(),
+    updatedAt: "2026-04",
+    note:
+      "Representative list prices for display in the cost dashboard. Exact billing is determined by the upstream provider invoices.",
+  });
 });
 
 qcoreaiRouter.get("/health", (_req, res) => {
@@ -128,6 +145,19 @@ qcoreaiRouter.get("/sessions/:id", async (req, res) => {
   }
 });
 
+qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const title = typeof req.body?.title === "string" ? req.body.title : "";
+    if (!title.trim()) return res.status(400).json({ error: "title required" });
+    const updated = await renameSession(req.params.id, auth?.sub ?? null, title);
+    if (!updated) return res.status(404).json({ error: "session not found" });
+    res.json({ session: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: "rename failed", details: err?.message });
+  }
+});
+
 qcoreaiRouter.delete("/sessions/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
@@ -150,6 +180,39 @@ qcoreaiRouter.get("/runs/:id", async (req, res) => {
     res.json({ run, messages });
   } catch (err: any) {
     res.status(500).json({ error: "get run failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/runs/:id/export?format=json|md
+ * Returns a clean, shareable snapshot of a run: agents, messages, final answer,
+ * token/cost totals. Useful for investor demos and offline review.
+ */
+qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
+  try {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const messages = await listMessages(run.id);
+    const format = (req.query.format === "md" ? "md" : "json") as "md" | "json";
+    const safeSlug = slugify(session.title || "run").slice(0, 40) || "run";
+    const filename = `qcoreai-${safeSlug}-${run.id.slice(0, 8)}.${format}`;
+
+    if (format === "json") {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(JSON.stringify({ session, run, messages }, null, 2));
+      return;
+    }
+
+    const md = renderRunMarkdown({ session, run, messages });
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(md);
+  } catch (err: any) {
+    res.status(500).json({ error: "export failed", details: err?.message });
   }
 });
 
@@ -179,8 +242,10 @@ qcoreaiRouter.post("/multi-agent", async (req, res) => {
     return res.status(400).json({ error: "input required" });
   }
 
-  const strategy: "sequential" | "parallel" =
-    req.body?.strategy === "parallel" ? "parallel" : "sequential";
+  const strategy: PipelineStrategy =
+    req.body?.strategy === "parallel" ? "parallel" :
+    req.body?.strategy === "debate" ? "debate" :
+    "sequential";
 
   const maxRevisions =
     typeof req.body?.maxRevisions === "number" ? Math.max(0, Math.min(2, req.body.maxRevisions)) : 1;
@@ -213,7 +278,6 @@ qcoreaiRouter.post("/multi-agent", async (req, res) => {
       strategy,
     });
     runId = run.id;
-    // Persist the user turn as message #0 immediately.
     await insertMessage({
       runId,
       role: "user",
@@ -251,21 +315,18 @@ qcoreaiRouter.post("/multi-agent", async (req, res) => {
 
   send({ type: "session", sessionId, runId });
 
-  // History context for follow-up turns in the same session.
   const history = await buildHistoryContext(sessionId, 6);
 
   const runStart = Date.now();
-  let ordering = 1; // 0 is the user message
-  /**
-   * In parallel mode two agents stream concurrently, so we can't use a single
-   * "currentStage" slot. Key pending starts by role+stage+instance so that
-   * agent_end can look up the matching provider/model.
-   */
+  let ordering = 1;
   const pendingByKey = new Map<string, { provider: string; model: string }>();
   const stageKey = (role: string, stage: string, instance?: string) =>
     `${role}|${stage}|${instance || ""}`;
   let finalContent: string | null = null;
   let hadError: string | null = null;
+  /** Tracks last completed agent output — used as partial final if the stream is aborted. */
+  let lastAgentContent: string | null = null;
+  let totalCost = 0;
 
   try {
     for await (const evt of runMultiAgent({
@@ -288,6 +349,13 @@ qcoreaiRouter.post("/multi-agent", async (req, res) => {
         case "agent_end": {
           const key = stageKey(evt.role, evt.stage, evt.instance);
           const meta = pendingByKey.get(key);
+          // Use the event's costUsd if present; recompute defensively otherwise.
+          const agentCost =
+            typeof evt.costUsd === "number"
+              ? evt.costUsd
+              : costUsd(meta?.provider || "", meta?.model || "", evt.tokensIn, evt.tokensOut);
+          totalCost += agentCost;
+          lastAgentContent = evt.content;
           await insertMessage({
             runId,
             role: evt.role,
@@ -299,6 +367,7 @@ qcoreaiRouter.post("/multi-agent", async (req, res) => {
             tokensIn: evt.tokensIn ?? null,
             tokensOut: evt.tokensOut ?? null,
             durationMs: evt.durationMs,
+            costUsd: agentCost,
             ordering: ordering++,
           });
           pendingByKey.delete(key);
@@ -329,12 +398,31 @@ qcoreaiRouter.post("/multi-agent", async (req, res) => {
 
   const totalDurationMs = Date.now() - runStart;
 
-  // Persist run finalization.
+  // Persist run finalization. When the client aborted mid-stream we save the
+  // last agent output as a partial final so the user can still see what
+  // arrived before they hit Stop.
   try {
-    if (hadError && !finalContent) {
-      await finishRun(runId, "error", { error: hadError, finalContent: null, totalDurationMs });
+    if (aborted) {
+      await finishRun(runId, "stopped", {
+        error: null,
+        finalContent: finalContent ?? lastAgentContent ?? null,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+      });
+    } else if (hadError && !finalContent) {
+      await finishRun(runId, "error", {
+        error: hadError,
+        finalContent: null,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+      });
     } else {
-      await finishRun(runId, "done", { error: hadError, finalContent, totalDurationMs });
+      await finishRun(runId, "done", {
+        error: hadError,
+        finalContent,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+      });
     }
     await renameSessionIfDefault(sessionId, userInput);
     await touchSession(sessionId);
@@ -351,7 +439,7 @@ qcoreaiRouter.post("/multi-agent", async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Role defaults (for UI to pre-populate config dropdowns)
+   Role + strategy defaults (for UI to pre-populate config dropdowns)
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/agents", (_req, res) => {
@@ -365,7 +453,6 @@ qcoreaiRouter.get("/agents", (_req, res) => {
     const any = providers.find((p) => p.configured);
     return any ? { provider: any.id, model: any.defaultModel } : null;
   };
-  // For writerB, prefer a provider *different* from the primary writer if any exist.
   const primaryWriter = resolveDefault("anthropic", "claude-sonnet-4-20250514");
   let writerBDefault: { provider: string; model: string } | null = null;
   if (primaryWriter) {
@@ -373,7 +460,6 @@ qcoreaiRouter.get("/agents", (_req, res) => {
     if (other) {
       writerBDefault = { provider: other.id, model: other.defaultModel };
     } else {
-      // Same provider, different model if any.
       const same = providers.find((p) => p.id === primaryWriter.provider);
       if (same) {
         const altModel = same.models.find((m) => m !== primaryWriter.model) || same.defaultModel;
@@ -387,14 +473,22 @@ qcoreaiRouter.get("/agents", (_req, res) => {
       {
         id: "sequential",
         label: "Sequential",
-        description: "Analyst → Writer → Critic → (optional) Writer revision. Classic reflection loop.",
+        description:
+          "Analyst → Writer → Critic → (optional) Writer revision. Classic reflection loop: one writer, one reviewer.",
         agents: ["analyst", "writer", "critic"],
       },
       {
         id: "parallel",
         label: "Parallel drafts",
         description:
-          "Analyst → two Writers stream in parallel on different models → Judge synthesizes the final. Diversity of voice.",
+          "Analyst → two Writers stream in parallel on different models → Judge synthesizes. Diversity of voice; best signal for open-ended questions.",
+        agents: ["analyst", "writer", "writerB", "critic"],
+      },
+      {
+        id: "debate",
+        label: "Debate",
+        description:
+          "Analyst → Pro advocate ‖ Con advocate → Moderator synthesizes a balanced answer. Best for decisions, trade-offs, and stress-testing recommendations.",
         agents: ["analyst", "writer", "writerB", "critic"],
       },
     ],
@@ -408,27 +502,99 @@ qcoreaiRouter.get("/agents", (_req, res) => {
       },
       {
         id: "writer",
-        label: "Writer",
-        description: "Drafts the final answer following the Analyst's plan.",
+        label: "Writer / Pro",
+        description:
+          "Sequential/Parallel: drafts the final answer. Debate: argues the Pro case.",
         default: primaryWriter,
         temperature: 0.7,
       },
       {
         id: "writerB",
-        label: "Writer B",
+        label: "Writer B / Con",
         description:
-          "Parallel mode only: second Writer with a different model/voice (concise, bottom-line first).",
+          "Parallel: second voice on a different model. Debate: argues the Con case.",
         default: writerBDefault,
         temperature: 0.7,
       },
       {
         id: "critic",
-        label: "Critic / Judge",
+        label: "Critic / Judge / Moderator",
         description:
-          "Sequential: approves draft or requests revisions. Parallel: picks or merges the two drafts.",
+          "Sequential: approves or requests revision. Parallel: picks or merges drafts. Debate: synthesizes a balanced answer.",
         default: resolveDefault("anthropic", "claude-haiku-4-5-20251001"),
         temperature: 0.2,
       },
     ],
   });
 });
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Helpers (local to route)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function slugify(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function fmtMoney(v: number | null | undefined): string {
+  if (v == null || !isFinite(v)) return "—";
+  if (v === 0) return "$0";
+  if (v < 0.0001) return "<$0.0001";
+  return `$${v.toFixed(4)}`;
+}
+
+function fmtDuration(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function renderRunMarkdown(opts: { session: any; run: any; messages: any[] }): string {
+  const { session, run, messages } = opts;
+  const lines: string[] = [];
+  lines.push(`# ${session.title || "QCoreAI run"}`);
+  lines.push("");
+  lines.push(`> Exported from QCoreAI multi-agent at ${new Date().toISOString()}`);
+  lines.push("");
+  lines.push("## Meta");
+  lines.push("");
+  lines.push(`- **Session:** \`${session.id}\``);
+  lines.push(`- **Run:** \`${run.id}\``);
+  lines.push(`- **Strategy:** ${run.strategy || "sequential"}`);
+  lines.push(`- **Status:** ${run.status}`);
+  lines.push(`- **Duration:** ${fmtDuration(run.totalDurationMs)}`);
+  lines.push(`- **Total cost:** ${fmtMoney(run.totalCostUsd)}`);
+  lines.push(`- **Started:** ${run.startedAt}`);
+  lines.push("");
+  lines.push("## User input");
+  lines.push("");
+  lines.push(run.userInput || "");
+  lines.push("");
+  lines.push("## Agent trace");
+  lines.push("");
+  for (const m of messages) {
+    if (m.role === "user" || m.role === "final") continue;
+    const tag = [m.role, m.stage, m.instance].filter(Boolean).join(" · ");
+    const modelInfo = [m.provider, m.model].filter(Boolean).join(" / ");
+    const tok = m.tokensIn != null || m.tokensOut != null ? ` · ${m.tokensIn ?? 0}→${m.tokensOut ?? 0} tok` : "";
+    const cost = m.costUsd != null ? ` · ${fmtMoney(m.costUsd)}` : "";
+    const dur = m.durationMs != null ? ` · ${fmtDuration(m.durationMs)}` : "";
+    lines.push(`### ${tag}${modelInfo ? `  _(${modelInfo})_` : ""}`);
+    lines.push("");
+    lines.push(`_${dur.replace(/^ · /, "")}${tok}${cost}_`);
+    lines.push("");
+    lines.push(m.content || "");
+    lines.push("");
+  }
+  const finalMsg = messages.find((m: any) => m.role === "final");
+  if (finalMsg || run.finalContent) {
+    lines.push("## Final answer");
+    lines.push("");
+    lines.push(finalMsg?.content || run.finalContent || "");
+    lines.push("");
+  }
+  return lines.join("\n");
+}

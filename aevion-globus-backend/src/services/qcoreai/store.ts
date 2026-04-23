@@ -24,12 +24,13 @@ export type RunRow = {
   id: string;
   sessionId: string;
   userInput: string;
-  status: "pending" | "running" | "done" | "error";
+  status: "pending" | "running" | "done" | "error" | "stopped";
   error: string | null;
   agentConfig: any;
   strategy: string | null;
   finalContent: string | null;
   totalDurationMs: number | null;
+  totalCostUsd: number | null;
   startedAt: string;
   finishedAt: string | null;
 };
@@ -46,6 +47,7 @@ export type MessageRow = {
   tokensIn: number | null;
   tokensOut: number | null;
   durationMs: number | null;
+  costUsd: number | null;
   ordering: number;
   createdAt: string;
 };
@@ -183,8 +185,13 @@ export async function createRun(opts: {
 
 export async function finishRun(
   runId: string,
-  status: "done" | "error",
-  opts: { error?: string | null; finalContent?: string | null; totalDurationMs?: number | null }
+  status: "done" | "error" | "stopped",
+  opts: {
+    error?: string | null;
+    finalContent?: string | null;
+    totalDurationMs?: number | null;
+    totalCostUsd?: number | null;
+  }
 ): Promise<void> {
   await pool.query(
     `UPDATE "QCoreRun"
@@ -192,10 +199,36 @@ export async function finishRun(
            "error"=$3,
            "finalContent"=$4,
            "totalDurationMs"=$5,
+           "totalCostUsd"=$6,
            "finishedAt"=NOW()
      WHERE "id"=$1`,
-    [runId, status, opts.error ?? null, opts.finalContent ?? null, opts.totalDurationMs ?? null]
+    [
+      runId,
+      status,
+      opts.error ?? null,
+      opts.finalContent ?? null,
+      opts.totalDurationMs ?? null,
+      opts.totalCostUsd ?? null,
+    ]
   );
+}
+
+export async function renameSession(
+  id: string,
+  userId: string | null,
+  nextTitle: string
+): Promise<SessionRow | null> {
+  const session = await getSession(id, userId);
+  if (!session) return null;
+  const clean = (nextTitle || "").trim().slice(0, 120) || "New session";
+  const r = await pool.query(
+    `UPDATE "QCoreSession"
+       SET "title"=$2, "updatedAt"=NOW()
+     WHERE "id"=$1
+     RETURNING *`,
+    [id, clean]
+  );
+  return (r.rows?.[0] as SessionRow) ?? null;
 }
 
 export async function insertMessage(opts: {
@@ -209,13 +242,14 @@ export async function insertMessage(opts: {
   tokensIn?: number | null;
   tokensOut?: number | null;
   durationMs?: number | null;
+  costUsd?: number | null;
   ordering: number;
 }): Promise<MessageRow> {
   const id = crypto.randomUUID();
   const r = await pool.query(
     `INSERT INTO "QCoreMessage"
-      ("id","runId","role","stage","instance","provider","model","content","tokensIn","tokensOut","durationMs","ordering")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ("id","runId","role","stage","instance","provider","model","content","tokensIn","tokensOut","durationMs","costUsd","ordering")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      RETURNING *`,
     [
       id,
@@ -229,6 +263,7 @@ export async function insertMessage(opts: {
       opts.tokensIn ?? null,
       opts.tokensOut ?? null,
       opts.durationMs ?? null,
+      opts.costUsd ?? null,
       opts.ordering,
     ]
   );

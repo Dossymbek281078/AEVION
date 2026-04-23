@@ -26,6 +26,7 @@ import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
 import { DeviceManagement } from "./_components/DeviceManagement";
 import { EcosystemPulse } from "./_components/EcosystemPulse";
+import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { GiftMode } from "./_components/GiftMode";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
@@ -110,7 +111,10 @@ function BankContent() {
 
   return (
     <>
-      <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 24 }}>
+      <div
+        id="bank-anchor-wallet"
+        style={{ borderRadius: 20, overflow: "hidden", marginBottom: 24 }}
+      >
         <BankHero email={me?.email} />
         {hasWallet && account ? (
           <WalletSummary account={account} operations={operations} />
@@ -253,10 +257,20 @@ function BankContent() {
             requested={searchParams?.get("demo") === "1"}
             notify={notify}
           />
+          <OnboardingTour
+            forceOpen={searchParams?.get("tour") === "1"}
+            autoFirstVisit={true}
+          />
           <TotalEarningsDashboard />
-          <EcosystemPulse accountId={account.id} operations={operations} />
-          <WealthForecast account={account} />
-          <TrustScoreCard account={account} operations={operations} />
+          <div id="bank-anchor-ecosystem">
+            <EcosystemPulse accountId={account.id} operations={operations} />
+          </div>
+          <div id="bank-anchor-forecast">
+            <WealthForecast account={account} />
+          </div>
+          <div id="bank-anchor-trust">
+            <TrustScoreCard account={account} operations={operations} />
+          </div>
           <PeerStanding account={account} operations={operations} />
           <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
           <SalaryAdvance
@@ -267,7 +281,9 @@ function BankContent() {
           />
           <RoyaltyStream />
           <ChessWinnings />
-          <AchievementsPanel account={account} operations={operations} />
+          <div id="bank-anchor-achievements">
+            <AchievementsPanel account={account} operations={operations} />
+          </div>
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}

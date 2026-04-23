@@ -119,6 +119,14 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
       "/api/qtrade/topup": { post: { summary: "Top up balance" } },
       "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
+      "/api/pipeline/protect": { post: { summary: "One-click IP protection (QRight → QSign → Shield → Certificate)" } },
+      "/api/pipeline/verify/{certId}": { get: { summary: "Public verification of an IP certificate" } },
+      "/api/pipeline/certificates": { get: { summary: "Public registry — supports ?q, ?kind, ?sort (recent|popular|az), ?limit" } },
+      "/api/pipeline/certificates.csv": { get: { summary: "Public registry as CSV (same filters as /certificates)" } },
+      "/api/pipeline/certificate/{certId}/pdf": { get: { summary: "Printable PDF certificate with QR code" } },
+      "/api/pipeline/bureau/stats": { get: { summary: "Aggregated Bureau dashboard: totals, by-kind, by-country, 30-day growth, latest" } },
+      "/api/pipeline/badge/{certId}": { get: { summary: "Embeddable SVG 'Protected by AEVION' badge" } },
+      "/api/pipeline/health": { get: { summary: "Pipeline health & enabled crypto/legal steps" } },
     },
   });
 });

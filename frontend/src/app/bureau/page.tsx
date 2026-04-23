@@ -391,7 +391,24 @@ export default function BureauPage() {
                 {loadingList ? "Loading…" : `${certificates.length} of ${totals?.certificates ?? 0} certificates · verifiable by anyone`}
               </div>
             </div>
-            <Link href="/qright" style={{ padding: "9px 16px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <a
+                href={(() => {
+                  const p = new URLSearchParams();
+                  if (debouncedQ) p.set("q", debouncedQ);
+                  if (kind) p.set("kind", kind);
+                  if (sort) p.set("sort", sort);
+                  return apiUrl(`/api/pipeline/certificates.csv${p.toString() ? `?${p.toString()}` : ""}`);
+                })()}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+                title="Download the current registry view as CSV"
+              >
+                📥 Export CSV
+              </a>
+              <Link href="/qright" style={{ padding: "9px 16px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
+            </div>
           </div>
 
           {/* filter bar */}

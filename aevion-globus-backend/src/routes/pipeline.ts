@@ -459,6 +459,80 @@ pipelineRouter.get("/certificates", async (req, res) => {
 });
 
 /**
+ * GET /api/pipeline/certificates.csv
+ *
+ * CSV export of the registry (same filters as /certificates).
+ * Returns text/csv with RFC 4180 quoting.
+ */
+pipelineRouter.get("/certificates.csv", async (req, res) => {
+  try {
+    await ensureTables();
+
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const kind = typeof req.query.kind === "string" ? req.query.kind.trim().toLowerCase() : "";
+    const sort = typeof req.query.sort === "string" ? req.query.sort.trim() : "recent";
+    const limitRaw = parseInt(String(req.query.limit || "1000"), 10);
+    const limit = Math.min(5000, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 1000));
+
+    const where: string[] = [`"status" = 'active'`];
+    const params: unknown[] = [];
+    if (q) {
+      params.push(`%${q.toLowerCase()}%`);
+      const p = `$${params.length}`;
+      where.push(`(LOWER("title") LIKE ${p} OR LOWER(COALESCE("authorName",'')) LIKE ${p} OR LOWER(COALESCE("country",'')) LIKE ${p} OR LOWER(COALESCE("city",'')) LIKE ${p})`);
+    }
+    if (kind && ["music","code","design","text","video","idea","other"].includes(kind)) {
+      params.push(kind);
+      where.push(`"kind" = $${params.length}`);
+    }
+    let orderBy = `"protectedAt" DESC`;
+    if (sort === "popular") orderBy = `"verifiedCount" DESC, "protectedAt" DESC`;
+    else if (sort === "az") orderBy = `LOWER("title") ASC`;
+    params.push(limit);
+    const limitIdx = `$${params.length}`;
+
+    const sql = `SELECT "id","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
+                 FROM "IPCertificate" WHERE ${where.join(" AND ")} ORDER BY ${orderBy} LIMIT ${limitIdx}`;
+    const { rows } = await pool.query(sql, params);
+
+    const escape = (v: unknown): string => {
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const header = ["id","title","kind","author","country","city","content_hash","algorithm","status","protected_at","verified_count","verify_url"];
+    const lines: string[] = [header.join(",")];
+    for (const r of rows as any[]) {
+      lines.push([
+        escape(r.id),
+        escape(r.title),
+        escape(r.kind),
+        escape(r.authorName || "Anonymous"),
+        escape(r.country || ""),
+        escape(r.city || ""),
+        escape(r.contentHash),
+        escape(r.algorithm),
+        escape(r.status),
+        escape(r.protectedAt instanceof Date ? r.protectedAt.toISOString() : r.protectedAt),
+        escape(r.verifiedCount || 0),
+        escape(`https://aevion.vercel.app/verify/${r.id}`),
+      ].join(","));
+    }
+
+    const filename = `aevion-registry-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.status(200).send(lines.join("\r\n") + "\r\n");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "csv failed";
+    console.error("[Pipeline] certificates.csv error:", msg);
+    if (!res.headersSent) res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * GET /api/pipeline/bureau/stats
  *
  * Aggregated Bureau dashboard data (single round-trip for frontend).

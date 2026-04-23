@@ -189,6 +189,7 @@ export default function BureauPage() {
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const [previewCert, setPreviewCert] = useState<Certificate | null>(null);
   const [hashInput, setHashInput] = useState("");
   const [checkerBusy, setCheckerBusy] = useState(false);
   const [checkerFile, setCheckerFile] = useState<{ name: string; size: number } | null>(null);
@@ -797,7 +798,13 @@ export default function BureauPage() {
               {certificates.map((cert) => {
                 const kindColor = KIND_COLORS[cert.kind] || "#64748b";
                 return (
-                  <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff", transition: "transform .15s ease, box-shadow .15s ease" }}
+                  <div key={cert.id}
+                       onClick={(e) => {
+                         const t = e.target as HTMLElement;
+                         if (t.closest("button") || t.closest("a")) return;
+                         setPreviewCert(cert);
+                       }}
+                       style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff", transition: "transform .15s ease, box-shadow .15s ease", cursor: "pointer" }}
                        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 24px rgba(15,23,42,0.08)"; }}
                        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
@@ -954,6 +961,135 @@ export default function BureauPage() {
           </div>
         </div>
       </ProductPageShell>
+
+      {previewCert && (
+        <CertificatePreviewModal cert={previewCert} onClose={() => setPreviewCert(null)} onCopy={copy} />
+      )}
     </main>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Certificate preview modal
+   ────────────────────────────────────────────────────────────── */
+function CertificatePreviewModal({ cert, onClose, onCopy }: { cert: Certificate; onClose: () => void; onCopy: (text: string, label: string) => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prevOverflow; };
+  }, [onClose]);
+
+  const verifyUrl = cert.verifyUrl || `https://aevion.vercel.app/verify/${cert.id}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verifyUrl)}`;
+  const shareText = `I just certified "${cert.title}" on AEVION Digital IP Bureau — cryptographic proof of authorship backed by the Berne Convention.`;
+
+  const shareLinks = [
+    { name: "Twitter",   color: "#0f172a", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(verifyUrl)}` },
+    { name: "LinkedIn",  color: "#0a66c2", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(verifyUrl)}` },
+    { name: "Telegram",  color: "#26a5e4", url: `https://t.me/share/url?url=${encodeURIComponent(verifyUrl)}&text=${encodeURIComponent(shareText)}` },
+    { name: "WhatsApp",  color: "#25d366", url: `https://wa.me/?text=${encodeURIComponent(shareText + " " + verifyUrl)}` },
+    { name: "Email",     color: "#64748b", url: `mailto:?subject=${encodeURIComponent("AEVION IP Certificate: " + cert.title)}&body=${encodeURIComponent(shareText + "\n\n" + verifyUrl)}` },
+  ];
+
+  const kindColor = KIND_COLORS[cert.kind] || "#64748b";
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)", zIndex: 60, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "50px 20px", overflowY: "auto" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 640, borderRadius: 18, background: "#fff", boxShadow: "0 40px 80px rgba(2,6,23,0.45)", overflow: "hidden" }}
+      >
+        {/* header */}
+        <div style={{ padding: "18px 22px", background: "linear-gradient(135deg, #0f172a, #1e1b4b)", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 800, color: "#5eead4", letterSpacing: "0.08em", textTransform: "uppercase" }}>AEVION Digital IP Bureau · Protection Certificate</div>
+            <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4, letterSpacing: "-0.015em" }}>{cert.title}</div>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{KIND_ICONS[cert.kind] || "📦"} {KIND_LABELS[cert.kind] || cert.kind} · by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ border: "none", background: "rgba(255,255,255,0.1)", color: "#fff", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 16, fontWeight: 800 }}>✕</button>
+        </div>
+
+        {/* body */}
+        <div style={{ padding: "20px 22px", display: "grid", gridTemplateColumns: "1fr 200px", gap: 18 }}>
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Status</div>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 999, background: "rgba(16,185,129,0.1)", color: "#059669", fontSize: 11, fontWeight: 800, marginTop: 4 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} /> Active
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Verifications</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginTop: 4 }}>{cert.verifiedCount}×</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Protected</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginTop: 4 }}>{new Date(cert.protectedAt).toLocaleString()}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Type</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: kindColor, marginTop: 4 }}>{KIND_LABELS[cert.kind] || cert.kind}</div>
+              </div>
+            </div>
+
+            <div style={{ padding: "10px 12px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", marginBottom: 12 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: 4 }}>SHA-256 Content Hash</div>
+              <div style={{ fontSize: 11, fontFamily: "ui-monospace, Menlo, monospace", color: "#334155", wordBreak: "break-all" }}>{cert.contentHash}</div>
+            </div>
+
+            <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: 4 }}>Algorithm</div>
+            <div style={{ fontSize: 11, color: "#475569", marginBottom: 14 }}>{cert.algorithm}</div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link href={`/verify/${cert.id}`} style={{ padding: "9px 16px", borderRadius: 10, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>✓ Open full verification</Link>
+              <a href={apiUrl(`/api/pipeline/certificate/${cert.id}/pdf`)} target="_blank" rel="noopener noreferrer" style={{ padding: "9px 16px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>📄 PDF</a>
+              <button onClick={() => onCopy(verifyUrl, "Verify URL")} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Link</button>
+              <button onClick={() => onCopy(cert.contentHash, "Hash")} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Hash</button>
+            </div>
+          </div>
+
+          {/* QR panel */}
+          <div style={{ textAlign: "center" }}>
+            <div style={{ padding: 8, borderRadius: 12, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
+              <img src={qrUrl} alt="Verify QR" width={184} height={184} style={{ width: "100%", height: "auto", display: "block", borderRadius: 6 }} />
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginTop: 8 }}>Scan to verify</div>
+            <div style={{ fontSize: 10, fontFamily: "ui-monospace, Menlo, monospace", color: "#475569", marginTop: 2, wordBreak: "break-all" }}>{cert.id}</div>
+          </div>
+        </div>
+
+        {/* share */}
+        <div style={{ padding: "14px 22px 20px", borderTop: "1px solid rgba(15,23,42,0.06)", background: "#fafafa" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Share this certificate</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {shareLinks.map((s) => (
+              <a
+                key={s.name}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ padding: "8px 14px", borderRadius: 10, background: s.color, color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {s.name}
+              </a>
+            ))}
+            <button
+              onClick={() => onCopy(`<a href="${verifyUrl}"><img src="${apiUrl(`/api/pipeline/badge/${cert.id}`)}" alt="Protected by AEVION" /></a>`, "Embed snippet")}
+              style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 12, cursor: "pointer" }}
+            >
+              Copy HTML badge
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

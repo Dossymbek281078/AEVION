@@ -15,6 +15,7 @@ import { Suspense, useCallback, useMemo } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { A11yStyles } from "./_components/A11yStyles";
 import { AccountIdCard } from "./_components/AccountIdCard";
 import { AchievementsPanel } from "./_components/AchievementsPanel";
 import { ActivityTimeline } from "./_components/ActivityTimeline";
@@ -114,10 +115,11 @@ function BankContent() {
   const hasWallet = !!me && !!account;
 
   return (
-    <>
+    <div className="aevion-bank-root">
+      <A11yStyles />
       <div
         id="bank-anchor-wallet"
-        style={{ borderRadius: 20, overflow: "hidden", marginBottom: 24 }}
+        style={{ borderRadius: 20, overflow: "hidden", marginBottom: 24, scrollMarginTop: 20 }}
       >
         <BankHero email={me?.email} />
         {hasWallet && account ? (
@@ -266,13 +268,13 @@ function BankContent() {
             autoFirstVisit={true}
           />
           <TotalEarningsDashboard />
-          <div id="bank-anchor-ecosystem">
+          <div id="bank-anchor-ecosystem" style={{ scrollMarginTop: 20 }}>
             <EcosystemPulse accountId={account.id} operations={operations} />
           </div>
-          <div id="bank-anchor-forecast">
+          <div id="bank-anchor-forecast" style={{ scrollMarginTop: 20 }}>
             <WealthForecast account={account} />
           </div>
-          <div id="bank-anchor-trust">
+          <div id="bank-anchor-trust" style={{ scrollMarginTop: 20 }}>
             <TrustScoreCard account={account} operations={operations} />
           </div>
           <PeerStanding account={account} operations={operations} />
@@ -285,7 +287,7 @@ function BankContent() {
           />
           <RoyaltyStream />
           <ChessWinnings />
-          <div id="bank-anchor-achievements">
+          <div id="bank-anchor-achievements" style={{ scrollMarginTop: 20 }}>
             <AchievementsPanel account={account} operations={operations} />
           </div>
 
@@ -394,7 +396,7 @@ function BankContent() {
       <QuickActions />
       <RoyaltiesExplainer />
       <SecurityRoadmap />
-    </>
+    </div>
   );
 }
 

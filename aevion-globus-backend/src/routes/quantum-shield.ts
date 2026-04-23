@@ -49,14 +49,27 @@ async function ensureShieldTable(): Promise<void> {
   ensuredTable = true;
 }
 
-function parseShards(raw: unknown): AuthenticatedShard[] {
+function parseShards(raw: unknown, ctx?: { shieldId?: string }): AuthenticatedShard[] {
   if (typeof raw !== "string") return [];
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as AuthenticatedShard[]) : [];
-  } catch {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const preview = raw.length > 64 ? raw.slice(0, 64) + "…" : raw;
+    console.error(
+      `[QuantumShield] shard JSON corrupt${ctx?.shieldId ? ` (id=${ctx.shieldId})` : ""}: ${
+        err instanceof Error ? err.message : String(err)
+      } | preview=${preview}`,
+    );
     return [];
   }
+  if (!Array.isArray(parsed)) {
+    console.warn(
+      `[QuantumShield] shard payload is not an array${ctx?.shieldId ? ` (id=${ctx.shieldId})` : ""}: type=${typeof parsed}`,
+    );
+    return [];
+  }
+  return parsed as AuthenticatedShard[];
 }
 
 /* ── List handler (reused by / and /records) ── */
@@ -67,7 +80,7 @@ async function handleList(_req: Request, res: Response): Promise<void> {
       `SELECT * FROM "QuantumShield" ORDER BY "createdAt" DESC LIMIT 100`,
     );
     const records = rows.map((r: Record<string, unknown>) => {
-      const shards = parseShards(r.shards);
+      const shards = parseShards(r.shards, { shieldId: r.id as string });
       const status =
         (r.status as string) ||
         (r.legacy === true ? "legacy" : "active");
@@ -224,7 +237,7 @@ quantumShieldRouter.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Shield record not found" });
     }
     const r = rows[0] as Record<string, unknown>;
-    const shards = parseShards(r.shards);
+    const shards = parseShards(r.shards, { shieldId: r.id as string });
     res.json({
       ...r,
       shards,
@@ -251,7 +264,7 @@ quantumShieldRouter.post("/:id/verify", async (req, res) => {
       return res.status(404).json({ error: "Shield record not found" });
     }
     const r = rows[0] as Record<string, unknown>;
-    const shards = parseShards(r.shards);
+    const shards = parseShards(r.shards, { shieldId: r.id as string });
     const now = new Date().toISOString();
     const updatedShards = shards.map((s) => ({ ...s, lastVerified: now }));
     await pool.query(
@@ -301,7 +314,7 @@ quantumShieldRouter.post("/verify", async (req, res) => {
         });
       }
       const r = rows[0] as Record<string, unknown>;
-      const storedShards = parseShards(r.shards);
+      const storedShards = parseShards(r.shards, { shieldId: recordId });
       const inputs = Array.isArray(shardInputs) ? shardInputs : [];
 
       // Preferred path: if inputs look like AuthenticatedShard objects, run

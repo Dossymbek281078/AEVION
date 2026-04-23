@@ -8,6 +8,7 @@ beforeAll(() => {
     "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
     "hex",
   ).toString("base64");
+  process.env.QSIGN_SECRET = "test-qsign-secret-at-least-16-chars";
   process.env.ENABLE_DEMO_ENDPOINTS = "true";
 });
 

@@ -7,8 +7,10 @@ export const HMAC_KEY_VERSION = 1;
 export const ED25519_PRIV_KEY_BYTES = 32;
 
 const REQUIRED_HMAC_SECRET_BYTES = 32;
+const MIN_QSIGN_SECRET_LENGTH = 16;
 
 let cachedSecret: Buffer | null = null;
+let cachedQSignSecret: string | null = null;
 
 export function getShardHmacSecret(): Buffer {
   if (cachedSecret) return cachedSecret;
@@ -43,6 +45,35 @@ export function getShardHmacSecret(): Buffer {
 
   cachedSecret = buf;
   return cachedSecret;
+}
+
+export function getQSignSecret(): string {
+  if (cachedQSignSecret !== null) return cachedQSignSecret;
+
+  const raw = process.env.QSIGN_SECRET;
+  if (!raw || raw.trim().length === 0) {
+    throw new QRightError(
+      "MISSING_QSIGN_SECRET",
+      500,
+      "QSIGN_SECRET env is not set",
+    );
+  }
+  if (raw.length < MIN_QSIGN_SECRET_LENGTH) {
+    throw new QRightError(
+      "MISSING_QSIGN_SECRET",
+      500,
+      `QSIGN_SECRET must be at least ${MIN_QSIGN_SECRET_LENGTH} characters`,
+    );
+  }
+
+  cachedQSignSecret = raw;
+  return cachedQSignSecret;
+}
+
+/** Test-only helper to reset cached secrets between test runs. */
+export function __resetConfigCache(): void {
+  cachedSecret = null;
+  cachedQSignSecret = null;
 }
 
 export function areDemoEndpointsEnabled(): boolean {

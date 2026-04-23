@@ -4,12 +4,14 @@ export type QRightErrorCode =
   | "RECONSTRUCTION_FAILED"
   | "LEGACY_RECORD"
   | "MISSING_SHARD_HMAC_SECRET"
+  | "MISSING_QSIGN_SECRET"
   | "SHIELD_NOT_FOUND"
   | "TAMPERED_SHARD"
   | "DUPLICATE_SHARD_INDEX"
   | "INVALID_SHARD_FORMAT"
   | "DEMO_DISABLED"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "INTERNAL_ERROR";
 
 export class QRightError extends Error {
   public readonly code: QRightErrorCode;

@@ -5,11 +5,13 @@ import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import {
   areDemoEndpointsEnabled,
+  getQSignSecret,
   HMAC_KEY_VERSION,
   SHAMIR_SHARDS,
   SHAMIR_THRESHOLD,
 } from "../config/qright";
 import { QRightError, type QRightErrorCode } from "../lib/errors/QRightError";
+import { canonicalContentHash } from "../lib/contentHash";
 import {
   combineAndVerify,
   generateEphemeralEd25519,
@@ -25,9 +27,30 @@ import {
 export const pipelineRouter = Router();
 const pool = getPool();
 
-const SIGN_SECRET = process.env.QSIGN_SECRET || "dev-qsign-secret";
-
 const demoRateLimiter = createInMemoryRateLimiter({ max: 10 });
+// 30 / мин / IP — достаточно для легитимного клиента-проверяющего, но
+// отсекает грубый перебор shard-комбинаций (brute-force Lagrange probe).
+const reconstructRateLimiter = createInMemoryRateLimiter({ max: 30 });
+
+interface QSignPayload {
+  objectId: string;
+  title: string;
+  contentHash: string;
+  signedAt: string; // ISO-8601, хранится в БД для последующей верификации
+}
+
+function computeQSignHmac(payload: QSignPayload): string {
+  const raw = JSON.stringify({
+    objectId: payload.objectId,
+    title: payload.title,
+    contentHash: payload.contentHash,
+    signedAt: payload.signedAt,
+  });
+  return crypto
+    .createHmac("sha256", getQSignSecret())
+    .update(raw)
+    .digest("hex");
+}
 
 /* ── Ensure tables ── */
 let tablesReady = false;
@@ -107,6 +130,11 @@ async function ensureTables(): Promise<void> {
       "lastVerifiedAt" TIMESTAMPTZ
     );
   `);
+  // v2: signedAt хранит момент, вошедший в HMAC-пейлоад; без него
+  // GET /verify/:certId не может пересчитать signatureHmac.
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "signedAt" TIMESTAMPTZ;`,
+  );
 
   tablesReady = true;
 }
@@ -252,50 +280,32 @@ pipelineRouter.post("/protect", async (req, res) => {
     const authorEmail = ownerEmail || user.email || null;
     const authorUserId = user.userId || null;
 
-    /* ── Step 1: QRight Registration ── */
-    const objectId = crypto.randomUUID();
-    const raw = JSON.stringify({
+    // Pre-flight: проверяем env, чтобы не делать частичную запись в БД
+    // ради того, чтобы упасть на QSign-шаге.
+    getQSignSecret();
+
+    /* ── Pre-compute: canonical content hash (NFC + sorted keys) ── */
+    const effectiveKind = kind || "other";
+    const contentHash = canonicalContentHash({
       title,
       description,
-      kind: kind || "other",
+      kind: effectiveKind,
       country,
       city,
     });
-    const contentHash = crypto
-      .createHash("sha256")
-      .update(raw)
-      .digest("hex");
 
-    await pool.query(
-      `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING *`,
-      [
-        objectId,
-        title,
-        description,
-        kind || "other",
-        contentHash,
-        authorName,
-        authorEmail,
-        authorUserId,
-        country || null,
-        city || null,
-      ],
-    );
-
-    /* ── Step 2: QSign (HMAC-SHA256) ── */
-    const signPayload = {
+    /* ── Pre-compute: QSign HMAC (signedAt stored for verify re-check) ── */
+    const objectId = crypto.randomUUID();
+    const signedAt = new Date().toISOString();
+    const protectedAt = signedAt; // тот же момент; храним раздельно для ясности
+    const signatureHmac = computeQSignHmac({
       objectId,
       title,
       contentHash,
-      timestamp: Date.now(),
-    };
-    const signatureHmac = crypto
-      .createHmac("sha256", SIGN_SECRET)
-      .update(JSON.stringify(signPayload))
-      .digest("hex");
+      signedAt,
+    });
 
-    /* ── Step 3: Quantum Shield (Ed25519 + real 2-of-3 Shamir SSS over GF(256)) ── */
+    /* ── Pre-compute: Ed25519 sign + Shamir split (no DB yet) ── */
     const shieldId = "qs-" + crypto.randomBytes(8).toString("hex");
     const { privateKeyRaw, publicKeySpkiHex, publicKeyRawHex } =
       generateEphemeralEd25519();
@@ -306,7 +316,7 @@ pipelineRouter.post("/protect", async (req, res) => {
       contentHash,
       signatureHmac,
       publicKeyRawHex,
-      timestamp: Date.now(),
+      signedAt,
     });
 
     const pkcs8Prefix = Buffer.from(
@@ -331,55 +341,91 @@ pipelineRouter.post("/protect", async (req, res) => {
       wipeBuffer(privateKeyRaw);
     }
 
-    await pool.query(
-      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,NOW())`,
-      [
-        shieldId,
-        objectId,
-        title,
-        "Shamir's Secret Sharing + Ed25519",
-        SHAMIR_THRESHOLD,
-        SHAMIR_SHARDS,
-        JSON.stringify(shards),
-        signatureEd25519,
-        publicKeySpkiHex,
-        HMAC_KEY_VERSION,
-      ],
-    );
-
-    /* ── Step 4: Issue IP Certificate ── */
+    /* ── All 4 DB writes in a single transaction ── */
     const certId = "cert-" + crypto.randomBytes(8).toString("hex");
-    const protectedAt = new Date().toISOString();
     const legalBasis = getLegalBasis(country);
     const algorithm =
       "SHA-256 + HMAC-SHA256 + Ed25519 + Shamir's Secret Sharing (2-of-3)";
 
-    await pool.query(
-      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19)`,
-      [
-        certId,
-        objectId,
-        shieldId,
-        title,
-        kind || "other",
-        description,
-        authorName,
-        authorEmail,
-        country || null,
-        city || null,
-        contentHash,
-        signatureHmac,
-        signatureEd25519,
-        publicKeySpkiHex,
-        SHAMIR_SHARDS,
-        SHAMIR_THRESHOLD,
-        algorithm,
-        JSON.stringify(legalBasis),
-        protectedAt,
-      ],
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      await client.query(
+        `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        [
+          objectId,
+          title,
+          description,
+          effectiveKind,
+          contentHash,
+          authorName,
+          authorEmail,
+          authorUserId,
+          country || null,
+          city || null,
+        ],
+      );
+
+      await client.query(
+        `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,NOW())`,
+        [
+          shieldId,
+          objectId,
+          title,
+          "Shamir's Secret Sharing + Ed25519",
+          SHAMIR_THRESHOLD,
+          SHAMIR_SHARDS,
+          JSON.stringify(shards),
+          signatureEd25519,
+          publicKeySpkiHex,
+          HMAC_KEY_VERSION,
+        ],
+      );
+
+      await client.query(
+        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19,$20)`,
+        [
+          certId,
+          objectId,
+          shieldId,
+          title,
+          effectiveKind,
+          description,
+          authorName,
+          authorEmail,
+          country || null,
+          city || null,
+          contentHash,
+          signatureHmac,
+          signatureEd25519,
+          publicKeySpkiHex,
+          SHAMIR_SHARDS,
+          SHAMIR_THRESHOLD,
+          algorithm,
+          JSON.stringify(legalBasis),
+          protectedAt,
+          signedAt,
+        ],
+      );
+
+      await client.query("COMMIT");
+    } catch (txErr) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rbErr) {
+        console.error(
+          "[Pipeline] ROLLBACK failed:",
+          rbErr instanceof Error ? rbErr.message : String(rbErr),
+        );
+      }
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     /* ── Response ── */
     const certificate = {
@@ -387,7 +433,7 @@ pipelineRouter.post("/protect", async (req, res) => {
       objectId,
       shieldId,
       title,
-      kind: kind || "other",
+      kind: effectiveKind,
       description,
       author: authorName || "Anonymous",
       email: authorEmail || null,
@@ -434,6 +480,14 @@ pipelineRouter.post("/protect", async (req, res) => {
       certificate,
     });
   } catch (err: unknown) {
+    if (err instanceof QRightError) {
+      console.error(
+        `[Pipeline] protect ${err.code}: ${err.message}`,
+      );
+      return res
+        .status(err.httpStatus)
+        .json({ error: err.message, code: err.code });
+    }
     const msg = err instanceof Error ? err.message : "pipeline failed";
     console.error("[Pipeline] protect error:", msg);
     res.status(500).json({ error: msg });
@@ -469,6 +523,18 @@ function isShardInput(v: unknown): v is {
 }
 
 pipelineRouter.post("/reconstruct", async (req, res) => {
+  const ip = clientIp({ ip: req.ip, headers: req.headers });
+  const rl = reconstructRateLimiter.check(ip);
+  if (!rl.allowed) {
+    res.setHeader("Retry-After", Math.ceil(rl.retryAfterMs / 1000).toString());
+    return res.status(429).json({
+      valid: false,
+      reconstructed: false,
+      reason: "RATE_LIMITED" satisfies QRightErrorCode,
+      retryAfterMs: rl.retryAfterMs,
+    });
+  }
+
   const body = req.body as ReconstructBody;
   const shieldId = typeof body.shieldId === "string" ? body.shieldId : null;
   const shardsInput = Array.isArray(body.shards) ? body.shards : [];
@@ -771,20 +837,50 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       [certId],
     );
 
-    /* Re-verify content hash */
-    const hashCheck = crypto
-      .createHash("sha256")
-      .update(
-        JSON.stringify({
-          title: cert.title,
-          description: cert.description,
-          kind: cert.kind,
-          country: cert.country,
-          city: cert.city,
-        }),
-      )
-      .digest("hex");
+    /* Re-verify content hash (canonical: NFC + sorted keys + null defaults) */
+    const hashCheck = canonicalContentHash({
+      title: cert.title,
+      description: cert.description,
+      kind: cert.kind,
+      country: cert.country,
+      city: cert.city,
+    });
     const hashValid = hashCheck === cert.contentHash;
+
+    /* Re-verify QSign HMAC using stored signedAt (null for pre-v2 rows) */
+    let signatureHmacValid: boolean | null = null;
+    let signatureHmacReason: "OK" | "NO_SIGNED_AT" | "MISMATCH" | "ERROR" =
+      "ERROR";
+    try {
+      const signedAtRaw = cert.signedAt;
+      if (!signedAtRaw) {
+        signatureHmacValid = null;
+        signatureHmacReason = "NO_SIGNED_AT";
+      } else {
+        const signedAtIso =
+          signedAtRaw instanceof Date
+            ? signedAtRaw.toISOString()
+            : String(signedAtRaw);
+        const expected = computeQSignHmac({
+          objectId: cert.objectId,
+          title: cert.title,
+          contentHash: cert.contentHash,
+          signedAt: signedAtIso,
+        });
+        signatureHmacValid = crypto.timingSafeEqual(
+          Buffer.from(expected, "hex"),
+          Buffer.from(cert.signatureHmac, "hex"),
+        );
+        signatureHmacReason = signatureHmacValid ? "OK" : "MISMATCH";
+      }
+    } catch (hmacErr) {
+      console.error(
+        "[Pipeline] verify HMAC re-check failed:",
+        hmacErr instanceof Error ? hmacErr.message : String(hmacErr),
+      );
+      signatureHmacValid = false;
+      signatureHmacReason = "ERROR";
+    }
 
     /* Check Quantum Shield status */
     let shieldStatus = "unknown";
@@ -828,6 +924,8 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       },
       integrity: {
         contentHashValid: hashValid,
+        signatureHmacValid,
+        signatureHmacReason,
         quantumShieldStatus: shieldStatus,
         shieldLegacy,
         shards: cert.shardCount,

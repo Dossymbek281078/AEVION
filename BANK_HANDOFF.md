@@ -8,9 +8,9 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 
 - **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer` — не отдельное приложение, дерево совпадает со всем `aevion-core`).
 - **Ветка:** `bank-payment-layer`.
-- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `1f77158`.
-- **Last commit:** `1f77158 feat(bank): wallet snapshot export — downloadable SVG + text summary`.
-- **Ahead of `main`:** 39 commits (1 modular rewrite + 28 features + 5 refactors + 5 polish/fix).
+- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `171c766`.
+- **Last commit:** `171c766 feat(bank): accessibility polish — skip link, focus ring, scroll margin`.
+- **Ahead of `main`:** 43 commits (1 modular rewrite + 32 features + 5 refactors + 5 polish/fix).
 - **PR URL (unmerged):** https://github.com/Dossymbek281078/AEVION/pull/new/bank-payment-layer
 - **Build:** green. `npm run verify` (from `aevion-core` root) passes.
 
@@ -53,6 +53,10 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 | fix | `9c640ae` | Real auto-repay on incoming transfers (tech-debt #9 closed) |
 | 26 | `e395124` | Onboarding tour — 5-step first-visit modal with scroll-to-anchor |
 | 27 | `1f77158` | Snapshot export — downloadable SVG + text summary |
+| 28 | `86d6275` | Audit JSON export + floating HelpMenu |
+| 29 | `de5b16d` | Invite & earn — referral program with tiered rewards |
+| 30 | `be2ce2c` | MobileTabBar — sticky bottom nav with scroll-spy on &lt;720px |
+| 31 | `171c766` | Accessibility polish — skip link, focus-visible ring, scroll margin |
 
 ## Architecture
 
@@ -173,17 +177,17 @@ Open:
 
 ## Next session picks
 
-Outstanding choices before we write more code:
+Почти всё закрыто этой сессией. Осталось:
 
-1. **Real backend wiring** — координация с backend-сессией, чтобы mock'и постепенно подменить на реальные endpoints. Нужно синхронное планирование (см. "Backend dependencies queue" ниже).
-2. **Accessibility audit + Lighthouse** — прогнать по странице, добить красные места (WealthForecast tiles, CoinTower SVG, radar chart alt-text, EcosystemPulse link aria-labels).
-3. **Snapshot export** — one-click PNG of your wealth state (balance + trust + achievements + peer standing); viral share coefficient.
-4. **Referral program** — "invite and earn X AEC" loop; classic fintech growth lever.
-5. **Onboarding tour** — first-visit coach-marks over Total Earnings → Ecosystem Pulse → Trust Score → Achievements so new users know what to click.
-6. **Mobile tab bar** — sticky bottom bar for section jumps on <768px (hero / earnings / ecosystem / trust / actions / history).
-7. **Open PR** — branch sits at 34 commits unmerged. Create PR draft when ready.
+1. **Real backend wiring** — координация с backend-сессией, чтобы mock'и постепенно подменить на реальные endpoints. Нужно синхронное планирование (см. "Backend dependencies queue" ниже). `POST /api/referrals/claim` добавлен в очередь.
+2. **Merge PR в main** — branch sits at 43 commits; draft PR открыт.
+3. **Lighthouse audit + `?reduceMotion`** — skip-link + focus-ring уже есть, но нужно прогнать Lighthouse и добить color-contrast на некоторых pill'ах (`#94a3b8` hint text) + проверить prefers-reduced-motion для CoinTower / confetti.
+4. **Help menu item "Jump to referrals"** — сейчас в HelpMenu есть Jump to snapshot; можно добавить для referrals и других секций.
+5. **Keyboard shortcut palette (Cmd+K)** — pro fintech feel; не критично.
 
-По умолчанию: начни с **п. 1 (backend wiring)** — все mock endpoints уже размечены `// TODO backend:` комментами и перечислены ниже. Frontend side готов дропнуть их как только реальные API придут.
+По умолчанию: начни с **п. 1 (backend wiring)** — все mock endpoints размечены `// TODO backend:` комментами. Frontend side полностью готов дропнуть их как только реальные API придут.
+
+Closed this session: onboarding tour, snapshot export, referrals panel, mobile tab bar, help menu, audit JSON export, real auto-repay (#9), accessibility basic pass (skip link + focus ring + scroll margin).
 
 ## Important gotchas
 

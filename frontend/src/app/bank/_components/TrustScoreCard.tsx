@@ -7,6 +7,7 @@ import {
   tierColor,
   tierDescription,
   tierLabel,
+  type TrustTier,
 } from "../_lib/trust";
 import type { Account, Operation } from "../_lib/types";
 import { RadarChart } from "./charts";
@@ -131,7 +132,150 @@ export function TrustScoreCard({
           </div>
         </div>
       </div>
+
+      {trust.nextTier ? (
+        <TierProgress
+          currentTier={trust.tier}
+          nextTier={trust.nextTier}
+          score={trust.score}
+          pointsToGo={trust.pointsToNextTier}
+          color={tierColor[trust.nextTier]}
+        />
+      ) : null}
+
+      {trust.checklist.length > 0 ? (
+        <div style={{ marginTop: 14 }}>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+              color: "#94a3b8",
+              marginBottom: 8,
+            }}
+          >
+            Fastest wins
+          </div>
+          <ul
+            role="list"
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: 8,
+            }}
+          >
+            {trust.checklist.map((item) => (
+              <li
+                key={item.key}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: `1px solid ${color}33`,
+                  background: `${color}0a`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12,
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    background: `${color}22`,
+                    color,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    flexShrink: 0,
+                  }}
+                >
+                  →
+                </span>
+                <span style={{ fontWeight: 700, color: "#0f172a", flex: 1 }}>{item.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function TierProgress({
+  currentTier,
+  nextTier,
+  score,
+  pointsToGo,
+  color,
+}: {
+  currentTier: TrustTier;
+  nextTier: TrustTier;
+  score: number;
+  pointsToGo: number;
+  color: string;
+}) {
+  const gateCurrent: Record<TrustTier, number> = { new: 0, growing: 20, trusted: 50, elite: 80 };
+  const from = gateCurrent[currentTier];
+  const to = gateCurrent[nextTier];
+  const pct = Math.max(0, Math.min(100, ((score - from) / (to - from)) * 100));
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        padding: 12,
+        borderRadius: 12,
+        border: `1px solid ${color}33`,
+        background: `linear-gradient(135deg, ${color}0a, transparent)`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 11,
+          marginBottom: 6,
+        }}
+      >
+        <span style={{ color: "#64748b", fontWeight: 700 }}>
+          {tierLabel[currentTier]} → <strong style={{ color }}>{tierLabel[nextTier]}</strong>
+        </span>
+        <span style={{ color, fontWeight: 800 }}>
+          {pointsToGo} point{pointsToGo === 1 ? "" : "s"} to go
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(pct)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Progress to ${tierLabel[nextTier]}`}
+        style={{
+          height: 6,
+          borderRadius: 999,
+          background: "rgba(15,23,42,0.06)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${pct}%`,
+            height: "100%",
+            background: `linear-gradient(90deg, ${color}, ${color}bb)`,
+            transition: "width 600ms ease",
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

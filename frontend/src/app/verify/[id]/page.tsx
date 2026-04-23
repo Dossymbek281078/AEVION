@@ -26,7 +26,10 @@ type VerifyData = {
   };
   integrity: {
     contentHashValid: boolean;
+    signatureHmacValid: boolean | null;
+    signatureHmacReason?: "OK" | "NO_SIGNED_AT" | "MISMATCH" | "ERROR";
     quantumShieldStatus: string;
+    shieldLegacy?: boolean;
     shards: number;
     threshold: number;
   };
@@ -253,8 +256,20 @@ export default function VerifyPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
               {[
                 { label: "Content Hash", status: integrity.contentHashValid, detail: integrity.contentHashValid ? "SHA-256 verified" : "Hash mismatch" },
-                { label: "Quantum Shield", status: integrity.quantumShieldStatus === "active", detail: `Status: ${integrity.quantumShieldStatus}` },
-                { label: "Secret Sharing", status: true, detail: `${integrity.shards} shards, threshold ${integrity.threshold}` },
+                {
+                  label: "HMAC Signature",
+                  status: integrity.signatureHmacValid === true,
+                  detail:
+                    integrity.signatureHmacValid === true
+                      ? "HMAC-SHA256 re-verified"
+                      : integrity.signatureHmacReason === "NO_SIGNED_AT"
+                        ? "Legacy row — signedAt not recorded"
+                        : integrity.signatureHmacReason === "MISMATCH"
+                          ? "Signature mismatch"
+                          : "Verification error",
+                },
+                { label: "Quantum Shield", status: integrity.quantumShieldStatus === "active" && integrity.shieldLegacy !== true, detail: integrity.shieldLegacy === true ? "Legacy shield (pre-v2)" : `Status: ${integrity.quantumShieldStatus}` },
+                { label: "Secret Sharing", status: integrity.shieldLegacy !== true, detail: integrity.shieldLegacy === true ? "Legacy — not real SSS" : `${integrity.shards} shards, threshold ${integrity.threshold} (Shamir SSS)` },
                 { label: "Certificate Status", status: cert.status === "active", detail: cert.status },
               ].map((check) => (
                 <div key={check.label} style={{

@@ -4,15 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
+import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { formatRelative } from "../_lib/format";
 import {
-  fetchRoyaltyStream,
   KIND_COLOR,
   KIND_ICON,
   KIND_LABEL,
   simulateRoyaltyEvent,
   type RoyaltyEvent,
-  type RoyaltyStreamSummary,
 } from "../_lib/royalties";
 
 function usePrefersReducedMotion(): boolean {
@@ -100,24 +99,14 @@ function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) 
   );
 }
 
-export function RoyaltyStream({ accountId }: { accountId: string }) {
-  const [data, setData] = useState<RoyaltyStreamSummary | null>(null);
+export function RoyaltyStream() {
+  const { royalty: data } = useEcosystemData();
   const [liveEvents, setLiveEvents] = useState<RoyaltyEvent[]>([]);
   const [paused, setPaused] = useState<boolean>(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const prm = usePrefersReducedMotion();
   const { code } = useCurrency();
   const tickRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchRoyaltyStream(accountId).then((s) => {
-      if (!cancelled) setData(s);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountId]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;

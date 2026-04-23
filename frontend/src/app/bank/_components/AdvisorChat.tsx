@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { loadAdvance } from "../_lib/advance";
-import { fetchChessSummary, type ChessSummary } from "../_lib/chess";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
-import { fetchEcosystemEarnings, type EcosystemEarningsSummary } from "../_lib/ecosystem";
+import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { lastActivityMs, stats30d } from "../_lib/format";
-import { fetchRoyaltyStream, type RoyaltyStreamSummary } from "../_lib/royalties";
 import { loadGoals } from "../_lib/savings";
 import { categoriseOps } from "../_lib/spending";
 import { computeEcosystemTrustScore, tierLabel } from "../_lib/trust";
@@ -37,27 +35,13 @@ export function AdvisorChat({
   operations: Operation[];
   notify: Notify;
 }) {
-  const [royalty, setRoyalty] = useState<RoyaltyStreamSummary | null>(null);
-  const [chess, setChess] = useState<ChessSummary | null>(null);
-  const [ecosystem, setEcosystem] = useState<EcosystemEarningsSummary | null>(null);
+  const { royalty, chess, ecosystem } = useEcosystemData();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [provider, setProvider] = useState<string | null>(null);
   const { code } = useCurrency();
   const feedRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchRoyaltyStream(account.id).then((s) => !cancelled && setRoyalty(s));
-    void fetchChessSummary(account.id).then((s) => !cancelled && setChess(s));
-    void fetchEcosystemEarnings({ accountId: account.id, operations }).then(
-      (s) => !cancelled && setEcosystem(s),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [account.id, operations]);
 
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;

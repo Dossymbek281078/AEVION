@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
-  fetchChessSummary,
   formatCountdown,
   FORMAT_LABEL,
   FORMAT_TIME,
-  type ChessSummary,
   type TournamentResult,
 } from "../_lib/chess";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
+import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { formatRelative } from "../_lib/format";
 import { Sparkline } from "./primitives";
 
@@ -104,19 +103,9 @@ function ResultRow({ r }: { r: TournamentResult }) {
   );
 }
 
-export function ChessWinnings({ accountId }: { accountId: string }) {
-  const [data, setData] = useState<ChessSummary | null>(null);
+export function ChessWinnings() {
+  const { chess: data } = useEcosystemData();
   const { code } = useCurrency();
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchChessSummary(accountId).then((s) => {
-      if (!cancelled) setData(s);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountId]);
 
   const peakPos = useMemo(() => {
     if (!data || data.ratingSeries.length === 0) return -1;

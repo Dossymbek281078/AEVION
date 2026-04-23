@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAdvance } from "../_hooks/useAdvance";
 import { eligibilityFor } from "../_lib/advance";
-import { fetchChessSummary, type ChessSummary } from "../_lib/chess";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
-import { fetchEcosystemEarnings, type EcosystemEarningsSummary } from "../_lib/ecosystem";
+import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { formatRelative } from "../_lib/format";
-import { fetchRoyaltyStream, type RoyaltyStreamSummary } from "../_lib/royalties";
 import { computeEcosystemTrustScore, tierColor, tierLabel } from "../_lib/trust";
 import type { Account, Operation } from "../_lib/types";
 
@@ -24,23 +22,9 @@ type Props = {
 export function SalaryAdvance({ account, operations, topup, notify }: Props) {
   const { advance, request, repayManual, close } = useAdvance();
   const [requesting, setRequesting] = useState<boolean>(false);
-  const [royalty, setRoyalty] = useState<RoyaltyStreamSummary | null>(null);
-  const [chess, setChess] = useState<ChessSummary | null>(null);
-  const [ecosystem, setEcosystem] = useState<EcosystemEarningsSummary | null>(null);
+  const { royalty, chess, ecosystem } = useEcosystemData();
   const [repayInput, setRepayInput] = useState<string>("");
   const { code } = useCurrency();
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchRoyaltyStream(account.id).then((s) => !cancelled && setRoyalty(s));
-    void fetchChessSummary(account.id).then((s) => !cancelled && setChess(s));
-    void fetchEcosystemEarnings({ accountId: account.id, operations }).then(
-      (s) => !cancelled && setEcosystem(s),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [account.id, operations]);
 
   const trust = useMemo(
     () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }),

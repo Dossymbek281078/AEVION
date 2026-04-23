@@ -4,6 +4,7 @@
 //   2. Expose GET /api/qright/royalties?accountId=... with { works, recentEvents, averages }.
 //   3. Optional: Server-Sent Events /api/qright/royalties/stream for live feed.
 
+import { QRIGHT_WORKS_BY_KIND } from "./mockCatalog";
 import { pick, seeded } from "./random";
 
 export type IPKind = "music" | "photo" | "code" | "design" | "writing" | "video";
@@ -36,15 +37,6 @@ export type RoyaltyStreamSummary = {
 };
 
 const IP_KINDS: IPKind[] = ["music", "photo", "code", "design", "writing", "video"];
-
-const WORK_TITLES_BY_KIND: Record<IPKind, readonly string[]> = {
-  music: ["Cosmic Journey OST", "Ambient Chill Vol. 3", "Piano Study in C Minor", "Synthwave Memories", "Jazz Café Nights", "Lo-fi Study Loop"],
-  photo: ["Urban Sunset", "Mountain Solitude", "Street Life Tokyo", "Coastal Dawn", "Architecture Series", "Night Markets"],
-  code: ["React Animation Hooks", "ML Tutorial Series", "CLI Toolkit", "WebGL Shader Lib", "API Rate Limiter", "Vector Search Demo"],
-  design: ["Digital Brush Pack v2", "Neon Grid Wallpapers", "Minimal UI Kit", "Icon Set Modern", "Pattern Library", "3D Mockup Bundle"],
-  writing: ["Startup Pitch Template", "Fantasy Short Story", "Technical Whitepaper", "Poetry Collection", "Screenplay Draft", "Interview Scripts"],
-  video: ["3D Character Rig", "Cinematic LUT Pack", "Stock Footage Pack", "Motion Graphics", "Short Film Director's Cut", "Tutorial Episode 4"],
-};
 
 export const KIND_ICON: Record<IPKind, string> = {
   music: "♪",
@@ -105,7 +97,7 @@ function generateStream(accountId: string): RoyaltyStreamSummary {
   const workCount = 5 + Math.floor(rand() * 7);
   const workMeta = Array.from({ length: workCount }, (_, i) => {
     const kind = pick(IP_KINDS, rand);
-    const title = pick(WORK_TITLES_BY_KIND[kind], rand);
+    const title = pick(QRIGHT_WORKS_BY_KIND[kind], rand);
     const daysAgo = Math.floor(30 + rand() * 335);
     const popularity = rand() * rand();
     return {

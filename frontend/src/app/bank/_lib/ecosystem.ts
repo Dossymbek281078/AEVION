@@ -2,6 +2,7 @@
 // TODO backend: GET /api/ecosystem/earnings?accountId=... returning EcosystemEarningsSummary.
 // For now we synthesise deterministic mock per accountId and merge real banking ops.
 
+import { CHESS_TOURNAMENT_NAMES, PLANET_TASKS, QRIGHT_FLAT_WORKS } from "./mockCatalog";
 import { pick, seeded } from "./random";
 import type { Operation } from "./types";
 
@@ -59,37 +60,6 @@ export const SOURCE_DESCRIPTION: Record<EarningSource, string> = {
   planet: "Progress bonuses from Planet Engine",
 };
 
-const QRIGHT_WORKS = [
-  "Cosmic Journey OST",
-  "Urban Sunset Photography",
-  "React Animation Hooks",
-  "Digital Brush Pack v2",
-  "Ambient Chill Vol. 3",
-  "ML Tutorial Series",
-  "Neon Grid Wallpapers",
-  "Piano Study in C Minor",
-  "Startup Pitch Template",
-  "3D Character Rig Guide",
-];
-
-const CHESS_TOURNAMENTS = [
-  "AEVION Blitz Arena #47",
-  "Grand Swiss Open 2026",
-  "Rapid Classic Weekly",
-  "Endgame Masters Cup",
-  "Opening Theory Invitational",
-  "Sunday Bullet Championship",
-];
-
-const PLANET_TASKS = [
-  "Verified 5 creative works",
-  "Trust Graph level 3",
-  "Weekly consistency bonus",
-  "Quantum Shield signature",
-  "Peer review contribution",
-  "Ecosystem onboarding done",
-];
-
 function dateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -126,7 +96,7 @@ function generateMock(accountId: string, ops: Operation[]): EcosystemEarningsSum
           source: "qright",
           amount: amt,
           timestamp: new Date(d.getTime() + rand() * 86_400_000).toISOString(),
-          title: pick(QRIGHT_WORKS, rand),
+          title: pick(QRIGHT_FLAT_WORKS, rand),
           meta: "1 verification",
         });
       }
@@ -142,7 +112,7 @@ function generateMock(accountId: string, ops: Operation[]): EcosystemEarningsSum
           source: "chess",
           amount: amt,
           timestamp: new Date(d.getTime() + rand() * 86_400_000).toISOString(),
-          title: pick(CHESS_TOURNAMENTS, rand),
+          title: pick(CHESS_TOURNAMENT_NAMES, rand),
           meta: `Place ${Math.floor(rand() * 3) + 1}`,
         });
       }

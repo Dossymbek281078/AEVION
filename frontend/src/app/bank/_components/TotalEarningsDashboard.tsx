@@ -1,19 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  fetchEcosystemEarnings,
   periodTotals,
   SOURCE_COLOR,
   SOURCE_DESCRIPTION,
   SOURCE_LABEL,
   type EarningSource,
-  type EcosystemEarningsSummary,
 } from "../_lib/ecosystem";
 import { formatRelative } from "../_lib/format";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
-import type { Operation } from "../_lib/types";
+import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { Legend, PieChart, StackedAreaChart, type StackedSeries } from "./charts";
 import { Sparkline } from "./primitives";
 
@@ -26,26 +24,10 @@ function sourceIcon(s: EarningSource): string {
   return { banking: "₳", qright: "♪", chess: "♞", planet: "◉" }[s];
 }
 
-export function TotalEarningsDashboard({
-  accountId,
-  operations,
-}: {
-  accountId: string;
-  operations: Operation[];
-}) {
-  const [summary, setSummary] = useState<EcosystemEarningsSummary | null>(null);
+export function TotalEarningsDashboard() {
+  const { ecosystem: summary } = useEcosystemData();
   const [period, setPeriod] = useState<Period>("30d");
   const { code } = useCurrency();
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchEcosystemEarnings({ accountId, operations }).then((s) => {
-      if (!cancelled) setSummary(s);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountId, operations]);
 
   const days = PERIOD_DAYS[period];
   const totals = useMemo(() => (summary ? periodTotals(summary.daily, days) : null), [summary, days]);

@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { fetchChessSummary, type ChessSummary } from "../_lib/chess";
-import { fetchEcosystemEarnings, type EcosystemEarningsSummary } from "../_lib/ecosystem";
-import { fetchRoyaltyStream, type RoyaltyStreamSummary } from "../_lib/royalties";
+import { useMemo } from "react";
+import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import {
   computeEcosystemTrustScore,
   tierColor,
@@ -20,25 +18,7 @@ export function TrustScoreCard({
   account: Account;
   operations: Operation[];
 }) {
-  const [royalty, setRoyalty] = useState<RoyaltyStreamSummary | null>(null);
-  const [chess, setChess] = useState<ChessSummary | null>(null);
-  const [ecosystem, setEcosystem] = useState<EcosystemEarningsSummary | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchRoyaltyStream(account.id).then((s) => {
-      if (!cancelled) setRoyalty(s);
-    });
-    void fetchChessSummary(account.id).then((s) => {
-      if (!cancelled) setChess(s);
-    });
-    void fetchEcosystemEarnings({ accountId: account.id, operations }).then((s) => {
-      if (!cancelled) setEcosystem(s);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [account.id, operations]);
+  const { royalty, chess, ecosystem } = useEcosystemData();
 
   const trust = useMemo(
     () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }),

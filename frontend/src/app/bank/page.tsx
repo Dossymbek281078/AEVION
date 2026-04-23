@@ -44,6 +44,7 @@ import { useBank } from "./_hooks/useBank";
 import { operationsCsvUrl } from "./_lib/api";
 import { BiometricProvider } from "./_lib/BiometricContext";
 import { CurrencyProvider } from "./_lib/CurrencyContext";
+import { EcosystemDataProvider } from "./_lib/EcosystemDataContext";
 import { decodePaymentRequest } from "./_lib/paymentRequest";
 
 function BankContent() {
@@ -241,8 +242,8 @@ function BankContent() {
       ) : null}
 
       {hasWallet && account ? (
-        <>
-          <TotalEarningsDashboard accountId={account.id} operations={operations} />
+        <EcosystemDataProvider accountId={account.id} operations={operations}>
+          <TotalEarningsDashboard />
           <TrustScoreCard account={account} operations={operations} />
           <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
           <SalaryAdvance
@@ -251,8 +252,8 @@ function BankContent() {
             topup={handleTopup}
             notify={notify}
           />
-          <RoyaltyStream accountId={account.id} />
-          <ChessWinnings accountId={account.id} />
+          <RoyaltyStream />
+          <ChessWinnings />
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}
@@ -348,7 +349,7 @@ function BankContent() {
           <AuditPanel notify={notify} />
 
           <DeviceManagement accountId={account.id} notify={notify} />
-        </>
+        </EcosystemDataProvider>
       ) : null}
 
       <QuickActions />

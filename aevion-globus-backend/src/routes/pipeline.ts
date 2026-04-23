@@ -3,15 +3,44 @@ import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
+import {
+  memoryEnabled,
+  memAddCertificate,
+  memAddShield,
+  memGetCertificate,
+  memGetShield,
+  memIncrementVerify,
+  memListCertificates,
+  memStats,
+  type MemCertificate,
+} from "../lib/pipelineMemoryStore";
 
 export const pipelineRouter = Router();
 const pool = getPool();
 
 const SIGN_SECRET = process.env.QSIGN_SECRET || "dev-qsign-secret";
 
+/* ── DB availability probe (one-shot + sticky) ── */
+let dbProbed = false;
+let dbAvailable = false;
+async function dbReady(): Promise<boolean> {
+  if (memoryEnabled()) return false;
+  if (dbProbed) return dbAvailable;
+  try {
+    await pool.query("SELECT 1");
+    dbAvailable = true;
+  } catch (e) {
+    console.warn("[Pipeline] Postgres unreachable, using in-memory fallback:", e instanceof Error ? e.message : e);
+    dbAvailable = false;
+  }
+  dbProbed = true;
+  return dbAvailable;
+}
+
 /* ── Ensure tables ── */
 let tablesReady = false;
 async function ensureTables() {
+  if (!(await dbReady())) return;
   if (tablesReady) return;
 
   await pool.query(`
@@ -204,11 +233,14 @@ pipelineRouter.post("/protect", async (req, res) => {
     const raw = JSON.stringify({ title, description, kind: kind || "other", country, city });
     const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
 
-    await pool.query(
-      `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING *`,
-      [objectId, title, description, kind || "other", contentHash, authorName, authorEmail, authorUserId, country || null, city || null]
-    );
+    const useDb = await dbReady();
+    if (useDb) {
+      await pool.query(
+        `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING *`,
+        [objectId, title, description, kind || "other", contentHash, authorName, authorEmail, authorUserId, country || null, city || null]
+      );
+    }
 
     /* ── Step 2: QSign (HMAC-SHA256) ── */
     const signPayload = { objectId, title, contentHash, timestamp: Date.now() };
@@ -238,11 +270,27 @@ pipelineRouter.post("/protect", async (req, res) => {
       });
     }
 
-    await pool.query(
-      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NOW())`,
-      [shieldId, objectId, title, "Shamir's Secret Sharing + Ed25519", threshold, totalShards, JSON.stringify(shards), signatureEd25519, pubKeyHex]
-    );
+    if (useDb) {
+      await pool.query(
+        `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NOW())`,
+        [shieldId, objectId, title, "Shamir's Secret Sharing + Ed25519", threshold, totalShards, JSON.stringify(shards), signatureEd25519, pubKeyHex]
+      );
+    } else {
+      memAddShield({
+        id: shieldId,
+        objectId,
+        objectTitle: title,
+        algorithm: "Shamir's Secret Sharing + Ed25519",
+        threshold,
+        totalShards,
+        shards: JSON.stringify(shards),
+        signature: signatureEd25519,
+        publicKey: pubKeyHex,
+        status: "active",
+        createdAt: new Date().toISOString(),
+      });
+    }
 
     /* ── Step 4: Issue IP Certificate ── */
     const certId = "cert-" + crypto.randomBytes(8).toString("hex");
@@ -250,16 +298,44 @@ pipelineRouter.post("/protect", async (req, res) => {
     const legalBasis = getLegalBasis(country);
     const algorithm = "SHA-256 + HMAC-SHA256 + Ed25519 + Shamir's Secret Sharing";
 
-    await pool.query(
-      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19)`,
-      [
-        certId, objectId, shieldId, title, kind || "other", description,
-        authorName, authorEmail, country || null, city || null,
-        contentHash, signatureHmac, signatureEd25519, pubKeyHex,
-        totalShards, threshold, algorithm, JSON.stringify(legalBasis), protectedAt,
-      ]
-    );
+    if (useDb) {
+      await pool.query(
+        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19)`,
+        [
+          certId, objectId, shieldId, title, kind || "other", description,
+          authorName, authorEmail, country || null, city || null,
+          contentHash, signatureHmac, signatureEd25519, pubKeyHex,
+          totalShards, threshold, algorithm, JSON.stringify(legalBasis), protectedAt,
+        ]
+      );
+    } else {
+      const memCert: MemCertificate = {
+        id: certId,
+        objectId,
+        shieldId,
+        title,
+        kind: kind || "other",
+        description,
+        authorName,
+        authorEmail,
+        country: country || null,
+        city: city || null,
+        contentHash,
+        signatureHmac,
+        signatureEd25519,
+        publicKeyEd25519: pubKeyHex,
+        shardCount: totalShards,
+        shardThreshold: threshold,
+        algorithm,
+        legalBasis,
+        status: "active",
+        protectedAt,
+        verifiedCount: 0,
+        lastVerifiedAt: null,
+      };
+      memAddCertificate(memCert);
+    }
 
     /* ── Response ── */
     const certificate = {
@@ -314,37 +390,41 @@ pipelineRouter.post("/protect", async (req, res) => {
 pipelineRouter.get("/verify/:certId", async (req, res) => {
   try {
     await ensureTables();
+    const useDb = await dbReady();
 
     const { certId } = req.params;
-    const { rows } = await pool.query(`SELECT * FROM "IPCertificate" WHERE "id" = $1`, [certId]);
+    let cert: any = null;
+    let shieldStatus = "unknown";
 
-    if (rows.length === 0) {
-      return res.status(404).json({ valid: false, error: "Certificate not found" });
+    if (useDb) {
+      const { rows } = await pool.query(`SELECT * FROM "IPCertificate" WHERE "id" = $1`, [certId]);
+      if (rows.length === 0) return res.status(404).json({ valid: false, error: "Certificate not found" });
+      cert = rows[0];
+      await pool.query(
+        `UPDATE "IPCertificate" SET "verifiedCount" = "verifiedCount" + 1, "lastVerifiedAt" = NOW() WHERE "id" = $1`,
+        [certId]
+      );
+      if (cert.shieldId) {
+        const shield = await pool.query(`SELECT "status" FROM "QuantumShield" WHERE "id" = $1`, [cert.shieldId]);
+        shieldStatus = shield.rows?.[0]?.status || "not_found";
+      }
+    } else {
+      const mem = memGetCertificate(certId);
+      if (!mem) return res.status(404).json({ valid: false, error: "Certificate not found" });
+      memIncrementVerify(certId);
+      cert = mem;
+      if (cert.shieldId) {
+        shieldStatus = memGetShield(cert.shieldId)?.status || "active";
+      } else {
+        shieldStatus = "active";
+      }
     }
 
-    const cert = rows[0];
-
-    /* Increment verify count */
-    await pool.query(
-      `UPDATE "IPCertificate" SET "verifiedCount" = "verifiedCount" + 1, "lastVerifiedAt" = NOW() WHERE "id" = $1`,
-      [certId]
-    );
-
-    /* Re-verify HMAC signature */
-    const signPayload = { objectId: cert.objectId, title: cert.title, contentHash: cert.contentHash };
-    // Note: we can't fully re-verify HMAC since we don't store the original timestamp,
-    // but we verify the hash chain is intact
+    /* Re-verify HMAC signature — hash chain integrity */
     const hashCheck = crypto.createHash("sha256")
       .update(JSON.stringify({ title: cert.title, description: cert.description, kind: cert.kind, country: cert.country, city: cert.city }))
       .digest("hex");
     const hashValid = hashCheck === cert.contentHash;
-
-    /* Check Quantum Shield status */
-    let shieldStatus = "unknown";
-    if (cert.shieldId) {
-      const shield = await pool.query(`SELECT "status" FROM "QuantumShield" WHERE "id" = $1`, [cert.shieldId]);
-      shieldStatus = shield.rows?.[0]?.status || "not_found";
-    }
 
     const legalBasis = typeof cert.legalBasis === "string" ? JSON.parse(cert.legalBasis) : cert.legalBasis;
 
@@ -405,6 +485,7 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
 pipelineRouter.get("/certificates", async (req, res) => {
   try {
     await ensureTables();
+    const useDb = await dbReady();
 
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     const kind = typeof req.query.kind === "string" ? req.query.kind.trim().toLowerCase() : "";
@@ -412,28 +493,31 @@ pipelineRouter.get("/certificates", async (req, res) => {
     const limitRaw = parseInt(String(req.query.limit || "60"), 10);
     const limit = Math.min(200, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 60));
 
-    const where: string[] = [`"status" = 'active'`];
-    const params: unknown[] = [];
-    if (q) {
-      params.push(`%${q.toLowerCase()}%`);
-      const p = `$${params.length}`;
-      where.push(`(LOWER("title") LIKE ${p} OR LOWER(COALESCE("authorName",'')) LIKE ${p} OR LOWER(COALESCE("country",'')) LIKE ${p} OR LOWER(COALESCE("city",'')) LIKE ${p})`);
+    let rows: any[];
+    if (useDb) {
+      const where: string[] = [`"status" = 'active'`];
+      const params: unknown[] = [];
+      if (q) {
+        params.push(`%${q.toLowerCase()}%`);
+        const p = `$${params.length}`;
+        where.push(`(LOWER("title") LIKE ${p} OR LOWER(COALESCE("authorName",'')) LIKE ${p} OR LOWER(COALESCE("country",'')) LIKE ${p} OR LOWER(COALESCE("city",'')) LIKE ${p})`);
+      }
+      if (kind && ["music","code","design","text","video","idea","other"].includes(kind)) {
+        params.push(kind);
+        where.push(`"kind" = $${params.length}`);
+      }
+      let orderBy = `"protectedAt" DESC`;
+      if (sort === "popular") orderBy = `"verifiedCount" DESC, "protectedAt" DESC`;
+      else if (sort === "az") orderBy = `LOWER("title") ASC`;
+      params.push(limit);
+      const limitIdx = `$${params.length}`;
+
+      const sql = `SELECT "id","objectId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
+                   FROM "IPCertificate" WHERE ${where.join(" AND ")} ORDER BY ${orderBy} LIMIT ${limitIdx}`;
+      rows = (await pool.query(sql, params)).rows;
+    } else {
+      rows = memListCertificates({ q, kind, sort, limit });
     }
-    if (kind && ["music","code","design","text","video","idea","other"].includes(kind)) {
-      params.push(kind);
-      where.push(`"kind" = $${params.length}`);
-    }
-
-    let orderBy = `"protectedAt" DESC`;
-    if (sort === "popular") orderBy = `"verifiedCount" DESC, "protectedAt" DESC`;
-    else if (sort === "az") orderBy = `LOWER("title") ASC`;
-
-    params.push(limit);
-    const limitIdx = `$${params.length}`;
-
-    const sql = `SELECT "id","objectId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
-                 FROM "IPCertificate" WHERE ${where.join(" AND ")} ORDER BY ${orderBy} LIMIT ${limitIdx}`;
-    const { rows } = await pool.query(sql, params);
 
     res.json({
       certificates: rows.map((r: any) => ({
@@ -450,6 +534,7 @@ pipelineRouter.get("/certificates", async (req, res) => {
       })),
       total: rows.length,
       query: { q, kind: kind || null, sort, limit },
+      source: useDb ? "postgres" : "memory",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list failed";
@@ -467,6 +552,7 @@ pipelineRouter.get("/certificates", async (req, res) => {
 pipelineRouter.get("/certificates.csv", async (req, res) => {
   try {
     await ensureTables();
+    const useDb = await dbReady();
 
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     const kind = typeof req.query.kind === "string" ? req.query.kind.trim().toLowerCase() : "";
@@ -474,26 +560,31 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
     const limitRaw = parseInt(String(req.query.limit || "1000"), 10);
     const limit = Math.min(5000, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 1000));
 
-    const where: string[] = [`"status" = 'active'`];
-    const params: unknown[] = [];
-    if (q) {
-      params.push(`%${q.toLowerCase()}%`);
-      const p = `$${params.length}`;
-      where.push(`(LOWER("title") LIKE ${p} OR LOWER(COALESCE("authorName",'')) LIKE ${p} OR LOWER(COALESCE("country",'')) LIKE ${p} OR LOWER(COALESCE("city",'')) LIKE ${p})`);
-    }
-    if (kind && ["music","code","design","text","video","idea","other"].includes(kind)) {
-      params.push(kind);
-      where.push(`"kind" = $${params.length}`);
-    }
-    let orderBy = `"protectedAt" DESC`;
-    if (sort === "popular") orderBy = `"verifiedCount" DESC, "protectedAt" DESC`;
-    else if (sort === "az") orderBy = `LOWER("title") ASC`;
-    params.push(limit);
-    const limitIdx = `$${params.length}`;
+    let rows: any[];
+    if (useDb) {
+      const where: string[] = [`"status" = 'active'`];
+      const params: unknown[] = [];
+      if (q) {
+        params.push(`%${q.toLowerCase()}%`);
+        const p = `$${params.length}`;
+        where.push(`(LOWER("title") LIKE ${p} OR LOWER(COALESCE("authorName",'')) LIKE ${p} OR LOWER(COALESCE("country",'')) LIKE ${p} OR LOWER(COALESCE("city",'')) LIKE ${p})`);
+      }
+      if (kind && ["music","code","design","text","video","idea","other"].includes(kind)) {
+        params.push(kind);
+        where.push(`"kind" = $${params.length}`);
+      }
+      let orderBy = `"protectedAt" DESC`;
+      if (sort === "popular") orderBy = `"verifiedCount" DESC, "protectedAt" DESC`;
+      else if (sort === "az") orderBy = `LOWER("title") ASC`;
+      params.push(limit);
+      const limitIdx = `$${params.length}`;
 
-    const sql = `SELECT "id","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
-                 FROM "IPCertificate" WHERE ${where.join(" AND ")} ORDER BY ${orderBy} LIMIT ${limitIdx}`;
-    const { rows } = await pool.query(sql, params);
+      const sql = `SELECT "id","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
+                   FROM "IPCertificate" WHERE ${where.join(" AND ")} ORDER BY ${orderBy} LIMIT ${limitIdx}`;
+      rows = (await pool.query(sql, params)).rows;
+    } else {
+      rows = memListCertificates({ q, kind, sort, limit });
+    }
 
     const escape = (v: unknown): string => {
       if (v === null || v === undefined) return "";
@@ -540,6 +631,26 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
 pipelineRouter.get("/bureau/stats", async (_req, res) => {
   try {
     await ensureTables();
+    const useDb = await dbReady();
+
+    if (!useDb) {
+      const s = memStats();
+      return res.json({
+        ...s,
+        latest: s.latest.map((r) => ({
+          id: r.id,
+          title: r.title,
+          kind: r.kind,
+          author: r.authorName || "Anonymous",
+          location: [r.city, r.country].filter(Boolean).join(", ") || null,
+          contentHash: r.contentHash,
+          protectedAt: r.protectedAt,
+          verifiedCount: r.verifiedCount || 0,
+        })),
+        generatedAt: new Date().toISOString(),
+        source: "memory",
+      });
+    }
 
     const totalsQ = pool.query(`
       SELECT
@@ -612,6 +723,7 @@ pipelineRouter.get("/bureau/stats", async (_req, res) => {
         verifiedCount: r.verifiedCount || 0,
       })),
       generatedAt: new Date().toISOString(),
+      source: "postgres",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "stats failed";
@@ -629,11 +741,20 @@ pipelineRouter.get("/bureau/stats", async (_req, res) => {
 pipelineRouter.get("/badge/:certId", async (req, res) => {
   try {
     await ensureTables();
+    const useDb = await dbReady();
     const { certId } = req.params;
-    const { rows } = await pool.query(
-      `SELECT "id","title","kind","contentHash","verifiedCount" FROM "IPCertificate" WHERE "id" = $1 AND "status" = 'active'`,
-      [certId]
-    );
+
+    let rows: any[];
+    if (useDb) {
+      const r = await pool.query(
+        `SELECT "id","title","kind","contentHash","verifiedCount" FROM "IPCertificate" WHERE "id" = $1 AND "status" = 'active'`,
+        [certId]
+      );
+      rows = r.rows;
+    } else {
+      const mem = memGetCertificate(certId);
+      rows = mem && mem.status === "active" ? [mem] : [];
+    }
 
     const escapeXml = (s: string) =>
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
@@ -689,15 +810,18 @@ pipelineRouter.get("/badge/:certId", async (req, res) => {
 pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
   try {
     await ensureTables();
+    const useDb = await dbReady();
 
     const { certId } = req.params;
-    const { rows } = await pool.query(`SELECT * FROM "IPCertificate" WHERE "id" = $1`, [certId]);
-
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Certificate not found" });
+    let cert: any;
+    if (useDb) {
+      const { rows } = await pool.query(`SELECT * FROM "IPCertificate" WHERE "id" = $1`, [certId]);
+      if (rows.length === 0) return res.status(404).json({ error: "Certificate not found" });
+      cert = rows[0];
+    } else {
+      cert = memGetCertificate(certId);
+      if (!cert) return res.status(404).json({ error: "Certificate not found" });
     }
-
-    const cert = rows[0];
     const PDFDocument = (await import("pdfkit")).default;
     const QRCode = await import("qrcode");
 

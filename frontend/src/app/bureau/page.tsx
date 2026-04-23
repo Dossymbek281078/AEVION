@@ -45,6 +45,7 @@ type BureauStats = {
     verifiedCount: number;
   }>;
   generatedAt: string;
+  source?: "postgres" | "memory";
 };
 
 type SortMode = "recent" | "popular" | "az";
@@ -286,7 +287,7 @@ export default function BureauPage() {
 
         {/* ── Data status strip ── */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#64748b" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#64748b", flexWrap: "wrap" }}>
             {statsError || listError ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#b91c1c", fontWeight: 700 }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} />
@@ -299,6 +300,15 @@ export default function BureauPage() {
               </span>
             ) : (
               <span style={{ padding: "4px 10px", borderRadius: 999, background: "rgba(15,23,42,0.05)", color: "#64748b", fontWeight: 700 }}>Loading live registry…</span>
+            )}
+            {stats?.source === "memory" && (
+              <span
+                title="Backend is running without a connected database — showing demonstration data. Set DATABASE_URL to switch to production storage."
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#92400e", fontWeight: 700 }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
+                Demo data
+              </span>
             )}
           </div>
           <button

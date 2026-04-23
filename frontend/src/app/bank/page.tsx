@@ -26,6 +26,7 @@ import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
 import { DeviceManagement } from "./_components/DeviceManagement";
 import { EcosystemPulse } from "./_components/EcosystemPulse";
+import { HelpMenu } from "./_components/HelpMenu";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { SnapshotExport } from "./_components/SnapshotExport";
@@ -287,6 +288,7 @@ function BankContent() {
           </div>
 
           <SnapshotExport account={account} operations={operations} notify={notify} />
+          <HelpMenu accountId={account.id} notify={notify} />
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}

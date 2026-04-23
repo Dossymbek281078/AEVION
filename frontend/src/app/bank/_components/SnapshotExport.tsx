@@ -162,7 +162,7 @@ export function SnapshotExport({
             >
               ⇪
             </span>
-            <h2 id="snapshot-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
+            <h2 id="snapshot-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0, scrollMarginTop: 80 }}>
               Snapshot export
             </h2>
           </div>

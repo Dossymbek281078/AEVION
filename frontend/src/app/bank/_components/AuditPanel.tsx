@@ -106,6 +106,46 @@ export function AuditPanel({
           {items.length > 0 ? (
             <button
               onClick={() => {
+                try {
+                  const payload = {
+                    exportedAt: new Date().toISOString(),
+                    count: items.length,
+                    signatures: items,
+                  };
+                  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+                    type: "application/json",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `aevion-audit-${new Date().toISOString().slice(0, 10)}.json`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  notify(`Exported ${items.length} signatures`, "success");
+                } catch {
+                  notify("Export failed", "error");
+                }
+              }}
+              aria-label="Download audit log as JSON"
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,118,110,0.3)",
+                background: "#fff",
+                color: "#0f766e",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Export JSON
+            </button>
+          ) : null}
+          {items.length > 0 ? (
+            <button
+              onClick={() => {
                 if (confirm("Clear local audit log? Backend keeps the operation history.")) {
                   clear();
                   notify("Audit log cleared", "info");

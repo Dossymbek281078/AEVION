@@ -2512,6 +2512,8 @@ export default function CyberChessPage(){
             ["N","Новая партия (в Play, до старта)"],
             ["Esc","Сбросить все премувы"],
             ["?","Показать / скрыть эту подсказку"],
+            ["ПКМ-drag","Стрелка на доске (Analysis / Coach / после партии)"],
+            ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
           ].map(([k,v])=><React.Fragment key={k}>
             <kbd style={{fontFamily:"monospace",fontWeight:900,fontSize:13,padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,color:T.text,whiteSpace:"nowrap"}}>{k}</kbd>
             <span style={{color:T.text}}>{v}</span>

@@ -28,6 +28,7 @@ import { DeviceManagement } from "./_components/DeviceManagement";
 import { EcosystemPulse } from "./_components/EcosystemPulse";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
+import { SnapshotExport } from "./_components/SnapshotExport";
 import { GiftMode } from "./_components/GiftMode";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
@@ -284,6 +285,8 @@ function BankContent() {
           <div id="bank-anchor-achievements">
             <AchievementsPanel account={account} operations={operations} />
           </div>
+
+          <SnapshotExport account={account} operations={operations} notify={notify} />
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}

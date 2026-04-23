@@ -733,6 +733,125 @@ pipelineRouter.get("/bureau/stats", async (_req, res) => {
 });
 
 /**
+ * GET /api/pipeline/lookup/:hash
+ *
+ * Reverse lookup — "is this SHA-256 already protected?".
+ * Public, no auth. Returns the matching certificate (if any) plus the
+ * current registry anchor so clients can prove freshness.
+ */
+pipelineRouter.get("/lookup/:hash", async (req, res) => {
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+    const raw = String(req.params.hash || "").trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(raw)) {
+      return res.status(400).json({ error: "hash must be a 64-char lowercase hex SHA-256" });
+    }
+
+    let row: any = null;
+    if (useDb) {
+      const r = await pool.query(
+        `SELECT "id","title","kind","authorName","country","city","contentHash","algorithm","protectedAt","verifiedCount"
+         FROM "IPCertificate" WHERE "contentHash" = $1 AND "status" = 'active' LIMIT 1`,
+        [raw]
+      );
+      row = r.rows[0] || null;
+    } else {
+      row = memListCertificates({ limit: 5000 }).find((c: any) => (c.contentHash || "").toLowerCase() === raw) || null;
+    }
+
+    if (!row) {
+      return res.json({ protected: false, hash: raw, source: useDb ? "postgres" : "memory" });
+    }
+
+    res.json({
+      protected: true,
+      hash: raw,
+      source: useDb ? "postgres" : "memory",
+      certificate: {
+        id: row.id,
+        title: row.title,
+        kind: row.kind,
+        author: row.authorName || "Anonymous",
+        location: [row.city, row.country].filter(Boolean).join(", ") || null,
+        contentHash: row.contentHash,
+        algorithm: row.algorithm,
+        protectedAt: row.protectedAt,
+        verifiedCount: row.verifiedCount || 0,
+        verifyUrl: `https://aevion.vercel.app/verify/${row.id}`,
+      },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "lookup failed";
+    console.error("[Pipeline] lookup error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/bureau/anchor
+ *
+ * Publishes a Merkle root over all active certificate hashes in the registry,
+ * forming a tamper-evident "anchor". Clients can recompute and prove that a
+ * particular certificate existed at a particular anchor.
+ *
+ * Tree: sorted contentHashes as leaves → pairwise sha256 concat → root.
+ */
+pipelineRouter.get("/bureau/anchor", async (_req, res) => {
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+    let leaves: Array<{ id: string; contentHash: string }>;
+
+    if (useDb) {
+      const r = await pool.query(`SELECT "id","contentHash" FROM "IPCertificate" WHERE "status" = 'active'`);
+      leaves = r.rows.map((x: any) => ({ id: x.id, contentHash: x.contentHash }));
+    } else {
+      leaves = memListCertificates({ limit: 5000 }).map((c: any) => ({ id: c.id, contentHash: c.contentHash }));
+    }
+
+    const sorted = [...leaves].sort((a, b) => a.contentHash.localeCompare(b.contentHash));
+    const sha = (bufs: Uint8Array[]) => {
+      const h = crypto.createHash("sha256");
+      for (const b of bufs) h.update(b);
+      return Buffer.from(h.digest());
+    };
+
+    const computeRoot = (hashesHex: string[]): string => {
+      if (hashesHex.length === 0) return sha([Buffer.from("AEVION-EMPTY-ANCHOR")]).toString("hex");
+      let layer: Buffer[] = hashesHex.map((h) => Buffer.from(h, "hex"));
+      while (layer.length > 1) {
+        const next: Buffer[] = [];
+        for (let i = 0; i < layer.length; i += 2) {
+          const l = layer[i];
+          const r = layer[i + 1] || layer[i];
+          next.push(sha([l, r]));
+        }
+        layer = next;
+      }
+      return layer[0].toString("hex");
+    };
+
+    const root = computeRoot(sorted.map((l) => l.contentHash));
+
+    res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
+    res.json({
+      version: "aevion-merkle-v1",
+      algorithm: "SHA-256(hex) pairwise",
+      leafCount: sorted.length,
+      merkleRoot: root,
+      publishedAt: new Date().toISOString(),
+      source: useDb ? "postgres" : "memory",
+      note: "Sort leaves by contentHash ASC, hash pairs (duplicate the last leaf when odd), repeat to a single root.",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "anchor failed";
+    console.error("[Pipeline] anchor error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * GET /api/pipeline/badge/:certId
  *
  * Embeddable SVG badge "Protected by AEVION" for external sites.

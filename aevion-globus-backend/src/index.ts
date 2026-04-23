@@ -125,6 +125,8 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pipeline/certificates.csv": { get: { summary: "Public registry as CSV (same filters as /certificates)" } },
       "/api/pipeline/certificate/{certId}/pdf": { get: { summary: "Printable PDF certificate with QR code" } },
       "/api/pipeline/bureau/stats": { get: { summary: "Aggregated Bureau dashboard: totals, by-kind, by-country, 30-day growth, latest" } },
+      "/api/pipeline/bureau/anchor": { get: { summary: "Merkle root over all active certificate hashes — tamper-evident registry anchor" } },
+      "/api/pipeline/lookup/{hash}": { get: { summary: "Reverse lookup — is this SHA-256 already protected in the AEVION registry?" } },
       "/api/pipeline/badge/{certId}": { get: { summary: "Embeddable SVG 'Protected by AEVION' badge" } },
       "/api/pipeline/health": { get: { summary: "Pipeline health & enabled crypto/legal steps" } },
     },

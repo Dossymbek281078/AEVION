@@ -51,6 +51,27 @@ type BureauStats = {
 type SortMode = "recent" | "popular" | "az";
 type KindKey = "" | "music" | "code" | "design" | "text" | "video" | "idea" | "other";
 
+type LookupResult =
+  | { protected: false; hash: string; source?: string }
+  | {
+      protected: true;
+      hash: string;
+      source?: string;
+      certificate: {
+        id: string; title: string; kind: string; author: string; location: string | null;
+        contentHash: string; algorithm: string; protectedAt: string; verifiedCount: number; verifyUrl: string;
+      };
+    };
+
+type Anchor = {
+  version: string;
+  algorithm: string;
+  leafCount: number;
+  merkleRoot: string;
+  publishedAt: string;
+  source?: string;
+};
+
 /* ──────────────────────────────────────────────────────────────
    Constants
    ────────────────────────────────────────────────────────────── */
@@ -95,6 +116,16 @@ function useDebounced<T>(value: T, delay = 250): T {
     return () => clearTimeout(t);
   }, [value, delay]);
   return v;
+}
+
+/* SHA-256 helpers running entirely in the browser */
+async function sha256OfBuffer(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function sha256OfFile(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  return sha256OfBuffer(buf);
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -157,6 +188,14 @@ export default function BureauPage() {
   const [lastSynced, setLastSynced] = useState<number | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const [hashInput, setHashInput] = useState("");
+  const [checkerBusy, setCheckerBusy] = useState(false);
+  const [checkerFile, setCheckerFile] = useState<{ name: string; size: number } | null>(null);
+  const [checkerResult, setCheckerResult] = useState<LookupResult | null>(null);
+  const [checkerError, setCheckerError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
   /* Load stats */
   useEffect(() => {
     let cancelled = false;
@@ -209,6 +248,72 @@ export default function BureauPage() {
   }, [debouncedQ, kind, sort, refreshNonce]);
 
   const handleRefresh = () => setRefreshNonce((n) => n + 1);
+
+  /* Load Merkle anchor alongside stats */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/pipeline/bureau/anchor"));
+        if (res.ok) {
+          const j = (await res.json()) as Anchor;
+          if (!cancelled) setAnchor(j);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [refreshNonce]);
+
+  /* Hash checker: send to backend */
+  async function runLookup(hashHex: string) {
+    setCheckerBusy(true);
+    setCheckerError(null);
+    setCheckerResult(null);
+    try {
+      const res = await fetch(apiUrl(`/api/pipeline/lookup/${hashHex}`));
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error || `HTTP ${res.status}`);
+      }
+      setCheckerResult(await res.json());
+    } catch (e) {
+      setCheckerError(e instanceof Error ? e.message : "lookup failed");
+    } finally {
+      setCheckerBusy(false);
+    }
+  }
+
+  async function handleFileCheck(file: File) {
+    try {
+      setCheckerBusy(true);
+      setCheckerError(null);
+      setCheckerResult(null);
+      setCheckerFile({ name: file.name, size: file.size });
+      const hex = await sha256OfFile(file);
+      setHashInput(hex);
+      await runLookup(hex);
+    } catch (e) {
+      setCheckerError(e instanceof Error ? e.message : "hashing failed");
+      setCheckerBusy(false);
+    }
+  }
+
+  async function handleManualCheck() {
+    const h = hashInput.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(h)) {
+      setCheckerError("Enter a 64-character lowercase hex SHA-256");
+      return;
+    }
+    setCheckerFile(null);
+    await runLookup(h);
+  }
+
+  function handleClearChecker() {
+    setHashInput("");
+    setCheckerResult(null);
+    setCheckerError(null);
+    setCheckerFile(null);
+  }
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -283,6 +388,140 @@ export default function BureauPage() {
               ))}
             </div>
           </div>
+        </section>
+
+        {/* ── File / Hash Checker (unique killer widget) ── */}
+        <section style={{ marginBottom: 14, borderRadius: 18, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)" }}>
+          <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid rgba(15,23,42,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, background: "rgba(13,148,136,0.1)", color: "#0d9488", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Instant check</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.01em" }}>Is your work already protected?</div>
+              <div style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.5, marginTop: 2 }}>
+                Drop a file or paste a SHA-256. We hash it locally in your browser — your file never leaves your device.
+              </div>
+            </div>
+            {anchor && (
+              <div title={`Merkle root over ${anchor.leafCount} certificates — tamper-evident registry anchor. Recomputable from the public registry.`} style={{ padding: "8px 12px", borderRadius: 10, background: "#0f172a", color: "#e2e8f0", minWidth: 220, cursor: "help" }}>
+                <div style={{ fontSize: 9, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.06em" }}>REGISTRY ANCHOR · {anchor.leafCount} leaves</div>
+                <div style={{ fontSize: 10.5, fontFamily: "ui-monospace, Menlo, monospace", color: "#5eead4", wordBreak: "break-all", marginTop: 2 }}>{anchor.merkleRoot.slice(0, 32)}…</div>
+                <div style={{ fontSize: 9, color: "#64748b", marginTop: 2 }}>{new Date(anchor.publishedAt).toLocaleString()}</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: "16px 22px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {/* Drop zone */}
+            <label
+              htmlFor="aevion-file-check"
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault(); setDragOver(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleFileCheck(f);
+              }}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                minHeight: 120, padding: "16px 14px", borderRadius: 14, cursor: "pointer",
+                border: `2px dashed ${dragOver ? "#0d9488" : "rgba(15,23,42,0.15)"}`,
+                background: dragOver ? "rgba(13,148,136,0.06)" : "#fff",
+                textAlign: "center", transition: "background .15s ease, border-color .15s ease",
+              }}
+            >
+              <div style={{ fontSize: 32, marginBottom: 6 }}>📁</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>Drop a file here</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>…or click to pick one. Hashed locally with Web Crypto SHA-256.</div>
+              {checkerFile && (
+                <div style={{ marginTop: 8, fontSize: 10.5, color: "#334155", background: "rgba(15,23,42,0.05)", padding: "4px 10px", borderRadius: 999, fontFamily: "ui-monospace, Menlo, monospace" }}>
+                  {checkerFile.name} · {(checkerFile.size / 1024).toFixed(1)} KB
+                </div>
+              )}
+              <input id="aevion-file-check" type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileCheck(f); }} />
+            </label>
+
+            {/* Hash input */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                or paste a SHA-256 (64 hex chars)
+              </label>
+              <textarea
+                value={hashInput}
+                onChange={(e) => setHashInput(e.target.value.replace(/\s+/g, ""))}
+                placeholder="e.g. 9985021b07c412915c03549e59459c2d514c41b8bb7d3c3ab33fef9c6d4ff06c"
+                rows={3}
+                style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", fontSize: 12, fontFamily: "ui-monospace, Menlo, monospace", color: "#0f172a", background: "#fff", resize: "none", outline: "none" }}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={handleManualCheck}
+                  disabled={checkerBusy}
+                  style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontSize: 13, fontWeight: 800, cursor: checkerBusy ? "wait" : "pointer", opacity: checkerBusy ? 0.6 : 1 }}
+                >
+                  {checkerBusy ? "Checking…" : "✓ Check registry"}
+                </button>
+                <button onClick={handleClearChecker} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Clear</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Result */}
+          {(checkerResult || checkerError || checkerBusy) && (
+            <div style={{ padding: "14px 22px 20px" }}>
+              {checkerBusy ? (
+                <div style={{ fontSize: 12, color: "#64748b" }}>Computing hash / querying registry…</div>
+              ) : checkerError ? (
+                <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", color: "#b91c1c", fontSize: 12, fontWeight: 700 }}>⚠ {checkerError}</div>
+              ) : checkerResult && checkerResult.protected ? (
+                <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.25)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 20 }}>✅</span>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: "#059669" }}>This work is already protected</div>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>Found in AEVION Bureau registry</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Title</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{checkerResult.certificate.title}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Author</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{checkerResult.certificate.author}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Protected</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{new Date(checkerResult.certificate.protectedAt).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Verifications</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{checkerResult.certificate.verifiedCount}×</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                    <Link href={`/verify/${checkerResult.certificate.id}`} style={{ padding: "8px 16px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>Open Certificate →</Link>
+                    <button onClick={() => copy(checkerResult.certificate.id, "Certificate ID")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy ID</button>
+                  </div>
+                </div>
+              ) : checkerResult && !checkerResult.protected ? (
+                <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.25)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 20 }}>🛡️</span>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: "#92400e" }}>Not protected yet</div>
+                      <div style={{ fontSize: 11, color: "#64748b", fontFamily: "ui-monospace, Menlo, monospace", wordBreak: "break-all" }}>{checkerResult.hash}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#78716c", lineHeight: 1.5, marginTop: 6 }}>
+                    This SHA-256 hash isn&apos;t in the AEVION registry yet. Register now — one click, 3 seconds, backed by international copyright law.
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <Link href="/qright" style={{ padding: "9px 18px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>🛡️ Protect now</Link>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
         </section>
 
         {/* ── Data status strip ── */}

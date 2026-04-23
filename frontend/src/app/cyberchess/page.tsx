@@ -131,8 +131,15 @@ const GK="aevion_chess_games_v1";
 function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
 function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;localStorage.setItem(GK,JSON.stringify(all))}catch{}}
 
+/* ═══ Resume snapshot — autosave in-progress game ═══ */
+type ResumeSnap={v:1;fen:string;hist:string[];fenHist:string[];pCol:"w"|"b";aiI:number;tcI:number;useCustom:boolean;customMin:number;customInc:number;timeP:number;timeA:number;capW:string[];capB:string[];ts:number};
+const RSK="aevion_chess_resume_v1";
+function loadResume():ResumeSnap|null{try{const s=localStorage.getItem(RSK);if(!s)return null;const r=JSON.parse(s);if(r?.v!==1||!Array.isArray(r.hist)||!r.fen)return null;return r as ResumeSnap}catch{return null}}
+function saveResume(s:ResumeSnap){try{localStorage.setItem(RSK,JSON.stringify(s))}catch{}}
+function clearResume(){try{localStorage.removeItem(RSK)}catch{}}
+
 /* ═══ Timer ═══ */
-function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){const[t,sT]=useState(ini);const r=useRef<any>(null);useEffect(()=>{sT(ini)},[ini]);useEffect(()=>{if(r.current)clearInterval(r.current);if(act&&ini>0){r.current=setInterval(()=>sT(v=>{if(v<=1){clearInterval(r.current);onT();return 0}return v-1}),1000)}return()=>{if(r.current)clearInterval(r.current)}},[act,ini>0]);return{time:t,addInc:useCallback(()=>{if(inc>0)sT(v=>v+inc)},[inc]),reset:useCallback(()=>sT(ini),[ini])}}
+function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){const[t,sT]=useState(ini);const r=useRef<any>(null);useEffect(()=>{sT(ini)},[ini]);useEffect(()=>{if(r.current)clearInterval(r.current);if(act&&ini>0){r.current=setInterval(()=>sT(v=>{if(v<=1){clearInterval(r.current);onT();return 0}return v-1}),1000)}return()=>{if(r.current)clearInterval(r.current)}},[act,ini>0]);return{time:t,addInc:useCallback(()=>{if(inc>0)sT(v=>v+inc)},[inc]),reset:useCallback(()=>sT(ini),[ini]),setTime:useCallback((v:number)=>sT(v),[])}}
 function fmt(s:number){return s<=0?"0:00":`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`}
 function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 
@@ -289,6 +296,7 @@ export default function CyberChessPage(){
   const[gamesModalOpen,sGamesModalOpen]=useState(false);
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
+  const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -323,6 +331,7 @@ export default function CyberChessPage(){
   },[pzCategory]);
 
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
+    const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
     fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
     fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
       // Build FEN-indexed opening database for transposition detection
@@ -609,6 +618,14 @@ export default function CyberChessPage(){
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel,hist.length,fenHist,browseIdx]);
 
+  /* ── Autosave in-progress game ── */
+  useEffect(()=>{
+    if(tab!=="play"||!on||over||setup||hist.length===0)return;
+    const snap:ResumeSnap={v:1,fen:game.fen(),hist,fenHist,pCol,aiI,tcI,useCustom,customMin,customInc,timeP:pT.time,timeA:aT.time,capW,capB,ts:Date.now()};
+    saveResume(snap);
+  },[bk,tab,on,over,setup,hist.length]);
+  useEffect(()=>{if(over)clearResume()},[over]);
+
   /* ── Premove trigger (fires instantly when it's player's turn) ── */
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
@@ -722,7 +739,23 @@ export default function CyberChessPage(){
     if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";console.log("[premove] queued",f+"→"+sq+(pre.pr?"="+pre.pr:""));sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();clearResume();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const resumeGame=(s:ResumeSnap)=>{
+    try{
+      sTab("play");
+      sTcI(s.tcI);sUseCustom(s.useCustom);sCustomMin(s.customMin);sCustomInc(s.customInc);
+      sPCol(s.pCol);sAiI(s.aiI);sFlip(s.pCol==="b");
+      const g=new Chess(s.fen);setGame(g);sBk(k=>k+1);
+      sHist(s.hist);sFenHist(s.fenHist);sCapW(s.capW);sCapB(s.capB);
+      sLm(null);sSel(null);sVm(new Set());sPromo(null);sThink(false);sPms([]);sPmSel(null);
+      sOver(null);sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);
+      sResumeOffer(null);
+      // Restore timer clocks on the next tick (after useTimer's [ini]-effect re-syncs)
+      setTimeout(()=>{pT.setTime(s.timeP);aT.setTime(s.timeA)},0);
+      showToast(`Партия восстановлена · ${s.hist.length} ходов`,"success");
+    }catch{showToast("Не удалось восстановить партию","error");clearResume();sResumeOffer(null)}
+  };
+  const discardResume=()=>{clearResume();sResumeOffer(null)};
   const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
   const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
@@ -925,6 +958,21 @@ export default function CyberChessPage(){
           <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:900,color:T.gold}}>{rat}</div><div style={{fontSize:14,color:T.dim}}>{rk.i} {rk.t}</div></div>
         </div>
       </div>
+
+      {/* Resume offer banner */}
+      {resumeOffer&&(()=>{
+        const s=resumeOffer;const ago=Math.round((Date.now()-s.ts)/60000);
+        const tcLabel=s.useCustom?`${s.customMin}+${s.customInc}`:(TCS[s.tcI]?.name||"?");
+        return <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:12,borderRadius:10,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d",flexWrap:"wrap"}}>
+          <div style={{fontSize:18}}>⏸</div>
+          <div style={{flex:"1 1 200px",minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#92400e"}}>Незавершённая партия</div>
+            <div style={{fontSize:13,color:"#b45309"}}>{s.hist.length} ходов · {tcLabel} · {s.pCol==="w"?"белыми":"чёрными"} · {ago<1?"только что":`${ago} мин назад`}</div>
+          </div>
+          <button onClick={()=>resumeGame(s)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>▶ Продолжить</button>
+          <button onClick={discardResume} style={{padding:"8px 14px",borderRadius:8,border:`1px solid #fcd34d`,background:"#fff",color:"#92400e",fontWeight:700,fontSize:13,cursor:"pointer"}}>Отменить</button>
+        </div>;
+      })()}
 
       {/* Tabs */}
       <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>

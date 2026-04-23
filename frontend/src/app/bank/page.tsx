@@ -27,6 +27,7 @@ import { ChessWinnings } from "./_components/ChessWinnings";
 import { DeviceManagement } from "./_components/DeviceManagement";
 import { EcosystemPulse } from "./_components/EcosystemPulse";
 import { HelpMenu } from "./_components/HelpMenu";
+import { MobileTabBar } from "./_components/MobileTabBar";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { ReferralsPanel } from "./_components/ReferralsPanel";
@@ -291,6 +292,7 @@ function BankContent() {
           <ReferralsPanel account={account} notify={notify} />
           <SnapshotExport account={account} operations={operations} notify={notify} />
           <HelpMenu accountId={account.id} notify={notify} />
+          <MobileTabBar />
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}

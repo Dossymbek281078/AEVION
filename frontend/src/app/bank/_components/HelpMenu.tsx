@@ -69,6 +69,7 @@ export function HelpMenu({
   return (
     <div
       ref={menuRef}
+      className="aevion-bank-helpmenu-offset"
       style={{
         position: "fixed" as const,
         right: 20,

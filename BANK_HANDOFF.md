@@ -8,9 +8,9 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 
 - **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer` — не отдельное приложение, дерево совпадает со всем `aevion-core`).
 - **Ветка:** `bank-payment-layer`.
-- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `3b9b6f7`.
-- **Last commit:** `3b9b6f7 feat(bank): animated balance ticker + direction indicator`.
-- **Ahead of `main`:** 28 commits (1 modular rewrite + 21 features + 5 refactors + 1 polish).
+- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `3cf6708`.
+- **Last commit:** `3cf6708 feat(bank): Peer Standing — network-rank widget across 4 dimensions`.
+- **Ahead of `main`:** 34 commits (1 modular rewrite + 25 features + 5 refactors + 3 polish/fix).
 - **PR URL (unmerged):** https://github.com/Dossymbek281078/AEVION/pull/new/bank-payment-layer
 - **Build:** green. `npm run verify` (from `aevion-core` root) passes.
 
@@ -45,6 +45,11 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 | 20 | `cfd43c6` | Wealth Forecast — 3 scenarios × 3 horizons + goal ETAs |
 | 21 | `487bf47` | Achievements — 18 unlockable badges across 4 tracks |
 | 22 | `3b9b6f7` | Animated balance ticker + direction indicator |
+| fix | `fd0cd7a` | Runtime hardening — SSR load, NaN guards, responsive grids |
+| 23 | `e4817fb` | `?demo=1` seed mode + /bank route error boundary |
+| fix | `406ab91` | Demo Reset purges seeded contacts + handoff docs |
+| 24 | `17a7bc0` | Ecosystem Pulse + shimmer skeletons + goal confetti |
+| 25 | `3cf6708` | Peer Standing — network-rank widget across 4 dimensions |
 
 ## Architecture
 
@@ -140,34 +145,38 @@ Open:
 
 ## E2E demo sequence для инвестора
 
+Открой `http://localhost:3000/bank?demo=1` (после логина и provision) — сразу видны контакты/цели/recurring/circle/split/gifts.
+
 1. Login (`/auth`) → Bank показывает "Create your AEVION Bank account" → клик → wallet creates.
-2. Top up 500 AEC → balance animates up with a green ▲, CoinTower заполняется на 5 монет, TotalEarnings + WealthForecast sparkline обновляются, AuditPanel показывает первую QSign-подпись.
-3. Переключи currency на USD/EUR/KZT — **всё** (Hero, WalletSummary, RoyaltyStream, ChessWinnings, TransactionList, RecurringPayments, SavingsGoals, SplitBills, SpendingInsights, WealthForecast) пересчитывается универсально.
-4. Посмотри WealthForecast: переключи scenario "Optimistic" → 1 year → видишь proyected balance. Включи один goal → появляется ETA к calendar-дате.
-5. Enable Biometric (Touch ID / Windows Hello) с threshold 100 AEC → Achievement "Biometric shield" unlocks. Попробуй Send 150 AEC — браузер запросит биометрию, потом появится "Signed & sealed" achievement.
-6. Create savings goal "MacBook Pro" target 1000, add 200 AEC → прогресс 20%, forecast обновляется, WealthForecast ETA появляется.
-7. Create recurring "Netflix" 15 AEC weekly → появится в списке, executor запустится через 30s.
-8. Create circle с контактом → напиши сообщение → Request 50 AEC → copy link → achievement "Circle host" unlocks.
-9. Send gift с темой Thanks → посмотри preview → Send → gift появляется в sent history.
-10. Request salary advance 500 AEC (при tier ≥ growing) → balance +500, outstanding тикает вниз каждые 4s.
-11. TrustScoreCard: посмотри progress bar "Growing → Trusted" + "Fastest wins" — список шагов до следующего tier.
-12. AchievementsPanel: фильтр по Creator / Security / Banking / Ecosystem. Видны earned (green ✓) vs locked с прогресс-баром.
-13. Ask AI Advisor: "Should I take an advance?" → ответ учитывает balance + trust + outstanding + goals.
-14. ActivityTimeline отмечает "First recipient" / "Large" аномалии по свежим переводам.
+2. (`?demo=1`) Баннер "Demo data loaded" сверху — подтверждение что seed применён.
+3. Top up 500 AEC → balance animates up with a green ▲, CoinTower заполняется на 5 монет, TotalEarnings + EcosystemPulse обновляются, AuditPanel показывает первую QSign-подпись.
+4. Переключи currency AEC → USD → EUR → KZT — **всё** (Hero, WalletSummary, TotalEarnings, WealthForecast, RoyaltyStream, ChessWinnings, RecurringPayments, SavingsGoals, SplitBills, SpendingInsights, EcosystemPulse, PeerStanding) пересчитывается универсально.
+5. EcosystemPulse — наведи на плитку QRight / Chess / Planet / Banking: hover-lift + "Open QRight →" deep-link.
+6. WealthForecast: переключи scenario "Optimistic" → 1 year → видишь projected balance. Под ним ETA до MacBook / Bali / Emergency целей (посевные).
+7. TrustScoreCard: progress bar "Growing → Trusted" + "Fastest wins" — top-3 шага до следующего tier.
+8. PeerStanding: "Best dimension: X · Top N %" + 4 ряда с peer-median маркером.
+9. AchievementsPanel: фильтр по Creator / Security / Banking / Ecosystem. Earned (green ✓) vs locked с прогресс-баром.
+10. Add 700 AEC to "Bali" goal → confetti burst + completedAt ставится + goal переходит в "Withdraw all" режим. Achievement "Goal-setter" unlocks.
+11. Enable Biometric (Touch ID / Windows Hello) с threshold 100 AEC → Achievement "Biometric shield" unlocks. Попробуй Send 150 AEC — браузер запросит биометрию, потом "Signed & sealed" unlocks.
+12. Request salary advance 500 AEC (при tier ≥ growing) → balance +500 animates, outstanding тикает вниз каждые 4s.
+13. Ask AI Advisor: "Should I take an advance?" → ответ учитывает balance + trust + outstanding + goals + royalties.
+14. ActivityTimeline отмечает "First recipient" / "Large" / "Late night" аномалии по свежим переводам.
 15. Export CSV (TransactionList → Export CSV) → скачивается файл с реальными операциями.
+16. (опционально) Trigger error — временно кинуть `throw` в каком-нибудь компоненте → error.tsx ловит, показывает Retry + Back-to-home + digest.
 
 ## Next session picks
 
 Outstanding choices before we write more code:
 
 1. **Real backend wiring** — координация с backend-сессией, чтобы mock'и постепенно подменить на реальные endpoints. Нужно синхронное планирование (см. "Backend dependencies queue" ниже).
-2. **Mobile responsive pass** — `<480px` checks on WealthForecast, AchievementsPanel, TrustScoreCard radar. Grid minmax tuning, possibly a mobile bottom-tab-bar for section jumps.
-3. **Accessibility audit + Lighthouse** — прогнать по странице, добить красные места (WealthForecast tiles, CoinTower SVG, radar chart alt-text).
-4. **Investor-demo script** — scripted `?demo=1` mode that seeds recurring/goals/circles/signatures so the page is always full; great for screencasts.
-5. **Snapshot export** — one-click PNG of your wealth state (balance + trust + achievements); viral share coefficient.
-6. **Referral program** — "invite and earn X AEC" loop; classic fintech growth lever.
+2. **Accessibility audit + Lighthouse** — прогнать по странице, добить красные места (WealthForecast tiles, CoinTower SVG, radar chart alt-text, EcosystemPulse link aria-labels).
+3. **Snapshot export** — one-click PNG of your wealth state (balance + trust + achievements + peer standing); viral share coefficient.
+4. **Referral program** — "invite and earn X AEC" loop; classic fintech growth lever.
+5. **Onboarding tour** — first-visit coach-marks over Total Earnings → Ecosystem Pulse → Trust Score → Achievements so new users know what to click.
+6. **Mobile tab bar** — sticky bottom bar for section jumps on <768px (hero / earnings / ecosystem / trust / actions / history).
+7. **Open PR** — branch sits at 34 commits unmerged. Create PR draft when ready.
 
-По умолчанию: начни с **п. 2 (mobile pass)** — чтобы демо на телефоне не ломалось.
+По умолчанию: начни с **п. 1 (backend wiring)** — все mock endpoints уже размечены `// TODO backend:` комментами и перечислены ниже. Frontend side готов дропнуть их как только реальные API придут.
 
 ## Important gotchas
 

@@ -14,6 +14,7 @@ import {
   PipelineStrategy,
 } from "../services/qcoreai/orchestrator";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
+import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import {
   buildHistoryContext,
   createRun,
@@ -111,15 +112,23 @@ qcoreaiRouter.get("/pricing", (_req, res) => {
   });
 });
 
-qcoreaiRouter.get("/health", (_req, res) => {
+qcoreaiRouter.get("/health", async (_req, res) => {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
+  // Trigger lazy DB probe so the storage mode is known at health-check time.
+  try {
+    const { ensureQCoreTables } = await import("../lib/ensureQCoreTables");
+    const { getPool } = await import("../lib/dbPool");
+    await ensureQCoreTables(getPool());
+  } catch { /* probe errors are reflected via isDbReady() */ }
   res.json({
     service: "qcoreai",
     ok: true,
     configuredProviders: configured.map((p) => p.id),
     totalProviders: providers.length,
     activeProvider: resolveProvider(),
+    storage: isDbReady() ? "postgres" : "in-memory",
+    storageError: isDbReady() ? null : getDbError(),
     at: new Date().toISOString(),
   });
 });

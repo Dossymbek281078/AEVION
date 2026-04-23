@@ -190,6 +190,7 @@ export default function BureauPage() {
 
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [previewCert, setPreviewCert] = useState<Certificate | null>(null);
+  const [activityTick, setActivityTick] = useState(0);
   const [hashInput, setHashInput] = useState("");
   const [checkerBusy, setCheckerBusy] = useState(false);
   const [checkerFile, setCheckerFile] = useState<{ name: string; size: number } | null>(null);
@@ -264,6 +265,29 @@ export default function BureauPage() {
     })();
     return () => { cancelled = true; };
   }, [refreshNonce]);
+
+  /* Activity auto-tick (every 15s when tab is visible) — re-fetches stats */
+  useEffect(() => {
+    const onVisibility = () => { /* no-op trigger by interval */ };
+    document.addEventListener("visibilitychange", onVisibility);
+    const i = setInterval(() => {
+      if (document.visibilityState === "visible") setActivityTick((n) => n + 1);
+    }, 15000);
+    return () => { document.removeEventListener("visibilitychange", onVisibility); clearInterval(i); };
+  }, []);
+
+  useEffect(() => {
+    if (activityTick === 0) return;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/pipeline/bureau/stats"));
+        if (res.ok) {
+          setStats(await res.json());
+          setLastSynced(Date.now());
+        }
+      } catch {}
+    })();
+  }, [activityTick]);
 
   /* Hash checker: send to backend */
   async function runLookup(hashHex: string) {
@@ -661,6 +685,38 @@ export default function BureauPage() {
           </div>
         </section>
 
+        {/* ── Live activity feed ── */}
+        {stats && stats.latest && stats.latest.length > 0 && (
+          <section style={{ marginBottom: 26, padding: "16px 18px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 8, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981", animation: "pulse 1.8s infinite" }} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>Live activity</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8" }}>Auto-refresh every 15s · last {stats.latest.length} certifications</div>
+                </div>
+              </div>
+              {stats.generatedAt && <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "ui-monospace, Menlo, monospace" }}>updated {new Date(stats.generatedAt).toLocaleTimeString()}</div>}
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {stats.latest.map((l) => (
+                <div key={l.id} style={{ display: "grid", gridTemplateColumns: "20px 1fr auto auto", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.04)" }}>
+                  <span style={{ fontSize: 14 }}>{KIND_ICONS[l.kind] || "📦"}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</div>
+                    <div style={{ fontSize: 10.5, color: "#64748b" }}>by {l.author}{l.location ? ` · ${l.location}` : ""}</div>
+                  </div>
+                  <span style={{ fontSize: 10, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{new Date(l.protectedAt).toLocaleDateString()}</span>
+                  <Link href={`/verify/${l.id}`} style={{ padding: "4px 10px", borderRadius: 6, background: "#fff", border: "1px solid rgba(15,23,42,0.12)", color: "#0d9488", textDecoration: "none", fontSize: 10, fontWeight: 800 }}>Verify →</Link>
+                </div>
+              ))}
+            </div>
+            <style jsx>{`
+              @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+            `}</style>
+          </section>
+        )}
+
         {/* ── How it works ── */}
         <section style={{ marginBottom: 26 }}>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", marginBottom: 12, letterSpacing: "-0.01em" }}>How AEVION IP Bureau works</div>
@@ -873,6 +929,110 @@ export default function BureauPage() {
                   <span style={{ fontSize: 10, fontWeight: 700, color: l.color }}>{l.scope}</span>
                   <span style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", fontFamily: "ui-monospace, Menlo, monospace" }}>{l.article}</span>
                 </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Pricing plans ── */}
+        <section style={{ marginBottom: 28 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.01em" }}>Simple, honest pricing</div>
+              <div style={{ fontSize: 13, color: "#64748b" }}>Every plan includes 3-layer cryptographic protection, international legal basis, and public verifiability.</div>
+            </div>
+            <div style={{ fontSize: 11, color: "#0d9488", fontWeight: 800, padding: "4px 10px", borderRadius: 999, background: "rgba(13,148,136,0.08)", border: "1px solid rgba(13,148,136,0.2)" }}>
+              Save 20% with annual billing
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            {[
+              {
+                name: "Free",
+                price: "$0",
+                per: "forever",
+                tagline: "For individual creators getting started.",
+                color: "#64748b",
+                bg: "#fff",
+                features: [
+                  "Up to 3 certificates / month",
+                  "SHA-256 + HMAC + Ed25519 protection",
+                  "Public verification page + QR",
+                  "Embeddable SVG badge",
+                  "Community support",
+                ],
+                cta: { label: "Start free", href: "/qright", primary: false },
+              },
+              {
+                name: "Pro",
+                price: "$29",
+                per: "per month",
+                tagline: "For serious creators and small teams.",
+                color: "#0d9488",
+                bg: "linear-gradient(180deg, rgba(13,148,136,0.06), rgba(6,182,212,0.04))",
+                featured: true,
+                features: [
+                  "Unlimited certificates",
+                  "Batch protection (upload many files)",
+                  "CSV + JSON registry export",
+                  "Priority verification & support",
+                  "Custom embed badges",
+                  "Merkle-root inclusion proofs",
+                ],
+                cta: { label: "Upgrade to Pro", href: "/auth?plan=pro", primary: true },
+              },
+              {
+                name: "Enterprise",
+                price: "Custom",
+                per: "annual",
+                tagline: "For studios, publishers, labels, law firms.",
+                color: "#8b5cf6",
+                bg: "#fff",
+                features: [
+                  "REST API + webhooks",
+                  "White-label certificate design",
+                  "SSO (SAML / OIDC)",
+                  "Dedicated Merkle anchor + audit log",
+                  "On-prem / regional deployment",
+                  "SLA & named support engineer",
+                ],
+                cta: { label: "Talk to sales", href: "mailto:yahiin1978@gmail.com?subject=AEVION%20Enterprise%20inquiry", primary: false, external: true },
+              },
+            ].map((p) => (
+              <div key={p.name} style={{
+                borderRadius: 16,
+                padding: "20px 18px 18px",
+                background: p.bg,
+                border: `1px solid ${p.featured ? "rgba(13,148,136,0.4)" : "rgba(15,23,42,0.08)"}`,
+                position: "relative",
+                boxShadow: p.featured ? "0 12px 30px rgba(13,148,136,0.15)" : "none",
+              }}>
+                {p.featured && (
+                  <div style={{ position: "absolute", top: -10, left: 18, padding: "3px 10px", borderRadius: 999, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontSize: 10, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                    Most popular
+                  </div>
+                )}
+                <div style={{ fontSize: 12, fontWeight: 800, color: p.color, letterSpacing: "0.05em", textTransform: "uppercase" }}>{p.name}</div>
+                <div style={{ fontSize: 34, fontWeight: 900, color: "#0f172a", marginTop: 6, letterSpacing: "-0.025em", lineHeight: 1 }}>{p.price}</div>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{p.per}</div>
+                <div style={{ fontSize: 12.5, color: "#475569", marginTop: 10, lineHeight: 1.5 }}>{p.tagline}</div>
+                <ul style={{ listStyle: "none", padding: 0, margin: "14px 0 16px", display: "grid", gap: 6 }}>
+                  {p.features.map((f) => (
+                    <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: "#0f172a" }}>
+                      <span style={{ color: p.color, fontWeight: 900, flexShrink: 0 }}>✓</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                {p.cta.external ? (
+                  <a href={p.cta.href} style={{ display: "block", textAlign: "center", padding: "11px 18px", borderRadius: 10, textDecoration: "none", fontWeight: 800, fontSize: 13, background: p.cta.primary ? "linear-gradient(135deg, #0d9488, #06b6d4)" : "#fff", color: p.cta.primary ? "#fff" : "#0f172a", border: p.cta.primary ? "none" : "1px solid rgba(15,23,42,0.12)" }}>
+                    {p.cta.label} →
+                  </a>
+                ) : (
+                  <Link href={p.cta.href} style={{ display: "block", textAlign: "center", padding: "11px 18px", borderRadius: 10, textDecoration: "none", fontWeight: 800, fontSize: 13, background: p.cta.primary ? "linear-gradient(135deg, #0d9488, #06b6d4)" : "#fff", color: p.cta.primary ? "#fff" : "#0f172a", border: p.cta.primary ? "none" : "1px solid rgba(15,23,42,0.12)" }}>
+                    {p.cta.label} →
+                  </Link>
+                )}
               </div>
             ))}
           </div>

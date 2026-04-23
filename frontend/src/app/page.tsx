@@ -76,6 +76,26 @@ export default function HomePage() {
     Array<{ id: string; submissionTitle?: string; artifactType?: string; voteCount?: number; voteAverage?: number | null }>
   >([]);
 
+  const [bureauStats, setBureauStats] = useState<{ certificates: number; verifications: number; countries: number; source?: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/pipeline/bureau/stats"));
+        if (!res.ok) return;
+        const j = await res.json();
+        if (cancelled) return;
+        setBureauStats({
+          certificates: j?.totals?.certificates ?? 0,
+          verifications: j?.totals?.verifications ?? 0,
+          countries: j?.totals?.countriesApprox ?? 0,
+          source: j?.source,
+        });
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const [selectedGeo, setSelectedGeo] = useState<{
     country?: string;
     city?: string;
@@ -425,6 +445,41 @@ export default function HomePage() {
               <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>{c.d}</div>
             </Link>
           ))}
+        </section>
+
+        {/* AEVION Bureau live strip */}
+        <section style={{ marginBottom: 28, padding: "22px 24px", borderRadius: 20, background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)", color: "#fff", position: "relative", overflow: "hidden" }}>
+          <div aria-hidden style={{ position: "absolute", top: -60, right: -40, width: 260, height: 260, borderRadius: "50%", background: "radial-gradient(closest-side, rgba(13,148,136,0.35), rgba(13,148,136,0))", filter: "blur(12px)" }} />
+          <div style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr auto", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 999, background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.35)", fontSize: 10, fontWeight: 800, color: "#5eead4", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }} />
+                AEVION Digital IP Bureau · Live
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.015em", marginBottom: 6 }}>
+                {bureauStats ? (
+                  <>Protecting <span style={{ color: "#5eead4" }}>{bureauStats.certificates.toLocaleString()}</span> works across <span style={{ color: "#5eead4" }}>{bureauStats.countries}</span> countries.</>
+                ) : (
+                  <>Cryptographic proof of authorship — global, instant, legal.</>
+                )}
+              </div>
+              <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.55, maxWidth: 620 }}>
+                Drop a file on the Bureau and see in 3 seconds whether it&apos;s already protected.
+                Every certificate carries a Merkle inclusion proof — anyone can verify without trusting us.
+              </div>
+              {bureauStats && (
+                <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 11, color: "#94a3b8", flexWrap: "wrap" }}>
+                  <span>✓ {bureauStats.verifications.toLocaleString()} public verifications</span>
+                  <span>· SHA-256 + Ed25519 + Shamir SSS</span>
+                  <span>· Berne · WIPO · TRIPS · eIDAS · ESIGN</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "stretch" }}>
+              <Link href="/bureau" style={{ padding: "12px 22px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14, textAlign: "center", boxShadow: "0 8px 24px rgba(6,182,212,0.35)" }}>Open Bureau →</Link>
+              <Link href="/qright" style={{ padding: "10px 22px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13, textAlign: "center" }}>🛡️ Protect a work</Link>
+            </div>
+          </div>
         </section>
 
         {/* How it works — 4-step pipeline */}

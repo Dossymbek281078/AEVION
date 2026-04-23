@@ -396,16 +396,44 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
 /**
  * GET /api/pipeline/certificates
  *
- * List all certificates (public registry).
+ * List certificates (public registry) with search / filter / sort / limit.
+ *   ?q=        full-text-ish (title/author/city/country)
+ *   ?kind=     music|code|design|text|video|idea|other
+ *   ?sort=     recent (default) | popular | az
+ *   ?limit=    1..200 (default 60)
  */
-pipelineRouter.get("/certificates", async (_req, res) => {
+pipelineRouter.get("/certificates", async (req, res) => {
   try {
     await ensureTables();
 
-    const { rows } = await pool.query(
-      `SELECT "id","objectId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
-       FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`
-    );
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const kind = typeof req.query.kind === "string" ? req.query.kind.trim().toLowerCase() : "";
+    const sort = typeof req.query.sort === "string" ? req.query.sort.trim() : "recent";
+    const limitRaw = parseInt(String(req.query.limit || "60"), 10);
+    const limit = Math.min(200, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 60));
+
+    const where: string[] = [`"status" = 'active'`];
+    const params: unknown[] = [];
+    if (q) {
+      params.push(`%${q.toLowerCase()}%`);
+      const p = `$${params.length}`;
+      where.push(`(LOWER("title") LIKE ${p} OR LOWER(COALESCE("authorName",'')) LIKE ${p} OR LOWER(COALESCE("country",'')) LIKE ${p} OR LOWER(COALESCE("city",'')) LIKE ${p})`);
+    }
+    if (kind && ["music","code","design","text","video","idea","other"].includes(kind)) {
+      params.push(kind);
+      where.push(`"kind" = $${params.length}`);
+    }
+
+    let orderBy = `"protectedAt" DESC`;
+    if (sort === "popular") orderBy = `"verifiedCount" DESC, "protectedAt" DESC`;
+    else if (sort === "az") orderBy = `LOWER("title") ASC`;
+
+    params.push(limit);
+    const limitIdx = `$${params.length}`;
+
+    const sql = `SELECT "id","objectId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
+                 FROM "IPCertificate" WHERE ${where.join(" AND ")} ORDER BY ${orderBy} LIMIT ${limitIdx}`;
+    const { rows } = await pool.query(sql, params);
 
     res.json({
       certificates: rows.map((r: any) => ({
@@ -421,11 +449,162 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         verifyUrl: `https://aevion.vercel.app/verify/${r.id}`,
       })),
       total: rows.length,
+      query: { q, kind: kind || null, sort, limit },
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list failed";
     console.error("[Pipeline] certificates error:", msg);
     res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/bureau/stats
+ *
+ * Aggregated Bureau dashboard data (single round-trip for frontend).
+ */
+pipelineRouter.get("/bureau/stats", async (_req, res) => {
+  try {
+    await ensureTables();
+
+    const totalsQ = pool.query(`
+      SELECT
+        COUNT(*)::int AS "totalCerts",
+        COALESCE(SUM("verifiedCount"),0)::int AS "totalVerifications",
+        COUNT(DISTINCT COALESCE(LOWER("authorName"),''))::int AS "authorsApprox",
+        COUNT(DISTINCT COALESCE(LOWER("country"),''))::int AS "countriesApprox",
+        MAX("protectedAt") AS "lastProtectedAt"
+      FROM "IPCertificate" WHERE "status" = 'active';
+    `);
+
+    const byKindQ = pool.query(`
+      SELECT "kind", COUNT(*)::int AS "count", COALESCE(SUM("verifiedCount"),0)::int AS "verifications"
+      FROM "IPCertificate" WHERE "status" = 'active'
+      GROUP BY "kind" ORDER BY "count" DESC;
+    `);
+
+    const byCountryQ = pool.query(`
+      SELECT COALESCE("country",'Unknown') AS "country", COUNT(*)::int AS "count"
+      FROM "IPCertificate" WHERE "status" = 'active'
+      GROUP BY COALESCE("country",'Unknown') ORDER BY "count" DESC LIMIT 10;
+    `);
+
+    const growthQ = pool.query(`
+      SELECT TO_CHAR(date_trunc('day', "protectedAt"), 'YYYY-MM-DD') AS "day", COUNT(*)::int AS "count"
+      FROM "IPCertificate" WHERE "status" = 'active' AND "protectedAt" >= NOW() - INTERVAL '30 days'
+      GROUP BY 1 ORDER BY 1 ASC;
+    `);
+
+    const latestQ = pool.query(`
+      SELECT "id","title","kind","authorName","country","city","contentHash","protectedAt","verifiedCount"
+      FROM "IPCertificate" WHERE "status" = 'active'
+      ORDER BY "protectedAt" DESC LIMIT 5;
+    `);
+
+    const [totals, byKind, byCountry, growth, latest] = await Promise.all([totalsQ, byKindQ, byCountryQ, growthQ, latestQ]);
+
+    // Fill 30-day series with zeros for missing days.
+    const map = new Map<string, number>((growth.rows as any[]).map((r) => [r.day, r.count]));
+    const series: Array<{ day: string; count: number }> = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(today.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      series.push({ day: key, count: map.get(key) ?? 0 });
+    }
+
+    const t = (totals.rows?.[0] || {}) as any;
+
+    res.json({
+      totals: {
+        certificates: t.totalCerts || 0,
+        verifications: t.totalVerifications || 0,
+        authorsApprox: t.authorsApprox || 0,
+        countriesApprox: t.countriesApprox || 0,
+        lastProtectedAt: t.lastProtectedAt || null,
+      },
+      byKind: (byKind.rows as any[]).map((r) => ({ kind: r.kind, count: r.count, verifications: r.verifications })),
+      byCountry: (byCountry.rows as any[]).map((r) => ({ country: r.country, count: r.count })),
+      growth30d: series,
+      latest: (latest.rows as any[]).map((r) => ({
+        id: r.id,
+        title: r.title,
+        kind: r.kind,
+        author: r.authorName || "Anonymous",
+        location: [r.city, r.country].filter(Boolean).join(", ") || null,
+        contentHash: r.contentHash,
+        protectedAt: r.protectedAt,
+        verifiedCount: r.verifiedCount || 0,
+      })),
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "stats failed";
+    console.error("[Pipeline] bureau/stats error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/badge/:certId
+ *
+ * Embeddable SVG badge "Protected by AEVION" for external sites.
+ * Returns image/svg+xml with caching headers.
+ */
+pipelineRouter.get("/badge/:certId", async (req, res) => {
+  try {
+    await ensureTables();
+    const { certId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "id","title","kind","contentHash","verifiedCount" FROM "IPCertificate" WHERE "id" = $1 AND "status" = 'active'`,
+      [certId]
+    );
+
+    const escapeXml = (s: string) =>
+      String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+
+    if (rows.length === 0) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="36" viewBox="0 0 220 36">
+  <rect width="220" height="36" rx="8" fill="#fee2e2"/>
+  <text x="14" y="22" font-family="system-ui,Arial" font-size="12" font-weight="700" fill="#b91c1c">Certificate not found</text>
+</svg>`;
+      return res.status(404).send(svg);
+    }
+
+    const cert = rows[0] as any;
+    const title = escapeXml((cert.title || "").slice(0, 42));
+    const hashShort = escapeXml((cert.contentHash || "").slice(0, 12));
+    const verifiedCount = Number(cert.verifiedCount || 0);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="58" viewBox="0 0 280 58">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0d9488"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="280" height="58" rx="10" fill="url(#bg)"/>
+  <rect x="0" y="54" width="280" height="4" rx="0" fill="url(#accent)"/>
+  <circle cx="24" cy="28" r="12" fill="url(#accent)"/>
+  <text x="24" y="33" text-anchor="middle" font-family="system-ui,Arial" font-size="14" font-weight="900" fill="#0f172a">✓</text>
+  <text x="46" y="20" font-family="system-ui,Arial" font-size="9" font-weight="700" fill="#94a3b8" letter-spacing="0.08em">PROTECTED BY AEVION</text>
+  <text x="46" y="36" font-family="system-ui,Arial" font-size="12" font-weight="800" fill="#ffffff">${title}</text>
+  <text x="46" y="50" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="#5eead4">${hashShort}… · ${verifiedCount} verifications</text>
+</svg>`;
+
+    res.status(200).send(svg);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "badge failed";
+    console.error("[Pipeline] badge error:", msg);
+    if (!res.headersSent) res.status(500).send(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="36"><text x="10" y="22" font-family="Arial" font-size="12" fill="#b91c1c">Badge error</text></svg>`);
   }
 });
 /**

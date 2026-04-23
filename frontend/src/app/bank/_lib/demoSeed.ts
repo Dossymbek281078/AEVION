@@ -5,7 +5,7 @@
 // Safe to call repeatedly — re-seeding overwrites the demo sets without
 // touching anything the user created outside the demo namespace.
 
-import { saveContact } from "./contacts";
+import { listContacts, removeContact, saveContact } from "./contacts";
 import type { Circle } from "./circles";
 import { saveCircles } from "./circles";
 import type { Gift } from "./gifts";
@@ -234,9 +234,12 @@ export function clearDemoSeed(): void {
   saveCircles([]);
   saveSplits([]);
   saveGifts([]);
+  // Purge demo-prefixed contacts only — user-added contacts stay.
+  for (const c of listContacts()) {
+    if (c.id.startsWith("acc_demo_")) removeContact(c.id);
+  }
   try {
     localStorage.removeItem(DEMO_FLAG_KEY);
-    // Contacts: leave demo peers in place (harmless) — user can trim manually.
   } catch {
     // ignore
   }

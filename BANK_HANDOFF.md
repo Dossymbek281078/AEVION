@@ -126,9 +126,17 @@ cd C:\Users\user\aevion-core\aevion-globus-backend ; npm run dev
 cd C:\Users\user\aevion-core\frontend ; npm run dev
 ```
 
-Open: **http://localhost:3000/bank**
+Open:
+- **http://localhost:3000/bank** — обычный режим, пустой wallet для нового пользователя.
+- **http://localhost:3000/bank?demo=1** — auto-seed goals / recurring / circles / splits / gifts / contacts. Баннер сверху показывает «Demo data loaded» с кнопкой Reset.
+
+`?demo=1` безопасен — не трогает реальный баланс / операции, пишет только в localStorage и помечается флагом `aevion_bank_demo_seeded_v1`; повторный переход с параметром не перезаписывает данные пока не сделан Reset.
 
 Если concurrently не установлен в корне — не использовать `npm run dev` из `aevion-core/`, запускать два сервиса отдельно (как выше).
+
+## Error boundary
+
+`/bank` имеет route-level error boundary (`error.tsx`). Если какой-либо client component падает в render, страница показывает red-accent card с Retry / Back-to-home, digest-идентификатором ошибки и `console.error` в DevTools. Backend-данные (balance, operations, audit) не теряются.
 
 ## E2E demo sequence для инвестора
 

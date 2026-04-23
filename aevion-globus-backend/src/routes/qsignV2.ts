@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional, type JwtPayload } from "../lib/authJwt";
 import { ensureQSignV2Tables } from "../lib/qsignV2/ensureTables";
@@ -15,6 +16,48 @@ import {
   getActiveKey,
 } from "../lib/qsignV2/keyRegistry";
 import type { QSignVerifyResult } from "../lib/qsignV2/types";
+
+/* ───────── rate limits ─────────
+ * Per-IP token-bucket style windows guarding the two expensive write paths.
+ * Limits are deliberately generous for legitimate UI use but cheap to defend
+ * against scripted abuse. Both respect x-forwarded-for via express trust proxy
+ * when configured at the app level.
+ */
+const signLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "rate_limit_exceeded",
+    endpoint: "/sign",
+    limit: "60 requests per minute per IP",
+  },
+});
+
+const revokeLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "rate_limit_exceeded",
+    endpoint: "/revoke/:id",
+    limit: "10 requests per minute per IP",
+  },
+});
+
+const rotateLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "rate_limit_exceeded",
+    endpoint: "/keys/rotate",
+    limit: "5 requests per minute per IP",
+  },
+});
 
 /**
  * QSign v2 — Unique Digital Signature Platform
@@ -125,7 +168,7 @@ qsignV2Router.get("/health", async (_req, res) => {
 
 /* ───────── POST /sign ───────── */
 
-qsignV2Router.post("/sign", async (req, res) => {
+qsignV2Router.post("/sign", signLimiter, async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
 
@@ -355,7 +398,7 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
  *     causalSignatureId?: string  // link to a newer signature that supersedes this one }
  */
 
-qsignV2Router.post("/revoke/:id", async (req, res) => {
+qsignV2Router.post("/revoke/:id", revokeLimiter, async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
 
@@ -527,7 +570,7 @@ qsignV2Router.get("/keys/:kid", async (req, res) => {
  *   }
  */
 
-qsignV2Router.post("/keys/rotate", async (req, res) => {
+qsignV2Router.post("/keys/rotate", rotateLimiter, async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
 

@@ -75,7 +75,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.4.0",
+      version: "0.5.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -90,6 +90,18 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qsign/sign": { post: { summary: "[v1] Sign payload (HMAC, no persistence)" } },
       "/api/qsign/verify": { post: { summary: "[v1] Stateless verify" } },
       "/api/qsign/v2/health": { get: { summary: "[v2] QSign health + active kids" } },
+      "/api/qsign/v2/stats": {
+        get: {
+          summary:
+            "[v2] Public aggregate metrics (totals, last 24h, unique issuers, top countries, keys by status)",
+        },
+      },
+      "/api/qsign/v2/recent": {
+        get: {
+          summary:
+            "[v2] Sanitized recent signatures feed (id, kids, country, createdAt, revoked) · ?limit=1..20",
+        },
+      },
       "/api/qsign/v2/sign": {
         post: {
           summary: "[v2] Sign payload (HMAC+Ed25519, RFC 8785, persisted, Bearer required)",

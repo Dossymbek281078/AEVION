@@ -166,6 +166,142 @@ qsignV2Router.get("/health", async (_req, res) => {
   }
 });
 
+/* ───────── GET /stats (public metrics) ─────────
+ * Aggregates used by the Studio hero and investor-facing widgets.
+ * Deliberately public (no auth) — exposes only counts and coarse geo labels,
+ * never payloads or issuer identities.
+ */
+
+qsignV2Router.get("/stats", async (_req, res) => {
+  try {
+    await ensureQSignV2Tables(pool);
+
+    const totalsQ = (await pool.query(
+      `SELECT
+         COUNT(*)::int AS total,
+         SUM(CASE WHEN "revokedAt" IS NULL THEN 1 ELSE 0 END)::int AS active,
+         SUM(CASE WHEN "revokedAt" IS NOT NULL THEN 1 ELSE 0 END)::int AS revoked,
+         COUNT(DISTINCT "issuerUserId")::int AS unique_issuers,
+         COUNT(DISTINCT "geoCountry") FILTER (WHERE "geoCountry" IS NOT NULL)::int AS unique_countries
+       FROM "QSignSignature"`,
+    )) as any;
+
+    const last24Q = (await pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM "QSignSignature"
+       WHERE "createdAt" >= NOW() - INTERVAL '24 hours'`,
+    )) as any;
+
+    const countriesQ = (await pool.query(
+      `SELECT "geoCountry" AS country, COUNT(*)::int AS n
+       FROM "QSignSignature"
+       WHERE "geoCountry" IS NOT NULL
+       GROUP BY "geoCountry"
+       ORDER BY n DESC
+       LIMIT 10`,
+    )) as any;
+
+    const keysQ = (await pool.query(
+      `SELECT "algo", "status", COUNT(*)::int AS n
+       FROM "QSignKey"
+       GROUP BY "algo", "status"`,
+    )) as any;
+
+    const keysByAlgo: Record<string, { active: number; retired: number }> = {
+      "HMAC-SHA256": { active: 0, retired: 0 },
+      Ed25519: { active: 0, retired: 0 },
+    };
+    for (const row of keysQ.rows || []) {
+      if (!keysByAlgo[row.algo]) keysByAlgo[row.algo] = { active: 0, retired: 0 };
+      if (row.status === "active") keysByAlgo[row.algo].active = row.n;
+      else if (row.status === "retired") keysByAlgo[row.algo].retired = row.n;
+    }
+
+    const totals = totalsQ.rows?.[0] || {};
+    res.json({
+      algoVersion: ALGO_VERSION,
+      canonicalization: CANONICALIZATION_SPEC,
+      signatures: {
+        total: totals.total ?? 0,
+        active: totals.active ?? 0,
+        revoked: totals.revoked ?? 0,
+        last24h: last24Q.rows?.[0]?.n ?? 0,
+      },
+      issuers: {
+        unique: totals.unique_issuers ?? 0,
+      },
+      geo: {
+        uniqueCountries: totals.unique_countries ?? 0,
+        topCountries: (countriesQ.rows || []).map((r: any) => ({
+          country: r.country,
+          count: r.n,
+        })),
+      },
+      keys: keysByAlgo,
+      asOf: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /stats error", e);
+    res.status(500).json({ error: "stats_failed", details: e?.message });
+  }
+});
+
+/* ───────── GET /recent (public sanitized feed) ─────────
+ * Returns a minimal, privacy-safe list of the most recent signatures for the
+ * public feed on the Studio page. Does NOT leak payloads, signatures, or
+ * issuer identities. Country is the only geo field exposed.
+ *
+ * Query:
+ *   limit  1..20 (default 8)
+ */
+
+qsignV2Router.get("/recent", async (req, res) => {
+  try {
+    await ensureQSignV2Tables(pool);
+
+    const rawLimit = Number(req.query.limit);
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit >= 1 && rawLimit <= 20
+        ? Math.floor(rawLimit)
+        : 8;
+
+    const r = (await pool.query(
+      `SELECT
+         "id",
+         "algoVersion",
+         "hmacKid",
+         "ed25519Kid",
+         "createdAt",
+         "revokedAt",
+         "geoCountry"
+       FROM "QSignSignature"
+       ORDER BY "createdAt" DESC
+       LIMIT $1`,
+      [limit],
+    )) as any;
+
+    const items = (r.rows || []).map((row: any) => ({
+      id: row.id,
+      algoVersion: row.algoVersion,
+      hmacKid: row.hmacKid,
+      ed25519Kid: row.ed25519Kid,
+      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
+      revoked: !!row.revokedAt,
+      country: row.geoCountry ?? null,
+      publicUrl: `/qsign/verify/${row.id}`,
+    }));
+
+    res.json({
+      items,
+      total: items.length,
+      limit,
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /recent error", e);
+    res.status(500).json({ error: "recent_failed", details: e?.message });
+  }
+});
+
 /* ───────── POST /sign ───────── */
 
 qsignV2Router.post("/sign", signLimiter, async (req, res) => {
@@ -704,7 +840,15 @@ qsignV2Router.get("/:id/public", async (req, res) => {
   try {
     await ensureQSignV2Tables(pool);
     const id = req.params.id;
-    const reserved = new Set(["health", "verify", "keys", "revoke", "sign"]);
+    const reserved = new Set([
+      "health",
+      "verify",
+      "keys",
+      "revoke",
+      "sign",
+      "stats",
+      "recent",
+    ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
     }

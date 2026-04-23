@@ -183,6 +183,37 @@ async function main() {
     pass("keys list", `total=${r.data.total}`);
   }
 
+  // 9b — public stats
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/stats");
+    if (!r.ok) return fail("stats", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (typeof r.data?.signatures?.total !== "number")
+      return fail("stats", "malformed signatures totals");
+    if (r.data.signatures.total < 1)
+      return fail("stats", `expected total >= 1, got ${r.data.signatures.total}`);
+    pass(
+      "stats",
+      `total=${r.data.signatures.total} last24h=${r.data.signatures.last24h} countries=${r.data.geo.uniqueCountries}`,
+    );
+  }
+
+  // 9c — public recent feed
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/recent?limit=5");
+    if (!r.ok) return fail("recent", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!Array.isArray(r.data?.items) || r.data.items.length < 1)
+      return fail("recent", `expected at least 1 item, got ${r.data?.items?.length}`);
+    const ours = r.data.items.find((it) => it.id === signed.id);
+    if (!ours) return fail("recent", "signed id not present in /recent");
+    // sanity: feed must not leak identifying fields
+    const leakedKeys = Object.keys(ours).filter((k) =>
+      ["issuerEmail", "issuerUserId", "signatureHmac", "signatureEd25519", "payloadCanonical", "payloadHash"].includes(k),
+    );
+    if (leakedKeys.length)
+      return fail("recent", `leaked sensitive fields: ${leakedKeys.join(", ")}`);
+    pass("recent", `includes signed id, no leaked fields`);
+  }
+
   // 10 — revoke (unless skipped)
   if (!SKIP_REVOKE) {
     const r = await jsonFetch("POST", `/api/qsign/v2/revoke/${signed.id}`, {

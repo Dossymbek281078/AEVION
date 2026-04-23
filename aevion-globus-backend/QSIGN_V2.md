@@ -16,6 +16,8 @@ Mounted at `/api/qsign/v2` (see `src/index.ts`). Legacy v1 stays at
 | Method | Path                              | Auth    | Rate limit | Purpose                                       |
 |--------|-----------------------------------|---------|------------|-----------------------------------------------|
 | GET    | `/health`                         | —       | —          | Liveness + active kids                        |
+| GET    | `/stats`                          | —       | —          | Public aggregate metrics (totals, last 24h, countries, keys) |
+| GET    | `/recent?limit=N`                 | —       | —          | Sanitized recent signatures feed (1..20 items) |
 | POST   | `/sign`                           | Bearer  | 60/min/IP  | Create + persist a signature                  |
 | POST   | `/verify`                         | —       | —          | Stateless verify of `{payload, sig, ...}`     |
 | GET    | `/verify/:id`                     | —       | —          | DB-backed verify by signature id              |
@@ -179,6 +181,37 @@ rotations. Retired keys are never deleted.
   verify endpoint and the public page shows a revocation banner.
 - Optional `causalSignatureId` links a revocation to the superseding
   signature (must exist and differ from the revoked id).
+
+---
+
+## 6a. Public metrics — `/stats` and `/recent`
+
+Two unauthenticated endpoints power the Studio's live metrics bar and the
+public recent-signatures feed:
+
+```bash
+curl -s $BASE/api/qsign/v2/stats | jq
+# {
+#   "signatures": { "total": 1423, "active": 1401, "revoked": 22, "last24h": 37 },
+#   "issuers":    { "unique": 183 },
+#   "geo":        { "uniqueCountries": 24, "topCountries": [...] },
+#   "keys":       { "HMAC-SHA256": {"active":1,"retired":2}, "Ed25519": {...} },
+#   "asOf":       "2026-04-23T17:20:11.452Z"
+# }
+
+curl -s "$BASE/api/qsign/v2/recent?limit=5" | jq
+# {
+#   "items": [
+#     { "id": "...", "algoVersion": "qsign-v2.0", "hmacKid": "qsign-hmac-v1",
+#       "ed25519Kid": "qsign-ed25519-v1", "createdAt": "...", "revoked": false,
+#       "country": "KZ", "publicUrl": "/qsign/verify/..." }
+#   ], "total": 5, "limit": 5
+# }
+```
+
+Privacy contract: `/recent` never returns payloads, signatures, canonical
+forms, hashes, issuer emails, or user ids — only coarse `country`, creation
+time, and the id needed to open the public verify page.
 
 ---
 

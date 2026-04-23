@@ -91,6 +91,50 @@ type VerifyResponse = {
   stateless?: boolean;
 };
 
+type StatsResponse = {
+  algoVersion: string;
+  canonicalization: string;
+  signatures: { total: number; active: number; revoked: number; last24h: number };
+  issuers: { unique: number };
+  geo: {
+    uniqueCountries: number;
+    topCountries: { country: string; count: number }[];
+  };
+  keys: Record<string, { active: number; retired: number }>;
+  asOf: string;
+};
+
+type RecentItem = {
+  id: string;
+  algoVersion: string;
+  hmacKid: string;
+  ed25519Kid: string | null;
+  createdAt: string | null;
+  revoked: boolean;
+  country: string | null;
+  publicUrl: string;
+};
+
+type RecentResponse = {
+  items: RecentItem[];
+  total: number;
+  limit: number;
+};
+
+/* ───────── sample payload for the "Try it" demo button ───────── */
+const SAMPLE_PAYLOAD = {
+  artifact: "AEVION investor brief v3",
+  type: "document",
+  authors: ["AEVION Labs"],
+  issuedAt: "2026-04-23T10:00:00Z",
+  hashSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  claims: {
+    originality: "first-registration",
+    jurisdiction: "KZ",
+    version: 3,
+  },
+};
+
 /* ───────── shared styles ───────── */
 
 const inputStyle: CSSProperties = {
@@ -146,8 +190,10 @@ export default function QSignPage() {
   const [parseError, setParseError] = useState<string>("");
   const [showCanonical, setShowCanonical] = useState(false);
 
-  // health
+  // health + live metrics
   const [health, setHealth] = useState<Health | null>(null);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [recent, setRecent] = useState<RecentResponse | null>(null);
 
   // auth
   const [token, setToken] = useState<string>("");
@@ -195,6 +241,21 @@ export default function QSignPage() {
       .then((r) => r.json())
       .then((d: Health) => setHealth(d))
       .catch(() => setHealth(null));
+  }, []);
+
+  /* — live stats + recent feed (refetched after every successful sign) — */
+  const loadMetrics = () => {
+    fetch(apiUrl("/api/qsign/v2/stats"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: StatsResponse | null) => setStats(d))
+      .catch(() => setStats(null));
+    fetch(apiUrl("/api/qsign/v2/recent?limit=8"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: RecentResponse | null) => setRecent(d))
+      .catch(() => setRecent(null));
+  };
+  useEffect(() => {
+    loadMetrics();
   }, []);
 
   /* — live canonical + hash on every payload edit — */
@@ -299,6 +360,7 @@ export default function QSignPage() {
       setVerifyEdSig(sr.ed25519.signature);
       setVerifyEdKid(sr.ed25519.kid);
       setVerifyResult(null);
+      loadMetrics();
       showToast("Signed · id " + sr.id.slice(0, 8), "success");
     } catch (e: any) {
       showToast("Sign error: " + (e?.message || String(e)), "error");
@@ -366,28 +428,45 @@ export default function QSignPage() {
               }}
             >
               <div>
-                <h1
+                <div
                   style={{
-                    fontSize: 26,
-                    fontWeight: 900,
-                    margin: "0 0 6px",
-                    letterSpacing: "-0.02em",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    opacity: 0.75,
+                    marginBottom: 8,
                   }}
                 >
-                  QSign v2 — Unique Digital Signature
+                  AEVION · Digital Signature Platform
+                </div>
+                <h1
+                  style={{
+                    fontSize: 30,
+                    fontWeight: 900,
+                    margin: "0 0 8px",
+                    letterSpacing: "-0.02em",
+                    lineHeight: 1.1,
+                  }}
+                >
+                  Tamper-evident proofs,
+                  <br />
+                  publicly verifiable in one link.
                 </h1>
                 <p
                   style={{
                     margin: 0,
-                    fontSize: 13,
-                    opacity: 0.85,
-                    lineHeight: 1.5,
-                    maxWidth: 680,
+                    fontSize: 14,
+                    opacity: 0.88,
+                    lineHeight: 1.55,
+                    maxWidth: 640,
                   }}
                 >
-                  RFC 8785 canonical JSON + HMAC-SHA256 + Ed25519 hybrid. Every signature is
-                  persisted, revocable, geo-anchored, and independently verifiable via a public
-                  URL.
+                  QSign v2 signs any JSON payload under{" "}
+                  <strong>RFC 8785 canonical form</strong> with a hybrid of{" "}
+                  <strong>HMAC-SHA256</strong> and <strong>Ed25519</strong>. Every signature is
+                  persisted, geo-anchored, revocable, and verifiable from a shareable public
+                  URL — no vendor lock-in, no trust-us.
                 </p>
               </div>
               <div
@@ -425,6 +504,57 @@ export default function QSignPage() {
             </div>
           </div>
         </div>
+
+        {/* ─── Live stats strip ─── */}
+        {stats ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              marginBottom: 18,
+            }}
+          >
+            <StatCard
+              label="Signatures anchored"
+              value={stats.signatures.total.toLocaleString("en-US")}
+              accent="#0f172a"
+              hint={
+                stats.signatures.last24h > 0
+                  ? `+${stats.signatures.last24h} in last 24h`
+                  : "ready for first anchor"
+              }
+            />
+            <StatCard
+              label="Active"
+              value={stats.signatures.active.toLocaleString("en-US")}
+              accent="#047857"
+              hint={
+                stats.signatures.revoked > 0
+                  ? `${stats.signatures.revoked} revoked`
+                  : "none revoked"
+              }
+            />
+            <StatCard
+              label="Unique issuers"
+              value={stats.issuers.unique.toLocaleString("en-US")}
+              accent="#0d9488"
+              hint={`${stats.geo.uniqueCountries} countries`}
+            />
+            <StatCard
+              label="Active keys"
+              value={String(
+                (stats.keys["HMAC-SHA256"]?.active || 0) +
+                  (stats.keys["Ed25519"]?.active || 0),
+              )}
+              accent="#6366f1"
+              hint={`${Object.values(stats.keys).reduce(
+                (a, b) => a + (b?.retired || 0),
+                0,
+              )} retired (verify-only)`}
+            />
+          </div>
+        ) : null}
 
         {/* ─── Deep-link banner ─── */}
         {payloadOrigin ? (
@@ -564,7 +694,35 @@ export default function QSignPage() {
             <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 12 }}>1. Sign payload</div>
 
             <div style={{ marginBottom: 12 }}>
-              <div style={label}>Payload (JSON)</div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 4,
+                }}
+              >
+                <div style={label}>Payload (JSON)</div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPayloadText(JSON.stringify(SAMPLE_PAYLOAD, null, 2))
+                  }
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#0d9488",
+                    cursor: "pointer",
+                    padding: 0,
+                    textTransform: "none",
+                    letterSpacing: 0,
+                  }}
+                >
+                  Load sample
+                </button>
+              </div>
               <textarea
                 value={payloadText}
                 onChange={(e) => setPayloadText(e.target.value)}
@@ -973,6 +1131,100 @@ export default function QSignPage() {
           </div>
         </div>
 
+        {/* ─── Recent signatures feed ─── */}
+        {recent && recent.items.length > 0 ? (
+          <div style={{ marginTop: 24, ...card }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12,
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 15 }}>Recent anchors</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  Live feed — public verification URLs, no identifying data.
+                </div>
+              </div>
+              {stats ? (
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "#64748b",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  updated{" "}
+                  {new Date(stats.asOf).toISOString().slice(11, 19)} UTC
+                </span>
+              ) : null}
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {recent.items.map((it) => (
+                <Link
+                  key={it.id}
+                  href={it.publicUrl}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "auto 1fr auto auto",
+                    gap: 12,
+                    alignItems: "center",
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: "#f8fafc",
+                    border: "1px solid rgba(15,23,42,0.05)",
+                    textDecoration: "none",
+                    color: "#0f172a",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: it.revoked ? "#b45309" : "#10b981",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <code
+                    style={{
+                      fontFamily: "ui-monospace, monospace",
+                      fontSize: 12,
+                      color: "#334155",
+                    }}
+                  >
+                    {it.id.slice(0, 8)}…{it.id.slice(-4)}
+                  </code>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#64748b",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {it.country || "—"}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#64748b",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {it.createdAt
+                      ? new Date(it.createdAt).toISOString().slice(0, 19).replace("T", " ")
+                      : "—"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {/* ─── How it works ─── */}
         <div
           style={{
@@ -1024,6 +1276,57 @@ export default function QSignPage() {
 }
 
 /* ───────── sub-components ───────── */
+
+function StatCard({
+  label: text,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  accent: string;
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(15,23,42,0.08)",
+        borderRadius: 14,
+        padding: "14px 16px",
+        background: "#fff",
+        borderTop: `3px solid ${accent}`,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 800,
+          color: "#64748b",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          marginBottom: 6,
+        }}
+      >
+        {text}
+      </div>
+      <div
+        style={{
+          fontSize: 26,
+          fontWeight: 900,
+          color: "#0f172a",
+          letterSpacing: "-0.02em",
+          lineHeight: 1,
+        }}
+      >
+        {value}
+      </div>
+      {hint ? (
+        <div style={{ marginTop: 6, fontSize: 11, color: "#64748b" }}>{hint}</div>
+      ) : null}
+    </div>
+  );
+}
 
 function SigRow({
   label: labelText,

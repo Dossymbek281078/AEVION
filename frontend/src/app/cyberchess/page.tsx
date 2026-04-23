@@ -184,6 +184,23 @@ function parsePGN(pgn:string):string[]{
   body=body.replace(/\d+\.(\.\.)?/g,"");
   return body.split(/\s+/).filter(t=>t&&!/^\d+$/.test(t));
 }
+/* ═══ Endgame trainer — 12 classic positions ═══ */
+type Endgame={name:string;fen:string;goal:"Win"|"Draw";side:"w"|"b";hint:string;reward:number};
+const ENDGAMES:Endgame[]=[
+  {name:"KQ vs K",fen:"4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1",goal:"Win",side:"w",hint:"Отжимай чёрного короля к краю ферзём на «ход коня»: не ближе чем в 2 клетках. Когда король на краю — подведи своего и мат.",reward:15},
+  {name:"KR vs K",fen:"4k3/8/8/8/8/8/4R3/4K3 w - - 0 1",goal:"Win",side:"w",hint:"Короля соперника гоняй на 8-ю горизонталь, свой король — в оппозицию. Ладья отрезает, короли друг против друга, потом мат ладьёй.",reward:20},
+  {name:"Оппозиция: KP vs K (выигрыш)",fen:"4k3/8/8/8/8/4P3/4K3/8 w - - 0 1",goal:"Win",side:"w",hint:"Король перед пешкой — правило оппозиции. Если твой король на 6-й горизонтали впереди пешки — выигрыш, даже без темпа. Не торопи пешку.",reward:15},
+  {name:"KP vs K (ничья)",fen:"4k3/8/8/4K3/4P3/8/8/8 b - - 0 1",goal:"Draw",side:"b",hint:"Чёрные держат оппозицию. Следи чтобы король соперника не прошёл на 6-ю горизонталь впереди пешки — тогда ничья.",reward:12},
+  {name:"Lucena (ладейный)",fen:"1K6/1P1k4/8/8/8/8/6r1/2R5 w - - 0 1",goal:"Win",side:"w",hint:"Построй «мост»: ладья на 4-ю горизонталь, король выходит из-за пешки, ладья прикрывает от шахов. Классика теории.",reward:30},
+  {name:"Philidor (ничья)",fen:"4k3/R7/4K3/4P3/8/8/8/5r2 b - - 0 1",goal:"Draw",side:"b",hint:"Держи ладью на 3-й (6-й для белых) горизонтали пока пешка не пойдёт. Когда пешка двинется — сразу за спину с шахом. Ничья по теории.",reward:25},
+  {name:"Два слона против короля",fen:"8/8/4k3/8/8/2B5/1B2K3/8 w - - 0 1",goal:"Win",side:"w",hint:"Слоны контролируют две соседние диагонали — гоняй короля в угол. Твой король помогает. Занимает 15-20 ходов.",reward:25},
+  {name:"Конь + слон (угол цвета слона)",fen:"8/8/4k3/8/8/3NB3/4K3/8 w - - 0 1",goal:"Win",side:"w",hint:"Король соперника должен оказаться в углу того же цвета, что слон. Техника W-manoeuvre коня — сложно, но изучаемо.",reward:40},
+  {name:"Пешечный эндшпиль: треугольник",fen:"8/4k3/8/3KP3/8/8/8/8 w - - 0 1",goal:"Win",side:"w",hint:"Манёвр «треугольник» королём для передачи темпа. Цель — занять ключевое поле перед пешкой с оппозицией у соперника.",reward:18},
+  {name:"Ферзь против ладьи",fen:"8/8/8/8/4k3/8/4r3/4K2Q w - - 0 1",goal:"Win",side:"w",hint:"Известная позиция Филидора. Оттесняй короля к краю и следи за шахами. Длинная техника — до 30-40 ходов.",reward:45},
+  {name:"Ладья+пешка vs ладья (пешка f)",fen:"8/5pk1/8/8/8/5PK1/6R1/6r1 w - - 0 1",goal:"Win",side:"w",hint:"Крайние пешки f/h — тяжелее чем центральные. Короля за пешку и Lucena-мост. Если не получится — ничья.",reward:28},
+  {name:"KBN vs K (мат слоном и конём)",fen:"8/8/8/4k3/8/8/1N1B4/4K3 w - - 0 1",goal:"Win",side:"w",hint:"Самый сложный основной мат. Король соперника должен оказаться в углу цвета СЛОНА. Маршрут коня — W-pattern.",reward:50},
+];
+
 const ACH_LABELS:Record<string,string>={
   first_win:"🏆 Первая победа",
   wins_10:"🎖 10 побед",
@@ -193,6 +210,7 @@ const ACH_LABELS:Record<string,string>={
   puzzles_10:"🧩 10 пазлов",
   puzzles_50:"🧠 50 пазлов",
   puzzles_100:"🎯 100 пазлов",
+  endgame_master:"🏰 Мастер эндшпилей",
 };
 
 /* ═══ Resume snapshot — autosave in-progress game ═══ */
@@ -383,6 +401,8 @@ export default function CyberChessPage(){
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[hotseat,sHotseat]=useState(false);
+  const[showEndgames,sShowEndgames]=useState(false);
+  const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
   useEffect(()=>{svChessy(chessy)},[chessy]);
@@ -707,7 +727,15 @@ export default function CyberChessPage(){
     if(game.isGameOver()){
       let r="";
       if(game.isCheckmate()){
-        if(hotseat){
+        if(currentEndgame){
+          // Endgame trainer: checkmate delivered by the trainee side?
+          const traineeWon=game.turn()!==currentEndgame.side;
+          r=traineeWon?"Checkmate — цель достигнута! 🏆":"Checkmate — соперник выиграл";
+          if(traineeWon&&currentEndgame.goal==="Win"){
+            setTimeout(()=>{addChessy(currentEndgame.reward,`🏰 ${currentEndgame.name}`);unlockAch("endgame_master",80,"Мастер эндшпилей")},600);
+          }
+          sCurrentEndgame(null);
+        }else if(hotseat){
           // Local 2-player: no rating change, small shared Chessy for playing a full game
           const winner=game.turn()==="w"?"Чёрные":"Белые";
           r=`Checkmate — ${winner} победили`;
@@ -736,16 +764,21 @@ export default function CyberChessPage(){
         }
       }
       else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";
-        if(!hotseat){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
+        if(!hotseat&&!currentEndgame){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
         // Draw gives small consolation
         setTimeout(()=>addChessy(2,"ничья"),400);
+        // Endgame trainer: draw target met?
+        if(currentEndgame&&currentEndgame.goal==="Draw"){
+          setTimeout(()=>{addChessy(currentEndgame.reward,`🏰 ${currentEndgame.name} — цель достигнута`);unlockAch("endgame_master",80,"Мастер эндшпилей")},600);
+          sCurrentEndgame(null);
+        }
       }
       sOver(r);snd("x");sOn(false);sPms([]);
       // Save to history
       const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
       const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
       saveGame(sg);sSavedGames(loadGames())}
-    return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState]);
+    return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -1005,6 +1038,16 @@ export default function CyberChessPage(){
   const discardResume=()=>{clearResume();sResumeOffer(null)};
   const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
   const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
+  const loadEndgame=(eg:Endgame)=>{
+    try{
+      const g=new Chess(eg.fen);setGame(g);sBk(k=>k+1);
+      sTab("coach");sCoachAIEnabled(false);sEditorMode(false);
+      sHist([]);sFenHist([eg.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);
+      sPCol(eg.side);sFlip(eg.side==="b");sOn(false);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+      sCurrentEndgame(eg);sShowEndgames(false);
+      showToast(`🏰 ${eg.name} · цель: ${eg.goal==="Win"?"победа":"ничья"}`,"info");
+    }catch{showToast("Не удалось загрузить эндшпиль","error")}
+  };
   const loadDailyPuzzle=()=>{
     if(!dailyState||PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
     const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
@@ -2342,10 +2385,24 @@ export default function CyberChessPage(){
                       if(savedGames.length===0){showToast("Нет сыгранных партий — сыграй хотя бы одну","error");return}
                       sGamesModalOpen(true);
                     })}
+                    {modeBtn("🏰","Эндшпили",`${ENDGAMES.length} классических позиций`,()=>sShowEndgames(true))}
                   </div>
                 </div>
               );
             })()}
+            {/* Active endgame banner */}
+            {currentEndgame&&<div style={{padding:"10px 12px",borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",border:"1px solid #93c5fd"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                <span style={{fontSize:20}}>🏰</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:800,color:T.blue,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Активный эндшпиль · цель: {currentEndgame.goal==="Win"?"победа":"ничья"} за {currentEndgame.side==="w"?"белых":"чёрных"}</div>
+                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1.2,marginTop:2}}>{currentEndgame.name}</div>
+                </div>
+                <div style={{fontSize:13,fontWeight:900,color:"#78350f",background:"#fef3c7",padding:"3px 10px",borderRadius:10,whiteSpace:"nowrap"}}>+{currentEndgame.reward} C</div>
+              </div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginTop:4}}>{currentEndgame.hint}</div>
+              <button onClick={()=>sCurrentEndgame(null)} style={{marginTop:6,padding:"4px 10px",borderRadius:6,border:"1px solid "+T.border,background:"#fff",color:T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>Отказаться</button>
+            </div>}
             {/* Position import */}
             <div id="coach-import-section" style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe",padding:"10px 12px"}}>
               <div style={{fontSize:11,fontWeight:800,color:T.blue,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>📥 Загрузить позицию</div>
@@ -2681,6 +2738,38 @@ export default function CyberChessPage(){
         </div>
       </div>;
     })()}
+
+    {/* Endgame trainer modal */}
+    {showEndgames&&<div onClick={()=>sShowEndgames(false)} role="dialog" aria-label="Endgame trainer" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:180,padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:760,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:20,fontWeight:900,color:T.text}}>🏰 Тренировка эндшпилей</div>
+            <div style={{fontSize:13,color:T.dim,marginTop:2}}>12 классических позиций от KP–K до KBN–K. Победил = Chessy + разбор от Алексея.</div>
+          </div>
+          <button onClick={()=>sShowEndgames(false)} aria-label="Close" style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
+          {ENDGAMES.map((eg,i)=>{
+            const gCol=eg.goal==="Win"?T.accent:T.blue;
+            return <button key={i} onClick={()=>loadEndgame(eg)} style={{padding:"14px 16px",borderRadius:10,border:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:6,transition:"all 0.15s"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
+                <div style={{fontWeight:900,color:T.text,fontSize:14,lineHeight:1.3}}>{eg.name}</div>
+                <span style={{fontSize:11,fontWeight:800,color:"#fff",background:gCol,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{eg.goal==="Win"?"Выиграть":"Удержать"} · {eg.side==="w"?"♔":"♚"}</span>
+              </div>
+              <div style={{fontSize:13,color:T.dim,lineHeight:1.5}}>{eg.hint.slice(0,110)}{eg.hint.length>110?"…":""}</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#78350f",background:"#fef3c7",padding:"2px 8px",borderRadius:6}}>+{eg.reward} Chessy</span>
+                <span style={{fontSize:13,fontWeight:800,color:T.accent}}>Начать →</span>
+              </div>
+            </button>;
+          })}
+        </div>
+        <div style={{marginTop:14,padding:"10px 14px",borderRadius:8,background:"#f0fdf4",border:"1px solid #a7f3d0",fontSize:13,color:"#065f46"}}>
+          💡 Открываются в Coach-режиме — можешь в любой момент спросить Алексея, как играть. Голос включается в шапке Coach'а (🔊).
+        </div>
+      </div>
+    </div>}
 
     {/* First-time welcome tour */}
     {tourStep>=0&&(()=>{

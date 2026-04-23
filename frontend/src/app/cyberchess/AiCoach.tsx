@@ -237,6 +237,80 @@ export default function AiCoach({
   const scrollRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef<HTMLDivElement>(null);
 
+  // TTS — browser SpeechSynthesis. Auto-reads the latest coach reply when enabled.
+  const TTS_KEY = "aevion_coach_tts_v1";
+  const TTS_VOICE_KEY = "aevion_coach_tts_voice_v1";
+  const [ttsOn, sTtsOn] = useState<boolean>(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem(TTS_KEY) === "1"; } catch { return false; }
+  });
+  const [ttsSpeaking, sTtsSpeaking] = useState(false);
+  const [voices, sVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceName, sVoiceName] = useState<string>(() => {
+    try { return typeof window !== "undefined" ? localStorage.getItem(TTS_VOICE_KEY) || "" : ""; } catch { return ""; }
+  });
+  useEffect(() => { try { localStorage.setItem(TTS_KEY, ttsOn ? "1" : "0"); } catch {} }, [ttsOn]);
+  useEffect(() => { try { localStorage.setItem(TTS_VOICE_KEY, voiceName); } catch {} }, [voiceName]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      sVoices(v);
+      if (!voiceName) {
+        const ru = v.find(x => x.lang.toLowerCase().startsWith("ru"));
+        if (ru) sVoiceName(ru.name);
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
+  const speakText = useCallback((text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
+    // Strip markdown emphasis and engine labels that sound weird spoken.
+    const clean = text.replace(/[*_`]/g, "").replace(/═/g, "").slice(0, 1500);
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(clean);
+    utt.lang = "ru-RU";
+    utt.rate = 1.05;
+    utt.pitch = 1.0;
+    if (voiceName) {
+      const v = voices.find(x => x.name === voiceName);
+      if (v) utt.voice = v;
+    }
+    utt.onstart = () => sTtsSpeaking(true);
+    utt.onend = () => sTtsSpeaking(false);
+    utt.onerror = () => sTtsSpeaking(false);
+    try { window.speechSynthesis.speak(utt); } catch {}
+  }, [voiceName, voices]);
+  const stopSpeak = useCallback(() => {
+    try { window.speechSynthesis.cancel(); } catch {}
+    sTtsSpeaking(false);
+  }, []);
+  // Stop speech when the coach panel closes
+  useEffect(() => { if (!visible) stopSpeak(); }, [visible, stopSpeak]);
+  // Auto-speak the latest assistant reply when TTS is on
+  const lastSpokenIdxRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!ttsOn || !visible) return;
+    const lastIdx = msgs.length - 1;
+    if (lastIdx <= lastSpokenIdxRef.current) return;
+    const last = msgs[lastIdx];
+    if (!last || last.role !== "assistant") return;
+    lastSpokenIdxRef.current = lastIdx;
+    speakText(last.content);
+  }, [msgs, ttsOn, visible, speakText]);
+  // Auto-speak the latest live comment
+  const lastSpokenLiveIdxRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!ttsOn || !visible || !liveMode) return;
+    const lastIdx = liveComments.length - 1;
+    if (lastIdx <= lastSpokenLiveIdxRef.current) return;
+    const last = liveComments[lastIdx];
+    if (!last) return;
+    lastSpokenLiveIdxRef.current = lastIdx;
+    speakText(`${last.san}. ${last.comment}`);
+  }, [liveComments, ttsOn, visible, liveMode, speakText]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [msgs]);
@@ -515,6 +589,24 @@ ${quality === "blunder" || quality === "mistake"
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {ttsSpeaking && (
+            <button onClick={stopSpeak} title="Остановить озвучку"
+              style={{ background: "rgba(255,255,255,0.9)", border: "none", color: "#059669", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
+              ❚❚
+            </button>
+          )}
+          <button onClick={() => sTtsOn(v => !v)} title={ttsOn ? "Выкл. озвучку" : "Вкл. озвучку"}
+            style={{ background: ttsOn ? "#fbbf24" : "rgba(255,255,255,0.2)", border: "none", color: ttsOn ? "#111" : "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
+            {ttsOn ? "🔊 Voice" : "🔈 Voice"}
+          </button>
+          {ttsOn && voices.length > 0 && (
+            <select value={voiceName} onChange={e => sVoiceName(e.target.value)} title="Голос"
+              style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 6px", fontSize: 10, fontWeight: 700, cursor: "pointer", maxWidth: 110 }}>
+              {voices.filter(v => v.lang.toLowerCase().startsWith("ru") || v.lang.toLowerCase().startsWith("en")).slice(0, 12).map(v => (
+                <option key={v.name} value={v.name} style={{ color: "#111" }}>{v.name.slice(0, 18)}</option>
+              ))}
+            </select>
+          )}
           <button onClick={() => {
             sLiveMode(!liveMode);
             if (!liveMode) { lastCommentedMoveIdx.current = moves.length; sLiveComments([]); }
@@ -607,6 +699,13 @@ ${quality === "blunder" || quality === "mistake"
                 borderBottomLeftRadius: m.role === "assistant" ? 2 : 10,
                 whiteSpace: "pre-wrap",
               }}>{m.content}</div>
+              {m.role === "assistant" && typeof window !== "undefined" && "speechSynthesis" in window && (
+                <button onClick={() => (ttsSpeaking ? stopSpeak() : speakText(m.content))}
+                  title={ttsSpeaking ? "Остановить" : "Озвучить"}
+                  style={{ marginTop: 3, padding: "2px 8px", fontSize: 10, fontWeight: 700, borderRadius: 5, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: "pointer" }}>
+                  {ttsSpeaking ? "❚❚ Стоп" : "🔊 Озвучить"}
+                </button>
+              )}
             </div>
           ))}
           {engineThinking && (

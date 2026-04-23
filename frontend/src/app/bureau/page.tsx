@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -197,6 +197,8 @@ export default function BureauPage() {
   const [checkerResult, setCheckerResult] = useState<LookupResult | null>(null);
   const [checkerError, setCheckerError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [batch, setBatch] = useState<Array<{ name: string; size: number; hash?: string; status: "hashing" | "checking" | "found" | "missing" | "error"; cert?: { id: string; title: string; author: string; protectedAt: string; verifiedCount: number }; error?: string }>>([]);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   /* Load stats */
   useEffect(() => {
@@ -289,6 +291,26 @@ export default function BureauPage() {
     })();
   }, [activityTick]);
 
+  /* Keyboard shortcuts: / focuses search, r refreshes, n opens /qright */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      const inField = !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (e.key === "/" && !inField) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+        return;
+      }
+      if (!inField && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.key === "r") { e.preventDefault(); setRefreshNonce((n) => n + 1); return; }
+        if (e.key === "n") { e.preventDefault(); window.location.href = "/qright"; return; }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   /* Hash checker: send to backend */
   async function runLookup(hashHex: string) {
     setCheckerBusy(true);
@@ -338,6 +360,44 @@ export default function BureauPage() {
     setCheckerResult(null);
     setCheckerError(null);
     setCheckerFile(null);
+    setBatch([]);
+  }
+
+  async function handleBatchFiles(files: File[]) {
+    if (!files.length) return;
+    setCheckerResult(null);
+    setCheckerError(null);
+    setCheckerFile(null);
+    const initial = files.map((f) => ({ name: f.name, size: f.size, status: "hashing" as const }));
+    setBatch(initial);
+    // Hash + lookup each file with limited concurrency (4).
+    const q = [...files.entries()];
+    const worker = async () => {
+      while (q.length) {
+        const entry = q.shift();
+        if (!entry) break;
+        const [idx, f] = entry;
+        try {
+          const hash = await sha256OfFile(f);
+          setBatch((prev) => prev.map((r, i) => (i === idx ? { ...r, hash, status: "checking" } : r)));
+          const res = await fetch(apiUrl(`/api/pipeline/lookup/${hash}`));
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j?.error || `HTTP ${res.status}`);
+          }
+          const j: LookupResult = await res.json();
+          setBatch((prev) => prev.map((r, i) => {
+            if (i !== idx) return r;
+            return j.protected
+              ? { ...r, status: "found", cert: { id: j.certificate.id, title: j.certificate.title, author: j.certificate.author, protectedAt: j.certificate.protectedAt, verifiedCount: j.certificate.verifiedCount } }
+              : { ...r, status: "missing" };
+          }));
+        } catch (e) {
+          setBatch((prev) => prev.map((r, i) => (i === idx ? { ...r, status: "error", error: e instanceof Error ? e.message : "failed" } : r)));
+        }
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
   }
 
   const copy = (text: string, label: string) => {
@@ -442,8 +502,9 @@ export default function BureauPage() {
               onDragLeave={() => setDragOver(false)}
               onDrop={(e) => {
                 e.preventDefault(); setDragOver(false);
-                const f = e.dataTransfer.files?.[0];
-                if (f) handleFileCheck(f);
+                const files = Array.from(e.dataTransfer.files || []);
+                if (files.length === 1) handleFileCheck(files[0]);
+                else if (files.length > 1) handleBatchFiles(files);
               }}
               style={{
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -454,14 +515,19 @@ export default function BureauPage() {
               }}
             >
               <div style={{ fontSize: 32, marginBottom: 6 }}>📁</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>Drop a file here</div>
-              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>…or click to pick one. Hashed locally with Web Crypto SHA-256.</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>Drop one or many files</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Hashed locally with Web Crypto SHA-256 · nothing is uploaded.</div>
               {checkerFile && (
                 <div style={{ marginTop: 8, fontSize: 10.5, color: "#334155", background: "rgba(15,23,42,0.05)", padding: "4px 10px", borderRadius: 999, fontFamily: "ui-monospace, Menlo, monospace" }}>
                   {checkerFile.name} · {(checkerFile.size / 1024).toFixed(1)} KB
                 </div>
               )}
-              <input id="aevion-file-check" type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileCheck(f); }} />
+              <input id="aevion-file-check" type="file" multiple style={{ display: "none" }} onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length === 1) handleFileCheck(files[0]);
+                else if (files.length > 1) handleBatchFiles(files);
+                (e.target as HTMLInputElement).value = "";
+              }} />
             </label>
 
             {/* Hash input */}
@@ -489,8 +555,68 @@ export default function BureauPage() {
             </div>
           </div>
 
-          {/* Result */}
-          {(checkerResult || checkerError || checkerBusy) && (
+          {/* Batch result */}
+          {batch.length > 0 && (
+            <div style={{ padding: "14px 22px 18px" }}>
+              {(() => {
+                const found = batch.filter((b) => b.status === "found").length;
+                const missing = batch.filter((b) => b.status === "missing").length;
+                const errored = batch.filter((b) => b.status === "error").length;
+                const pending = batch.length - found - missing - errored;
+                return (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(16,185,129,0.1)", color: "#059669", fontSize: 11, fontWeight: 800 }}>✓ {found} protected</span>
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.1)", color: "#92400e", fontSize: 11, fontWeight: 800 }}>🛡️ {missing} unprotected</span>
+                        {errored > 0 && <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(239,68,68,0.1)", color: "#b91c1c", fontSize: 11, fontWeight: 800 }}>⚠ {errored} errors</span>}
+                        {pending > 0 && <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(15,23,42,0.06)", color: "#475569", fontSize: 11, fontWeight: 800 }}>{pending} in progress</span>}
+                      </div>
+                      {missing > 0 && (
+                        <Link href="/qright" style={{ padding: "8px 14px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>
+                          🛡️ Protect the {missing} unprotected →
+                        </Link>
+                      )}
+                    </div>
+                    <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 10, overflow: "hidden", maxHeight: 280, overflowY: "auto" }}>
+                      {batch.map((b, i) => (
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "20px 1fr auto 100px", gap: 10, alignItems: "center", padding: "8px 12px", background: i % 2 === 0 ? "#fff" : "#f8fafc", borderBottom: i < batch.length - 1 ? "1px solid rgba(15,23,42,0.04)" : "none", fontSize: 12 }}>
+                          <span>
+                            {b.status === "hashing" || b.status === "checking" ? "⏳" :
+                             b.status === "found" ? "✅" :
+                             b.status === "missing" ? "🛡️" : "⚠"}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</div>
+                            {b.hash ? (
+                              <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10, color: "#64748b" }}>{b.hash.slice(0, 32)}…</div>
+                            ) : b.status === "hashing" ? (
+                              <div style={{ fontSize: 10, color: "#94a3b8" }}>hashing…</div>
+                            ) : null}
+                          </div>
+                          <span style={{ fontSize: 10, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{(b.size / 1024).toFixed(1)} KB</span>
+                          <span style={{ textAlign: "right" }}>
+                            {b.status === "found" && b.cert ? (
+                              <Link href={`/verify/${b.cert.id}`} style={{ color: "#0d9488", fontWeight: 800, fontSize: 11, textDecoration: "none" }}>Verify →</Link>
+                            ) : b.status === "missing" ? (
+                              <Link href="/qright" style={{ color: "#92400e", fontWeight: 800, fontSize: 11, textDecoration: "none" }}>Protect →</Link>
+                            ) : b.status === "error" ? (
+                              <span style={{ color: "#b91c1c", fontSize: 10, fontWeight: 700 }}>{b.error?.slice(0, 24)}</span>
+                            ) : (
+                              <span style={{ color: "#94a3b8", fontSize: 10 }}>…</span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Single Result */}
+          {(checkerResult || checkerError || checkerBusy) && batch.length === 0 && (
             <div style={{ padding: "14px 22px 20px" }}>
               {checkerBusy ? (
                 <div style={{ fontSize: 12, color: "#64748b" }}>Computing hash / querying registry…</div>
@@ -575,14 +701,22 @@ export default function BureauPage() {
               </span>
             )}
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={loadingStats || loadingList}
-            style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: loadingStats || loadingList ? "wait" : "pointer", opacity: loadingStats || loadingList ? 0.6 : 1 }}
-            title="Reload live registry data"
-          >
-            {loadingStats || loadingList ? "Refreshing…" : "↻ Refresh"}
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span
+              title={"Keyboard shortcuts\n/  focus search\nr  refresh data\nn  new certificate"}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.1)", background: "#f8fafc", color: "#64748b", fontSize: 10, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace", cursor: "help" }}
+            >
+              /   r   n
+            </span>
+            <button
+              onClick={handleRefresh}
+              disabled={loadingStats || loadingList}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: loadingStats || loadingList ? "wait" : "pointer", opacity: loadingStats || loadingList ? 0.6 : 1 }}
+              title="Reload live registry data (r)"
+            >
+              {loadingStats || loadingList ? "Refreshing…" : "↻ Refresh"}
+            </button>
+          </div>
         </div>
 
         {/* ── KPI grid with animated counts + sparkline ── */}
@@ -772,9 +906,11 @@ export default function BureauPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, marginBottom: 14 }}>
             <div style={{ position: "relative" }}>
               <input
+                ref={searchRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search by title, author, country, city…"
+                placeholder="Search by title, author, country, city… (press /)"
+                aria-label="Search registry"
                 style={{ width: "100%", padding: "10px 12px 10px 34px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 13, color: "#0f172a", outline: "none", boxSizing: "border-box" }}
               />
               <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#94a3b8" }}>🔍</span>
@@ -1113,13 +1249,26 @@ export default function BureauPage() {
           </div>
         </section>
 
-        {/* ── Disclaimer ── */}
-        <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", marginBottom: 40 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>Legal Disclaimer</div>
-          <div style={{ fontSize: 11, color: "#78716c", lineHeight: 1.6 }}>
-            Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time. They do not constitute a patent, trademark, or government-issued copyright registration. They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
+        {/* ── Audit & Disclaimer ── */}
+        <section style={{ marginBottom: 40, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(13,148,136,0.06)", border: "1px solid rgba(13,148,136,0.15)" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", marginBottom: 4 }}>Public audit</div>
+            <div style={{ fontSize: 11, color: "#334155", lineHeight: 1.6, marginBottom: 10 }}>
+              The entire active registry — every certificate plus the current Merkle anchor — is publicly downloadable as deterministic JSON for independent verification.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <a href={apiUrl("/api/pipeline/bureau/snapshot.json")} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 11 }}>↓ snapshot.json</a>
+              <a href={apiUrl("/api/pipeline/bureau/anchor")} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(13,148,136,0.3)", background: "#fff", color: "#0d9488", textDecoration: "none", fontWeight: 800, fontSize: 11 }}>anchor.json</a>
+              <a href={apiUrl("/api/openapi.json")} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", color: "#0f172a", textDecoration: "none", fontWeight: 800, fontSize: 11 }}>OpenAPI</a>
+            </div>
           </div>
-        </div>
+          <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>Legal Disclaimer</div>
+            <div style={{ fontSize: 11, color: "#78716c", lineHeight: 1.6 }}>
+              Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time. They do not constitute a patent, trademark, or government-issued copyright registration. They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
+            </div>
+          </div>
+        </section>
       </ProductPageShell>
 
       {previewCert && (

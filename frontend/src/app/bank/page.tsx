@@ -16,6 +16,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { AccountIdCard } from "./_components/AccountIdCard";
+import { AchievementsPanel } from "./_components/AchievementsPanel";
 import { ActivityTimeline } from "./_components/ActivityTimeline";
 import { AdvisorChat } from "./_components/AdvisorChat";
 import { AuditPanel } from "./_components/AuditPanel";
@@ -256,6 +257,7 @@ function BankContent() {
           />
           <RoyaltyStream />
           <ChessWinnings />
+          <AchievementsPanel account={account} operations={operations} />
           <AccountIdCard
             accountId={account.id}
             onCopy={() => void copyToClipboard(account.id, "Account ID copied")}

@@ -117,7 +117,7 @@ export function SpendingInsights({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(180px, 220px) 1fr",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
               gap: 18,
               marginBottom: 16,
               alignItems: "center",

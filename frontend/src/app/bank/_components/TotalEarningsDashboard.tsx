@@ -134,7 +134,7 @@ export function TotalEarningsDashboard() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(200px, 240px) 1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 20,
           alignItems: "center",
           marginBottom: 18,

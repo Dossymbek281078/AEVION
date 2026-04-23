@@ -210,7 +210,7 @@ export function WealthForecast({ account }: { account: Account }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr auto",
+            gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
             gap: 12,
             alignItems: "end",
           }}
@@ -249,7 +249,6 @@ export function WealthForecast({ account }: { account: Account }) {
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
               gap: 6,
-              minWidth: 230,
             }}
           >
             {(["d30", "d90", "d365"] as const).map((h) => {

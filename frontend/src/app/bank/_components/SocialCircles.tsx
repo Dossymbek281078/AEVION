@@ -234,7 +234,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 220px) 1fr",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: 12,
           }}
         >

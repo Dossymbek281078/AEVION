@@ -46,7 +46,7 @@ export type TrustInputs = {
 // Sub-linear curve: rewards early progress while still saturating at the target.
 // pow(r, 0.55) gives ~47 at r=0.25, ~68 at r=0.5, 100 at r=1. Clamps to 100.
 function curve(value: number, target: number): number {
-  if (value <= 0 || target <= 0) return 0;
+  if (!Number.isFinite(value) || !Number.isFinite(target) || value <= 0 || target <= 0) return 0;
   const r = value / target;
   return Math.round(Math.min(100, Math.pow(r, 0.55) * 100));
 }
@@ -70,7 +70,10 @@ function nextTier(current: TrustTier): TrustTier | null {
 export function computeEcosystemTrustScore(input: TrustInputs): TrustScore {
   const { account, operations, royalty, chess, ecosystem } = input;
 
-  const ageDays = Math.max(0, (Date.now() - new Date(account.createdAt).getTime()) / 86_400_000);
+  const createdMs = new Date(account.createdAt).getTime();
+  const ageDays = Number.isFinite(createdMs)
+    ? Math.max(0, (Date.now() - createdMs) / 86_400_000)
+    : 0;
 
   const transferOps = operations.filter((op) => op.kind === "transfer");
   const counterparties = new Set<string>();

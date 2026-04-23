@@ -48,7 +48,7 @@ export function TrustScoreCard({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(220px, 260px) 1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
           gap: 20,
           alignItems: "center",
         }}

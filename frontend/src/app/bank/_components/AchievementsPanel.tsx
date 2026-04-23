@@ -15,7 +15,7 @@ import { useBiometric } from "../_lib/BiometricContext";
 import { loadCircles } from "../_lib/circles";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { loadGoals } from "../_lib/savings";
-import { loadSignatures } from "../_lib/signatures";
+import { loadSignatures, SIGNATURE_EVENT } from "../_lib/signatures";
 import type { Account, Operation } from "../_lib/types";
 
 const FILTERS: Array<{ key: AchievementCategory | "all"; label: string }> = [
@@ -35,28 +35,31 @@ export function AchievementsPanel({
 }) {
   const { royalty, chess, ecosystem } = useEcosystemData();
   const { settings: biometric } = useBiometric();
-  const [goals, setGoals] = useState(loadGoals());
-  const [circles, setCircles] = useState(loadCircles());
-  const [signatures, setSignatures] = useState(loadSignatures());
-  const [advance, setAdvance] = useState(loadAdvance());
+  const [goals, setGoals] = useState<ReturnType<typeof loadGoals>>([]);
+  const [circles, setCircles] = useState<ReturnType<typeof loadCircles>>([]);
+  const [signatures, setSignatures] = useState<ReturnType<typeof loadSignatures>>([]);
+  const [advance, setAdvance] = useState<ReturnType<typeof loadAdvance>>(null);
   const [filter, setFilter] = useState<AchievementCategory | "all">("all");
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const sync = () => {
       setGoals(loadGoals());
       setCircles(loadCircles());
       setSignatures(loadSignatures());
       setAdvance(loadAdvance());
     };
-    if (typeof window === "undefined") return;
+    sync();
     const onFocus = () => sync();
     const onStorage = () => sync();
     window.addEventListener("focus", onFocus);
     window.addEventListener("storage", onStorage);
+    window.addEventListener(SIGNATURE_EVENT, onStorage);
     const id = window.setInterval(sync, 15_000);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener(SIGNATURE_EVENT, onStorage);
       window.clearInterval(id);
     };
   }, []);

@@ -561,12 +561,16 @@ export default function CyberChessPage(){
                 showToast("Продолжай решение...","info");
               }else{
                 sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+                const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
+                addChessy(reward,"пазл решён");
               }
             }catch{}
           },100); // fast response, no thinking delay
         }else{
           // Single-move puzzle — solved
           sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+          const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
+          addChessy(reward,"пазл решён");
         }
         return true;
       }else{
@@ -584,15 +588,35 @@ export default function CyberChessPage(){
     if(game.isGameOver()){
       let r="";
       if(game.isCheckmate()){const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
-        if(w){const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success")}
+        if(w){
+          const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);
+          const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success");
+          // Chessy reward: scale by AI difficulty × time category
+          const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
+          const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
+          const reward=Math.max(5,Math.round(10*aiMul*timeMul));
+          setTimeout(()=>addChessy(reward,`победа над ${lv.name}`),400);
+          // Achievements
+          const newWinCount=sts.w+1;
+          setTimeout(()=>{
+            if(newWinCount===1)unlockAch("first_win",50,"Первая победа");
+            if(newWinCount===10)unlockAch("wins_10",100,"10 побед");
+            if(newWinCount===50)unlockAch("wins_50",300,"50 побед");
+            if(aiI>=5)unlockAch("beat_master",200,"Победа над Master");
+            if(aiI>=4)unlockAch("beat_expert",100,"Победа над Expert");
+          },900);
+        }
         else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}}
-      else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
+      else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);
+        // Draw gives small consolation
+        setTimeout(()=>addChessy(2,"ничья"),400);
+      }
       sOver(r);snd("x");sOn(false);sPms([]);
       // Save to history
       const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
       const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
       saveGame(sg);sSavedGames(loadGames())}
-    return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan]);
+    return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -668,6 +692,13 @@ export default function CyberChessPage(){
     saveResume(snap);
   },[bk,tab,on,over,setup,hist.length]);
   useEffect(()=>{if(over)clearResume()},[over]);
+
+  /* ── Puzzle achievement tracker ── */
+  useEffect(()=>{
+    if(pzSolvedCount===10)unlockAch("puzzles_10",30,"10 пазлов решено");
+    if(pzSolvedCount===50)unlockAch("puzzles_50",150,"50 пазлов решено");
+    if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
+  },[pzSolvedCount,unlockAch]);
 
   /* ── Premove trigger (fires instantly when it's player's turn) ── */
   useEffect(()=>{

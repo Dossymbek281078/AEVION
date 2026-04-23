@@ -1312,17 +1312,55 @@ export default function CyberChessPage(){
 
         {/* Dashboard Widgets */}
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {/* Rating Widget */}
-          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
+          {/* Rating Widget with sparkline */}
+          <div style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
             <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Rating</div>
             <div style={{fontSize:32,fontWeight:900,color:T.gold,lineHeight:1}}>{rat}</div>
             <div style={{fontSize:13,color:T.dim,marginTop:2}}>{rk.i} {rk.t}</div>
+            {savedGames.length>1&&(()=>{
+              const pts=[...savedGames].reverse().slice(-30).map(g=>g.rating);
+              if(pts.length<2)return null;
+              const mn=Math.min(...pts),mx=Math.max(...pts);const rng=Math.max(30,mx-mn);
+              const dx=100/(pts.length-1);
+              const path=pts.map((v,i)=>`${i===0?"M":"L"}${(i*dx).toFixed(1)} ${(24-((v-mn)/rng)*22).toFixed(1)}`).join(" ");
+              const trend=pts[pts.length-1]-pts[0];const col=trend>=0?T.accent:T.danger;
+              return <div style={{marginTop:6}}>
+                <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{width:"100%",height:32}}>
+                  <path d={path} fill="none" stroke={col} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <div style={{fontSize:10,fontWeight:700,color:col,marginTop:-2}}>{trend>=0?"+":""}{trend} за {pts.length} партий</div>
+              </div>;
+            })()}
             <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:8}}>
               <div><span style={{fontSize:14,fontWeight:900,color:T.accent}}>{sts.w}</span><div style={{fontSize:8,color:T.dim}}>W</div></div>
               <div><span style={{fontSize:14,fontWeight:900,color:T.danger}}>{sts.l}</span><div style={{fontSize:8,color:T.dim}}>L</div></div>
               <div><span style={{fontSize:14,fontWeight:900,color:T.dim}}>{sts.d}</span><div style={{fontSize:8,color:T.dim}}>D</div></div>
             </div>
           </div>
+          {/* Chessy widget */}
+          <div onClick={()=>sShowShop(true)} style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderRadius:12,border:"1px solid #fcd34d",padding:16,textAlign:"center",cursor:"pointer"}}>
+            <div style={{fontSize:13,color:"#92400e",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Chessy</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <svg viewBox="0 0 24 24" width={28} height={28}><circle cx="12" cy="12" r="10" fill="#fbbf24" stroke="#b45309" strokeWidth="1.5"/><text x="12" y="16" textAnchor="middle" fontSize="11" fontWeight="900" fill="#78350f">C</text></svg>
+              <span style={{fontSize:28,fontWeight:900,color:"#78350f",lineHeight:1}}>{chessy.balance}</span>
+            </div>
+            <div style={{fontSize:13,color:"#b45309",marginTop:4}}>Всего: {chessy.lifetime}</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginTop:4}}>Магазин →</div>
+            {chessy.streak>=2&&<div style={{marginTop:6,fontSize:11,fontWeight:700,color:"#92400e",background:"rgba(146,64,14,0.1)",padding:"2px 8px",borderRadius:10,display:"inline-block"}}>🔥 {chessy.streak} дн. подряд</div>}
+          </div>
+          {/* Achievements widget */}
+          {(()=>{
+            const total=Object.keys(ACH_LABELS).length;const got=Object.keys(chessy.ach).length;
+            const pct=Math.round(got/total*100);
+            return <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",borderRadius:12,border:"1px solid #c4b5fd",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sShowShop(true)}>
+              <div style={{fontSize:13,color:T.purple,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Достижения</div>
+              <div style={{fontSize:28,fontWeight:900,color:T.purple,lineHeight:1}}>{got}/{total}</div>
+              <div style={{height:6,borderRadius:3,background:"#ede9fe",marginTop:8,overflow:"hidden"}}>
+                <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${T.purple},#a78bfa)`,transition:"width 0.4s"}}/>
+              </div>
+              <div style={{fontSize:11,color:T.purple,fontWeight:700,marginTop:6}}>{pct}% разблокировано</div>
+            </div>;
+          })()}
           {/* Win Rate Widget */}
           <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
             <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Win Rate</div>

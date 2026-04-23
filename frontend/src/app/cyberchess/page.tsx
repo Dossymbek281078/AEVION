@@ -146,6 +146,16 @@ const CHESSY_DEFAULT:ChessyState={v:1,balance:0,lifetime:0,streak:0,welcome:fals
 function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};const r=JSON.parse(s);if(!r||r.v!==1)return {...CHESSY_DEFAULT};return {...CHESSY_DEFAULT,...r,owned:r.owned||{},ach:r.ach||{}}}catch{return {...CHESSY_DEFAULT}}}
 function svChessy(s:ChessyState){try{localStorage.setItem(CK,JSON.stringify(s))}catch{}}
 function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
+const ACH_LABELS:Record<string,string>={
+  first_win:"🏆 Первая победа",
+  wins_10:"🎖 10 побед",
+  wins_50:"🏅 50 побед",
+  beat_expert:"⚔ Победа над Expert",
+  beat_master:"👑 Победа над Master",
+  puzzles_10:"🧩 10 пазлов",
+  puzzles_50:"🧠 50 пазлов",
+  puzzles_100:"🎯 100 пазлов",
+};
 
 /* ═══ Resume snapshot — autosave in-progress game ═══ */
 type ResumeSnap={v:1;fen:string;hist:string[];fenHist:string[];pCol:"w"|"b";aiI:number;tcI:number;useCustom:boolean;customMin:number;customInc:number;timeP:number;timeA:number;capW:string[];capB:string[];ts:number};
@@ -721,16 +731,29 @@ export default function CyberChessPage(){
   },[bk,over,on,tab,pms,pCol]);
 
   /* ── AI turn trigger ── */
+  // Snapshot fen at trigger time so a late-arriving Stockfish bestmove
+  // can't try to apply itself on a position the user has already moved on.
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(game.turn()===pCol)return;
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
+    const fenAtTrigger=game.fen();
     if(useSF&&sfR.current?.ready()){
-      const t=setTimeout(()=>sfR.current!.go(game.fen(),SFD[aiI]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)}),Math.max(800,delay));
+      const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
+        // Only apply if the board is still on the same position we asked about.
+        try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any)}catch{}
+        sThink(false);
+      }),Math.max(800,delay));
       return()=>clearTimeout(t);
     }
-    const t=setTimeout(()=>{const c=new Chess(game.fen());const b=best(c,lv.depth,lv.rand);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},delay);
+    const t=setTimeout(()=>{
+      try{if(game.fen()!==fenAtTrigger){sThink(false);return}
+        const c=new Chess(fenAtTrigger);const b=best(c,lv.depth,lv.rand);
+        if(b)exec(b.from as Square,b.to as Square,b.promotion as any);
+      }catch{}
+      sThink(false);
+    },delay);
     return()=>clearTimeout(t);
   },[bk,over,on,tab]);
 
@@ -836,8 +859,12 @@ export default function CyberChessPage(){
       sLm(null);sSel(null);sVm(new Set());sPromo(null);sThink(false);sPms([]);sPmSel(null);
       sOver(null);sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);
       sResumeOffer(null);
-      // Restore timer clocks on the next tick (after useTimer's [ini]-effect re-syncs)
-      setTimeout(()=>{pT.setTime(s.timeP);aT.setTime(s.timeA)},0);
+      // Restore timer clocks after the useTimer's [ini]-effect resyncs.
+      // queueMicrotask runs before paint but after current effects; in practice
+      // the ini-effect fires during commit so we need a real tick — use rAF
+      // which lands just before the next paint, avoiding the ~ticking gap that
+      // setTimeout(0) sometimes produces on throttled tabs.
+      requestAnimationFrame(()=>{pT.setTime(s.timeP);aT.setTime(s.timeA)});
       showToast(`Партия восстановлена · ${s.hist.length} ходов`,"success");
     }catch{showToast("Не удалось восстановить партию","error");clearResume();sResumeOffer(null)}
   };
@@ -1423,9 +1450,13 @@ export default function CyberChessPage(){
             {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
             {btn(`↩ Take back · 3`,()=>{
               if(hist.length<2){showToast("No moves","error");return}
+              if(think){showToast("AI думает — подожди","error");return}
               if(tab!=="play"){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);return}
-              if(!spendChessy(3,"takeback"))return;
-              game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
+              if(chessy.balance<3){showToast("Недостаточно Chessy (нужно 3)","error");return}
+              // Do the undo first, charge only on success
+              try{game.undo();game.undo();}catch{showToast("Takeback failed","error");return}
+              spendChessy(3,"takeback");
+              sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
             },T.surface,T.dim)}
             {savedGames.length>0&&(tab==="play"||tab==="coach")&&btn(`📜 История (${savedGames.length})`,()=>{
               sGamesModalOpen(true);
@@ -2334,7 +2365,7 @@ export default function CyberChessPage(){
           {Object.keys(chessy.ach).length>0&&<div style={{marginTop:12}}>
             <div style={{fontSize:13,fontWeight:800,color:T.dim,marginBottom:8,textTransform:"uppercase" as const,letterSpacing:"0.05em"}}>🏆 Достижения ({Object.keys(chessy.ach).length})</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {Object.keys(chessy.ach).map(k=><span key={k} style={{padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:T.text}}>{k.replace(/_/g," ")}</span>)}
+              {Object.keys(chessy.ach).map(k=><span key={k} title={new Date(chessy.ach[k]).toLocaleDateString("ru-RU")} style={{padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:T.text}}>{ACH_LABELS[k]||k}</span>)}
             </div>
           </div>}
         </div>

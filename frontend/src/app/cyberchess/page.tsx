@@ -1138,11 +1138,12 @@ export default function CyberChessPage(){
             </div>
             {/* AI opponent */}
             <div style={{flex:"1 1 260px"}}>
-              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>OPPONENT · {lv.name} {lv.elo}</div>
+              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>OPPONENT · {lv.name} {lv.elo}{aiI===5&&!chessy.owned.master_ai&&<span style={{marginLeft:6,color:"#b45309"}}>🔒</span>}</div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="range" min={0} max={5} value={aiI} onChange={e=>sAiI(+e.target.value)} style={{flex:1,accentColor:lv.color}}/>
+                <input type="range" min={0} max={chessy.owned.master_ai?5:4} value={Math.min(aiI,chessy.owned.master_ai?5:4)} onChange={e=>{const v=+e.target.value;if(v===5&&!chessy.owned.master_ai){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}} style={{flex:1,accentColor:lv.color}}/>
                 <div style={{fontSize:13,fontWeight:900,color:lv.color,minWidth:70,textAlign:"right"}}>{lv.name}{aiI>=3?" ⚡":""}</div>
               </div>
+              {!chessy.owned.master_ai&&<button onClick={()=>sShowShop(true)} style={{marginTop:6,padding:"4px 10px",borderRadius:6,border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔒 Разблокировать Master AI · 30 Chessy</button>}
             </div>
           </div>
         </div>
@@ -1410,7 +1411,12 @@ export default function CyberChessPage(){
           {on&&!over&&!setup&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
             {btn("🏳 Resign",()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
             {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
-            {btn("↩ Take back",()=>{if(hist.length>=2){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1)}else showToast("No moves","error")},T.surface,T.dim)}
+            {btn(`↩ Take back · 3`,()=>{
+              if(hist.length<2){showToast("No moves","error");return}
+              if(tab!=="play"){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);return}
+              if(!spendChessy(3,"takeback"))return;
+              game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
+            },T.surface,T.dim)}
             {savedGames.length>0&&(tab==="play"||tab==="coach")&&btn(`📜 История (${savedGames.length})`,()=>{
               sGamesModalOpen(true);
             },T.surface,T.dim)}
@@ -1674,7 +1680,7 @@ export default function CyberChessPage(){
                   <button onClick={nextPz} style={{flex:"1 1 auto",minWidth:120,padding:"10px 18px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer"}}>▶ Следующая</button>
                   <button onClick={randomPz} style={{padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:14,fontWeight:700,cursor:"pointer"}} title="Случайная">🎲</button>
                   {pzAttempt==="wrong"&&<button onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}} style={{padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.text,fontSize:13,fontWeight:700,cursor:"pointer"}}>↩ Заново</button>}
-                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<button onClick={()=>sPzAttempt("shown")} style={{padding:"10px 14px",borderRadius:8,border:`1px solid #fde68a`,background:"#fffbeb",color:"#92400e",fontSize:13,fontWeight:700,cursor:"pointer"}}>💡 Подсказка</button>}
+                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<button onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}} style={{padding:"10px 14px",borderRadius:8,border:`1px solid #fde68a`,background:"#fffbeb",color:"#92400e",fontSize:13,fontWeight:700,cursor:"pointer"}}>💡 Подсказка · 5</button>}
                 </div>
               </div>
             </div>:<div style={{padding:"24px",textAlign:"center",color:T.dim,fontSize:14,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>Выбери задачу из списка ниже ↓</div>}

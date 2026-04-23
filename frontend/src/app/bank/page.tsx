@@ -29,6 +29,7 @@ import { EcosystemPulse } from "./_components/EcosystemPulse";
 import { HelpMenu } from "./_components/HelpMenu";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
+import { ReferralsPanel } from "./_components/ReferralsPanel";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { GiftMode } from "./_components/GiftMode";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
@@ -287,6 +288,7 @@ function BankContent() {
             <AchievementsPanel account={account} operations={operations} />
           </div>
 
+          <ReferralsPanel account={account} notify={notify} />
           <SnapshotExport account={account} operations={operations} notify={notify} />
           <HelpMenu accountId={account.id} notify={notify} />
           <AccountIdCard

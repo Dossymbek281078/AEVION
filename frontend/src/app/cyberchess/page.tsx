@@ -146,6 +146,13 @@ const CHESSY_DEFAULT:ChessyState={v:1,balance:0,lifetime:0,streak:0,welcome:fals
 function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};const r=JSON.parse(s);if(!r||r.v!==1)return {...CHESSY_DEFAULT};return {...CHESSY_DEFAULT,...r,owned:r.owned||{},ach:r.ach||{}}}catch{return {...CHESSY_DEFAULT}}}
 function svChessy(s:ChessyState){try{localStorage.setItem(CK,JSON.stringify(s))}catch{}}
 function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
+function daysSinceEpoch(){return Math.floor(Date.now()/86400000)}
+// Deterministic daily-puzzle index — same for all users on the same day
+function pickDailyIdx(total:number){if(total<=0)return 0;const n=daysSinceEpoch();let h=n*2654435761;h=(h^(h>>>16))>>>0;return h%total}
+type DailyState={v:1;date:string;idx:number;solved:boolean};
+const DK="aevion_daily_puzzle_v1";
+function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)return null;const r=JSON.parse(s);return r?.v===1?r:null}catch{return null}}
+function svDaily(s:DailyState){try{localStorage.setItem(DK,JSON.stringify(s))}catch{}}
 const ACH_LABELS:Record<string,string>={
   first_win:"🏆 Первая победа",
   wins_10:"🎖 10 побед",
@@ -342,6 +349,7 @@ export default function CyberChessPage(){
   const clearAnnotations=useCallback(()=>{sArrows([]);sSqHL([])},[]);
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   const[showShop,sShowShop]=useState(false);
+  const[dailyState,sDailyState]=useState<DailyState|null>(null);
   useEffect(()=>{svChessy(chessy)},[chessy]);
   const addChessy=useCallback((n:number,reason:string)=>{
     if(n<=0)return;
@@ -394,6 +402,16 @@ export default function CyberChessPage(){
     const pz=fPz[0];if(!pz)return;
     const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
   },[pzCategory]);
+
+  // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
+  useEffect(()=>{
+    if(PUZZLES.length===0)return;
+    const tk=todayKey();const saved=ldDaily();
+    if(saved&&saved.date===tk){sDailyState(saved);return}
+    const idx=pickDailyIdx(PUZZLES.length);
+    const next:DailyState={v:1,date:tk,idx,solved:false};
+    svDaily(next);sDailyState(next);
+  },[PUZZLES.length]);
 
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
@@ -598,6 +616,10 @@ export default function CyberChessPage(){
                 sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"пазл решён");
+                if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+                  const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+                  setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
+                }
               }
             }catch{}
           },100); // fast response, no thinking delay
@@ -606,6 +628,11 @@ export default function CyberChessPage(){
           sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"пазл решён");
+          // Daily puzzle bonus — first solve today
+          if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+            const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+            setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
+          }
         }
         return true;
       }else{
@@ -909,6 +936,13 @@ export default function CyberChessPage(){
   const discardResume=()=>{clearResume();sResumeOffer(null)};
   const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
   const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
+  const loadDailyPuzzle=()=>{
+    if(!dailyState||PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
+    const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
+    sTab("puzzles");
+    const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();sPzTimeLeft(0);
+    showToast(`☀ Пазл дня · ${pz.r}`,"info");
+  };
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
@@ -1234,6 +1268,20 @@ export default function CyberChessPage(){
           }} style={{flex:"1 1 160px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚡ Match Me<div style={{fontSize:13,color:T.dim,fontWeight:600,marginTop:2}}>AI ≈ {rat} ELO</div></button>
           <button onClick={()=>sShowCustom(!showCustom)} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚙ Custom Time</button>
         </div>
+
+        {/* Daily Puzzle card */}
+        {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
+          const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
+          return <button onClick={loadDailyPuzzle} style={{width:"100%",marginBottom:12,padding:"14px 18px",borderRadius:12,border:solved?"1px solid #a7f3d0":"1px solid #fcd34d",background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+            <div style={{fontSize:32,lineHeight:1}}>{solved?"✅":"☀"}</div>
+            <div style={{flex:"1 1 200px",minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:800,color:solved?"#065f46":"#92400e",letterSpacing:"0.06em",textTransform:"uppercase" as const}}>{solved?"Пазл дня решён":"Пазл дня"}</div>
+              <div style={{fontSize:16,fontWeight:900,color:T.text,marginTop:3}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Найди лучший ход"} · <span style={{color:T.gold}}>{pz.r}</span></div>
+              <div style={{fontSize:13,color:T.dim,marginTop:2}}>{solved?"Возвращайся завтра за новым":`Награда: +50 Chessy · обновится через ${24-new Date().getHours()} ч`}</div>
+            </div>
+            {!solved&&<div style={{padding:"8px 16px",borderRadius:8,background:T.accent,color:"#fff",fontSize:13,fontWeight:800,whiteSpace:"nowrap"}}>▶ Решить</div>}
+          </button>;
+        })()}
 
         {/* Premove Queue — slider 1..20 */}
         <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>

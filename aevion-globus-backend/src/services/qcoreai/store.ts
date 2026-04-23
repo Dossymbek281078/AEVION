@@ -31,6 +31,7 @@ export type RunRow = {
   finalContent: string | null;
   totalDurationMs: number | null;
   totalCostUsd: number | null;
+  shareToken: string | null;
   startedAt: string;
   finishedAt: string | null;
 };
@@ -270,6 +271,42 @@ export async function insertMessage(opts: {
   return r.rows[0] as MessageRow;
 }
 
+/** Enable public sharing of a run — returns the token. Idempotent (reuses existing token). */
+export async function shareRun(runId: string, userId: string | null): Promise<string | null> {
+  const run = await getRun(runId);
+  if (!run) return null;
+  const session = await getSession(run.sessionId, userId);
+  if (!session) return null;
+  if (run.shareToken) return run.shareToken;
+  const token = crypto.randomBytes(24).toString("base64url");
+  await pool.query(`UPDATE "QCoreRun" SET "shareToken"=$2 WHERE "id"=$1`, [runId, token]);
+  return token;
+}
+
+/** Disable public sharing. Returns true if a token was revoked. */
+export async function unshareRun(runId: string, userId: string | null): Promise<boolean> {
+  const run = await getRun(runId);
+  if (!run) return false;
+  const session = await getSession(run.sessionId, userId);
+  if (!session) return false;
+  if (!run.shareToken) return false;
+  await pool.query(`UPDATE "QCoreRun" SET "shareToken"=NULL WHERE "id"=$1`, [runId]);
+  return true;
+}
+
+/** Look up a run by its public share token (read-only path, no auth required). */
+export async function getRunByShareToken(token: string): Promise<RunRow | null> {
+  await ensureQCoreTables(pool);
+  const r = await pool.query(`SELECT * FROM "QCoreRun" WHERE "shareToken"=$1 LIMIT 1`, [token]);
+  return (r.rows?.[0] as RunRow) || null;
+}
+
+/** Public-safe session fetch (used by shared endpoint — returns only title/mode). */
+export async function getSessionPublic(id: string): Promise<{ id: string; title: string; mode: string } | null> {
+  const r = await pool.query(`SELECT "id","title","mode" FROM "QCoreSession" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as any) || null;
+}
+
 export async function listRuns(sessionId: string, limit = 50): Promise<RunRow[]> {
   const lim = Math.max(1, Math.min(200, limit));
   const r = await pool.query(
@@ -295,6 +332,166 @@ export async function listMessages(runId: string): Promise<MessageRow[]> {
     [runId]
   );
   return r.rows as MessageRow[];
+}
+
+/**
+ * Aggregate analytics across all runs a caller can see. Anonymous users see
+ * anonymous sessions only; authenticated users see their own sessions only.
+ */
+export type AnalyticsSummary = {
+  scope: "mine" | "anonymous";
+  runs: number;
+  sessions: number;
+  messages: number;
+  totals: { tokensIn: number; tokensOut: number; costUsd: number; durationMs: number };
+  byStrategy: Array<{ strategy: string; runs: number; costUsd: number; tokens: number; avgDurationMs: number }>;
+  byProvider: Array<{ provider: string; calls: number; costUsd: number; tokensIn: number; tokensOut: number }>;
+  byModel: Array<{ provider: string; model: string; calls: number; costUsd: number; tokens: number }>;
+  recent: Array<{ sessionId: string; runId: string; strategy: string | null; costUsd: number | null; totalDurationMs: number | null; startedAt: string; title: string }>;
+};
+
+export async function getAnalytics(userId: string | null): Promise<AnalyticsSummary> {
+  await ensureQCoreTables(pool);
+  const scope: "mine" | "anonymous" = userId ? "mine" : "anonymous";
+  const userPredicate = userId
+    ? `s."userId" = $1`
+    : `s."userId" IS NULL`;
+  const params = userId ? [userId] : [];
+
+  const runsQ = await pool.query(
+    `SELECT COUNT(*)::int AS runs,
+            COALESCE(SUM(r."totalCostUsd"), 0)::float8 AS "costUsd",
+            COALESCE(SUM(r."totalDurationMs"), 0)::bigint AS "durationMs"
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate}`,
+    params
+  );
+
+  const sessQ = await pool.query(
+    `SELECT COUNT(*)::int AS sessions FROM "QCoreSession" s WHERE ${userPredicate}`,
+    params
+  );
+
+  const tokensQ = await pool.query(
+    `SELECT COALESCE(SUM(m."tokensIn"), 0)::bigint AS "tokensIn",
+            COALESCE(SUM(m."tokensOut"), 0)::bigint AS "tokensOut",
+            COUNT(*)::int AS messages
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON r."id" = m."runId"
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate}`,
+    params
+  );
+
+  const strategyQ = await pool.query(
+    `SELECT COALESCE(r."strategy", 'sequential') AS strategy,
+            COUNT(*)::int AS runs,
+            COALESCE(SUM(r."totalCostUsd"), 0)::float8 AS "costUsd",
+            COALESCE(SUM(
+              (SELECT COALESCE(SUM(COALESCE(m."tokensIn",0)+COALESCE(m."tokensOut",0)),0)
+                 FROM "QCoreMessage" m WHERE m."runId" = r."id")
+            ), 0)::bigint AS "tokens",
+            COALESCE(AVG(r."totalDurationMs"), 0)::float8 AS "avgDurationMs"
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate}
+      GROUP BY COALESCE(r."strategy", 'sequential')
+      ORDER BY runs DESC`,
+    params
+  );
+
+  const providerQ = await pool.query(
+    `SELECT m."provider" AS provider,
+            COUNT(*)::int AS calls,
+            COALESCE(SUM(m."costUsd"), 0)::float8 AS "costUsd",
+            COALESCE(SUM(m."tokensIn"), 0)::bigint AS "tokensIn",
+            COALESCE(SUM(m."tokensOut"), 0)::bigint AS "tokensOut"
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON r."id" = m."runId"
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate} AND m."provider" IS NOT NULL
+      GROUP BY m."provider"
+      ORDER BY calls DESC`,
+    params
+  );
+
+  const modelQ = await pool.query(
+    `SELECT m."provider" AS provider,
+            m."model" AS model,
+            COUNT(*)::int AS calls,
+            COALESCE(SUM(m."costUsd"), 0)::float8 AS "costUsd",
+            COALESCE(SUM(COALESCE(m."tokensIn",0)+COALESCE(m."tokensOut",0)), 0)::bigint AS "tokens"
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON r."id" = m."runId"
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate} AND m."provider" IS NOT NULL AND m."model" IS NOT NULL
+      GROUP BY m."provider", m."model"
+      ORDER BY calls DESC
+      LIMIT 20`,
+    params
+  );
+
+  const recentQ = await pool.query(
+    `SELECT r."id" AS "runId",
+            r."sessionId" AS "sessionId",
+            r."strategy" AS strategy,
+            r."totalCostUsd" AS "costUsd",
+            r."totalDurationMs" AS "totalDurationMs",
+            r."startedAt" AS "startedAt",
+            s."title" AS title
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate}
+      ORDER BY r."startedAt" DESC
+      LIMIT 10`,
+    params
+  );
+
+  const tokensIn = Number(tokensQ.rows[0]?.tokensIn ?? 0);
+  const tokensOut = Number(tokensQ.rows[0]?.tokensOut ?? 0);
+  return {
+    scope,
+    runs: runsQ.rows[0]?.runs ?? 0,
+    sessions: sessQ.rows[0]?.sessions ?? 0,
+    messages: tokensQ.rows[0]?.messages ?? 0,
+    totals: {
+      tokensIn,
+      tokensOut,
+      costUsd: Number(runsQ.rows[0]?.costUsd ?? 0),
+      durationMs: Number(runsQ.rows[0]?.durationMs ?? 0),
+    },
+    byStrategy: strategyQ.rows.map((r: any) => ({
+      strategy: r.strategy,
+      runs: r.runs,
+      costUsd: Number(r.costUsd),
+      tokens: Number(r.tokens),
+      avgDurationMs: Number(r.avgDurationMs),
+    })),
+    byProvider: providerQ.rows.map((r: any) => ({
+      provider: r.provider,
+      calls: r.calls,
+      costUsd: Number(r.costUsd),
+      tokensIn: Number(r.tokensIn),
+      tokensOut: Number(r.tokensOut),
+    })),
+    byModel: modelQ.rows.map((r: any) => ({
+      provider: r.provider,
+      model: r.model,
+      calls: r.calls,
+      costUsd: Number(r.costUsd),
+      tokens: Number(r.tokens),
+    })),
+    recent: recentQ.rows.map((r: any) => ({
+      runId: r.runId,
+      sessionId: r.sessionId,
+      strategy: r.strategy,
+      costUsd: r.costUsd,
+      totalDurationMs: r.totalDurationMs,
+      startedAt: r.startedAt,
+      title: r.title,
+    })),
+  };
 }
 
 /** Build a history context (user + final assistant messages) for follow-up runs. */

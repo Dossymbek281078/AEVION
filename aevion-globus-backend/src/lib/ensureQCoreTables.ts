@@ -74,9 +74,13 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       ON "QCoreMessage" ("runId", "ordering");
   `);
 
-  // QCoreRun — strategy column (sequential | parallel | debate) + cost total.
+  // QCoreRun — strategy column (sequential | parallel | debate) + cost total + share token.
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "strategy" TEXT;`);
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "totalCostUsd" DOUBLE PRECISION;`);
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "shareToken" TEXT;`);
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "QCoreRun_shareToken_key" ON "QCoreRun" ("shareToken") WHERE "shareToken" IS NOT NULL;`
+  );
 
   // QCoreMessage — per-call cost (computed from provider/model/tokens at runtime).
   await pool.query(`ALTER TABLE "QCoreMessage" ADD COLUMN IF NOT EXISTS "costUsd" DOUBLE PRECISION;`);

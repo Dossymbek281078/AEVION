@@ -180,6 +180,20 @@ export default function MultichatEnginePage() {
         </div>
 
         <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: "#64748b" }}>
+          <Link
+            href="/qcoreai/analytics"
+            style={{
+              border: "1px solid #7c3aed55",
+              background: "rgba(124,58,237,0.06)",
+              borderRadius: 8,
+              padding: "6px 10px",
+              textDecoration: "none",
+              color: "#6d28d9",
+              fontWeight: 700,
+            }}
+          >
+            📊 Analytics
+          </Link>
           <a
             href={`${origin}/api/qcoreai/health`}
             target="_blank"

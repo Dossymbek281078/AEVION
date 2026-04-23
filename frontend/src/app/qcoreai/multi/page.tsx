@@ -75,6 +75,7 @@ type RunState = {
   strategy?: Strategy;
   agentConfig?: any;
   persisted?: boolean;
+  shareToken?: string | null;
 };
 
 type SessionSummary = {
@@ -277,6 +278,7 @@ export default function QCoreMultiAgentPage() {
   });
   const [maxRevisions, setMaxRevisions] = useState(1);
   const [configOpen, setConfigOpen] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -355,6 +357,7 @@ export default function QCoreMultiAgentPage() {
         strategy: r.strategy || undefined,
         agentConfig: r.agentConfig ?? undefined,
         persisted: true,
+        shareToken: r.shareToken ?? null,
       }));
       setRuns(hydrated);
       setActiveSessionId(sessionId);
@@ -632,6 +635,56 @@ export default function QCoreMultiAgentPage() {
     }
   }, []);
 
+  /** Run the same prompt through all three strategies back-to-back. */
+  const sendCompareAll = useCallback(async () => {
+    const msg = input.trim();
+    if (!msg || busy) return;
+    setInput("");
+    const order: Strategy[] = ["sequential", "parallel", "debate"];
+    for (const s of order) {
+      if (abortRef.current === null && busy) break; // allow stop to cancel remaining
+      await send(msg, { strategy: s });
+    }
+  }, [input, busy, send]);
+
+  /** Publish a run via shareToken; copies public URL to clipboard. */
+  const shareRun = useCallback(async (runId: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/share`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/qcoreai/shared/${data.token}`;
+      setRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, shareToken: data.token } : r)));
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        alert(`Public link copied to clipboard:\n\n${shareUrl}`);
+      } catch {
+        prompt("Public link:", shareUrl);
+      }
+    } catch (e: any) {
+      setGlobalError(e?.message || "Share failed");
+    }
+  }, []);
+
+  const unshareRun = useCallback(async (runId: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/share`), {
+        method: "DELETE",
+        headers: bearerHeader(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      setRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, shareToken: null } : r)));
+    } catch (e: any) {
+      setGlobalError(e?.message || "Unshare failed");
+    }
+  }, []);
+
   /** Restore a past run's config + resend its prompt — the "Rerun" button. */
   const rerun = useCallback((run: RunState) => {
     const cfg = run.agentConfig || {};
@@ -700,22 +753,41 @@ export default function QCoreMultiAgentPage() {
                   Analyst + Writer + Critic — inspectable AI pipeline with live streaming, cost tracking, and three strategies.
                 </p>
               </div>
-              <Link
-                href="/qcoreai"
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.25)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#fff",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  textDecoration: "none",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Single chat →
-              </Link>
+              <div style={{ display: "flex", gap: 6 }}>
+                <Link
+                  href="/qcoreai/analytics"
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Totals: runs, cost, tokens, strategy mix"
+                >
+                  📊 Analytics
+                </Link>
+                <Link
+                  href="/qcoreai"
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Single chat →
+                </Link>
+              </div>
             </div>
 
             {/* Strategy + role pills */}
@@ -796,6 +868,25 @@ export default function QCoreMultiAgentPage() {
               >
                 {configOpen ? "Hide config ▲" : "Configure agents ▼"}
               </button>
+
+              <label
+                style={{
+                  padding: "6px 12px", borderRadius: 8,
+                  background: compareMode ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.08)",
+                  border: `1px solid ${compareMode ? "rgba(245,158,11,0.6)" : "rgba(255,255,255,0.2)"}`,
+                  color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+                title="Send the same prompt through all three strategies back-to-back"
+              >
+                <input
+                  type="checkbox"
+                  checked={compareMode}
+                  onChange={(e) => setCompareMode(e.target.checked)}
+                  style={{ accentColor: "#f59e0b", cursor: "pointer" }}
+                />
+                Compare all 3
+              </label>
 
               {liveRun && (
                 <LiveCostBadge run={liveRun} />
@@ -973,6 +1064,8 @@ export default function QCoreMultiAgentPage() {
                     run={run}
                     onLoadDetails={run.persisted && run.turns.length === 0 ? () => expandRunDetails(run.id) : undefined}
                     onRerun={() => rerun(run)}
+                    onShare={() => shareRun(run.id)}
+                    onUnshare={() => unshareRun(run.id)}
                   />
                 ))
               )}
@@ -998,11 +1091,13 @@ export default function QCoreMultiAgentPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    send();
+                    if (compareMode) sendCompareAll(); else send();
                   }
                 }}
                 placeholder={
-                  strategy === "debate"
+                  compareMode
+                    ? "Compare mode: your prompt runs through Sequential + Parallel + Debate, back-to-back."
+                    : strategy === "debate"
                     ? "Ask a decision or trade-off question — Pro and Con will argue it out, Moderator synthesizes."
                     : strategy === "parallel"
                     ? "Describe your task — Analyst plans, two Writers draft on different models, Judge synthesizes."
@@ -1032,17 +1127,19 @@ export default function QCoreMultiAgentPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => send()}
+                  onClick={() => compareMode ? sendCompareAll() : send()}
                   disabled={!input.trim() || !anyConfigured}
                   style={{
                     padding: "12px 24px", borderRadius: 12, border: "none",
-                    background: !input.trim() || !anyConfigured ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #06b6d4)",
+                    background: !input.trim() || !anyConfigured ? "#94a3b8"
+                      : compareMode ? "linear-gradient(135deg, #f59e0b, #ef4444)"
+                      : "linear-gradient(135deg, #0d9488, #06b6d4)",
                     color: "#fff", fontWeight: 800, fontSize: 14,
                     cursor: !input.trim() || !anyConfigured ? "default" : "pointer",
-                    alignSelf: "stretch",
+                    alignSelf: "stretch", whiteSpace: "nowrap",
                   }}
                 >
-                  Send
+                  {compareMode ? "Send × 3" : "Send"}
                 </button>
               )}
             </div>
@@ -1336,10 +1433,14 @@ function RunCard({
   run,
   onLoadDetails,
   onRerun,
+  onShare,
+  onUnshare,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
   onRerun?: () => void;
+  onShare?: () => void;
+  onUnshare?: () => void;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
@@ -1474,6 +1575,47 @@ function RunCard({
             )}
             {run.persisted && run.id && !run.id.startsWith("tmp_") && (
               <>
+                {run.shareToken ? (
+                  <>
+                    <a
+                      href={`/qcoreai/shared/${run.shareToken}`}
+                      target="_blank" rel="noreferrer"
+                      style={{
+                        padding: "5px 10px", borderRadius: 8,
+                        background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.35)",
+                        color: "#6d28d9", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                      }}
+                      title="Open public link in new tab"
+                    >
+                      🔗 Public
+                    </a>
+                    {onUnshare && (
+                      <button
+                        onClick={onUnshare}
+                        style={{
+                          padding: "5px 10px", borderRadius: 8,
+                          background: "#fff", border: "1px solid #cbd5e1",
+                          color: "#991b1b", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                        }}
+                        title="Revoke public link"
+                      >
+                        Unshare
+                      </button>
+                    )}
+                  </>
+                ) : onShare ? (
+                  <button
+                    onClick={onShare}
+                    style={{
+                      padding: "5px 10px", borderRadius: 8,
+                      background: "#fff", border: "1px solid #cbd5e1",
+                      color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    }}
+                    title="Create a public link to share this run"
+                  >
+                    🔗 Share
+                  </button>
+                ) : null}
                 <a
                   href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
                   target="_blank" rel="noreferrer"

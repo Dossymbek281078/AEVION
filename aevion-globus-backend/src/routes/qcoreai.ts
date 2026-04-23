@@ -20,15 +20,20 @@ import {
   deleteSession,
   ensureSession,
   finishRun,
+  getAnalytics,
   getRun,
+  getRunByShareToken,
   getSession,
+  getSessionPublic,
   insertMessage,
   listMessages,
   listRuns,
   listSessions,
   renameSession,
   renameSessionIfDefault,
+  shareRun,
   touchSession,
+  unshareRun,
 } from "../services/qcoreai/store";
 
 export const qcoreaiRouter = Router();
@@ -180,6 +185,83 @@ qcoreaiRouter.get("/runs/:id", async (req, res) => {
     res.json({ run, messages });
   } catch (err: any) {
     res.status(500).json({ error: "get run failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Shared runs (public, read-only)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/share", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const token = await shareRun(req.params.id, auth?.sub ?? null);
+    if (!token) return res.status(404).json({ error: "run not found" });
+    res.json({ token });
+  } catch (err: any) {
+    res.status(500).json({ error: "share failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/runs/:id/share", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const ok = await unshareRun(req.params.id, auth?.sub ?? null);
+    if (!ok) return res.status(404).json({ error: "run not found or not shared" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "unshare failed", details: err?.message });
+  }
+});
+
+/**
+ * Public read-only endpoint. No auth. Anyone with the token sees the run's
+ * agent trace and final answer. Sensitive fields (session.userId, agentConfig
+ * with raw system prompts) are stripped.
+ */
+qcoreaiRouter.get("/shared/:token", async (req, res) => {
+  try {
+    const run = await getRunByShareToken(req.params.token);
+    if (!run) return res.status(404).json({ error: "not found" });
+    const session = await getSessionPublic(run.sessionId);
+    const messages = await listMessages(run.id);
+    // Strip raw system prompts from agentConfig to avoid leaking custom prompts.
+    const safeConfig = run.agentConfig && typeof run.agentConfig === "object"
+      ? {
+          strategy: run.agentConfig.strategy ?? run.strategy ?? "sequential",
+          maxRevisions: run.agentConfig.maxRevisions ?? null,
+          overrides: scrubOverrides(run.agentConfig.overrides),
+        }
+      : null;
+    const safeRun = {
+      id: run.id,
+      strategy: run.strategy,
+      status: run.status,
+      userInput: run.userInput,
+      finalContent: run.finalContent,
+      totalDurationMs: run.totalDurationMs,
+      totalCostUsd: run.totalCostUsd,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      agentConfig: safeConfig,
+    };
+    res.json({ session, run: safeRun, messages });
+  } catch (err: any) {
+    res.status(500).json({ error: "shared lookup failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Analytics
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/analytics", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const summary = await getAnalytics(auth?.sub ?? null);
+    res.json(summary);
+  } catch (err: any) {
+    res.status(500).json({ error: "analytics failed", details: err?.message });
   }
 });
 
@@ -531,6 +613,22 @@ qcoreaiRouter.get("/agents", (_req, res) => {
 /* ═══════════════════════════════════════════════════════════════════════
    Helpers (local to route)
    ═══════════════════════════════════════════════════════════════════════ */
+
+/** Remove raw system prompts from agent overrides — keeps model/provider/temperature. */
+function scrubOverrides(raw: any): any {
+  if (!raw || typeof raw !== "object") return null;
+  const out: any = {};
+  for (const k of Object.keys(raw)) {
+    const v = raw[k];
+    if (!v || typeof v !== "object") continue;
+    out[k] = {
+      provider: v.provider,
+      model: v.model,
+      temperature: typeof v.temperature === "number" ? v.temperature : undefined,
+    };
+  }
+  return out;
+}
 
 function slugify(s: string): string {
   return (s || "")

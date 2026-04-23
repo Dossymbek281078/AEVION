@@ -20,6 +20,7 @@ import { AchievementsPanel } from "./_components/AchievementsPanel";
 import { ActivityTimeline } from "./_components/ActivityTimeline";
 import { AdvisorChat } from "./_components/AdvisorChat";
 import { AuditPanel } from "./_components/AuditPanel";
+import { DemoModeBanner } from "./_components/DemoModeBanner";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
@@ -245,6 +246,11 @@ function BankContent() {
 
       {hasWallet && account ? (
         <EcosystemDataProvider accountId={account.id} operations={operations}>
+          <DemoModeBanner
+            accountId={account.id}
+            requested={searchParams?.get("demo") === "1"}
+            notify={notify}
+          />
           <TotalEarningsDashboard />
           <WealthForecast account={account} />
           <TrustScoreCard account={account} operations={operations} />

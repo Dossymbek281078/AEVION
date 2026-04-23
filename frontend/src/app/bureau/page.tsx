@@ -151,39 +151,63 @@ export default function BureauPage() {
   const [sort, setSort] = useState<SortMode>("recent");
   const debouncedQ = useDebounced(q, 220);
 
-  /* Load stats once */
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [lastSynced, setLastSynced] = useState<number | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  /* Load stats */
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         setLoadingStats(true);
+        setStatsError(null);
         const res = await fetch(apiUrl("/api/pipeline/bureau/stats"));
-        if (res.ok) setStats(await res.json());
-      } catch {}
-      finally { setLoadingStats(false); }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!cancelled) {
+          setStats(data);
+          setLastSynced(Date.now());
+        }
+      } catch (e) {
+        if (!cancelled) setStatsError(e instanceof Error ? e.message : "offline");
+      } finally {
+        if (!cancelled) setLoadingStats(false);
+      }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [refreshNonce]);
 
   /* Load certificates whenever query changes */
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         setLoadingList(true);
+        setListError(null);
         const params = new URLSearchParams();
         if (debouncedQ) params.set("q", debouncedQ);
         if (kind) params.set("kind", kind);
         if (sort) params.set("sort", sort);
         params.set("limit", "60");
         const res = await fetch(apiUrl(`/api/pipeline/certificates?${params.toString()}`));
-        if (res.ok) {
-          const data = await res.json();
-          setCertificates(data.certificates || []);
-        } else {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!cancelled) setCertificates(data.certificates || []);
+      } catch (e) {
+        if (!cancelled) {
+          setListError(e instanceof Error ? e.message : "offline");
           setCertificates([]);
         }
-      } catch { setCertificates([]); }
-      finally { setLoadingList(false); }
+      } finally {
+        if (!cancelled) setLoadingList(false);
+      }
     })();
-  }, [debouncedQ, kind, sort]);
+    return () => { cancelled = true; };
+  }, [debouncedQ, kind, sort, refreshNonce]);
+
+  const handleRefresh = () => setRefreshNonce((n) => n + 1);
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -259,6 +283,33 @@ export default function BureauPage() {
             </div>
           </div>
         </section>
+
+        {/* ── Data status strip ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#64748b" }}>
+            {statsError || listError ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#b91c1c", fontWeight: 700 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} />
+                Data source temporarily unavailable
+              </span>
+            ) : lastSynced ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", color: "#059669", fontWeight: 700 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }} />
+                Synced {new Date(lastSynced).toLocaleTimeString()}
+              </span>
+            ) : (
+              <span style={{ padding: "4px 10px", borderRadius: 999, background: "rgba(15,23,42,0.05)", color: "#64748b", fontWeight: 700 }}>Loading live registry…</span>
+            )}
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={loadingStats || loadingList}
+            style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: loadingStats || loadingList ? "wait" : "pointer", opacity: loadingStats || loadingList ? 0.6 : 1 }}
+            title="Reload live registry data"
+          >
+            {loadingStats || loadingList ? "Refreshing…" : "↻ Refresh"}
+          </button>
+        </div>
 
         {/* ── KPI grid with animated counts + sparkline ── */}
         <section style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 22 }}>
@@ -461,6 +512,17 @@ export default function BureauPage() {
               <style jsx>{`
                 @keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
               `}</style>
+            </div>
+          ) : listError ? (
+            <div style={{ textAlign: "center", padding: "56px 20px", borderRadius: 16, border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.04)" }}>
+              <div style={{ fontSize: 46, marginBottom: 8 }}>🛰️</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#b91c1c", marginBottom: 4 }}>Registry source unreachable</div>
+              <div style={{ fontSize: 12.5, color: "#7f1d1d", marginBottom: 16, maxWidth: 420, margin: "0 auto 16px" }}>
+                We couldn&apos;t reach the verification backend. Your certificates are safe — this is a transient connectivity issue.
+              </div>
+              <button onClick={handleRefresh} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.25)", background: "#fff", fontWeight: 700, cursor: "pointer", color: "#0f172a", fontSize: 13 }}>
+                ↻ Retry
+              </button>
             </div>
           ) : certificates.length === 0 ? (
             <div style={{ textAlign: "center", padding: "56px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.15)", background: "#fff" }}>

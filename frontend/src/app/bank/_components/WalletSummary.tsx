@@ -11,6 +11,7 @@ import {
 import type { Account, Operation } from "../_lib/types";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
+import { AnimatedMoney, BalanceTrendIndicator } from "./AnimatedMoney";
 import { CoinTower } from "./CoinTower";
 import { Sparkline, StatCard } from "./primitives";
 
@@ -64,7 +65,16 @@ export function WalletSummary({
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "2 1 400px" }}>
-        <StatCard label="Balance" value={formatCurrency(account.balance, code)} accent="#0f766e" />
+        <StatCard
+          label="Balance"
+          value={
+            <>
+              <AnimatedMoney aec={account.balance} />
+              <BalanceTrendIndicator balance={account.balance} />
+            </>
+          }
+          accent="#0f766e"
+        />
         <StatCard
           label="Net flow 30d"
           value={formatCurrency(s.netFlow, code, { sign: true })}

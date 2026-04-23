@@ -154,7 +154,7 @@ function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 /* ═══ Theme ═══ */
 const T={bg:"#f3f4f6",surface:"#fff",border:"#e5e7eb",text:"#111827",dim:"#6b7280",accent:"#059669",gold:"#d97706",danger:"#dc2626",blue:"#2563eb",purple:"#7c3aed",sel:"rgba(5,150,105,0.45)",valid:"rgba(5,150,105,0.35)",cap:"rgba(220,38,38,0.35)",last:"rgba(217,119,6,0.25)",chk:"rgba(220,38,38,0.55)",pm:"rgba(37,99,235,0.35)",pmS:"rgba(37,99,235,0.5)"};
 
-type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string};
+type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string;premium?:string};
 const BOARD_THEMES: BoardTheme[] = [
   {name:"Classic",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
   {name:"Emerald",light:"#eeeed2",dark:"#769656",border:"#769656",icon:"🌿"},
@@ -164,6 +164,10 @@ const BOARD_THEMES: BoardTheme[] = [
   {name:"Dark",light:"#b0b0b0",dark:"#555555",border:"#444444",icon:"🌑"},
   {name:"Ice",light:"#e8f4f8",dark:"#7eb8d0",border:"#5a9ab5",icon:"❄️"},
   {name:"Rose",light:"#f5e6e0",dark:"#c47a6c",border:"#b06858",icon:"🌹"},
+  // Premium (owned key in Chessy state)
+  {name:"Neon",light:"#1a0b2e",dark:"#ff00e6",border:"#7c3aed",icon:"⚡",premium:"theme_neon"},
+  {name:"Obsidian",light:"#1f2937",dark:"#0a0a0a",border:"#fbbf24",icon:"🖤",premium:"theme_obsidian"},
+  {name:"Sakura",light:"#ffe0ec",dark:"#f472b6",border:"#ec4899",icon:"🌸",premium:"theme_sakura"},
 ];
 
 /* ═══ StatusBar — game state badge with inline SVG icons ═══ */
@@ -209,7 +213,7 @@ export default function CyberChessPage(){
   const{showToast}=useToast();
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
-  const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=8?0:v}catch{return 0}});
+  const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=BOARD_THEMES.length?0:v}catch{return 0}});
   const[muted,sMuted]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{return false}});
   useEffect(()=>{setMuted(muted)},[muted]);
   const[voiceListening,sVoiceListening]=useState(false);
@@ -1168,14 +1172,17 @@ export default function CyberChessPage(){
         <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12}}>
           <div style={{fontSize:14,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const,marginBottom:8}}>Board Theme</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {BOARD_THEMES.map((th,i)=>(
-              <button key={i} onClick={()=>sBoardTheme(i)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:boardTheme===i?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:boardTheme===i?"rgba(5,150,105,0.06)":"#fff",cursor:"pointer"}}>
+            {BOARD_THEMES.map((th,i)=>{
+              const locked=!!th.premium&&!chessy.owned[th.premium];
+              return <button key={i} onClick={()=>{if(locked){showToast("Premium — доступно в Chessy-магазине","info");sShowShop(true);return}sBoardTheme(i)}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:boardTheme===i?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:boardTheme===i?"rgba(5,150,105,0.06)":locked?"#fafafa":"#fff",cursor:"pointer",opacity:locked?0.65:1}}>
                 <div style={{width:20,height:20,borderRadius:4,overflow:"hidden",display:"flex",flexShrink:0}}>
                   <div style={{width:10,height:20,background:th.light}}/>
                   <div style={{width:10,height:20,background:th.dark}}/>
                 </div>
                 <span style={{fontSize:14,fontWeight:boardTheme===i?800:600,color:boardTheme===i?T.text:T.dim}}>{th.name}</span>
-              </button>))}
+                {locked&&<span style={{fontSize:11,color:"#b45309"}}>🔒</span>}
+              </button>;
+            })}
           </div>
         </div>
 
@@ -2253,6 +2260,67 @@ export default function CyberChessPage(){
               </button>;
             })}
           </div>
+        </div>
+      </div>;
+    })()}
+
+    {/* Chessy Shop */}
+    {showShop&&(()=>{
+      type ShopItem={id:string;name:string;desc:string;cost:number;kind:"unlock"|"action";onBuy?:()=>void;disabled?:boolean};
+      const items:ShopItem[]=[
+        {id:"master_ai",name:"Master AI (2400 ELO)",desc:"Разблокирует самого сильного соперника",cost:30,kind:"unlock"},
+        {id:"theme_neon",name:"Тема Neon ⚡",desc:"Киберпанк-доска, неоновый градиент",cost:50,kind:"unlock"},
+        {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
+        {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
+        {id:"deep_review",name:"Глубокий разбор партии",desc:"Coach пройдёт по всем ходам и выдаст план на будущее",cost:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
+      ];
+      const purchaseUnlock=(id:string,cost:number,name:string)=>{
+        if(chessy.owned[id]){showToast("Уже куплено","info");return}
+        if(!spendChessy(cost,`покупка: ${name}`))return;
+        sChessy(c=>({...c,owned:{...c.owned,[id]:true}}));
+        showToast(`✓ Куплено: ${name}`,"success");
+      };
+      return <div onClick={()=>sShowShop(false)} role="dialog" aria-label="Chessy shop" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:150,padding:20}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:680,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div>
+              <div style={{fontSize:20,fontWeight:900,color:T.text}}>🛒 Chessy · магазин</div>
+              <div style={{fontSize:13,color:T.dim,marginTop:2}}>Баланс: <b style={{color:"#b45309"}}>{chessy.balance} Chessy</b> · всего заработано {chessy.lifetime}</div>
+            </div>
+            <button onClick={()=>sShowShop(false)} aria-label="Close" style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10,marginBottom:16}}>
+            {items.map(it=>{
+              const owned=it.kind==="unlock"&&chessy.owned[it.id];
+              const afford=chessy.balance>=it.cost;
+              const dis=owned||it.disabled||!afford;
+              return <div key={it.id} style={{padding:"14px 16px",borderRadius:10,border:`1px solid ${owned?"#a7f3d0":T.border}`,background:owned?"#f0fdf4":"#fff",display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                  <div style={{fontWeight:900,color:T.text,fontSize:14,lineHeight:1.3}}>{it.name}</div>
+                  {owned?<span style={{fontSize:11,fontWeight:800,color:T.accent,background:"#d1fae5",padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap"}}>✓ КУПЛЕНО</span>:<span style={{fontSize:13,fontWeight:900,color:"#78350f",background:"#fef3c7",padding:"3px 10px",borderRadius:10,whiteSpace:"nowrap"}}>{it.cost} Chessy</span>}
+                </div>
+                <div style={{fontSize:13,color:T.dim,lineHeight:1.5}}>{it.desc}</div>
+                {!owned&&<button disabled={dis} onClick={()=>{if(it.kind==="unlock")purchaseUnlock(it.id,it.cost,it.name);else if(it.onBuy){if(!spendChessy(it.cost,it.name))return;it.onBuy()}}} style={{padding:"8px 14px",borderRadius:7,border:"none",background:dis?"#e5e7eb":T.accent,color:dis?T.dim:"#fff",fontSize:13,fontWeight:800,cursor:dis?"not-allowed":"pointer"}}>
+                  {it.disabled?"Нужна сыгранная партия":!afford?`Нужно ${it.cost-chessy.balance} ещё`:it.kind==="action"?"Использовать":"Купить"}
+                </button>}
+              </div>;
+            })}
+          </div>
+          <div style={{padding:"14px 16px",borderRadius:10,background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #fcd34d"}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:6}}>💡 Как заработать Chessy</div>
+            <div style={{fontSize:13,color:"#b45309",lineHeight:1.7}}>
+              · Победа против AI: 5–160 (чем сильнее соперник и длиннее партия — тем больше)<br/>
+              · Пазл: 2–15 (по рейтингу)<br/>
+              · Daily-бонус: 5, 30 (streak 3), 100 (streak 7)<br/>
+              · Достижения: 30–400 за вехи
+            </div>
+          </div>
+          {Object.keys(chessy.ach).length>0&&<div style={{marginTop:12}}>
+            <div style={{fontSize:13,fontWeight:800,color:T.dim,marginBottom:8,textTransform:"uppercase" as const,letterSpacing:"0.05em"}}>🏆 Достижения ({Object.keys(chessy.ach).length})</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {Object.keys(chessy.ach).map(k=><span key={k} style={{padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:T.text}}>{k.replace(/_/g," ")}</span>)}
+            </div>
+          </div>}
         </div>
       </div>;
     })()}

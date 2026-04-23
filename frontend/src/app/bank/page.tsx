@@ -26,6 +26,7 @@ import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
 import { DeviceManagement } from "./_components/DeviceManagement";
 import { EcosystemPulse } from "./_components/EcosystemPulse";
+import { PeerStanding } from "./_components/PeerStanding";
 import { GiftMode } from "./_components/GiftMode";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
@@ -256,6 +257,7 @@ function BankContent() {
           <EcosystemPulse accountId={account.id} operations={operations} />
           <WealthForecast account={account} />
           <TrustScoreCard account={account} operations={operations} />
+          <PeerStanding account={account} operations={operations} />
           <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
           <SalaryAdvance
             account={account}

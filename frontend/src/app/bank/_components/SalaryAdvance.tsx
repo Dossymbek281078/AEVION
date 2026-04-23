@@ -20,7 +20,10 @@ type Props = {
 };
 
 export function SalaryAdvance({ account, operations, topup, notify }: Props) {
-  const { advance, request, repayManual, close } = useAdvance();
+  const { advance, request, repayManual, close } = useAdvance({
+    accountId: account.id,
+    operations,
+  });
   const [requesting, setRequesting] = useState<boolean>(false);
   const { royalty, chess, ecosystem } = useEcosystemData();
   const [repayInput, setRepayInput] = useState<string>("");
@@ -223,7 +226,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
               {progress.toFixed(1)}% repaid ·{" "}
               {advance.outstanding > 0
-                ? "Auto-repayment active (1%/4s from royalty stream)"
+                ? "Auto-sweep active — 50% of each incoming transfer repays the advance"
                 : "Fully repaid — request again anytime"}
             </div>
           </div>

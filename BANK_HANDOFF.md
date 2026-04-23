@@ -8,9 +8,9 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 
 - **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer` — не отдельное приложение, дерево совпадает со всем `aevion-core`).
 - **Ветка:** `bank-payment-layer`.
-- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `3cf6708`.
-- **Last commit:** `3cf6708 feat(bank): Peer Standing — network-rank widget across 4 dimensions`.
-- **Ahead of `main`:** 34 commits (1 modular rewrite + 25 features + 5 refactors + 3 polish/fix).
+- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `1f77158`.
+- **Last commit:** `1f77158 feat(bank): wallet snapshot export — downloadable SVG + text summary`.
+- **Ahead of `main`:** 39 commits (1 modular rewrite + 28 features + 5 refactors + 5 polish/fix).
 - **PR URL (unmerged):** https://github.com/Dossymbek281078/AEVION/pull/new/bank-payment-layer
 - **Build:** green. `npm run verify` (from `aevion-core` root) passes.
 
@@ -50,6 +50,9 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 | fix | `406ab91` | Demo Reset purges seeded contacts + handoff docs |
 | 24 | `17a7bc0` | Ecosystem Pulse + shimmer skeletons + goal confetti |
 | 25 | `3cf6708` | Peer Standing — network-rank widget across 4 dimensions |
+| fix | `9c640ae` | Real auto-repay on incoming transfers (tech-debt #9 closed) |
+| 26 | `e395124` | Onboarding tour — 5-step first-visit modal with scroll-to-anchor |
+| 27 | `1f77158` | Snapshot export — downloadable SVG + text summary |
 
 ## Architecture
 
@@ -96,11 +99,13 @@ Cleared this session (2026-04-23):
 6. ~~Mock catalog duplication~~ — `_lib/mockCatalog.ts` exports `QRIGHT_WORKS_BY_KIND`, `QRIGHT_FLAT_WORKS`, `CHESS_TOURNAMENT_NAMES`, `PLANET_TASKS`.
 8. ~~CRLF warnings~~ — `.gitattributes` with `* text=auto eol=lf`.
 
+Closed 2026-04-23 evening:
+9. ~~`useAdvance` auto-repay~~ — теперь sweep'ит 50% каждого incoming transfer в outstanding (commit `9c640ae`).
+
 Still open:
 7. **Audit panel retention** — хранит 50 подписей; нет экспорта в файл.
-9. **`useAdvance` auto-repay** — только visual tick (1 %/4s). На real ops не реагирует. Надо wire into new incoming transfers.
-10. **Mobile responsive polish** — WealthForecast + Achievements на &lt;480px тесно. Grid minmax нужно подправить.
 11. **AchievementsPanel: shared refresh signal** — сейчас polls every 15s + focus/storage events. Было бы чище: emit events из useSavings/useSplits/useCircles/useSignatures по записи в storage.
+12. **Discoverability of re-run for Tour** — сейчас `?tour=1` работает, но нет in-page кнопки «Take the tour» (кроме первого автозапуска). Можно добавить в Help-меню или footer.
 
 ## Backend dependencies queue (другая сессия)
 
@@ -132,8 +137,10 @@ cd C:\Users\user\aevion-core\frontend ; npm run dev
 ```
 
 Open:
-- **http://localhost:3000/bank** — обычный режим, пустой wallet для нового пользователя.
+- **http://localhost:3000/bank** — обычный режим, пустой wallet для нового пользователя. Первый визит автоматически открывает 5-step onboarding tour.
 - **http://localhost:3000/bank?demo=1** — auto-seed goals / recurring / circles / splits / gifts / contacts. Баннер сверху показывает «Demo data loaded» с кнопкой Reset.
+- **http://localhost:3000/bank?tour=1** — принудительно переоткрыть onboarding tour (даже если флаг `aevion_bank_tour_seen_v1` уже выставлен). Можно комбинировать с `?demo=1`.
+- **`?demo=1&tour=1`** — идеальная ссылка для screencast'а/инвесторской демонстрации: и seed, и гайд.
 
 `?demo=1` безопасен — не трогает реальный баланс / операции, пишет только в localStorage и помечается флагом `aevion_bank_demo_seeded_v1`; повторный переход с параметром не перезаписывает данные пока не сделан Reset.
 

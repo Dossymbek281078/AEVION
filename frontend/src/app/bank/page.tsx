@@ -39,6 +39,7 @@ import { TotalEarningsDashboard } from "./_components/TotalEarningsDashboard";
 import { TransactionList } from "./_components/TransactionList";
 import { TrustScoreCard } from "./_components/TrustScoreCard";
 import { WalletSummary } from "./_components/WalletSummary";
+import { WealthForecast } from "./_components/WealthForecast";
 import { useAuthMe } from "./_hooks/useAuthMe";
 import { useBank } from "./_hooks/useBank";
 import { operationsCsvUrl } from "./_lib/api";
@@ -244,6 +245,7 @@ function BankContent() {
       {hasWallet && account ? (
         <EcosystemDataProvider accountId={account.id} operations={operations}>
           <TotalEarningsDashboard />
+          <WealthForecast account={account} />
           <TrustScoreCard account={account} operations={operations} />
           <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
           <SalaryAdvance

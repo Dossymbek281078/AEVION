@@ -11,6 +11,7 @@ import {
   type Recurring,
 } from "../_lib/recurring";
 import { Field, inputStyle } from "./formPrimitives";
+import { Money } from "./Money";
 
 type Props = {
   myAccountId: string;
@@ -266,7 +267,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
             </button>
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8" }}>
-            Available balance: {balance.toFixed(2)} AEC · Insufficient funds will auto-pause the
+            Available balance: <Money aec={balance} /> · Insufficient funds will auto-pause the
             schedule.
           </div>
         </div>
@@ -358,7 +359,7 @@ function RecurringRow({
           </span>
         </div>
         <div style={{ fontSize: 12, color: "#334155", fontWeight: 700 }}>
-          {r.amount.toFixed(2)} AEC · {PERIOD_LABEL[r.period]}
+          <Money aec={r.amount} /> · {PERIOD_LABEL[r.period]}
         </div>
         <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
           To {r.recipientNickname ? <strong>{r.recipientNickname}</strong> : <code style={{ fontFamily: "ui-monospace, monospace" }}>{shortTo}</code>}

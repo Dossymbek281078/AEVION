@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useCurrency } from "../_lib/CurrencyContext";
+import { formatCurrency } from "../_lib/currency";
 import {
   CATEGORY_COLOR,
   CATEGORY_DESCRIPTION,
@@ -12,6 +14,7 @@ import {
 } from "../_lib/spending";
 import type { Operation } from "../_lib/types";
 import { Legend, PieChart } from "./charts";
+import { Money } from "./Money";
 
 const PERIODS: SpendingPeriod[] = ["thisMonth", "last30d"];
 
@@ -23,6 +26,7 @@ export function SpendingInsights({
   operations: Operation[];
 }) {
   const [period, setPeriod] = useState<SpendingPeriod>("thisMonth");
+  const { code } = useCurrency();
 
   const summary = useMemo(
     () => summariseSpending(operations, accountId, period),
@@ -144,9 +148,9 @@ export function SpendingInsights({
                     SPENT
                   </div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", lineHeight: 1.1 }}>
-                    {summary.totalSpent.toFixed(0)}
+                    <Money aec={summary.totalSpent} decimals={0} />
                   </div>
-                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>AEC</div>
+                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{code}</div>
                 </div>
               </div>
               <Legend
@@ -155,7 +159,7 @@ export function SpendingInsights({
                   .map((b) => ({
                     label: CATEGORY_LABEL[b.category],
                     color: CATEGORY_COLOR[b.category],
-                    hint: `${b.amount.toFixed(0)}`,
+                    hint: formatCurrency(b.amount, code, { decimals: 0 }),
                   }))}
               />
             </div>
@@ -197,7 +201,7 @@ export function SpendingInsights({
                         {b.count}×
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
-                        {b.amount.toFixed(2)} AEC
+                        <Money aec={b.amount} />
                       </span>
                     </div>
                     <div
@@ -255,7 +259,7 @@ export function SpendingInsights({
             <InsightCard
               label="Vs previous period"
               value={`${trendUp ? "+" : ""}${summary.pctVsPrev.toFixed(0)}%`}
-              hint={`prev ${summary.totalSpentPrev.toFixed(0)} AEC`}
+              hint={`prev ${formatCurrency(summary.totalSpentPrev, code, { decimals: 0 })}`}
               accent={trendColor}
             />
             <InsightCard
@@ -263,7 +267,7 @@ export function SpendingInsights({
               value={summary.topCategory ? CATEGORY_LABEL[summary.topCategory] : "—"}
               hint={
                 summary.topCategory
-                  ? `${summary.byCategory[0].amount.toFixed(0)} AEC`
+                  ? formatCurrency(summary.byCategory[0].amount, code, { decimals: 0 })
                   : "no spending"
               }
               accent={summary.topCategory ? CATEGORY_COLOR[summary.topCategory] : "#94a3b8"}
@@ -271,7 +275,7 @@ export function SpendingInsights({
             <InsightCard
               label="Biggest payment"
               value={
-                summary.biggestTx ? `${summary.biggestTx.op.amount.toFixed(2)} AEC` : "—"
+                summary.biggestTx ? formatCurrency(summary.biggestTx.op.amount, code) : "—"
               }
               hint={
                 summary.biggestTx

@@ -12,6 +12,7 @@ import {
   type SavingsGoal,
 } from "../_lib/savings";
 import { btnSecondary, Field, inputStyle } from "./formPrimitives";
+import { Money } from "./Money";
 
 type Props = {
   notify: (msg: string, type?: "success" | "error" | "info") => void;
@@ -399,8 +400,8 @@ function GoalCard({
           }}
         >
           <span style={{ fontWeight: 700, color: "#0f172a" }}>
-            {g.currentAec.toFixed(2)}
-            <span style={{ color: "#94a3b8" }}> / {g.targetAec.toFixed(0)} AEC</span>
+            <Money aec={g.currentAec} />
+            <span style={{ color: "#94a3b8" }}> / <Money aec={g.targetAec} decimals={0} /></span>
           </span>
           <span style={{ fontWeight: 800, color }}>{forecast.progressPct.toFixed(0)}%</span>
         </div>

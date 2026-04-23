@@ -8,6 +8,7 @@ import { formatRelative } from "../_lib/format";
 import { absoluteRequestUrl } from "../_lib/paymentRequest";
 import { billStatus, splitEqually, type SplitBill } from "../_lib/splits";
 import { btnSecondary, Field, inputStyle } from "./formPrimitives";
+import { Money } from "./Money";
 
 type Props = {
   myAccountId: string;
@@ -343,7 +344,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
 
           {equalPreview && !customMode ? (
             <div style={{ fontSize: 12, color: "#334155" }}>
-              Equal split: <strong>{equalPreview[0].amount.toFixed(2)} AEC</strong> per person (first participant absorbs any rounding)
+              Equal split: <strong><Money aec={equalPreview[0].amount} /></strong> per person (first participant absorbs any rounding)
             </div>
           ) : null}
           {customMode && participants.length > 0 ? (
@@ -354,7 +355,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
                 fontWeight: 700,
               }}
             >
-              Custom total: {customTotal.toFixed(2)} / {totalNum.toFixed(2)} AEC
+              Custom total: <Money aec={customTotal} /> / <Money aec={totalNum} />
             </div>
           ) : null}
 
@@ -486,7 +487,7 @@ function BillRow({
             {bill.label}
           </div>
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-            {bill.totalAec.toFixed(2)} AEC · {status.paid}/{status.total} paid · {formatRelative(bill.createdAt)}
+            <Money aec={bill.totalAec} /> · {status.paid}/{status.total} paid · {formatRelative(bill.createdAt)}
           </div>
           <div
             role="progressbar"
@@ -566,7 +567,7 @@ function BillRow({
                 </div>
               </div>
               <div style={{ fontWeight: 800, fontSize: 13, color: s.paid ? "#059669" : "#0f172a" }}>
-                {s.amount.toFixed(2)} AEC
+                <Money aec={s.amount} />
               </div>
               <button
                 onClick={() => void copyLink(s.accountId, s.amount)}

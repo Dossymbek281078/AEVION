@@ -53,6 +53,18 @@ const KIND_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+type InclusionProof = {
+  version: string;
+  certId: string;
+  leaf: string;
+  leafIndex: number;
+  leafCount: number;
+  path: Array<{ hash: string; side: "L" | "R" }>;
+  merkleRoot: string;
+  verifyAlgorithm: string;
+  publishedAt: string;
+};
+
 export default function VerifyPage() {
   const params = useParams();
   const certId = params?.id as string;
@@ -60,10 +72,13 @@ export default function VerifyPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<VerifyData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [proof, setProof] = useState<InclusionProof | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
+  const [proofError, setProofError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     if (!certId) return;
-
     (async () => {
       try {
         setLoading(true);
@@ -82,8 +97,25 @@ export default function VerifyPage() {
     })();
   }, [certId]);
 
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text).catch(() => {});
+  async function loadProof() {
+    try {
+      setProofBusy(true);
+      setProofError(null);
+      const res = await fetch(apiUrl(`/api/pipeline/bureau/proof/${certId}`));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setProof(await res.json());
+    } catch (e) {
+      setProofError(e instanceof Error ? e.message : "proof failed");
+    } finally {
+      setProofBusy(false);
+    }
+  }
+
+  const copy = (text: string, label = "Value") => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1400);
+    }).catch(() => {});
   };
 
   if (loading) {
@@ -314,6 +346,65 @@ export default function VerifyPage() {
           </div>
         </div>
 
+        {/* Merkle inclusion proof */}
+        <div style={{ marginBottom: 24, padding: "18px 22px", borderRadius: 16, background: "#0f172a", color: "#e2e8f0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#5eead4", letterSpacing: "0.08em", textTransform: "uppercase" }}>Merkle inclusion proof</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginTop: 2 }}>Prove this certificate is in the public registry</div>
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4, maxWidth: 560, lineHeight: 1.5 }}>
+                Our registry publishes a Merkle root over every active certificate. Fetch the proof for this one and you can verify offline, independently, that it exists in the tree — no trust in AEVION required.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {!proof && !proofError && (
+                <button onClick={loadProof} disabled={proofBusy} style={{ padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(94,234,212,0.35)", background: "rgba(94,234,212,0.08)", color: "#5eead4", fontWeight: 800, fontSize: 12, cursor: proofBusy ? "wait" : "pointer" }}>
+                  {proofBusy ? "Loading…" : "🔐 Load proof"}
+                </button>
+              )}
+              {proof && (
+                <button onClick={() => copy(JSON.stringify(proof, null, 2), "Proof JSON")} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(148,163,184,0.3)", background: "transparent", color: "#5eead4", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Copy JSON</button>
+              )}
+            </div>
+          </div>
+          {proofError ? (
+            <div style={{ fontSize: 11, color: "#fca5a5" }}>⚠ {proofError}</div>
+          ) : proof ? (
+            <pre style={{ margin: 0, fontSize: 10.5, fontFamily: "ui-monospace, Menlo, monospace", color: "#e2e8f0", whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#020617", padding: "10px 12px", borderRadius: 8, maxHeight: 220, overflowY: "auto" }}>
+{`root:  ${proof.merkleRoot}
+leaf:  ${proof.leaf}
+index: ${proof.leafIndex} / ${proof.leafCount - 1}
+path:${proof.path.length === 0 ? " (empty — lone leaf)" : ""}
+${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
+            </pre>
+          ) : null}
+        </div>
+
+        {/* Share */}
+        {(() => {
+          const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+          const shareText = `I verified "${cert.title}" on AEVION Digital IP Bureau — cryptographic proof of authorship backed by the Berne Convention.`;
+          const shareLinks = [
+            { name: "Twitter",  color: "#0f172a", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}` },
+            { name: "LinkedIn", color: "#0a66c2", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}` },
+            { name: "Telegram", color: "#26a5e4", url: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}` },
+            { name: "WhatsApp", color: "#25d366", url: `https://wa.me/?text=${encodeURIComponent(shareText + " " + shareUrl)}` },
+            { name: "Email",    color: "#64748b", url: `mailto:?subject=${encodeURIComponent("AEVION IP Certificate: " + cert.title)}&body=${encodeURIComponent(shareText + "\n\n" + shareUrl)}` },
+          ];
+          return (
+            <div style={{ marginBottom: 24, padding: "16px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Share this verified certificate</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {shareLinks.map((s) => (
+                  <a key={s.name} href={s.url} target="_blank" rel="noopener noreferrer" style={{ padding: "8px 14px", borderRadius: 10, background: s.color, color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>{s.name}</a>
+                ))}
+                <button onClick={() => copy(shareUrl, "Share link")} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Copy link</button>
+                <button onClick={() => copy(`<a href="${shareUrl.replace(/\/verify\/[^/]+$/, "")}/bureau"><img src="${apiUrl(`/api/pipeline/badge/${cert.id}`)}" alt="Protected by AEVION" /></a>`, "Embed snippet")} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Copy HTML badge</button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Footer */}
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <a href="/qright" style={{
@@ -333,6 +424,13 @@ export default function VerifyPage() {
           </div>
         </div>
       </div>
+
+      {/* Copy toast */}
+      {copied && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#0f172a", color: "#fff", padding: "10px 18px", borderRadius: 10, fontSize: 12, fontWeight: 700, boxShadow: "0 8px 24px rgba(15,23,42,0.2)", zIndex: 60 }}>
+          {copied} copied!
+        </div>
+      )}
     </div>
   );
 }

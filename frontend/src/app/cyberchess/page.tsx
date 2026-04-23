@@ -82,7 +82,11 @@ function mm(c:Chess,d:number,a:number,b:number,mx:boolean):number{if(!d)return e
 function best(c:Chess,d:number,rn:number):Move|null{const mv=c.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{c.move(m);const s=mm(c,Math.min(d,4)-1,-Infinity,Infinity,c.turn()==="w");c.undo();return{m,s:s+(Math.random()-.5)*rn}});sc.sort((a,b)=>c.turn()==="w"?b.s-a.s:a.s-b.s);return sc[0].m}
 
 /* ═══ Sound — neutral percussive (filtered noise bursts, no melody) ═══ */
-function snd(t:string){try{
+const MK="aevion_chess_mute_v1";
+let _muted:boolean|null=null;
+function isMuted(){if(_muted===null){try{_muted=typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{_muted=false}}return !!_muted}
+function setMuted(v:boolean){_muted=v;try{localStorage.setItem(MK,v?"1":"0")}catch{}}
+function snd(t:string){if(isMuted())return;try{
   const x=new AudioContext(),n=x.currentTime;
   // Generate short noise burst
   const dur = t==="capture"?0.12 : t==="check"?0.08 : t==="premove"?0.04 : t==="x"?0.25 : 0.05;
@@ -191,6 +195,8 @@ export default function CyberChessPage(){
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=8?0:v}catch{return 0}});
+  const[muted,sMuted]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{return false}});
+  useEffect(()=>{setMuted(muted)},[muted]);
   const[voiceListening,sVoiceListening]=useState(false);
   const voiceRecRef=useRef<any>(null);
   useEffect(()=>{try{localStorage.setItem("aevion_chess_theme_v1",String(boardTheme))}catch{}},[boardTheme]);
@@ -569,9 +575,11 @@ export default function CyberChessPage(){
       if(e.key==="Escape"){
         if(pms.length>0||pmSel){sPms([]);sPmSel(null)}
       }
-      // Arrow key navigation through moves (when not typing in input)
+      // Global shortcuts (but not while typing in input)
       const target=e.target as HTMLElement;
       if(target?.tagName==="INPUT"||target?.tagName==="TEXTAREA"||target?.tagName==="SELECT")return;
+      if(e.key==="m"||e.key==="M"){e.preventDefault();sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})}
+      if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
       if(hist.length===0)return;
       if(e.key==="ArrowLeft"){
         e.preventDefault();
@@ -892,7 +900,19 @@ export default function CyberChessPage(){
           <div style={{width:34,height:34,borderRadius:9,background:"linear-gradient(135deg,#059669,#10b981)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,color:"#fff"}}>♞</div>
           <div><div style={{fontSize:15,fontWeight:900,color:T.text}}>CyberChess</div><div style={{fontSize:14,color:T.dim}}>Stockfish 18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}</div></div>
         </div>
-        <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:900,color:T.gold}}>{rat}</div><div style={{fontSize:14,color:T.dim}}>{rk.i} {rk.t}</div></div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <button
+            onClick={()=>{sMuted(v=>!v);showToast(muted?"Sound on":"Muted","info")}}
+            title={muted?"Unmute sounds (M)":"Mute sounds (M)"}
+            aria-label={muted?"Unmute":"Mute"}
+            style={{width:38,height:38,borderRadius:10,border:`1px solid ${T.border}`,background:muted?"#fef2f2":T.surface,color:muted?T.danger:T.dim,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
+          >
+            {muted
+              ? <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+              : <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>}
+          </button>
+          <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:900,color:T.gold}}>{rat}</div><div style={{fontSize:14,color:T.dim}}>{rk.i} {rk.t}</div></div>
+        </div>
       </div>
 
       {/* Tabs */}

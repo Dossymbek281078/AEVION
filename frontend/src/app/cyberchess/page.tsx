@@ -327,6 +327,8 @@ export default function CyberChessPage(){
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
+  const[replaying,sReplaying]=useState(false);
+  const[replaySpeed,sReplaySpeed]=useState(1000);
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   const[showShop,sShowShop]=useState(false);
   useEffect(()=>{svChessy(chessy)},[chessy]);
@@ -723,6 +725,18 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>runAnalysis(),400);
     return()=>clearTimeout(t);
   },[over,tab,sfOk,fenHist.length]);
+
+  /* ── Replay auto-advance ── */
+  useEffect(()=>{
+    if(!replaying||hist.length===0)return;
+    const t=setInterval(()=>{
+      const cur=browseIdx<0?hist.length:browseIdx;
+      const ni=cur+1;
+      if(ni>=hist.length){sReplaying(false);sBrowseIdx(-1);try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1)}catch{}return}
+      try{const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());snd("move")}catch{sReplaying(false)}
+    },replaySpeed);
+    return()=>clearInterval(t);
+  },[replaying,replaySpeed,browseIdx,hist.length,fenHist]);
 
   /* ── Puzzle achievement tracker ── */
   useEffect(()=>{
@@ -1701,11 +1715,23 @@ export default function CyberChessPage(){
           <div ref={hR} style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
             <div style={{padding:"8px 14px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:12,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim}}>Ходы {hist.length>0&&<span style={{color:T.accent,marginLeft:4}}>· {Math.ceil(hist.length/2)}</span>}{refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const}}>⚡ уточняю d18...</span>}</span>
-              {hist.length>0&&<div style={{display:"flex",gap:3}}>
-                <button onClick={()=>{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
-                <button onClick={()=>{const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
-                <button onClick={()=>{const ni=browseIdx<0?hist.length:Math.min(hist.length,browseIdx+1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni>=hist.length?-1:ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Вперёд">▶</button>
-                <button onClick={()=>{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
+              {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
+                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
+                <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
+                <button onClick={()=>{
+                  if(replaying){sReplaying(false);return}
+                  // If at end, rewind to start before starting replay
+                  if(browseIdx<0||browseIdx>=hist.length-1){try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null)}catch{}}
+                  sReplaying(true);
+                }} style={{padding:"3px 9px",borderRadius:4,border:`1px solid ${replaying?T.accent:T.border}`,background:replaying?"rgba(5,150,105,0.1)":"#fff",color:replaying?T.accent:T.text,fontSize:11,fontWeight:800,cursor:"pointer"}} title={replaying?"Пауза":"Авто-воспроизведение"}>{replaying?"❚❚":"▶"}</button>
+                {replaying&&<select value={replaySpeed} onChange={e=>sReplaySpeed(+e.target.value)} style={{padding:"2px 4px",borderRadius:4,border:`1px solid ${T.border}`,fontSize:11,cursor:"pointer",background:"#fff"}} title="Скорость">
+                  <option value={2000}>0.5x</option>
+                  <option value={1000}>1x</option>
+                  <option value={500}>2x</option>
+                  <option value={250}>4x</option>
+                </select>}
+                <button onClick={()=>{sReplaying(false);const ni=browseIdx<0?hist.length:Math.min(hist.length,browseIdx+1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni>=hist.length?-1:ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Вперёд">▶</button>
+                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
               </div>}
             </div>
             <div style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0"}}>

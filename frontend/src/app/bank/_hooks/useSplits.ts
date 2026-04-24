@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { loadSplits, saveSplits, type SplitBill, type SplitShare } from "../_lib/splits";
+import { loadSplits, saveSplits, SPLITS_EVENT, type SplitBill, type SplitShare } from "../_lib/splits";
 import { useLocalList } from "./useLocalList";
 
 function newId(): string {
@@ -12,6 +12,7 @@ export function useSplits() {
   const { items, setItems, add: pushItem, removeWhere } = useLocalList<SplitBill>({
     load: loadSplits,
     save: saveSplits,
+    event: SPLITS_EVENT,
   });
 
   const add = useCallback(

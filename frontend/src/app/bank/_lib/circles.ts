@@ -3,6 +3,7 @@
 // TODO backend: POST /api/circles, GET /api/circles/:id/messages, SSE stream.
 
 const STORAGE_KEY = "aevion_bank_circles_v1";
+export const CIRCLES_EVENT = "aevion:circles-changed";
 
 export type CircleMember = {
   accountId: string;
@@ -80,6 +81,7 @@ export function saveCircles(items: Circle[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event(CIRCLES_EVENT));
   } catch {
     // ignore
   }

@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import {
+  CIRCLES_EVENT,
   loadCircles,
   saveCircles,
   type Circle,
@@ -19,6 +20,7 @@ export function useCircles() {
   const { items, setItems, add: pushItem, removeWhere } = useLocalList<Circle>({
     load: loadCircles,
     save: saveCircles,
+    event: CIRCLES_EVENT,
   });
 
   const add = useCallback(

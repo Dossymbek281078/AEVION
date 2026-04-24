@@ -12,9 +12,9 @@ import {
 } from "../_lib/achievements";
 import { loadAdvance } from "../_lib/advance";
 import { useBiometric } from "../_lib/BiometricContext";
-import { loadCircles } from "../_lib/circles";
+import { CIRCLES_EVENT, loadCircles } from "../_lib/circles";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
-import { loadGoals } from "../_lib/savings";
+import { GOALS_EVENT, loadGoals } from "../_lib/savings";
 import { loadSignatures, SIGNATURE_EVENT } from "../_lib/signatures";
 import type { Account, Operation } from "../_lib/types";
 
@@ -52,15 +52,19 @@ export function AchievementsPanel({
     sync();
     const onFocus = () => sync();
     const onStorage = () => sync();
+    // focus + storage cover cross-tab refresh; custom events cover same-tab
+    // updates from useSavings / useSplits / useCircles / useSignatures.
     window.addEventListener("focus", onFocus);
     window.addEventListener("storage", onStorage);
-    window.addEventListener(SIGNATURE_EVENT, onStorage);
-    const id = window.setInterval(sync, 15_000);
+    window.addEventListener(SIGNATURE_EVENT, sync);
+    window.addEventListener(GOALS_EVENT, sync);
+    window.addEventListener(CIRCLES_EVENT, sync);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener(SIGNATURE_EVENT, onStorage);
-      window.clearInterval(id);
+      window.removeEventListener(SIGNATURE_EVENT, sync);
+      window.removeEventListener(GOALS_EVENT, sync);
+      window.removeEventListener(CIRCLES_EVENT, sync);
     };
   }, []);
 

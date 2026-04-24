@@ -3,6 +3,7 @@
 // cross-reference incoming transfers by memo.
 
 const STORAGE_KEY = "aevion_bank_splits_v1";
+export const SPLITS_EVENT = "aevion:splits-changed";
 
 export type SplitShare = {
   accountId: string;
@@ -61,6 +62,7 @@ export function saveSplits(items: SplitBill[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event(SPLITS_EVENT));
   } catch {
     // ignore
   }

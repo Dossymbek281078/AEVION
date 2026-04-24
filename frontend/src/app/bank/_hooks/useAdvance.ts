@@ -75,7 +75,7 @@ export function useAdvance({ accountId, operations }: Options = { accountId: nul
       newRepayments.push({
         amount: sweep,
         at: op.createdAt || new Date().toISOString(),
-        kind: "auto",
+        kind: "auto" as const,
       });
     }
     const closed = outstanding <= 0;
@@ -104,7 +104,7 @@ export function useAdvance({ accountId, operations }: Options = { accountId: nul
         outstanding: nextOutstanding,
         repayments: [
           ...prev.repayments,
-          { amount, at: new Date().toISOString(), kind: "manual" },
+          { amount, at: new Date().toISOString(), kind: "manual" as const },
         ].slice(-30),
         closedAt: closed ? new Date().toISOString() : prev.closedAt,
       };

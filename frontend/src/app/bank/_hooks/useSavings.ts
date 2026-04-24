@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { loadGoals, saveGoals, type GoalIcon, type SavingsGoal } from "../_lib/savings";
+import { GOALS_EVENT, loadGoals, saveGoals, type GoalIcon, type SavingsGoal } from "../_lib/savings";
 import { useLocalList } from "./useLocalList";
 
 function newId(): string {
@@ -19,6 +19,7 @@ export function useSavings() {
   const { items: goals, setItems, add: pushItem, removeWhere } = useLocalList<SavingsGoal>({
     load: loadGoals,
     save: saveGoals,
+    event: GOALS_EVENT,
   });
 
   const add = useCallback(

@@ -4,6 +4,7 @@
 // goals live in localStorage ["aevion_bank_goals_v1"].
 
 const STORAGE_KEY = "aevion_bank_goals_v1";
+export const GOALS_EVENT = "aevion:goals-changed";
 
 export type GoalIcon = "travel" | "vacation" | "home" | "gear" | "star" | "heart" | "coffee" | "music";
 
@@ -81,6 +82,7 @@ export function saveGoals(items: SavingsGoal[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event(GOALS_EVENT));
   } catch {
     // quota exceeded — best effort
   }

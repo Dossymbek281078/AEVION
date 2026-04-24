@@ -3841,12 +3841,52 @@ export default function CyberChessPage(){
           </div>
         </div>
 
-        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.accentSoft,border:`1px solid ${CC.accent}`}}>
-          <div style={{fontSize:12,fontWeight:900,color:CC.accent,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🏆 Скоро: глобальный лидерборд</div>
-          <div style={{fontSize:12,color:CC.text,lineHeight:1.5}}>
-            В следующем апдейте — топ-100 игроков по lifetime Chessy и недельному приросту. За первое место — эксклюзивный набор тем.
-          </div>
-        </div>
+        {/* Leaderboard — local simulated */}
+        {(()=>{
+          const board:{name:string;rating:number;chessy:number;country:string;isMe?:boolean}[]=[
+            {name:"Magnus C.",rating:2847,chessy:8800,country:"🇳🇴"},
+            {name:"Hikaru N.",rating:2795,chessy:7600,country:"🇺🇸"},
+            {name:"Fabiano C.",rating:2758,chessy:6900,country:"🇺🇸"},
+            {name:"Ding L.",rating:2720,chessy:5800,country:"🇨🇳"},
+            {name:"Alireza F.",rating:2692,chessy:5200,country:"🇫🇷"},
+            {name:"Anish G.",rating:2668,chessy:4700,country:"🇳🇱"},
+            {name:"Ian N.",rating:2633,chessy:4100,country:"🇷🇺"},
+            {name:"Wesley So",rating:2610,chessy:3600,country:"🇺🇸"},
+            {name:"Jan-Krz. D.",rating:2582,chessy:3100,country:"🇵🇱"},
+            {name:"Leinier D.",rating:2551,chessy:2800,country:"🇺🇸"},
+            {name:"Ты",rating:rat,chessy:chessy.lifetime,country:"🇰🇿",isMe:true},
+          ];
+          board.sort((a,b)=>b.rating-a.rating);
+          const meIdx=board.findIndex(x=>x.isMe);
+          return <div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:CC.accentSoft,border:`1px solid ${CC.accent}`}}>
+            <div style={{fontSize:12,fontWeight:900,color:CC.accent,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>
+              🏆 Глобальный лидерборд
+              <Badge tone="accent" size="xs" style={{marginLeft:6,fontSize:9}}>демо</Badge>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+              {board.slice(0,Math.max(10,meIdx+1)).map((p,i)=>{
+                const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
+                return <div key={i} style={{
+                  display:"flex",alignItems:"center",gap:SPACE[2],
+                  padding:"6px 10px",borderRadius:RADIUS.sm,
+                  background:p.isMe?CC.brandSoft:"rgba(255,255,255,0.5)",
+                  border:p.isMe?`1px solid ${CC.brand}`:"1px solid transparent"
+                }}>
+                  <div style={{width:24,textAlign:"center",fontSize:12,fontWeight:900,color:p.isMe?CC.brand:CC.textDim}}>
+                    {medal||`#${i+1}`}
+                  </div>
+                  <span style={{fontSize:14}}>{p.country}</span>
+                  <div style={{flex:1,fontSize:13,fontWeight:p.isMe?900:700,color:p.isMe?CC.brand:CC.text}}>{p.name}</div>
+                  <Badge tone="gold" size="xs">{p.rating}</Badge>
+                  <span style={{fontSize:11,color:CC.textDim,fontFamily:"ui-monospace, monospace",minWidth:50,textAlign:"right"}}>{p.chessy}c</span>
+                </div>;
+              })}
+            </div>
+            <div style={{fontSize:10,color:CC.textDim,marginTop:SPACE[2],fontStyle:"italic",lineHeight:1.4}}>
+              Топ-10 мировых гроссмейстеров — симулировано. Реальный лидерборд появится с запуском multiplayer.
+            </div>
+          </div>;
+        })()}
 
         <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4]}}>
           <Btn variant="secondary" size="md" full onClick={()=>sShowChessyInfo(false)}>Понятно</Btn>

@@ -376,6 +376,13 @@ export default function CyberChessPage(){
   const[pzCurrent,sPzCurrent]=useState<Puzzle|null>(null);
   const[pzSolvedCount,sPzSolvedCount]=useState(0);
   const[pzFailedCount,sPzFailedCount]=useState(0);
+  // Puzzle Rush state
+  const[rushActive,sRushActive]=useState(false);
+  const[rushScore,sRushScore]=useState(0);
+  const[rushStreak,sRushStreak]=useState(0);
+  const[rushBestStreak,sRushBestStreak]=useState(0);
+  const[rushBest,sRushBest]=useState(()=>{try{return parseInt(localStorage.getItem("aevion_puzzle_rush_best_v1")||"0")||0}catch{return 0}});
+  const[rushResult,sRushResult]=useState<null|{score:number;streak:number;best:number;chessy:number;isNewBest:boolean}>(null);
   // Multi-dimensional filters
   const[pzFilterGoal,sPzFilterGoal]=useState<string>("all"); // all, Mate, Best move
   const[pzFilterMate,sPzFilterMate]=useState<number>(0); // 0=any, 1=M1, 2=M2, 3=M3...
@@ -705,7 +712,21 @@ export default function CyberChessPage(){
                 sPzCurrent({...pzCurrent,sol:pzCurrent.sol.slice(2)});
                 showToast("Продолжай решение...","info");
               }else{
-                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");
+                // Rush: +1..+3 sec по сложности, streak, score, Chessy
+                if(pzMode==="rush"){
+                  const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+                  sPzTimeLeft(v=>Math.min(180,v+bonus));
+                  sRushScore(s=>s+1);
+                  sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
+                  showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
+                }else if(pzMode==="timed3"||pzMode==="timed5"){
+                  const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+                  sPzTimeLeft(v=>v+bonus);
+                  showToast(`✓ +${bonus}с`,"success");
+                }else{
+                  showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+                }
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"пазл решён");
                 if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
@@ -718,7 +739,20 @@ export default function CyberChessPage(){
           },100); // fast response, no thinking delay
         }else{
           // Single-move puzzle — solved
-          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");
+          if(pzMode==="rush"){
+            const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+            sPzTimeLeft(v=>Math.min(180,v+bonus));
+            sRushScore(s=>s+1);
+            sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
+            showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
+          }else if(pzMode==="timed3"||pzMode==="timed5"){
+            const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+            sPzTimeLeft(v=>v+bonus);
+            showToast(`✓ +${bonus}с`,"success");
+          }else{
+            showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+          }
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"пазл решён");
           if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
@@ -730,7 +764,23 @@ export default function CyberChessPage(){
         }
         return true;
       }else{
-        sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");showToast(`✗ Not the best. Try again or see solution`,"error");
+        sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");
+        if(pzMode==="rush"){
+          sPzTimeLeft(v=>Math.max(0,v-5));
+          sRushStreak(0);
+          showToast(`✗ −5с · streak сброшен`,"error");
+          // Auto-advance in rush after miss (no retry)
+          setTimeout(()=>{
+            if(!fPz.length)return;
+            const nextIdx=(pzI+1)%fPz.length;
+            const pz=fPz[nextIdx];if(!pz)return;
+            const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+            sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
+            sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
+          },700);
+        }else{
+          showToast(`✗ Not the best. Try again or see solution`,"error");
+        }
         return false;
       }
     }
@@ -1116,11 +1166,15 @@ export default function CyberChessPage(){
     });
   },[fenHist,showToast,pT,aT]);
 
-  // Puzzle timer
+  // Puzzle timer — in rush, keep ticking even during brief 'correct' state before auto-advance
   useEffect(()=>{
-    if(tab!=="puzzles"||pzMode==="learn"||!pzCurrent||pzAttempt==="correct"||pzTimeLeft<=0)return;
+    if(tab!=="puzzles"||pzMode==="learn"||!pzCurrent||pzTimeLeft<=0)return;
+    if(pzMode!=="rush"&&pzAttempt==="correct")return;
     const t=setInterval(()=>sPzTimeLeft(v=>{
-      if(v<=1){sPzFailedCount(c=>c+1);sPzAttempt("wrong");return 0}
+      if(v<=1){
+        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong")}
+        return 0;
+      }
       return v-1;
     }),1000);
     return()=>clearInterval(t);
@@ -1129,10 +1183,40 @@ export default function CyberChessPage(){
   // Sync timer to current mode (fires on mode switch, even mid-puzzle)
   useEffect(()=>{
     if(tab!=="puzzles")return;
-    if(pzMode==="timed3")sPzTimeLeft(180);
-    else if(pzMode==="timed5")sPzTimeLeft(300);
-    else sPzTimeLeft(0);
+    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false)}
+    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false)}
+    else if(pzMode==="rush"){sPzTimeLeft(90);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
+    else {sPzTimeLeft(0);sRushActive(false)}
   },[pzMode,tab]);
+
+  // Rush end-of-session detection — fire only once per session
+  useEffect(()=>{
+    if(!rushActive||pzTimeLeft>0||pzMode!=="rush")return;
+    // Timer hit 0 during rush — finalize
+    const chessy=rushScore*2+rushBestStreak; // 2 Chessy per solve + streak bonus
+    const isNewBest=rushScore>rushBest;
+    if(isNewBest){sRushBest(rushScore);try{localStorage.setItem("aevion_puzzle_rush_best_v1",String(rushScore))}catch{}}
+    sRushResult({score:rushScore,streak:rushBestStreak,best:isNewBest?rushScore:rushBest,chessy,isNewBest});
+    sRushActive(false);
+    if(chessy>0)addChessy(chessy,`Puzzle Rush · ${rushScore} решено`);
+    if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
+    if(isNewBest&&rushScore>=25)unlockAch("rush_25",200,"Rush: 25 за сессию");
+  },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);
+
+  // Auto-advance to next puzzle in rush/timed modes after a correct solve
+  useEffect(()=>{
+    if(pzAttempt!=="correct"||pzMode==="learn")return;
+    const delay=pzMode==="rush"?600:1200;
+    const t=setTimeout(()=>{
+      if(!fPz.length)return;
+      const nextIdx=(pzI+1)%fPz.length;
+      const pz=fPz[nextIdx];if(!pz)return;
+      const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+      sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
+      sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
+    },delay);
+    return()=>clearTimeout(t);
+  },[pzAttempt,pzMode,pzI,fPz]);
 
   // Auto-load first puzzle when filters change
   useEffect(()=>{
@@ -2438,9 +2522,21 @@ export default function CyberChessPage(){
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
                     <span style={{fontSize:14,fontWeight:900,padding:"4px 12px",borderRadius:7,background:pzCurrent.r<600?"#d1fae5":pzCurrent.r<1200?"#dbeafe":pzCurrent.r<1800?"#ede9fe":"#fee2e2",color:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger}}>{pzCurrent.r}</span>
-                    {pzTimeLeft>0&&<span style={{fontSize:14,fontWeight:900,color:pzTimeLeft<30?T.danger:T.text,fontFamily:"monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<30?"#fef2f2":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
+                    {pzTimeLeft>0&&<span style={{fontSize:14,fontWeight:900,color:pzTimeLeft<15?CC.danger:pzTimeLeft<30?CC.gold:CC.text,fontFamily:"ui-monospace, monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<15?"#fef2f2":pzTimeLeft<30?"#fef3c7":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
                   </div>
                 </div>
+                {/* Rush HUD — score + streak */}
+                {pzMode==="rush"&&rushActive&&<div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[2],padding:`${SPACE[2]}px ${SPACE[3]}px`,borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:0.5,textTransform:"uppercase" as const}}>RUSH</span>
+                    <Badge tone="gold" size="xs">{rushScore} решено</Badge>
+                  </div>
+                  <div style={{flex:1}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    {rushStreak>0&&<Badge tone="danger" size="xs">🔥 {rushStreak}</Badge>}
+                    {rushBest>0&&<Badge tone="neutral" size="xs">best {rushBest}</Badge>}
+                  </div>
+                </div>}
                 {/* Tags */}
                 <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
                   {[pzCurrent.phase,pzCurrent.theme].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
@@ -2506,7 +2602,13 @@ export default function CyberChessPage(){
                     return false;
                   }).length;
                   const active=pzCategory===cat;
-                  return<button key={cat} onClick={()=>{sPzCategory(cat);sPzI(0);}} style={{padding:"8px 6px",borderRadius:7,border:active?`2px solid ${color}`:`1px solid ${T.border}`,background:active?`${color}15`:"#fff",color:active?color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                  return<button key={cat} onClick={()=>{
+                    // Reset conflicting filters so category selection is respected
+                    sPzCategory(cat);sPzI(0);
+                    if(cat!=="all"){
+                      sPzFilterGoal("all");sPzFilterMate(0);sPzFilterPhase("all");
+                    }
+                  }} style={{padding:"8px 6px",borderRadius:7,border:active?`2px solid ${color}`:`1px solid ${T.border}`,background:active?`${color}15`:"#fff",color:active?color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
                     <span style={{fontSize:13,fontWeight:800}}>{label}</span>
                     <span style={{fontSize:10,color:T.dim,fontWeight:700}}>{cnt}</span>
                   </button>;
@@ -3261,6 +3363,41 @@ export default function CyberChessPage(){
 
     {/* Chessy gain floating animation */}
     {chessyFloat&&<ChessyFloat key={chessyFloat.key} amount={chessyFloat.amount} onDone={()=>sChessyFloat(null)}/>}
+
+    {/* Puzzle Rush — final result */}
+    <Modal open={!!rushResult} onClose={()=>sRushResult(null)} size="sm" title={rushResult?.isNewBest?"🏆 Новый рекорд!":"⚡ Rush завершён"}>
+      {rushResult&&<div style={{textAlign:"center"}}>
+        <div style={{fontSize:60,lineHeight:1,marginBottom:SPACE[3]}}>{rushResult.isNewBest?"🏆":"⚡"}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[2],marginBottom:SPACE[4]}}>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
+            <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Решено</div>
+            <div style={{fontSize:28,fontWeight:900,color:CC.brand,lineHeight:1.1,marginTop:2}}>{rushResult.score}</div>
+          </div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"#fef2f2",border:"1px solid #fca5a5"}}>
+            <div style={{fontSize:10,color:CC.danger,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Streak 🔥</div>
+            <div style={{fontSize:28,fontWeight:900,color:CC.danger,lineHeight:1.1,marginTop:2}}>{rushResult.streak}</div>
+          </div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.goldSoft,border:"1px solid #fcd34d"}}>
+            <div style={{fontSize:10,color:CC.gold,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Лучшее</div>
+            <div style={{fontSize:28,fontWeight:900,color:CC.gold,lineHeight:1.1,marginTop:2}}>{rushResult.best}</div>
+          </div>
+        </div>
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d",marginBottom:SPACE[3]}}>
+          <div style={{fontSize:12,fontWeight:800,color:"#92400e"}}>Начислено Chessy</div>
+          <div style={{fontSize:22,fontWeight:900,color:"#78350f",display:"inline-flex",alignItems:"center",gap:4,marginTop:2}}>
+            <Icon.Coin width={20} height={20}/>+{rushResult.chessy}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sRushResult(null)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{
+            sRushResult(null);sPzMode("rush");
+            // Force reinit rush
+            sPzTimeLeft(90);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);
+          }}>⚡ Ещё раз</Btn>
+        </div>
+      </div>}
+    </Modal>
 
     </ProductPageShell></main>);
 }

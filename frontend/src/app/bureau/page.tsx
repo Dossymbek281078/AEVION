@@ -1426,6 +1426,7 @@ ${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
           {/* QR panel */}
           <div style={{ textAlign: "center" }}>
             <div style={{ padding: 8, borderRadius: 12, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- QR is a client-generated data URL, next/image adds no benefit */}
               <img src={qrUrl} alt="Verify QR" width={184} height={184} style={{ width: "100%", height: "auto", display: "block", borderRadius: 6 }} />
             </div>
             <div style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginTop: 8 }}>Scan to verify</div>

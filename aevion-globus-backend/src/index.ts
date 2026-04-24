@@ -119,7 +119,7 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
       "/api/qtrade/topup": { post: { summary: "Top up balance" } },
       "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
-      "/api/pipeline/protect": { post: { summary: "One-click IP protection (QRight → QSign → Shield → Certificate)" } },
+      "/api/pipeline/protect": { post: { summary: "One-click IP protection (QRight → QSign → Shield → Certificate). Body: { title, description, kind?, authorName? | ownerName?, authorEmail? | ownerEmail?, country?, city?, contentHash? (64-hex SHA-256 if caller pre-hashed a file) }" } },
       "/api/pipeline/verify/{certId}": { get: { summary: "Public verification of an IP certificate" } },
       "/api/pipeline/certificates": { get: { summary: "Public registry — supports ?q, ?kind, ?sort (recent|popular|az), ?limit" } },
       "/api/pipeline/certificates.csv": { get: { summary: "Public registry as CSV (same filters as /certificates)" } },

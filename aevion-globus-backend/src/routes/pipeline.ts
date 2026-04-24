@@ -217,21 +217,43 @@ pipelineRouter.post("/protect", async (req, res) => {
   try {
     await ensureTables();
 
-    const { title, description, kind, ownerName, ownerEmail, country, city } = req.body;
+    const {
+      title,
+      description,
+      kind,
+      // Both aliases accepted; `authorName`/`authorEmail` is the canonical public contract,
+      // `ownerName`/`ownerEmail` retained for backwards compatibility with earlier clients.
+      ownerName,
+      ownerEmail,
+      authorName: authorNameIn,
+      authorEmail: authorEmailIn,
+      country,
+      city,
+      // Optional: caller supplies their own SHA-256 hex (e.g. hashed a file locally).
+      // Must be 64 lowercase hex chars; otherwise we compute one from {title, description, kind, country, city}.
+      contentHash: providedHash,
+    } = req.body;
 
     if (!title || !description) {
       return res.status(400).json({ error: "title and description are required" });
     }
 
     const user = await resolveUser(req);
-    const authorName = ownerName || user.name || null;
-    const authorEmail = ownerEmail || user.email || null;
+    const authorName = authorNameIn || ownerName || user.name || null;
+    const authorEmail = authorEmailIn || ownerEmail || user.email || null;
     const authorUserId = user.userId || null;
 
     /* ── Step 1: QRight Registration ── */
     const objectId = crypto.randomUUID();
+    const normalizedProvidedHash =
+      typeof providedHash === "string" && /^[0-9a-f]{64}$/i.test(providedHash.trim())
+        ? providedHash.trim().toLowerCase()
+        : null;
     const raw = JSON.stringify({ title, description, kind: kind || "other", country, city });
-    const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
+    const contentHash =
+      normalizedProvidedHash ||
+      crypto.createHash("sha256").update(raw).digest("hex");
+    const contentHashSource: "provided" | "computed" = normalizedProvidedHash ? "provided" : "computed";
 
     const useDb = await dbReady();
     if (useDb) {
@@ -242,13 +264,19 @@ pipelineRouter.post("/protect", async (req, res) => {
       );
     }
 
-    /* ── Step 2: QSign (HMAC-SHA256) ── */
-    const signPayload = { objectId, title, contentHash, timestamp: Date.now() };
+    /* ── Step 2: QSign (HMAC-SHA256) ──
+     * Sign only stable fields so `/verify` can reproduce the HMAC exactly.
+     * Dropping the mutable timestamp keeps the signature deterministic and
+     * lets any auditor reconstruct it from the public certificate payload. */
+    const signPayload = { objectId, title, contentHash };
     const signatureHmac = crypto.createHmac("sha256", SIGN_SECRET).update(JSON.stringify(signPayload)).digest("hex");
 
-    /* ── Step 3: Quantum Shield (Ed25519 + Shamir SSS) ── */
+    /* ── Step 3: Quantum Shield (Ed25519 + Shamir SSS) ──
+     * The Ed25519 message is kept deterministic (no timestamp) so that any
+     * auditor with the stored publicKey can reverify the signature against
+     * the same canonical payload in the future. */
     const shieldId = "qs-" + crypto.randomBytes(8).toString("hex");
-    const dataToProtect = JSON.stringify({ objectId, title, contentHash, signatureHmac, timestamp: Date.now() });
+    const dataToProtect = JSON.stringify({ objectId, title, contentHash, signatureHmac });
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
     const signatureEd25519 = crypto.sign(null, Buffer.from(dataToProtect), privateKey).toString("hex");
     const pubKeyHex = publicKey.export({ type: "spki", format: "der" }).toString("hex");
@@ -420,17 +448,61 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       }
     }
 
-    /* Re-verify HMAC signature — hash chain integrity */
-    const hashCheck = crypto.createHash("sha256")
-      .update(JSON.stringify({ title: cert.title, description: cert.description, kind: cert.kind, country: cert.country, city: cert.city }))
-      .digest("hex");
-    const hashValid = hashCheck === cert.contentHash;
+    /* ── Integrity checks ──
+     * 1. contentHash shape check (valid 64-char hex). The hash's cryptographic
+     *    binding to the certificate is proven by the HMAC + Ed25519 checks
+     *    below, not by re-deriving it from metadata (which would be a false
+     *    proof — an attacker tampering the metadata could also recompute).
+     * 2. signatureHmac: recompute HMAC({objectId,title,contentHash}) with SIGN_SECRET.
+     * 3. signatureEd25519: verify against the stored publicKey over the canonical payload.
+     *    Seed certificates use placeholder signatures and are flagged `seed: true`. */
+    const isSeed = !!cert.contentHash && typeof cert.signatureHmac === "string" &&
+      cert.signatureHmac === crypto.createHash("sha256").update(`${cert.id}:${cert.contentHash}:hmac`).digest("hex");
+
+    const hashValid = /^[0-9a-f]{64}$/i.test(String(cert.contentHash || ""));
+
+    let signatureHmacValid = false;
+    let signatureHmacReason = "not_checked";
+    if (isSeed) {
+      signatureHmacValid = true;
+      signatureHmacReason = "seed";
+    } else if (cert.objectId && cert.signatureHmac) {
+      const expected = crypto.createHmac("sha256", SIGN_SECRET)
+        .update(JSON.stringify({ objectId: cert.objectId, title: cert.title, contentHash: cert.contentHash }))
+        .digest("hex");
+      signatureHmacValid = expected === cert.signatureHmac;
+      signatureHmacReason = signatureHmacValid ? "OK" : "mismatch";
+    }
+
+    let signatureEd25519Valid = false;
+    let signatureEd25519Reason = "not_checked";
+    if (isSeed) {
+      signatureEd25519Valid = true;
+      signatureEd25519Reason = "seed";
+    } else if (cert.signatureEd25519 && cert.publicKeyEd25519) {
+      try {
+        const pubKey = crypto.createPublicKey({
+          key: Buffer.from(cert.publicKeyEd25519, "hex"),
+          format: "der",
+          type: "spki",
+        });
+        const message = Buffer.from(
+          JSON.stringify({ objectId: cert.objectId, title: cert.title, contentHash: cert.contentHash, signatureHmac: cert.signatureHmac })
+        );
+        signatureEd25519Valid = crypto.verify(null, message, pubKey, Buffer.from(cert.signatureEd25519, "hex"));
+        signatureEd25519Reason = signatureEd25519Valid ? "OK" : "mismatch";
+      } catch (e) {
+        signatureEd25519Reason = e instanceof Error ? `error: ${e.message}` : "error";
+      }
+    }
+
+    const allCryptoValid = hashValid && signatureHmacValid && signatureEd25519Valid;
 
     const legalBasis = typeof cert.legalBasis === "string" ? JSON.parse(cert.legalBasis) : cert.legalBasis;
 
     res.json({
-      valid: true,
-      verified: true,
+      valid: allCryptoValid,
+      verified: allCryptoValid,
       verifiedAt: new Date().toISOString(),
       certificate: {
         id: cert.id,
@@ -450,9 +522,14 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       },
       integrity: {
         contentHashValid: hashValid,
+        signatureHmacValid,
+        signatureHmacReason,
+        signatureEd25519Valid,
+        signatureEd25519Reason,
         quantumShieldStatus: shieldStatus,
         shards: cert.shardCount,
         threshold: cert.shardThreshold,
+        seed: isSeed,
       },
       legalBasis: {
         framework: legalBasis?.framework,

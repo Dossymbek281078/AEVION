@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 
 type VerifyData = {
@@ -140,9 +141,9 @@ export default function VerifyPage() {
           <div style={{ padding: "12px 16px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)", fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>
             ID: {certId}
           </div>
-          <a href="/" style={{ display: "inline-block", marginTop: 20, padding: "10px 20px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 14 }}>
+          <Link href="/" style={{ display: "inline-block", marginTop: 20, padding: "10px 20px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 14 }}>
             Go to AEVION
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -158,10 +159,10 @@ export default function VerifyPage() {
       {/* Header */}
       <div style={{ background: "#0f172a", padding: "20px 0" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900, color: "#fff" }}>A</div>
             <span style={{ fontSize: 16, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>AEVION</span>
-          </a>
+          </Link>
           <div style={{ fontSize: 12, color: "#64748b" }}>Digital IP Bureau — Public Verification</div>
         </div>
       </div>
@@ -407,7 +408,7 @@ ${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
 
         {/* Footer */}
         <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <a href="/qright" style={{
+          <Link href="/qright" style={{
             display: "inline-block",
             padding: "12px 24px",
             borderRadius: 12,
@@ -418,7 +419,7 @@ ${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
             fontSize: 14,
           }}>
             🛡️ Protect Your Own Work
-          </a>
+          </Link>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 12 }}>
             AEVION Digital IP Bureau · Powered by SHA-256, Ed25519, and Shamir&apos;s Secret Sharing
           </div>

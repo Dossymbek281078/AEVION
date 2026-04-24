@@ -1183,13 +1183,44 @@ function AutopilotPanel({
             step={1}
             onChange={(v) => onUpdate("anomalyWindowMin", v)}
           />
+          <div
+            style={{
+              marginTop: 4,
+              paddingTop: 6,
+              borderTop: "1px dashed rgba(15,23,42,0.08)",
+              fontSize: 10,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "#64748b",
+              fontWeight: 800,
+            }}
+          >
+            Rule #4 · Timelock balance-guard
+          </div>
+          <ToggleRow
+            label="Reserve balance for upcoming gifts"
+            hint={`Block outgoing if it would push balance below the sum of gifts unlocking in the next ${config.timelockGuardHr}h`}
+            checked={config.timelockGuard}
+            onChange={(v) => onUpdate("timelockGuard", v)}
+          />
+          <SettingRow
+            label="Guard window"
+            hint="Look-ahead horizon for reserve calculation"
+            value={config.timelockGuardHr}
+            unit="h"
+            min={1}
+            max={72}
+            step={1}
+            onChange={(v) => onUpdate("timelockGuardHr", v)}
+          />
           <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.45, marginTop: 4 }}>
             Autopilot is deterministic: one action per 60s tick, never overdrafts the safety
             buffer, never exceeds the daily cap, never signs cross-account transfers. Rule #2
             (inflow-split) fires first when it qualifies; rule #1 (catch-up) is the fallback.
             Rule #3 (anomaly-watchdog) runs every 15s and, when enabled, auto-triggers the same
             5-min Panic Freeze — with a 10-min cooldown between consecutive auto-freezes.
-            Every action lands in the audit feed below.
+            Rule #4 (timelock balance-guard) blocks outgoing transfers that would jeopardise
+            pending-gift auto-fires. Every action lands in the audit feed below.
           </div>
 
           <div

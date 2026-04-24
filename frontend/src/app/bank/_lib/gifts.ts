@@ -166,3 +166,18 @@ export function canCancelGift(g: Gift, now: number = Date.now()): boolean {
   if (!Number.isFinite(t)) return false;
   return t - now > GIFT_COMMIT_LOCK_MS;
 }
+
+/** Sum of pending-gift amounts whose unlockAt lands within the next windowMs.
+ *  Used by SendForm and Autopilot to guard against accidental drains that
+ *  would make an upcoming auto-fire fail at unlock time. */
+export function timelockReserveWithin(windowMs: number, now: number = Date.now()): number {
+  const cutoff = now + windowMs;
+  let sum = 0;
+  for (const g of pendingGifts()) {
+    if (!g.unlockAt) continue;
+    const t = Date.parse(g.unlockAt);
+    if (!Number.isFinite(t)) continue;
+    if (t <= cutoff) sum += g.amount;
+  }
+  return sum;
+}

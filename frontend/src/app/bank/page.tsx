@@ -22,6 +22,7 @@ import { ActivityTimeline } from "./_components/ActivityTimeline";
 import { AdvisorChat } from "./_components/AdvisorChat";
 import { AuditPanel } from "./_components/AuditPanel";
 import { AutopilotStatement } from "./_components/AutopilotStatement";
+import { BalanceProjection } from "./_components/BalanceProjection";
 import { DemoModeBanner } from "./_components/DemoModeBanner";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
@@ -280,6 +281,7 @@ function BankContent() {
             autoFirstVisit={true}
           />
           <ConceptPrimer />
+          <BalanceProjection account={account} />
           <TotalEarningsDashboard />
           <div id="bank-anchor-constellation" style={{ scrollMarginTop: 20 }}>
             <WealthConstellation account={account} operations={operations} />

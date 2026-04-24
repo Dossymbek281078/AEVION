@@ -34,6 +34,11 @@ export type AutopilotConfig = {
   /** Rule #3: burst defined as ≥ N outgoing ops in anomalyWindowMin minutes. */
   anomalyBurstCount: number;
   anomalyWindowMin: number;
+  /** Rule #4: timelock balance-guard. Blocks outgoing transfers that would
+   *  push balance below the sum of pending gifts unlocking in the next
+   *  timelockGuardHr hours. Prevents auto-fire failures at unlock time. */
+  timelockGuard: boolean;
+  timelockGuardHr: number;
 };
 
 export const DEFAULT_CONFIG: AutopilotConfig = {
@@ -47,6 +52,8 @@ export const DEFAULT_CONFIG: AutopilotConfig = {
   anomalyWatchdog: false,
   anomalyBurstCount: 3,
   anomalyWindowMin: 20,
+  timelockGuard: false,
+  timelockGuardHr: 2,
 };
 
 /** Runtime state — not user preferences; tracks what autopilot has observed. */

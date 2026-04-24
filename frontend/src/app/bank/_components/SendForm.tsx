@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AUTOPILOT_EVENT,
+  loadConfig as loadAutopilotConfig,
+} from "../_lib/autopilot";
 import { useBiometric } from "../_lib/BiometricContext";
 import * as contactsLib from "../_lib/contacts";
 import type { Contact } from "../_lib/contacts";
 import { FREEZE_EVENT, isFrozen, loadFreeze, secondsUntilSober } from "../_lib/freeze";
+import { GIFTS_EVENT, timelockReserveWithin } from "../_lib/gifts";
 import type { PaymentRequest } from "../_lib/paymentRequest";
 
 type Props = {
@@ -25,6 +30,8 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [showPicker, setShowPicker] = useState<boolean>(false);
   const [frozen, setFrozen] = useState<boolean>(false);
+  const [timelockReserve, setTimelockReserve] = useState<number>(0);
+  const [guardEnabled, setGuardEnabled] = useState<boolean>(false);
   const prefillSignature = prefill ? `${prefill.to}|${prefill.amount ?? ""}|${prefill.memo ?? ""}` : "";
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -37,6 +44,31 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
     sync();
     window.addEventListener(FREEZE_EVENT, sync);
     return () => window.removeEventListener(FREEZE_EVENT, sync);
+  }, []);
+
+  useEffect(() => {
+    const syncGuard = () => {
+      const cfg = loadAutopilotConfig();
+      const active = cfg.enabled && cfg.timelockGuard;
+      setGuardEnabled(active);
+      if (active) {
+        setTimelockReserve(timelockReserveWithin(cfg.timelockGuardHr * 60 * 60 * 1000));
+      } else {
+        setTimelockReserve(0);
+      }
+    };
+    syncGuard();
+    // Tick once per minute to refresh the countdown-derived reserve.
+    const id = window.setInterval(syncGuard, 60_000);
+    window.addEventListener(GIFTS_EVENT, syncGuard);
+    window.addEventListener(AUTOPILOT_EVENT, syncGuard);
+    window.addEventListener("focus", syncGuard);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener(GIFTS_EVENT, syncGuard);
+      window.removeEventListener(AUTOPILOT_EVENT, syncGuard);
+      window.removeEventListener("focus", syncGuard);
+    };
   }, []);
 
   useEffect(() => {
@@ -89,6 +121,12 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
         wait > 0
           ? `Wallet frozen — sober window ${wait}s left`
           : "Wallet frozen — unfreeze in Copilot",
+      );
+      return;
+    }
+    if (guardEnabled && timelockReserve > 0 && balance - n < timelockReserve) {
+      onError(
+        `Timelock guard · ${timelockReserve.toFixed(2)} AEC reserved for upcoming gifts`,
       );
       return;
     }
@@ -362,6 +400,14 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
       <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
         Fee 0.1% · Instant · Available: {balance.toFixed(2)} AEC
         {bioSettings ? <> · Biometric required ≥ {bioSettings.threshold} AEC</> : null}
+        {guardEnabled && timelockReserve > 0 ? (
+          <>
+            {" · "}
+            <span style={{ color: "#7c3aed", fontWeight: 700 }}>
+              🔐 Reserved for timelock: {timelockReserve.toFixed(2)} AEC
+            </span>
+          </>
+        ) : null}
       </div>
     </section>
   );

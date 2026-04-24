@@ -33,6 +33,16 @@ type VerifyData = {
     shards: number;
     threshold: number;
   };
+  bitcoinAnchor?: {
+    status: "pending" | "bitcoin-confirmed" | "failed" | "not_stamped";
+    bitcoinBlockHeight: number | null;
+    stampedAt: string | null;
+    upgradedAt: string | null;
+    hasProof: boolean;
+    network: string;
+    proofUrl: string | null;
+    upgradeUrl: string | null;
+  };
   legalBasis: {
     framework: string;
     type: string;
@@ -63,6 +73,8 @@ export default function VerifyPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<VerifyData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
+  const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!certId) return;
@@ -87,6 +99,35 @@ export default function VerifyPage() {
 
   const copy = (text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
+  };
+
+  const tryUpgrade = async () => {
+    if (!data?.bitcoinAnchor?.upgradeUrl) return;
+    setUpgrading(true);
+    setUpgradeMsg(null);
+    try {
+      const res = await fetch(apiUrl(data.bitcoinAnchor.upgradeUrl), {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (json.upgraded) {
+        setUpgradeMsg(
+          `Bitcoin confirmed at block #${json.bitcoinBlockHeight}!`,
+        );
+        // Refresh data to show the confirmed state.
+        const r2 = await fetch(apiUrl(`/api/pipeline/verify/${certId}`));
+        const j2 = await r2.json();
+        if (r2.ok && j2.valid) setData(j2 as VerifyData);
+      } else {
+        setUpgradeMsg(
+          json.note || "Still pending Bitcoin confirmation — try later.",
+        );
+      }
+    } catch {
+      setUpgradeMsg("Upgrade request failed — try again in a moment.");
+    } finally {
+      setUpgrading(false);
+    }
   };
 
   if (loading) {
@@ -288,6 +329,116 @@ export default function VerifyPage() {
             </div>
           </div>
         </div>
+
+        {/* Bitcoin anchor (OpenTimestamps) */}
+        {data.bitcoinAnchor && data.bitcoinAnchor.status !== "not_stamped" && (
+          <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 24 }}>
+            <div style={{ padding: "16px 24px", background: "linear-gradient(135deg, #f7931a10, #0f172a05)", borderBottom: "1px solid rgba(15,23,42,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 20 }}>₿</span>
+                  Bitcoin Blockchain Anchor
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  {data.bitcoinAnchor.network} — third-party verifiable timestamp
+                </div>
+              </div>
+              <div style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 800,
+                background:
+                  data.bitcoinAnchor.status === "bitcoin-confirmed"
+                    ? "rgba(16,185,129,0.15)"
+                    : data.bitcoinAnchor.status === "pending"
+                      ? "rgba(245,158,11,0.15)"
+                      : "rgba(239,68,68,0.15)",
+                color:
+                  data.bitcoinAnchor.status === "bitcoin-confirmed"
+                    ? "#059669"
+                    : data.bitcoinAnchor.status === "pending"
+                      ? "#d97706"
+                      : "#dc2626",
+              }}>
+                {data.bitcoinAnchor.status === "bitcoin-confirmed"
+                  ? `✓ CONFIRMED @ BLOCK #${data.bitcoinAnchor.bitcoinBlockHeight}`
+                  : data.bitcoinAnchor.status === "pending"
+                    ? "⏱ PENDING CONFIRMATION"
+                    : "✗ FAILED"}
+              </div>
+            </div>
+            <div style={{ padding: "20px 24px", background: "#fff" }}>
+              {data.bitcoinAnchor.status === "bitcoin-confirmed" && (
+                <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, color: "#065f46", lineHeight: 1.6 }}>
+                    The content hash of this certificate is <b>permanently recorded in the Bitcoin blockchain</b> at block <b>#{data.bitcoinAnchor.bitcoinBlockHeight}</b>. This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.
+                  </div>
+                </div>
+              )}
+              {data.bitcoinAnchor.status === "pending" && (
+                <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, color: "#92400e", lineHeight: 1.6 }}>
+                    Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.
+                  </div>
+                </div>
+              )}
+              {data.bitcoinAnchor.status === "failed" && (
+                <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, color: "#991b1b", lineHeight: 1.6 }}>
+                    Bitcoin anchoring failed at the time of protection (calendar network unreachable). The other cryptographic layers remain valid.
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                {data.bitcoinAnchor.stampedAt && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>Submitted to OT</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{new Date(data.bitcoinAnchor.stampedAt).toLocaleString()}</div>
+                  </div>
+                )}
+                {data.bitcoinAnchor.upgradedAt && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>Bitcoin-confirmed</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#059669" }}>{new Date(data.bitcoinAnchor.upgradedAt).toLocaleString()}</div>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {data.bitcoinAnchor.hasProof && data.bitcoinAnchor.proofUrl && (
+                  <a
+                    href={apiUrl(data.bitcoinAnchor.proofUrl)}
+                    style={{ padding: "8px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontSize: 12, fontWeight: 700 }}
+                  >
+                    ⬇ Download .ots proof
+                  </a>
+                )}
+                {data.bitcoinAnchor.status === "pending" && data.bitcoinAnchor.upgradeUrl && (
+                  <button
+                    onClick={tryUpgrade}
+                    disabled={upgrading}
+                    style={{ padding: "8px 14px", borderRadius: 8, background: upgrading ? "#cbd5e1" : "#f7931a", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: upgrading ? "not-allowed" : "pointer" }}
+                  >
+                    {upgrading ? "Checking..." : "₿ Try upgrade now"}
+                  </button>
+                )}
+                <a
+                  href="https://opentimestamps.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: "8px 14px", borderRadius: 8, background: "#fff", color: "#475569", border: "1px solid rgba(15,23,42,0.12)", textDecoration: "none", fontSize: 12, fontWeight: 700 }}
+                >
+                  What is OpenTimestamps?
+                </a>
+              </div>
+              {upgradeMsg && (
+                <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)", fontSize: 12, color: "#334155" }}>
+                  {upgradeMsg}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Legal basis */}
         <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 24 }}>

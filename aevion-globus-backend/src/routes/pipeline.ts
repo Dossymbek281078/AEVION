@@ -23,6 +23,11 @@ import {
   clientIp,
   createInMemoryRateLimiter,
 } from "../lib/rateLimit/inMemoryWindow";
+import {
+  stampHash as otsStampHash,
+  upgradeProof as otsUpgradeProof,
+  verifyProof as otsVerifyProof,
+} from "../lib/opentimestamps/anchor";
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -134,6 +139,25 @@ async function ensureTables(): Promise<void> {
   // GET /verify/:certId не может пересчитать signatureHmac.
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "signedAt" TIMESTAMPTZ;`,
+  );
+  // v3: Bitcoin-anchored timestamp proof (OpenTimestamps).
+  // Pending immediately after /protect; upgraded to bitcoin-confirmed via
+  // POST /pipeline/ots/:certId/upgrade once the OT calendar network has
+  // folded the hash into a Bitcoin block (typically 1-6h).
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsProof" BYTEA;`,
+  );
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsStatus" TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsBitcoinBlockHeight" INTEGER;`,
+  );
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsStampedAt" TIMESTAMPTZ;`,
+  );
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsUpgradedAt" TIMESTAMPTZ;`,
   );
 
   tablesReady = true;
@@ -426,6 +450,41 @@ pipelineRouter.post("/protect", async (req, res) => {
     } finally {
       client.release();
     }
+
+    // Fire-and-forget Bitcoin anchor via OpenTimestamps. We don't block the
+    // response on calendar RTT (1-5s); the proof is persisted asynchronously
+    // and the client can poll /api/pipeline/verify/:id (or trigger
+    // /api/pipeline/ots/:id/upgrade) to see the bitcoin-confirmed state.
+    void (async () => {
+      try {
+        const r = await otsStampHash(contentHash);
+        if (r.otsProof) {
+          await pool.query(
+            `UPDATE "IPCertificate"
+             SET "otsProof" = $1,
+                 "otsStatus" = $2,
+                 "otsBitcoinBlockHeight" = $3,
+                 "otsStampedAt" = NOW()
+             WHERE "id" = $4`,
+            [r.otsProof, r.status, r.bitcoinBlockHeight, certId],
+          );
+          console.log(
+            `[OT] cert=${certId} status=${r.status} height=${r.bitcoinBlockHeight ?? "pending"} proofBytes=${r.otsProof.length}`,
+          );
+        } else {
+          await pool.query(
+            `UPDATE "IPCertificate" SET "otsStatus" = 'failed', "otsStampedAt" = NOW() WHERE "id" = $1`,
+            [certId],
+          );
+          console.error(`[OT] cert=${certId} stamp failed: ${r.error}`);
+        }
+      } catch (err) {
+        console.error(
+          `[OT] cert=${certId} unexpected:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    })();
 
     /* ── Response ── */
     const certificate = {
@@ -931,6 +990,20 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         shards: cert.shardCount,
         threshold: cert.shardThreshold,
       },
+      bitcoinAnchor: {
+        status: cert.otsStatus ?? "not_stamped",
+        bitcoinBlockHeight: cert.otsBitcoinBlockHeight ?? null,
+        stampedAt: cert.otsStampedAt ?? null,
+        upgradedAt: cert.otsUpgradedAt ?? null,
+        hasProof: Boolean(cert.otsProof),
+        network: "OpenTimestamps → Bitcoin",
+        proofUrl: cert.otsProof
+          ? `/api/pipeline/ots/${cert.id}/proof`
+          : null,
+        upgradeUrl: cert.otsStatus === "pending"
+          ? `/api/pipeline/ots/${cert.id}/upgrade`
+          : null,
+      },
       legalBasis: {
         framework: legalBasis?.framework,
         type: legalBasis?.type,
@@ -1323,4 +1396,162 @@ pipelineRouter.get("/health", (_req, res) => {
     },
     at: new Date().toISOString(),
   });
+});
+
+/**
+ * GET /api/pipeline/ots/:certId/proof
+ *
+ * Returns the raw `.ots` proof for independent verification with the
+ * standard OpenTimestamps CLI / any OT-compatible tool. This is what makes
+ * the Bitcoin anchor genuinely third-party-verifiable — the user does not
+ * have to trust our server.
+ *
+ *   curl -o cert-XX.ots https://host/api/pipeline/ots/cert-XX/proof
+ *   ots verify cert-XX.ots   # independent check against Bitcoin
+ */
+pipelineRouter.get("/ots/:certId/proof", async (req, res) => {
+  try {
+    await ensureTables();
+    const { certId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "otsProof","contentHash" FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "certificate not found" });
+    }
+    const proof = rows[0].otsProof as Buffer | null;
+    if (!proof) {
+      return res.status(404).json({
+        error: "proof not ready",
+        reason: "OT_PROOF_PENDING",
+      });
+    }
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${certId}.ots"`,
+    );
+    res.setHeader(
+      "X-Content-Hash",
+      String(rows[0].contentHash || ""),
+    );
+    return res.send(proof);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "proof fetch failed";
+    console.error("[OT] proof fetch error:", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/pipeline/ots/:certId/upgrade
+ *
+ * Try to upgrade a pending OT proof to a Bitcoin-confirmed attestation.
+ * Idempotent: if the proof is already bitcoin-confirmed, returns the stored
+ * height without network I/O. Safe to poll — the OT calendar network handles
+ * its own rate-limiting.
+ */
+pipelineRouter.post("/ots/:certId/upgrade", async (req, res) => {
+  try {
+    await ensureTables();
+    const { certId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "otsProof","otsStatus","otsBitcoinBlockHeight" FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "certificate not found" });
+    }
+    const proof = rows[0].otsProof as Buffer | null;
+    if (!proof) {
+      return res.status(409).json({
+        error: "no proof to upgrade",
+        reason: "OT_PROOF_PENDING",
+        status: rows[0].otsStatus ?? "not_stamped",
+      });
+    }
+    // Short-circuit: already confirmed.
+    if (rows[0].otsStatus === "bitcoin-confirmed") {
+      return res.json({
+        upgraded: false,
+        status: "bitcoin-confirmed",
+        bitcoinBlockHeight: rows[0].otsBitcoinBlockHeight,
+        note: "already confirmed; nothing to upgrade",
+      });
+    }
+
+    const r = await otsUpgradeProof(proof);
+    if (r.upgraded && r.otsProof) {
+      await pool.query(
+        `UPDATE "IPCertificate"
+         SET "otsProof" = $1,
+             "otsStatus" = $2,
+             "otsBitcoinBlockHeight" = $3,
+             "otsUpgradedAt" = NOW()
+         WHERE "id" = $4`,
+        [r.otsProof, r.status, r.bitcoinBlockHeight, certId],
+      );
+      console.log(
+        `[OT] cert=${certId} upgraded height=${r.bitcoinBlockHeight}`,
+      );
+      return res.json({
+        upgraded: true,
+        status: r.status,
+        bitcoinBlockHeight: r.bitcoinBlockHeight,
+      });
+    }
+    return res.json({
+      upgraded: false,
+      status: r.status,
+      bitcoinBlockHeight: r.bitcoinBlockHeight,
+      note: "still pending Bitcoin confirmation — try again in 1-6 hours",
+      error: r.error,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "upgrade failed";
+    console.error("[OT] upgrade error:", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/pipeline/ots/:certId/verify
+ *
+ * Cryptographically re-verify the OT proof against the certificate's content
+ * hash. If the proof carries a Bitcoin attestation, the library checks the
+ * Merkle root against public block explorers — making this end-to-end
+ * independent of our DB.
+ */
+pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
+  try {
+    await ensureTables();
+    const { certId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "otsProof","contentHash" FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "certificate not found" });
+    }
+    const proof = rows[0].otsProof as Buffer | null;
+    const contentHash = String(rows[0].contentHash || "");
+    if (!proof || !contentHash) {
+      return res.status(409).json({
+        ok: false,
+        error: "proof or hash missing",
+      });
+    }
+    const v = await otsVerifyProof(contentHash, proof);
+    return res.json({
+      ok: v.ok,
+      bitcoinBlockHeight: v.bitcoinBlockHeight,
+      attestations: v.attestations,
+      error: v.error,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "verify failed";
+    console.error("[OT] verify error:", msg);
+    return res.status(500).json({ ok: false, error: msg });
+  }
 });

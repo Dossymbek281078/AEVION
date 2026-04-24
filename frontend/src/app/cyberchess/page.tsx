@@ -697,6 +697,7 @@ export default function CyberChessPage(){
                 sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"пазл решён");
+                if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
                 if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
                   setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
@@ -709,6 +710,7 @@ export default function CyberChessPage(){
           sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"пазл решён");
+          if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
           if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
@@ -1067,6 +1069,41 @@ export default function CyberChessPage(){
   // Next puzzle helper
   const nextPz=useCallback(()=>{const nextIdx=(pzI+1)%Math.max(1,fPz.length);ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
+
+  /* ── Blunder Rewind — превращает блундер игрока в персональный пазл.
+     Берёт позицию ДО ошибки, запрашивает у Stockfish лучший ход,
+     загружает как обычный puzzle (reusing pzCurrent infra). ── */
+  const rewindBlunder=useCallback((idx:number)=>{
+    if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+    const fen=fenHist[idx];
+    if(!fen){showToast("Позиция недоступна","error");return}
+    const g=new Chess(fen);
+    const side=g.turn();
+    const phase=idx<16?"Opening":idx<50?"Middlegame":"Endgame";
+    showToast("🧠 Считаю лучший ход…","info");
+    sfR.current.go(fen,14,(f,t,p)=>{
+      if(!f||!t){showToast("Не удалось найти лучший ход","error");return}
+      const bestUci=f+t+(p||"");
+      // Verify it's legal
+      try{const mv=g.move({from:f as Square,to:t as Square,promotion:(p||"q") as any});if(!mv){showToast("Лучший ход не определён","error");return}g.undo();}catch{showToast("Лучший ход не определён","error");return}
+      const pz:Puzzle={
+        fen,
+        sol:[bestUci],
+        name:`Переиграть ход ${idx+1}`,
+        r:1500,
+        theme:"Твоя ошибка",
+        phase:phase as any,
+        side,
+        goal:"Best move",
+      };
+      sTab("puzzles");
+      const g2=new Chess(fen);setGame(g2);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");
+      sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([fen]);
+      sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);
+      sPCol(g2.turn());sFlip(g2.turn()==="b");sEvalCp(0);sEvalMate(0);sPzTimeLeft(0);
+      showToast(`🎯 Переиграй ход ${idx+1}. Бонус +3 Chessy за правильный`,"info");
+    });
+  },[fenHist,showToast,pT,aT]);
 
   // Puzzle timer
   useEffect(()=>{
@@ -2090,6 +2127,47 @@ export default function CyberChessPage(){
             </div>;
           })()}
           {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
+
+          {/* ── Blunder Rewind — переиграть свои ошибки как пазлы ── */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>0&&(()=>{
+            const userIsWhite=pCol==="w";
+            const myErrors=analysis.map((a,i)=>({a,i}))
+              .filter(x=>{
+                const isUserMove=userIsWhite?x.i%2===0:x.i%2===1;
+                return isUserMove&&(x.a.quality==="blunder"||x.a.quality==="mistake");
+              })
+              .slice(0,6);
+            if(myErrors.length===0)return null;
+            return <div style={{marginTop:SPACE[2],padding:SPACE[3],borderRadius:RADIUS.lg,
+              background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #fcd34d",
+              boxShadow:SHADOW.sm}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
+                <span style={{fontSize:18}}>🎯</span>
+                <div style={{fontSize:13,fontWeight:900,color:"#92400e",letterSpacing:0.3}}>ПЕРЕИГРАТЬ ОШИБКИ</div>
+                <Badge tone="gold" size="xs">+3 Chessy за каждую</Badge>
+              </div>
+              <div style={{fontSize:11,color:"#b45309",marginBottom:SPACE[2],lineHeight:1.5}}>
+                Кликни на блундер — откроется позиция до ошибки, найди правильный ход.
+              </div>
+              <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+                {myErrors.map(({a,i})=>{
+                  const isBlunder=a.quality==="blunder";
+                  return <button key={i} onClick={()=>rewindBlunder(i)}
+                    className="cc-focus-ring"
+                    title={`Ход ${Math.floor(i/2)+1}${userIsWhite?"":"..."}  · ${isBlunder?"Блундер":"Ошибка"} · eval ${a.cp>=0?"+":""}${(a.cp/100).toFixed(1)}`}
+                    style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
+                      borderRadius:RADIUS.full,border:`1px solid ${isBlunder?"#fca5a5":"#fdba74"}`,
+                      background:isBlunder?"#fef2f2":"#fff7ed",
+                      color:isBlunder?CC.danger:"#c2410c",
+                      fontSize:12,fontWeight:800,cursor:"pointer",
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                    <span style={{fontSize:13,fontWeight:900}}>{isBlunder?"??":"?"}</span>
+                    <span>Ход {Math.floor(i/2)+1}{userIsWhite?".":"..."}</span>
+                  </button>;
+                })}
+              </div>
+            </div>;
+          })()}
 
           {/* My player block (bottom = me) */}
           {!setup&&(tab==="play"||tab==="coach")&&<div style={{

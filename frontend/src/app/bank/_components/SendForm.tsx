@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useBiometric } from "../_lib/BiometricContext";
 import * as contactsLib from "../_lib/contacts";
 import type { Contact } from "../_lib/contacts";
+import { FREEZE_EVENT, isFrozen, loadFreeze, secondsUntilSober } from "../_lib/freeze";
 import type { PaymentRequest } from "../_lib/paymentRequest";
 
 type Props = {
@@ -23,11 +24,19 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
   const [busy, setBusy] = useState<boolean>(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [showPicker, setShowPicker] = useState<boolean>(false);
+  const [frozen, setFrozen] = useState<boolean>(false);
   const prefillSignature = prefill ? `${prefill.to}|${prefill.amount ?? ""}|${prefill.memo ?? ""}` : "";
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setContacts(contactsLib.listContacts());
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setFrozen(isFrozen());
+    sync();
+    window.addEventListener(FREEZE_EVENT, sync);
+    return () => window.removeEventListener(FREEZE_EVENT, sync);
   }, []);
 
   useEffect(() => {
@@ -73,6 +82,16 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
       onError("Insufficient funds");
       return;
     }
+    const fs = loadFreeze();
+    if (fs) {
+      const wait = secondsUntilSober(fs);
+      onError(
+        wait > 0
+          ? `Wallet frozen — sober window ${wait}s left`
+          : "Wallet frozen — unfreeze in Copilot",
+      );
+      return;
+    }
     setBusy(true);
     if (bioSettings && n >= bioSettings.threshold) {
       const allowed = await bioGuard(n);
@@ -110,13 +129,37 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
 
   return (
     <section
+      aria-label="Send"
       style={{
-        border: "1px solid rgba(15,23,42,0.1)",
+        border: frozen ? "1px solid rgba(220,38,38,0.35)" : "1px solid rgba(15,23,42,0.1)",
         borderRadius: 16,
         padding: 20,
-        background: "#fff",
+        background: frozen ? "rgba(220,38,38,0.03)" : "#fff",
       }}
     >
+      {frozen ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 12px",
+            borderRadius: 10,
+            background: "rgba(220,38,38,0.08)",
+            border: "1px solid rgba(220,38,38,0.25)",
+            marginBottom: 12,
+            fontSize: 12,
+            color: "#991b1b",
+            fontWeight: 700,
+          }}
+          role="alert"
+        >
+          <span aria-hidden="true" style={{ fontSize: 14 }}>
+            🔒
+          </span>
+          Wallet frozen — outgoing transfers blocked. Unfreeze via Copilot ✦.
+        </div>
+      ) : null}
       <div
         style={{
           display: "flex",
@@ -283,20 +326,22 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
           </div>
           <button
             onClick={() => void submit()}
-            disabled={busy}
+            disabled={busy || frozen}
+            aria-disabled={busy || frozen}
             style={{
               padding: "10px 18px",
               borderRadius: 10,
               border: "none",
-              background: busy ? "#94a3b8" : "#0f172a",
+              background: busy || frozen ? "#94a3b8" : "#0f172a",
               color: "#fff",
               fontWeight: 800,
               fontSize: 13,
-              cursor: busy ? "default" : "pointer",
+              cursor: busy || frozen ? "not-allowed" : "pointer",
               whiteSpace: "nowrap" as const,
             }}
+            title={frozen ? "Wallet frozen — unfreeze in Copilot" : undefined}
           >
-            {busy ? "Sending…" : "Send"}
+            {frozen ? "Frozen" : busy ? "Sending…" : "Send"}
           </button>
         </div>
         {memo ? (

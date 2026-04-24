@@ -17,6 +17,9 @@ export function HelpMenu({
   const [open, setOpen] = useState<boolean>(false);
   const [demoActive, setDemoActive] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const isMac =
+    typeof navigator !== "undefined" &&
+    /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent || "");
 
   useEffect(() => {
     setDemoActive(hasDemoSeed());
@@ -132,6 +135,23 @@ export function HelpMenu({
           >
             Quick actions
           </div>
+          <MenuItem
+            icon="⌘"
+            label="Command palette"
+            hint={`Press ${isMac ? "⌘" : "Ctrl"}+K — search & jump anywhere`}
+            onClick={() => {
+              setOpen(false);
+              window.dispatchEvent(
+                new KeyboardEvent("keydown", {
+                  key: "k",
+                  code: "KeyK",
+                  metaKey: isMac,
+                  ctrlKey: !isMac,
+                  bubbles: true,
+                }),
+              );
+            }}
+          />
           <MenuItem icon="↻" label="Take the tour" hint="5-step walk-through" onClick={relaunchTour} />
           <MenuItem
             icon={demoActive ? "✓" : "⟡"}
@@ -146,6 +166,16 @@ export function HelpMenu({
             onClick={() => {
               setOpen(false);
               const el = document.getElementById("snapshot-heading");
+              el?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
+          <MenuItem
+            icon="➤"
+            label="Jump to Invite & Earn"
+            hint="Referral program"
+            onClick={() => {
+              setOpen(false);
+              const el = document.getElementById("referrals-heading");
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
           />

@@ -25,14 +25,18 @@ import { DemoModeBanner } from "./_components/DemoModeBanner";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
+import { CommandPalette } from "./_components/CommandPalette";
+import { ConceptPrimer } from "./_components/ConceptPrimer";
 import { DeviceManagement } from "./_components/DeviceManagement";
 import { EcosystemPulse } from "./_components/EcosystemPulse";
+import { FinancialCopilot } from "./_components/FinancialCopilot";
 import { HelpMenu } from "./_components/HelpMenu";
 import { MobileTabBar } from "./_components/MobileTabBar";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { ReferralsPanel } from "./_components/ReferralsPanel";
 import { SnapshotExport } from "./_components/SnapshotExport";
+import { TierProgression } from "./_components/TierProgression";
 import { GiftMode } from "./_components/GiftMode";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
@@ -48,7 +52,9 @@ import { TopupForm } from "./_components/TopupForm";
 import { TotalEarningsDashboard } from "./_components/TotalEarningsDashboard";
 import { TransactionList } from "./_components/TransactionList";
 import { TrustScoreCard } from "./_components/TrustScoreCard";
+import { UnifiedAuditFeed } from "./_components/UnifiedAuditFeed";
 import { WalletSummary } from "./_components/WalletSummary";
+import { WealthConstellation } from "./_components/WealthConstellation";
 import { WealthForecast } from "./_components/WealthForecast";
 import { useAuthMe } from "./_hooks/useAuthMe";
 import { useBank } from "./_hooks/useBank";
@@ -117,6 +123,11 @@ function BankContent() {
   return (
     <div className="aevion-bank-root">
       <A11yStyles />
+      <CommandPalette
+        accountId={account?.id ?? null}
+        hasWallet={hasWallet}
+        notify={notify}
+      />
       <div
         id="bank-anchor-wallet"
         style={{ borderRadius: 20, overflow: "hidden", marginBottom: 24, scrollMarginTop: 20 }}
@@ -267,7 +278,11 @@ function BankContent() {
             forceOpen={searchParams?.get("tour") === "1"}
             autoFirstVisit={true}
           />
+          <ConceptPrimer />
           <TotalEarningsDashboard />
+          <div id="bank-anchor-constellation" style={{ scrollMarginTop: 20 }}>
+            <WealthConstellation account={account} operations={operations} />
+          </div>
           <div id="bank-anchor-ecosystem" style={{ scrollMarginTop: 20 }}>
             <EcosystemPulse accountId={account.id} operations={operations} />
           </div>
@@ -276,6 +291,9 @@ function BankContent() {
           </div>
           <div id="bank-anchor-trust" style={{ scrollMarginTop: 20 }}>
             <TrustScoreCard account={account} operations={operations} />
+          </div>
+          <div id="bank-anchor-tiers" style={{ scrollMarginTop: 20 }}>
+            <TierProgression account={account} operations={operations} notify={notify} />
           </div>
           <PeerStanding account={account} operations={operations} />
           <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
@@ -293,6 +311,7 @@ function BankContent() {
 
           <ReferralsPanel account={account} notify={notify} />
           <SnapshotExport account={account} operations={operations} notify={notify} />
+          <FinancialCopilot account={account} operations={operations} notify={notify} />
           <HelpMenu accountId={account.id} notify={notify} />
           <MobileTabBar />
           <AccountIdCard
@@ -305,7 +324,7 @@ function BankContent() {
             onCopy={(msg) => showToast(msg, "success")}
           />
 
-          <SavingsGoals notify={notify} />
+          <SavingsGoals accountId={account.id} notify={notify} />
 
           {prefill ? (
             <div
@@ -387,6 +406,9 @@ function BankContent() {
 
           <ActivityTimeline myId={account.id} operations={operations} />
 
+          <div id="bank-anchor-audit-unified" style={{ scrollMarginTop: 20 }}>
+            <UnifiedAuditFeed accountId={account.id} operations={operations} notify={notify} />
+          </div>
           <AuditPanel notify={notify} />
 
           <DeviceManagement accountId={account.id} notify={notify} />

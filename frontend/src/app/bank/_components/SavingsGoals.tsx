@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSavings } from "../_hooks/useSavings";
+import { absoluteRequestUrl } from "../_lib/paymentRequest";
 import {
   forecastGoal,
   ICON_COLOR,
@@ -13,14 +14,16 @@ import {
 } from "../_lib/savings";
 import { btnSecondary, Field, inputStyle } from "./formPrimitives";
 import { Money } from "./Money";
+import { QRCodeView } from "./QRCode";
 
 type Props = {
+  accountId: string;
   notify: (msg: string, type?: "success" | "error" | "info") => void;
 };
 
 const ICON_CHOICES: GoalIcon[] = ["travel", "vacation", "home", "gear", "star", "heart", "coffee", "music"];
 
-export function SavingsGoals({ notify }: Props) {
+export function SavingsGoals({ accountId, notify }: Props) {
   const { goals, add, remove, contribute, reset } = useSavings();
   const [formOpen, setFormOpen] = useState<boolean>(false);
   const [label, setLabel] = useState<string>("");
@@ -261,6 +264,8 @@ export function SavingsGoals({ notify }: Props) {
               <GoalCard
                 key={g.id}
                 g={g}
+                accountId={accountId}
+                notify={notify}
                 onAdd={(amt) => {
                   contribute(g.id, amt);
                   notify(`+${amt.toFixed(2)} AEC to "${g.label}"`, "success");
@@ -291,21 +296,40 @@ export function SavingsGoals({ notify }: Props) {
 
 function GoalCard({
   g,
+  accountId,
+  notify,
   onAdd,
   onWithdraw,
   onReset,
   onDelete,
 }: {
   g: SavingsGoal;
+  accountId: string;
+  notify: (msg: string, type?: "success" | "error" | "info") => void;
   onAdd: (amount: number) => void;
   onWithdraw: (amount: number) => void;
   onReset: () => void;
   onDelete: () => void;
 }) {
   const [amt, setAmt] = useState<string>("");
+  const [shareOpen, setShareOpen] = useState<boolean>(false);
   const forecast: GoalForecast = forecastGoal(g);
   const color = ICON_COLOR[g.icon];
   const completed = forecast.status === "completed";
+  const remainingAec = Math.max(0, g.targetAec - g.currentAec);
+  const suggestedContributionAec = Math.max(
+    1,
+    Math.min(remainingAec || 10, Math.round(remainingAec / 4) || 5),
+  );
+  const shareUrl = useMemo(
+    () =>
+      absoluteRequestUrl({
+        to: accountId,
+        amount: suggestedContributionAec,
+        memo: `Gift for "${g.label}"`,
+      }),
+    [accountId, suggestedContributionAec, g.label],
+  );
 
   // Celebrate the null → set transition on completedAt.
   const prevCompleted = useRef<boolean>(!!g.completedAt);
@@ -390,21 +414,50 @@ function GoalCard({
             {forecast.hint}
           </div>
         </div>
-        <button
-          onClick={onDelete}
-          aria-label={`Delete ${g.label}`}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "#94a3b8",
-            fontSize: 16,
-            cursor: "pointer",
-            padding: 4,
-          }}
-        >
-          ×
-        </button>
+        <div style={{ display: "flex", gap: 2 }}>
+          <button
+            onClick={() => setShareOpen(true)}
+            aria-label={`Share ${g.label} for contributions`}
+            title="Share goal · contribution QR"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: color,
+              fontSize: 14,
+              cursor: "pointer",
+              padding: 4,
+              fontWeight: 900,
+            }}
+          >
+            ⇱
+          </button>
+          <button
+            onClick={onDelete}
+            aria-label={`Delete ${g.label}`}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#94a3b8",
+              fontSize: 16,
+              cursor: "pointer",
+              padding: 4,
+            }}
+          >
+            ×
+          </button>
+        </div>
       </div>
+
+      {shareOpen ? (
+        <GoalShareModal
+          goal={g}
+          shareUrl={shareUrl}
+          suggestedAec={suggestedContributionAec}
+          color={color}
+          onClose={() => setShareOpen(false)}
+          notify={notify}
+        />
+      ) : null}
 
       <div>
         <div
@@ -507,6 +560,16 @@ function GoalCard({
 }
 
 function ConfettiBurst({ color }: { color: string }) {
+  const [prm, setPrm] = useState<boolean>(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrm(mq.matches);
+    update();
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, []);
+
   const pieces = useMemo(() => {
     const palette = [color, "#059669", "#d97706", "#0ea5e9", "#db2777"];
     return Array.from({ length: 14 }, (_, i) => ({
@@ -520,6 +583,8 @@ function ConfettiBurst({ color }: { color: string }) {
       color: palette[i % palette.length],
     }));
   }, [color]);
+
+  if (prm) return null;
 
   return (
     <>
@@ -564,3 +629,177 @@ function ConfettiBurst({ color }: { color: string }) {
   );
 }
 
+function GoalShareModal({
+  goal,
+  shareUrl,
+  suggestedAec,
+  color,
+  onClose,
+  notify,
+}: {
+  goal: SavingsGoal;
+  shareUrl: string;
+  suggestedAec: number;
+  color: string;
+  onClose: () => void;
+  notify: (msg: string, type?: "success" | "error" | "info") => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const doCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      notify("Share link copied", "success");
+    } catch {
+      notify("Clipboard blocked — copy manually", "error");
+    }
+  };
+
+  const doNativeShare = async () => {
+    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+    if (!nav.share) {
+      await doCopy();
+      return;
+    }
+    try {
+      await nav.share({
+        title: `Contribute to "${goal.label}"`,
+        text: `Help me hit my AEVION savings goal.`,
+        url: shareUrl,
+      });
+    } catch {
+      // User cancelled — don't bother them with a toast.
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Share ${goal.label}`}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 90,
+        background: "rgba(15,23,42,0.45)",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 360,
+          background: "#fff",
+          borderRadius: 16,
+          padding: 20,
+          boxShadow: "0 24px 48px rgba(15,23,42,0.22)",
+          display: "grid",
+          gap: 14,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>
+              Share "{goal.label}"
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
+              Friends can scan this QR to contribute. Suggested: {suggestedAec.toFixed(0)} AEC.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close share dialog"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#94a3b8",
+              fontSize: 18,
+              cursor: "pointer",
+              padding: 4,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <QRCodeView value={shareUrl} size={200} />
+        </div>
+
+        <div
+          style={{
+            fontSize: 11,
+            color: "#475569",
+            fontFamily: "ui-monospace, monospace",
+            padding: "6px 10px",
+            background: "rgba(15,23,42,0.04)",
+            borderRadius: 8,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={shareUrl}
+        >
+          {shareUrl}
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => void doCopy()}
+            style={{
+              flex: 1,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: `1px solid ${color}44`,
+              background: "#fff",
+              color,
+              fontWeight: 800,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Copy link
+          </button>
+          <button
+            type="button"
+            onClick={() => void doNativeShare()}
+            style={{
+              flex: 1,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "none",
+              background: color,
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Share →
+          </button>
+        </div>
+
+        <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.45 }}>
+          Holographic QR · animation is the liveness signal — screenshots won't move.
+          When scanned, opens a pre-filled SendForm for your contact.
+        </div>
+      </div>
+    </div>
+  );
+}

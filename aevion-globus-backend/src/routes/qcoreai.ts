@@ -15,6 +15,7 @@ import {
 } from "../services/qcoreai/orchestrator";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
+import { rateLimit } from "../lib/rateLimit";
 import {
   buildHistoryContext,
   createRun,
@@ -228,7 +229,14 @@ qcoreaiRouter.delete("/runs/:id/share", async (req, res) => {
  * agent trace and final answer. Sensitive fields (session.userId, agentConfig
  * with raw system prompts) are stripped.
  */
-qcoreaiRouter.get("/shared/:token", async (req, res) => {
+const sharedLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "qcore-shared",
+  message: "Too many requests to the public share endpoint. Please retry later.",
+});
+
+qcoreaiRouter.get("/shared/:token", sharedLimiter, async (req, res) => {
   try {
     const run = await getRunByShareToken(req.params.token);
     if (!run) return res.status(404).json({ error: "not found" });

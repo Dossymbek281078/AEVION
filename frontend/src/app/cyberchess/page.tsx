@@ -1636,29 +1636,37 @@ export default function CyberChessPage(){
           </div>}
 
           <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px))",gap:4}}>
-            {/* Eval bar - shown in play/coach/analysis when Stockfish ready */}
+            {/* Eval bar — with W/B labels + centered numeric badge */}
             {sfOk&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
-              const pct=50+cp/30; // -1500..1500 → 0..100
+              const pct=50+cp/30;
               const wPct=Math.max(2,Math.min(98,pct));
               const label=evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp>=0?"+":"")+(evalCp/100).toFixed(2);
               const whiteTop=flip;
+              const topSide=whiteTop?"W":"B";
+              const botSide=whiteTop?"B":"W";
               const isWhiteBetter=evalMate!==0?evalMate>0:evalCp>=0;
-              return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                <div style={{fontSize:11,fontWeight:900,color:whiteTop?(isWhiteBetter?T.accent:T.danger):T.dim,fontFamily:"monospace",minHeight:14}}>{whiteTop?label:""}</div>
-                <div style={{width:28,flex:1,borderRadius:6,overflow:"hidden",border:"1px solid #475569",background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+              const badgeBg=isWhiteBetter?"#ffffff":"#1e293b";
+              const badgeFg=isWhiteBetter?"#0f172a":"#ffffff";
+              const pipStyle=(side:"W"|"B"):React.CSSProperties=>side==="W"
+                ? {background:"#f8fafc",color:CC.text,border:`1px solid ${CC.border}`}
+                : {background:"#1e293b",color:"#fff"};
+              return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:32}}>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(topSide)}}>{topSide}</div>
+                <div style={{width:28,flex:1,borderRadius:8,overflow:"hidden",border:`1px solid ${CC.borderStrong}`,background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.15)"}}>
                   {whiteTop?<>
-                    <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
-                    <div style={{flex:1,background:"#262626"}}/>
+                    <div style={{height:`${wPct}%`,background:"linear-gradient(180deg,#ffffff 0%,#e2e8f0 100%)",transition:"height 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
+                    <div style={{flex:1,background:"linear-gradient(180deg,#374151 0%,#1f2937 100%)"}}/>
                   </>:<>
-                    <div style={{flex:1,background:"#262626"}}/>
-                    <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
+                    <div style={{flex:1,background:"linear-gradient(180deg,#1f2937 0%,#374151 100%)"}}/>
+                    <div style={{height:`${wPct}%`,background:"linear-gradient(180deg,#e2e8f0 0%,#ffffff 100%)",transition:"height 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
                   </>}
+                  <div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",padding:"2px 5px",background:badgeBg,color:badgeFg,fontSize:10,fontWeight:900,fontFamily:"ui-monospace, monospace",borderRadius:4,boxShadow:"0 1px 3px rgba(0,0,0,0.3)",whiteSpace:"nowrap",minWidth:26,textAlign:"center",letterSpacing:0.3}}>{label}</div>
                 </div>
-                <div style={{fontSize:11,fontWeight:900,color:!whiteTop?(isWhiteBetter?T.accent:T.danger):T.dim,fontFamily:"monospace",minHeight:14}}>{!whiteTop?label:""}</div>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(botSide)}}>{botSide}</div>
               </div>);
             })()}
-            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:14,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
+            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative"}}>
               {/* Arrow / highlight overlay */}
               {(arrows.length>0||sqHL.length>0)&&(()=>{
@@ -1711,13 +1719,13 @@ export default function CyberChessPage(){
                   if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
                 }} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
-                  {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
-                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s"}}><Piece type={p.type} color={p.color}/></div>}
+                  {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)"}}/>}
+                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined}}><Piece type={p.type} color={p.color}/></div>}
                   {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
                 </div>}))}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:14,color:T.dim,fontWeight:700}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Controls */}
           <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>

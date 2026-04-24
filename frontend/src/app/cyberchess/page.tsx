@@ -413,6 +413,7 @@ export default function CyberChessPage(){
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   const[showShop,sShowShop]=useState(false);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
+  const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -2747,7 +2748,8 @@ export default function CyberChessPage(){
             {/* ── Puzzle List (collapsible) ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
               <button onClick={()=>sPuzzleListOpen(!puzzleListOpen)} style={{width:"100%",padding:"10px 14px",borderBottom:puzzleListOpen?`1px solid ${T.border}`:"none",background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center",border:"none",cursor:"pointer"}}>
-                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 Список задач ({fPz.length})</span>
+                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 Список задач ({fPz.length}/{PUZZLES.length})</span>
+                {PUZZLES.length<5000&&<button onClick={()=>sShowPuzzleExpand(true)} className="cc-focus-ring" style={{marginLeft:"auto",padding:"3px 10px",borderRadius:RADIUS.full,background:CC.accentSoft,color:CC.accent,border:`1px solid ${CC.accent}`,fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Расширить до 20k</button>}
                 <span style={{fontSize:11,color:T.dim,fontWeight:700,transform:puzzleListOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
               </button>
               {puzzleListOpen&&<>
@@ -3477,6 +3479,43 @@ export default function CyberChessPage(){
           <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:12,padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text,whiteSpace:"nowrap"}}>{k}</kbd>
           <span style={{color:CC.text}}>{v}</span>
         </React.Fragment>)}
+      </div>
+    </Modal>
+
+    {/* Puzzle Expansion instructions */}
+    <Modal open={showPuzzleExpand} onClose={()=>sShowPuzzleExpand(false)} size="md" title="🧩 Расширить базу пазлов до 20 000">
+      <div style={{fontSize:13,color:CC.text,lineHeight:1.6}}>
+        <p style={{margin:`0 0 ${SPACE[3]}px`}}>
+          Lichess выложил <b>~4 миллиона</b> пазлов под CC0. Мы можем импортировать лучшие 20 000 (~5 MB) с стратифицированной выборкой по рейтингу и темам — <b>~5 минут работы</b>, делается один раз.
+        </p>
+        <ol style={{margin:0,paddingLeft:20,fontSize:13,lineHeight:1.8}}>
+          <li>
+            Скачай CSV:&nbsp;
+            <a href="https://database.lichess.org/#puzzles" target="_blank" rel="noreferrer" style={{color:CC.brand,fontWeight:700}}>
+              database.lichess.org/#puzzles
+            </a>
+            &nbsp;(~300 МБ .zst)
+          </li>
+          <li>Распакуй (7-Zip на Windows или <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>zstd -d</code>)</li>
+          <li>Положи <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>lichess_db_puzzle.csv</code> в корень проекта <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>aevion-core/</code></li>
+          <li>
+            В PowerShell из корня:
+            <div style={{marginTop:SPACE[2],padding:SPACE[2],background:"#0f172a",color:"#d1d5db",borderRadius:RADIUS.sm,fontSize:11,fontFamily:"ui-monospace, monospace",overflowX:"auto",whiteSpace:"nowrap"}}>
+              node frontend/scripts/import-lichess-puzzles.mjs --in ./lichess_db_puzzle.csv --out ./frontend/public/puzzles.json --limit 20000 --min-rating 600 --max-rating 2600 --min-plays 100 --min-popularity 80
+            </div>
+          </li>
+          <li>Обнови страницу — <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>PUZZLES.length</code> станет 20 000.</li>
+        </ol>
+        <div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,fontSize:12,color:"#065f46"}}>
+          💡 Скрипт применяет стартовый ход соперника к FEN, так что загружаемая позиция уже «студент ходит». Фильтр по popularity/plays убирает шумные пазлы.
+        </div>
+        <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowPuzzleExpand(false)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{
+            const cmd="node frontend/scripts/import-lichess-puzzles.mjs --in ./lichess_db_puzzle.csv --out ./frontend/public/puzzles.json --limit 20000 --min-rating 600 --max-rating 2600 --min-plays 100 --min-popularity 80";
+            try{navigator.clipboard.writeText(cmd).then(()=>showToast("✓ Команда скопирована","success")).catch(()=>showToast("Не получилось","error"))}catch{showToast("Clipboard недоступен","error")}
+          }}>📋 Копировать команду</Btn>
+        </div>
       </div>
     </Modal>
 

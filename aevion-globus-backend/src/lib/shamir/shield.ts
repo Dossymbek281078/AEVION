@@ -39,7 +39,9 @@ function computeShardHmac(
   shieldId: string,
   hmacKeyVersion: number,
 ): string {
-  const secret = getShardHmacSecret();
+  // getShardHmacSecret(version) throws if the version is not configured —
+  // that correctly bubbles up as a 500 / caller decides what to do.
+  const secret = getShardHmacSecret(hmacKeyVersion);
   const payload = [
     String(index),
     sssShare,
@@ -133,13 +135,22 @@ export function verifyShardHmac(
   >,
   shieldId: string,
 ): boolean {
-  if (shard.hmacKeyVersion !== HMAC_KEY_VERSION) return false;
-  const expected = computeShardHmac(
-    shard.index,
-    shard.sssShare,
-    shieldId,
-    shard.hmacKeyVersion,
-  );
+  // Verify against the secret for THIS shard's own version, not the
+  // current one. That's what makes rotation work: a v1 shard remains
+  // verifiable under SHARD_HMAC_SECRET_V1 even after we rotate to v2.
+  let expected: string;
+  try {
+    expected = computeShardHmac(
+      shard.index,
+      shard.sssShare,
+      shieldId,
+      shard.hmacKeyVersion,
+    );
+  } catch {
+    // Unknown version = secret not configured on this deployment.
+    // Don't leak whether the version exists or not — just fail closed.
+    return false;
+  }
   return timingSafeEqualHex(expected, shard.hmac);
 }
 

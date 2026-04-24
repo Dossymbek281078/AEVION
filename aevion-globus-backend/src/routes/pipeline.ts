@@ -7,6 +7,7 @@ import {
   areDemoEndpointsEnabled,
   getQSignSecret,
   HMAC_KEY_VERSION,
+  listAvailableHmacVersions,
   SHAMIR_SHARDS,
   SHAMIR_THRESHOLD,
 } from "../config/qright";
@@ -45,15 +46,20 @@ interface QSignPayload {
   signedAt: string; // ISO-8601, хранится в БД для последующей верификации
 }
 
-function computeQSignHmac(payload: QSignPayload): string {
+function computeQSignHmac(
+  payload: QSignPayload,
+  version: number = HMAC_KEY_VERSION,
+): string {
   const raw = JSON.stringify({
     objectId: payload.objectId,
     title: payload.title,
     contentHash: payload.contentHash,
     signedAt: payload.signedAt,
   });
+  // getQSignSecret(version) throws if the version is not configured — that
+  // correctly propagates as a 500 for the caller to handle.
   return crypto
-    .createHmac("sha256", getQSignSecret())
+    .createHmac("sha256", getQSignSecret(version))
     .update(raw)
     .digest("hex");
 }
@@ -159,6 +165,12 @@ async function ensureTables(): Promise<void> {
   // GET /verify/:certId не может пересчитать signatureHmac.
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "signedAt" TIMESTAMPTZ;`,
+  );
+  // v3 (Phase 3 — HMAC rotation): the QSign HMAC version that signed this
+  // row. Verify uses the secret for THIS version (not the current one), so
+  // rotated records still verify under their original key.
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "qsignKeyVersion" INTEGER NOT NULL DEFAULT 1;`,
   );
   // v3: Bitcoin-anchored timestamp proof (OpenTimestamps).
   // Pending immediately after /protect; upgraded to bitcoin-confirmed via
@@ -454,8 +466,8 @@ pipelineRouter.post("/protect", async (req, res) => {
       );
 
       await client.query(
-        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19,$20)`,
+        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19,$20,$21)`,
         [
           certId,
           objectId,
@@ -477,6 +489,7 @@ pipelineRouter.post("/protect", async (req, res) => {
           JSON.stringify(legalBasis),
           protectedAt,
           signedAt,
+          HMAC_KEY_VERSION,
         ],
       );
 
@@ -997,12 +1010,22 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
           signedAtRaw instanceof Date
             ? signedAtRaw.toISOString()
             : String(signedAtRaw);
-        const expected = computeQSignHmac({
-          objectId: cert.objectId,
-          title: cert.title,
-          contentHash: cert.contentHash,
-          signedAt: signedAtIso,
-        });
+        // Use the version that was in effect when the cert was signed.
+        // For pre-Phase-3 rows qsignKeyVersion defaults to 1 via the
+        // ALTER TABLE DEFAULT.
+        const certVersion =
+          typeof cert.qsignKeyVersion === "number" && cert.qsignKeyVersion >= 1
+            ? cert.qsignKeyVersion
+            : 1;
+        const expected = computeQSignHmac(
+          {
+            objectId: cert.objectId,
+            title: cert.title,
+            contentHash: cert.contentHash,
+            signedAt: signedAtIso,
+          },
+          certVersion,
+        );
         signatureHmacValid = crypto.timingSafeEqual(
           Buffer.from(expected, "hex"),
           Buffer.from(cert.signatureHmac, "hex"),
@@ -1096,6 +1119,13 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         contentHashValid: hashValid,
         signatureHmacValid,
         signatureHmacReason,
+        qsignKeyVersion:
+          typeof cert.qsignKeyVersion === "number" ? cert.qsignKeyVersion : 1,
+        currentKeyVersion: HMAC_KEY_VERSION,
+        keyRotatedSinceSigning:
+          (typeof cert.qsignKeyVersion === "number"
+            ? cert.qsignKeyVersion
+            : 1) !== HMAC_KEY_VERSION,
         quantumShieldStatus: shieldStatus,
         shieldLegacy,
         shards: cert.shardCount,
@@ -1641,6 +1671,55 @@ pipelineRouter.post("/ots/:certId/upgrade", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "upgrade failed";
     console.error("[OT] upgrade error:", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/hmac-versions
+ *
+ * Introspection for key rotation: which HMAC versions are configured on
+ * this deployment, which is the current one (used to sign new records),
+ * and how many records in the DB reference each version. Useful during
+ * rotation windows — lets ops confirm "every row is verifiable under a
+ * secret we still have" before retiring an old secret.
+ */
+pipelineRouter.get("/hmac-versions", async (_req, res) => {
+  try {
+    await ensureTables();
+    const v = listAvailableHmacVersions();
+
+    // Per-version row counts.
+    const certCounts = await pool.query(
+      `SELECT "qsignKeyVersion" as version, COUNT(*)::int as rows
+       FROM "IPCertificate"
+       GROUP BY "qsignKeyVersion"
+       ORDER BY "qsignKeyVersion" ASC`,
+    );
+    const shieldCounts = await pool.query(
+      `SELECT "hmac_key_version" as version, COUNT(*)::int as rows
+       FROM "QuantumShield"
+       GROUP BY "hmac_key_version"
+       ORDER BY "hmac_key_version" ASC`,
+    );
+
+    return res.json({
+      current: v.current,
+      configured: {
+        shardSecretVersions: v.shardVersions,
+        qsignSecretVersions: v.qsignVersions,
+      },
+      usage: {
+        certificatesByVersion: certCounts.rows,
+        shieldsByVersion: shieldCounts.rows,
+      },
+      rotationReady: v.shardVersions.length > 1 || v.qsignVersions.length > 1,
+      note:
+        "To rotate: add SHARD_HMAC_SECRET_V{N+1} and QSIGN_SECRET_V{N+1} env vars, then set HMAC_KEY_VERSION={N+1} and restart. Old records keep their version and stay verifiable against the old secrets.",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "hmac-versions failed";
+    console.error("[HMAC] versions error:", msg);
     return res.status(500).json({ error: msg });
   }
 });

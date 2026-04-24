@@ -1841,64 +1841,116 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
             {btn("⇄ Flip",()=>sFlip(!flip),T.surface,T.dim)}
             {btn("New Game",()=>{sSetup(true);sOn(false);sOver(null);sPms([])},T.accent,"#fff","none")}
-            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю...":"🎤 Голос",()=>{
+            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
-              if(!SR){showToast("Браузер не поддерживает голосовой ввод","error");return}
-              if(voiceListening&&voiceRecRef.current){voiceRecRef.current.stop();return}
-              const rec=new SR();rec.lang="ru-RU";rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=3;
-              rec.onstart=()=>{sVoiceListening(true);showToast("Говорите: 'е2 е4' или 'конь f3'","info")};
-              rec.onend=()=>{sVoiceListening(false);voiceRecRef.current=null};
-              rec.onerror=(e:any)=>{sVoiceListening(false);
-                if(e.error==="network"){
-                  showToast("Голосу нужен интернет (Chrome speech API). Попробуй ввести ход вручную","error");
-                }else if(e.error==="not-allowed"){
-                  showToast("Разреши доступ к микрофону в браузере","error");
-                }else{
-                  showToast(`Ошибка: ${e.error}`,"error");
-                }
+              if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
+              if(voiceListening&&voiceRecRef.current){
+                try{voiceRecRef.current._stop=true;voiceRecRef.current.stop()}catch{}
+                sVoiceListening(false);voiceRecRef.current=null;
+                showToast("Голос выключен","info");
+                return;
+              }
+              const rec=new SR();
+              rec.lang="ru-RU";
+              rec.interimResults=false;
+              rec.continuous=true; // always-on — не надо жать каждый раз
+              rec.maxAlternatives=4;
+              rec._stop=false;
+              const parseVoice=(text:string):{from?:string;to?:string;san?:string;special?:string}=>{
+                let t=text.toLowerCase().trim().replace(/ё/g,"е");
+                // Special commands
+                if(/\b(новая\s+партия|новую\s+партию|new\s+game|начать\s+заново)\b/.test(t))return{special:"new"};
+                if(/\b(сдаюсь|сдаться|resign|признаю\s+поражение)\b/.test(t))return{special:"resign"};
+                if(/\b(переверни|переверни\s+доску|flip|flip\s+board)\b/.test(t))return{special:"flip"};
+                if(/\b(отмена|отмени|отменить|undo|отмени\s+ход)\b/.test(t))return{special:"undo"};
+                if(/\b(анализ|проанализируй|analyze|analysis)\b/.test(t))return{special:"analyze"};
+                if(/\b(выкл(ючи)?\s+голос|выключи\s+микрофон|stop\s+listening)\b/.test(t))return{special:"stopvoice"};
+                // Castling — broad coverage
+                if(/(коротк(ая|ую)\s+рокировк|короткая|short\s+castle|castle\s+short|king[-\s]?side|o-?o(?!-?o))/i.test(t))return{san:"O-O"};
+                if(/(длинн(ая|ую)\s+рокировк|длинная|long\s+castle|castle\s+long|queen[-\s]?side|o-?o-?o)/i.test(t))return{san:"O-O-O"};
+                // Russian letter → file (extended: phonetic spellings shaхматистов)
+                const rusMap:Record<string,string>={"а":"a","бэ":"b","б":"b","вэ":"c","в":"c","цэ":"c","ц":"c","с":"c","дэ":"d","д":"d","е":"e","эф":"f","ф":"f","жэ":"g","же":"g","ж":"g","ге":"g","г":"g","ха":"h","х":"h","аш":"h","эйч":"h"};
+                // English spoken: "e four", "knight f three"
+                const engFileMap:Record<string,string>={"ei":"a","bi":"b","си":"c","си-эн":"c","di":"d","ди":"d","ii":"e","эф":"f","джи":"g","эйч":"h","аш":"h","хэй":"h"};
+                // Number words (rus + eng)
+                const numMap:Record<string,string>={"один":"1","одну":"1","первую":"1","first":"1","one":"1","два":"2","две":"2","вторую":"2","second":"2","two":"2","три":"3","третью":"3","third":"3","three":"3","четыре":"4","четвертую":"4","four":"4","пять":"5","пятую":"5","five":"5","шесть":"6","шестую":"6","six":"6","семь":"7","седьмую":"7","seven":"7","восемь":"8","восьмую":"8","eight":"8"};
+                // Piece words — broad morphology
+                const pieceMap:Record<string,string>={
+                  "конь":"N","коня":"N","конём":"N","конем":"N","конику":"N","knight":"N","horse":"N",
+                  "слон":"B","слона":"B","слоном":"B","слоны":"B","bishop":"B",
+                  "ладья":"R","ладью":"R","ладьёй":"R","ладьей":"R","тура":"R","туру":"R","rook":"R",
+                  "ферзь":"Q","ферзя":"Q","ферзём":"Q","ферзем":"Q","королева":"Q","королеву":"Q","queen":"Q",
+                  "король":"K","короля":"K","королём":"K","королем":"K","king":"K",
+                  "пешка":"","пешку":"","пешкой":"","пешки":"","pawn":""
+                };
+                // Strip capture / connector words — they're fluff for parsing
+                t=t.replace(/\s+/g," ");
+                t=t.replace(/\b(идёт|идет|на|берёт|берет|бьёт|бьет|рубит|съест|съедает|съесть|captures|takes|to|move|move\s+to|-|—|—>|->|→|идет\s+на|идёт\s+на|играет)\b/g," ");
+                t=t.replace(/\s+/g," ");
+                for(const[k,v]of Object.entries(rusMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                for(const[k,v]of Object.entries(engFileMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                for(const[k,v]of Object.entries(numMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                // Promotion
+                let promo:"q"|"r"|"b"|"n"|undefined;
+                if(/(ферзь|ферзя|queen)\s*$/.test(t)||/\bв\s*(ферз[ьяеем]|queen)/.test(text)){promo="q";t=t.replace(/(ферзь|ферзя|queen)/g,"")}
+                else if(/(конь|коня|knight)\s*$/.test(t)||/\bв\s*(кон[ьяем]|knight)/.test(text)){promo="n";t=t.replace(/(конь|коня|knight)/g,"")}
+                else if(/(ладья|ладью|rook)\s*$/.test(t)||/\bв\s*(ладь[юея]|rook)/.test(text)){promo="r";t=t.replace(/(ладья|ладью|rook)/g,"")}
+                else if(/(слон|слона|bishop)\s*$/.test(t)||/\bв\s*(слон[ае]|bishop)/.test(text)){promo="b";t=t.replace(/(слон|слона|bishop)/g,"")}
+                // Extract piece
+                let piece="";
+                for(const[k,v]of Object.entries(pieceMap))if(t.includes(k)){piece=v;t=t.replace(k," ");break;}
+                t=t.replace(/\s+/g," ").trim();
+                // Extract squares — support "e2e4", "e2 e4", "e 2 e 4"
+                const sq=/([a-h])\s*([1-8])/g;const matches:string[]=[];let m;
+                while((m=sq.exec(t))!==null){matches.push(m[1]+m[2]);if(matches.length===2)break}
+                if(matches.length===2)return{from:matches[0],to:matches[1],san:promo?undefined:undefined};
+                if(matches.length===1&&piece)return{san:piece+matches[0]+(promo?"="+promo.toUpperCase():"")};
+                if(matches.length===1)return{san:matches[0]+(promo?"="+promo.toUpperCase():"")};
+                return{};
+              };
+              rec.onstart=()=>{sVoiceListening(true);showToast("🎤 Слушаю постоянно. Говори ходы или команды: 'конь эф три', 'новая партия', 'переверни'","info")};
+              rec.onend=()=>{
+                // continuous mode sometimes ends unexpectedly; auto-restart unless user stopped
+                if(rec._stop){sVoiceListening(false);voiceRecRef.current=null;return}
+                try{rec.start()}catch{sVoiceListening(false);voiceRecRef.current=null}
+              };
+              rec.onerror=(e:any)=>{
+                if(e.error==="no-speech"){return} // normal — user just silent
+                rec._stop=true;sVoiceListening(false);voiceRecRef.current=null;
+                if(e.error==="network")showToast("Голосу нужен интернет (Chrome speech API)","error");
+                else if(e.error==="not-allowed")showToast("Разреши доступ к микрофону","error");
+                else if(e.error==="aborted"){/* ignore */}
+                else showToast(`Голос: ${e.error}`,"error");
               };
               rec.onresult=(e:any)=>{
-                // Try all alternatives
+                const last=e.results[e.results.length-1];
+                if(!last.isFinal)return;
                 const alts:string[]=[];
-                for(let i=0;i<e.results[0].length;i++)alts.push(e.results[0][i].transcript);
-                const parseVoice=(text:string):{from?:string;to?:string;san?:string}=>{
-                  let t=text.toLowerCase().trim();
-                  // Russian letters to files
-                  const rusMap:Record<string,string>={"а":"a","б":"b","в":"c","с":"c","д":"d","е":"e","ф":"f","ж":"g","ге":"g","г":"g","х":"h","аш":"h","эйч":"h"};
-                  // Number words
-                  const numMap:Record<string,string>={"один":"1","одну":"1","два":"2","две":"2","три":"3","четыре":"4","пять":"5","шесть":"6","семь":"7","восемь":"8"};
-                  // Piece words
-                  const pieceMap:Record<string,string>={"конь":"N","коня":"N","конём":"N","конем":"N","слон":"B","слона":"B","слоном":"B","ладья":"R","ладью":"R","ладьёй":"R","ферзь":"Q","ферзя":"Q","ферзём":"Q","ферзем":"Q","король":"K","короля":"K","королём":"K","королем":"K"};
-                  // Castling
-                  if(/короткая\s+рокировка|короткую\s+рокировку|o-?o(?!-?o)/i.test(t))return{san:"O-O"};
-                  if(/длинная\s+рокировка|длинную\s+рокировку|o-?o-?o/i.test(t))return{san:"O-O-O"};
-                  // Replace Russian words with letters/numbers
-                  t=t.replace(/\s+/g," ");
-                  for(const[k,v]of Object.entries(rusMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                  for(const[k,v]of Object.entries(numMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                  // Extract piece if mentioned
-                  let piece="";
-                  for(const[k,v]of Object.entries(pieceMap))if(t.includes(k)){piece=v;t=t.replace(k,"").trim();break;}
-                  // Extract 2 squares like "e2 e4" or "e2e4"
-                  const sq=/([a-h])\s*([1-8])/g;const matches:string[]=[];let m;
-                  while((m=sq.exec(t))!==null){matches.push(m[1]+m[2]);if(matches.length===2)break}
-                  if(matches.length===2)return{from:matches[0],to:matches[1]};
-                  if(matches.length===1&&piece)return{san:piece+matches[0]};
-                  if(matches.length===1)return{san:matches[0]};
-                  return{};
-                };
+                for(let i=0;i<last.length;i++)alts.push(last[i].transcript);
                 let matched=false;
                 for(const alt of alts){
                   const v=parseVoice(alt);
+                  // Special commands
+                  if(v.special){
+                    matched=true;
+                    if(v.special==="new"){if(tab==="play")newG();else showToast("'Новая партия' работает в Play","info")}
+                    else if(v.special==="resign"){if(on&&!over){sOn(false);sOver("You resigned");snd("x")}}
+                    else if(v.special==="flip"){sFlip(f=>!f)}
+                    else if(v.special==="undo"){if(pms.length>0)sPms(p=>p.slice(0,-1));else if(hist.length>=2){const u1=game.undo();if(u1){const u2=game.undo();if(u2){sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sBk(k=>k+1)}else{try{game.move(u1.san)}catch{}}}}}
+                    else if(v.special==="analyze"){if(tab==="analysis"||tab==="coach"||over)runAnalysis();else showToast("Анализ — после партии или в Analysis","info")}
+                    else if(v.special==="stopvoice"){rec._stop=true;try{rec.stop()}catch{}}
+                    break;
+                  }
                   if(v.from&&v.to){
                     try{const mv=game.move({from:v.from as Square,to:v.to as Square,promotion:"q"});if(mv){exec(v.from as Square,v.to as Square);showToast(`✓ ${v.from}→${v.to}`,"success");matched=true;break}}catch{}
                   }else if(v.san){
                     try{const mv=game.move(v.san);if(mv){game.undo();const legal=game.moves({verbose:true}).find(x=>x.san===mv.san);if(legal){exec(legal.from,legal.to);showToast(`✓ ${v.san}`,"success");matched=true;break}}}catch{}
                   }
                 }
-                if(!matched)showToast(`Не распознал: "${alts[0]}"`,"error");
+                if(!matched)showToast(`🎤 "${alts[0]}" — не понял`,"error");
               };
-              voiceRecRef.current=rec;rec.start();
+              voiceRecRef.current=rec;
+              try{rec.start()}catch{showToast("Не удалось запустить микрофон","error")}
             },voiceListening?"#fee2e2":T.surface,voiceListening?T.danger:T.dim)}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn("⌨️ Ход текстом",()=>{
               const input=prompt("Введи ход в алгебраической нотации (например: e4, Nf3, O-O, exd5):");

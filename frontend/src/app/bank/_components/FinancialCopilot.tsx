@@ -30,6 +30,7 @@ import {
   tryUnfreeze,
   type FreezeState,
 } from "../_lib/freeze";
+import { GIFTS_EVENT, pendingGifts, type Gift } from "../_lib/gifts";
 import { loadRecurring, type Recurring } from "../_lib/recurring";
 import { forecastGoal, GOALS_EVENT, loadGoals, type SavingsGoal } from "../_lib/savings";
 import { perksByTier } from "../_lib/tierPerks";
@@ -114,6 +115,7 @@ export function FinancialCopilot({
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [recurring, setRecurring] = useState<Recurring[]>([]);
   const [circlesCount, setCirclesCount] = useState<number>(0);
+  const [pending, setPending] = useState<Gift[]>([]);
   const [dismissed, setDismissed] = useState<Record<string, number>>({});
   const [open, setOpen] = useState<boolean>(false);
   const [primed, setPrimed] = useState<boolean>(false);
@@ -131,6 +133,7 @@ export function FinancialCopilot({
       setGoals(loadGoals());
       setRecurring(loadRecurring());
       setCirclesCount(loadCircles().length);
+      setPending(pendingGifts());
     };
     const syncAutopilot = () => {
       setAutopilotConfig(loadAutopilotConfig());
@@ -146,6 +149,7 @@ export function FinancialCopilot({
     window.addEventListener("focus", onFocus);
     window.addEventListener(GOALS_EVENT, sync);
     window.addEventListener(CIRCLES_EVENT, sync);
+    window.addEventListener(GIFTS_EVENT, sync);
     window.addEventListener(AUTOPILOT_EVENT, syncAutopilot);
     window.addEventListener(FREEZE_EVENT, syncFreeze);
     // Mark "primed" after a tick so the tab can render before any highlight animations.
@@ -154,6 +158,7 @@ export function FinancialCopilot({
       window.removeEventListener("focus", onFocus);
       window.removeEventListener(GOALS_EVENT, sync);
       window.removeEventListener(CIRCLES_EVENT, sync);
+      window.removeEventListener(GIFTS_EVENT, sync);
       window.removeEventListener(AUTOPILOT_EVENT, syncAutopilot);
       window.removeEventListener(FREEZE_EVENT, syncFreeze);
       window.clearTimeout(t);
@@ -492,7 +497,36 @@ export function FinancialCopilot({
       }
     }
 
-    // 8) Network growth — 0 contacts & 3+ ops means you're sending to self? nudge
+    // 8) Upcoming timelock unlock — within next 24h
+    const soon = 24 * 60 * 60 * 1000;
+    const imminent = pending
+      .map((g) => {
+        const unlockMs = g.unlockAt ? Date.parse(g.unlockAt) : Number.NaN;
+        return { g, unlockMs };
+      })
+      .filter(({ unlockMs }) => Number.isFinite(unlockMs) && unlockMs - Date.now() >= 0 && unlockMs - Date.now() <= soon)
+      .sort((a, b) => a.unlockMs - b.unlockMs);
+    if (imminent.length > 0) {
+      const first = imminent[0];
+      const hoursLeft = Math.max(1, Math.round((first.unlockMs - Date.now()) / (60 * 60 * 1000)));
+      out.push({
+        id: `timelock-${first.g.id}`,
+        kind: "info",
+        icon: "🔐",
+        title: `Gift unlocks in ~${hoursLeft}h`,
+        body: `${first.g.amount.toFixed(2)} AEC → ${first.g.recipientNickname}${imminent.length > 1 ? ` (+${imminent.length - 1} more soon)` : ""}. Ensure balance stays above ${first.g.amount.toFixed(0)} AEC.`,
+        priority: 6,
+        cta: {
+          label: "Open gift",
+          run: () => {
+            const el = document.getElementById("gift-heading");
+            el?.scrollIntoView({ behavior: "smooth", block: "start" });
+          },
+        },
+      });
+    }
+
+    // 9) Network growth — 0 contacts & 3+ ops means you're sending to self? nudge
     if (circlesCount === 0 && operations.length >= 5) {
       out.push({
         id: "network-empty",
@@ -515,7 +549,7 @@ export function FinancialCopilot({
       .filter((i) => !(i.id in dismissed))
       .sort((a, b) => b.priority - a.priority)
       .slice(0, 6);
-  }, [operations, goals, recurring, account.balance, trust, bioSettings, royalty, circlesCount, dismissed]);
+  }, [operations, goals, recurring, account.balance, trust, bioSettings, royalty, circlesCount, pending, dismissed]);
 
   const dismiss = useCallback((id: string) => {
     setDismissed((prev) => {

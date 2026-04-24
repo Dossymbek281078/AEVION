@@ -4,6 +4,10 @@
 
 const STORAGE_KEY = "aevion_bank_gifts_v1";
 const MAX_KEEP = 30;
+export const GIFTS_EVENT = "aevion:gifts-changed";
+/** Commit-lock window — no cancel after this many ms until unlockAt remain.
+ *  Prevents last-second revocation. */
+export const GIFT_COMMIT_LOCK_MS = 60 * 60 * 1000; // 1 hour
 
 export type GiftThemeId =
   | "birthday"
@@ -77,6 +81,8 @@ export function getTheme(id: GiftThemeId): GiftTheme {
   return GIFT_THEMES.find((t) => t.id === id) ?? GIFT_THEMES[GIFT_THEMES.length - 1];
 }
 
+export type GiftStatus = "pending" | "sent" | "cancelled";
+
 export type Gift = {
   id: string;
   recipientAccountId: string;
@@ -85,6 +91,12 @@ export type Gift = {
   themeId: GiftThemeId;
   message: string;
   sentAt: string;
+  /** ISO timestamp — when transfer should auto-fire. If missing or ≤ sentAt,
+   *  the gift was sent immediately (legacy behaviour). */
+  unlockAt?: string;
+  /** "pending" until unlock fires; "sent" once the transfer landed;
+   *  "cancelled" if the sender aborted before the commit-lock window. */
+  status?: GiftStatus;
 };
 
 function isGift(x: unknown): x is Gift {
@@ -117,6 +129,7 @@ export function saveGifts(items: Gift[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_KEEP)));
+    window.dispatchEvent(new Event(GIFTS_EVENT));
   } catch {
     // ignore
   }
@@ -124,4 +137,32 @@ export function saveGifts(items: Gift[]): void {
 
 export function appendGift(g: Gift): void {
   saveGifts([g, ...loadGifts()]);
+}
+
+export function updateGiftStatus(id: string, patch: Partial<Gift>): void {
+  const current = loadGifts();
+  const next = current.map((g) => (g.id === id ? { ...g, ...patch } : g));
+  saveGifts(next);
+}
+
+/** Gifts in pending-lock state (scheduled transfers awaiting unlockAt). */
+export function pendingGifts(): Gift[] {
+  return loadGifts().filter((g) => g.status === "pending");
+}
+
+/** Pending gifts whose unlockAt has passed — ready to auto-fire. */
+export function readyToUnlockGifts(now: number = Date.now()): Gift[] {
+  return pendingGifts().filter((g) => {
+    if (!g.unlockAt) return false;
+    const t = Date.parse(g.unlockAt);
+    return Number.isFinite(t) && t <= now;
+  });
+}
+
+export function canCancelGift(g: Gift, now: number = Date.now()): boolean {
+  if (g.status !== "pending") return false;
+  if (!g.unlockAt) return false;
+  const t = Date.parse(g.unlockAt);
+  if (!Number.isFinite(t)) return false;
+  return t - now > GIFT_COMMIT_LOCK_MS;
 }

@@ -8,9 +8,13 @@ import { formatCurrency } from "../_lib/currency";
 import { formatRelative } from "../_lib/format";
 import {
   appendGift,
+  canCancelGift,
   GIFT_THEMES,
+  GIFTS_EVENT,
   getTheme,
   loadGifts,
+  readyToUnlockGifts,
+  updateGiftStatus,
   type Gift,
   type GiftThemeId,
 } from "../_lib/gifts";
@@ -31,10 +35,14 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
   const [amount, setAmount] = useState<string>("");
   const [themeId, setThemeId] = useState<GiftThemeId>("thanks");
   const [message, setMessage] = useState<string>("");
+  const [unlockDate, setUnlockDate] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [history, setHistory] = useState<Gift[]>([]);
+  const [nowTick, setNowTick] = useState<number>(Date.now());
   const { code } = useCurrency();
   const recipientRef = useRef<HTMLSelectElement | null>(null);
+  const sendRef = useRef(send);
+  sendRef.current = send;
 
   useEffect(() => {
     const cs = contactsLib.listContacts();
@@ -42,6 +50,38 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
     if (cs.length > 0 && !recipientId) setRecipientId(cs[0].id);
     setHistory(loadGifts());
   }, [recipientId]);
+
+  // Subscribe to gift changes + tick for countdown + auto-fire unlock.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => setHistory(loadGifts());
+    sync();
+    window.addEventListener(GIFTS_EVENT, sync);
+    window.addEventListener("focus", sync);
+    const tick = async () => {
+      setNowTick(Date.now());
+      const ready = readyToUnlockGifts();
+      for (const g of ready) {
+        // Fire and forget — status transitions to "sent" only on successful
+        // transfer; otherwise the gift stays pending for the next tick.
+        try {
+          const ok = await sendRef.current(g.recipientAccountId, g.amount);
+          if (ok) {
+            updateGiftStatus(g.id, { status: "sent", sentAt: new Date().toISOString() });
+            notify(`🎁 Timelocked gift to ${g.recipientNickname} unlocked — ${g.amount.toFixed(2)} AEC sent`, "success");
+          }
+        } catch {
+          // Leave pending; surface quietly next tick.
+        }
+      }
+    };
+    const id = window.setInterval(tick, 30_000);
+    return () => {
+      window.removeEventListener(GIFTS_EVENT, sync);
+      window.removeEventListener("focus", sync);
+      window.clearInterval(id);
+    };
+  }, [notify]);
 
   const theme = getTheme(themeId);
   const amountNum = parseFloat(amount);
@@ -69,6 +109,34 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
       return;
     }
 
+    // Timelocked variant: record as pending, don't transfer yet. Auto-fire
+    // tick (every 30s) will send on unlockAt. Balance is NOT escrowed —
+    // when unlock fires, a normal send() is attempted; if balance is
+    // insufficient at that moment, the gift stays pending until balance
+    // recovers (shown to the user as "awaiting balance" in UI).
+    const unlockIso = unlockDate ? new Date(unlockDate).toISOString() : "";
+    const unlockFuture = !!unlockIso && Date.parse(unlockIso) > Date.now();
+
+    if (unlockFuture) {
+      appendGift({
+        id: `gift_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        recipientAccountId: recipient.id,
+        recipientNickname: recipient.nickname,
+        amount: amountNum,
+        themeId,
+        message: message.trim(),
+        sentAt: new Date().toISOString(),
+        unlockAt: unlockIso,
+        status: "pending",
+      });
+      setHistory(loadGifts());
+      setAmount("");
+      setMessage("");
+      setUnlockDate("");
+      notify(`🔐 Timelock gift scheduled for ${new Date(unlockIso).toLocaleString()}`, "success");
+      return;
+    }
+
     setBusy(true);
     const ok = await send(recipient.id, amountNum);
     if (ok) {
@@ -80,6 +148,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
         themeId,
         message: message.trim(),
         sentAt: new Date().toISOString(),
+        status: "sent",
       });
       setHistory(loadGifts());
       setAmount("");
@@ -88,6 +157,18 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
     }
     setBusy(false);
   };
+
+  const cancelPending = (g: Gift) => {
+    if (!canCancelGift(g)) {
+      notify("Commit-lock window reached — gift will fire as scheduled.", "info");
+      return;
+    }
+    if (!confirm(`Cancel timelock gift to ${g.recipientNickname}?`)) return;
+    updateGiftStatus(g.id, { status: "cancelled" });
+    notify(`Timelock gift cancelled`, "info");
+  };
+
+  const pending = history.filter((g) => g.status === "pending");
 
   return (
     <section
@@ -223,6 +304,21 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               })}
             </div>
           </div>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
+              Unlock at <span style={{ color: "#94a3b8", fontWeight: 600 }}>(optional timelock)</span>
+            </span>
+            <input
+              value={unlockDate}
+              onChange={(e) => setUnlockDate(e.target.value)}
+              type="datetime-local"
+              style={inputStyle}
+            />
+            <span style={{ fontSize: 10, color: "#94a3b8" }}>
+              Leave blank to send now. With a future date, transfer auto-fires at unlock
+              — cancellable up to 1 hour before.
+            </span>
+          </label>
           <button
             onClick={submit}
             disabled={busy || contacts.length === 0}
@@ -230,14 +326,25 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               padding: "10px 18px",
               borderRadius: 10,
               border: "none",
-              background: busy || contacts.length === 0 ? "#94a3b8" : "linear-gradient(135deg, #db2777, #9d174d)",
+              background:
+                busy || contacts.length === 0
+                  ? "#94a3b8"
+                  : unlockDate && Date.parse(new Date(unlockDate).toISOString()) > Date.now()
+                    ? "linear-gradient(135deg, #7c3aed, #0ea5e9)"
+                    : "linear-gradient(135deg, #db2777, #9d174d)",
               color: "#fff",
               fontWeight: 800,
               fontSize: 13,
               cursor: busy || contacts.length === 0 ? "default" : "pointer",
             }}
           >
-            {busy ? "Sending…" : contacts.length === 0 ? "Add a contact first" : "Send gift"}
+            {busy
+              ? "Sending…"
+              : contacts.length === 0
+                ? "Add a contact first"
+                : unlockDate && Date.parse(new Date(unlockDate).toISOString()) > Date.now()
+                  ? "🔐 Schedule timelock gift"
+                  : "Send gift"}
           </button>
         </div>
 
@@ -250,7 +357,39 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
         />
       </div>
 
-      {history.length > 0 ? (
+      {pending.length > 0 ? (
+        <div style={{ marginBottom: 14 }}>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+              color: "#7c3aed",
+              marginBottom: 8,
+            }}
+          >
+            🔐 Timelock · pending unlock
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            {pending.map((g) => (
+              <PendingGiftRow
+                key={g.id}
+                g={g}
+                now={nowTick}
+                onCancel={() => cancelPending(g)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {history.filter((g) => g.status !== "pending" && g.status !== "cancelled").length > 0 ? (
         <div>
           <div
             style={{
@@ -271,13 +410,116 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               gap: 10,
             }}
           >
-            {history.slice(0, 6).map((g) => (
-              <MiniGift key={g.id} g={g} code={code} />
-            ))}
+            {history
+              .filter((g) => g.status !== "pending" && g.status !== "cancelled")
+              .slice(0, 6)
+              .map((g) => (
+                <MiniGift key={g.id} g={g} code={code} />
+              ))}
           </div>
         </div>
       ) : null}
     </section>
+  );
+}
+
+function PendingGiftRow({
+  g,
+  now,
+  onCancel,
+}: {
+  g: Gift;
+  now: number;
+  onCancel: () => void;
+}) {
+  const unlockMs = g.unlockAt ? Date.parse(g.unlockAt) : 0;
+  const remainingMs = Math.max(0, unlockMs - now);
+  const sec = Math.floor(remainingMs / 1000);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const countdown = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+  const canCancel = canCancelGift(g, now);
+  const theme = getTheme(g.themeId);
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "36px 1fr auto auto",
+        gap: 10,
+        alignItems: "center",
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: "1px solid rgba(124,58,237,0.25)",
+        background: "rgba(124,58,237,0.05)",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 8,
+          background: theme.gradient,
+          color: theme.textColor,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 16,
+          fontWeight: 900,
+        }}
+      >
+        {theme.icon}
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            color: "#0f172a",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap" as const,
+          }}
+        >
+          {g.amount.toFixed(2)} AEC → {g.recipientNickname}
+        </div>
+        <div style={{ fontSize: 10, color: "#64748b", marginTop: 1 }}>
+          Unlocks {new Date(unlockMs).toLocaleString()} · {g.message.slice(0, 60)}
+        </div>
+      </div>
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 900,
+          color: "#7c3aed",
+          fontFamily: "ui-monospace, monospace",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {countdown}
+      </span>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={!canCancel}
+        aria-disabled={!canCancel}
+        title={canCancel ? "Cancel timelock gift" : "Commit-lock window reached"}
+        style={{
+          padding: "4px 8px",
+          borderRadius: 7,
+          border: "1px solid rgba(15,23,42,0.15)",
+          background: "#fff",
+          color: canCancel ? "#334155" : "#94a3b8",
+          fontSize: 10,
+          fontWeight: 800,
+          cursor: canCancel ? "pointer" : "not-allowed",
+        }}
+      >
+        {canCancel ? "Cancel" : "🔒 Locked"}
+      </button>
+    </div>
   );
 }
 

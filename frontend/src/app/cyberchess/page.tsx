@@ -408,10 +408,12 @@ export default function CyberChessPage(){
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
   useEffect(()=>{svChessy(chessy)},[chessy]);
+  const[chessyFloat,sChessyFloat]=useState<{amount:number;key:number}|null>(null);
   const addChessy=useCallback((n:number,reason:string)=>{
     if(n<=0)return;
     sChessy(c=>({...c,balance:c.balance+n,lifetime:c.lifetime+n}));
     showToast(`+${n} Chessy · ${reason}`,"success");
+    sChessyFloat({amount:n,key:Date.now()});
   },[showToast]);
   const spendChessy=useCallback((n:number,reason:string)=>{
     let ok=false;
@@ -423,7 +425,7 @@ export default function CyberChessPage(){
   const unlockAch=useCallback((key:string,reward:number,label:string)=>{
     sChessy(c=>{
       if(c.ach[key])return c;
-      setTimeout(()=>showToast(`🏆 ${label} · +${reward} Chessy`,"success"),300);
+      setTimeout(()=>{showToast(`🏆 ${label} · +${reward} Chessy`,"success");sChessyFloat({amount:reward,key:Date.now()})},300);
       return {...c,balance:c.balance+reward,lifetime:c.lifetime+reward,ach:{...c.ach,[key]:Date.now()}};
     });
   },[showToast]);
@@ -3085,6 +3087,9 @@ export default function CyberChessPage(){
         </React.Fragment>)}
       </div>
     </Modal>
+
+    {/* Chessy gain floating animation */}
+    {chessyFloat&&<ChessyFloat key={chessyFloat.key} amount={chessyFloat.amount} onDone={()=>sChessyFloat(null)}/>}
 
     </ProductPageShell></main>);
 }

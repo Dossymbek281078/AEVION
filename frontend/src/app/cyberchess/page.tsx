@@ -417,6 +417,10 @@ export default function CyberChessPage(){
   const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
   const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
+  // Opening Trainer state (killer #4)
+  const[showOpeningTrainer,sShowOpeningTrainer]=useState(false);
+  const[openingDrill,sOpeningDrill]=useState<null|{eco:string;name:string;moves:string[];ply:number;mistakes:number}>(null);
+  const[openingDrillFilter,sOpeningDrillFilter]=useState("");
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -681,6 +685,58 @@ export default function CyberChessPage(){
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
     const p=game.get(from);if(!p)return false;
+    // ── OPENING TRAINER — верификация хода против скрипта дебюта ──
+    if(openingDrill){
+      const expectedSan=openingDrill.moves[openingDrill.ply];
+      if(!expectedSan){return false}
+      // Determine user's attempted SAN
+      const probe=new Chess(game.fen());
+      let attemptSan="";
+      try{const pm=probe.move({from,to,promotion:pr||"q"});if(pm)attemptSan=pm.san}catch{}
+      if(!attemptSan)return false;
+      if(attemptSan!==expectedSan){
+        showToast(`✗ Ожидалось ${expectedSan} · попробуй ещё`,"error");
+        sOpeningDrill(d=>d?{...d,mistakes:d.mistakes+1}:null);
+        snd("capture");
+        return false;
+      }
+      // Correct — apply user move
+      let mv;try{mv=game.move({from,to,promotion:pr||"q"});}catch{mv=null}
+      if(!mv)return false;
+      sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);
+      snd("move");
+      const newPly=openingDrill.ply+1;
+      if(newPly>=openingDrill.moves.length){
+        const reward=openingDrill.mistakes===0?10:5;
+        addChessy(reward,`Дебют ${openingDrill.name}`);
+        showToast(`🎓 ${openingDrill.name} пройден! +${reward} Chessy`,"success");
+        sOpeningDrill(null);
+        return true;
+      }
+      // Schedule bot response from script
+      sOpeningDrill(d=>d?{...d,ply:newPly}:null);
+      setTimeout(()=>{
+        const odSnap={moves:openingDrill.moves,name:openingDrill.name,mistakes:openingDrill.mistakes,ply:newPly};
+        const botSan=odSnap.moves[odSnap.ply];if(!botSan)return;
+        try{
+          const bmv=game.move(botSan);
+          if(bmv){
+            sLm({from:bmv.from,to:bmv.to});sHist(h=>[...h,bmv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);
+            snd("move");
+            const nextPly=odSnap.ply+1;
+            if(nextPly>=odSnap.moves.length){
+              const reward=odSnap.mistakes===0?10:5;
+              addChessy(reward,`Дебют ${odSnap.name}`);
+              showToast(`🎓 ${odSnap.name} пройден! +${reward} Chessy`,"success");
+              sOpeningDrill(null);
+            }else{
+              sOpeningDrill(d=>d?{...d,ply:nextPly}:null);
+            }
+          }
+        }catch{}
+      },600);
+      return true;
+    }
     // Guess Best Move mode
     if(tab==="analysis"&&guessMode&&guessResult==="idle"&&guessBest){
       const attemptUci=`${from}${to}${pr||""}`;
@@ -1013,6 +1069,7 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(hotseat)return; // two-player hotseat: no AI moves
+    if(openingDrill)return; // Opening Trainer plays bot moves from script
     if(game.turn()===pCol)return;
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
@@ -1738,6 +1795,14 @@ export default function CyberChessPage(){
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>за одним экраном</span>
                 </div>
               </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>sShowOpeningTrainer(true)}
+                style={{flex:"1 1 160px",background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",
+                  border:"1px solid #d8b4fe",color:CC.accent}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>🎓 Opening Trainer</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>drill дебютов</span>
+                </div>
+              </Btn>
             </div>
           </Card>
 
@@ -2246,6 +2311,25 @@ export default function CyberChessPage(){
 
         {/* Right panel */}
         <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
+          {/* Opening Drill HUD */}
+          {openingDrill&&<Card padding={SPACE[3]} tone="surface1"
+            style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[1]}}>
+              <Badge tone="accent" size="sm">{openingDrill.eco}</Badge>
+              <div style={{fontSize:13,fontWeight:800,color:CC.accent}}>🎓 Opening Drill</div>
+              <div style={{flex:1}}/>
+              <Btn size="xs" variant="ghost" onClick={()=>{sOpeningDrill(null);showToast("Drill прерван","info")}}>✕</Btn>
+            </div>
+            <div style={{fontSize:13,fontWeight:700,color:CC.text,marginBottom:SPACE[1]}}>{openingDrill.name}</div>
+            <div style={{height:6,borderRadius:RADIUS.full,background:"#ede9fe",overflow:"hidden",marginBottom:SPACE[1]}}>
+              <div style={{height:"100%",width:`${Math.round(openingDrill.ply/openingDrill.moves.length*100)}%`,background:`linear-gradient(90deg,${CC.accent},#a78bfa)`,transition:`width ${MOTION.base} ${MOTION.ease}`}}/>
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,display:"flex",justifyContent:"space-between"}}>
+              <span>Ход {openingDrill.ply+1} / {openingDrill.moves.length}</span>
+              {openingDrill.mistakes>0&&<span style={{color:CC.danger,fontWeight:800}}>× {openingDrill.mistakes}</span>}
+            </div>
+          </Card>}
+
           {/* Player block (top = opponent) */}
           {!setup&&(tab==="play"||tab==="coach")&&(()=>{
             const isAiTurn=game.turn()===aiC&&!over&&on;
@@ -3502,6 +3586,60 @@ export default function CyberChessPage(){
           <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:12,padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text,whiteSpace:"nowrap"}}>{k}</kbd>
           <span style={{color:CC.text}}>{v}</span>
         </React.Fragment>)}
+      </div>
+    </Modal>
+
+    {/* Opening Trainer modal — выбор дебюта */}
+    <Modal open={showOpeningTrainer} onClose={()=>sShowOpeningTrainer(false)} size="lg" title="🎓 Opening Trainer">
+      <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
+        Выбери дебют — бот сыграет чёрными, ты ведёшь белыми по скрипту. За безошибочный — <b>+10 Chessy</b>, с ошибками — <b>+5</b>.
+      </div>
+      <input
+        type="text"
+        value={openingDrillFilter}
+        onChange={e=>sOpeningDrillFilter(e.target.value)}
+        placeholder="🔍 Поиск: Сицилианская, Italian, B20..."
+        className="cc-focus-ring"
+        style={{width:"100%",padding:"8px 12px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,marginBottom:SPACE[3]}}
+      />
+      <div style={{maxHeight:400,overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md}}>
+        {(()=>{
+          const q=openingDrillFilter.trim().toLowerCase();
+          const list=(openingsDb||[]).filter(op=>{
+            if(!q)return true;
+            return op.name.toLowerCase().includes(q)||op.eco.toLowerCase().includes(q);
+          }).slice(0,80);
+          if(openingsDb.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>База дебютов загружается…</div>;
+          if(list.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>Ничего не найдено</div>;
+          return list.map((op,i)=>{
+            const sans=(typeof op.moves==="string"?op.moves.split(/\s+/):[]).filter(Boolean);
+            if(sans.length<2)return null;
+            return <button key={op.eco+i}
+              className="cc-focus-ring"
+              onClick={()=>{
+                // Start drill
+                const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);
+                sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);
+                sPCol("w");sFlip(false);sOn(true);sSetup(false);sTab("play");
+                sOpeningDrill({eco:op.eco,name:op.name,moves:sans,ply:0,mistakes:0});
+                sShowOpeningTrainer(false);
+                showToast(`🎓 ${op.eco} · ${op.name} — ходи!`,"info");
+              }}
+              style={{width:"100%",padding:`${SPACE[3]}px ${SPACE[4]}px`,border:"none",
+                borderBottom:i<list.length-1?`1px solid ${CC.border}`:"none",
+                background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3]}}>
+              <Badge tone="accent" size="sm">{op.eco}</Badge>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:CC.text,marginBottom:2}}>{op.name}</div>
+                <div style={{fontSize:11,color:CC.textMute,fontFamily:"ui-monospace, monospace"}}>
+                  {sans.slice(0,6).join(" ")}{sans.length>6?" …":""}
+                  <span style={{marginLeft:6,color:CC.textDim}}>· {sans.length} полуходов</span>
+                </div>
+              </div>
+              <span style={{fontSize:12,fontWeight:800,color:CC.brand}}>▶</span>
+            </button>;
+          });
+        })()}
       </div>
     </Modal>
 

@@ -2715,29 +2715,33 @@ export default function CyberChessPage(){
                 {pzAttempt==="wrong"&&<div style={{fontSize:14,fontWeight:900,color:T.danger,padding:"8px 12px",background:"rgba(220,38,38,0.1)",borderRadius:7,marginBottom:10}}>✗ Неверно. Попробуй ещё</div>}
                 {pzAttempt==="shown"&&<div style={{fontSize:14,fontWeight:800,color:"#92400e",padding:"8px 12px",background:"#fffbeb",borderRadius:7,marginBottom:10,border:"1px solid #fde68a"}}>💡 Ответ: <span style={{fontFamily:"monospace",background:"#fef3c7",padding:"2px 8px",borderRadius:4}}>{pzCurrent.sol[0]}</span></div>}
                 {/* Actions */}
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button onClick={nextPz} style={{flex:"1 1 auto",minWidth:120,padding:"10px 18px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer"}}>▶ Следующая</button>
-                  <button onClick={randomPz} style={{padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:14,fontWeight:700,cursor:"pointer"}} title="Случайная">🎲</button>
-                  {pzAttempt==="wrong"&&<button onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}} style={{padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.text,fontSize:13,fontWeight:700,cursor:"pointer"}}>↩ Заново</button>}
-                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<button onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}} style={{padding:"10px 14px",borderRadius:8,border:`1px solid #fde68a`,background:"#fffbeb",color:"#92400e",fontSize:13,fontWeight:700,cursor:"pointer"}}>💡 Подсказка · 5</button>}
+                <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+                  <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>
+                  <Btn size="md" variant="secondary" onClick={randomPz} title="Случайная">🎲</Btn>
+                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}}>Заново</Btn>}
+                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
                 </div>
               </div>
             </div>:<div style={{padding:"24px",textAlign:"center",color:T.dim,fontSize:14,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>Выбери задачу из списка ниже ↓</div>}
 
             {/* ── Stats strip ── */}
-            <div style={{display:"flex",gap:6}}>
-              <div style={{flex:1,padding:"10px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",textAlign:"center",border:"1px solid #a7f3d0"}}>
-                <div style={{fontSize:20,fontWeight:900,color:T.accent,lineHeight:1}}>{pzSolvedCount}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Решено</div>
-              </div>
-              <div style={{flex:1,padding:"10px",borderRadius:8,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",textAlign:"center",border:"1px solid #fecaca"}}>
-                <div style={{fontSize:20,fontWeight:900,color:T.danger,lineHeight:1}}>{pzFailedCount}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Ошибок</div>
-              </div>
-              <div style={{flex:1,padding:"10px",borderRadius:8,background:"#f3f4f6",textAlign:"center",border:`1px solid ${T.border}`}}>
-                <div style={{fontSize:20,fontWeight:900,color:T.text,lineHeight:1}}>{fPz.length}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>В фильтре</div>
-              </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))",gap:SPACE[2]}}>
+              <Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",borderColor:"#a7f3d0",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:CC.brand,lineHeight:1}}>{pzSolvedCount}</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Решено</div>
+              </Card>
+              <Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fef2f2,#fff1f2)",borderColor:"#fecaca",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:CC.danger,lineHeight:1}}>{pzFailedCount}</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Ошибок</div>
+              </Card>
+              <Card padding={SPACE[2]} tone="surface3" style={{textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:CC.text,lineHeight:1}}>{fPz.length}</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>В фильтре</div>
+              </Card>
+              {rushBest>0&&<Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderColor:"#fcd34d",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:"#78350f",lineHeight:1}}>{rushBest}</div>
+                <div style={{fontSize:10,color:"#92400e",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Rush best</div>
+              </Card>}
             </div>
 
             {/* ── Category Selector ── */}
@@ -2786,16 +2790,24 @@ export default function CyberChessPage(){
             </div>
 
             {/* ── Mode Selector ── */}
-            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,padding:"8px 10px"}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.08em",textTransform:"uppercase" as const}}>Режим</div>
-              <div style={{display:"flex",gap:4}}>
-                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["rush","⚡","Раш"]] as const).map(([m,ic,label])=>
-                  <button key={m} onClick={()=>sPzMode(m)} style={{flex:1,padding:"7px 4px",borderRadius:6,border:pzMode===m?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:pzMode===m?"rgba(124,58,237,0.08)":"#fff",color:pzMode===m?T.purple:T.dim,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <Card padding={SPACE[2]} tone="surface1">
+              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?"+1..+3с per solve":pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":""}/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1]}}>
+                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
+                  const active=pzMode===m;
+                  return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
+                    style={{padding:"8px 4px",borderRadius:RADIUS.md,
+                      border:active?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,
+                      background:active?CC.accentSoft:CC.surface1,color:active?CC.accent:CC.textDim,
+                      fontSize:12,fontWeight:800,cursor:"pointer",
+                      display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
                     <span style={{fontSize:16}}>{ic}</span>
                     <span style={{fontSize:10,fontWeight:800}}>{label}</span>
-                  </button>)}
+                  </button>;
+                })}
               </div>
-            </div>
+            </Card>
 
             {/* ── Collapsible Filters ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>

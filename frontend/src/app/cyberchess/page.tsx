@@ -2131,9 +2131,9 @@ export default function CyberChessPage(){
           <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Controls */}
-          <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
-            {btn("⇄ Flip",()=>sFlip(!flip),T.surface,T.dim)}
-            {btn("New Game",()=>{sSetup(true);sOn(false);sOver(null);sPms([])},T.accent,"#fff","none")}
+          <div style={{display:"flex",gap:6,marginTop:SPACE[2],flexWrap:"wrap"}}>
+            <Btn size="sm" variant="secondary" icon={<Icon.Flip width={14} height={14}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
+            <Btn size="sm" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -2245,7 +2245,7 @@ export default function CyberChessPage(){
               voiceRecRef.current=rec;
               try{rec.start()}catch{showToast("Не удалось запустить микрофон","error")}
             },voiceListening?"#fee2e2":T.surface,voiceListening?T.danger:T.dim)}
-            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn("⌨️ Ход текстом",()=>{
+            {(tab==="play"||tab==="coach"||tab==="analysis")&&<Btn size="sm" variant="secondary" onClick={()=>{
               const input=prompt("Введи ход в алгебраической нотации (например: e4, Nf3, O-O, exd5):");
               if(!input)return;
               const san=input.trim();
@@ -2254,50 +2254,39 @@ export default function CyberChessPage(){
                 if(mv){game.undo();const legal=game.moves({verbose:true}).find(x=>x.san===mv.san);if(legal){exec(legal.from,legal.to);showToast(`✓ ${san}`,"success")}}
                 else showToast(`Невозможный ход: ${san}`,"error");
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
-            },T.surface,T.dim)}
-            {over&&btn("Rematch",()=>newG(),"#f59e0b","#fff","none")}
-            {pms.length>0&&btn(`↩ Undo`,()=>sPms(p=>p.slice(0,-1)),"#eff6ff",T.blue,`1px solid rgba(37,99,235,0.3)`)}
-            {pms.length>0&&btn(`✕ Clear (${pms.length})`,()=>{sPms([]);sPmSel(null)},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
+            }}>⌨️ Ход текстом</Btn>}
+            {over&&<Btn size="sm" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
+            {pms.length>0&&<Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>sPms(p=>p.slice(0,-1))} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Undo</Btn>}
+            {pms.length>0&&<Btn size="sm" variant="secondary" onClick={()=>{sPms([]);sPmSel(null)}} style={{background:"#fef2f2",color:CC.danger,borderColor:"#fca5a5"}}>✕ Clear ({pms.length})</Btn>}
           </div>
-          {on&&!over&&!setup&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
-            {btn("🏳 Resign",()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
-            {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
-            {btn(`↩ Take back${tab==="play"&&!hotseat?" · 3":""}`,()=>{
+          {on&&!over&&!setup&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
+            <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
+            <Btn size="sm" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
+            <Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{
               if(hist.length<2){showToast("No moves","error");return}
               if(think){showToast("AI думает — подожди","error");return}
-              // Free take-back in analysis/coach/hotseat, costs 3 Chessy only in paid single-player
               const needChessy=tab==="play"&&!hotseat;
               if(needChessy&&chessy.balance<3){showToast("Недостаточно Chessy (нужно 3)","error");return}
-              // Try both undoes BEFORE any state/Chessy mutation so we never end up with a half-undo.
               const u1=game.undo();
               if(!u1){showToast("Takeback failed","error");return}
               const u2=game.undo();
-              if(!u2){
-                // Roll back the first undo so internal chess state matches hist/fenHist
-                try{game.move(u1.san)}catch{}
-                showToast("Takeback failed","error");return;
-              }
+              if(!u2){try{game.move(u1.san)}catch{}showToast("Takeback failed","error");return;}
               if(needChessy)spendChessy(3,"takeback");
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
-            },T.surface,T.dim)}
-            {savedGames.length>0&&(tab==="play"||tab==="coach")&&btn(`📜 История (${savedGames.length})`,()=>{
-              sGamesModalOpen(true);
-            },T.surface,T.dim)}
+            }}>Take back{tab==="play"&&!hotseat?" · 3":""}</Btn>
+            {savedGames.length>0&&(tab==="play"||tab==="coach")&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
           </div>}
-          {over&&fenHist.length>2&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
-            {btn("📊 Открыть в Analysis",()=>{
-              // Switch to analysis tab, keep current game's history, auto-kick full analysis
-              sTab("analysis");
-              sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+          {over&&fenHist.length>2&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
+            <Btn size="sm" variant="accent" onClick={()=>{
+              sTab("analysis");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
               showToast("Партия открыта в анализе — запускаю разбор","info");
-              // Fire runAnalysis after React flushes state — ensures tab is analysis and sfR ready
               setTimeout(()=>{if(sfR.current?.ready()&&fenHist.length>=3)runAnalysis()},150);
-            },T.purple,"#fff","none")}
-            {btn(analyzing?"⚡ Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze",runAnalysis,T.accent,"#fff","none")}
-            {savedGames.length>0&&btn(`📜 История (${savedGames.length})`,()=>{
-              sGamesModalOpen(true);
-            },T.surface,T.dim)}
-            {btn("🔗 Share PGN",()=>{
+            }}>📊 Открыть в Analysis</Btn>
+            <Btn size="sm" variant="primary" loading={analyzing} onClick={runAnalysis}>
+              {analyzing?"Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze"}
+            </Btn>
+            {savedGames.length>0&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
+            <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
               const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
               const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
               const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
@@ -2305,7 +2294,7 @@ export default function CyberChessPage(){
               const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
               const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
               try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
-            },"#eff6ff",T.blue,"1px solid #bfdbfe")}
+            } } style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Share PGN</Btn>
           </div>}
         </div>
 

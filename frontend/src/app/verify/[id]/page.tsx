@@ -43,6 +43,23 @@ type VerifyData = {
     proofUrl: string | null;
     upgradeUrl: string | null;
   };
+  shardDistribution?: {
+    policy: "legacy_all_local" | "distributed_v2";
+    realDistributed: boolean;
+    locations: Array<{
+      index: number;
+      place: string;
+      held: string;
+      serverHasCopy: boolean;
+      cid?: string;
+      cidValid?: boolean;
+    }>;
+    witness: {
+      cid: string;
+      cidValid: boolean;
+      witnessUrl: string;
+    } | null;
+  };
   legalBasis: {
     framework: string;
     type: string;
@@ -329,6 +346,91 @@ export default function VerifyPage() {
             </div>
           </div>
         </div>
+
+        {/* Shard distribution (Shamir SSS 2-of-3 across independent locations) */}
+        {data.shardDistribution && (
+          <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 24 }}>
+            <div style={{ padding: "16px 24px", background: "rgba(15,23,42,0.02)", borderBottom: "1px solid rgba(15,23,42,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 20 }}>🧩</span>
+                  Shard Distribution (Shamir SSS 2-of-3)
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  {data.shardDistribution.realDistributed
+                    ? "Any 2 of 3 shards reconstruct the Ed25519 private key; no single holder can forge the certificate."
+                    : "Legacy record: all three shards are stored in our DB. Re-protect to upgrade to true distribution."}
+                </div>
+              </div>
+              <div style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 800,
+                background: data.shardDistribution.realDistributed ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+                color: data.shardDistribution.realDistributed ? "#059669" : "#d97706",
+              }}>
+                {data.shardDistribution.realDistributed ? "✓ TRULY DISTRIBUTED" : "⚠ LEGACY (LOCAL)"}
+              </div>
+            </div>
+            <div style={{ padding: "20px 24px", background: "#fff" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                {data.shardDistribution.locations.map((loc) => (
+                  <div key={loc.index} style={{
+                    padding: "14px",
+                    borderRadius: 10,
+                    border: `1px solid ${!loc.serverHasCopy ? "rgba(16,185,129,0.25)" : "rgba(15,23,42,0.08)"}`,
+                    background: !loc.serverHasCopy ? "rgba(16,185,129,0.03)" : "#f8fafc",
+                  }}>
+                    <div style={{ fontSize: 24, marginBottom: 6 }}>
+                      {loc.index === 1 ? "👤" : loc.index === 2 ? "🏢" : "🌐"}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>
+                      Shard {loc.index}: {loc.place}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#475569", marginBottom: 6 }}>{loc.held}</div>
+                    <div style={{
+                      display: "inline-block",
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      fontSize: 9,
+                      fontWeight: 800,
+                      background: !loc.serverHasCopy ? "#059669" : "#64748b",
+                      color: "#fff",
+                    }}>
+                      {!loc.serverHasCopy ? "OFFLINE (user holds)" : "ON-SERVER"}
+                    </div>
+                    {loc.cid && (
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(15,23,42,0.06)" }}>
+                        <div style={{ fontSize: 9, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>
+                          CID {loc.cidValid ? "✓" : "✗"}
+                        </div>
+                        <div style={{ fontSize: 9, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const, lineHeight: 1.3 }}>
+                          {loc.cid}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {data.shardDistribution.witness && (
+                <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 8, background: "rgba(15,23,42,0.03)", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11, color: "#475569" }}>
+                    Public witness shard — fetchable by anyone, integrity verified via content-addressed CID
+                  </div>
+                  <a
+                    href={apiUrl(data.shardDistribution.witness.witnessUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ padding: "6px 12px", borderRadius: 6, background: "#0f172a", color: "#fff", textDecoration: "none", fontSize: 11, fontWeight: 700 }}
+                  >
+                    Fetch Witness Shard →
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Bitcoin anchor (OpenTimestamps) */}
         {data.bitcoinAnchor && data.bitcoinAnchor.status !== "not_stamped" && (

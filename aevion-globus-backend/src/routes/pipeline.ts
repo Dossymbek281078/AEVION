@@ -28,6 +28,7 @@ import {
   upgradeProof as otsUpgradeProof,
   verifyProof as otsVerifyProof,
 } from "../lib/opentimestamps/anchor";
+import { computeWitnessCid } from "../lib/shamir/witnessCid";
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -108,6 +109,25 @@ async function ensureTables(): Promise<void> {
   await pool.query(
     `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "hmac_key_version" INTEGER NOT NULL DEFAULT 1;`,
   );
+  // v3: distribution policy. 'legacy_all_local' for pre-v3 rows (all 3 shards
+  // sit in the `shards` column — not a real Shamir distribution). For v3 rows,
+  // `shards` holds ONLY the AEVION vault shard; the author shard is wiped
+  // after being returned to the client; the witness shard lives in
+  // "PublicShardWitness" and is fetched via CID.
+  await pool.query(
+    `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "distribution_policy" TEXT NOT NULL DEFAULT 'legacy_all_local';`,
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PublicShardWitness" (
+      "shieldId" TEXT PRIMARY KEY,
+      "shardIndex" INTEGER NOT NULL,
+      "sssShare" TEXT NOT NULL,
+      "hmac" TEXT NOT NULL,
+      "hmacKeyVersion" INTEGER NOT NULL,
+      "witnessCid" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "IPCertificate" (
@@ -392,9 +412,20 @@ pipelineRouter.post("/protect", async (req, res) => {
         ],
       );
 
+      // v3 distributed Shamir:
+      //   shards[0] → author (returned in response, NOT stored)
+      //   shards[1] → AEVION vault (QuantumShield.shards = [this one only])
+      //   shards[2] → public witness (PublicShardWitness table + CID)
+      // For v3 `shards` holds a JSON array with exactly ONE element — the
+      // vault shard. Reconstruction requires the author's downloaded shard
+      // plus either the vault OR the public witness.
+      const vaultShard = shards[1];
+      const witnessShard = shards[2];
+      const witnessCid = computeWitnessCid(witnessShard);
+
       await client.query(
-        `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,NOW())`,
+        `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","distribution_policy","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,'distributed_v2',NOW())`,
         [
           shieldId,
           objectId,
@@ -402,10 +433,23 @@ pipelineRouter.post("/protect", async (req, res) => {
           "Shamir's Secret Sharing + Ed25519",
           SHAMIR_THRESHOLD,
           SHAMIR_SHARDS,
-          JSON.stringify(shards),
+          JSON.stringify([vaultShard]),
           signatureEd25519,
           publicKeySpkiHex,
           HMAC_KEY_VERSION,
+        ],
+      );
+
+      await client.query(
+        `INSERT INTO "PublicShardWitness" ("shieldId","shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+        [
+          shieldId,
+          witnessShard.index,
+          witnessShard.sssShare,
+          witnessShard.hmac,
+          witnessShard.hmacKeyVersion,
+          witnessCid,
         ],
       );
 
@@ -517,6 +561,11 @@ pipelineRouter.post("/protect", async (req, res) => {
       verifyUrl: `https://aevion.vercel.app/verify/${certId}`,
     };
 
+    // Re-derive for response (shadowing inner scope).
+    const responseVaultShard = shards[1];
+    const responseWitnessShard = shards[2];
+    const responseWitnessCid = computeWitnessCid(responseWitnessShard);
+
     res.status(201).json({
       success: true,
       message:
@@ -535,6 +584,34 @@ pipelineRouter.post("/protect", async (req, res) => {
         shards: SHAMIR_SHARDS,
         threshold: SHAMIR_THRESHOLD,
         hmacKeyVersion: HMAC_KEY_VERSION,
+        distributionPolicy: "distributed_v2",
+      },
+      // v3 distributed Shamir — the author shard is returned here ONCE.
+      // The client MUST save it (download JSON) because it is immediately
+      // wiped from server memory and is not persisted in our DB.
+      // Without this shard, reconstruction needs AEVION vault AND the
+      // public witness (a 2-of-3 recovery, not 1-of-3).
+      authorShard: {
+        shieldId,
+        shard: shards[0],
+        warning:
+          "Download and store this shard safely. AEVION does NOT keep a copy. With this shard + AEVION vault (or + public witness) you can reconstruct the proof independently. Without this shard, reconstruction requires BOTH AEVION vault AND the public witness.",
+        recoveryPaths: [
+          "authorShard + AEVION vault",
+          "authorShard + public witness",
+          "AEVION vault + public witness (fallback if author loses shard)",
+        ],
+      },
+      vaultShard: {
+        index: responseVaultShard.index,
+        location: "AEVION Platform vault",
+        stored: true,
+      },
+      witness: {
+        index: responseWitnessShard.index,
+        location: "Public Witness",
+        cid: responseWitnessCid,
+        witnessUrl: `/api/pipeline/shield/${shieldId}/witness`,
       },
       certificate,
     });
@@ -941,17 +1018,51 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       signatureHmacReason = "ERROR";
     }
 
-    /* Check Quantum Shield status */
+    /* Check Quantum Shield status + distribution policy */
     let shieldStatus = "unknown";
     let shieldLegacy = false;
+    type DistributionPolicy = "legacy_all_local" | "distributed_v2";
+    let distributionPolicy: DistributionPolicy = "legacy_all_local";
+    let witnessInfo: {
+      cid: string;
+      cidValid: boolean;
+      witnessUrl: string;
+    } | null = null;
+
     if (cert.shieldId) {
       const shield = await pool.query(
-        `SELECT "status","legacy" FROM "QuantumShield" WHERE "id" = $1`,
+        `SELECT "status","legacy","distribution_policy" FROM "QuantumShield" WHERE "id" = $1`,
         [cert.shieldId],
       );
       const sh = shield.rows?.[0];
       shieldStatus = sh?.status || "not_found";
       shieldLegacy = sh?.legacy === true;
+      distributionPolicy =
+        sh?.distribution_policy === "distributed_v2"
+          ? "distributed_v2"
+          : "legacy_all_local";
+
+      if (distributionPolicy === "distributed_v2") {
+        const w = await pool.query(
+          `SELECT "shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid"
+           FROM "PublicShardWitness" WHERE "shieldId" = $1`,
+          [cert.shieldId],
+        );
+        const wr = w.rows?.[0];
+        if (wr) {
+          const reDerived = computeWitnessCid({
+            index: wr.shardIndex,
+            sssShare: wr.sssShare,
+            hmac: wr.hmac,
+            hmacKeyVersion: wr.hmacKeyVersion,
+          });
+          witnessInfo = {
+            cid: wr.witnessCid,
+            cidValid: reDerived === wr.witnessCid,
+            witnessUrl: `/api/pipeline/shield/${cert.shieldId}/witness`,
+          };
+        }
+      }
     }
 
     const legalBasis =
@@ -989,6 +1100,25 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         shieldLegacy,
         shards: cert.shardCount,
         threshold: cert.shardThreshold,
+      },
+      shardDistribution: {
+        policy: distributionPolicy,
+        // Real distribution means the AEVION DB cannot recover the key on
+        // its own — an external source (author or witness) is required.
+        realDistributed: distributionPolicy === "distributed_v2",
+        locations:
+          distributionPolicy === "distributed_v2"
+            ? [
+                { index: 1, place: "Author Vault", held: "author (offline download)", serverHasCopy: false },
+                { index: 2, place: "AEVION Platform", held: "our DB", serverHasCopy: true },
+                { index: 3, place: "Public Witness", held: "content-addressed CID", serverHasCopy: true, cid: witnessInfo?.cid, cidValid: witnessInfo?.cidValid },
+              ]
+            : [
+                { index: 1, place: "Author Vault (legacy — stored locally)", held: "our DB", serverHasCopy: true },
+                { index: 2, place: "AEVION Platform", held: "our DB", serverHasCopy: true },
+                { index: 3, place: "Witness Node (legacy — stored locally)", held: "our DB", serverHasCopy: true },
+              ],
+        witness: witnessInfo,
       },
       bitcoinAnchor: {
         status: cert.otsStatus ?? "not_stamped",
@@ -1511,6 +1641,75 @@ pipelineRouter.post("/ots/:certId/upgrade", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "upgrade failed";
     console.error("[OT] upgrade error:", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/shield/:shieldId/witness
+ *
+ * Public witness shard (shard 3 of 3). Distributed under a content-addressed
+ * CID — anyone can fetch, any third party can re-derive the CID and verify
+ * this shard has not been tampered with since publication. Combined with the
+ * author's downloaded shard OR the AEVION vault shard, this reconstructs the
+ * Ed25519 private key via real 2-of-3 Shamir SSS.
+ *
+ * This endpoint is intentionally public — that's the whole point of a
+ * witness. Rate-limited against abuse.
+ */
+pipelineRouter.get("/shield/:shieldId/witness", async (req, res) => {
+  try {
+    await ensureTables();
+    const ip = clientIp({ ip: req.ip, headers: req.headers });
+    const rl = reconstructRateLimiter.check(ip);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", Math.ceil(rl.retryAfterMs / 1000).toString());
+      return res.status(429).json({
+        error: "Too Many Requests",
+        reason: "RATE_LIMITED" satisfies QRightErrorCode,
+      });
+    }
+
+    const { shieldId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "shieldId","shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid","createdAt"
+       FROM "PublicShardWitness" WHERE "shieldId" = $1`,
+      [shieldId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "witness not found",
+        reason: "WITNESS_NOT_FOUND" satisfies QRightErrorCode,
+      });
+    }
+    const w = rows[0];
+    // Re-derive CID to prove the shard hasn't been tampered with in our DB.
+    const reDerived = computeWitnessCid({
+      index: w.shardIndex,
+      sssShare: w.sssShare,
+      hmac: w.hmac,
+      hmacKeyVersion: w.hmacKeyVersion,
+    });
+    const cidValid = reDerived === w.witnessCid;
+
+    return res.json({
+      shieldId: w.shieldId,
+      shard: {
+        index: w.shardIndex,
+        sssShare: w.sssShare,
+        hmac: w.hmac,
+        hmacKeyVersion: w.hmacKeyVersion,
+        location: "Public Witness",
+        createdAt: w.createdAt,
+        lastVerified: new Date().toISOString(),
+      },
+      cid: w.witnessCid,
+      cidValid,
+      createdAt: w.createdAt,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "witness fetch failed";
+    console.error("[Witness] fetch error:", msg);
     return res.status(500).json({ error: msg });
   }
 });

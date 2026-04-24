@@ -11,6 +11,7 @@ export type QRightErrorCode =
   | "INVALID_SHARD_FORMAT"
   | "DEMO_DISABLED"
   | "RATE_LIMITED"
+  | "WITNESS_NOT_FOUND"
   | "INTERNAL_ERROR";
 
 export class QRightError extends Error {

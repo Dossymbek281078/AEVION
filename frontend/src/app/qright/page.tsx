@@ -27,12 +27,42 @@ type CertificateData = {
   verifyUrl: string;
 };
 
+type AuthorShard = {
+  shieldId: string;
+  shard: {
+    index: number;
+    sssShare: string;
+    hmac: string;
+    hmacKeyVersion: number;
+    location: string;
+    createdAt: string;
+    lastVerified: string;
+  };
+  warning: string;
+  recoveryPaths: string[];
+};
+
 type PipelineResult = {
   success: boolean;
   message: string;
   qright: { id: string; title: string; contentHash: string; createdAt: string };
   qsign: { signature: string; algo: string };
-  shield: { id: string; signature: string; publicKey: string; shards: number; threshold: number };
+  shield: {
+    id: string;
+    signature: string;
+    publicKey: string;
+    shards: number;
+    threshold: number;
+    distributionPolicy?: "legacy_all_local" | "distributed_v2";
+  };
+  authorShard?: AuthorShard;
+  vaultShard?: { index: number; location: string; stored: boolean };
+  witness?: {
+    index: number;
+    location: string;
+    cid: string;
+    witnessUrl: string;
+  };
   certificate: CertificateData;
 };
 
@@ -402,6 +432,72 @@ export default function QRightPage() {
                 </div>
               </div>
             </div>
+
+            {/* Author shard — distributed Shamir v2 */}
+            {result.authorShard && (
+              <div style={{ borderRadius: 16, border: "2px solid #f59e0b", overflow: "hidden", marginBottom: 20, background: "#fffbeb" }}>
+                <div style={{ padding: "16px 24px", background: "linear-gradient(135deg, #fbbf24, #f59e0b)", color: "#451a03" }}>
+                  <div style={{ fontSize: 14, fontWeight: 900, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 22 }}>🔑</span>
+                    Your Author Shard — Save It Now
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    Shard 1 of 3 · AEVION does NOT keep a copy · Without it you depend on AEVION
+                  </div>
+                </div>
+                <div style={{ padding: "20px 24px" }}>
+                  <div style={{ fontSize: 13, color: "#92400e", marginBottom: 14, lineHeight: 1.6 }}>
+                    {result.authorShard.warning}
+                  </div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#78350f" }}>Any 2 of 3 reconstructs your proof:</div>
+                    {result.authorShard.recoveryPaths.map((p, i) => (
+                      <div key={i} style={{ fontSize: 12, color: "#78350f", paddingLeft: 16 }}>
+                        • {p}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => {
+                        if (!result.authorShard) return;
+                        const blob = new Blob(
+                          [JSON.stringify(result.authorShard, null, 2)],
+                          { type: "application/json" },
+                        );
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `aevion-author-shard-${result.authorShard.shieldId}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        showToast("Author shard downloaded — store it safely!", "success");
+                      }}
+                      style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: "#78350f", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}
+                    >
+                      ⬇ Download Author Shard (.json)
+                    </button>
+                    <button
+                      onClick={() => copy(JSON.stringify(result.authorShard, null, 2), "Author shard JSON")}
+                      style={{ padding: "12px 18px", borderRadius: 10, border: "1px solid #92400e", background: "#fff", color: "#92400e", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+                    >
+                      Copy JSON
+                    </button>
+                  </div>
+                  {result.witness && (
+                    <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 8, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)" }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#475569", textTransform: "uppercase", marginBottom: 4 }}>Public Witness Shard (shard 3 of 3)</div>
+                      <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>
+                        CID: {result.witness.cid}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                        Anyone can fetch this shard and verify its integrity against the CID. No trust in AEVION required.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Actions with PDF button */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>

@@ -21,6 +21,7 @@ import { AchievementsPanel } from "./_components/AchievementsPanel";
 import { ActivityTimeline } from "./_components/ActivityTimeline";
 import { AdvisorChat } from "./_components/AdvisorChat";
 import { AuditPanel } from "./_components/AuditPanel";
+import { AutopilotStatement } from "./_components/AutopilotStatement";
 import { DemoModeBanner } from "./_components/DemoModeBanner";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
@@ -294,6 +295,9 @@ function BankContent() {
           </div>
           <div id="bank-anchor-tiers" style={{ scrollMarginTop: 20 }}>
             <TierProgression account={account} operations={operations} notify={notify} />
+          </div>
+          <div id="bank-anchor-statement" style={{ scrollMarginTop: 20 }}>
+            <AutopilotStatement accountId={account.id} notify={notify} />
           </div>
           <PeerStanding account={account} operations={operations} />
           <AdvisorChat account={account} me={me} operations={operations} notify={notify} />

@@ -413,6 +413,9 @@ export default function CyberChessPage(){
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   const[showShop,sShowShop]=useState(false);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
+  // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
+  const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[hotseat,sHotseat]=useState(false);
@@ -927,6 +930,44 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>runAnalysis(),400);
     return()=>clearTimeout(t);
   },[over,tab,sfOk,fenHist.length]);
+
+  /* ── Live Voice Commentary — Coach speaks after every move when enabled. ── */
+  const lastCommentaryBkRef=useRef<number>(-1);
+  useEffect(()=>{
+    if(!liveCommentary)return;
+    if(tab!=="play"&&tab!=="coach")return;
+    if(!on||over||setup)return;
+    if(hist.length===0)return;
+    if(lastCommentaryBkRef.current===bk)return;
+    lastCommentaryBkRef.current=bk;
+    if(typeof window==="undefined"||!window.speechSynthesis)return;
+    const lastSan=hist[hist.length-1];if(!lastSan)return;
+    const wasMyMove=hist.length%2===(pCol==="w"?1:0);
+    const isCapture=lastSan.includes("x");
+    const isCheck=lastSan.endsWith("+");
+    const isMate=lastSan.endsWith("#");
+    const isCastle=lastSan.startsWith("O");
+    const isPromotion=lastSan.includes("=");
+    let comment="";
+    if(isMate){comment=wasMyMove?"Мат! Отличная партия":"Мат. Хорошая игра"}
+    else if(isPromotion){comment=wasMyMove?"Превращение, новая фигура":"Соперник превратил пешку"}
+    else if(isCheck){comment="Шах"}
+    else if(isCastle){comment=wasMyMove?"Король в безопасности":"Соперник укрыл короля"}
+    else if(isCapture&&wasMyMove){comment="Ты взял фигуру"}
+    else if(isCapture&&!wasMyMove){comment="Внимание, соперник взял"}
+    // Engine-based delta (only on every 3rd move to avoid spam)
+    else if(hist.length%3===0&&Math.abs(evalCp)>=120){
+      const favoringMe=(evalCp>0)===(pCol==="w");
+      comment=favoringMe?"Позиция складывается в твою пользу":"Будь внимателен, позиция ухудшается";
+    }
+    if(!comment)return;
+    try{
+      const utt=new SpeechSynthesisUtterance(comment);
+      utt.lang="ru-RU";utt.rate=1.15;utt.volume=0.75;utt.pitch=1.0;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utt);
+    }catch{}
+  },[bk,liveCommentary,tab,on,over,setup,hist.length,pCol,evalCp]);
 
   /* ── Clear annotations on tab switch, on a new move, and on history browse ── */
   useEffect(()=>{clearAnnotations()},[tab,clearAnnotations]);
@@ -1464,6 +1505,16 @@ export default function CyberChessPage(){
           onClick={()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode — OBS-ready","info")}}
           title={streamerMode?"Вернуть обычный вид":"Streamer mode для стримов (OBS)"}
           ariaLabel="Streamer mode"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+        <Btn
+          variant={liveCommentary?"accent":"secondary"}
+          size="sm"
+          icon={<span style={{fontSize:13}}>🔊</span>}
+          onClick={()=>{sLiveCommentary(v=>!v);showToast(liveCommentary?"Live-комментарии выкл":"Live-комментарии вкл · Coach говорит вслух каждый ход","info")}}
+          title={liveCommentary?"Выключить live-комментарии":"Live commentary от Coach — читает ходы вслух"}
+          ariaLabel="Live commentary toggle"
+          active={liveCommentary}
           style={{padding:"6px 10px",minHeight:36,minWidth:36}}
         />
         <Btn

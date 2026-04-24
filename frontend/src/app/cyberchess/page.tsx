@@ -7,7 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
-import { Btn, Card, Badge, Tabs as UiTabs, Icon, Spinner, SectionHeader, ChessyFloat } from "./ui";
+import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 
 const FILES = "abcdefgh";
@@ -2824,14 +2824,13 @@ export default function CyberChessPage(){
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);
-      const[categoryFilter,sCategoryFilter]=[gamesFilter,sGamesFilter];
+      const categoryFilter=gamesFilter;
+      const sCategoryFilter=sGamesFilter;
       const filtered=byCategory(categoryFilter);
-      // Rating history: reverse order (oldest first)
       const ratingHistory=[...savedGames].reverse().map((g,i)=>({x:i,y:g.rating}));
       const minR=Math.min(...ratingHistory.map(p=>p.y),rat)-50;
       const maxR=Math.max(...ratingHistory.map(p=>p.y),rat)+50;
       const range=Math.max(100,maxR-minR);
-      // Stats by category
       const catStats=(cat:string)=>{
         const games=byCategory(cat);
         const wins=games.filter(g=>g.result.includes("You win")||g.result.includes("win!")).length;
@@ -2839,90 +2838,86 @@ export default function CyberChessPage(){
         const draws=games.length-wins-losses;
         return{total:games.length,wins,losses,draws};
       };
-      return<div onClick={()=>sGamesModalOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:900,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div>
-              <div style={{fontSize:22,fontWeight:900,color:T.text}}>📜 Мои партии</div>
-              <div style={{fontSize:13,color:T.dim,marginTop:2}}>{savedGames.length} партий · текущий рейтинг {rat}</div>
-            </div>
-            <button onClick={()=>sGamesModalOpen(false)} style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕ Закрыть</button>
+      return<Modal open={gamesModalOpen} onClose={()=>sGamesModalOpen(false)} size="xl"
+        title={<span>📜 Мои партии <span style={{fontSize:13,color:CC.textDim,fontWeight:600,marginLeft:8}}>{savedGames.length} · {rat} ELO</span></span>}>
+
+        {ratingHistory.length>1&&<div style={{background:"#0f172a",borderRadius:RADIUS.md,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[3],border:"1px solid #334155"}}>
+          <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2],display:"flex",justifyContent:"space-between"}}>
+            <span>📈 Прогресс рейтинга</span>
+            <span style={{fontSize:10,color:"#64748b"}}>{minR} — {maxR}</span>
           </div>
+          <svg viewBox={`0 0 ${Math.max(100,ratingHistory.length*8)} 80`} preserveAspectRatio="none" style={{width:"100%",height:90,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 100%)",borderRadius:6}}>
+            <line x1="0" y1="40" x2={ratingHistory.length*8} y2="40" stroke="#475569" strokeWidth="0.3" strokeDasharray="2,2"/>
+            <polyline fill="none" stroke="#7c3aed" strokeWidth="1.8" points={ratingHistory.map(p=>`${p.x*8},${80-((p.y-minR)/range)*80}`).join(" ")}/>
+            {ratingHistory.map(p=><circle key={p.x} cx={p.x*8} cy={80-((p.y-minR)/range)*80} r="1.8" fill="#a78bfa"/>)}
+          </svg>
+        </div>}
 
-          {/* Rating chart */}
-          {ratingHistory.length>1&&<div style={{background:"#0f172a",borderRadius:10,padding:"14px 16px",marginBottom:14,border:"1px solid #334155"}}>
-            <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
-              <span>📈 Прогресс рейтинга</span>
-              <span style={{fontSize:10,color:"#64748b"}}>{minR} — {maxR}</span>
-            </div>
-            <svg viewBox={`0 0 ${Math.max(100,ratingHistory.length*8)} 80`} preserveAspectRatio="none" style={{width:"100%",height:90,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 100%)",borderRadius:6}}>
-              <line x1="0" y1="40" x2={ratingHistory.length*8} y2="40" stroke="#475569" strokeWidth="0.3" strokeDasharray="2,2"/>
-              <polyline fill="none" stroke="#7c3aed" strokeWidth="1.8" points={ratingHistory.map(p=>`${p.x*8},${80-((p.y-minR)/range)*80}`).join(" ")}/>
-              {ratingHistory.map(p=><circle key={p.x} cx={p.x*8} cy={80-((p.y-minR)/range)*80} r="1.8" fill="#a78bfa"/>)}
-            </svg>
-          </div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:SPACE[2],marginBottom:SPACE[3]}}>
+          {(["all","Bullet","Blitz","Rapid"] as const).map(cat=>{
+            const s=catStats(cat);const active=categoryFilter===cat;
+            const icon=cat==="Bullet"?"⚡":cat==="Blitz"?"🔥":cat==="Rapid"?"⏱":"🎯";
+            const pct=s.total>0?Math.round(s.wins/s.total*100):0;
+            return<button key={cat} onClick={()=>sCategoryFilter(cat)}
+              className="cc-focus-ring"
+              style={{padding:SPACE[3],borderRadius:RADIUS.md,
+                border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                background:active?CC.brandSoft:CC.surface1,cursor:"pointer",textAlign:"left",
+                transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+              <div style={{fontSize:13,fontWeight:900,color:active?CC.brand:CC.text,marginBottom:SPACE[1]}}>{icon} {cat==="all"?"Все":cat}</div>
+              <div style={{fontSize:22,fontWeight:900,color:CC.text,lineHeight:1}}>{s.total}</div>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:700,marginTop:SPACE[1],textTransform:"uppercase" as const,letterSpacing:0.5}}>партий</div>
+              {s.total>0&&<div style={{marginTop:SPACE[2],display:"flex",gap:6,fontSize:11,fontWeight:800}}>
+                <span style={{color:CC.brand}}>{s.wins}W</span>
+                <span style={{color:CC.danger}}>{s.losses}L</span>
+                <span style={{color:CC.textDim}}>{s.draws}D</span>
+                <span style={{marginLeft:"auto",color:pct>=60?CC.brand:pct>=40?CC.info:CC.danger}}>{pct}%</span>
+              </div>}
+            </button>;
+          })}
+        </div>
 
-          {/* Category stats */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-            {(["all","Bullet","Blitz","Rapid"] as const).map(cat=>{
-              const s=catStats(cat);const active=categoryFilter===cat;
-              const icon=cat==="Bullet"?"⚡":cat==="Blitz"?"🔥":cat==="Rapid"?"⏱":"🎯";
-              const pct=s.total>0?Math.round(s.wins/s.total*100):0;
-              return<button key={cat} onClick={()=>sCategoryFilter(cat)} style={{padding:"12px",borderRadius:9,border:active?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:active?"rgba(5,150,105,0.06)":"#fff",cursor:"pointer",textAlign:"left"}}>
-                <div style={{fontSize:14,fontWeight:900,color:active?T.accent:T.text,marginBottom:6}}>{icon} {cat==="all"?"Все":cat}</div>
-                <div style={{fontSize:22,fontWeight:900,color:T.text,lineHeight:1}}>{s.total}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:4,textTransform:"uppercase" as const,letterSpacing:"0.05em"}}>партий</div>
-                {s.total>0&&<div style={{marginTop:8,display:"flex",gap:6,fontSize:11,fontWeight:800}}>
-                  <span style={{color:T.accent}}>{s.wins}W</span>
-                  <span style={{color:T.danger}}>{s.losses}L</span>
-                  <span style={{color:T.dim}}>{s.draws}D</span>
-                  <span style={{marginLeft:"auto",color:pct>=60?T.accent:pct>=40?T.blue:T.danger}}>{pct}%</span>
-                </div>}
-              </button>;
-            })}
-          </div>
-
-          {/* Games list */}
-          <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:400,overflowY:"auto"}}>
-            {filtered.length===0?<div style={{padding:"40px",textAlign:"center",color:T.dim,fontSize:14}}>Нет партий в этой категории</div>:
-            filtered.map(g=>{
-              const isWin=g.result.includes("You win")||g.result.includes("win!");
-              const isDraw=g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
-              const date=new Date(g.date);
-              return<button key={g.id} onClick={()=>{
-                sGamesModalOpen(false);
-                // Preserve Coach tab if the user opened the modal from Coach;
-                // otherwise route to Analysis where the richer tools live.
-                const destTab=tab==="coach"?"coach":"analysis";
-                sTab(destTab);
-                const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
-                for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
-                setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.playerColor);sFlip(g.playerColor==="b");
-                if(destTab==="coach"){sCoachAIEnabled(false);sEditorMode(false);}
-                showToast(`Партия открыта · ${mh.length} ходов${destTab==="coach"?" · Coach готов к разбору":""}`,"success");
-              }} style={{width:"100%",padding:"12px 16px",border:"none",borderBottom:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
-                <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0,flex:1}}>
-                  <span style={{fontSize:16,fontWeight:900,color:isWin?T.accent:isDraw?T.dim:T.danger,minWidth:24,textAlign:"center"}}>{isWin?"W":isDraw?"D":"L"}</span>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:2}}>{g.opening||"Без дебюта"}</div>
-                    <div style={{fontSize:11,color:T.dim,display:"flex",gap:8,flexWrap:"wrap"}}>
-                      <span>{g.category||"—"}</span>
-                      <span>· {g.aiLevel}</span>
-                      <span>· {g.tc}</span>
-                      <span>· {g.moves.length} ходов</span>
-                      <span>· {g.playerColor==="w"?"⚪":"⚫"}</span>
-                    </div>
+        <div style={{border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,overflow:"hidden",maxHeight:400,overflowY:"auto"}}>
+          {filtered.length===0?<div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>Нет партий в этой категории</div>:
+          filtered.map(g=>{
+            const isWin=g.result.includes("You win")||g.result.includes("win!");
+            const isDraw=g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+            const resCol=isWin?CC.brand:isDraw?CC.textDim:CC.danger;
+            const date=new Date(g.date);
+            return<button key={g.id} className="cc-focus-ring" onClick={()=>{
+              sGamesModalOpen(false);
+              const destTab=tab==="coach"?"coach":"analysis";
+              sTab(destTab);
+              const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
+              for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
+              setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.playerColor);sFlip(g.playerColor==="b");
+              if(destTab==="coach"){sCoachAIEnabled(false);sEditorMode(false);}
+              showToast(`Партия открыта · ${mh.length} ходов${destTab==="coach"?" · Coach готов к разбору":""}`,"success");
+            }} style={{width:"100%",padding:`${SPACE[3]}px ${SPACE[4]}px`,border:"none",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[3],minWidth:0,flex:1}}>
+                <div style={{width:32,height:32,borderRadius:"50%",background:resCol+"18",color:resCol,
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0}}>
+                  {isWin?"W":isDraw?"D":"L"}
+                </div>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:14,fontWeight:700,color:CC.text,marginBottom:2}}>{g.opening||"Без дебюта"}</div>
+                  <div style={{fontSize:11,color:CC.textDim,display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+                    <span>{g.category||"—"}</span>
+                    <span>· {g.aiLevel}</span>
+                    <span>· {g.tc}</span>
+                    <span>· {g.moves.length} ходов</span>
+                    <span>· {g.playerColor==="w"?"⚪":"⚫"}</span>
                   </div>
                 </div>
-                <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
-                  <div style={{fontSize:13,fontWeight:900,color:T.text}}>{g.rating}</div>
-                  <div style={{fontSize:10,color:T.dim,marginTop:2}}>{date.toLocaleDateString("ru-RU")}</div>
-                </div>
-              </button>;
-            })}
-          </div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0,marginLeft:SPACE[2]}}>
+                <div style={{fontSize:13,fontWeight:900,color:CC.gold}}>{g.rating}</div>
+                <div style={{fontSize:10,color:CC.textDim,marginTop:2}}>{date.toLocaleDateString("ru-RU")}</div>
+              </div>
+            </button>;
+          })}
         </div>
-      </div>;
+      </Modal>;
     })()}
 
     {/* Chessy Shop */}
@@ -2941,148 +2936,155 @@ export default function CyberChessPage(){
         sChessy(c=>({...c,owned:{...c.owned,[id]:true}}));
         showToast(`✓ Куплено: ${name}`,"success");
       };
-      return <div onClick={()=>sShowShop(false)} role="dialog" aria-label="Chessy shop" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:150,padding:20}}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:680,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <div>
-              <div style={{fontSize:20,fontWeight:900,color:T.text}}>🛒 Chessy · магазин</div>
-              <div style={{fontSize:13,color:T.dim,marginTop:2}}>Баланс: <b style={{color:"#b45309"}}>{chessy.balance} Chessy</b> · всего заработано {chessy.lifetime}</div>
-            </div>
-            <button onClick={()=>sShowShop(false)} aria-label="Close" style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕</button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10,marginBottom:16}}>
-            {items.map(it=>{
-              const owned=it.kind==="unlock"&&chessy.owned[it.id];
-              const afford=chessy.balance>=it.cost;
-              const dis=owned||it.disabled||!afford;
-              return <div key={it.id} style={{padding:"14px 16px",borderRadius:10,border:`1px solid ${owned?"#a7f3d0":T.border}`,background:owned?"#f0fdf4":"#fff",display:"flex",flexDirection:"column",gap:8}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
-                  <div style={{fontWeight:900,color:T.text,fontSize:14,lineHeight:1.3}}>{it.name}</div>
-                  {owned?<span style={{fontSize:11,fontWeight:800,color:T.accent,background:"#d1fae5",padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap"}}>✓ КУПЛЕНО</span>:<span style={{fontSize:13,fontWeight:900,color:"#78350f",background:"#fef3c7",padding:"3px 10px",borderRadius:10,whiteSpace:"nowrap"}}>{it.cost} Chessy</span>}
-                </div>
-                <div style={{fontSize:13,color:T.dim,lineHeight:1.5}}>{it.desc}</div>
-                {!owned&&<button disabled={dis} onClick={()=>{if(it.kind==="unlock")purchaseUnlock(it.id,it.cost,it.name);else if(it.onBuy){if(!spendChessy(it.cost,it.name))return;it.onBuy()}}} style={{padding:"8px 14px",borderRadius:7,border:"none",background:dis?"#e5e7eb":T.accent,color:dis?T.dim:"#fff",fontSize:13,fontWeight:800,cursor:dis?"not-allowed":"pointer"}}>
-                  {it.disabled?"Нужна сыгранная партия":!afford?`Нужно ${it.cost-chessy.balance} ещё`:it.kind==="action"?"Использовать":"Купить"}
-                </button>}
-              </div>;
-            })}
-          </div>
-          <div style={{padding:"14px 16px",borderRadius:10,background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #fcd34d"}}>
-            <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:6}}>💡 Как заработать Chessy</div>
-            <div style={{fontSize:13,color:"#b45309",lineHeight:1.7}}>
-              · Победа против AI: 5–160 (чем сильнее соперник и длиннее партия — тем больше)<br/>
-              · Пазл: 2–15 (по рейтингу)<br/>
-              · Daily-бонус: 5, 30 (streak 3), 100 (streak 7)<br/>
-              · Достижения: 30–400 за вехи
-            </div>
-          </div>
-          {Object.keys(chessy.ach).length>0&&<div style={{marginTop:12}}>
-            <div style={{fontSize:13,fontWeight:800,color:T.dim,marginBottom:8,textTransform:"uppercase" as const,letterSpacing:"0.05em"}}>🏆 Достижения ({Object.keys(chessy.ach).length})</div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {Object.keys(chessy.ach).map(k=><span key={k} title={new Date(chessy.ach[k]).toLocaleDateString("ru-RU")} style={{padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:T.text}}>{ACH_LABELS[k]||k}</span>)}
-            </div>
-          </div>}
+      return <Modal open={showShop} onClose={()=>sShowShop(false)} size="lg"
+        title={<span>🛒 Chessy · магазин <Badge tone="gold" size="md" style={{marginLeft:8}}><Icon.Coin width={12} height={12}/> {chessy.balance}</Badge></span>}>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:SPACE[2],marginBottom:SPACE[4]}}>
+          {items.map(it=>{
+            const owned=it.kind==="unlock"&&chessy.owned[it.id];
+            const afford=chessy.balance>=it.cost;
+            const dis=owned||it.disabled||!afford;
+            return <div key={it.id} style={{
+              padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
+              border:`1px solid ${owned?"#a7f3d0":CC.border}`,
+              background:owned?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":CC.surface1,
+              display:"flex",flexDirection:"column",gap:SPACE[2],
+              boxShadow:SHADOW.sm
+            }}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:SPACE[2]}}>
+                <div style={{fontWeight:900,color:CC.text,fontSize:14,lineHeight:1.3}}>{it.name}</div>
+                {owned?<Badge tone="brand" size="xs">✓ Куплено</Badge>:<Badge tone="gold" size="sm"><Icon.Coin width={11} height={11}/> {it.cost}</Badge>}
+              </div>
+              <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5}}>{it.desc}</div>
+              {!owned&&<Btn
+                disabled={!!dis}
+                variant={dis?"secondary":"primary"}
+                size="sm"
+                full
+                onClick={()=>{if(it.kind==="unlock")purchaseUnlock(it.id,it.cost,it.name);else if(it.onBuy){if(!spendChessy(it.cost,it.name))return;it.onBuy()}}}
+              >
+                {it.disabled?"Нужна сыгранная партия":!afford?`Нужно +${it.cost-chessy.balance}`:it.kind==="action"?"Использовать":"Купить"}
+              </Btn>}
+            </div>;
+          })}
         </div>
-      </div>;
+
+        <div style={{padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.md,
+          background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #fcd34d"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:SPACE[1]}}>💡 Как заработать Chessy</div>
+          <div style={{fontSize:12,color:"#b45309",lineHeight:1.7}}>
+            · Победа против AI: 5–160 (чем сильнее соперник и длиннее партия — тем больше)<br/>
+            · Пазл: 2–15 (по рейтингу)<br/>
+            · Daily-бонус: 5, 30 (streak 3), 100 (streak 7)<br/>
+            · Достижения: 30–400 за вехи
+          </div>
+        </div>
+
+        {Object.keys(chessy.ach).length>0&&<div style={{marginTop:SPACE[3]}}>
+          <div style={{fontSize:12,fontWeight:800,color:CC.textDim,marginBottom:SPACE[2],textTransform:"uppercase" as const,letterSpacing:0.5}}>🏆 Достижения · {Object.keys(chessy.ach).length}</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {Object.keys(chessy.ach).map(k=><Badge key={k} tone="neutral" size="sm" style={{padding:"4px 10px"}}>{ACH_LABELS[k]||k}</Badge>)}
+          </div>
+        </div>}
+      </Modal>;
     })()}
 
     {/* Endgame trainer modal */}
-    {showEndgames&&<div onClick={()=>sShowEndgames(false)} role="dialog" aria-label="Endgame trainer" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:180,padding:20}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:760,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <div>
-            <div style={{fontSize:20,fontWeight:900,color:T.text}}>🏰 Тренировка эндшпилей</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:2}}>12 классических позиций от KP–K до KBN–K. Победил = Chessy + разбор от Алексея.</div>
-          </div>
-          <button onClick={()=>sShowEndgames(false)} aria-label="Close" style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕</button>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
-          {ENDGAMES.map((eg,i)=>{
-            const gCol=eg.goal==="Win"?T.accent:T.blue;
-            return <button key={i} onClick={()=>loadEndgame(eg)} style={{padding:"14px 16px",borderRadius:10,border:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:6,transition:"all 0.15s"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
-                <div style={{fontWeight:900,color:T.text,fontSize:14,lineHeight:1.3}}>{eg.name}</div>
-                <span style={{fontSize:11,fontWeight:800,color:"#fff",background:gCol,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{eg.goal==="Win"?"Выиграть":"Удержать"} · {eg.side==="w"?"♔":"♚"}</span>
-              </div>
-              <div style={{fontSize:13,color:T.dim,lineHeight:1.5}}>{eg.hint.slice(0,110)}{eg.hint.length>110?"…":""}</div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
-                <span style={{fontSize:12,fontWeight:700,color:"#78350f",background:"#fef3c7",padding:"2px 8px",borderRadius:6}}>+{eg.reward} Chessy</span>
-                <span style={{fontSize:13,fontWeight:800,color:T.accent}}>Начать →</span>
-              </div>
-            </button>;
-          })}
-        </div>
-        <div style={{marginTop:14,padding:"10px 14px",borderRadius:8,background:"#f0fdf4",border:"1px solid #a7f3d0",fontSize:13,color:"#065f46"}}>
-          💡 Открываются в Coach-режиме — можешь в любой момент спросить Алексея, как играть. Голос включается в шапке Coach'а (🔊).
-        </div>
+    <Modal open={showEndgames} onClose={()=>sShowEndgames(false)} size="lg"
+      title="🏰 Тренировка эндшпилей">
+      <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
+        12 классических позиций от KP–K до KBN–K. Победил = Chessy + разбор от Алексея.
       </div>
-    </div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:SPACE[2]}}>
+        {ENDGAMES.map((eg,i)=>{
+          const gTone:"brand"|"info"=eg.goal==="Win"?"brand":"info";
+          return <button key={i} onClick={()=>loadEndgame(eg)}
+            className="cc-focus-ring"
+            style={{padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
+              border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",
+              textAlign:"left",display:"flex",flexDirection:"column",gap:SPACE[1],
+              transition:`all ${MOTION.base} ${MOTION.ease}`,
+              boxShadow:SHADOW.sm}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
+              <div style={{fontWeight:900,color:CC.text,fontSize:14,lineHeight:1.3}}>{eg.name}</div>
+              <Badge tone={gTone} size="xs">{eg.goal==="Win"?"Выиграть":"Удержать"} · {eg.side==="w"?"♔":"♚"}</Badge>
+            </div>
+            <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5}}>{eg.hint.slice(0,110)}{eg.hint.length>110?"…":""}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:SPACE[1]}}>
+              <Badge tone="gold" size="xs">+{eg.reward} Chessy</Badge>
+              <span style={{fontSize:12,fontWeight:800,color:CC.brand}}>Начать →</span>
+            </div>
+          </button>;
+        })}
+      </div>
+      <div style={{marginTop:SPACE[3],padding:`${SPACE[2]}px ${SPACE[3]}px`,
+        borderRadius:RADIUS.md,background:"#f0fdf4",border:"1px solid #a7f3d0",
+        fontSize:12,color:"#065f46"}}>
+        💡 Открываются в Coach — спроси Алексея, как играть. Голос включается в шапке Coach'а (🔊).
+      </div>
+    </Modal>
 
     {/* First-time welcome tour */}
     {tourStep>=0&&(()=>{
       const slides=[
         {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
           <p style={{margin:"0 0 10px"}}>Полноценный шахматный тренажёр с ИИ-коучем, ежедневными задачами и собственной валютой.</p>
-          <p style={{margin:0,color:T.dim,fontSize:14}}>Ты уже получил <b style={{color:"#b45309"}}>+50 Chessy</b> за регистрацию.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Ты уже получил <b style={{color:"#b45309"}}>+50 Chessy</b> за регистрацию.</p>
         </>},
         {icon:"💰",title:"Зарабатывай Chessy",body:<>
           <p style={{margin:"0 0 10px"}}>За победы, решённые пазлы, достижения и ежедневный заход. Streak 7 дней — +100.</p>
-          <p style={{margin:0,color:T.dim,fontSize:14}}>Трать на премиум: разблокировка Master AI, эксклюзивные темы доски, глубокий разбор партии от тренера.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Трать на премиум: разблокировка Master AI, эксклюзивные темы доски, глубокий разбор партии от тренера.</p>
         </>},
         {icon:"🎓",title:"ИИ-тренер Алексей",body:<>
           <p style={{margin:"0 0 10px"}}>Задай любой вопрос по позиции — тренер ответит на основе Stockfish-анализа, без фантазий.</p>
-          <p style={{margin:0,color:T.dim,fontSize:14}}>Можно <b>включить голос</b> в Coach — ответы будут зачитываться вслух. Этого нет на lichess и chess.com.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Можно <b>включить голос</b> в Coach — ответы будут зачитываться вслух. Этого нет на lichess и chess.com.</p>
         </>},
       ];
       const s=slides[tourStep];const last=tourStep===slides.length-1;
       const finish=()=>{try{localStorage.setItem("aevion_tour_seen_v1","1")}catch{}sTourStep(-1)};
-      return <div role="dialog" aria-label="Welcome tour" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:20}}>
-        <div style={{background:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:28,boxShadow:"0 25px 70px rgba(0,0,0,0.4)",textAlign:"center"}}>
+      return <Modal open={tourStep>=0} onClose={finish} size="sm" title={undefined}>
+        <div style={{textAlign:"center"}}>
           <div style={{fontSize:52,lineHeight:1,marginBottom:10}}>{s.icon}</div>
-          <div style={{fontSize:20,fontWeight:900,color:T.text,marginBottom:12,lineHeight:1.25}}>{s.title}</div>
-          <div style={{fontSize:15,color:T.text,lineHeight:1.6,textAlign:"left"}}>{s.body}</div>
+          <div style={{fontSize:20,fontWeight:900,color:CC.text,marginBottom:12,lineHeight:1.25}}>{s.title}</div>
+          <div style={{fontSize:14,color:CC.text,lineHeight:1.6,textAlign:"left"}}>{s.body}</div>
           <div style={{display:"flex",justifyContent:"center",gap:5,margin:"18px 0"}}>
-            {slides.map((_,i)=><div key={i} style={{width:i===tourStep?22:7,height:7,borderRadius:3,background:i===tourStep?T.accent:"#e5e7eb",transition:"width 0.2s"}}/>)}
+            {slides.map((_,i)=><div key={i} style={{
+              width:i===tourStep?22:7,height:7,borderRadius:RADIUS.full,
+              background:i===tourStep?CC.brand:CC.surface3,
+              transition:`width ${MOTION.base} ${MOTION.ease}`
+            }}/>)}
           </div>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={finish} style={{flex:1,padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:14,fontWeight:700,cursor:"pointer"}}>Пропустить</button>
-            <button onClick={()=>{if(last)finish();else sTourStep(tourStep+1)}} style={{flex:2,padding:"10px 14px",borderRadius:8,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer"}}>{last?"Поехали! ▶":"Дальше →"}</button>
+          <div style={{display:"flex",gap:SPACE[2]}}>
+            <Btn variant="secondary" size="md" full onClick={finish}>Пропустить</Btn>
+            <Btn variant="primary" size="md" full onClick={()=>{if(last)finish();else sTourStep(tourStep+1)}}
+              style={{flex:2,background:`linear-gradient(135deg,${CC.brand},#10b981)`}}>
+              {last?"Поехали! ▶":"Дальше →"}
+            </Btn>
           </div>
         </div>
-      </div>;
+      </Modal>;
     })()}
 
     {/* Keyboard Shortcuts Help Overlay */}
-    {showHelp&&<div onClick={()=>sShowHelp(false)} role="dialog" aria-label="Keyboard shortcuts" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:520,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <div>
-            <div style={{fontSize:20,fontWeight:900,color:T.text}}>⌨ Горячие клавиши</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:2}}>Работают во всех вкладках</div>
-          </div>
-          <button onClick={()=>sShowHelp(false)} aria-label="Close" style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕</button>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 16px",fontSize:14,alignItems:"center"}}>
-          {[
-            ["←  / →","Листать ходы назад / вперёд"],
-            ["Home / End","К первому / последнему ходу"],
-            ["F","Перевернуть доску"],
-            ["M","Вкл./выкл. звук"],
-            ["N","Новая партия (в Play, до старта)"],
-            ["Esc","Сбросить все премувы"],
-            ["?","Показать / скрыть эту подсказку"],
-            ["ПКМ-drag","Стрелка на доске (Analysis / Coach / после партии)"],
-            ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
-          ].map(([k,v])=><React.Fragment key={k}>
-            <kbd style={{fontFamily:"monospace",fontWeight:900,fontSize:13,padding:"4px 10px",borderRadius:6,background:"#f3f4f6",border:`1px solid ${T.border}`,color:T.text,whiteSpace:"nowrap"}}>{k}</kbd>
-            <span style={{color:T.text}}>{v}</span>
-          </React.Fragment>)}
-        </div>
-        <div style={{marginTop:16,padding:"10px 12px",background:"#f9fafb",borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,color:T.dim,lineHeight:1.5}}>
-          💡 Совет: все сочетания игнорируются, пока фокус в поле ввода.
-        </div>
+    <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title="⌨ Горячие клавиши">
+      <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Работают во всех вкладках, пока курсор не в поле ввода.</div>
+      <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 16px",fontSize:14,alignItems:"center"}}>
+        {[
+          ["←  / →","Листать ходы назад / вперёд"],
+          ["Home / End","К первому / последнему ходу"],
+          ["F","Перевернуть доску"],
+          ["M","Вкл./выкл. звук"],
+          ["N","Новая партия (в Play, до старта)"],
+          ["Esc","Сбросить все премувы"],
+          ["?","Показать / скрыть эту подсказку"],
+          ["ПКМ-drag","Стрелка на доске (Analysis / Coach / после партии)"],
+          ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
+        ].map(([k,v])=><React.Fragment key={k}>
+          <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:12,padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text,whiteSpace:"nowrap"}}>{k}</kbd>
+          <span style={{color:CC.text}}>{v}</span>
+        </React.Fragment>)}
       </div>
-    </div>}
+    </Modal>
 
     </ProductPageShell></main>);
 }

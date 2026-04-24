@@ -2777,15 +2777,17 @@ export default function CyberChessPage(){
 
           {/* ── MultiPV Analysis Panel ── */}
           {tab==="analysis"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {/* Position import for Analysis */}
-            <div style={{borderRadius:10,background:"linear-gradient(135deg,#faf5ff,#f5f3ff)",border:"1px solid #ddd6fe",padding:"10px 12px"}}>
-              <div style={{fontSize:11,fontWeight:800,color:T.purple,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>📥 Источник позиции</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
+            {/* Position import for Analysis — расширенный source picker */}
+            <div style={{borderRadius:RADIUS.md,background:"linear-gradient(135deg,#faf5ff,#f5f3ff)",border:"1px solid #ddd6fe",padding:SPACE[3]}}>
+              <div style={{fontSize:11,fontWeight:800,color:CC.accent,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>📥 Источник позиции</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px,1fr))",gap:6}}>
+                {/* Empty start */}
                 <button onClick={()=>{
                   const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
                   showToast("Начальная позиция","info");
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🆕 Начальная</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🆕 Начальная</button>
 
+                {/* Last saved game */}
                 <button onClick={()=>{
                   if(savedGames.length===0){showToast("Нет сыгранных партий","error");return}
                   const last=savedGames[0];
@@ -2793,15 +2795,58 @@ export default function CyberChessPage(){
                   for(const san of last.moves){try{const mv=g.move(san);if(mv){mhist.push(mv.san);fh.push(g.fen())}}catch{break}}
                   setGame(g);sBk(k=>k+1);sHist(mhist);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b");
                   showToast(`Партия · ${mhist.length} ходов`,"success");
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📜 Последняя партия</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>📜 Последняя партия</button>
 
+                {/* All archive */}
+                <button onClick={()=>{if(savedGames.length===0){showToast("Архив пуст","info");return}sGamesModalOpen(true)}}
+                  className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>
+                  📚 Архив ({savedGames.length})
+                </button>
+
+                {/* Current puzzle */}
                 <button onClick={()=>{
                   if(!pzCurrent){showToast("Нет активного пазла","error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
                   showToast(`Пазл · ${pzCurrent.name}`,"success");
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущий пазл</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🧩 Текущий пазл</button>
 
-                <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>
+                {/* Random puzzle */}
+                <button onClick={()=>{
+                  if(PUZZLES.length===0){showToast("Пазлы не загружены","error");return}
+                  const pz=PUZZLES[Math.floor(Math.random()*PUZZLES.length)];
+                  const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
+                  showToast(`🎲 Случайный пазл · ${pz.r} · ${pz.name}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🎲 Random пазл</button>
+
+                {/* Daily puzzle */}
+                <button onClick={()=>{
+                  if(!dailyState||!PUZZLES[dailyState.idx]){showToast("Daily puzzle не готов","error");return}
+                  const pz=PUZZLES[dailyState.idx];
+                  const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
+                  showToast(`☀ Пазл дня · ${pz.r}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Daily пазл</button>
+
+                {/* Random endgame study */}
+                <button onClick={()=>{
+                  if(ENDGAMES.length===0){showToast("Этюды недоступны","error");return}
+                  const eg=ENDGAMES[Math.floor(Math.random()*ENDGAMES.length)];
+                  const g=new Chess(eg.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([eg.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(eg.side);sFlip(eg.side==="b");
+                  showToast(`🏰 Этюд · ${eg.name}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🏰 Случайный этюд</button>
+
+                {/* Random opening line */}
+                <button onClick={()=>{
+                  if(!openingsDb||openingsDb.length===0){showToast("Дебюты не загружены","error");return}
+                  const op=openingsDb[Math.floor(Math.random()*openingsDb.length)];
+                  const g=new Chess();const fh:string[]=[g.fen()];const mh:string[]=[];
+                  const sans=(typeof op.moves==="string"?op.moves.split(/\s+/):[]).filter(Boolean);
+                  for(const san of sans){try{const mv=g.move(san);if(mv){mh.push(mv.san);fh.push(g.fen())}}catch{break}}
+                  setGame(g);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
+                  showToast(`♞ ${op.eco} · ${op.name}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>♞ Случайный дебют</button>
+
+                {/* PGN file */}
+                <label className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left",display:"block"}}>
                   📁 PGN файл
                   <input type="file" accept=".pgn,.txt" style={{display:"none"}} onChange={e=>{
                     const f=e.target.files?.[0];if(!f)return;
@@ -2817,12 +2862,14 @@ export default function CyberChessPage(){
                   }}/>
                 </label>
 
+                {/* FEN prompt */}
                 <button onClick={()=>{
                   const fen=prompt("Введите FEN позиции:");
                   if(!fen)return;
                   try{const g=new Chess(fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");showToast("FEN загружен","success")}catch{showToast("Неверный FEN","error")}
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🔤 FEN</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🔤 FEN</button>
 
+                {/* PGN text */}
                 <button onClick={()=>{
                   const pgn=prompt("Вставьте PGN:");if(!pgn)return;
                   try{
@@ -2832,7 +2879,7 @@ export default function CyberChessPage(){
                     setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
                     showToast(`PGN · ${mh.length} ходов`,"success");
                   }catch{showToast("Неверный PGN","error")}
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📋 PGN текст</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>📋 PGN текст</button>
               </div>
             </div>
             {/* Controls */}

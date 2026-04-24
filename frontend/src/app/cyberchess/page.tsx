@@ -412,6 +412,7 @@ export default function CyberChessPage(){
   const clearAnnotations=useCallback(()=>{sArrows([]);sSqHL([])},[]);
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   const[showShop,sShowShop]=useState(false);
+  const[showChessyInfo,sShowChessyInfo]=useState(false);
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[hotseat,sHotseat]=useState(false);
@@ -1412,27 +1413,47 @@ export default function CyberChessPage(){
           </div>
         </div>
 
-        {/* Chessy balance pill */}
-        <button
-          onClick={()=>sShowShop(true)}
-          title={`Chessy · баланс ${chessy.balance}`}
-          aria-label="Chessy shop"
-          className="cc-focus-ring cc-touch"
-          style={{
-            display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
-            borderRadius:RADIUS.full,border:"1px solid #fcd34d",
-            background:"linear-gradient(135deg,#fef3c7,#fde68a)",
-            boxShadow:"0 2px 6px rgba(217,119,6,0.18)",
-            cursor:"pointer",fontSize:14,fontWeight:900,color:"#78350f",
-            transition:`transform ${MOTION.fast} ${MOTION.ease}`
-          }}
-          onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.96)"}}
-          onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
-          onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
-        >
-          <Icon.Coin width={18} height={18}/>
-          <span>{chessy.balance}</span>
-        </button>
+        {/* Chessy balance pill + info button */}
+        <div style={{display:"inline-flex",alignItems:"center",gap:2}}>
+          <button
+            onClick={()=>sShowShop(true)}
+            title={`Chessy · баланс ${chessy.balance} · клик → магазин`}
+            aria-label="Chessy shop"
+            className="cc-focus-ring cc-touch"
+            style={{
+              display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
+              borderRadius:`${RADIUS.full}px 0 0 ${RADIUS.full}px`,
+              border:"1px solid #fcd34d",borderRight:"none",
+              background:"linear-gradient(135deg,#fef3c7,#fde68a)",
+              boxShadow:"0 2px 6px rgba(217,119,6,0.18)",
+              cursor:"pointer",fontSize:14,fontWeight:900,color:"#78350f",
+              transition:`transform ${MOTION.fast} ${MOTION.ease}`
+            }}
+            onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.96)"}}
+            onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+          >
+            <Icon.Coin width={18} height={18}/>
+            <span>{chessy.balance}</span>
+          </button>
+          <button
+            onClick={()=>sShowChessyInfo(true)}
+            title="Что такое Chessy?"
+            aria-label="Chessy info"
+            className="cc-focus-ring cc-touch"
+            style={{
+              display:"inline-flex",alignItems:"center",justifyContent:"center",
+              width:28,height:32,
+              borderRadius:`0 ${RADIUS.full}px ${RADIUS.full}px 0`,
+              border:"1px solid #fcd34d",
+              background:"linear-gradient(135deg,#fde68a,#fcd34d)",
+              boxShadow:"0 2px 6px rgba(217,119,6,0.18)",
+              cursor:"pointer",color:"#78350f"
+            }}
+          >
+            <Icon.Help width={14} height={14}/>
+          </button>
+        </div>
 
         {/* Icon buttons */}
         <Btn
@@ -3358,6 +3379,66 @@ export default function CyberChessPage(){
           <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:12,padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text,whiteSpace:"nowrap"}}>{k}</kbd>
           <span style={{color:CC.text}}>{v}</span>
         </React.Fragment>)}
+      </div>
+    </Modal>
+
+    {/* Chessy Explainer */}
+    <Modal open={showChessyInfo} onClose={()=>sShowChessyInfo(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon.Coin width={20} height={20}/> Как работает Chessy</span>}>
+      <div style={{fontSize:14,color:CC.text,lineHeight:1.55}}>
+        <p style={{margin:`0 0 ${SPACE[3]}px`}}>
+          <b>Chessy</b> — игровая валюта AEVION CyberChess. Зарабатывай, играя и решая пазлы. Трать на премиум-функции, подсказки и тренировки.
+        </p>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[3],marginBottom:SPACE[4]}}>
+          {/* Earn */}
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
+            <div style={{fontSize:12,fontWeight:900,color:CC.brand,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>💰 Как заработать</div>
+            <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
+              <li><b>Победа</b> 5–160 (зависит от силы AI и времени)</li>
+              <li><b>Пазл</b> 2–15 (по рейтингу задачи)</li>
+              <li><b>Daily puzzle</b> +50 за первое решение в день</li>
+              <li><b>Daily bonus</b> +5 / +30 (streak 3) / +100 (streak 7)</li>
+              <li><b>Puzzle Rush</b> 2 за пазл + бонус по best streak</li>
+              <li><b>Исправленная ошибка</b> +3 (Blunder Rewind)</li>
+              <li><b>Достижения</b> 30–400</li>
+              <li><b>Welcome</b> +50 при первом визите</li>
+            </ul>
+          </div>
+          {/* Spend */}
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`}}>
+            <div style={{fontSize:12,fontWeight:900,color:CC.danger,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>🛒 На что тратить</div>
+            <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
+              <li><b>Takeback</b> 3 (откат хода в партии vs AI)</li>
+              <li><b>Подсказка в пазле</b> 5</li>
+              <li><b>Ghost-подсказка</b> 15 (стрелка лучшего хода)</li>
+              <li><b>Глубокий разбор</b> 20 (Coach)</li>
+              <li><b>Master AI unlock</b> 30 (2400 ELO)</li>
+              <li><b>Premium-тема</b> 50 (Neon / Obsidian / Sakura)</li>
+              <li><b>AI Rival Алексей</b> 100 (beta)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.goldSoft,border:"1px solid #fcd34d",marginBottom:SPACE[3]}}>
+          <div style={{fontSize:12,fontWeight:900,color:"#92400e",letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>📊 Твоя статистика</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[2]}}>
+            <div><div style={{fontSize:11,color:"#b45309",fontWeight:700}}>Сейчас</div><div style={{fontSize:22,fontWeight:900,color:"#78350f"}}>{chessy.balance}</div></div>
+            <div><div style={{fontSize:11,color:"#b45309",fontWeight:700}}>Всего</div><div style={{fontSize:22,fontWeight:900,color:"#78350f"}}>{chessy.lifetime}</div></div>
+            <div><div style={{fontSize:11,color:"#b45309",fontWeight:700}}>Streak</div><div style={{fontSize:22,fontWeight:900,color:"#78350f"}}>{chessy.streak} дн.</div></div>
+          </div>
+        </div>
+
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.accentSoft,border:`1px solid ${CC.accent}`}}>
+          <div style={{fontSize:12,fontWeight:900,color:CC.accent,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🏆 Скоро: глобальный лидерборд</div>
+          <div style={{fontSize:12,color:CC.text,lineHeight:1.5}}>
+            В следующем апдейте — топ-100 игроков по lifetime Chessy и недельному приросту. За первое место — эксклюзивный набор тем.
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowChessyInfo(false)}>Понятно</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{sShowChessyInfo(false);sShowShop(true)}}>🛒 В магазин</Btn>
+        </div>
       </div>
     </Modal>
 

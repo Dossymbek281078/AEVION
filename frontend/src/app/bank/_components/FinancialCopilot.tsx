@@ -13,9 +13,11 @@ import {
   loadConfig as loadAutopilotConfig,
   loadState as loadAutopilotState,
   saveConfig as saveAutopilotConfig,
+  type AnomalyDecision,
   type AutopilotAction,
   type AutopilotConfig,
   type AutopilotState,
+  type TickDecision,
 } from "../_lib/autopilot";
 import { useBiometric } from "../_lib/BiometricContext";
 import { CIRCLES_EVENT, loadCircles } from "../_lib/circles";
@@ -30,8 +32,13 @@ import {
 } from "../_lib/freeze";
 import { loadRecurring, type Recurring } from "../_lib/recurring";
 import { forecastGoal, GOALS_EVENT, loadGoals, type SavingsGoal } from "../_lib/savings";
+import { perksByTier } from "../_lib/tierPerks";
 import { computeEcosystemTrustScore } from "../_lib/trust";
-import { tierLabel } from "../_lib/trust";
+import { tierLabel, type TrustTier } from "../_lib/trust";
+
+function perksAtTier(tier: TrustTier): number {
+  return perksByTier(tier).length;
+}
 import type { Account, Operation } from "../_lib/types";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
@@ -299,6 +306,13 @@ export function FinancialCopilot({
     [],
   );
 
+  const simulateTick = useCallback((): { tick: TickDecision; anomaly: AnomalyDecision } => {
+    const ctx = tickStateRef.current;
+    const tick = evaluateTick(ctx);
+    const anomaly = evaluateAnomaly(ctx.config, ctx.state, ctx.account, operations, freezeState !== null);
+    return { tick, anomaly };
+  }, [operations, freezeState]);
+
   const trust = useMemo(
     () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }),
     [account, operations, royalty, chess, ecosystem],
@@ -395,19 +409,25 @@ export function FinancialCopilot({
       }
     }
 
-    // 4) Trust tier close
-    if (trust.nextTier && trust.pointsToNextTier > 0 && trust.pointsToNextTier <= 12) {
-      out.push({
-        id: `trust-near-${trust.nextTier}`,
-        kind: "opportunity",
-        icon: "↑",
-        title: `${trust.pointsToNextTier} pts to ${tierLabel[trust.nextTier]} tier`,
-        body:
-          trust.checklist[0]?.label ??
-          "One more action across AEVION nudges your Trust Score into the next tier.",
-        priority: 7,
-        cta: { label: "See Trust Score", run: () => scrollToId("bank-anchor-trust") },
-      });
+    // 4) Trust tier close — two bands. Tight (≤ 5 pts) gets higher priority
+    // because it's the most actionable moment. Broader band (6..12) still
+    // shown as a reminder. Both surface how many perks unlock at the gate.
+    if (trust.nextTier && trust.pointsToNextTier > 0) {
+      const perksAhead = perksAtTier(trust.nextTier);
+      const imminent = trust.pointsToNextTier <= 5;
+      if (imminent || trust.pointsToNextTier <= 12) {
+        out.push({
+          id: `trust-near-${trust.nextTier}`,
+          kind: "opportunity",
+          icon: imminent ? "↑" : "↗",
+          title: imminent
+            ? `${trust.pointsToNextTier} pts from ${tierLabel[trust.nextTier]} — go!`
+            : `${trust.pointsToNextTier} pts to ${tierLabel[trust.nextTier]} tier`,
+          body: `${perksAhead} new perks unlock · ${trust.checklist[0]?.label ?? "One more action nudges your Trust Score into the next tier."}`,
+          priority: imminent ? 9 : 7,
+          cta: { label: "See tier unlocks", run: () => scrollToId("bank-anchor-tiers") },
+        });
+      }
     }
 
     // 5) Biometric off
@@ -711,6 +731,7 @@ export function FinancialCopilot({
             onToggle={toggleAutopilot}
             onToggleSettings={() => setAutopilotSettingsOpen((v) => !v)}
             onUpdate={updateAutopilotField}
+            onSimulate={simulateTick}
           />
           {insights.length === 0 ? (
             <div
@@ -905,6 +926,7 @@ function AutopilotPanel({
   onToggle,
   onToggleSettings,
   onUpdate,
+  onSimulate,
 }: {
   config: AutopilotConfig;
   actions: AutopilotAction[];
@@ -912,6 +934,7 @@ function AutopilotPanel({
   onToggle: () => void;
   onToggleSettings: () => void;
   onUpdate: <K extends keyof AutopilotConfig>(key: K, value: AutopilotConfig[K]) => void;
+  onSimulate: () => { tick: TickDecision; anomaly: AnomalyDecision };
 }) {
   const recent = actions.slice(0, 3);
   const last24h = actions.filter((a) => {
@@ -919,6 +942,12 @@ function AutopilotPanel({
     return Number.isFinite(t) && Date.now() - t < 24 * 60 * 60 * 1000;
   });
   const movedToday = last24h.reduce((s, a) => s + a.amount, 0);
+  const [preview, setPreview] = useState<{ tick: TickDecision; anomaly: AnomalyDecision; at: number } | null>(null);
+
+  const runSimulate = () => {
+    const res = onSimulate();
+    setPreview({ ...res, at: Date.now() });
+  };
 
   return (
     <section
@@ -1128,6 +1157,42 @@ function AutopilotPanel({
             5-min Panic Freeze — with a 10-min cooldown between consecutive auto-freezes.
             Every action lands in the audit feed below.
           </div>
+
+          <div
+            style={{
+              marginTop: 4,
+              paddingTop: 6,
+              borderTop: "1px dashed rgba(15,23,42,0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.35, flex: 1 }}>
+              Dry-run · evaluate current state without mutating anything.
+            </div>
+            <button
+              type="button"
+              onClick={runSimulate}
+              aria-label="Simulate next tick now"
+              style={{
+                padding: "5px 10px",
+                borderRadius: 7,
+                border: "1px solid rgba(5,150,105,0.35)",
+                background: "#fff",
+                color: "#059669",
+                fontSize: 10,
+                fontWeight: 900,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Simulate now
+            </button>
+          </div>
+
+          {preview ? <SimulationPreview preview={preview} /> : null}
         </div>
       ) : null}
 
@@ -1175,6 +1240,77 @@ function AutopilotPanel({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+function SimulationPreview({
+  preview,
+}: {
+  preview: { tick: TickDecision; anomaly: AnomalyDecision; at: number };
+}) {
+  const tickExecutes = preview.tick.status === "execute";
+  const anomalyFires = preview.anomaly.status === "freeze";
+  const anyAction = tickExecutes || anomalyFires;
+  const accent = anomalyFires ? "#dc2626" : tickExecutes ? "#059669" : "#64748b";
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: `1px solid ${accent}33`,
+        background: `${accent}08`,
+        display: "grid",
+        gap: 4,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          fontSize: 10,
+          fontWeight: 900,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: accent,
+        }}
+      >
+        <span>
+          Preview {anyAction ? "· would act" : "· would skip"}
+        </span>
+        <span style={{ color: "#94a3b8", fontWeight: 700 }}>
+          {new Date(preview.at).toLocaleTimeString()}
+        </span>
+      </div>
+      <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 700 }}>
+        Tick:{" "}
+        {preview.tick.status === "execute" ? (
+          <span style={{ color: "#059669" }}>⚡ {preview.tick.action.note}</span>
+        ) : (
+          <span style={{ color: "#64748b", fontWeight: 600 }}>
+            skip · {preview.tick.reason}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 700 }}>
+        Watchdog:{" "}
+        {preview.anomaly.status === "freeze" ? (
+          <span style={{ color: "#dc2626" }}>
+            🔒 freeze · burst {preview.anomaly.burstCount} ·{" "}
+            {preview.anomaly.burstValueAec.toFixed(0)} AEC
+          </span>
+        ) : (
+          <span style={{ color: "#64748b", fontWeight: 600 }}>
+            idle · {preview.anomaly.reason}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.4 }}>
+        Simulation only — nothing was mutated. Real tick fires every 60s;
+        watchdog every 15s.
+      </div>
+    </div>
   );
 }
 

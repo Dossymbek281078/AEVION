@@ -382,3 +382,37 @@ code {
     animation: none !important;
   }
 }
+
+/* ── CyberChess mobile polish ─────────────────────────── */
+
+@media (max-width: 768px) {
+  /* Compact sticky header on phones */
+  .cc-phone-compact button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 520px) {
+  /* Hide descriptive subtitles in header on very small screens */
+  .cc-header-sub { display: none !important; }
+  /* Stack tab indicators, let them scroll horizontally */
+  [role="tablist"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  [role="tablist"]::-webkit-scrollbar { display: none; }
+  [role="tablist"] button {
+    flex-shrink: 0;
+  }
+}
+
+/* Safe-area insets for iOS / notched devices */
+@supports (padding: max(0px)) {
+  .cc-safe-bottom {
+    padding-bottom: max(var(--cc-space-4), env(safe-area-inset-bottom));
+  }
+  .cc-safe-top {
+    padding-top: max(var(--cc-space-4), env(safe-area-inset-top));
+  }
+}

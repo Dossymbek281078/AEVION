@@ -1256,7 +1256,7 @@ export default function CyberChessPage(){
           }}>♞</div>
           <div style={{lineHeight:1.15}}>
             <div style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2}}>CyberChess</div>
-            <div style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+            <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
               SF18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>

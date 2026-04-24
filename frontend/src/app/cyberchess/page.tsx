@@ -2285,7 +2285,13 @@ export default function CyberChessPage(){
                     </span>
                   </React.Fragment>;
                 })}
-              </div>:<div style={{padding:"14px",textAlign:"center",fontSize:13,color:T.dim,fontStyle:"italic"}}>No moves yet</div>}
+              </div>:<div style={{padding:"28px 18px",textAlign:"center",color:CC.textMute}}>
+                <div style={{fontSize:32,marginBottom:SPACE[2],opacity:0.6}}>♟</div>
+                <div style={{fontSize:13,fontWeight:700,color:CC.textDim}}>Пока нет ходов</div>
+                <div style={{fontSize:11,color:CC.textMute,marginTop:4,lineHeight:1.5}}>
+                  {tab==="play"||tab==="coach"?"Сделай первый ход — история появится здесь":tab==="puzzles"?"Выбери позицию или загрузи пазл":"Загрузи PGN/FEN или введи ходы"}
+                </div>
+              </div>}
             </div>
           </div>
 

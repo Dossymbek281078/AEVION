@@ -1203,7 +1203,7 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think&&tab!=="analysis"?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
+          {(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
             {over?<><div style={{fontWeight:900,fontSize:15,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:13,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:8,height:8,borderRadius:4,background:chk?T.danger:think?T.gold:myT?T.accent:T.dim,animation:think?"pulse 1s infinite":"none"}}/>

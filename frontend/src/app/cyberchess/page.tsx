@@ -1976,16 +1976,40 @@ export default function CyberChessPage(){
         {/* Right panel */}
         <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
           {/* Player block (top = opponent) */}
-          {!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#1e293b,#334155)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:14,flexShrink:0}}>🤖</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:800,color:T.text,display:"flex",alignItems:"center",gap:6}}>
-                {useSF?"Stockfish":"AI"} <span style={{fontSize:12,fontWeight:600,color:T.dim}}>({lv.elo})</span>
-                {game.turn()===aiC&&!over&&on&&<span style={{width:6,height:6,borderRadius:3,background:think?T.gold:T.dim,animation:think?"pulse 1s infinite":"none"}}/>}
+          {!setup&&(tab==="play"||tab==="coach")&&(()=>{
+            const isAiTurn=game.turn()===aiC&&!over&&on;
+            return <div style={{
+              padding:"10px 14px",borderRadius:RADIUS.lg,
+              background:CC.surface1,border:`1px solid ${isAiTurn?CC.borderStrong:CC.border}`,
+              display:"flex",alignItems:"center",gap:SPACE[3],
+              boxShadow:isAiTurn?"0 0 0 2px rgba(15,23,42,0.08)":SHADOW.sm,
+              transition:`all ${MOTION.base} ${MOTION.ease}`
+            }}>
+              <div style={{
+                width:40,height:40,borderRadius:RADIUS.md,
+                background:"linear-gradient(135deg,#1e293b,#334155 60%,#475569)",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                color:"#fff",fontSize:18,flexShrink:0,boxShadow:SHADOW.sm,
+                position:"relative"
+              }}>
+                🤖
+                {isAiTurn&&<span style={{
+                  position:"absolute",right:-2,bottom:-2,width:12,height:12,borderRadius:"50%",
+                  background:think?CC.gold:CC.textDim,
+                  border:"2px solid #fff",
+                  animation:think?"cc-pulse-glow 1.2s infinite":undefined
+                }}/>}
               </div>
-              {capW.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:2}} translate="no">{capW.join("")}</div>}
-            </div>
-          </div>}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                  <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{useSF?"Stockfish":lv.name}</span>
+                  <Badge tone={useSF?"accent":"info"} size="xs">{lv.elo}</Badge>
+                  {think&&<Badge tone="gold" size="xs" icon={<Spinner size={10}/>}>думаю</Badge>}
+                </div>
+                {capW.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:4,color:CC.textDim}} translate="no">{capW.join("")}</div>}
+              </div>
+            </div>;
+          })()}
 
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
@@ -2025,14 +2049,35 @@ export default function CyberChessPage(){
           {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
 
           {/* My player block (bottom = me) */}
-          {!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:T.surface,border:`1px solid ${myT&&on&&!over?T.accent:T.border}`,display:"flex",alignItems:"center",gap:10,boxShadow:myT&&on&&!over?"0 0 0 2px rgba(5,150,105,0.15)":"none"}}>
-            <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#059669,#10b981)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:14,flexShrink:0}}>👤</div>
+          {!setup&&(tab==="play"||tab==="coach")&&<div style={{
+            padding:"10px 14px",borderRadius:RADIUS.lg,
+            background:CC.surface1,
+            border:`1px solid ${myT&&on&&!over?CC.brand:CC.border}`,
+            display:"flex",alignItems:"center",gap:SPACE[3],
+            boxShadow:myT&&on&&!over?"0 0 0 3px rgba(5,150,105,0.18), 0 2px 8px rgba(5,150,105,0.1)":SHADOW.sm,
+            transition:`all ${MOTION.base} ${MOTION.ease}`
+          }}>
+            <div style={{
+              width:40,height:40,borderRadius:RADIUS.md,
+              background:"linear-gradient(135deg,#059669 0%,#10b981 60%,#14b8a6)",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              color:"#fff",fontSize:18,flexShrink:0,boxShadow:SHADOW.sm,
+              position:"relative"
+            }}>
+              👤
+              {myT&&!over&&on&&<span style={{
+                position:"absolute",right:-2,bottom:-2,width:12,height:12,borderRadius:"50%",
+                background:CC.brand,border:"2px solid #fff",
+                boxShadow:"0 0 0 2px rgba(5,150,105,0.4)"
+              }}/>}
+            </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:800,color:T.text,display:"flex",alignItems:"center",gap:6}}>
-                You <span style={{fontSize:12,fontWeight:600,color:T.dim}}>({rat})</span>
-                {myT&&!over&&on&&<span style={{width:6,height:6,borderRadius:3,background:T.accent,marginLeft:"auto"}}/>}
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{hotseat?"Игрок":"You"}</span>
+                <Badge tone="gold" size="xs">{rat}</Badge>
+                <Badge tone="neutral" size="xs">{rk.i} {rk.t}</Badge>
               </div>
-              {capB.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:2}} translate="no">{capB.join("")}</div>}
+              {capB.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:4,color:CC.textDim}} translate="no">{capB.join("")}</div>}
             </div>
           </div>}
 
@@ -2047,12 +2092,21 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Opening detection */}
-          {currentOpening&&(on&&!setup||tab==="analysis")&&hist.length>0&&<div style={{padding:"10px 14px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0",boxShadow:"0 1px 4px rgba(5,150,105,0.08)"}}>
-            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
-              <span style={{fontSize:13,fontWeight:900,padding:"2px 7px",borderRadius:4,background:T.accent,color:"#fff",fontFamily:"monospace",letterSpacing:"0.05em"}}>{currentOpening.eco}</span>
-              <span style={{fontSize:13,fontWeight:800,color:T.text}}>{currentOpening.name}</span>
+          {currentOpening&&(on&&!setup||tab==="analysis")&&hist.length>0&&<div style={{
+            padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
+            background:"linear-gradient(135deg,#f0fdf4 0%,#ecfdf5 60%,#dcfce7)",
+            border:"1px solid #a7f3d0",
+            boxShadow:"0 2px 8px rgba(5,150,105,0.08), inset 0 1px 0 rgba(255,255,255,0.6)"
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:4}}>
+              <span style={{
+                fontSize:11,fontWeight:900,padding:"3px 8px",borderRadius:RADIUS.sm,
+                background:CC.brand,color:"#fff",
+                fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:1
+              }}>{currentOpening.eco}</span>
+              <span style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.name}</span>
             </div>
-            <div style={{fontSize:14,color:T.dim,lineHeight:1.4}}>{currentOpening.desc}</div>
+            <div style={{fontSize:12,color:"#065f46",lineHeight:1.45}}>{currentOpening.desc}</div>
           </div>}
 
           {/* Game Stats — per-side breakdown with eval graph */}

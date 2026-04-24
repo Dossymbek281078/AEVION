@@ -147,6 +147,11 @@ const CK="aevion_chessy_v1";
 const CHESSY_DEFAULT:ChessyState={v:1,balance:0,lifetime:0,streak:0,welcome:false,owned:{},ach:{}};
 function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};const r=JSON.parse(s);if(!r||r.v!==1)return {...CHESSY_DEFAULT};return {...CHESSY_DEFAULT,...r,owned:r.owned||{},ach:r.ach||{}}}catch{return {...CHESSY_DEFAULT}}}
 function svChessy(s:ChessyState){try{localStorage.setItem(CK,JSON.stringify(s))}catch{}}
+// Chessy transaction log (last 50 events) for shop "History" section
+type ChessyLogEntry={ts:number;amount:number;reason:string;sign:1|-1};
+const CLK="aevion_chessy_log_v1";
+function ldChessyLog():ChessyLogEntry[]{try{const s=localStorage.getItem(CLK);if(!s)return [];const r=JSON.parse(s);return Array.isArray(r)?r.slice(0,50):[]}catch{return []}}
+function svChessyLog(log:ChessyLogEntry[]){try{localStorage.setItem(CLK,JSON.stringify(log.slice(0,50)))}catch{}}
 function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
 function daysSinceEpoch(){return Math.floor(Date.now()/86400000)}
 // Deterministic daily-puzzle index — same for all users on the same day
@@ -409,16 +414,22 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
   useEffect(()=>{svChessy(chessy)},[chessy]);
   const[chessyFloat,sChessyFloat]=useState<{amount:number;key:number}|null>(null);
+  const[chessyLog,sChessyLog]=useState<ChessyLogEntry[]>(()=>ldChessyLog());
+  useEffect(()=>{svChessyLog(chessyLog)},[chessyLog]);
   const addChessy=useCallback((n:number,reason:string)=>{
     if(n<=0)return;
     sChessy(c=>({...c,balance:c.balance+n,lifetime:c.lifetime+n}));
+    sChessyLog(log=>[{ts:Date.now(),amount:n,reason,sign:1 as const},...log].slice(0,50));
     showToast(`+${n} Chessy · ${reason}`,"success");
     sChessyFloat({amount:n,key:Date.now()});
   },[showToast]);
   const spendChessy=useCallback((n:number,reason:string)=>{
     let ok=false;
     sChessy(c=>{if(c.balance<n)return c;ok=true;return {...c,balance:c.balance-n}});
-    if(ok)showToast(`−${n} Chessy · ${reason}`,"info");
+    if(ok){
+      sChessyLog(log=>[{ts:Date.now(),amount:n,reason,sign:-1 as const},...log].slice(0,50));
+      showToast(`−${n} Chessy · ${reason}`,"info");
+    }
     else showToast(`Недостаточно Chessy (нужно ${n})`,"error");
     return ok;
   },[showToast]);
@@ -3055,6 +3066,17 @@ export default function CyberChessPage(){
         {id:"theme_neon",name:"Тема Neon ⚡",desc:"Киберпанк-доска, неоновый градиент",cost:50,kind:"unlock"},
         {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
         {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
+        {id:"ai_rival",name:"AI Rival «Алексей» 🧠",desc:"Персональный AI-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
+        {id:"hint_ghost",name:"Ghost-подсказка",desc:"На 3 секунды увидишь лучший ход прямо на доске (разовое использование в текущей партии)",cost:15,kind:"action",disabled:!on||!!over,onBuy:()=>{
+          if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+          sShowShop(false);
+          showToast("🧠 Считаю подсказку...","info");
+          sfR.current.go(game.fen(),12,(f,t)=>{
+            if(!f||!t){showToast("Не нашёл хода","error");return}
+            sArrows([{from:f as Square,to:t as Square,c:"#22c55e"}]);
+            setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),3000);
+          });
+        }},
         {id:"deep_review",name:"Глубокий разбор партии",desc:"Coach пройдёт по всем ходам и выдаст план на будущее",cost:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
       ];
       const purchaseUnlock=(id:string,cost:number,name:string)=>{
@@ -3113,6 +3135,30 @@ export default function CyberChessPage(){
             {Object.keys(chessy.ach).map(k=><Badge key={k} tone="neutral" size="sm" style={{padding:"4px 10px"}}>{ACH_LABELS[k]||k}</Badge>)}
           </div>
         </div>}
+
+        {chessyLog.length>0&&<details style={{marginTop:SPACE[3]}}>
+          <summary style={{cursor:"pointer",fontSize:12,fontWeight:800,color:CC.textDim,textTransform:"uppercase" as const,letterSpacing:0.5,padding:`${SPACE[2]}px 0`}}>
+            📜 История Chessy · last {chessyLog.length}
+          </summary>
+          <div style={{marginTop:SPACE[2],maxHeight:240,overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md}}>
+            {chessyLog.map((e,i)=>{
+              const ago=Math.max(1,Math.round((Date.now()-e.ts)/60000));
+              const agoStr=ago<60?`${ago}м`:ago<1440?`${Math.round(ago/60)}ч`:`${Math.round(ago/1440)}д`;
+              return <div key={i} style={{
+                display:"flex",alignItems:"center",gap:SPACE[2],
+                padding:`${SPACE[1]+2}px ${SPACE[3]}px`,
+                borderBottom:i<chessyLog.length-1?`1px solid ${CC.border}`:"none",
+                fontSize:12
+              }}>
+                <span style={{fontWeight:900,color:e.sign>0?CC.brand:CC.danger,minWidth:40,fontFamily:"ui-monospace,monospace"}}>
+                  {e.sign>0?"+":"−"}{e.amount}
+                </span>
+                <span style={{flex:1,color:CC.text}}>{e.reason}</span>
+                <span style={{color:CC.textMute,fontSize:11}}>{agoStr}</span>
+              </div>;
+            })}
+          </div>
+        </details>}
       </Modal>;
     })()}
 

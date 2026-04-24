@@ -1533,48 +1533,39 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── Daily puzzle + Premove row ─── */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))",gap:SPACE[3]}}>
+          {/* ─── Daily puzzle (full-width) ─── */}
+          {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
+            const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
+            return <button onClick={loadDailyPuzzle}
+              className="cc-focus-ring"
+              style={{padding:SPACE[4],borderRadius:RADIUS.lg,
+                border:solved?"1px solid #a7f3d0":"1px solid #fcd34d",
+                background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
+                cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3],
+                boxShadow:SHADOW.sm,transition:`all ${MOTION.base} ${MOTION.ease}`}}>
+              <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>{solved?"✅":"☀"}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>{solved?"Пазл дня решён":"Пазл дня"}</div>
+                <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:2}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Найди лучший ход"} · <span style={{color:CC.gold}}>{pz.r}</span></div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{solved?"Возвращайся завтра":`+50 Chessy · осталось ${24-new Date().getHours()} ч`}</div>
+              </div>
+              {!solved&&<Badge tone="brand" size="md">▶ Решить</Badge>}
+            </button>;
+          })()}
 
-            {/* Daily Puzzle */}
-            {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
-              const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
-              return <button onClick={loadDailyPuzzle}
-                className="cc-focus-ring"
-                style={{padding:SPACE[4],borderRadius:RADIUS.lg,
-                  border:solved?"1px solid #a7f3d0":"1px solid #fcd34d",
-                  background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
-                  cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3],
-                  boxShadow:SHADOW.sm,transition:`all ${MOTION.base} ${MOTION.ease}`}}>
-                <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>{solved?"✅":"☀"}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:10,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>{solved?"Пазл дня решён":"Пазл дня"}</div>
-                  <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:2}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Найди лучший ход"} · <span style={{color:CC.gold}}>{pz.r}</span></div>
-                  <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{solved?"Возвращайся завтра":`+50 Chessy · осталось ${24-new Date().getHours()} ч`}</div>
-                </div>
-                {!solved&&<Badge tone="brand" size="md">▶ Решить</Badge>}
-              </button>;
-            })()}
-
-            {/* Premove Queue */}
-            <Card padding={SPACE[4]}>
-              <SectionHeader title="⚡ PREMOVE QUEUE" hint={pmLim===1?"как Lichess":pmLim>=15?"как Chess.com":`${pmLim} ходов`}/>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+          {/* ─── Board theme + Premove slider (consolidated) ─── */}
+          <Card padding={SPACE[3]}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
+              <SectionHeader title="ДОСКА"/>
+              <div style={{flex:1}}/>
+              <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:11,color:CC.textDim,fontWeight:700,letterSpacing:0.3,whiteSpace:"nowrap"}} title="Сколько премувов можно ставить в очередь">
+                <span>⚡ PREMOVE {pmLim}</span>
                 <input type="range" min={1} max={20} value={pmLim}
                   onChange={e=>sPmLim(+e.target.value)}
-                  style={{flex:1,accentColor:CC.brand}}/>
-                <Badge tone="brand" size="md">{pmLim}</Badge>
-              </div>
-              <div style={{fontSize:11,color:CC.textMute,marginTop:SPACE[2],fontStyle:"italic"}}>
-                ПКМ — отменить · Esc — сбросить все
-              </div>
-            </Card>
-          </div>
-
-          {/* ─── Board theme selector ─── */}
-          <Card padding={SPACE[3]}>
-            <SectionHeader title="ДОСКА"/>
-            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+                  style={{width:100,accentColor:CC.brand}}/>
+              </label>
+            </div>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginTop:SPACE[2]}}>
               {BOARD_THEMES.map((th,i)=>{
                 const locked=!!th.premium&&!chessy.owned[th.premium!];
                 const selected=boardTheme===i;

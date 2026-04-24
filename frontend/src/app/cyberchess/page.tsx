@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -796,8 +796,6 @@ export default function CyberChessPage(){
       const ok=mvs.find(m=>m.from===pm.from&&m.to===pm.to&&(pm.pr?m.promotion===pm.pr:!m.promotion));
       if(ok){
         const rest=curPms.slice(idx+1);
-        if(idx>0)console.log("[premove] drop",idx,"invalid head entr"+(idx===1?"y":"ies"));
-        console.log("[premove] apply",pm.from+"→"+pm.to+(pm.pr?"="+pm.pr:""));
         sPms(rest);
         exec(pm.from,pm.to,pm.pr);
         snd("premove");
@@ -805,8 +803,6 @@ export default function CyberChessPage(){
       }
       idx++;
     }
-    // None of the premoves is valid → clear all
-    console.log("[premove] drop all",curPms.length,"queued (none valid)");
     sPms([]);
   },[game,over,pCol,exec]);
   const doPremoveRef=useRef(doPremove);
@@ -892,13 +888,15 @@ export default function CyberChessPage(){
     if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
   },[pzSolvedCount,unlockAch]);
 
-  /* ── Premove trigger (fires instantly when it's player's turn) ── */
+  /* ── Premove trigger — микрозадача, чтобы не блокировать паинт; без pms в deps,
+     pmsRef читаем напрямую → нет каскада re-render'ов, если sPms(rest) обновил массив. ── */
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
-    if(game.turn()!==pCol||pms.length===0)return;
-    const t=setTimeout(()=>doPremoveRef.current(),20);
-    return()=>clearTimeout(t);
-  },[bk,over,on,tab,pms,pCol]);
+    if(game.turn()!==pCol)return;
+    if(pmsRef.current.length===0)return;
+    const id=requestAnimationFrame(()=>doPremoveRef.current());
+    return()=>cancelAnimationFrame(id);
+  },[bk,over,on,tab,pCol,pms.length]);
 
   /* ── AI turn trigger ── */
   // Snapshot fen at trigger time so a late-arriving Stockfish bestmove
@@ -1016,7 +1014,7 @@ export default function CyberChessPage(){
   const dRef=useRef<Square|null>(null);
   const dS=(sq:Square)=>{const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
   const dD=(sq:Square)=>{if(!dRef.current)return;const f=dRef.current;dRef.current=null;
-    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";console.log("[premove] queued",f+"→"+sq+(pre.pr?"="+pre.pr:""));sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
+    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
@@ -1205,28 +1203,28 @@ export default function CyberChessPage(){
     setTimeout(()=>startGuess(),100);
   },[fenHist,startGuess]);
 
-  const pmSet=new Set<string>();pms.forEach(p=>{pmSet.add(p.from);pmSet.add(p.to)});
-  // Map destination square → queue index (1-based) for numbered badge on board
-  const pmToIdx=new Map<string,number>();pms.forEach((p,i)=>{if(!pmToIdx.has(p.to))pmToIdx.set(p.to,i+1)});
-  // Virtual board: apply premoves to show ghost/shadow pieces at destinations
-  const virtualGame=(()=>{
+  const pmSet=useMemo(()=>{
+    const s=new Set<string>();pms.forEach(p=>{s.add(p.from);s.add(p.to)});return s;
+  },[pms]);
+  const pmToIdx=useMemo(()=>{
+    const m=new Map<string,number>();pms.forEach((p,i)=>{if(!m.has(p.to))m.set(p.to,i+1)});return m;
+  },[pms]);
+  // Virtual board is expensive (FEN round-trip + moves). Memo by bk + pms length/signature.
+  const virtualGame=useMemo(()=>{
     if(pms.length===0)return game;
     try{
       const g=new Chess(game.fen());
-      // Force turn to player color so premoves can be played
       for(const pm of pms){
         const fenParts=g.fen().split(" ");
         fenParts[1]=pCol;
-        // Reset en passant & castling flags that might block
         try{g.load(fenParts.join(" "));}catch{}
         const from=g.get(pm.from);
         if(!from||from.color!==pCol)continue;
-        // Try move, ignore if illegal
         try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
       }
       return g;
     }catch{return game;}
-  })();
+  },[game,bk,pms,pCol]);
   const bd=virtualGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
 
   const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:13,fontWeight:700,cursor:"pointer"}}>{label}</button>);

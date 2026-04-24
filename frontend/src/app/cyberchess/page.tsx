@@ -1376,256 +1376,375 @@ export default function CyberChessPage(){
       </div>}
 
       {/* LAUNCHPAD DASHBOARD */}
-      {setup&&tab==="play"&&!streamerMode&&<div style={{marginBottom:16}}>
-        {/* Category strip */}
-        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-          {(["Bullet","Blitz","Rapid"] as const).map(cat=>{
-            const catColor={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Classical:"#3b82f6"}[cat];
-            const catTcs=TCS.map((t,i)=>({t,i})).filter(x=>x.t.cat===cat);
-            return(<div key={cat} style={{flex:"1 1 280px",background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,padding:14,position:"relative",overflow:"hidden"}}>
-              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:catColor}}/>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-                <div style={{width:8,height:8,borderRadius:4,background:catColor}}/>
-                <div style={{fontSize:14,fontWeight:900,color:T.text,letterSpacing:"0.05em"}}>{cat.toUpperCase()}</div>
-                <div style={{fontSize:13,color:T.dim,marginLeft:"auto"}}>{cat==="Bullet"?"< 3 min":cat==="Blitz"?"3-8 min":"10-15 min"}</div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>
-                {catTcs.map(({t,i})=><button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} style={{padding:"10px 4px",borderRadius:8,border:!useCustom&&tcI===i?`2px solid ${catColor}`:`1px solid ${T.border}`,background:!useCustom&&tcI===i?`${catColor}15`:"#fff",color:!useCustom&&tcI===i?catColor:T.text,fontSize:13,fontWeight:!useCustom&&tcI===i?900:700,cursor:"pointer",fontFamily:"monospace"}}>{t.name}</button>)}
-              </div>
-            </div>);
-          })}
-          {/* Custom card */}
-          <div style={{flex:"1 1 140px",background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,padding:14,position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:T.purple}}/>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-              <div style={{width:8,height:8,borderRadius:4,background:T.purple}}/>
-              <div style={{fontSize:14,fontWeight:900,color:T.text,letterSpacing:"0.05em"}}>CUSTOM</div>
-            </div>
-            {showCustom?<div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:14,color:T.dim,width:28}}>Min</span>
-                <input type="number" min={1} max={60} value={customMin} onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))} style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:14,width:"100%"}}/>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:14,color:T.dim,width:28}}>Inc</span>
-                <input type="number" min={0} max={60} value={customInc} onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))} style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:14,width:"100%"}}/>
-              </div>
-              <button onClick={()=>{sUseCustom(true);sShowCustom(false)}} style={{padding:"6px",borderRadius:6,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Use {customMin}+{customInc}</button>
-            </div>:<button onClick={()=>sShowCustom(true)} style={{width:"100%",padding:"16px 4px",borderRadius:8,border:useCustom?`2px solid ${T.purple}`:`1px dashed ${T.border}`,background:useCustom?`${T.purple}15`:"#fff",color:useCustom?T.purple:T.dim,fontSize:14,fontWeight:800,cursor:"pointer"}}>{useCustom?`${customMin}+${customInc}`:"⚙ Set..."}</button>}
-          </div>
-        </div>
+      {setup&&tab==="play"&&!streamerMode&&(()=>{
+        const activeCat:"Bullet"|"Blitz"|"Rapid"|"Custom"=useCustom?"Custom":(TCS[tcI]?.cat as any)||"Blitz";
+        const catTcs=TCS.map((t,i)=>({t,i})).filter(x=>x.t.cat===activeCat);
+        const catColor={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Classical:"#3b82f6",Custom:CC.accent}[activeCat];
+        const totalGames=sts.w+sts.l+sts.d;
+        const winPct=totalGames?Math.round(sts.w/totalGames*100):0;
+        const achTotal=Object.keys(ACH_LABELS).length;
+        const achGot=Object.keys(chessy.ach).length;
+        const achPct=Math.round(achGot/achTotal*100);
+        return<div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
 
-        {/* Center preview card */}
-        <div style={{background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:14,border:`1px solid ${T.border}`,padding:20,marginBottom:12,boxShadow:"0 4px 14px rgba(0,0,0,0.04)"}}>
-          <div style={{display:"flex",flexWrap:"wrap",gap:20,alignItems:"center"}}>
-            {/* Preview left */}
-            <div style={{flex:"1 1 220px"}}>
-              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>FORMAT</div>
-              <div style={{fontSize:36,fontWeight:900,color:T.text,fontFamily:"monospace",lineHeight:1,marginBottom:4}}>{tc.name}</div>
-              <div style={{fontSize:13,color:T.dim}}>{tc.cat} · ~{Math.round(tc.ini/60*2+tc.inc*0.5)} min estimated</div>
-            </div>
-            {/* Color selector */}
-            <div>
-              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>COLOR</div>
-              <div style={{display:"flex",gap:6}}>
-                {([["w","♔"],["b","♚"]] as const).map(([v,ic])=><button key={v} onClick={()=>sPCol(v as ChessColor)} style={{width:44,height:44,borderRadius:10,border:pCol===v?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:pCol===v?"rgba(5,150,105,0.08)":"#fff",fontSize:22,cursor:"pointer",padding:0}}>{ic}</button>)}
-                <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} style={{width:44,height:44,borderRadius:10,border:`1px dashed ${T.border}`,background:"#fff",fontSize:16,cursor:"pointer",color:T.dim}} title="Random">🎲</button>
+          {/* ─── HERO: format + color + AI + actions ─── */}
+          <Card padding={SPACE[4]} elevation="md">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:SPACE[4]}}>
+
+              {/* Time format */}
+              <div>
+                <SectionHeader title="ФОРМАТ" hint={`≈ ${Math.round(tc.ini/60*2+tc.inc*0.5)} min`}/>
+                <UiTabs<"Bullet"|"Blitz"|"Rapid"|"Custom">
+                  variant="pill"
+                  size="sm"
+                  value={activeCat}
+                  onChange={(c)=>{
+                    if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
+                    sUseCustom(false);
+                    const first=TCS.findIndex(t=>t.cat===c);
+                    if(first>=0)sTcI(first);
+                  }}
+                  tabs={[
+                    {value:"Bullet",label:"Bullet"},
+                    {value:"Blitz",label:"Blitz"},
+                    {value:"Rapid",label:"Rapid"},
+                    {value:"Custom",label:"Custom"},
+                  ]}
+                />
+                {activeCat!=="Custom"?(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,marginTop:SPACE[2]}}>
+                    {catTcs.map(({t,i})=>{
+                      const selected=!useCustom&&tcI===i;
+                      return <button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} className="cc-focus-ring"
+                        style={{padding:"9px 0",borderRadius:RADIUS.sm,
+                          border:selected?`2px solid ${catColor}`:`1px solid ${CC.border}`,
+                          background:selected?`${catColor}15`:CC.surface1,
+                          color:selected?catColor:CC.text,
+                          fontSize:12,fontWeight:selected?900:700,cursor:"pointer",
+                          fontFamily:"ui-monospace, SFMono-Regular, monospace",
+                          transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                        {t.name}
+                      </button>;
+                    })}
+                  </div>
+                ):(
+                  <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],alignItems:"center"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
+                      Min <input type="number" min={1} max={60} value={customMin}
+                        onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))}
+                        style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
+                      +Inc <input type="number" min={0} max={60} value={customInc}
+                        onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))}
+                        style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
+                    </label>
+                    <Badge tone="accent" size="md">{customMin}+{customInc}</Badge>
+                  </div>
+                )}
               </div>
-            </div>
-            {/* AI opponent */}
-            <div style={{flex:"1 1 260px"}}>
-              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>OPPONENT · {lv.name} {lv.elo}{aiI===5&&!chessy.owned.master_ai&&<span style={{marginLeft:6,color:"#b45309"}}>🔒</span>}</div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="range" min={0} max={chessy.owned.master_ai?5:4} value={Math.min(aiI,chessy.owned.master_ai?5:4)} onChange={e=>{const v=+e.target.value;if(v===5&&!chessy.owned.master_ai){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}} style={{flex:1,accentColor:lv.color}}/>
-                <div style={{fontSize:13,fontWeight:900,color:lv.color,minWidth:70,textAlign:"right"}}>{lv.name}{aiI>=3?" ⚡":""}</div>
-              </div>
-              {!chessy.owned.master_ai&&<button onClick={()=>sShowShop(true)} style={{marginTop:6,padding:"4px 10px",borderRadius:6,border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔒 Разблокировать Master AI · 30 Chessy</button>}
-            </div>
-          </div>
-        </div>
 
-        {/* Action buttons */}
-        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-          <button onClick={()=>{sHotseat(false);newG()}} style={{flex:"2 1 240px",padding:"14px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>▶ Quick Start</button>
-          <button onClick={()=>{
-            // Match Me: pick AI level close to user rating, but cap at 4 (Expert)
-            // unless user owns Master AI unlock.
-            const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
-            const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
-            sAiI(capped);sHotseat(false);
-            setTimeout(()=>newG(),50);
-          }} style={{flex:"1 1 160px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚡ Match Me<div style={{fontSize:13,color:T.dim,fontWeight:600,marginTop:2}}>AI ≈ {rat} ELO</div></button>
-          <button onClick={()=>sShowCustom(!showCustom)} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚙ Custom Time</button>
-          <button onClick={()=>{sHotseat(true);setTimeout(()=>newG(),50)}} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid #bfdbfe`,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",color:T.blue,fontWeight:800,fontSize:13,cursor:"pointer"}}>👥 Vs Человек<div style={{fontSize:13,color:T.dim,fontWeight:600,marginTop:2}}>за одним экраном</div></button>
-        </div>
-
-        {/* Daily Puzzle card */}
-        {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
-          const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
-          return <button onClick={loadDailyPuzzle} style={{width:"100%",marginBottom:12,padding:"14px 18px",borderRadius:12,border:solved?"1px solid #a7f3d0":"1px solid #fcd34d",background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-            <div style={{fontSize:32,lineHeight:1}}>{solved?"✅":"☀"}</div>
-            <div style={{flex:"1 1 200px",minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:800,color:solved?"#065f46":"#92400e",letterSpacing:"0.06em",textTransform:"uppercase" as const}}>{solved?"Пазл дня решён":"Пазл дня"}</div>
-              <div style={{fontSize:16,fontWeight:900,color:T.text,marginTop:3}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Найди лучший ход"} · <span style={{color:T.gold}}>{pz.r}</span></div>
-              <div style={{fontSize:13,color:T.dim,marginTop:2}}>{solved?"Возвращайся завтра за новым":`Награда: +50 Chessy · обновится через ${24-new Date().getHours()} ч`}</div>
-            </div>
-            {!solved&&<div style={{padding:"8px 16px",borderRadius:8,background:T.accent,color:"#fff",fontSize:13,fontWeight:800,whiteSpace:"nowrap"}}>▶ Решить</div>}
-          </button>;
-        })()}
-
-        {/* Premove Queue — slider 1..20 */}
-        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <div style={{fontSize:14,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>⚡ Premove Queue</div>
-          <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,minWidth:140,accentColor:T.accent}}/>
-          <div style={{fontSize:15,fontWeight:900,color:T.accent,minWidth:32,textAlign:"center"}}>{pmLim}</div>
-          <div style={{fontSize:13,color:T.dim,flex:"1 1 180px"}}>{pmLim===1?"1 ход · как Lichess":pmLim>=15?`${pmLim} ходов · как Chess.com`:`${pmLim} ходов в очереди`}</div>
-          <div style={{fontSize:13,color:T.dim,flex:"1 1 100%",marginTop:2,fontStyle:"italic"}}>ПКМ — отменить последний · Esc — отменить все</div>
-        </div>
-
-        {/* Board Theme Selector */}
-        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12}}>
-          <div style={{fontSize:14,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const,marginBottom:8}}>Board Theme</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {BOARD_THEMES.map((th,i)=>{
-              const locked=!!th.premium&&!chessy.owned[th.premium];
-              return <button key={i} onClick={()=>{if(locked){showToast("Premium — доступно в Chessy-магазине","info");sShowShop(true);return}sBoardTheme(i)}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:boardTheme===i?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:boardTheme===i?"rgba(5,150,105,0.06)":locked?"#fafafa":"#fff",cursor:"pointer",opacity:locked?0.65:1}}>
-                <div style={{width:20,height:20,borderRadius:4,overflow:"hidden",display:"flex",flexShrink:0}}>
-                  <div style={{width:10,height:20,background:th.light}}/>
-                  <div style={{width:10,height:20,background:th.dark}}/>
+              {/* Color */}
+              <div>
+                <SectionHeader title="ЦВЕТ"/>
+                <div style={{display:"flex",gap:SPACE[2]}}>
+                  {([["w","♔","Белые"],["b","♚","Чёрные"]] as const).map(([v,ic,name])=>{
+                    const selected=pCol===v;
+                    return <button key={v} onClick={()=>sPCol(v as ChessColor)} className="cc-focus-ring"
+                      style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                        padding:"10px 0",borderRadius:RADIUS.md,
+                        border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:selected?CC.brandSoft:CC.surface1,
+                        color:selected?CC.brand:CC.text,
+                        cursor:"pointer",transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                      <span style={{fontSize:24,lineHeight:1}}>{ic}</span>
+                      <span style={{fontSize:11,fontWeight:700}}>{name}</span>
+                    </button>;
+                  })}
+                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Random"
+                    className="cc-focus-ring"
+                    style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                      padding:"10px 0",borderRadius:RADIUS.md,
+                      border:`1px dashed ${CC.borderStrong}`,background:CC.surface2,
+                      color:CC.textDim,cursor:"pointer"}}>
+                    <span style={{fontSize:22,lineHeight:1}}>🎲</span>
+                    <span style={{fontSize:11,fontWeight:700}}>Random</span>
+                  </button>
                 </div>
-                <span style={{fontSize:14,fontWeight:boardTheme===i?800:600,color:boardTheme===i?T.text:T.dim}}>{th.name}</span>
-                {locked&&<span style={{fontSize:11,color:"#b45309"}}>🔒</span>}
-              </button>;
-            })}
-          </div>
-        </div>
-
-        {/* Dashboard Widgets */}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {/* Rating Widget with sparkline */}
-          <div style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
-            <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Rating</div>
-            <div style={{fontSize:32,fontWeight:900,color:T.gold,lineHeight:1}}>{rat}</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:2}}>{rk.i} {rk.t}</div>
-            {savedGames.length>1&&(()=>{
-              const pts=[...savedGames].reverse().slice(-30).map(g=>g.rating);
-              if(pts.length<2)return null;
-              const mn=Math.min(...pts),mx=Math.max(...pts);const rng=Math.max(30,mx-mn);
-              const dx=100/(pts.length-1);
-              const path=pts.map((v,i)=>`${i===0?"M":"L"}${(i*dx).toFixed(1)} ${(24-((v-mn)/rng)*22).toFixed(1)}`).join(" ");
-              const trend=pts[pts.length-1]-pts[0];const col=trend>=0?T.accent:T.danger;
-              return <div style={{marginTop:6}}>
-                <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{width:"100%",height:32}}>
-                  <path d={path} fill="none" stroke={col} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <div style={{fontSize:10,fontWeight:700,color:col,marginTop:-2}}>{trend>=0?"+":""}{trend} за {pts.length} партий</div>
-              </div>;
-            })()}
-            <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:8}}>
-              <div><span style={{fontSize:14,fontWeight:900,color:T.accent}}>{sts.w}</span><div style={{fontSize:8,color:T.dim}}>W</div></div>
-              <div><span style={{fontSize:14,fontWeight:900,color:T.danger}}>{sts.l}</span><div style={{fontSize:8,color:T.dim}}>L</div></div>
-              <div><span style={{fontSize:14,fontWeight:900,color:T.dim}}>{sts.d}</span><div style={{fontSize:8,color:T.dim}}>D</div></div>
-            </div>
-          </div>
-          {/* Chessy widget */}
-          <div onClick={()=>sShowShop(true)} style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderRadius:12,border:"1px solid #fcd34d",padding:16,textAlign:"center",cursor:"pointer"}}>
-            <div style={{fontSize:13,color:"#92400e",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Chessy</div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              <svg viewBox="0 0 24 24" width={28} height={28}><circle cx="12" cy="12" r="10" fill="#fbbf24" stroke="#b45309" strokeWidth="1.5"/><text x="12" y="16" textAnchor="middle" fontSize="11" fontWeight="900" fill="#78350f">C</text></svg>
-              <span style={{fontSize:28,fontWeight:900,color:"#78350f",lineHeight:1}}>{chessy.balance}</span>
-            </div>
-            <div style={{fontSize:13,color:"#b45309",marginTop:4}}>Всего: {chessy.lifetime}</div>
-            <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginTop:4}}>Магазин →</div>
-            {chessy.streak>=2&&<div style={{marginTop:6,fontSize:11,fontWeight:700,color:"#92400e",background:"rgba(146,64,14,0.1)",padding:"2px 8px",borderRadius:10,display:"inline-block"}}>🔥 {chessy.streak} дн. подряд</div>}
-          </div>
-          {/* Achievements widget */}
-          {(()=>{
-            const total=Object.keys(ACH_LABELS).length;const got=Object.keys(chessy.ach).length;
-            const pct=Math.round(got/total*100);
-            return <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",borderRadius:12,border:"1px solid #c4b5fd",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sShowShop(true)}>
-              <div style={{fontSize:13,color:T.purple,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Достижения</div>
-              <div style={{fontSize:28,fontWeight:900,color:T.purple,lineHeight:1}}>{got}/{total}</div>
-              <div style={{height:6,borderRadius:3,background:"#ede9fe",marginTop:8,overflow:"hidden"}}>
-                <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${T.purple},#a78bfa)`,transition:"width 0.4s"}}/>
               </div>
-              <div style={{fontSize:11,color:T.purple,fontWeight:700,marginTop:6}}>{pct}% разблокировано</div>
-            </div>;
-          })()}
-          {/* Win Rate Widget */}
-          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
-            <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Win Rate</div>
-            {(sts.w+sts.l+sts.d)>0?<>
-              <div style={{fontSize:32,fontWeight:900,color:Math.round(sts.w/(sts.w+sts.l+sts.d)*100)>=50?T.accent:T.danger,lineHeight:1}}>{Math.round(sts.w/(sts.w+sts.l+sts.d)*100)}%</div>
-              <div style={{fontSize:14,color:T.dim,marginTop:2}}>{sts.w+sts.l+sts.d} games played</div>
-              {/* Mini bar */}
-              <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",marginTop:8,background:"#f3f4f6"}}>
-                <div style={{width:`${sts.w/(sts.w+sts.l+sts.d)*100}%`,background:T.accent}}/>
-                <div style={{width:`${sts.d/(sts.w+sts.l+sts.d)*100}%`,background:"#9ca3af"}}/>
-                <div style={{width:`${sts.l/(sts.w+sts.l+sts.d)*100}%`,background:T.danger}}/>
-              </div>
-            </>:<div style={{fontSize:14,color:T.dim,marginTop:8}}>No games yet</div>}
-          </div>
-          {/* Quick Puzzle Widget */}
-          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderRadius:12,border:"1px solid #bfdbfe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}>
-            <div style={{fontSize:13,color:T.blue,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Задачи</div>
-            <div style={{fontSize:28}}>🧩</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:4}}>{PUZZLES.length} puzzles</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.blue,marginTop:4}}>Решать →</div>
-          </div>
-          {/* AI Coach Widget */}
-          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderRadius:12,border:"1px solid #a7f3d0",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sTab("coach")}>
-            <div style={{fontSize:13,color:T.accent,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>AI Coach</div>
-            <div style={{fontSize:28}}>🎓</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:4}}>Разбор партии</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.accent,marginTop:4}}>Учиться →</div>
-          </div>
-          {/* Library Widget */}
-          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderRadius:12,border:"1px solid #d8b4fe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sTab("analysis")}>
-            <div style={{fontSize:13,color:T.purple,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Анализ</div>
-            <div style={{fontSize:28}}>⚡</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:4}}>MultiPV · Stockfish</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.purple,marginTop:4}}>Анализ →</div>
-          </div>
-        </div>
 
-        {/* Game History */}
-        {savedGames.length>0&&<div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-          <div style={{padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`}}>
-            <span style={{fontSize:14,fontWeight:800,color:T.text}}>Мои партии ({savedGames.length})</span>
-            <div style={{display:"flex",gap:3}}>
-              {["all","Bullet","Blitz","Rapid"].map(f=><button key={f} onClick={()=>sGamesFilter(f)} style={{padding:"3px 8px",borderRadius:5,border:"none",background:gamesFilter===f?T.accent:"#f3f4f6",color:gamesFilter===f?"#fff":T.dim,fontSize:13,fontWeight:700,cursor:"pointer"}}>{f==="all"?"Все":f}</button>)}
-            </div>
-          </div>
-          <div style={{maxHeight:200,overflowY:"auto"}}>
-            {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map(g=>{
-              const isWin=g.result.includes("You win")||g.result.includes("timed out");
-              const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
-              return(<button key={g.id} onClick={()=>{
-                // Load game into analysis
-                sTab("analysis");
-                const ch=new Chess();
-                for(const san of g.moves)try{ch.move(san)}catch{}
-                setGame(ch);sBk(k=>k+1);sHist(g.moves);
-                const fens=[new Chess().fen()];const tmp=new Chess();
-                for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
-                sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
-              }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",fontSize:13}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:14,fontWeight:900,color:isWin?T.accent:isDraw?T.dim:T.danger}}>{isWin?"W":isDraw?"D":"L"}</span>
-                  <div>
-                    <div style={{fontWeight:600,color:T.text}}>{g.opening||"Unknown"}</div>
-                    <div style={{fontSize:13,color:T.dim}}>{g.aiLevel} · {g.tc} · {g.moves.length} ходов</div>
+              {/* AI opponent */}
+              <div>
+                <SectionHeader title="СОПЕРНИК" hint={`${lv.name} · ${lv.elo} ELO${aiI===5&&!chessy.owned.master_ai?" 🔒":""}`}/>
+                <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                  <input type="range" min={0} max={chessy.owned.master_ai?5:4}
+                    value={Math.min(aiI,chessy.owned.master_ai?5:4)}
+                    onChange={e=>{const v=+e.target.value;if(v===5&&!chessy.owned.master_ai){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
+                    style={{flex:1,accentColor:lv.color}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",
+                    borderRadius:RADIUS.full,background:lv.color+"20",color:lv.color,
+                    fontSize:12,fontWeight:900,minWidth:80,justifyContent:"center"}}>
+                    {lv.name}{aiI>=3?" ⚡":""}
                   </div>
                 </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:14,fontWeight:700,color:T.dim}}>{g.rating}</div>
-                  <span style={{fontSize:8,padding:"1px 5px",borderRadius:3,background:g.category==="Bullet"?"#fecaca":g.category==="Blitz"?"#fef3c7":"#d1fae5",color:g.category==="Bullet"?T.danger:g.category==="Blitz"?"#92400e":T.accent,fontWeight:700}}>{g.category}</span>
+                {!chessy.owned.master_ai&&<button onClick={()=>sShowShop(true)}
+                  className="cc-focus-ring"
+                  style={{marginTop:SPACE[2],padding:"5px 10px",borderRadius:RADIUS.sm,
+                    border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
+                    fontSize:12,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+                  🔒 Master AI · 30 Chessy
+                </button>}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4],flexWrap:"wrap"}}>
+              <button onClick={()=>{sHotseat(false);newG()}} className="cc-focus-ring cc-touch"
+                style={{flex:"2 1 260px",padding:"14px 22px",borderRadius:RADIUS.lg,border:"none",
+                  background:`linear-gradient(135deg,${CC.brand},#10b981 60%,#14b8a6)`,color:"#fff",
+                  fontWeight:900,fontSize:15,cursor:"pointer",
+                  boxShadow:"0 8px 20px rgba(5,150,105,0.34), inset 0 1px 0 rgba(255,255,255,0.2)",
+                  display:"inline-flex",alignItems:"center",justifyContent:"center",gap:SPACE[2],
+                  letterSpacing:0.3,transition:`transform ${MOTION.fast} ${MOTION.ease}`}}
+                onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.98)"}}
+                onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}>
+                <Icon.Play width={18} height={18}/> QUICK START
+              </button>
+              <Btn size="lg" variant="secondary" onClick={()=>{
+                const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
+                const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
+                sAiI(capped);sHotseat(false);
+                setTimeout(()=>newG(),50);
+              }} style={{flex:"1 1 160px"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>⚡ Match Me</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat} ELO</span>
                 </div>
-              </button>)
-            })}
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);setTimeout(()=>newG(),50)}}
+                style={{flex:"1 1 160px",background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
+                  border:"1px solid #bfdbfe",color:CC.info}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>👥 Vs Человек</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>за одним экраном</span>
+                </div>
+              </Btn>
+            </div>
+          </Card>
+
+          {/* ─── Daily puzzle + Premove row ─── */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))",gap:SPACE[3]}}>
+
+            {/* Daily Puzzle */}
+            {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
+              const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
+              return <button onClick={loadDailyPuzzle}
+                className="cc-focus-ring"
+                style={{padding:SPACE[4],borderRadius:RADIUS.lg,
+                  border:solved?"1px solid #a7f3d0":"1px solid #fcd34d",
+                  background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
+                  cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3],
+                  boxShadow:SHADOW.sm,transition:`all ${MOTION.base} ${MOTION.ease}`}}>
+                <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>{solved?"✅":"☀"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:10,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>{solved?"Пазл дня решён":"Пазл дня"}</div>
+                  <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:2}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Найди лучший ход"} · <span style={{color:CC.gold}}>{pz.r}</span></div>
+                  <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{solved?"Возвращайся завтра":`+50 Chessy · осталось ${24-new Date().getHours()} ч`}</div>
+                </div>
+                {!solved&&<Badge tone="brand" size="md">▶ Решить</Badge>}
+              </button>;
+            })()}
+
+            {/* Premove Queue */}
+            <Card padding={SPACE[4]}>
+              <SectionHeader title="⚡ PREMOVE QUEUE" hint={pmLim===1?"как Lichess":pmLim>=15?"как Chess.com":`${pmLim} ходов`}/>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <input type="range" min={1} max={20} value={pmLim}
+                  onChange={e=>sPmLim(+e.target.value)}
+                  style={{flex:1,accentColor:CC.brand}}/>
+                <Badge tone="brand" size="md">{pmLim}</Badge>
+              </div>
+              <div style={{fontSize:11,color:CC.textMute,marginTop:SPACE[2],fontStyle:"italic"}}>
+                ПКМ — отменить · Esc — сбросить все
+              </div>
+            </Card>
           </div>
-        </div>}
-      </div>}
+
+          {/* ─── Board theme selector ─── */}
+          <Card padding={SPACE[3]}>
+            <SectionHeader title="ДОСКА"/>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+              {BOARD_THEMES.map((th,i)=>{
+                const locked=!!th.premium&&!chessy.owned[th.premium!];
+                const selected=boardTheme===i;
+                return <button key={i}
+                  className="cc-focus-ring"
+                  onClick={()=>{if(locked){showToast("Premium — доступно в магазине","info");sShowShop(true);return}sBoardTheme(i)}}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",
+                    borderRadius:RADIUS.full,
+                    border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                    background:selected?CC.brandSoft:locked?CC.surface2:CC.surface1,
+                    cursor:"pointer",opacity:locked?0.65:1,
+                    transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                  <div style={{width:22,height:16,borderRadius:4,overflow:"hidden",
+                    display:"flex",flexShrink:0,boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)"}}>
+                    <div style={{width:11,height:16,background:th.light}}/>
+                    <div style={{width:11,height:16,background:th.dark}}/>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{th.name}</span>
+                  {locked&&<span style={{fontSize:10,color:"#b45309"}}>🔒</span>}
+                </button>;
+              })}
+            </div>
+          </Card>
+
+          {/* ─── Dashboard widgets ─── */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:SPACE[2]}}>
+            {/* Rating */}
+            <Card padding={SPACE[3]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Rating</div>
+              <div style={{fontSize:28,fontWeight:900,color:CC.gold,lineHeight:1.1,marginTop:2}}>{rat}</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{rk.i} {rk.t}</div>
+              {savedGames.length>1&&(()=>{
+                const pts=[...savedGames].reverse().slice(-30).map(g=>g.rating);
+                if(pts.length<2)return null;
+                const mn=Math.min(...pts),mx=Math.max(...pts);const rng=Math.max(30,mx-mn);
+                const dx=100/(pts.length-1);
+                const path=pts.map((v,i)=>`${i===0?"M":"L"}${(i*dx).toFixed(1)} ${(24-((v-mn)/rng)*22).toFixed(1)}`).join(" ");
+                const trend=pts[pts.length-1]-pts[0];const col=trend>=0?CC.brand:CC.danger;
+                return <div style={{marginTop:4}}>
+                  <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{width:"100%",height:28}}>
+                    <path d={path} fill="none" stroke={col} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div style={{fontSize:10,fontWeight:700,color:col,marginTop:-2}}>{trend>=0?"+":""}{trend}</div>
+                </div>;
+              })()}
+              <div style={{display:"flex",justifyContent:"flex-start",gap:SPACE[2],marginTop:SPACE[2]}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:3}}><span style={{fontSize:13,fontWeight:900,color:CC.brand}}>{sts.w}</span><span style={{fontSize:10,color:CC.textDim}}>W</span></div>
+                <div style={{display:"flex",alignItems:"baseline",gap:3}}><span style={{fontSize:13,fontWeight:900,color:CC.danger}}>{sts.l}</span><span style={{fontSize:10,color:CC.textDim}}>L</span></div>
+                <div style={{display:"flex",alignItems:"baseline",gap:3}}><span style={{fontSize:13,fontWeight:900,color:CC.textDim}}>{sts.d}</span><span style={{fontSize:10,color:CC.textDim}}>D</span></div>
+              </div>
+            </Card>
+
+            {/* Chessy */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
+              style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderColor:"#fcd34d",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Chessy</div>
+              <div style={{display:"flex",alignItems:"baseline",gap:4,marginTop:2}}>
+                <Icon.Coin width={20} height={20}/>
+                <span style={{fontSize:26,fontWeight:900,color:"#78350f",lineHeight:1.1}}>{chessy.balance}</span>
+              </div>
+              <div style={{fontSize:11,color:"#b45309",marginTop:2}}>Всего {chessy.lifetime}</div>
+              {chessy.streak>=2&&<div style={{marginTop:SPACE[2],fontSize:10,fontWeight:800,color:"#92400e",background:"rgba(146,64,14,0.14)",padding:"2px 8px",borderRadius:RADIUS.full,display:"inline-flex",alignItems:"center",gap:3}}>🔥 {chessy.streak} дней</div>}
+              <div style={{fontSize:11,fontWeight:800,color:"#92400e",marginTop:SPACE[2]}}>Магазин →</div>
+            </Card>
+
+            {/* Achievements */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
+              style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",borderColor:"#c4b5fd",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Достижения</div>
+              <div style={{fontSize:26,fontWeight:900,color:CC.accent,lineHeight:1.1,marginTop:2}}>{achGot}<span style={{fontSize:14,color:CC.textDim}}>/{achTotal}</span></div>
+              <div style={{height:6,borderRadius:RADIUS.full,background:"#ede9fe",marginTop:SPACE[2],overflow:"hidden"}}>
+                <div style={{width:`${achPct}%`,height:"100%",background:`linear-gradient(90deg,${CC.accent},#a78bfa)`,transition:`width ${MOTION.slow} ${MOTION.ease}`}}/>
+              </div>
+              <div style={{fontSize:11,color:CC.accent,fontWeight:700,marginTop:SPACE[2]}}>{achPct}% открыто</div>
+            </Card>
+
+            {/* Win rate */}
+            <Card padding={SPACE[3]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Win Rate</div>
+              {totalGames>0?<>
+                <div style={{fontSize:28,fontWeight:900,color:winPct>=50?CC.brand:CC.danger,lineHeight:1.1,marginTop:2}}>{winPct}%</div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{totalGames} игр</div>
+                <div style={{display:"flex",height:6,borderRadius:RADIUS.full,overflow:"hidden",marginTop:SPACE[2],background:CC.surface3}}>
+                  <div style={{width:`${sts.w/totalGames*100}%`,background:CC.brand}}/>
+                  <div style={{width:`${sts.d/totalGames*100}%`,background:"#9ca3af"}}/>
+                  <div style={{width:`${sts.l/totalGames*100}%`,background:CC.danger}}/>
+                </div>
+              </>:<div style={{fontSize:12,color:CC.textDim,marginTop:SPACE[2]}}>Пока нет игр</div>}
+            </Card>
+
+            {/* Quick Puzzle */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
+              style={{background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderColor:"#bfdbfe",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.info,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Задачи</div>
+              <div style={{fontSize:26,marginTop:2}}>🧩</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{PUZZLES.length} puzzles</div>
+              <div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Случайная →</div>
+            </Card>
+
+            {/* Coach */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sTab("coach")}
+              style={{background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderColor:"#a7f3d0",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>AI Coach</div>
+              <div style={{fontSize:26,marginTop:2}}>🎓</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Разбор</div>
+              <div style={{fontSize:11,fontWeight:800,color:CC.brand,marginTop:SPACE[2]}}>Учиться →</div>
+            </Card>
+
+            {/* Library / Analysis */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sTab("analysis")}
+              style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#d8b4fe",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Analysis</div>
+              <div style={{fontSize:26,marginTop:2}}>⚡</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>MultiPV · SF</div>
+              <div style={{fontSize:11,fontWeight:800,color:CC.accent,marginTop:SPACE[2]}}>Анализ →</div>
+            </Card>
+          </div>
+
+          {/* ─── Game History ─── */}
+          {savedGames.length>0&&<Card padding={0} elevation="sm">
+            <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${CC.border}`}}>
+              <span style={{fontSize:13,fontWeight:800,color:CC.text}}>Мои партии <span style={{color:CC.textDim,fontWeight:600}}>({savedGames.length})</span></span>
+              <UiTabs
+                variant="segment"
+                size="sm"
+                value={gamesFilter}
+                onChange={(v)=>sGamesFilter(v)}
+                tabs={[
+                  {value:"all",label:"Все"},
+                  {value:"Bullet",label:"Bullet"},
+                  {value:"Blitz",label:"Blitz"},
+                  {value:"Rapid",label:"Rapid"},
+                ]}
+              />
+            </div>
+            <div style={{maxHeight:220,overflowY:"auto"}}>
+              {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map(g=>{
+                const isWin=g.result.includes("You win")||g.result.includes("timed out");
+                const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+                const resCol=isWin?CC.brand:isDraw?CC.textDim:CC.danger;
+                const catBadge:"danger"|"gold"|"brand"=g.category==="Bullet"?"danger":g.category==="Blitz"?"gold":"brand";
+                return(<button key={g.id} className="cc-focus-ring" onClick={()=>{
+                  sTab("analysis");
+                  const ch=new Chess();
+                  for(const san of g.moves)try{ch.move(san)}catch{}
+                  setGame(ch);sBk(k=>k+1);sHist(g.moves);
+                  const fens=[new Chess().fen()];const tmp=new Chess();
+                  for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
+                  sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
+                }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                    <div style={{width:26,height:26,borderRadius:"50%",background:resCol+"18",color:resCol,
+                      display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>
+                      {isWin?"W":isDraw?"D":"L"}
+                    </div>
+                    <div>
+                      <div style={{fontWeight:700,color:CC.text,fontSize:13}}>{g.opening||"Unknown"}</div>
+                      <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{g.aiLevel} · {g.tc} · {g.moves.length} ходов</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                    <span style={{fontSize:13,fontWeight:800,color:CC.gold}}>{g.rating}</span>
+                    <Badge tone={catBadge} size="xs">{g.category}</Badge>
+                  </div>
+                </button>);
+              })}
+            </div>
+          </Card>}
+        </div>;
+      })()}
 
       {/* Board + Panel */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>

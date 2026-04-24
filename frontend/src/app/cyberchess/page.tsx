@@ -7,6 +7,8 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
+import { Btn, Card, Badge, Tabs as UiTabs, Icon, Spinner, SectionHeader, ChessyFloat } from "./ui";
+import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -1234,46 +1236,101 @@ export default function CyberChessPage(){
         <div style={{padding:"6px 12px",background:"rgba(124,58,237,0.2)",border:"1px solid rgba(124,58,237,0.4)",borderRadius:8,color:"#a78bfa",fontSize:12,fontWeight:800,letterSpacing:"0.05em"}}>📺 STREAMER MODE</div>
         <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
       </div>}
-      {/* Header */}
-      {!streamerMode&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 10px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:34,height:34,borderRadius:9,background:"linear-gradient(135deg,#059669,#10b981)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,color:"#fff"}}>♞</div>
-          <div><div style={{fontSize:15,fontWeight:900,color:T.text}}>CyberChess</div><div style={{fontSize:14,color:T.dim}}>Stockfish 18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}</div></div>
+      {/* Sticky glass header */}
+      {!streamerMode&&<div style={{
+        position:"sticky",top:0,zIndex:Z.sticky,
+        margin:"0 -12px 12px",padding:"10px 12px",
+        background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
+        borderBottom:`1px solid ${CC.border}`,
+        display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
+      }}>
+        {/* Logo */}
+        <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flex:"0 0 auto"}}>
+          <div style={{
+            width:38,height:38,borderRadius:RADIUS.md,
+            background:"linear-gradient(135deg,#059669 0%,#10b981 55%,#7c3aed 100%)",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:19,color:"#fff",boxShadow:SHADOW.sm
+          }}>♞</div>
+          <div style={{lineHeight:1.15}}>
+            <div style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2}}>CyberChess</div>
+            <div style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+              SF18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}
+            </div>
+          </div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <button
-            onClick={()=>sShowShop(true)}
-            title={`Chessy · баланс ${chessy.balance}`}
-            aria-label="Chessy shop"
-            style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:20,border:"1px solid #fcd34d",background:"linear-gradient(135deg,#fef3c7,#fde68a)",cursor:"pointer"}}
-          >
-            <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fbbf24" stroke="#b45309" strokeWidth="1.5"/><text x="12" y="16" textAnchor="middle" fontSize="11" fontWeight="900" fill="#78350f">C</text></svg>
-            <span style={{fontSize:14,fontWeight:900,color:"#78350f"}}>{chessy.balance}</span>
-          </button>
-          <button
-            onClick={()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode — OBS-ready","info")}}
-            title={streamerMode?"Вернуть обычный вид":"Streamer mode для стримов (OBS)"}
-            aria-label="Streamer mode"
-            style={{width:38,height:38,borderRadius:10,border:streamerMode?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:streamerMode?"rgba(124,58,237,0.08)":T.surface,color:streamerMode?T.purple:T.dim,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontSize:14,fontWeight:900}}
-          >📺</button>
-          <button
-            onClick={()=>sShowHelp(true)}
-            title="Keyboard shortcuts (?)"
-            aria-label="Keyboard shortcuts"
-            style={{width:38,height:38,borderRadius:10,border:`1px solid ${T.border}`,background:T.surface,color:T.dim,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontSize:16,fontWeight:900}}
-          >?</button>
-          <button
-            onClick={()=>{sMuted(v=>!v);showToast(muted?"Sound on":"Muted","info")}}
-            title={muted?"Unmute sounds (M)":"Mute sounds (M)"}
-            aria-label={muted?"Unmute":"Mute"}
-            style={{width:38,height:38,borderRadius:10,border:`1px solid ${T.border}`,background:muted?"#fef2f2":T.surface,color:muted?T.danger:T.dim,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
-          >
-            {muted
-              ? <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-              : <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>}
-          </button>
-          <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:900,color:T.gold}}>{rat}</div><div style={{fontSize:14,color:T.dim}}>{rk.i} {rk.t}</div></div>
+
+        <div style={{flex:1}}/>
+
+        {/* Rating badge */}
+        <div style={{
+          display:"flex",alignItems:"center",gap:SPACE[2],padding:"4px 12px 4px 4px",
+          background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.full,
+          boxShadow:SHADOW.sm
+        }} title={`Rating ${rat} · ${rk.t}`}>
+          <div style={{
+            width:28,height:28,borderRadius:"50%",
+            background:CC.goldSoft,color:CC.gold,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:14,fontWeight:900
+          }}>{rk.i}</div>
+          <div style={{lineHeight:1.1}}>
+            <div style={{fontSize:15,fontWeight:900,color:CC.gold}}>{rat}</div>
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:700,letterSpacing:0.2}}>{rk.t.toUpperCase()}</div>
+          </div>
         </div>
+
+        {/* Chessy balance pill */}
+        <button
+          onClick={()=>sShowShop(true)}
+          title={`Chessy · баланс ${chessy.balance}`}
+          aria-label="Chessy shop"
+          className="cc-focus-ring cc-touch"
+          style={{
+            display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
+            borderRadius:RADIUS.full,border:"1px solid #fcd34d",
+            background:"linear-gradient(135deg,#fef3c7,#fde68a)",
+            boxShadow:"0 2px 6px rgba(217,119,6,0.18)",
+            cursor:"pointer",fontSize:14,fontWeight:900,color:"#78350f",
+            transition:`transform ${MOTION.fast} ${MOTION.ease}`
+          }}
+          onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.96)"}}
+          onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+          onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+        >
+          <Icon.Coin width={18} height={18}/>
+          <span>{chessy.balance}</span>
+        </button>
+
+        {/* Icon buttons */}
+        <Btn
+          variant={streamerMode?"accent":"secondary"}
+          size="sm"
+          icon={<span style={{fontSize:14}}>📺</span>}
+          active={streamerMode}
+          onClick={()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode — OBS-ready","info")}}
+          title={streamerMode?"Вернуть обычный вид":"Streamer mode для стримов (OBS)"}
+          ariaLabel="Streamer mode"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+        <Btn
+          variant="secondary"
+          size="sm"
+          icon={<Icon.Help/>}
+          onClick={()=>sShowHelp(true)}
+          title="Keyboard shortcuts (?)"
+          ariaLabel="Keyboard shortcuts"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+        <Btn
+          variant={muted?"danger":"secondary"}
+          size="sm"
+          icon={muted?<Icon.Mute/>:<Icon.Sound/>}
+          onClick={()=>{sMuted(v=>!v);showToast(muted?"Sound on":"Muted","info")}}
+          title={muted?"Unmute sounds (M)":"Mute sounds (M)"}
+          ariaLabel={muted?"Unmute":"Mute"}
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
       </div>}
 
       {/* Resume offer banner */}
@@ -1292,21 +1349,30 @@ export default function CyberChessPage(){
       })()}
 
       {/* Tabs */}
-      {!streamerMode&&<div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
-        {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{
-          const fromPuzzle=tab==="puzzles"&&pzCurrent;
-          sTab(t);
-          if(t==="play")sSetup(true);
-          else if(t==="puzzles"){sOver(null);ldPz(0);}
-          else if(t==="coach"){
-            // Always start Coach with a fresh starting position — don't inherit from other tabs
-            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
-          }
-          else if(t==="analysis"&&fromPuzzle){
-            // Reset to starting position when coming from puzzle
-            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
-          }
-        }} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:14,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
+      {!streamerMode&&<div style={{marginBottom:14,display:"flex",justifyContent:"flex-start"}}>
+        <UiTabs<"play"|"puzzles"|"analysis"|"coach">
+          variant="segment"
+          size="md"
+          value={tab}
+          onChange={(t)=>{
+            const fromPuzzle=tab==="puzzles"&&pzCurrent;
+            sTab(t);
+            if(t==="play")sSetup(true);
+            else if(t==="puzzles"){sOver(null);ldPz(0);}
+            else if(t==="coach"){
+              const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
+            }
+            else if(t==="analysis"&&fromPuzzle){
+              const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
+            }
+          }}
+          tabs={[
+            {value:"play",label:"Play",icon:<Icon.Play width={14} height={14}/>},
+            {value:"puzzles",label:"Puzzles",icon:<Icon.Target width={14} height={14}/>},
+            {value:"analysis",label:"Analysis",icon:<span style={{fontSize:13}}>⚡</span>},
+            {value:"coach",label:"Coach",icon:<span style={{fontSize:13}}>🎓</span>},
+          ]}
+        />
       </div>}
 
       {/* LAUNCHPAD DASHBOARD */}

@@ -9,6 +9,7 @@ import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
+import { computeGameDNA, type GameDNA } from "./gameDna";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -414,6 +415,8 @@ export default function CyberChessPage(){
   const[showShop,sShowShop]=useState(false);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
   const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
+  const[showGameDna,sShowGameDna]=useState(false);
+  const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -1886,6 +1889,26 @@ export default function CyberChessPage(){
               <div style={{fontSize:26,marginTop:2}}>⚡</div>
               <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>MultiPV · SF</div>
               <div style={{fontSize:11,fontWeight:800,color:CC.accent,marginTop:SPACE[2]}}>Анализ →</div>
+            </Card>
+
+            {/* Game DNA — персональные паттерны (killer #3) */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowGameDna(true)}
+              style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",borderColor:"#93c5fd",cursor:"pointer",gridColumn:gameDna.insights.length>0&&savedGames.length>0?"span 2":"auto"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:CC.info,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Game DNA</div>
+                <Badge tone="info" size="xs">🧬 new</Badge>
+              </div>
+              {savedGames.length>0?<>
+                <div style={{fontSize:12,color:CC.text,marginTop:SPACE[2],lineHeight:1.5,fontWeight:600,minHeight:48,maxHeight:60,overflow:"hidden"}}>
+                  {gameDna.insights[0]}
+                </div>
+                {gameDna.insights.length>1&&<div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>+{gameDna.insights.length-1} инсайтов →</div>}
+                {gameDna.insights.length<=1&&<div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Открыть →</div>}
+              </>:<>
+                <div style={{fontSize:26,marginTop:2}}>🧬</div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Сыграй 5+ партий</div>
+                <div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Разблокировать →</div>
+              </>}
             </Card>
           </div>
 
@@ -3480,6 +3503,121 @@ export default function CyberChessPage(){
           <span style={{color:CC.text}}>{v}</span>
         </React.Fragment>)}
       </div>
+    </Modal>
+
+    {/* Game DNA */}
+    <Modal open={showGameDna} onClose={()=>sShowGameDna(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🧬 Твой Game DNA <Badge tone="info" size="sm">{gameDna.total} партий</Badge></span>}>
+      {savedGames.length===0?<div style={{padding:SPACE[6],textAlign:"center",color:CC.textDim,fontSize:14}}>
+        <div style={{fontSize:40,marginBottom:SPACE[3]}}>🧬</div>
+        <div style={{fontWeight:800,marginBottom:SPACE[2]}}>Пока пусто</div>
+        <div>Сыграй 5–10 партий — AEVION построит твою персональную диагностику: лучший/худший дебют, любимое время, слабая фаза, тренды.</div>
+      </div>:<div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+
+        {/* Top stats */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:SPACE[2]}}>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Винрейт</div>
+            <div style={{fontSize:28,fontWeight:900,color:gameDna.winPct>=55?CC.brand:gameDna.winPct>=40?CC.info:CC.danger,lineHeight:1.1,marginTop:2}}>{gameDna.winPct}%</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{gameDna.wins}W {gameDna.losses}L {gameDna.draws}D</div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Streak</div>
+            <div style={{fontSize:28,fontWeight:900,
+              color:gameDna.currentStreak.type==="W"?CC.brand:gameDna.currentStreak.type==="L"?CC.danger:CC.textDim,
+              lineHeight:1.1,marginTop:2}}>{gameDna.currentStreak.count>0?`${gameDna.currentStreak.count}${gameDna.currentStreak.type}`:"—"}</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
+              {gameDna.currentStreak.type==="W"?"побед подряд":gameDna.currentStreak.type==="L"?"поражений":gameDna.currentStreak.type==="D"?"ничьих":"нейтрально"}
+            </div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Тренд 10</div>
+            <div style={{fontSize:28,fontWeight:900,
+              color:gameDna.recentTrend==="up"?CC.brand:gameDna.recentTrend==="down"?CC.danger:CC.textDim,
+              lineHeight:1.1,marginTop:2}}>
+              {gameDna.recentTrend==="up"?"↑":gameDna.recentTrend==="down"?"↓":gameDna.recentTrend==="flat"?"≈":"—"}
+              {gameDna.recentTrend!=="insufficient"&&<span style={{fontSize:16}}>{gameDna.recentWinPctDelta>0?"+":""}{gameDna.recentWinPctDelta}%</span>}
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
+              {gameDna.recentTrend==="up"?"рост":gameDna.recentTrend==="down"?"спад":gameDna.recentTrend==="flat"?"стабильно":"мало партий"}
+            </div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Цвет</div>
+            <div style={{fontSize:28,lineHeight:1.1,marginTop:2}}>
+              {gameDna.preferredColor==="w"?"♔":gameDna.preferredColor==="b"?"♚":"⚖"}
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
+              W {gameDna.whiteWinPct}% · B {gameDna.blackWinPct}%
+            </div>
+          </Card>
+        </div>
+
+        {/* Insights list */}
+        <Card padding={SPACE[3]} tone="surface1">
+          <SectionHeader title="🔍 ИНСАЙТЫ" hint={`${gameDna.insights.length} персональных`}/>
+          <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+            {gameDna.insights.map((ins,i)=><div key={i} style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,background:CC.surface2,borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,color:CC.text,lineHeight:1.5}}>
+              {ins}
+            </div>)}
+          </div>
+        </Card>
+
+        {/* Openings breakdown */}
+        {gameDna.bestOpening&&<div style={{display:"grid",gridTemplateColumns:gameDna.worstOpening?"1fr 1fr":"1fr",gap:SPACE[2]}}>
+          <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderColor:"#a7f3d0"}}>
+            <SectionHeader title="🟢 СИЛЬНЫЙ ДЕБЮТ"/>
+            <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:SPACE[1]}}>{gameDna.bestOpening.opening}</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+              <Badge tone="brand" size="xs">{gameDna.bestOpening.winPct}% побед</Badge>
+              &nbsp;в {gameDna.bestOpening.total} партиях
+            </div>
+          </Card>
+          {gameDna.worstOpening&&gameDna.worstOpening.opening!==gameDna.bestOpening.opening&&
+            <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#fef2f2,#fff1f2)",borderColor:"#fca5a5"}}>
+              <SectionHeader title="🔴 СЛАБЫЙ ДЕБЮТ"/>
+              <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:SPACE[1]}}>{gameDna.worstOpening.opening}</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+                <Badge tone="danger" size="xs">{gameDna.worstOpening.winPct}% побед</Badge>
+                &nbsp;в {gameDna.worstOpening.total} партиях
+              </div>
+            </Card>}
+        </div>}
+
+        {/* Timing & length */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:SPACE[2]}}>
+          {gameDna.bestHour!==null&&<Card padding={SPACE[3]} tone="surface1">
+            <SectionHeader title="⏰ ЛУЧШЕЕ ВРЕМЯ"/>
+            <div style={{fontSize:20,fontWeight:900,color:CC.text,marginTop:SPACE[1]}}>
+              {gameDna.bestHour}:00–{(gameDna.bestHour+1)%24}:00
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+              {gameDna.bestHourWinPct}% побед в этот час
+            </div>
+          </Card>}
+          <Card padding={SPACE[3]} tone="surface1">
+            <SectionHeader title="⚡ ДЛИНА ПАРТИИ"/>
+            <div style={{fontSize:13,color:CC.text,marginTop:SPACE[1]}}>
+              Победы: <b>{Math.round(gameDna.avgLengthWin/2)}</b> ходов<br/>
+              Поражения: <b>{Math.round(gameDna.avgLengthLoss/2)}</b> ходов
+            </div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface1">
+            <SectionHeader title="📊 РЕЙТИНГ"/>
+            <div style={{fontSize:20,fontWeight:900,color:gameDna.ratingGrowth>=0?CC.brand:CC.danger,marginTop:SPACE[1]}}>
+              {gameDna.ratingGrowth>=0?"+":""}{gameDna.ratingGrowth}
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+              за {gameDna.total} партий
+            </div>
+          </Card>
+        </div>
+
+        <div style={{display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowGameDna(false)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{sShowGameDna(false);sGamesModalOpen(true)}}>📜 Все партии</Btn>
+        </div>
+      </div>}
     </Modal>
 
     {/* Puzzle Expansion instructions */}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
+import { InfoTip } from "@/components/InfoTip";
 
 type VerifyData = {
   valid: boolean;
@@ -28,6 +29,9 @@ type VerifyData = {
     contentHashValid: boolean;
     signatureHmacValid: boolean | null;
     signatureHmacReason?: "OK" | "NO_SIGNED_AT" | "MISMATCH" | "ERROR";
+    qsignKeyVersion?: number;
+    currentKeyVersion?: number;
+    keyRotatedSinceSigning?: boolean;
     quantumShieldStatus: string;
     shieldLegacy?: boolean;
     shards: number;
@@ -221,6 +225,32 @@ export default function VerifyPage() {
           </div>
         </div>
 
+        {/* How to read this page */}
+        <div
+          role="region"
+          aria-label="How to read this verification page"
+          style={{ borderRadius: 14, border: "1px solid rgba(13,148,136,0.18)", background: "rgba(13,148,136,0.04)", padding: "16px 18px", marginBottom: 24 }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 18 }} aria-hidden>👇</span>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>How to read this page</div>
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 6, fontSize: 12, color: "#0f172a", lineHeight: 1.6 }}>
+            <li>
+              <b>Status banner</b> above tells you if the certificate passed every check.
+            </li>
+            <li>
+              The <b>Integrity Checks</b> grid breaks the verdict into per-layer results — content hash, HMAC, Shamir, and key version.
+            </li>
+            <li>
+              <b>Shard Distribution</b> shows where the three Shamir shards live; only two are needed to recover.
+            </li>
+            <li>
+              <b>Bitcoin Anchor</b> proves <i>when</i> the certificate existed — verifiable without trusting AEVION.
+            </li>
+          </ol>
+        </div>
+
         {/* Certificate card */}
         <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 24 }}>
           {/* Card header */}
@@ -269,12 +299,31 @@ export default function VerifyPage() {
             )}
 
             {/* Cryptographic details */}
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>Cryptographic Proof</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10, display: "flex", alignItems: "center" }}>
+              Cryptographic Proof
+              <InfoTip
+                label="Cryptographic Proof"
+                text="Five tamper-evident fields. Each one independently links the certificate to the protected work — change any byte and at least one of these will stop matching."
+              />
+            </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
               {[
-                { label: "Content Hash (SHA-256)", value: cert.contentHash, valid: integrity.contentHashValid },
-                { label: "HMAC-SHA256 Signature", value: cert.signatureHmac },
-                { label: "Ed25519 Signature", value: cert.signatureEd25519 || "N/A" },
+                {
+                  label: "Content Hash (SHA-256)",
+                  value: cert.contentHash,
+                  valid: integrity.contentHashValid,
+                  tip: { name: "SHA-256", text: "Cryptographic fingerprint of your work. Changing one byte in the source produces a completely different hash, so this value can prove the original content has not been altered." },
+                },
+                {
+                  label: "HMAC-SHA256 Signature",
+                  value: cert.signatureHmac,
+                  tip: { name: "HMAC-SHA256", text: "Tamper-detection signature computed with AEVION's secret key. Anyone with the same key can re-derive it from the certificate fields and check that it has not been changed." },
+                },
+                {
+                  label: "Ed25519 Signature",
+                  value: cert.signatureEd25519 || "N/A",
+                  tip: { name: "Ed25519", text: "An asymmetric digital signature. The matching public key is published, so anyone — not just AEVION — can verify that the signature is genuine." },
+                },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },
               ].map((item) => (
@@ -289,8 +338,11 @@ export default function VerifyPage() {
                   gap: 8,
                 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
-                      {item.label}
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                      <span>{item.label}</span>
+                      {"tip" in item && item.tip && (
+                        <InfoTip label={item.tip.name} text={item.tip.text} size={12} />
+                      )}
                       {"valid" in item && (
                         <span style={{ color: item.valid ? "#059669" : "#dc2626", fontSize: 10 }}>
                           {item.valid ? " ✓ valid" : " ✗ mismatch"}
@@ -310,35 +362,77 @@ export default function VerifyPage() {
             </div>
 
             {/* Integrity checks */}
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>Integrity Checks</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10, display: "flex", alignItems: "center" }}>
+              Integrity Checks
+              <InfoTip
+                label="Integrity Checks"
+                text="Each tile is one independent test. Green tiles passed; red tiles failed. A certificate is fully valid only when every tile is green."
+              />
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-              {[
-                { label: "Content Hash", status: integrity.contentHashValid, detail: integrity.contentHashValid ? "SHA-256 verified" : "Hash mismatch" },
-                {
-                  label: "HMAC Signature",
-                  status: integrity.signatureHmacValid === true,
-                  detail:
-                    integrity.signatureHmacValid === true
-                      ? "HMAC-SHA256 re-verified"
-                      : integrity.signatureHmacReason === "NO_SIGNED_AT"
-                        ? "Legacy row — signedAt not recorded"
-                        : integrity.signatureHmacReason === "MISMATCH"
-                          ? "Signature mismatch"
-                          : "Verification error",
-                },
-                { label: "Quantum Shield", status: integrity.quantumShieldStatus === "active" && integrity.shieldLegacy !== true, detail: integrity.shieldLegacy === true ? "Legacy shield (pre-v2)" : `Status: ${integrity.quantumShieldStatus}` },
-                { label: "Secret Sharing", status: integrity.shieldLegacy !== true, detail: integrity.shieldLegacy === true ? "Legacy — not real SSS" : `${integrity.shards} shards, threshold ${integrity.threshold} (Shamir SSS)` },
-                { label: "Certificate Status", status: cert.status === "active", detail: cert.status },
-              ].map((check) => (
+              {(() => {
+                const certKv = integrity.qsignKeyVersion ?? 1;
+                const curKv = integrity.currentKeyVersion ?? 1;
+                const rotated = integrity.keyRotatedSinceSigning === true;
+                const hmacOk = integrity.signatureHmacValid === true;
+                return [
+                  {
+                    label: "Content Hash",
+                    status: integrity.contentHashValid,
+                    detail: integrity.contentHashValid ? "SHA-256 verified" : "Hash mismatch",
+                    tip: { name: "Content Hash", text: "We re-hash the certificate's metadata with SHA-256 and compare it to the stored value. Match means the registered fields have not changed since protection." },
+                  },
+                  {
+                    label: "HMAC Signature",
+                    status: hmacOk,
+                    detail:
+                      hmacOk
+                        ? "HMAC-SHA256 re-verified"
+                        : integrity.signatureHmacReason === "NO_SIGNED_AT"
+                          ? "Legacy row — signedAt not recorded"
+                          : integrity.signatureHmacReason === "MISMATCH"
+                            ? "Signature mismatch"
+                            : "Verification error",
+                    tip: { name: "HMAC Signature", text: "We recompute the HMAC-SHA256 from the certificate's signed fields with the secret key version that signed it, and compare. Match proves no field has been tampered with." },
+                  },
+                  {
+                    label: "HMAC Key Version",
+                    status: hmacOk,
+                    detail: rotated
+                      ? `Signed under v${certKv} · current is v${curKv} · key rotated, signature still valid`
+                      : `Signed under v${certKv} · current key`,
+                    tip: { name: "Key Rotation", text: "AEVION can rotate signing keys without invalidating older certificates. Each row records the version it was signed with, so we always verify under the right key." },
+                  },
+                  {
+                    label: "Quantum Shield",
+                    status: integrity.quantumShieldStatus === "active" && integrity.shieldLegacy !== true,
+                    detail: integrity.shieldLegacy === true ? "Legacy shield (pre-v2)" : `Status: ${integrity.quantumShieldStatus}`,
+                    tip: { name: "Quantum Shield", text: "AEVION's protection envelope. Combines Ed25519 signing with Shamir secret-sharing so no single party can recover the private key alone." },
+                  },
+                  {
+                    label: "Secret Sharing",
+                    status: integrity.shieldLegacy !== true,
+                    detail: integrity.shieldLegacy === true ? "Legacy — not real SSS" : `${integrity.shards} shards, threshold ${integrity.threshold} (Shamir SSS)`,
+                    tip: { name: "Shamir Secret Sharing", text: "The Ed25519 private key is split into 3 shards. Any 2 reconstruct it; any 1 alone reveals nothing. AEVION never holds 2 of them." },
+                  },
+                  {
+                    label: "Certificate Status",
+                    status: cert.status === "active",
+                    detail: cert.status,
+                    tip: undefined as { name: string; text: string } | undefined,
+                  },
+                ];
+              })().map((check) => (
                 <div key={check.label} style={{
                   padding: "12px 14px",
                   borderRadius: 10,
                   border: `1px solid ${check.status ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
                   background: check.status ? "rgba(16,185,129,0.04)" : "rgba(239,68,68,0.04)",
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <span style={{ fontSize: 14 }}>{check.status ? "✅" : "❌"}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 14 }} aria-label={check.status ? "passed" : "failed"}>{check.status ? "✅" : "❌"}</span>
                     <span style={{ fontSize: 12, fontWeight: 800, color: "#0f172a" }}>{check.label}</span>
+                    {check.tip && <InfoTip label={check.tip.name} text={check.tip.text} size={12} />}
                   </div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{check.detail}</div>
                 </div>
@@ -353,8 +447,12 @@ export default function VerifyPage() {
             <div style={{ padding: "16px 24px", background: "rgba(15,23,42,0.02)", borderBottom: "1px solid rgba(15,23,42,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 20 }}>🧩</span>
+                  <span style={{ fontSize: 20 }} aria-hidden>🧩</span>
                   Shard Distribution (Shamir SSS 2-of-3)
+                  <InfoTip
+                    label="Shamir 2-of-3"
+                    text="The signing key is split into 3 pieces stored in different places. Combining any 2 of the 3 reconstructs the key; possessing only 1 reveals nothing. AEVION holds at most 1 — so no rogue platform action can forge your certificate."
+                  />
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
                   {data.shardDistribution.realDistributed
@@ -438,8 +536,12 @@ export default function VerifyPage() {
             <div style={{ padding: "16px 24px", background: "linear-gradient(135deg, #f7931a10, #0f172a05)", borderBottom: "1px solid rgba(15,23,42,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 20 }}>₿</span>
+                  <span style={{ fontSize: 20 }} aria-hidden>₿</span>
                   Bitcoin Blockchain Anchor
+                  <InfoTip
+                    label="OpenTimestamps"
+                    text="At protection time we submit the content hash to OpenTimestamps. Within hours it is included in a Bitcoin block — proof that this exact certificate existed by that timestamp, verifiable against any Bitcoin node without trusting AEVION."
+                  />
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
                   {data.bitcoinAnchor.network} — third-party verifiable timestamp

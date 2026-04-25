@@ -5,7 +5,10 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { InfoTip } from "@/components/InfoTip";
 import { apiUrl } from "@/lib/apiBase";
+
+const TOUR_KEY = "aevion_qright_tour_seen_v1";
 
 type CertificateData = {
   id: string;
@@ -111,6 +114,19 @@ export default function QRightPage() {
   const [showRegistry, setShowRegistry] = useState(false);
   const [items, setItems] = useState<RightObject[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(TOUR_KEY)) setShowTour(true);
+    } catch {}
+  }, []);
+  const dismissTour = () => {
+    setShowTour(false);
+    try {
+      localStorage.setItem(TOUR_KEY, "1");
+    } catch {}
+  };
 
   const authHeaders = (): HeadersInit => {
     try {
@@ -256,18 +272,49 @@ export default function QRightPage() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
               {[
-                { n: "1", title: "Describe", desc: "Tell us about your work", color: "#0d9488" },
-                { n: "2", title: "Register", desc: "SHA-256 hash in QRight", color: "#3b82f6" },
-                { n: "3", title: "Sign", desc: "HMAC-SHA256 signature", color: "#8b5cf6" },
-                { n: "4", title: "Shield", desc: "Ed25519 + Shamir SSS", color: "#f59e0b" },
+                { n: "1", title: "Describe", desc: "Tell us about your work", color: "#0d9488", tip: null },
+                { n: "2", title: "Register", desc: "SHA-256 hash in QRight", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },
+                { n: "3", title: "Sign", desc: "HMAC-SHA256 signature", color: "#8b5cf6", tip: { name: "HMAC-SHA256", text: "A tamper-detection signature using AEVION's secret key. Anyone verifying later re-derives it from the certificate fields and confirms nothing was changed." } },
+                { n: "4", title: "Shield", desc: "Ed25519 + Shamir SSS", color: "#f59e0b", tip: { name: "Ed25519 + Shamir", text: "We sign with Ed25519 (a public-key signature anyone can verify) and split the private key into 3 Shamir shards. Any 2 of 3 reconstruct it; AEVION never holds 2." } },
               ].map((s) => (
                 <div key={s.n} style={{ textAlign: "center", padding: "14px 8px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: s.color, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, marginBottom: 6 }}>{s.n}</div>
-                  <div style={{ fontWeight: 800, fontSize: 12, color: "#0f172a", marginBottom: 2 }}>{s.title}</div>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: s.color, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, marginBottom: 6 }} aria-label={`Step ${s.n}`}>{s.n}</div>
+                  <div style={{ fontWeight: 800, fontSize: 12, color: "#0f172a", marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {s.title}
+                    {s.tip && <InfoTip label={s.tip.name} text={s.tip.text} size={12} />}
+                  </div>
                   <div style={{ fontSize: 10, color: "#64748b" }}>{s.desc}</div>
                 </div>
               ))}
             </div>
+
+            {showTour && (
+              <div
+                role="region"
+                aria-label="Quick start guide"
+                style={{ position: "relative", borderRadius: 14, border: "1px dashed rgba(13,148,136,0.4)", background: "rgba(13,148,136,0.05)", padding: "14px 18px 14px 16px", marginBottom: 18 }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <span style={{ fontSize: 20 }} aria-hidden>👇</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "#0f766e", marginBottom: 4 }}>First time? Start here.</div>
+                    <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.55 }}>
+                      Fill the <b>title</b> and <b>description</b> below — that is enough. Pick the work type, then press
+                      <span style={{ display: "inline-block", margin: "0 4px", padding: "1px 8px", borderRadius: 6, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 11 }}>🛡️ Protect My Work</span>.
+                      You get a certificate, an author shard to save offline, and a public verify URL — all in one click.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={dismissTour}
+                    aria-label="Dismiss quick start guide"
+                    style={{ border: "none", background: "transparent", color: "#64748b", fontSize: 18, fontWeight: 700, cursor: "pointer", padding: 0, lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
               <div>
@@ -278,6 +325,9 @@ export default function QRightPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder='e.g. "My AI Music Track", "Logo Design v3", "Trading Algorithm"'
+                  aria-label="Title of the work you are protecting"
+                  aria-required="true"
+                  required
                   style={{ width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", fontSize: 15, outline: "none", boxSizing: "border-box" }}
                 />
               </div>
@@ -312,6 +362,9 @@ export default function QRightPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="What is it? What makes it unique? The more detail, the stronger the protection."
                   rows={4}
+                  aria-label="Description of the work"
+                  aria-required="true"
+                  required
                   style={{ width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, outline: "none", resize: "vertical", boxSizing: "border-box" }}
                 />
               </div>
@@ -341,11 +394,11 @@ export default function QRightPage() {
               </details>
 
               {err && (
-                <div style={{ color: "#dc2626", fontSize: 13, padding: "10px 14px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)" }}>{err}</div>
+                <div role="alert" style={{ color: "#dc2626", fontSize: 13, padding: "10px 14px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)" }}>{err}</div>
               )}
 
-              <button type="submit" style={{ padding: "16px 24px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 900, fontSize: 16, cursor: "pointer", boxShadow: "0 4px 20px rgba(13,148,136,0.35)" }}>
-                🛡️ Protect My Work
+              <button type="submit" aria-label="Protect my work — register, sign, and shield in one click" style={{ padding: "16px 24px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 900, fontSize: 16, cursor: "pointer", boxShadow: "0 4px 20px rgba(13,148,136,0.35)" }}>
+                <span aria-hidden>🛡️</span> Protect My Work
               </button>
             </form>
           </>
@@ -353,7 +406,7 @@ export default function QRightPage() {
 
         {/* ── Step: PROCESSING ── */}
         {step === "processing" && (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
+          <div role="status" aria-live="polite" style={{ textAlign: "center", padding: "60px 20px" }}>
             <div style={{ fontSize: 48, marginBottom: 20 }}>⚡</div>
             <div style={{ fontWeight: 900, fontSize: 20, color: "#0f172a", marginBottom: 24 }}>Protecting your work...</div>
             <div style={{ maxWidth: 360, margin: "0 auto", display: "grid", gap: 12 }}>
@@ -427,8 +480,13 @@ export default function QRightPage() {
                   ))}
                 </div>
 
-                <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.05)", border: "1px solid rgba(13,148,136,0.15)", fontSize: 12, color: "#0f766e" }}>
-                  <b>3-layer protection active:</b> SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir&apos;s Secret Sharing ({result.shield.shards} shards, threshold {result.shield.threshold})
+                <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.05)", border: "1px solid rgba(13,148,136,0.15)", fontSize: 12, color: "#0f766e", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+                  <b>3-layer protection active:</b>
+                  <span>SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir&apos;s Secret Sharing ({result.shield.shards} shards, threshold {result.shield.threshold})</span>
+                  <InfoTip
+                    label="Why 3 layers?"
+                    text="Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards."
+                  />
                 </div>
               </div>
             </div>
@@ -498,6 +556,46 @@ export default function QRightPage() {
                 </div>
               </div>
             )}
+
+            {/* What to do next */}
+            <div
+              role="region"
+              aria-label="What to do next"
+              style={{ borderRadius: 14, border: "1px solid rgba(13,148,136,0.2)", background: "linear-gradient(135deg, rgba(13,148,136,0.04), rgba(6,182,212,0.04))", padding: "16px 18px", marginBottom: 20 }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 18 }} aria-hidden>📋</span>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>What to do next</div>
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 8, fontSize: 12, color: "#0f172a", lineHeight: 1.6 }}>
+                {result.authorShard && (
+                  <li>
+                    <b>Save your Author Shard</b> (orange panel above) — download the JSON and store it offline. AEVION does not keep a copy.
+                  </li>
+                )}
+                <li>
+                  <b>Share the verify link</b> with anyone — they will see the public certificate and every integrity check.
+                  <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", fontSize: 11, fontFamily: "monospace", color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span style={{ wordBreak: "break-all" as const }}>{typeof window !== "undefined" ? `${window.location.origin}/verify/${result.certificate.id}` : `/verify/${result.certificate.id}`}</span>
+                    <button
+                      type="button"
+                      onClick={() => copy(typeof window !== "undefined" ? `${window.location.origin}/verify/${result.certificate.id}` : `/verify/${result.certificate.id}`, "Verify URL")}
+                      style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </li>
+                <li>
+                  <b>Download the PDF</b> for paper records — court-ready printout with QR code linking back to the verify page.
+                </li>
+                {result.witness && (
+                  <li>
+                    <b>Even if AEVION goes down</b>, your Author Shard + the public Witness Shard (CID above) are enough to reconstruct the proof.
+                  </li>
+                )}
+              </ol>
+            </div>
 
             {/* Actions with PDF button */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>

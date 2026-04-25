@@ -85,6 +85,20 @@ type SessionSummary = {
   userId: string | null;
 };
 
+/** Saved agent preset — strategy + role overrides + revision count.
+    Persisted in localStorage so users can reuse named role lineups
+    (e.g. "Long-form essay", "Quick code review") without re-picking
+    Provider/Model for each agent every time. */
+type AgentPreset = {
+  id: string;
+  name: string;
+  strategy: Strategy;
+  overrides: Record<ConfigRoleId, { provider: string; model: string }>;
+  maxRevisions: number;
+};
+
+const PRESETS_KEY = "qcore_presets_v1";
+
 type SSEPayload =
   | { type: "session"; sessionId: string; runId: string }
   | {
@@ -279,6 +293,9 @@ export default function QCoreMultiAgentPage() {
   const [maxRevisions, setMaxRevisions] = useState(1);
   const [configOpen, setConfigOpen] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
+  const [presets, setPresets] = useState<AgentPreset[]>([]);
+  const [savingPreset, setSavingPreset] = useState(false);
+  const [presetName, setPresetName] = useState("");
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -288,6 +305,7 @@ export default function QCoreMultiAgentPage() {
   const [globalError, setGlobalError] = useState<string | null>(null);
 
   const timelineRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   // True when user has manually scrolled up — pauses auto-scroll until they
   // return to the bottom. Prevents the streaming view from yanking the
@@ -333,6 +351,58 @@ export default function QCoreMultiAgentPage() {
       }
     })();
   }, []);
+
+  /* ── Load saved presets on mount ── */
+  useEffect(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(PRESETS_KEY) : null;
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const safe = parsed.filter(
+        (p): p is AgentPreset =>
+          p && typeof p.id === "string" && typeof p.name === "string" &&
+          p.overrides && typeof p.overrides === "object"
+      );
+      setPresets(safe);
+    } catch { /* ignore corrupted storage */ }
+  }, []);
+
+  const persistPresets = useCallback((next: AgentPreset[]) => {
+    setPresets(next);
+    try {
+      if (typeof window !== "undefined") localStorage.setItem(PRESETS_KEY, JSON.stringify(next));
+    } catch { /* quota / privacy mode — keep state in memory */ }
+  }, []);
+
+  const savePreset = useCallback(() => {
+    const name = presetName.trim();
+    if (!name) return;
+    // Overwrite same-name preset rather than duplicating.
+    const next: AgentPreset[] = [
+      ...presets.filter((p) => p.name !== name),
+      {
+        id: `p_${Date.now()}`,
+        name,
+        strategy,
+        overrides,
+        maxRevisions,
+      },
+    ];
+    persistPresets(next);
+    setPresetName("");
+    setSavingPreset(false);
+  }, [presetName, presets, strategy, overrides, maxRevisions, persistPresets]);
+
+  const applyPreset = useCallback((p: AgentPreset) => {
+    setStrategy(p.strategy);
+    setOverrides(p.overrides);
+    setMaxRevisions(p.maxRevisions);
+  }, []);
+
+  const deletePreset = useCallback((id: string) => {
+    persistPresets(presets.filter((p) => p.id !== id));
+  }, [presets, persistPresets]);
 
   /* ── Auto-scroll on new chunks (only if user is at the bottom) ── */
   useEffect(() => {
@@ -720,6 +790,45 @@ export default function QCoreMultiAgentPage() {
     }
   }, []);
 
+  /** Restore a past run's config and load its prompt into the textarea so
+      the user can tweak it before resending. The "Edit ✎" button. */
+  const editAndResend = useCallback((run: RunState) => {
+    const cfg = run.agentConfig || {};
+    const nextStrategy: Strategy =
+      cfg.strategy === "parallel" ? "parallel" :
+      cfg.strategy === "debate" ? "debate" :
+      (run.strategy as Strategy) || strategy;
+    let nextOverrides = overrides;
+    if (cfg.overrides && typeof cfg.overrides === "object") {
+      const pick = (k: ConfigRoleId) => {
+        const v = cfg.overrides?.[k];
+        return v && typeof v === "object" && v.provider
+          ? { provider: v.provider, model: v.model || "" }
+          : overrides[k];
+      };
+      nextOverrides = {
+        analyst: pick("analyst"),
+        writer: pick("writer"),
+        writerB: pick("writerB"),
+        critic: pick("critic"),
+      };
+    }
+    const nextMaxRev = typeof cfg.maxRevisions === "number" ? cfg.maxRevisions : maxRevisions;
+    setStrategy(nextStrategy);
+    setOverrides(nextOverrides);
+    setMaxRevisions(nextMaxRev);
+    setInput(run.userInput);
+    // Focus + place caret at the end so the user can keep typing.
+    setTimeout(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }, 0);
+  }, [strategy, overrides, maxRevisions]);
+
   /** Restore a past run's config + resend its prompt — the "Rerun" button. */
   const rerun = useCallback((run: RunState) => {
     const cfg = run.agentConfig || {};
@@ -947,6 +1056,160 @@ export default function QCoreMultiAgentPage() {
                       ? "Parallel: Analyst plans, two Writers draft on different models in parallel, Judge synthesizes."
                       : "Debate: Pro and Con each argue their case, Moderator synthesizes a balanced answer."))}
             </div>
+
+            {/* Agent presets — save/recall named role lineups */}
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                flexWrap: "wrap",
+                fontSize: 11,
+              }}
+            >
+              <span
+                style={{
+                  color: "rgba(226,232,240,0.55)",
+                  fontWeight: 800,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  marginRight: 2,
+                }}
+              >
+                Presets
+              </span>
+              {presets.length === 0 && !savingPreset && (
+                <span style={{ color: "rgba(226,232,240,0.5)", fontStyle: "italic" }}>
+                  none — pick a strategy + models, then save the lineup
+                </span>
+              )}
+              {presets.map((p) => (
+                <span
+                  key={p.id}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "stretch",
+                    borderRadius: 8,
+                    background: "rgba(255,255,255,0.08)",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => applyPreset(p)}
+                    title={`Apply: ${p.strategy} · ${Object.values(p.overrides).filter((v) => v.provider).length} roles`}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#fff",
+                      padding: "4px 8px",
+                      fontWeight: 700,
+                      fontSize: 11,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {p.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deletePreset(p.id)}
+                    aria-label={`Delete preset ${p.name}`}
+                    title="Delete preset"
+                    style={{
+                      border: "none",
+                      borderLeft: "1px solid rgba(255,255,255,0.15)",
+                      background: "transparent",
+                      color: "rgba(255,255,255,0.55)",
+                      padding: "0 7px",
+                      fontSize: 13,
+                      cursor: "pointer",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {savingPreset ? (
+                <>
+                  <input
+                    autoFocus
+                    value={presetName}
+                    onChange={(e) => setPresetName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); savePreset(); }
+                      if (e.key === "Escape") { setSavingPreset(false); setPresetName(""); }
+                    }}
+                    placeholder="Preset name"
+                    maxLength={40}
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.3)",
+                      background: "rgba(255,255,255,0.95)",
+                      color: "#0f172a",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      outline: "none",
+                      width: 140,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={savePreset}
+                    disabled={!presetName.trim()}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.3)",
+                      background: presetName.trim() ? "#fff" : "rgba(255,255,255,0.4)",
+                      color: "#0f172a",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      cursor: presetName.trim() ? "pointer" : "default",
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSavingPreset(false); setPresetName(""); }}
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "transparent",
+                      color: "rgba(255,255,255,0.7)",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSavingPreset(true)}
+                  title="Save the current strategy + role models as a named preset"
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 8,
+                    border: "1px dashed rgba(255,255,255,0.3)",
+                    background: "transparent",
+                    color: "rgba(255,255,255,0.85)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  + Save current
+                </button>
+              )}
+            </div>
           </div>
 
           {configOpen && (
@@ -1120,6 +1383,7 @@ export default function QCoreMultiAgentPage() {
                     run={run}
                     onLoadDetails={run.persisted && run.turns.length === 0 ? () => expandRunDetails(run.id) : undefined}
                     onRerun={() => rerun(run)}
+                    onEdit={() => editAndResend(run)}
                     onShare={() => shareRun(run.id)}
                     onUnshare={() => unshareRun(run.id)}
                   />
@@ -1156,6 +1420,7 @@ export default function QCoreMultiAgentPage() {
             {/* Input */}
             <div style={{ display: "flex", gap: 8 }}>
               <textarea
+                ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -1503,12 +1768,14 @@ function RunCard({
   run,
   onLoadDetails,
   onRerun,
+  onEdit,
   onShare,
   onUnshare,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
   onRerun?: () => void;
+  onEdit?: () => void;
   onShare?: () => void;
   onUnshare?: () => void;
 }) {
@@ -1630,6 +1897,19 @@ function RunCard({
           </span>
 
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {onEdit && run.status !== "running" && (
+              <button
+                onClick={onEdit}
+                style={{
+                  padding: "5px 10px", borderRadius: 8,
+                  background: "#fff", border: "1px solid #cbd5e1",
+                  color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                }}
+                title="Load this prompt + settings into the input so you can tweak and resend"
+              >
+                ✎ Edit
+              </button>
+            )}
             {onRerun && run.status !== "running" && (
               <button
                 onClick={onRerun}

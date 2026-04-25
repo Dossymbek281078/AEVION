@@ -87,38 +87,33 @@
 | **P3 Key registry & rotation** | ✅ done | `295b9be` | GET `/keys` (JWKS-like), GET `/keys/:kid`, POST `/keys/rotate` (admin only). Overlap window: active → retired, новый становится active. Retired ключи верифицируют исторические подписи вечно. Route order исправлен: `/keys/*` регистрируется до `/:id/public`. |
 | **P4 Revocation ledger** | ✅ done | `aafeb64` | POST `/revoke/:id`. Permission gate: issuer (`auth.sub === row.issuerUserId`) ИЛИ admin. Транзакционно: INSERT QSignRevocation + UPDATE QSignSignature.revokedAt. Опциональный `causalSignatureId` с валидацией. 409 при повторном revoke. Reserved-id guard в `/:id/public` расширен до `health/verify/keys/revoke/sign`. |
 | **P5 Geo-anchoring** | ✅ done | `a74b482` | `npm install geoip-lite @types/geoip-lite`. `src/lib/qsignV2/geo.ts`: IP extraction, private-range filter, GPS sanitize. `resolveGeo(bodyGps, req)` — GPS приоритетнее, IP fallback заполняет country/city. `/sign` принимает `body.gps = { lat, lng }`. Signature row хранит geoLat/Lng/Source/Country/City. |
-| **P6 Frontend Studio redesign** | ⏳ TODO | — | `frontend/src/app/qsign/page.tsx` — редизайн: live canonicalization preview, hash-diff, выбор активного kid, показ обеих подписей (HMAC + Ed25519), GPS opt-in кнопка. |
-| **P7 Public verify page SSR** | ⏳ TODO | — | `frontend/src/app/qsign/verify/[id]/page.tsx` — SSR, QR-код, OG metadata, shareable link, «revoked» banner. Потребляет `/api/qsign/v2/:id/public`. |
-| **P8 Key registry UI** | ⏳ TODO | — | `frontend/src/app/qsign/keys/page.tsx` — таблица ключей + timeline ротаций + публичные Ed25519 ключи. |
-| **P9 Polish** | ⏳ TODO | — | rate-limit на `/sign` (например, `express-rate-limit`), swagger/openapi расширение, README с curl examples, smoke-test script. |
+| **P6 Frontend Studio redesign** | ✅ done | `830181a` | `frontend/src/app/qsign/page.tsx` (190 → 1392 строк): live canonicalization preview, hash-diff, выбор активного kid, показ обеих подписей (HMAC + Ed25519), GPS opt-in. |
+| **P7 Public verify page SSR** | ✅ done | `05a5cf8` | `frontend/src/app/qsign/verify/[id]/page.tsx` + `ClientBits.tsx`: SSR, QR-код, OG metadata, shareable link, «revoked» banner, потребляет `/api/qsign/v2/:id/public`. |
+| **P8 Key registry UI** | ✅ done | `107bb24` | `frontend/src/app/qsign/keys/page.tsx` (538 строк): таблица ключей + timeline + публичные Ed25519. |
+| **P9 Polish** | ✅ done | `0b966de` | `express-rate-limit` на `/sign` (60/min), `/revoke` (10/min), `/keys/rotate` (5/min). README `aevion-globus-backend/QSIGN_V2.md`. Smoke `scripts/qsign-v2-smoke.js`. openapi.json → 0.4.0. |
+| **Investor polish** | ✅ done | `2b0cd6b` | Дополнительно: GET `/stats` (live aggregate metrics), GET `/recent?limit=N` (sanitized feed без leak issuerEmail/payloads), sample payload в Studio. |
 
-### Как продолжить завтра
+### Done verification (2026-04-25)
 
-1. `cd C:\Users\user\aevion-qsign` ; `git status` (должен быть clean) ; `git log --oneline feat/qsign-v2 ^main` — увидеть 5 коммитов P1-P5.
-2. Старт с P6: открыть `frontend/src/app/qsign/page.tsx` (190 строк текущей демки) и полностью переписать с учётом нового контракта `/api/qsign/v2/sign` (возвращает `{ id, hmac: {kid, signature}, ed25519: {kid, signature, publicKey}, ... }`).
-3. Frontend зависит от `ProductPageShell`, `PipelineSteps`, `Wave1Nav`, `ToastProvider` — уже есть, не трогаем.
-4. Для auth на фронте — посмотреть как QRight сейчас берёт bearer (обычно из localStorage / cookie). Если нет — добавить логин-флоу позже, в P6 пока класть токен вручную через поле ввода (MVP).
-5. После P6 — P7, P8, P9 по списку.
+DoD §5 проверен полностью:
 
-### Runtime smoke-тесты (не запускались, сделать завтра)
+- ✅ `npm run verify` (root) — backend tsc + frontend next build, exit 0, 24 страницы включая `/qsign`, `/qsign/keys`, `/qsign/verify/[id]`.
+- ✅ `npm run smoke:qsign-v2` (backend) — **ALL PASSED · 14 steps**:
+  health → register → login → sign → stateless verify → tampered verify (correctly invalid)
+  → DB verify → public view → keys list → stats → recent → revoke → post-revoke verify
+  → double revoke (409).
+- ✅ Legacy v1 (`/api/qsign/sign|verify`) не сломан — smoke `valid: true`.
+- ✅ `pipeline.ts` и `planetCompliance.ts` не тронуты в этой ветке.
 
-```
-# из C:\Users\user\aevion-qsign\aevion-globus-backend
-npm run dev
-# в другом окне:
-curl http://127.0.0.1:4001/api/qsign/v2/health
-# ожидаем: { status: "ok", activeKeys: { hmac: "qsign-hmac-v1", ed25519: "qsign-ed25519-v1" }, ... }
+Локальная конфигурация для повторного прогона (см. `aevion-globus-backend/.env`, в гит не коммитим):
+- `DATABASE_URL` — Postgres 18 на localhost:5432, БД `aevion_dev`.
+- `AUTH_JWT_SECRET` задан.
+- `QSIGN_HMAC_V1_SECRET` (>= 16 chars) и `QSIGN_ED25519_V1_PRIVATE` (64-hex seed) заданы — больше нет dev-ephemeral warning.
 
-# sign требует bearer — сначала register/login:
-curl -X POST http://127.0.0.1:4001/api/auth/register -H "Content-Type: application/json" -d '{"email":"test@aevion.com","password":"secret123","name":"Test"}'
-# взять token из ответа, затем:
-curl -X POST http://127.0.0.1:4001/api/qsign/v2/sign \
-  -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
-  -d '{"payload":{"hello":"AEVION","ts":1714000000}}'
-```
+### Что осталось / возможные следующие шаги
 
-### Известные риски на завтра
+Все запланированные фазы P1–P9 + investor polish закрыты, smoke зелёный. По желанию пользователя:
 
-- БД не запущена локально? `npm run dev` упадёт на первом запросе к `/api/qsign/v2/*`. Проверить `DATABASE_URL` в `.env`.
-- `QSIGN_HMAC_V1_SECRET` / `QSIGN_ED25519_V1_PRIVATE` не заданы → в dev работает с ephemeral-ключами (warning в консоли). В prod — error. Добавить в `.env` перед локальным прогоном: `QSIGN_HMAC_V1_SECRET=dev-hmac-at-least-16chars` и `QSIGN_ED25519_V1_PRIVATE=<64-hex>` (генератор: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`).
-- Параллельная сессия `feat/qright-v2` могла закоммитить правки в `pipeline.ts`. Перед P6 сделать `git fetch` и проверить `git log --oneline main..origin/main` — если там что-то есть, согласовать мердж.
+- **Merge → main**: ветка `feat/qsign-v2` готова. PR не открывался — только по явной просьбе.
+- **Browser sanity-check** UI Studio / Verify / Keys страниц (next build прошёл, но визуальный smoke — отдельно).
+- **Post-MVP идеи** (не в roadmap): Dilithium слот в `signatureDilithium` зарезервирован в БД (всегда NULL), цепочки supersedes по `causalSignatureId` уже хранятся, можно построить chain-of-custody UI; multi-sig / threshold; экспорт публичных ключей в JWKS-формат.

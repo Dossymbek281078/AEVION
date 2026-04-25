@@ -289,6 +289,12 @@ export default function QCoreMultiAgentPage() {
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // True when user has manually scrolled up — pauses auto-scroll until they
+  // return to the bottom. Prevents the streaming view from yanking the
+  // viewport away while the user is reading an earlier turn.
+  const userScrolledUpRef = useRef(false);
+  // Tells `sendCompareAll` to stop firing remaining strategies. Set by Stop.
+  const compareAbortRef = useRef(false);
 
   /* ── Load providers + role defaults + sessions + pricing on mount ── */
   useEffect(() => {
@@ -328,11 +334,22 @@ export default function QCoreMultiAgentPage() {
     })();
   }, []);
 
-  /* ── Auto-scroll on new chunks ── */
+  /* ── Auto-scroll on new chunks (only if user is at the bottom) ── */
   useEffect(() => {
-    if (!timelineRef.current) return;
-    timelineRef.current.scrollTo({ top: timelineRef.current.scrollHeight, behavior: "smooth" });
+    const el = timelineRef.current;
+    if (!el) return;
+    if (userScrolledUpRef.current) return;
+    // Instant, not smooth — smooth queues animations during streaming and
+    // ends up always one chunk behind.
+    el.scrollTop = el.scrollHeight;
   }, [runs]);
+
+  const onTimelineScroll = useCallback(() => {
+    const el = timelineRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    userScrolledUpRef.current = distFromBottom > 80;
+  }, []);
 
   /* ── Load a session's runs when selected ── */
   const loadSession = useCallback(async (sessionId: string) => {
@@ -442,9 +459,15 @@ export default function QCoreMultiAgentPage() {
     const msg = (text || input).trim();
     if (!msg || busy) return;
 
-    setInput("");
+    // Optimistically clear textarea so the user can keep typing while the
+    // run streams. If the request fails BEFORE the stream opens, we restore
+    // it so they don't lose what they wrote.
+    const clearedFromInput = !text;
+    if (clearedFromInput) setInput("");
     setGlobalError(null);
     setBusy(true);
+    // Reset the manual-scroll flag for this new run — they want to follow it.
+    userScrolledUpRef.current = false;
 
     const useStrategy = opts?.strategy || strategy;
     const useOverrides = opts?.overrides || overrides;
@@ -487,7 +510,16 @@ export default function QCoreMultiAgentPage() {
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
+        if (res.status === 429) {
+          const retry = parseInt(res.headers.get("Retry-After") || "60", 10);
+          // Restore input so the user can re-send after waiting.
+          if (clearedFromInput) setInput(msg);
+          // Tell compare-all to give up — hammering at 429 won't help.
+          compareAbortRef.current = true;
+          throw new Error(`Rate limit reached (20 runs/min/IP). Try again in ${isFinite(retry) ? retry : 60}s.`);
+        }
         const err = await res.json().catch(() => ({}));
+        if (clearedFromInput) setInput(msg);
         throw new Error(err?.error || `HTTP ${res.status}`);
       }
 
@@ -629,6 +661,8 @@ export default function QCoreMultiAgentPage() {
   }, [input, busy, activeSessionId, maxRevisions, overrides, strategy]);
 
   const stop = useCallback(() => {
+    // Signal compare-all loop to stop firing more strategies.
+    compareAbortRef.current = true;
     if (abortRef.current) {
       try { abortRef.current.abort(); } catch { /* noop */ }
       abortRef.current = null;
@@ -640,9 +674,10 @@ export default function QCoreMultiAgentPage() {
     const msg = input.trim();
     if (!msg || busy) return;
     setInput("");
+    compareAbortRef.current = false;
     const order: Strategy[] = ["sequential", "parallel", "debate"];
     for (const s of order) {
-      if (abortRef.current === null && busy) break; // allow stop to cancel remaining
+      if (compareAbortRef.current) break;
       await send(msg, { strategy: s });
     }
   }, [input, busy, send]);
@@ -892,6 +927,26 @@ export default function QCoreMultiAgentPage() {
                 <LiveCostBadge run={liveRun} />
               )}
             </div>
+
+            {/* Active-strategy description: always visible so the user
+                knows what the chosen mode does without opening Config. */}
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                color: "rgba(226,232,240,0.78)",
+                lineHeight: 1.5,
+              }}
+            >
+              {compareMode
+                ? "Compare mode: your prompt runs through Sequential, Parallel, and Debate back-to-back so you can read all three side-by-side."
+                : (strategies.find((x) => x.id === strategy)?.description ||
+                    (strategy === "sequential"
+                      ? "Sequential: Analyst plans, Writer drafts, Critic reviews and may send back for one revision."
+                      : strategy === "parallel"
+                      ? "Parallel: Analyst plans, two Writers draft on different models in parallel, Judge synthesizes."
+                      : "Debate: Pro and Con each argue their case, Moderator synthesizes a balanced answer."))}
+            </div>
           </div>
 
           {configOpen && (
@@ -1035,6 +1090,7 @@ export default function QCoreMultiAgentPage() {
           <section>
             <div
               ref={timelineRef}
+              onScroll={onTimelineScroll}
               style={{
                 border: "1px solid rgba(15,23,42,0.1)",
                 borderRadius: 14,
@@ -1073,13 +1129,27 @@ export default function QCoreMultiAgentPage() {
 
             {globalError && (
               <div
+                role="alert"
                 style={{
                   color: "#b91c1c", background: "rgba(239,68,68,0.06)",
                   border: "1px solid rgba(239,68,68,0.2)",
                   borderRadius: 10, padding: "8px 12px", fontSize: 12, marginBottom: 10,
+                  display: "flex", alignItems: "center", gap: 10,
                 }}
               >
-                {globalError}
+                <span style={{ flex: 1 }}>{globalError}</span>
+                <button
+                  type="button"
+                  onClick={() => setGlobalError(null)}
+                  aria-label="Dismiss error"
+                  style={{
+                    border: "none", background: "transparent",
+                    color: "#b91c1c", cursor: "pointer",
+                    fontSize: 16, lineHeight: 1, padding: "0 2px", fontWeight: 700,
+                  }}
+                >
+                  ×
+                </button>
               </div>
             )}
 

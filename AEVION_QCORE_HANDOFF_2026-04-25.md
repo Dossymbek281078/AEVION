@@ -8,17 +8,53 @@
 
 ## 1. Что сделано сегодня (2026-04-25)
 
-Один коммит — закрыт последний реальный abuse-вектор перед merge:
+Четыре коммита — закрыт abuse-вектор, отполирован UI до релизного состояния,
+разблокирован prod-build после апгрейда Next 16:
 
 - **`448d730`** — `feat(qcore): rate-limit on /multi-agent (20 req/min/IP)`
   - `/multi-agent` сжигает LLM-токены ($0.01–$0.03 за run), а лимит стоял
     только на `/shared`. Теперь жёстче: 20 runs/min/IP → потолок ~$0.60/min/IP.
-  - Переиспользует существующий `lib/rateLimit.ts` (in-process, без зависимостей).
-  - Отдельный bucket: `keyPrefix: "qcore-multi-agent"` (не делит окно с `/shared`).
+  - Переиспользует `lib/rateLimit.ts`. Отдельный bucket `qcore-multi-agent`.
   - 429 + `Retry-After` + `X-RateLimit-*` headers — идентичный pattern с `/shared`.
 
-**Всего на ветке: 7 коммитов.** 6 из них уже на `origin/qcore-multi-agent`,
-сегодняшний `448d730` — локальный, ждёт push'а перед merge.
+- **`1b8283d`** — `docs(qcore): handoff 2026-04-25`. Текущий файл.
+
+- **`bc7b65b`** — `feat(qcore): release-grade UI polish on /qcoreai/multi`.
+  Шесть связанных UX-правок в `frontend/src/app/qcoreai/multi/page.tsx`:
+  1. **Умный auto-scroll** — тайм-лайн больше не выдёргивает viewport, когда
+     пользователь поднялся читать. Если он >80px от низа — auto-scroll пауза.
+  2. **Дружелюбный 429** — читаем `Retry-After`, показываем
+     «Rate limit reached (20 runs/min/IP). Try again in Ns.», compare-all бросает.
+  3. **Не теряется prompt при ошибке** — `setInput("")` теперь возвращает
+     текст обратно, если запрос упал ДО открытия SSE.
+  4. **Stop отменяет остаток compare-all** — раньше после Stop цикл всё равно
+     отстреливал оставшиеся 2 стратегии. Теперь честный `compareAbortRef`.
+  5. **Dismissible global error** — `×` рядом с баннером, `aria-label`.
+  6. **Описание стратегии всегда видно** — однострочник под пиллами,
+     меняется live при переключении (раньше прятался в Config).
+
+- **`edda67b`** — `fix(globus): tighten [id]/page params types for Next 16 build`.
+  Pre-existing breakage от апгрейда Next до 16.0.10: `params: Promise<T> | T`
+  больше не валиден (PageProps generic). Code уже await'ил оба, так что
+  union был декоративный — снят. Тот же приём что `b998211` для cyberchess.
+  Без этого `next build --webpack` падал на проверке типов.
+
+**Всего на ветке: 10 коммитов** (8 запушены, 2 свежих перед push'ом):
+
+```
+qcore-multi-agent (origin):
+  73fcfdf  feat(qcore): multi-agent pipeline with sequential & parallel strategies
+  af0ce8d  feat(qcore): debate strategy + pricing/cost engine + run export
+  16f8309  feat(qcore): shareable public runs + analytics + compare-all
+  aa1bde6  feat(qcore): in-memory fallback store
+  f91eb5d  feat(qcore): rate-limit on /shared + SEO OG tags
+  b998211  fix(cyberchess): drop tautological tab!=="analysis" comparison
+  7761d23  docs(qcore): production-ready handoff 2026-04-24
+  448d730  feat(qcore): rate-limit on /multi-agent (20 req/min/IP)
+  1b8283d  docs(qcore): handoff 2026-04-25 — rate-limit on /multi-agent
+  bc7b65b  feat(qcore): release-grade UI polish on /qcoreai/multi
+  edda67b  fix(globus): tighten [id]/page params types for Next 16 build
+```
 
 ```
 qcore-multi-agent:
@@ -43,6 +79,8 @@ qcore-multi-agent:
 | 20× POST `/multi-agent` `{}` | ✅ 400 (input required), `X-RateLimit-Remaining` 19→0 |
 | 21-й POST | ✅ 429 + `Retry-After: 56` |
 | `/shared` лимит не пострадал | ✅ отдельный keyPrefix → независимое окно |
+| Frontend `next build --webpack` | ✅ 25 routes, prod build clean |
+| `/qcoreai/multi` UX-правки | ✅ компилируются, тип-ассоциации на месте |
 
 > PG не был поднят в этой сессии (пароль слетел снова), но storage-fallback
 > прозрачно ушёл в in-memory — ровно то, для чего его и встраивали в

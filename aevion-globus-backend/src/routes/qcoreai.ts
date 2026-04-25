@@ -332,7 +332,14 @@ function parseAgentOverride(raw: any): AgentOverride | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
-qcoreaiRouter.post("/multi-agent", async (req, res) => {
+const multiAgentLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyPrefix: "qcore-multi-agent",
+  message: "Too many multi-agent runs from this IP. Please retry in a minute.",
+});
+
+qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
 

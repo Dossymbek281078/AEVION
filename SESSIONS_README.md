@@ -4,10 +4,22 @@
 
 ## TL;DR
 
+**From PowerShell (most common):**
 ```powershell
-# From any PowerShell window:
+& "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
+```
+
+If you get an "execution policy" error:
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force; & "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
+```
+
+**From cmd.exe** (or Run dialog Win+R):
+```cmd
 powershell -ExecutionPolicy Bypass -File "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
 ```
+
+> Why two forms? Inside PowerShell, `-ExecutionPolicy` is a parameter of `powershell.exe`, not a top-level command — typing it directly produces "Имя -ExecutionPolicy не распознано". The `&` call operator runs the script in the current shell. From cmd, `powershell` is the executable, so flags work.
 
 This opens 10 sessions (Windows Terminal tabs if available, otherwise 10 PowerShell windows). Each tab is pre-configured with its own working directory and prints a brief on launch. Then **type `claude` in each tab** to start the agent.
 

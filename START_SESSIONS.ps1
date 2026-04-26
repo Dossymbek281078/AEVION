@@ -2,7 +2,14 @@
 #  AEVION — Open 10 parallel Claude Code sessions
 #  Last updated: 2026-04-26
 #
-#  Usage (from any PowerShell window):
+#  Usage:
+#     # From PowerShell (most common):
+#     & "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
+#
+#     # If you get execution-policy error:
+#     Set-ExecutionPolicy -Scope Process Bypass -Force; & "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
+#
+#     # From cmd.exe / Win+R Run dialog:
 #     powershell -ExecutionPolicy Bypass -File "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
 #
 #  Or: copy this file anywhere, double-click → choose "Run with PowerShell"

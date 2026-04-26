@@ -2,6 +2,44 @@
 
 > Last updated: 2026-04-26. Use this with `START_SESSIONS.ps1`.
 
+## On a fresh laptop — first run (do once)
+
+```powershell
+# 1. Install prerequisites (one-time):
+#    - Git for Windows: https://git-scm.com/download/win
+#    - Node.js (LTS):    https://nodejs.org/
+#    - Windows Terminal: from Microsoft Store (recommended)
+#    - Claude Code:      npm install -g @anthropic-ai/claude-code
+
+# 2. Clone the repo into the canonical path:
+git clone https://github.com/Dossymbek281078/AEVION.git C:\Users\user\aevion-core
+
+# 3. Add the bank-payment-layer worktree (where the launcher lives):
+cd C:\Users\user\aevion-core
+git worktree add frontend-bank bank-payment-layer
+
+# 4. Run the launcher:
+& "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
+```
+
+The launcher itself takes care of creating the 5 Group-B worktrees, pulling latest in everything, and opening 10 wt tabs.
+
+## Daily run (every subsequent day)
+
+```powershell
+& "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
+```
+
+That single command now:
+
+1. `git fetch --all --prune` (gets remote refs)
+2. `git pull --ff-only` in **every** existing worktree (main repo, frontend-bank, and each Group-B worktree if present) — pulls the latest commits on each branch
+3. Creates any Group-B worktree that's still missing (tracks `origin/<branch>` if it exists, else forks from `main`)
+4. Generates per-session `.ps1` files in `%TEMP%\AEVION_SESSIONS\` with UTF-8 BOM
+5. Opens 10 wt tabs (or 10 PowerShell windows fallback)
+
+If a worktree has uncommitted local changes that block the fast-forward, you'll see a yellow `[warn] could not fast-forward` line — open that worktree manually, commit/stash, then re-run.
+
 ## TL;DR
 
 **From PowerShell (most common):**

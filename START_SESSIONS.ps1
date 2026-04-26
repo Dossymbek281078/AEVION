@@ -43,13 +43,30 @@ if (-not (Test-Path $DataFile)) {
 }
 
 # -----------------------------------------------------------------------------
-# Step 1. Refresh main and ensure worktrees
+# Step 1. Pull latest in every existing worktree, then ensure worktrees exist
 # -----------------------------------------------------------------------------
-Write-Host "[1/3] Refreshing main branch + ensuring worktrees..." -ForegroundColor Yellow
+Write-Host "[1/3] Pulling latest from origin in every worktree..." -ForegroundColor Yellow
 
+# Refresh remote refs once
 Push-Location $RepoRoot
-git fetch origin 2>&1 | Out-Null
+git fetch --all --prune 2>&1 | Out-Null
 Pop-Location
+
+# Pull in main repo (root) and bank-payment-layer worktree
+$AllPullPaths = @($RepoRoot, $BankWT)
+foreach ($p in $AllPullPaths) {
+  if (Test-Path $p) {
+    Push-Location $p
+    $branch = (git rev-parse --abbrev-ref HEAD 2>&1).Trim()
+    git pull --ff-only origin $branch 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host ("    [pull] " + $p + " (" + $branch + ") -> up to date") -ForegroundColor Green
+    } else {
+      Write-Host ("    [warn] " + $p + " could not fast-forward (local changes? diverged?)") -ForegroundColor Yellow
+    }
+    Pop-Location
+  }
+}
 
 $Worktrees = @(
   @{ Path = "$RepoRoot\frontend-globus";   Branch = "globus-polish";     Base = "main" },
@@ -61,13 +78,26 @@ $Worktrees = @(
 
 foreach ($wt in $Worktrees) {
   if (Test-Path $wt.Path) {
-    Write-Host ("    [OK] worktree exists: " + $wt.Path) -ForegroundColor Green
+    Push-Location $wt.Path
+    git pull --ff-only origin $wt.Branch 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host ("    [pull] " + $wt.Path + " (" + $wt.Branch + ") -> up to date") -ForegroundColor Green
+    } else {
+      Write-Host ("    [OK]   worktree exists: " + $wt.Path + " (no remote yet, that's fine)") -ForegroundColor Green
+    }
+    Pop-Location
   } else {
-    Write-Host ("    [+]  creating worktree: " + $wt.Path + " (branch: " + $wt.Branch + ")") -ForegroundColor Cyan
+    Write-Host ("    [+]    creating worktree: " + $wt.Path + " (branch: " + $wt.Branch + ")") -ForegroundColor Cyan
     Push-Location $RepoRoot
-    git worktree add $wt.Path -b $wt.Branch $wt.Base 2>&1 | Out-Null
+    # try: branch exists on remote -> track it
+    git worktree add $wt.Path -b $wt.Branch ("origin/" + $wt.Branch) 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
+      # try: branch exists locally already
       git worktree add $wt.Path $wt.Branch 2>&1 | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        # last resort: brand new branch from main
+        git worktree add $wt.Path -b $wt.Branch $wt.Base 2>&1 | Out-Null
+      }
     }
     Pop-Location
   }

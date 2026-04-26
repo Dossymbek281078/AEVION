@@ -12,11 +12,14 @@
 #    From cmd.exe / Win+R:
 #      powershell -ExecutionPolicy Bypass -File "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"
 #
-#  What it does:
-#    1. Ensures 5 git worktrees exist for the 5 NEW work streams.
-#    2. Opens 10 Windows Terminal tabs (or 10 PowerShell windows fallback),
-#       each cd-ed into the right working directory with a short brief printed.
-#    3. Does NOT auto-launch claude -- you start it yourself per tab.
+#  How it works:
+#    1. Refreshes main + ensures 5 worktrees exist for the new tracks.
+#    2. Writes one tiny .ps1 per session into %TEMP%\AEVION_SESSIONS\.
+#       (This avoids the Windows Terminal `;` parsing pitfall when a brief
+#        contains semicolons.)
+#    3. Opens 10 Windows Terminal tabs (or 10 PowerShell windows fallback)
+#       and each tab runs its own per-session .ps1 via -File.
+#    4. Does NOT auto-launch claude -- you start it yourself per tab.
 #
 #  Pure ASCII -- safe for Windows PowerShell 5.1 default encoding.
 # =============================================================================
@@ -24,6 +27,7 @@
 $ErrorActionPreference = "Continue"
 $RepoRoot = "C:\Users\user\aevion-core"
 $BankWT   = "$RepoRoot\frontend-bank"
+$TempDir  = Join-Path $env:TEMP "AEVION_SESSIONS"
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
@@ -65,10 +69,9 @@ foreach ($wt in $Worktrees) {
 Write-Host ""
 
 # -----------------------------------------------------------------------------
-# Step 2. Define the 10 sessions (briefs use ASCII only)
+# Step 2. Define the 10 sessions (briefs are pure ASCII)
 # -----------------------------------------------------------------------------
 $Sessions = @(
-  # ----- Group A: continuing tracks (frontend-bank/ on bank-payment-layer)
   @{
     Title = "A1-Bank-polish"
     Path  = $BankWT
@@ -77,7 +80,7 @@ $Sessions = @(
       "Branch: bank-payment-layer (PR 5 open). Worktree: frontend-bank/",
       "Goals today: bug-fix sweep, UX micro-polish, mobile responsiveness audit,",
       "  performance (Lighthouse), accessibility (axe), final QA before merge to main.",
-      "Start: cd frontend ; claude"
+      "Start: cd frontend  then  claude"
     )
   },
   @{
@@ -88,7 +91,7 @@ $Sessions = @(
       "Branch: bank-payment-layer. Files: src/app/pitch/, src/data/pitchModel.ts",
       "Goals: case-study quotes, real partner logos when allowed, video walkthrough",
       "  links, clearer Year 1 traction chart, optional /pitch/print route.",
-      "Start: cd frontend ; claude"
+      "Start: cd frontend  then  claude"
     )
   },
   @{
@@ -99,7 +102,7 @@ $Sessions = @(
       "Branch: bank-payment-layer. Files: src/app/demo/, src/data/demoNarrative.ts, demoDeep.ts",
       "Goals: align /demo with /pitch numbers, add live metrics row to /demo,",
       "  fill /demo/deep with architecture diagrams, threat model, perf budgets.",
-      "Start: cd frontend ; claude"
+      "Start: cd frontend  then  claude"
     )
   },
   @{
@@ -110,7 +113,7 @@ $Sessions = @(
       "Branch: bank-payment-layer. Files: src/app/multichat-engine/, /api/qcoreai/chat",
       "Goals: parallel session UI, role isolation per agent, persistence,",
       "  white-label B2B preview, ship as a real consumable product surface.",
-      "Start: cd frontend ; claude"
+      "Start: cd frontend  then  claude"
     )
   },
   @{
@@ -121,11 +124,9 @@ $Sessions = @(
       "Branch: bank-payment-layer. Files: src/app/awards/{music,film}/, AwardPortal component",
       "Goals: submission form, vote UI, leaderboard with live Planet stats,",
       "  AEC payout preview tied to Bank, jury panel mechanics.",
-      "Start: cd frontend ; claude"
+      "Start: cd frontend  then  claude"
     )
   },
-
-  # ----- Group B: new tracks (each in its own worktree from main)
   @{
     Title = "B1-Globus-polish"
     Path  = "$RepoRoot\frontend-globus"
@@ -135,7 +136,7 @@ $Sessions = @(
       "Goals: interactive 3D / SVG map, click any node -> live status drawer,",
       "  hero refresh aligned with /pitch numbers, pull /api/globus/projects live.",
       "First file to read: frontend/src/app/page.tsx (998 lines -- careful).",
-      "Start: cd frontend ; npm install --include=optional ; claude"
+      "Start: cd frontend  then  npm install --include=optional  then  claude"
     )
   },
   @{
@@ -148,7 +149,7 @@ $Sessions = @(
       "  (royalty credit, chess credit, planet credit), AMM-style pricing,",
       "  treasury controls. Ship as preview behind feature flag.",
       "Backend contracts to propose: /api/exchange/book, /quote, /trade.",
-      "Start: cd frontend ; npm install --include=optional ; claude"
+      "Start: cd frontend  then  npm install --include=optional  then  claude"
     )
   },
   @{
@@ -161,7 +162,7 @@ $Sessions = @(
       "  audit log, recurring + scheduled + split + gift modes consolidated,",
       "  reconciliation report, real-time balance everywhere.",
       "Files: src/app/bank/_components/SendForm.tsx, _lib/api.ts",
-      "Start: cd frontend ; npm install --include=optional ; claude"
+      "Start: cd frontend  then  npm install --include=optional  then  claude"
     )
   },
   @{
@@ -173,7 +174,7 @@ $Sessions = @(
       "Goals: tiered pricing page (Free / Pro / Enterprise) per module bundle,",
       "  hosted /api-docs reading from /api/openapi.json with try-it console,",
       "  partner program landing, embeds for iframe marketing.",
-      "Start: cd frontend ; npm install --include=optional ; claude"
+      "Start: cd frontend  then  npm install --include=optional  then  claude"
     )
   },
   @{
@@ -186,13 +187,38 @@ $Sessions = @(
       "  Trust-Score-gated brackets (elite-only), anti-cheat hooks via Trust Graph,",
       "  prize-pool auto-payout to Bank.",
       "Files: src/app/cyberchess/page.tsx (1137 lines -- read engine first)",
-      "Start: cd frontend ; npm install --include=optional ; claude"
+      "Start: cd frontend  then  npm install --include=optional  then  claude"
     )
   }
 )
 
 # -----------------------------------------------------------------------------
-# Step 3. Open the 10 tabs/windows
+# Step 3. Generate per-session .ps1 files in %TEMP%\AEVION_SESSIONS\
+# -----------------------------------------------------------------------------
+if (-not (Test-Path $TempDir)) {
+  New-Item -ItemType Directory -Path $TempDir | Out-Null
+}
+
+foreach ($s in $Sessions) {
+  $perSessionFile = Join-Path $TempDir ($s.Title + ".ps1")
+  $lines = New-Object System.Collections.Generic.List[string]
+  $lines.Add('$Host.UI.RawUI.WindowTitle = "' + $s.Title + '"')
+  $lines.Add('Set-Location -LiteralPath "' + $s.Path + '"')
+  $lines.Add('Write-Host ""')
+  $lines.Add('Write-Host "=== ' + $s.Title + ' ===" -ForegroundColor Cyan')
+  foreach ($line in $s.Brief) {
+    $safe = $line.Replace('"', '`"')
+    $lines.Add('Write-Host "  ' + $safe + '" -ForegroundColor Gray')
+  }
+  $lines.Add('Write-Host ""')
+  $lines.Add('Write-Host "Ready. Type: claude" -ForegroundColor Green')
+  $lines.Add('Write-Host ""')
+  # ASCII-safe write
+  [System.IO.File]::WriteAllLines($perSessionFile, $lines.ToArray(), [System.Text.Encoding]::ASCII)
+}
+
+# -----------------------------------------------------------------------------
+# Step 4. Open the 10 tabs/windows
 # -----------------------------------------------------------------------------
 $wtCmd = Get-Command wt.exe -ErrorAction SilentlyContinue
 $useWT = $null -ne $wtCmd
@@ -206,22 +232,13 @@ if ($useWT) {
 }
 Write-Host ""
 
-function Build-TabCommand($session) {
-  $cmd = "Set-Location '" + $session.Path + "'; "
-  $cmd += "Write-Host '=== " + $session.Title + " ===' -ForegroundColor Cyan; "
-  foreach ($line in $session.Brief) {
-    $safe = $line -replace "'", "''"
-    $cmd += "Write-Host '  " + $safe + "' -ForegroundColor Gray; "
-  }
-  $cmd += "Write-Host ''; Write-Host 'Ready. Type: claude' -ForegroundColor Green"
-  return $cmd
-}
-
 if ($useWT) {
+  # Build a single wt invocation. Each new-tab references its own .ps1 file
+  # via -File, so no semicolons leak into wt's argument parser.
   $wtArgs = New-Object System.Collections.Generic.List[string]
   $first = $true
   foreach ($s in $Sessions) {
-    $cmd = Build-TabCommand $s
+    $perSessionFile = Join-Path $TempDir ($s.Title + ".ps1")
     if (-not $first) { $wtArgs.Add(";") }
     $wtArgs.Add("new-tab")
     $wtArgs.Add("--title")
@@ -230,16 +247,17 @@ if ($useWT) {
     $wtArgs.Add($s.Path)
     $wtArgs.Add("powershell.exe")
     $wtArgs.Add("-NoExit")
-    $wtArgs.Add("-Command")
-    $wtArgs.Add($cmd)
+    $wtArgs.Add("-ExecutionPolicy")
+    $wtArgs.Add("Bypass")
+    $wtArgs.Add("-File")
+    $wtArgs.Add($perSessionFile)
     $first = $false
   }
   Start-Process wt.exe -ArgumentList $wtArgs.ToArray()
 } else {
   foreach ($s in $Sessions) {
-    $cmd  = "`$Host.UI.RawUI.WindowTitle = '" + $s.Title + "'; "
-    $cmd += Build-TabCommand $s
-    Start-Process powershell -ArgumentList @("-NoExit", "-Command", $cmd) | Out-Null
+    $perSessionFile = Join-Path $TempDir ($s.Title + ".ps1")
+    Start-Process powershell -ArgumentList @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", $perSessionFile) | Out-Null
   }
 }
 
@@ -248,4 +266,5 @@ Write-Host "[3/3] Done." -ForegroundColor Green
 Write-Host ""
 Write-Host "Tip: each tab/window has its own brief and cwd ready. Type 'claude' to start." -ForegroundColor Cyan
 Write-Host "     Read SESSIONS_README.md for the full plan and per-track first prompts." -ForegroundColor Cyan
+Write-Host ("     Per-session scripts live in: " + $TempDir) -ForegroundColor DarkGray
 Write-Host ""

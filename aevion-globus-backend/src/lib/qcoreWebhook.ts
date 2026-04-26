@@ -27,38 +27,64 @@ export type RunCompletedEvent = {
   finishedAt: string;
 };
 
+/** True iff the env-level (single-tenant) webhook is configured. The UI
+ * uses this to show a "🔗 Webhook wired" chip; per-user webhooks render
+ * their own indicator since they need auth context. */
 export function isWebhookConfigured(): boolean {
   return !!process.env.QCORE_WEBHOOK_URL?.trim();
 }
 
-export async function notifyRunCompleted(evt: RunCompletedEvent): Promise<void> {
+type WebhookTarget = { url: string; secret: string | null; source: "user" | "env" };
+
+/**
+ * Resolve which webhook (if any) should receive a given run's event.
+ *
+ *   1. If `userOverride` is provided (the run's user has a stored row),
+ *      use that — per-tenant routing.
+ *   2. Otherwise fall back to env QCORE_WEBHOOK_URL / QCORE_WEBHOOK_SECRET.
+ *   3. Returns null when neither is set — caller is a no-op.
+ */
+function resolveTarget(userOverride?: { url: string; secret: string | null } | null): WebhookTarget | null {
+  if (userOverride && userOverride.url) {
+    return { url: userOverride.url, secret: userOverride.secret, source: "user" };
+  }
   const url = process.env.QCORE_WEBHOOK_URL?.trim();
-  if (!url) return;
+  if (!url) return null;
+  const secret = process.env.QCORE_WEBHOOK_SECRET?.trim() || null;
+  return { url, secret, source: "env" };
+}
+
+export async function notifyRunCompleted(
+  evt: RunCompletedEvent,
+  userOverride?: { url: string; secret: string | null } | null
+): Promise<void> {
+  const target = resolveTarget(userOverride);
+  if (!target) return;
 
   const body = JSON.stringify(evt);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "User-Agent": "AEVION-QCoreAI/1.0",
     "X-QCore-Event": "run.completed",
+    "X-QCore-Webhook-Source": target.source,
   };
 
-  const secret = process.env.QCORE_WEBHOOK_SECRET?.trim();
-  if (secret) {
-    const sig = createHmac("sha256", secret).update(body).digest("hex");
+  if (target.secret) {
+    const sig = createHmac("sha256", target.secret).update(body).digest("hex");
     headers["X-QCore-Signature"] = `sha256=${sig}`;
   }
 
   try {
-    const r = await fetch(url, {
+    const r = await fetch(target.url, {
       method: "POST",
       headers,
       body,
       signal: AbortSignal.timeout(5_000),
     });
     if (!r.ok) {
-      console.warn(`[QCoreAI] webhook ${url} responded ${r.status} for run ${evt.runId}`);
+      console.warn(`[QCoreAI] webhook (${target.source}) ${target.url} responded ${r.status} for run ${evt.runId}`);
     }
   } catch (e: any) {
-    console.warn(`[QCoreAI] webhook ${url} failed for run ${evt.runId}: ${e?.message || e}`);
+    console.warn(`[QCoreAI] webhook (${target.source}) ${target.url} failed for run ${evt.runId}: ${e?.message || e}`);
   }
 }

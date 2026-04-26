@@ -324,6 +324,16 @@ export default function QCoreMultiAgentPage() {
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [webhookConfigured, setWebhookConfigured] = useState(false);
+  // Per-user webhook config (auth-required). null = not loaded yet,
+  // undefined = loaded but user has no webhook set.
+  const [userWebhook, setUserWebhook] = useState<{
+    url: string;
+    hasSecret: boolean;
+    updatedAt: string;
+  } | null | undefined>(null);
+  const [whUrlInput, setWhUrlInput] = useState("");
+  const [whSecretInput, setWhSecretInput] = useState("");
+  const [whBusy, setWhBusy] = useState(false);
   // Sessions sidebar state — only honored on mobile via CSS, always-open on desktop.
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // Mid-run guidance input value.
@@ -390,6 +400,94 @@ export default function QCoreMultiAgentPage() {
         setGlobalError(e?.message || "Failed to load QCoreAI config");
       }
     })();
+  }, []);
+
+  /* ── Lazy-load personal webhook config when config panel opens ── */
+  useEffect(() => {
+    if (!configOpen) return;
+    if (userWebhook !== null) return;
+    if (typeof window === "undefined") return;
+    const token = (() => {
+      try { return localStorage.getItem("aevion_auth_token_v1"); } catch { return null; }
+    })();
+    if (!token) {
+      // Anonymous — there's no per-user config to load. Mark as undefined.
+      setUserWebhook(undefined);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/qcoreai/me/webhook"), { headers: bearerHeader() });
+        if (res.status === 404) {
+          setUserWebhook(undefined);
+          return;
+        }
+        if (!res.ok) {
+          setUserWebhook(undefined);
+          return;
+        }
+        const data = await res.json();
+        setUserWebhook({
+          url: data.url,
+          hasSecret: !!data.hasSecret,
+          updatedAt: data.updatedAt || "",
+        });
+      } catch {
+        setUserWebhook(undefined);
+      }
+    })();
+  }, [configOpen, userWebhook]);
+
+  const saveUserWebhook = useCallback(async () => {
+    const url = whUrlInput.trim();
+    if (!url) return;
+    setWhBusy(true);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/webhook"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({
+          url,
+          secret: whSecretInput.trim() ? whSecretInput.trim() : undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setGlobalError(data?.error || `Webhook save failed: HTTP ${res.status}`);
+        return;
+      }
+      setUserWebhook({
+        url: data.url,
+        hasSecret: !!data.hasSecret,
+        updatedAt: data.updatedAt || "",
+      });
+      setWhUrlInput("");
+      setWhSecretInput("");
+    } catch (e: any) {
+      setGlobalError(e?.message || "Webhook save failed");
+    } finally {
+      setWhBusy(false);
+    }
+  }, [whUrlInput, whSecretInput]);
+
+  const removeUserWebhook = useCallback(async () => {
+    setWhBusy(true);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/webhook"), {
+        method: "DELETE",
+        headers: bearerHeader(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setGlobalError(data?.error || `Webhook delete failed: HTTP ${res.status}`);
+        return;
+      }
+      setUserWebhook(undefined);
+    } catch (e: any) {
+      setGlobalError(e?.message || "Webhook delete failed");
+    } finally {
+      setWhBusy(false);
+    }
   }, []);
 
   /* ── Lazy-load QRight objects when config panel opens (one fetch per page life) ── */
@@ -1389,6 +1487,175 @@ export default function QCoreMultiAgentPage() {
                     />
                   ))}
               </div>
+              {/* Personal webhook config — auth-required.
+                  When set, run.completed events fire to this URL instead of
+                  the env-level fallback. Anonymous users see only a hint. */}
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    🔗 Personal webhook
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    Your URL receives <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, fontSize: "0.92em" }}>run.completed</code> events for runs you start.
+                  </span>
+                </div>
+                {userWebhook === null ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading…</div>
+                ) : userWebhook === undefined ? (
+                  <div>
+                    {(() => {
+                      const token = typeof window !== "undefined"
+                        ? (() => { try { return localStorage.getItem("aevion_auth_token_v1"); } catch { return null; } })()
+                        : null;
+                      if (!token) {
+                        return (
+                          <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                            Sign in at{" "}
+                            <Link href="/auth" style={{ color: "#0d9488", fontWeight: 700 }}>Auth</Link>
+                            {" "}to configure your own webhook URL.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          <input
+                            type="url"
+                            value={whUrlInput}
+                            onChange={(e) => setWhUrlInput(e.target.value)}
+                            placeholder="https://your-receiver.example.com/qcore"
+                            disabled={whBusy}
+                            style={{
+                              flex: "1 1 220px",
+                              minWidth: 200,
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #cbd5e1",
+                              fontSize: 12,
+                              outline: "none",
+                            }}
+                          />
+                          <input
+                            type="password"
+                            value={whSecretInput}
+                            onChange={(e) => setWhSecretInput(e.target.value)}
+                            placeholder="HMAC secret (optional)"
+                            disabled={whBusy}
+                            style={{
+                              flex: "1 1 160px",
+                              minWidth: 140,
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #cbd5e1",
+                              fontSize: 12,
+                              outline: "none",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={saveUserWebhook}
+                            disabled={whBusy || !whUrlInput.trim()}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: 8,
+                              border: "none",
+                              background: whUrlInput.trim() ? "#0369a1" : "#cbd5e1",
+                              color: "#fff",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              cursor: whUrlInput.trim() ? "pointer" : "default",
+                            }}
+                          >
+                            {whBusy ? "Saving…" : "Save"}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <code
+                      style={{
+                        padding: "4px 8px",
+                        background: "rgba(56,189,248,0.12)",
+                        border: "1px solid rgba(56,189,248,0.35)",
+                        borderRadius: 8,
+                        fontSize: 11,
+                        color: "#0369a1",
+                        fontWeight: 600,
+                        maxWidth: "100%",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                      title={userWebhook.url}
+                    >
+                      {userWebhook.url}
+                    </code>
+                    {userWebhook.hasSecret && (
+                      <span
+                        title="HMAC-SHA256 signature included on every POST"
+                        style={{
+                          padding: "3px 8px",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: "#0f766e",
+                          background: "rgba(13,148,136,0.1)",
+                          border: "1px solid rgba(13,148,136,0.3)",
+                          borderRadius: 999,
+                        }}
+                      >
+                        🔐 HMAC
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWhUrlInput(userWebhook.url);
+                        setWhSecretInput("");
+                        setUserWebhook(undefined);
+                      }}
+                      disabled={whBusy}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "#fff",
+                        border: "1px solid #cbd5e1",
+                        color: "#0f172a",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={removeUserWebhook}
+                      disabled={whBusy}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "#fff",
+                        border: "1px solid #fecaca",
+                        color: "#991b1b",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {whBusy ? "…" : "Remove"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* QRight attachments — pre-fetched as Analyst context */}
               <div
                 style={{

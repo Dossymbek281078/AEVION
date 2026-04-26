@@ -115,6 +115,18 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreMessage — per-call cost (computed from provider/model/tokens at runtime).
   await pool.query(`ALTER TABLE "QCoreMessage" ADD COLUMN IF NOT EXISTS "costUsd" DOUBLE PRECISION;`);
 
+  // Per-user webhook config. One row per JWT sub. URL is required, secret
+  // optional (when set, run.completed POSTs include X-QCore-Signature).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreUserWebhook" (
+      "userId"    TEXT PRIMARY KEY,
+      "url"       TEXT NOT NULL,
+      "secret"    TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

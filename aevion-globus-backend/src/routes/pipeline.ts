@@ -30,6 +30,11 @@ import {
   verifyProof as otsVerifyProof,
 } from "../lib/opentimestamps/anchor";
 import { computeWitnessCid } from "../lib/shamir/witnessCid";
+import {
+  CosignError,
+  reverifyAuthorCosign,
+  verifyAuthorCosign,
+} from "../lib/cosign/authorCosign";
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -171,6 +176,19 @@ async function ensureTables(): Promise<void> {
   // rotated records still verify under their original key.
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "qsignKeyVersion" INTEGER NOT NULL DEFAULT 1;`,
+  );
+  // v3 (Phase 4 — author co-signing): the user's browser-held Ed25519
+  // pubkey (base64, 32 raw bytes) and signature over `contentHash`
+  // (base64, 64 raw bytes). NULL for legacy pre-v3 rows; verify reports
+  // `present: false` for those.
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "authorPublicKey" TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "authorSignature" TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "authorKeyAlgo" TEXT;`,
   );
   // v3: Bitcoin-anchored timestamp proof (OpenTimestamps).
   // Pending immediately after /protect; upgraded to bitcoin-confirmed via
@@ -322,8 +340,17 @@ pipelineRouter.post("/protect", async (req, res) => {
   try {
     await ensureTables();
 
-    const { title, description, kind, ownerName, ownerEmail, country, city } =
-      req.body;
+    const {
+      title,
+      description,
+      kind,
+      ownerName,
+      ownerEmail,
+      country,
+      city,
+      authorPublicKey,
+      authorSignature,
+    } = req.body;
 
     if (!title || !description) {
       return res
@@ -349,6 +376,33 @@ pipelineRouter.post("/protect", async (req, res) => {
       country,
       city,
     });
+
+    /* ── Author co-sign (optional, but verified before any DB write) ── */
+    // The user's browser holds an Ed25519 keypair; the signature on
+    // `contentHash` is sent alongside the form. We verify here so a bad
+    // payload fails before we register the work or split shards.
+    let cosign: ReturnType<typeof verifyAuthorCosign> | null = null;
+    const cosignProvided =
+      typeof authorPublicKey === "string" && authorPublicKey.length > 0;
+    if (cosignProvided) {
+      try {
+        cosign = verifyAuthorCosign(
+          {
+            authorPublicKey,
+            authorSignature: typeof authorSignature === "string" ? authorSignature : "",
+          },
+          contentHash,
+        );
+      } catch (cosErr) {
+        if (cosErr instanceof CosignError) {
+          return res.status(400).json({
+            error: cosErr.message,
+            code: `COSIGN_${cosErr.code}`,
+          });
+        }
+        throw cosErr;
+      }
+    }
 
     /* ── Pre-compute: QSign HMAC (signedAt stored for verify re-check) ── */
     const objectId = crypto.randomUUID();
@@ -466,8 +520,8 @@ pipelineRouter.post("/protect", async (req, res) => {
       );
 
       await client.query(
-        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19,$20,$21)`,
+        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19,$20,$21,$22,$23,$24)`,
         [
           certId,
           objectId,
@@ -490,6 +544,9 @@ pipelineRouter.post("/protect", async (req, res) => {
           protectedAt,
           signedAt,
           HMAC_KEY_VERSION,
+          cosign?.authorPublicKey ?? null,
+          cosign?.authorSignature ?? null,
+          cosign?.authorKeyAlgo ?? null,
         ],
       );
 
@@ -626,6 +683,13 @@ pipelineRouter.post("/protect", async (req, res) => {
         cid: responseWitnessCid,
         witnessUrl: `/api/pipeline/shield/${shieldId}/witness`,
       },
+      cosign: cosign
+        ? {
+            present: true,
+            algo: cosign.authorKeyAlgo,
+            authorKeyFingerprint: cosign.authorKeyFingerprint,
+          }
+        : { present: false },
       certificate,
     });
   } catch (err: unknown) {
@@ -1093,6 +1157,13 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         ? JSON.parse(cert.legalBasis)
         : cert.legalBasis;
 
+    /* ── Re-verify author co-signature against current contentHash ── */
+    const cosignStatus = reverifyAuthorCosign(
+      cert.authorPublicKey,
+      cert.authorSignature,
+      cert.contentHash,
+    );
+
     res.json({
       valid: true,
       verified: true,
@@ -1130,6 +1201,7 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         shieldLegacy,
         shards: cert.shardCount,
         threshold: cert.shardThreshold,
+        authorCosign: cosignStatus,
       },
       shardDistribution: {
         policy: distributionPolicy,

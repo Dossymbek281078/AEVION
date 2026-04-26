@@ -18,6 +18,11 @@ import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { rateLimit } from "../lib/rateLimit";
 import { isWebhookConfigured, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
+  fetchQRightAttachments,
+  normalizeAttachmentIds,
+  renderAttachmentsContext,
+} from "../services/qcoreai/attachments";
+import {
   buildHistoryContext,
   createRun,
   deleteSession,
@@ -419,6 +424,22 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     critic: parseAgentOverride(req.body?.overrides?.critic),
   };
 
+  // Pre-fetch any QRight attachments the user wants the agents to reason
+  // against. Pulled BEFORE the SSE stream opens so we can fail fast (bad
+  // ID list) and so the Analyst sees them on its very first prompt.
+  const requestedAttachmentIds = normalizeAttachmentIds(req.body?.qrightAttachmentIds);
+  let attachments: Awaited<ReturnType<typeof fetchQRightAttachments>> = [];
+  if (requestedAttachmentIds.length > 0) {
+    try {
+      attachments = await fetchQRightAttachments(requestedAttachmentIds);
+    } catch (err: any) {
+      return res.status(500).json({ error: "qright attachment fetch failed", details: err?.message });
+    }
+  }
+  const augmentedUserInput = attachments.length
+    ? `${renderAttachmentsContext(attachments)}\n\n[User question]\n${userInput}`
+    : userInput;
+
   let sessionId: string;
   let runId: string;
   try {
@@ -472,6 +493,15 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   send({ type: "session", sessionId, runId });
 
+  if (attachments.length > 0) {
+    // Surface attached QRight objects so the UI can chip them in the run
+    // header. Lightweight payload — id + title + kind only.
+    send({
+      type: "qright_attached",
+      items: attachments.map((a) => ({ id: a.id, title: a.title, kind: a.kind })),
+    });
+  }
+
   // Register this run for mid-run guidance. The orchestrator will drain
   // this queue at each writer-stage boundary; the new
   // POST /runs/:runId/guidance endpoint pushes into it.
@@ -492,7 +522,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   try {
     for await (const evt of runMultiAgent({
-      userInput,
+      userInput: augmentedUserInput,
       strategy,
       overrides,
       maxRevisions,

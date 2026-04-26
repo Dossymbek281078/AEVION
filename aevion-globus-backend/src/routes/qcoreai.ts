@@ -487,6 +487,13 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const maxRevisions =
     typeof req.body?.maxRevisions === "number" ? Math.max(0, Math.min(2, req.body.maxRevisions)) : 1;
 
+  // Optional spend cap. Hard upper bound 50 USD/run prevents accidental
+  // misuse via negative or huge values.
+  let maxCostUsd: number | undefined;
+  if (typeof req.body?.maxCostUsd === "number" && isFinite(req.body.maxCostUsd) && req.body.maxCostUsd > 0) {
+    maxCostUsd = Math.min(50, req.body.maxCostUsd);
+  }
+
   const overrides: {
     analyst?: AgentOverride;
     writer?: AgentOverride;
@@ -617,6 +624,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       maxRevisions,
       history,
       guidanceProvider: () => drainGuidance(runId),
+      maxCostUsd,
     }) as AsyncGenerator<OrchestratorEvent>) {
       if (aborted) break;
       send(evt);

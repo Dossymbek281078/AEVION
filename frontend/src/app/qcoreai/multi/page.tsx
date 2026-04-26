@@ -78,6 +78,8 @@ type RunState = {
   sessionId: string;
   userInput: string;
   turns: AgentTurn[];
+  /** Set when the run hit its maxCostUsd budget cap and bailed early. */
+  budgetExceeded?: { spentUsd: number; budgetUsd: number };
   /** Optional mid-run guidance items, rendered as inline chips before the
       agent stage they steered. */
   guidance?: GuidanceItem[];
@@ -147,6 +149,7 @@ type SSEPayload =
   | { type: "error"; message: string; role?: AgentRole }
   | { type: "guidance_applied"; stage: Stage; role: AgentRole; text: string; instance?: string }
   | { type: "qright_attached"; items: { id: string; title: string | null; kind: string | null }[] }
+  | { type: "budget_exceeded"; spentUsd: number; budgetUsd: number }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number }
   | { type: "sse_end" };
 
@@ -318,6 +321,9 @@ export default function QCoreMultiAgentPage() {
     critic: { provider: "", model: "" },
   });
   const [maxRevisions, setMaxRevisions] = useState(1);
+  // Optional spend cap per run (USD). 0 = no cap. Persisted in localStorage
+  // so investors don't accidentally start a $5 run during a demo.
+  const [maxCostUsd, setMaxCostUsd] = useState(0);
   const [configOpen, setConfigOpen] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [presets, setPresets] = useState<AgentPreset[]>([]);
@@ -788,6 +794,7 @@ export default function QCoreMultiAgentPage() {
         },
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
+      if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...bearerHeader() },
@@ -903,6 +910,15 @@ export default function QCoreMultiAgentPage() {
           case "final":
             setRuns((prev) =>
               prev.map((r) => (r.id === realRunId ? { ...r, finalContent: payload.content } : r))
+            );
+            break;
+          case "budget_exceeded":
+            setRuns((prev) =>
+              prev.map((r) =>
+                r.id === realRunId
+                  ? { ...r, budgetExceeded: { spentUsd: payload.spentUsd, budgetUsd: payload.budgetUsd } }
+                  : r
+              )
             );
             break;
           case "qright_attached":
@@ -1792,6 +1808,39 @@ export default function QCoreMultiAgentPage() {
                 )}
               </div>
 
+              {/* Budget cap selector — applies to every strategy. */}
+              <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 700 }}>Spend cap:</span>
+                {[
+                  { v: 0, label: "No cap" },
+                  { v: 0.05, label: "$0.05" },
+                  { v: 0.10, label: "$0.10" },
+                  { v: 0.25, label: "$0.25" },
+                  { v: 1.0, label: "$1.00" },
+                ].map((opt) => {
+                  const active = Math.abs(maxCostUsd - opt.v) < 0.001;
+                  return (
+                    <button
+                      key={opt.label}
+                      onClick={() => setMaxCostUsd(opt.v)}
+                      style={{
+                        padding: "5px 10px", borderRadius: 8,
+                        border: "1px solid " + (active ? "#0f172a" : "#cbd5e1"),
+                        background: active ? "#0f172a" : "#fff",
+                        color: active ? "#fff" : "#334155",
+                        fontWeight: 700, fontSize: 12, cursor: "pointer",
+                      }}
+                      title={opt.v === 0 ? "Run until natural completion" : `Stop after ~$${opt.v.toFixed(2)} spent`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                  (orchestrator finalises with the latest writer output if the cap is crossed mid-run)
+                </span>
+              </div>
+
               {strategy === "sequential" && (
                 <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 700 }}>Revision rounds:</span>
@@ -2581,6 +2630,18 @@ function RunCard({
               }}
             >
               STOPPED
+            </span>
+          )}
+          {run.budgetExceeded && (
+            <span
+              title={`Spend cap of ${formatMoney(run.budgetExceeded.budgetUsd, 2)} crossed at ${formatMoney(run.budgetExceeded.spentUsd, 4)} — finalised with the latest writer output.`}
+              style={{
+                padding: "2px 8px", borderRadius: 999,
+                background: "rgba(245,158,11,0.12)", color: "#92400e",
+                fontSize: 10, fontWeight: 800, border: "1px solid rgba(245,158,11,0.4)",
+              }}
+            >
+              💸 BUDGET CAP
             </span>
           )}
           {run.status === "error" && (

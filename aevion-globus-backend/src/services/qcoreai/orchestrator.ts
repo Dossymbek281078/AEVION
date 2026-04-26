@@ -62,6 +62,13 @@ export type OrchestratorInput = {
    * runs exactly as before.
    */
   guidanceProvider?: () => string[];
+  /**
+   * Optional spend cap per run, in USD. The orchestrator checks running
+   * cost after every agent stage and short-circuits with a `budget_exceeded`
+   * event + a graceful `final` (last writer output) + `done` if the cap is
+   * crossed. When omitted or non-positive, no cap applies.
+   */
+  maxCostUsd?: number;
 };
 
 export type OrchestratorEvent =
@@ -109,6 +116,9 @@ export type OrchestratorEvent =
       stage that will incorporate it. The UI renders these as a compact
       lavender chip in the run timeline so the trace is auditable. */
   | { type: "guidance_applied"; stage: AgentStage; role: AgentRole; text: string; instance?: string }
+  /** Emitted exactly once when the running cost crosses `maxCostUsd`.
+      Followed by a graceful `final` (last writer output) + `done`. */
+  | { type: "budget_exceeded"; spentUsd: number; budgetUsd: number }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -185,6 +195,28 @@ async function* applyGuidance(
   return `${basePrompt}\n\n${guidanceBlock}`;
 }
 
+/**
+ * Returns the cap from input, treating <=0 / non-finite / undefined as
+ * "no cap" (Infinity). Centralised so each strategy has one source of truth.
+ */
+function effectiveBudget(input: OrchestratorInput): number {
+  const raw = input.maxCostUsd;
+  if (typeof raw !== "number" || !isFinite(raw) || raw <= 0) return Infinity;
+  return raw;
+}
+
+/** Yield the graceful bail-out tail when a budget is crossed mid-run. */
+function* bailBudget(
+  totalCost: number,
+  budget: number,
+  lastContent: string,
+  t0: number
+): Generator<OrchestratorEvent> {
+  yield { type: "budget_exceeded", spentUsd: totalCost, budgetUsd: budget };
+  yield { type: "final", content: lastContent };
+  yield { type: "done", totalDurationMs: Date.now() - t0, totalCostUsd: totalCost };
+}
+
 /** Helper: drain a sub-generator, re-yielding events, return its final value. */
 async function* forward<T>(
   gen: AsyncGenerator<OrchestratorEvent, T, unknown>
@@ -248,6 +280,7 @@ async function* runSequential(
   const { analyst, writer, critic } = agents;
   const maxRevisions = Math.max(0, Math.min(2, input.maxRevisions ?? 1));
   const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  const budget = effectiveBudget(input);
   let totalCost = 0;
   const tally = (e: OrchestratorEvent) => {
     if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
@@ -275,6 +308,12 @@ async function* runSequential(
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
     return;
   }
+  if (totalCost > budget) {
+    // Analyst alone busted the cap — there's no draft yet, so finalize
+    // with the analyst plan as the partial answer.
+    yield* bailBudget(totalCost, budget, analystContent, t0);
+    return;
+  }
 
   /* Stage 2: Writer draft */
   const writerDraftUser = yield* applyGuidance(
@@ -293,6 +332,11 @@ async function* runSequential(
     writerDraft = yield* forwardTally(streamAgent(writer, "draft", writerMessages), tally);
   } catch (e) {
     yield { type: "error", role: "writer", message: `Writer failed: ${errMsg(e)}` };
+    return;
+  }
+  if (totalCost > budget) {
+    // Writer draft is good enough as the final answer — skip critic + revision.
+    yield* bailBudget(totalCost, budget, writerDraft, t0);
     return;
   }
 
@@ -316,6 +360,12 @@ async function* runSequential(
   yield { type: "verdict", approved: verdict.approved, feedback: verdict.feedback };
 
   let finalContent = writerDraft;
+
+  if (totalCost > budget) {
+    // Critic spent us out before revision could happen — ship the draft.
+    yield* bailBudget(totalCost, budget, writerDraft, t0);
+    return;
+  }
 
   /* Stage 4: Writer revision (optional) */
   if (!verdict.approved && maxRevisions > 0) {
@@ -353,6 +403,7 @@ async function* runParallel(
 ): AsyncGenerator<OrchestratorEvent> {
   const { analyst, writerA, writerB, judge } = agents;
   const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  const budget = effectiveBudget(input);
   let totalCost = 0;
   const tally = (e: OrchestratorEvent) => {
     if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
@@ -379,6 +430,10 @@ async function* runParallel(
     analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
   } catch (e) {
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
+    return;
+  }
+  if (totalCost > budget) {
+    yield* bailBudget(totalCost, budget, analystContent, t0);
     return;
   }
 
@@ -415,6 +470,12 @@ async function* runParallel(
     yield { type: "error", role: "writer", message: `Parallel writers failed: ${errMsg(e)}` };
     return;
   }
+  if (totalCost > budget) {
+    // Skip judge and pick the longer draft as the partial answer.
+    const partial = draftA.length >= draftB.length ? draftA : draftB;
+    yield* bailBudget(totalCost, budget, partial, t0);
+    return;
+  }
 
   /* Stage 3: Judge */
   const judgeUser = buildJudgePrompt(input.userInput, analystContent, draftA, draftB);
@@ -445,6 +506,7 @@ async function* runDebate(
 ): AsyncGenerator<OrchestratorEvent> {
   const { analyst, pro, con, moderator } = agents;
   const history = Array.isArray(input.history) ? input.history.filter((m) => m.role !== "system") : [];
+  const budget = effectiveBudget(input);
   let totalCost = 0;
   const tally = (e: OrchestratorEvent) => {
     if (e.type === "agent_end" && typeof e.costUsd === "number") totalCost += e.costUsd;
@@ -471,6 +533,10 @@ async function* runDebate(
     analystContent = yield* forwardTally(streamAgent(analyst, "draft", analystMessages), tally);
   } catch (e) {
     yield { type: "error", role: "analyst", message: `Analyst failed: ${errMsg(e)}` };
+    return;
+  }
+  if (totalCost > budget) {
+    yield* bailBudget(totalCost, budget, analystContent, t0);
     return;
   }
 
@@ -504,6 +570,12 @@ async function* runDebate(
     conArg = results[1] ?? "";
   } catch (e) {
     yield { type: "error", role: "writer", message: `Debate advocates failed: ${errMsg(e)}` };
+    return;
+  }
+  if (totalCost > budget) {
+    // Skip moderator and stitch a placeholder summary.
+    const partial = `**Pro side:**\n${proArg}\n\n**Con side:**\n${conArg}\n\n[Budget exceeded before Moderator synthesis.]`;
+    yield* bailBudget(totalCost, budget, partial, t0);
     return;
   }
 

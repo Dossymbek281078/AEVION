@@ -216,3 +216,203 @@ code {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   CyberChess Design System
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* Surfaces */
+  --cc-bg: #f5f6fa;
+  --cc-surface-1: #ffffff;
+  --cc-surface-2: #fafbfd;
+  --cc-surface-3: #f1f2f7;
+  --cc-surface-glass: rgba(255, 255, 255, 0.78);
+
+  /* Ink */
+  --cc-text: #0f172a;
+  --cc-text-dim: #5b6474;
+  --cc-text-mute: #8b94a3;
+  --cc-text-inv: #ffffff;
+
+  /* Borders */
+  --cc-border: #e4e7ee;
+  --cc-border-strong: #cbd0db;
+
+  /* Brand */
+  --cc-brand: #059669;
+  --cc-brand-hover: #047857;
+  --cc-brand-soft: rgba(5, 150, 105, 0.1);
+  --cc-accent: #7c3aed;
+  --cc-accent-soft: rgba(124, 58, 237, 0.1);
+  --cc-gold: #d97706;
+  --cc-gold-soft: rgba(217, 119, 6, 0.12);
+  --cc-danger: #dc2626;
+  --cc-danger-soft: rgba(220, 38, 38, 0.1);
+  --cc-info: #2563eb;
+  --cc-info-soft: rgba(37, 99, 235, 0.1);
+
+  /* Spacing */
+  --cc-space-1: 4px;
+  --cc-space-2: 8px;
+  --cc-space-3: 12px;
+  --cc-space-4: 16px;
+  --cc-space-5: 20px;
+  --cc-space-6: 24px;
+  --cc-space-7: 32px;
+  --cc-space-8: 48px;
+
+  /* Radius */
+  --cc-radius-xs: 4px;
+  --cc-radius-sm: 6px;
+  --cc-radius-md: 10px;
+  --cc-radius-lg: 14px;
+  --cc-radius-xl: 20px;
+  --cc-radius-full: 999px;
+
+  /* Shadows */
+  --cc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
+  --cc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --cc-shadow-lg: 0 10px 32px rgba(15, 23, 42, 0.1), 0 4px 12px rgba(15, 23, 42, 0.05);
+  --cc-shadow-xl: 0 24px 64px rgba(15, 23, 42, 0.14), 0 8px 24px rgba(15, 23, 42, 0.08);
+  --cc-shadow-glow: 0 0 0 3px rgba(5, 150, 105, 0.18), 0 0 24px rgba(5, 150, 105, 0.3);
+  --cc-shadow-glow-purple: 0 0 0 3px rgba(124, 58, 237, 0.2), 0 0 24px rgba(124, 58, 237, 0.3);
+  --cc-shadow-glow-danger: 0 0 0 3px rgba(220, 38, 38, 0.22), 0 0 24px rgba(220, 38, 38, 0.35);
+
+  /* Motion */
+  --cc-motion-fast: 120ms;
+  --cc-motion-base: 200ms;
+  --cc-motion-slow: 320ms;
+  --cc-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --cc-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --cc-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Z-index */
+  --cc-z-base: 1;
+  --cc-z-sticky: 50;
+  --cc-z-dropdown: 200;
+  --cc-z-modal-backdrop: 900;
+  --cc-z-modal: 1000;
+  --cc-z-toast: 1100;
+}
+
+/* ── CyberChess keyframes ─────────────────────────────── */
+
+@keyframes cc-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes cc-scale-in {
+  from { opacity: 0; transform: scale(0.94) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes cc-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes cc-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes cc-pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45); }
+  50% { box-shadow: 0 0 0 12px rgba(220, 38, 38, 0); }
+}
+@keyframes cc-float-up {
+  0% { opacity: 0; transform: translateY(8px) scale(0.9); }
+  20% { opacity: 1; transform: translateY(0) scale(1); }
+  80% { opacity: 1; transform: translateY(-24px) scale(1); }
+  100% { opacity: 0; transform: translateY(-40px) scale(0.95); }
+}
+@keyframes cc-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes cc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── CyberChess utility classes ───────────────────────── */
+
+.cc-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.35);
+  border-radius: var(--cc-radius-md);
+}
+
+.cc-no-scrollbar::-webkit-scrollbar { display: none; }
+.cc-no-scrollbar { scrollbar-width: none; }
+
+.cc-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: var(--cc-z-modal-backdrop);
+  animation: cc-fade-in var(--cc-motion-base) var(--cc-ease);
+}
+.cc-modal-shell {
+  animation: cc-scale-in var(--cc-motion-base) var(--cc-ease-spring);
+}
+.cc-sheet-shell {
+  animation: cc-sheet-up var(--cc-motion-slow) var(--cc-ease-out);
+}
+
+.cc-float-plus {
+  animation: cc-float-up 1.6s var(--cc-ease-out) forwards;
+  pointer-events: none;
+}
+
+.cc-skeleton {
+  background: linear-gradient(90deg, #eceff4 0%, #f5f7fa 50%, #eceff4 100%);
+  background-size: 200% 100%;
+  animation: cc-shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--cc-radius-md);
+}
+
+/* Touch targets on mobile */
+@media (max-width: 768px) {
+  .cc-touch { min-height: 44px; min-width: 44px; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .cc-backdrop, .cc-modal-shell, .cc-sheet-shell, .cc-float-plus, .cc-skeleton {
+    animation: none !important;
+  }
+}
+
+/* ── CyberChess mobile polish ─────────────────────────── */
+
+@media (max-width: 768px) {
+  /* Compact sticky header on phones */
+  .cc-phone-compact button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 520px) {
+  /* Hide descriptive subtitles in header on very small screens */
+  .cc-header-sub { display: none !important; }
+  /* Stack tab indicators, let them scroll horizontally */
+  [role="tablist"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  [role="tablist"]::-webkit-scrollbar { display: none; }
+  [role="tablist"] button {
+    flex-shrink: 0;
+  }
+}
+
+/* Safe-area insets for iOS / notched devices */
+@supports (padding: max(0px)) {
+  .cc-safe-bottom {
+    padding-bottom: max(var(--cc-space-4), env(safe-area-inset-bottom));
+  }
+  .cc-safe-top {
+    padding-top: max(var(--cc-space-4), env(safe-area-inset-top));
+  }
+}

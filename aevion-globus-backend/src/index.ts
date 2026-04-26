@@ -14,6 +14,7 @@ import { modulesRouter } from "./routes/modules";
 import { qcoreaiRouter } from "./routes/qcoreai";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
+import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -121,8 +122,25 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/auth/register": { post: {} },
       "/api/auth/login": { post: {} },
       "/api/auth/me": { get: {} },
-      "/api/qcoreai/chat": { post: { summary: "Chat (OpenAI or stub)" } },
+      "/api/qcoreai/chat": { post: { summary: "Single-shot chat (one provider)" } },
+      "/api/qcoreai/providers": { get: { summary: "List LLM providers + configured flag" } },
       "/api/qcoreai/health": { get: { summary: "QCoreAI config probe" } },
+      "/api/qcoreai/agents": { get: { summary: "Multi-agent role defaults" } },
+      "/api/qcoreai/multi-agent": {
+        post: {
+          summary: "Multi-agent pipeline (Analyst+Writer+Critic), SSE stream",
+        },
+      },
+      "/api/qcoreai/sessions": {
+        get: { summary: "List sessions (mine if Bearer, else anonymous)" },
+      },
+      "/api/qcoreai/sessions/{id}": {
+        get: { summary: "Session + all runs" },
+        delete: { summary: "Delete session and its runs" },
+      },
+      "/api/qcoreai/runs/{id}": {
+        get: { summary: "Run + all agent messages in order" },
+      },
       "/api/planet/stats": {
         get: {
           summary: "Planet public stats (participants Y, votes, optional productKeyPrefix scope)",
@@ -170,6 +188,7 @@ app.use("/api/qsign", qsignRouter);
 // ==========================
 app.use("/api/quantum-shield", quantumShieldRouter);
 app.use("/api/pipeline", pipelineRouter);
+app.use("/api/bureau", bureauRouter);
 app.use("/api/coach", coachRouter);
 // ==========================
 // Auth

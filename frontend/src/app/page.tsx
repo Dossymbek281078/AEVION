@@ -301,6 +301,18 @@ export default function HomePage() {
             <Link href="/qright" style={btnGhost}>
               QRight Registry
             </Link>
+            <Link
+              href="/multichat-engine"
+              style={{
+                ...btnGhost,
+                border: "1px solid rgba(196,181,253,0.7)",
+                background: "rgba(124,58,237,0.18)",
+                color: "#fff",
+                fontWeight: 800,
+              }}
+            >
+              QCoreAI · Multi-agent
+            </Link>
             <Link href="/awards/music" style={btnGhost}>
               Music Awards
             </Link>
@@ -798,17 +810,35 @@ export default function HomePage() {
                 Planet
               </Link>
               <Link
-                href="/qcoreai"
+                href="/multichat-engine"
                 style={{
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid rgba(124,58,237,0.4)",
                   borderRadius: 10,
                   padding: "10px 12px",
                   textDecoration: "none",
-                  color: "#475569",
-                  fontWeight: 650,
+                  color: "#6d28d9",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "rgba(124,58,237,0.06)",
                 }}
               >
                 QCoreAI
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 800,
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                    padding: "2px 6px",
+                    borderRadius: 999,
+                    background: "rgba(124,58,237,0.15)",
+                    color: "#6d28d9",
+                  }}
+                >
+                  Multi-agent
+                </span>
               </Link>
               <Link
                 href="/auth"

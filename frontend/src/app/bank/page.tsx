@@ -451,7 +451,7 @@ export default function AevionBankPage() {
           <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>AEVION Bank security</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             {[
-              { title: "Quantum Shield", desc: "Ed25519 + Shamir Secret Sharing. Every transaction signed with three shards." },
+              { title: "Quantum Shield", desc: "Ed25519 signatures + SHA-256 integrity chain on every transaction." },
               { title: "Trust Graph", desc: "Wallet reputation = verification history. Fraud visible before transaction." },
               { title: "Merkle Audit", desc: "Every transaction block fixed in Merkle tree. Impossible to forge history." },
               { title: "Planet Compliance", desc: "Automatic AML/KYC check via Planet smart contracts." },

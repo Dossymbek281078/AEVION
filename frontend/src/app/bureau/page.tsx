@@ -41,11 +41,46 @@ const LEGAL_FRAMEWORKS = [
   { name: "KZ Digital Signature Law", desc: "Electronic digital signatures are legally equivalent to handwritten", scope: "Kazakhstan", color: "#f59e0b" },
 ];
 
+type DashboardData = {
+  certificates: Array<{
+    id: string;
+    title: string;
+    kind: string;
+    contentHash: string;
+    protectedAt: string;
+    authorVerificationLevel?: "anonymous" | "verified";
+    authorVerifiedAt?: string | null;
+    authorVerifiedName?: string | null;
+  }>;
+  verifications: Array<{
+    id: string;
+    kycStatus: string;
+    paymentStatus: string;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
+  pricing: { verifiedTierCents: number; currency: string };
+};
+
+const TOKEN_KEY = "aevion_auth_token_v1";
+
 export default function BureauPage() {
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
+
+  const [authed, setAuthed] = useState(false);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+
+  const authHeaders = (): HeadersInit => {
+    try {
+      const raw = localStorage.getItem(TOKEN_KEY);
+      return raw ? { Authorization: `Bearer ${raw}` } : {};
+    } catch {
+      return {};
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -63,6 +98,45 @@ export default function BureauPage() {
       finally { setLoading(false); }
     })();
   }, []);
+
+  // Personal dashboard — only fetch if authed.
+  useEffect(() => {
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(TOKEN_KEY);
+    } catch {}
+    if (!raw) return;
+    setAuthed(true);
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/bureau/dashboard"), {
+          headers: { Authorization: `Bearer ${raw}` },
+        });
+        if (r.ok) setDashboard((await r.json()) as DashboardData);
+      } catch {}
+    })();
+  }, []);
+
+  const myIdentity = (() => {
+    if (!dashboard) return null;
+    const completed = dashboard.verifications.find(
+      (v) => v.kycStatus === "approved" && v.paymentStatus === "paid",
+    );
+    if (!completed) return null;
+    const verifiedCerts = dashboard.certificates.filter(
+      (c) => c.authorVerificationLevel === "verified",
+    );
+    const verifiedName = verifiedCerts[0]?.authorVerifiedName || null;
+    const verifiedAt = verifiedCerts[0]?.authorVerifiedAt || completed.completedAt;
+    return { verifiedName, verifiedAt, certCount: verifiedCerts.length };
+  })();
+
+  const inFlightUpgrade = (() => {
+    if (!dashboard) return null;
+    return dashboard.verifications.find(
+      (v) => v.kycStatus !== "approved" || v.paymentStatus !== "paid",
+    );
+  })();
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -99,6 +173,53 @@ export default function BureauPage() {
             </div>
           </div>
         </div>
+
+        {/* ── My Identity (authed users only) ── */}
+        {authed && (myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
+          <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(79,70,229,0.04))", padding: "18px 22px" }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#312e81", marginBottom: 8 }}>
+              My Bureau identity
+            </div>
+            {myIdentity ? (
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ flex: "1 1 240px" }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>
+                    ⭐ {myIdentity.verifiedName || "Verified"}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>
+                    Identity verified by AEVION Bureau
+                    {myIdentity.verifiedAt && (
+                      <> · {new Date(myIdentity.verifiedAt).toLocaleDateString()}</>
+                    )}
+                    {myIdentity.certCount > 0 && (
+                      <> · attesting <b>{myIdentity.certCount}</b> certificate{myIdentity.certCount === 1 ? "" : "s"}</>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Link href="/qright" style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                    Protect another work
+                  </Link>
+                </div>
+              </div>
+            ) : inFlightUpgrade ? (
+              <div>
+                <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.6 }}>
+                  You have an upgrade in progress — KYC <b>{inFlightUpgrade.kycStatus}</b>, payment <b>{inFlightUpgrade.paymentStatus}</b>. Continue from where you left off:
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>
+                  Pick the certificate you started upgrading from the registry below — the <em>Upgrade to Verified</em> button there resumes the same flow.
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.6, marginBottom: 8 }}>
+                  Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({dashboard ? `$${(dashboard.pricing.verifiedTierCents / 100).toFixed(2)}` : "$19"}) and the bureau will attest your real-name authorship — useful evidence in court.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Stats ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>

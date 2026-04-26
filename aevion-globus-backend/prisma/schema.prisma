@@ -35,3 +35,55 @@ model QuantumShield {
   hmacKeyVersion Int      @default(1) @map("hmac_key_version")
   createdAt      DateTime @default(now())
 }
+
+/// QCoreAI multi-agent persistence.
+/// NOTE: runtime uses raw SQL via pg Pool (see lib/ensureQCoreTables.ts).
+/// This schema block documents the shape for tooling / future migrations.
+
+model QCoreSession {
+  id        String   @id @default(uuid())
+  userId    String?
+  title     String   @default("New session")
+  mode      String   @default("multi-agent")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model QCoreRun {
+  id              String    @id @default(uuid())
+  sessionId       String
+  userInput       String
+  status          String    @default("pending")
+  error           String?
+  agentConfig     Json?
+  strategy        String?
+  finalContent    String?
+  totalDurationMs Int?
+  totalCostUsd    Float?
+  shareToken      String?   @unique
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+
+  @@index([sessionId, startedAt(sort: Desc)])
+}
+
+model QCoreMessage {
+  id         String   @id @default(uuid())
+  runId      String
+  role       String
+  stage      String?
+  instance   String?
+  provider   String?
+  model      String?
+  content    String
+  tokensIn   Int?
+  tokensOut  Int?
+  durationMs Int?
+  costUsd    Float?
+  ordering   Int
+  createdAt  DateTime @default(now())
+
+  @@index([runId, ordering])
+}

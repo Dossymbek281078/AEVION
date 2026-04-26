@@ -1,230 +1,57 @@
 import { Router } from "express";
+
+import { verifyBearerOptional } from "../lib/authJwt";
+import {
+  callProvider,
+  getProviders,
+  resolveProvider,
+  sanitizeMessages,
+} from "../services/qcoreai/providers";
+import { AgentOverride } from "../services/qcoreai/agents";
+import {
+  runMultiAgent,
+  OrchestratorEvent,
+  PipelineStrategy,
+} from "../services/qcoreai/orchestrator";
+import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
+import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
+import { rateLimit } from "../lib/rateLimit";
+import { isWebhookConfigured, notifyRunCompleted } from "../lib/qcoreWebhook";
+import {
+  buildHistoryContext,
+  createRun,
+  deleteSession,
+  ensureSession,
+  finishRun,
+  getAnalytics,
+  getRun,
+  getRunByShareToken,
+  getSession,
+  getSessionPublic,
+  insertMessage,
+  listMessages,
+  listRuns,
+  listSessions,
+  renameSession,
+  renameSessionIfDefault,
+  shareRun,
+  touchSession,
+  unshareRun,
+} from "../services/qcoreai/store";
+
 export const qcoreaiRouter = Router();
 
-type ChatMessage = { role: string; content: string };
+/* ═══════════════════════════════════════════════════════════════════════
+   Legacy single-shot chat (kept for backwards compatibility)
+   POST /api/qcoreai/chat
+   ═══════════════════════════════════════════════════════════════════════ */
 
-function sanitizeMessages(raw: unknown): ChatMessage[] | null {
-  if (!Array.isArray(raw)) return null;
-  const out: ChatMessage[] = [];
-  for (const m of raw) {
-    if (!m || typeof m !== "object") continue;
-    const role = (m as any).role;
-    const content = (m as any).content;
-    if (role !== "user" && role !== "assistant" && role !== "system") continue;
-    if (typeof content !== "string" || !content.trim()) continue;
-    out.push({ role, content: content.slice(0, 32000) });
-  }
-  return out.length ? out : null;
-}
-
-/* ═══ Provider definitions ═══ */
-type Provider = {
-  id: string;
-  name: string;
-  models: string[];
-  defaultModel: string;
-  envKey: string;
-  configured: boolean;
-};
-
-function getProviders(): Provider[] {
-  return [
-    {
-      id: "anthropic",
-      name: "Claude (Anthropic)",
-      models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"],
-      defaultModel: "claude-sonnet-4-20250514",
-      envKey: "ANTHROPIC_API_KEY",
-      configured: !!process.env.ANTHROPIC_API_KEY?.trim(),
-    },
-    {
-      id: "openai",
-      name: "GPT (OpenAI)",
-      models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-      defaultModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      envKey: "OPENAI_API_KEY",
-      configured: !!process.env.OPENAI_API_KEY?.trim(),
-    },
-    {
-      id: "gemini",
-      name: "Gemini (Google)",
-      models: ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"],
-defaultModel: "gemini-2.5-flash",
-      envKey: "GEMINI_API_KEY",
-      configured: !!process.env.GEMINI_API_KEY?.trim(),
-    },
-    {
-      id: "deepseek",
-      name: "DeepSeek",
-      models: ["deepseek-chat", "deepseek-reasoner"],
-      defaultModel: "deepseek-chat",
-      envKey: "DEEPSEEK_API_KEY",
-      configured: !!process.env.DEEPSEEK_API_KEY?.trim(),
-    },
-    {
-      id: "grok",
-      name: "Grok (xAI)",
-      models: ["grok-3", "grok-3-mini"],
-      defaultModel: "grok-3-mini",
-      envKey: "GROK_API_KEY",
-      configured: !!process.env.GROK_API_KEY?.trim(),
-    },
-  ];
-}
-
-/* ═══ Anthropic (Claude) ═══ */
-async function callAnthropic(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
-
-  const systemMsg = messages.find((m) => m.role === "system");
-  const chatMsgs = messages.filter((m) => m.role !== "system");
-
-  const body: any = {
-    model,
-    max_tokens: 4096,
-    temperature,
-    messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
-  };
-  if (systemMsg) body.system = systemMsg.content;
-
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `Anthropic ${r.status}`);
-
-  const reply = data.content?.map((b: any) => b.text || "").join("") || "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ OpenAI (GPT) ═══ */
-async function callOpenAI(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) throw new Error("OPENAI_API_KEY not configured");
-
-  const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const r = await fetch(`${base}/chat/completions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `OpenAI ${r.status}`);
-
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ Gemini (Google) ═══ */
-async function callGemini(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) throw new Error("GEMINI_API_KEY not configured");
-
-  const systemMsg = messages.find((m) => m.role === "system");
-  const chatMsgs = messages.filter((m) => m.role !== "system");
-
-  const contents = chatMsgs.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
-  const body: any = {
-    contents,
-    generationConfig: { temperature, maxOutputTokens: 4096 },
-  };
-  if (systemMsg) {
-    body.systemInstruction = { parts: [{ text: systemMsg.content }] };
-  }
-
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-  );
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `Gemini ${r.status}`);
-
-  const reply = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
-  return { reply, model, usage: null };
-}
-
-/* ═══ DeepSeek ═══ */
-async function callDeepSeek(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!key) throw new Error("DEEPSEEK_API_KEY not configured");
-
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `DeepSeek ${r.status}`);
-
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ Grok (xAI) ═══ */
-async function callGrok(messages: ChatMessage[], model: string, temperature: number) {
-  const key = process.env.GROK_API_KEY?.trim();
-  if (!key) throw new Error("GROK_API_KEY not configured");
-
-  const r = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, temperature }),
-  });
-
-  const data = await r.json() as any;
-  if (!r.ok) throw new Error(data?.error?.message || `Grok ${r.status}`);
-
-  const reply = data.choices?.[0]?.message?.content ?? "";
-  return { reply, model: data.model || model, usage: data.usage || null };
-}
-
-/* ═══ Router: resolve provider ═══ */
-function resolveProvider(providerId?: string): string {
-  if (providerId) {
-    const p = getProviders().find((p) => p.id === providerId);
-    if (p?.configured) return p.id;
-  }
-  // Auto-select first configured provider (priority: anthropic > openai > gemini > deepseek > grok)
-  for (const p of getProviders()) {
-    if (p.configured) return p.id;
-  }
-  return "stub";
-}
-
-async function callProvider(providerId: string, messages: ChatMessage[], model: string, temperature: number) {
-  switch (providerId) {
-    case "anthropic": return callAnthropic(messages, model, temperature);
-    case "openai": return callOpenAI(messages, model, temperature);
-    case "gemini": return callGemini(messages, model, temperature);
-    case "deepseek": return callDeepSeek(messages, model, temperature);
-    case "grok": return callGrok(messages, model, temperature);
-    default: throw new Error("No AI provider configured");
-  }
-}
-
-/* ═══ POST /api/qcoreai/chat ═══ */
 qcoreaiRouter.post("/chat", async (req, res) => {
   try {
     const messages = sanitizeMessages(req.body?.messages);
     if (!messages) {
       return res.status(400).json({ error: "messages required" });
     }
-
     const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
     const providerId = resolveProvider(requestedProvider);
 
@@ -234,7 +61,10 @@ qcoreaiRouter.post("/chat", async (req, res) => {
         mode: "stub",
         provider: "none",
         model: "none",
-        reply: `[QCoreAI — no AI provider configured]\n\nYour question: "${lastUser?.content?.slice(0, 200) || ""}"\n\nTo enable AI responses, add one of these API keys to the backend environment:\n- ANTHROPIC_API_KEY (Claude)\n- OPENAI_API_KEY (GPT-4)\n- GEMINI_API_KEY (Gemini)\n- DEEPSEEK_API_KEY (DeepSeek)\n- GROK_API_KEY (Grok)`,
+        reply:
+          `[QCoreAI — no AI provider configured]\n\nYour question: "${lastUser?.content?.slice(0, 200) || ""}"\n\n` +
+          `To enable AI responses, add one of these API keys to the backend environment:\n` +
+          `- ANTHROPIC_API_KEY (Claude)\n- OPENAI_API_KEY (GPT-4)\n- GEMINI_API_KEY (Gemini)\n- DEEPSEEK_API_KEY (DeepSeek)\n- GROK_API_KEY (Grok)`,
         usage: null,
       });
     }
@@ -244,7 +74,6 @@ qcoreaiRouter.post("/chat", async (req, res) => {
     const temperature = typeof req.body?.temperature === "number" ? req.body.temperature : 0.6;
 
     const result = await callProvider(providerId, messages, modelName, temperature);
-
     res.json({
       mode: providerId,
       provider: provider.name,
@@ -259,7 +88,10 @@ qcoreaiRouter.post("/chat", async (req, res) => {
   }
 });
 
-/* ═══ GET /api/qcoreai/providers ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   Providers + pricing + health
+   ═══════════════════════════════════════════════════════════════════════ */
+
 qcoreaiRouter.get("/providers", (_req, res) => {
   const providers = getProviders().map((p) => ({
     id: p.id,
@@ -271,16 +103,646 @@ qcoreaiRouter.get("/providers", (_req, res) => {
   res.json({ providers });
 });
 
-/* ═══ GET /api/qcoreai/health ═══ */
-qcoreaiRouter.get("/health", (_req, res) => {
+qcoreaiRouter.get("/pricing", (_req, res) => {
+  res.json({
+    currency: "USD",
+    unit: "per 1,000,000 tokens",
+    table: getPricingTable(),
+    updatedAt: "2026-04",
+    note:
+      "Representative list prices for display in the cost dashboard. Exact billing is determined by the upstream provider invoices.",
+  });
+});
+
+qcoreaiRouter.get("/health", async (_req, res) => {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
+  // Trigger lazy DB probe so the storage mode is known at health-check time.
+  try {
+    const { ensureQCoreTables } = await import("../lib/ensureQCoreTables");
+    const { getPool } = await import("../lib/dbPool");
+    await ensureQCoreTables(getPool());
+  } catch { /* probe errors are reflected via isDbReady() */ }
   res.json({
     service: "qcoreai",
     ok: true,
     configuredProviders: configured.map((p) => p.id),
     totalProviders: providers.length,
     activeProvider: resolveProvider(),
+    storage: isDbReady() ? "postgres" : "in-memory",
+    storageError: isDbReady() ? null : getDbError(),
+    webhookConfigured: isWebhookConfigured(),
     at: new Date().toISOString(),
   });
 });
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sessions CRUD
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/sessions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const rows = await listSessions(auth?.sub ?? null, 50);
+    res.json({ items: rows, total: rows.length, scope: auth ? "mine" : "anonymous" });
+  } catch (err: any) {
+    res.status(500).json({ error: "list sessions failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/sessions/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(req.params.id, auth?.sub ?? null);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    const runs = await listRuns(session.id, 200);
+    res.json({ session, runs });
+  } catch (err: any) {
+    res.status(500).json({ error: "get session failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const title = typeof req.body?.title === "string" ? req.body.title : "";
+    if (!title.trim()) return res.status(400).json({ error: "title required" });
+    const updated = await renameSession(req.params.id, auth?.sub ?? null, title);
+    if (!updated) return res.status(404).json({ error: "session not found" });
+    res.json({ session: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: "rename failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/sessions/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const ok = await deleteSession(req.params.id, auth?.sub ?? null);
+    if (!ok) return res.status(404).json({ error: "session not found" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete session failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/runs/:id", async (req, res) => {
+  try {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const messages = await listMessages(run.id);
+    res.json({ run, messages });
+  } catch (err: any) {
+    res.status(500).json({ error: "get run failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Shared runs (public, read-only)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/share", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const token = await shareRun(req.params.id, auth?.sub ?? null);
+    if (!token) return res.status(404).json({ error: "run not found" });
+    res.json({ token });
+  } catch (err: any) {
+    res.status(500).json({ error: "share failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/runs/:id/share", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const ok = await unshareRun(req.params.id, auth?.sub ?? null);
+    if (!ok) return res.status(404).json({ error: "run not found or not shared" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "unshare failed", details: err?.message });
+  }
+});
+
+/**
+ * Public read-only endpoint. No auth. Anyone with the token sees the run's
+ * agent trace and final answer. Sensitive fields (session.userId, agentConfig
+ * with raw system prompts) are stripped.
+ */
+const sharedLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "qcore-shared",
+  message: "Too many requests to the public share endpoint. Please retry later.",
+});
+
+qcoreaiRouter.get("/shared/:token", sharedLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const session = await getSessionPublic(run.sessionId);
+    const messages = await listMessages(run.id);
+    // Strip raw system prompts from agentConfig to avoid leaking custom prompts.
+    const safeConfig = run.agentConfig && typeof run.agentConfig === "object"
+      ? {
+          strategy: run.agentConfig.strategy ?? run.strategy ?? "sequential",
+          maxRevisions: run.agentConfig.maxRevisions ?? null,
+          overrides: scrubOverrides(run.agentConfig.overrides),
+        }
+      : null;
+    const safeRun = {
+      id: run.id,
+      strategy: run.strategy,
+      status: run.status,
+      userInput: run.userInput,
+      finalContent: run.finalContent,
+      totalDurationMs: run.totalDurationMs,
+      totalCostUsd: run.totalCostUsd,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      agentConfig: safeConfig,
+    };
+    res.json({ session, run: safeRun, messages });
+  } catch (err: any) {
+    res.status(500).json({ error: "shared lookup failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Analytics
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/analytics", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const summary = await getAnalytics(auth?.sub ?? null);
+    res.json(summary);
+  } catch (err: any) {
+    res.status(500).json({ error: "analytics failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/runs/:id/export?format=json|md
+ * Returns a clean, shareable snapshot of a run: agents, messages, final answer,
+ * token/cost totals. Useful for investor demos and offline review.
+ */
+qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
+  try {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const messages = await listMessages(run.id);
+    const format = (req.query.format === "md" ? "md" : "json") as "md" | "json";
+    const safeSlug = slugify(session.title || "run").slice(0, 40) || "run";
+    const filename = `qcoreai-${safeSlug}-${run.id.slice(0, 8)}.${format}`;
+
+    if (format === "json") {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(JSON.stringify({ session, run, messages }, null, 2));
+      return;
+    }
+
+    const md = renderRunMarkdown({ session, run, messages });
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(md);
+  } catch (err: any) {
+    res.status(500).json({ error: "export failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Multi-agent pipeline (Server-Sent Events)
+   POST /api/qcoreai/multi-agent
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function parseAgentOverride(raw: any): AgentOverride | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: AgentOverride = {};
+  if (typeof raw.provider === "string") out.provider = raw.provider;
+  if (typeof raw.model === "string") out.model = raw.model;
+  if (typeof raw.temperature === "number") out.temperature = raw.temperature;
+  if (typeof raw.systemPrompt === "string" && raw.systemPrompt.trim().length > 0) {
+    out.systemPrompt = raw.systemPrompt.slice(0, 8000);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+const multiAgentLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyPrefix: "qcore-multi-agent",
+  message: "Too many multi-agent runs from this IP. Please retry in a minute.",
+});
+
+qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+
+  const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
+  if (!userInput) {
+    return res.status(400).json({ error: "input required" });
+  }
+
+  const strategy: PipelineStrategy =
+    req.body?.strategy === "parallel" ? "parallel" :
+    req.body?.strategy === "debate" ? "debate" :
+    "sequential";
+
+  const maxRevisions =
+    typeof req.body?.maxRevisions === "number" ? Math.max(0, Math.min(2, req.body.maxRevisions)) : 1;
+
+  const overrides: {
+    analyst?: AgentOverride;
+    writer?: AgentOverride;
+    writerB?: AgentOverride;
+    critic?: AgentOverride;
+  } = {
+    analyst: parseAgentOverride(req.body?.overrides?.analyst),
+    writer: parseAgentOverride(req.body?.overrides?.writer),
+    writerB: parseAgentOverride(req.body?.overrides?.writerB),
+    critic: parseAgentOverride(req.body?.overrides?.critic),
+  };
+
+  let sessionId: string;
+  let runId: string;
+  try {
+    const session = await ensureSession({
+      sessionId: typeof req.body?.sessionId === "string" ? req.body.sessionId : null,
+      userId,
+      seedTitle: userInput,
+    });
+    sessionId = session.id;
+    const run = await createRun({
+      sessionId,
+      userInput,
+      agentConfig: { strategy, maxRevisions, overrides },
+      strategy,
+    });
+    runId = run.id;
+    await insertMessage({
+      runId,
+      role: "user",
+      content: userInput,
+      ordering: 0,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: "session init failed", details: err?.message });
+  }
+
+  // Start SSE
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  if (typeof (res as any).flushHeaders === "function") (res as any).flushHeaders();
+
+  const send = (data: any) => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Heartbeat every 20s so proxies don't drop idle connection.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(`: ping\n\n`);
+  }, 20000);
+
+  let aborted = false;
+  req.on("close", () => {
+    aborted = true;
+    clearInterval(heartbeat);
+  });
+
+  send({ type: "session", sessionId, runId });
+
+  const history = await buildHistoryContext(sessionId, 6);
+
+  const runStart = Date.now();
+  let ordering = 1;
+  const pendingByKey = new Map<string, { provider: string; model: string }>();
+  const stageKey = (role: string, stage: string, instance?: string) =>
+    `${role}|${stage}|${instance || ""}`;
+  let finalContent: string | null = null;
+  let hadError: string | null = null;
+  /** Tracks last completed agent output — used as partial final if the stream is aborted. */
+  let lastAgentContent: string | null = null;
+  let totalCost = 0;
+
+  try {
+    for await (const evt of runMultiAgent({
+      userInput,
+      strategy,
+      overrides,
+      maxRevisions,
+      history,
+    }) as AsyncGenerator<OrchestratorEvent>) {
+      if (aborted) break;
+      send(evt);
+
+      switch (evt.type) {
+        case "agent_start":
+          pendingByKey.set(stageKey(evt.role, evt.stage, evt.instance), {
+            provider: evt.provider,
+            model: evt.model,
+          });
+          break;
+        case "agent_end": {
+          const key = stageKey(evt.role, evt.stage, evt.instance);
+          const meta = pendingByKey.get(key);
+          // Use the event's costUsd if present; recompute defensively otherwise.
+          const agentCost =
+            typeof evt.costUsd === "number"
+              ? evt.costUsd
+              : costUsd(meta?.provider || "", meta?.model || "", evt.tokensIn, evt.tokensOut);
+          totalCost += agentCost;
+          lastAgentContent = evt.content;
+          await insertMessage({
+            runId,
+            role: evt.role,
+            stage: evt.stage,
+            instance: evt.instance ?? null,
+            provider: meta?.provider ?? null,
+            model: meta?.model ?? null,
+            content: evt.content,
+            tokensIn: evt.tokensIn ?? null,
+            tokensOut: evt.tokensOut ?? null,
+            durationMs: evt.durationMs,
+            costUsd: agentCost,
+            ordering: ordering++,
+          });
+          pendingByKey.delete(key);
+          break;
+        }
+        case "final":
+          finalContent = evt.content;
+          await insertMessage({
+            runId,
+            role: "final",
+            content: evt.content,
+            ordering: ordering++,
+          });
+          break;
+        case "error":
+          hadError = evt.message;
+          break;
+        default:
+          break;
+      }
+    }
+  } catch (err: any) {
+    hadError = err?.message || "orchestrator crashed";
+    send({ type: "error", message: hadError });
+  } finally {
+    clearInterval(heartbeat);
+  }
+
+  const totalDurationMs = Date.now() - runStart;
+
+  // Persist run finalization. When the client aborted mid-stream we save the
+  // last agent output as a partial final so the user can still see what
+  // arrived before they hit Stop.
+  let runStatus: "done" | "stopped" | "error" = "done";
+  let runFinal: string | null = finalContent;
+  try {
+    if (aborted) {
+      runStatus = "stopped";
+      runFinal = finalContent ?? lastAgentContent ?? null;
+      await finishRun(runId, "stopped", {
+        error: null,
+        finalContent: runFinal,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+      });
+    } else if (hadError && !finalContent) {
+      runStatus = "error";
+      runFinal = null;
+      await finishRun(runId, "error", {
+        error: hadError,
+        finalContent: null,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+      });
+    } else {
+      await finishRun(runId, "done", {
+        error: hadError,
+        finalContent,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+      });
+    }
+    await renameSessionIfDefault(sessionId, userInput);
+    await touchSession(sessionId);
+  } catch (e: any) {
+    console.error("[QCoreAI] finishRun error:", e?.message);
+  }
+
+  // Fire-and-forget webhook for external integrations (Zapier, Make, etc.).
+  // Never blocks the SSE response and never throws back into the request loop.
+  if (isWebhookConfigured()) {
+    void notifyRunCompleted({
+      event: "run.completed",
+      runId,
+      sessionId,
+      status: runStatus,
+      strategy,
+      userInput,
+      finalContent: runFinal,
+      totalDurationMs,
+      totalCostUsd: totalCost,
+      error: hadError ?? null,
+      finishedAt: new Date().toISOString(),
+    });
+  }
+
+  if (!aborted) {
+    send({ type: "sse_end" });
+    res.end();
+  } else {
+    try { res.end(); } catch { /* noop */ }
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Role + strategy defaults (for UI to pre-populate config dropdowns)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/agents", (_req, res) => {
+  const providers = getProviders();
+  const resolveDefault = (preferProvider: string, preferModel: string) => {
+    const pref = providers.find((p) => p.id === preferProvider);
+    if (pref?.configured) {
+      const model = pref.models.includes(preferModel) ? preferModel : pref.defaultModel;
+      return { provider: pref.id, model };
+    }
+    const any = providers.find((p) => p.configured);
+    return any ? { provider: any.id, model: any.defaultModel } : null;
+  };
+  const primaryWriter = resolveDefault("anthropic", "claude-sonnet-4-20250514");
+  let writerBDefault: { provider: string; model: string } | null = null;
+  if (primaryWriter) {
+    const other = providers.find((p) => p.configured && p.id !== primaryWriter.provider);
+    if (other) {
+      writerBDefault = { provider: other.id, model: other.defaultModel };
+    } else {
+      const same = providers.find((p) => p.id === primaryWriter.provider);
+      if (same) {
+        const altModel = same.models.find((m) => m !== primaryWriter.model) || same.defaultModel;
+        writerBDefault = { provider: same.id, model: altModel };
+      }
+    }
+  }
+
+  res.json({
+    strategies: [
+      {
+        id: "sequential",
+        label: "Sequential",
+        description:
+          "Analyst → Writer → Critic → (optional) Writer revision. Classic reflection loop: one writer, one reviewer.",
+        agents: ["analyst", "writer", "critic"],
+      },
+      {
+        id: "parallel",
+        label: "Parallel drafts",
+        description:
+          "Analyst → two Writers stream in parallel on different models → Judge synthesizes. Diversity of voice; best signal for open-ended questions.",
+        agents: ["analyst", "writer", "writerB", "critic"],
+      },
+      {
+        id: "debate",
+        label: "Debate",
+        description:
+          "Analyst → Pro advocate ‖ Con advocate → Moderator synthesizes a balanced answer. Best for decisions, trade-offs, and stress-testing recommendations.",
+        agents: ["analyst", "writer", "writerB", "critic"],
+      },
+    ],
+    roles: [
+      {
+        id: "analyst",
+        label: "Analyst",
+        description: "Decomposes your request, extracts facts, lists risks, builds a plan.",
+        default: resolveDefault("anthropic", "claude-sonnet-4-20250514"),
+        temperature: 0.3,
+      },
+      {
+        id: "writer",
+        label: "Writer / Pro",
+        description:
+          "Sequential/Parallel: drafts the final answer. Debate: argues the Pro case.",
+        default: primaryWriter,
+        temperature: 0.7,
+      },
+      {
+        id: "writerB",
+        label: "Writer B / Con",
+        description:
+          "Parallel: second voice on a different model. Debate: argues the Con case.",
+        default: writerBDefault,
+        temperature: 0.7,
+      },
+      {
+        id: "critic",
+        label: "Critic / Judge / Moderator",
+        description:
+          "Sequential: approves or requests revision. Parallel: picks or merges drafts. Debate: synthesizes a balanced answer.",
+        default: resolveDefault("anthropic", "claude-haiku-4-5-20251001"),
+        temperature: 0.2,
+      },
+    ],
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Helpers (local to route)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Remove raw system prompts from agent overrides — keeps model/provider/temperature. */
+function scrubOverrides(raw: any): any {
+  if (!raw || typeof raw !== "object") return null;
+  const out: any = {};
+  for (const k of Object.keys(raw)) {
+    const v = raw[k];
+    if (!v || typeof v !== "object") continue;
+    out[k] = {
+      provider: v.provider,
+      model: v.model,
+      temperature: typeof v.temperature === "number" ? v.temperature : undefined,
+    };
+  }
+  return out;
+}
+
+function slugify(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function fmtMoney(v: number | null | undefined): string {
+  if (v == null || !isFinite(v)) return "—";
+  if (v === 0) return "$0";
+  if (v < 0.0001) return "<$0.0001";
+  return `$${v.toFixed(4)}`;
+}
+
+function fmtDuration(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function renderRunMarkdown(opts: { session: any; run: any; messages: any[] }): string {
+  const { session, run, messages } = opts;
+  const lines: string[] = [];
+  lines.push(`# ${session.title || "QCoreAI run"}`);
+  lines.push("");
+  lines.push(`> Exported from QCoreAI multi-agent at ${new Date().toISOString()}`);
+  lines.push("");
+  lines.push("## Meta");
+  lines.push("");
+  lines.push(`- **Session:** \`${session.id}\``);
+  lines.push(`- **Run:** \`${run.id}\``);
+  lines.push(`- **Strategy:** ${run.strategy || "sequential"}`);
+  lines.push(`- **Status:** ${run.status}`);
+  lines.push(`- **Duration:** ${fmtDuration(run.totalDurationMs)}`);
+  lines.push(`- **Total cost:** ${fmtMoney(run.totalCostUsd)}`);
+  lines.push(`- **Started:** ${run.startedAt}`);
+  lines.push("");
+  lines.push("## User input");
+  lines.push("");
+  lines.push(run.userInput || "");
+  lines.push("");
+  lines.push("## Agent trace");
+  lines.push("");
+  for (const m of messages) {
+    if (m.role === "user" || m.role === "final") continue;
+    const tag = [m.role, m.stage, m.instance].filter(Boolean).join(" · ");
+    const modelInfo = [m.provider, m.model].filter(Boolean).join(" / ");
+    const tok = m.tokensIn != null || m.tokensOut != null ? ` · ${m.tokensIn ?? 0}→${m.tokensOut ?? 0} tok` : "";
+    const cost = m.costUsd != null ? ` · ${fmtMoney(m.costUsd)}` : "";
+    const dur = m.durationMs != null ? ` · ${fmtDuration(m.durationMs)}` : "";
+    lines.push(`### ${tag}${modelInfo ? `  _(${modelInfo})_` : ""}`);
+    lines.push("");
+    lines.push(`_${dur.replace(/^ · /, "")}${tok}${cost}_`);
+    lines.push("");
+    lines.push(m.content || "");
+    lines.push("");
+  }
+  const finalMsg = messages.find((m: any) => m.role === "final");
+  if (finalMsg || run.finalContent) {
+    lines.push("## Final answer");
+    lines.push("");
+    lines.push(finalMsg?.content || run.finalContent || "");
+    lines.push("");
+  }
+  return lines.join("\n");
+}

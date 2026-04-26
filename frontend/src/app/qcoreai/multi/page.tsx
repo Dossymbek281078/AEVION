@@ -622,23 +622,73 @@ export default function QCoreMultiAgentPage() {
       const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}`), { headers: bearerHeader() });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      const turns: AgentTurn[] = (data.messages || [])
-        .filter((m: any) => m.role === "analyst" || m.role === "writer" || m.role === "critic")
-        .map((m: any) => ({
-          role: m.role,
-          stage: (m.stage || "draft") as Stage,
-          instance: m.instance ?? undefined,
-          provider: m.provider || "",
-          model: m.model || "",
-          content: m.content || "",
-          status: "done" as const,
-          startedAt: Date.parse(m.createdAt) || 0,
-          durationMs: m.durationMs ?? undefined,
-          tokensIn: m.tokensIn ?? undefined,
-          tokensOut: m.tokensOut ?? undefined,
-          costUsd: m.costUsd ?? undefined,
-        }));
-      setRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, turns } : r)));
+      const all = (data.messages || []) as any[];
+
+      // Hydrate agent turns (analyst / writer / critic).
+      const agentMsgs = all.filter(
+        (m) => m.role === "analyst" || m.role === "writer" || m.role === "critic"
+      );
+      const turns: AgentTurn[] = agentMsgs.map((m: any) => ({
+        role: m.role,
+        stage: (m.stage || "draft") as Stage,
+        instance: m.instance ?? undefined,
+        provider: m.provider || "",
+        model: m.model || "",
+        content: m.content || "",
+        status: "done" as const,
+        startedAt: Date.parse(m.createdAt) || 0,
+        durationMs: m.durationMs ?? undefined,
+        tokensIn: m.tokensIn ?? undefined,
+        tokensOut: m.tokensOut ?? undefined,
+        costUsd: m.costUsd ?? undefined,
+      }));
+
+      // Hydrate guidance + attachments. We rebuild beforeTurnIndex by
+      // walking messages in order: each guidance message lands before the
+      // next agent message (its position in the trace).
+      const guidance: GuidanceItem[] = [];
+      let agentIdxSoFar = 0;
+      for (const m of all) {
+        if (m.role === "analyst" || m.role === "writer" || m.role === "critic") {
+          agentIdxSoFar++;
+          continue;
+        }
+        if (m.role === "guidance") {
+          guidance.push({
+            text: m.content || "",
+            stage: (m.stage || "draft") as Stage,
+            role: "writer",
+            instance: m.instance ?? undefined,
+            appliedAt: Date.parse(m.createdAt) || Date.now(),
+            beforeTurnIndex: agentIdxSoFar,
+          });
+        }
+      }
+
+      const attachmentsMsg = all.find((m) => m.role === "attachments");
+      let attachments: QRightObjectLite[] | undefined;
+      if (attachmentsMsg?.content) {
+        try {
+          const parsed = JSON.parse(attachmentsMsg.content);
+          if (Array.isArray(parsed)) {
+            attachments = parsed
+              .filter((a: any) => a && typeof a.id === "string")
+              .map((a: any) => ({
+                id: a.id,
+                title: typeof a.title === "string" ? a.title : null,
+                kind: typeof a.kind === "string" ? a.kind : null,
+              }));
+          }
+        } catch {
+          // malformed — skip
+        }
+      }
+
+      setRuns((prev) =>
+        prev.map((r) =>
+          r.id === runId ? { ...r, turns, guidance, attachments } : r
+        )
+      );
     } catch (e: any) {
       setGlobalError(e?.message || "Failed to load run detail");
     }

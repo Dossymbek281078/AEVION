@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
@@ -179,6 +180,8 @@ export default function AuthPage() {
             ) : null}
           </div>
         </div>
+
+        <PitchValueCallout moduleId="auth" variant="dark" />
 
         {/* What you get */}
         <div style={{ marginTop: 20, padding: "18px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>

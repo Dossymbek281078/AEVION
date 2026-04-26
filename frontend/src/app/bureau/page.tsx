@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 type Certificate = {
@@ -96,6 +97,8 @@ export default function BureauPage() {
             </div>
           </div>
         </div>
+
+        <PitchValueCallout moduleId="aevion-ip-bureau" variant="dark" />
 
         {/* ── Stats ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>

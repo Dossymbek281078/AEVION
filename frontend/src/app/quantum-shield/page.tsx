@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 type ShardInfo = { index: number; shard: string };
@@ -222,6 +223,8 @@ export default function QuantumShieldPage() {
             </div>
           </div>
         </div>
+
+        <PitchValueCallout moduleId="quantum-shield" variant="dark" />
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginBottom: 20 }}>
           <Link href="/qsign" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>&#8592; QSign</Link>

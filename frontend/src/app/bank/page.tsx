@@ -67,6 +67,7 @@ import { BiometricProvider } from "./_lib/BiometricContext";
 import { CurrencyProvider } from "./_lib/CurrencyContext";
 import { EcosystemDataProvider } from "./_lib/EcosystemDataContext";
 import { useI18n } from "@/lib/i18n";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { decodePaymentRequest } from "./_lib/paymentRequest";
 
 function BankContent() {
@@ -289,6 +290,7 @@ function BankContent() {
           <SectionTabs active={activeTab} onChange={setActiveTab} />
 
           <TabPanel id="overview" active={activeTab}>
+            <PitchValueCallout moduleId="bank" variant="dark" compact={true} />
             <BalanceProjection account={account} />
             <div id="bank-anchor-constellation" style={{ scrollMarginTop: 20 }}>
               <WealthConstellation account={account} operations={operations} />

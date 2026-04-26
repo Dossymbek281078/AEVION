@@ -5,6 +5,7 @@ import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Mo
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
 
@@ -565,6 +566,8 @@ export default function CyberChessPage(){
         </div>
         <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:900,color:T.gold}}>{rat}</div><div style={{fontSize:10,color:T.dim}}>{rk.i} {rk.t}</div></div>
       </div>
+
+      <PitchValueCallout moduleId="cyberchess" variant="dark" />
 
       {/* Tabs */}
       <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>

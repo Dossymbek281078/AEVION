@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 export default function QSignPage() {
@@ -91,6 +92,8 @@ export default function QSignPage() {
             </p>
           </div>
         </div>
+
+        <PitchValueCallout moduleId="qsign" variant="dark" />
 
         {payloadOrigin ? (
           <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(15,118,110,0.25)", background: "rgba(15,118,110,0.06)", fontSize: 13, color: "#0f766e", fontWeight: 600 }}>

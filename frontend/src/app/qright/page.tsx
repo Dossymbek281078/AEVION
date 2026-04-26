@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 type CertificateData = {
@@ -220,6 +221,8 @@ export default function QRightPage() {
             </p>
           </div>
         </div>
+
+        <PitchValueCallout moduleId="qright" variant="dark" />
 
         {/* ── Step: FORM ── */}
         {step === "form" && (

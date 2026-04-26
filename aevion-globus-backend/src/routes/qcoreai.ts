@@ -341,6 +341,55 @@ const multiAgentLimiter = rateLimit({
   message: "Too many multi-agent runs from this IP. Please retry in a minute.",
 });
 
+/**
+ * In-process registry of currently-running runs and their pending mid-run
+ * guidance items. Populated when /multi-agent starts, drained at every
+ * orchestrator stage boundary, deleted in the finally block. Maps cleanly
+ * onto the orchestrator's `guidanceProvider` contract: a `drainGuidance`
+ * call returns and clears the queue atomically.
+ *
+ * In-process is fine for single-instance deploys. A multi-instance setup
+ * would replace this with Redis pub/sub keyed by runId.
+ */
+const liveRunGuidance = new Map<string, string[]>();
+
+function pushGuidance(runId: string, text: string): boolean {
+  const arr = liveRunGuidance.get(runId);
+  if (!arr) return false;
+  arr.push(text);
+  return true;
+}
+
+function drainGuidance(runId: string): string[] {
+  const arr = liveRunGuidance.get(runId);
+  if (!arr || arr.length === 0) return [];
+  const out = arr.slice();
+  arr.length = 0;
+  return out;
+}
+
+const guidanceLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "qcore-guidance",
+  message: "Too many guidance updates. Slow down.",
+});
+
+/**
+ * POST /api/qcoreai/runs/:runId/guidance
+ * Mid-run human guidance — appended to the next writer-stage user prompt.
+ * Returns 404 if the run has already finished or doesn't exist in this
+ * process; the client should treat that as "too late, run is over".
+ */
+qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, (req, res) => {
+  const runId = String(req.params.runId || "");
+  const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
+  if (!text) return res.status(400).json({ error: "text required" });
+  const ok = pushGuidance(runId, text);
+  if (!ok) return res.status(404).json({ error: "run is not live" });
+  return res.json({ ok: true, queueDepth: liveRunGuidance.get(runId)?.length ?? 0 });
+});
+
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
@@ -423,6 +472,11 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   send({ type: "session", sessionId, runId });
 
+  // Register this run for mid-run guidance. The orchestrator will drain
+  // this queue at each writer-stage boundary; the new
+  // POST /runs/:runId/guidance endpoint pushes into it.
+  liveRunGuidance.set(runId, []);
+
   const history = await buildHistoryContext(sessionId, 6);
 
   const runStart = Date.now();
@@ -443,6 +497,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       overrides,
       maxRevisions,
       history,
+      guidanceProvider: () => drainGuidance(runId),
     }) as AsyncGenerator<OrchestratorEvent>) {
       if (aborted) break;
       send(evt);
@@ -561,6 +616,10 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       finishedAt: new Date().toISOString(),
     });
   }
+
+  // Deregister mid-run guidance queue regardless of how the run finished.
+  // Any guidance posted after this point gets a 404 — accurate.
+  liveRunGuidance.delete(runId);
 
   if (!aborted) {
     send({ type: "sse_end" });

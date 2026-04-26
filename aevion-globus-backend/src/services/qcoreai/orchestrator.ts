@@ -52,6 +52,16 @@ export type OrchestratorInput = {
   maxRevisions?: number;
   /** Optional prior user/assistant turns for follow-up context. */
   history?: ChatMessage[];
+  /**
+   * Mid-run human guidance. Called by the orchestrator at stage boundaries
+   * (before each writer call, including parallel/debate sides and revisions);
+   * returns and clears any pending guidance text the user has POSTed since
+   * the last drain. The orchestrator appends each item to the writer's user
+   * prompt as `[Mid-run user guidance: …]` and emits a `guidance_applied`
+   * event so the UI can render it inline. When omitted, the orchestrator
+   * runs exactly as before.
+   */
+  guidanceProvider?: () => string[];
 };
 
 export type OrchestratorEvent =
@@ -95,6 +105,10 @@ export type OrchestratorEvent =
   | { type: "verdict"; approved: boolean; feedback: string }
   | { type: "final"; content: string }
   | { type: "error"; message: string; role?: AgentRole }
+  /** Emitted once per drained guidance item, immediately before the agent
+      stage that will incorporate it. The UI renders these as a compact
+      lavender chip in the run timeline so the trace is auditable. */
+  | { type: "guidance_applied"; stage: AgentStage; role: AgentRole; text: string; instance?: string }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -146,6 +160,29 @@ async function* streamAgent(
     instance,
   };
   return content;
+}
+
+/**
+ * Drain pending mid-run guidance from the input's `guidanceProvider`, emit a
+ * `guidance_applied` event for each drained item (so the UI/audit trail can
+ * show the human's interjection inline), and return the user prompt with the
+ * guidance appended. When no guidance is pending or no provider was supplied,
+ * returns the base prompt unchanged.
+ */
+async function* applyGuidance(
+  input: OrchestratorInput,
+  basePrompt: string,
+  role: AgentRole,
+  stage: AgentStage,
+  instance?: string
+): AsyncGenerator<OrchestratorEvent, string, unknown> {
+  const items = input.guidanceProvider?.() ?? [];
+  if (items.length === 0) return basePrompt;
+  for (const text of items) {
+    yield { type: "guidance_applied", stage, role, text, instance };
+  }
+  const guidanceBlock = items.map((t) => `[Mid-run user guidance: ${t}]`).join("\n");
+  return `${basePrompt}\n\n${guidanceBlock}`;
 }
 
 /** Helper: drain a sub-generator, re-yielding events, return its final value. */
@@ -240,7 +277,12 @@ async function* runSequential(
   }
 
   /* Stage 2: Writer draft */
-  const writerDraftUser = buildWriterPrompt(input.userInput, analystContent);
+  const writerDraftUser = yield* applyGuidance(
+    input,
+    buildWriterPrompt(input.userInput, analystContent),
+    "writer",
+    "draft"
+  );
   const writerMessages: ChatMessage[] = [
     { role: "system", content: writer.systemPrompt },
     ...history,
@@ -277,7 +319,12 @@ async function* runSequential(
 
   /* Stage 4: Writer revision (optional) */
   if (!verdict.approved && maxRevisions > 0) {
-    const reviseUser = buildRevisePrompt(input.userInput, writerDraft, verdict.feedback);
+    const reviseUser = yield* applyGuidance(
+      input,
+      buildRevisePrompt(input.userInput, writerDraft, verdict.feedback),
+      "writer",
+      "revision"
+    );
     const reviseMessages: ChatMessage[] = [
       { role: "system", content: writer.systemPrompt },
       ...history,
@@ -336,7 +383,14 @@ async function* runParallel(
   }
 
   /* Stage 2: Two writers in parallel */
-  const writerUserPrompt = buildWriterPrompt(input.userInput, analystContent);
+  // Drain guidance once and apply it equally to both writers so they share
+  // the same human steer (rather than randomly biasing only one).
+  const writerUserPrompt = yield* applyGuidance(
+    input,
+    buildWriterPrompt(input.userInput, analystContent),
+    "writer",
+    "draft"
+  );
   const writerAMessages: ChatMessage[] = [
     { role: "system", content: writerA.systemPrompt },
     ...history,
@@ -421,7 +475,13 @@ async function* runDebate(
   }
 
   /* Stage 2: Pro + Con in parallel */
-  const debateUser = buildDebatePrompt(input.userInput, analystContent);
+  // Apply pending guidance to both advocates equally so the debate is fair.
+  const debateUser = yield* applyGuidance(
+    input,
+    buildDebatePrompt(input.userInput, analystContent),
+    "writer",
+    "draft"
+  );
   const proMessages: ChatMessage[] = [
     { role: "system", content: pro.systemPrompt },
     ...history,

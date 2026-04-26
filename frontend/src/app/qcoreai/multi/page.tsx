@@ -60,11 +60,27 @@ type AgentTurn = {
   costUsd?: number;
 };
 
+/** Mid-run human guidance entry. `beforeTurnIndex` is the index in
+    `run.turns` of the agent stage this guidance was applied to (set when
+    we receive `guidance_applied` — the next arriving `agent_start` will
+    be at exactly that index). */
+type GuidanceItem = {
+  text: string;
+  stage: Stage;
+  role: AgentRole;
+  instance?: string;
+  appliedAt: number;
+  beforeTurnIndex: number;
+};
+
 type RunState = {
   id: string;
   sessionId: string;
   userInput: string;
   turns: AgentTurn[];
+  /** Optional mid-run guidance items, rendered as inline chips before the
+      agent stage they steered. */
+  guidance?: GuidanceItem[];
   verdict?: { approved: boolean; feedback: string };
   finalContent?: string;
   error?: string;
@@ -126,6 +142,7 @@ type SSEPayload =
   | { type: "verdict"; approved: boolean; feedback: string }
   | { type: "final"; content: string }
   | { type: "error"; message: string; role?: AgentRole }
+  | { type: "guidance_applied"; stage: Stage; role: AgentRole; text: string; instance?: string }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number }
   | { type: "sse_end" };
 
@@ -299,6 +316,8 @@ export default function QCoreMultiAgentPage() {
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   // Sessions sidebar state — only honored on mobile via CSS, always-open on desktop.
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Mid-run guidance input value.
+  const [guidanceText, setGuidanceText] = useState("");
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -698,6 +717,29 @@ export default function QCoreMultiAgentPage() {
               prev.map((r) => (r.id === realRunId ? { ...r, finalContent: payload.content } : r))
             );
             break;
+          case "guidance_applied":
+            setRuns((prev) =>
+              prev.map((r) =>
+                r.id === realRunId
+                  ? {
+                      ...r,
+                      guidance: [
+                        ...(r.guidance || []),
+                        {
+                          text: payload.text,
+                          stage: payload.stage,
+                          role: payload.role,
+                          instance: payload.instance,
+                          appliedAt: Date.now(),
+                          // The next agent_start will land at this turn index.
+                          beforeTurnIndex: r.turns.length,
+                        },
+                      ],
+                    }
+                  : r
+              )
+            );
+            break;
           case "error":
             setRuns((prev) =>
               prev.map((r) => (r.id === realRunId ? { ...r, error: (r.error ? r.error + "\n" : "") + payload.message } : r))
@@ -737,6 +779,38 @@ export default function QCoreMultiAgentPage() {
       setBusy(false);
     }
   }, [input, busy, activeSessionId, maxRevisions, overrides, strategy]);
+
+  /**
+   * Mid-run guidance — POST a steer message that gets attached to the next
+   * writer-stage prompt. Returns true on success, false on 404/etc so the
+   * UI can show a friendly hint ("run already finished").
+   */
+  const sendGuidance = useCallback(async (runIdArg: string, text: string): Promise<boolean> => {
+    const trimmed = text.trim();
+    if (!trimmed || !runIdArg || runIdArg.startsWith("tmp_")) return false;
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runIdArg}/guidance`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ text: trimmed }),
+      });
+      if (!res.ok) {
+        if (res.status === 404) {
+          setGlobalError("Run already finished — guidance arrived too late.");
+        } else if (res.status === 429) {
+          setGlobalError("Too many guidance updates. Slow down for a moment.");
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setGlobalError(data?.error || `Guidance failed: HTTP ${res.status}`);
+        }
+        return false;
+      }
+      return true;
+    } catch (e: any) {
+      setGlobalError(e?.message || "Guidance send failed");
+      return false;
+    }
+  }, []);
 
   const stop = useCallback(() => {
     // Signal compare-all loop to stop firing more strategies.
@@ -1448,6 +1522,85 @@ export default function QCoreMultiAgentPage() {
               )}
             </div>
 
+            {/* Mid-run guidance — visible only while a run is streaming and
+                has been registered (real runId, not the tmp_ placeholder).
+                Lets the user steer writer stages mid-execution; the steer
+                lands as a `[Mid-run user guidance: …]` line on the next
+                writer prompt and surfaces back as a lavender chip in the
+                timeline. */}
+            {liveRun && !liveRun.id.startsWith("tmp_") && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  padding: "8px 12px",
+                  marginBottom: 10,
+                  borderRadius: 10,
+                  background: "rgba(196,181,253,0.16)",
+                  border: "1px solid rgba(124,58,237,0.3)",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: "#6d28d9",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ↪ Steer
+                </span>
+                <input
+                  value={guidanceText}
+                  onChange={(e) => setGuidanceText(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter" && guidanceText.trim()) {
+                      e.preventDefault();
+                      const ok = await sendGuidance(liveRun.id, guidanceText);
+                      if (ok) setGuidanceText("");
+                    }
+                  }}
+                  placeholder='Mid-run hint — applied to the next writer stage. e.g. "focus on EU regulators".'
+                  maxLength={4000}
+                  style={{
+                    flex: 1,
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(124,58,237,0.25)",
+                    background: "#fff",
+                    color: "#0f172a",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    outline: "none",
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={!guidanceText.trim()}
+                  onClick={async () => {
+                    const ok = await sendGuidance(liveRun.id, guidanceText);
+                    if (ok) setGuidanceText("");
+                  }}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: guidanceText.trim() ? "#7c3aed" : "rgba(124,58,237,0.3)",
+                    color: "#fff",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: guidanceText.trim() ? "pointer" : "default",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Send
+                </button>
+              </div>
+            )}
+
             {globalError && (
               <div
                 role="alert"
@@ -1863,17 +2016,39 @@ function RunCard({
         </div>
       </div>
 
-      {/* Agent turns (pair up parallel/debate writers) */}
-      {grouped.map((item, i) =>
-        "pair" in item ? (
-          <div key={`pair-${i}`} className="qc-pair-grid" style={{ marginBottom: 0 }}>
-            <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} />
-            <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} />
-          </div>
-        ) : (
-          <AgentTurnCard key={i} turn={item} strategy={displayStrategy} />
-        )
-      )}
+      {/* Agent turns (pair up parallel/debate writers) — guidance chips
+          are interleaved at their `beforeTurnIndex` positions so the
+          steer is visible right above the stage it shaped. */}
+      {(() => {
+        const out: React.ReactNode[] = [];
+        let consumedTurns = 0;
+        const guidanceList = run.guidance || [];
+        const flushGuidanceBefore = (turnIdx: number) => {
+          for (const g of guidanceList) {
+            if (g.beforeTurnIndex === turnIdx) {
+              out.push(<GuidanceChip key={`g-${turnIdx}-${g.appliedAt}`} item={g} />);
+            }
+          }
+        };
+        grouped.forEach((item, i) => {
+          flushGuidanceBefore(consumedTurns);
+          if ("pair" in item) {
+            out.push(
+              <div key={`pair-${i}`} className="qc-pair-grid" style={{ marginBottom: 0 }}>
+                <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} />
+                <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} />
+              </div>
+            );
+            consumedTurns += 2;
+          } else {
+            out.push(<AgentTurnCard key={i} turn={item} strategy={displayStrategy} />);
+            consumedTurns += 1;
+          }
+        });
+        // Trailing guidance — applied but next stage hasn't started yet.
+        flushGuidanceBefore(consumedTurns);
+        return out;
+      })()}
 
       {/* Verdict */}
       {run.verdict && (
@@ -2067,6 +2242,44 @@ function RunCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function GuidanceChip({ item }: { item: GuidanceItem }) {
+  return (
+    <div
+      style={{
+        margin: "0 0 8px",
+        padding: "8px 12px",
+        borderRadius: 10,
+        background: "rgba(196,181,253,0.18)",
+        border: "1px solid rgba(124,58,237,0.35)",
+        display: "flex",
+        gap: 8,
+        alignItems: "flex-start",
+      }}
+      title="Mid-run guidance you sent — applied to the next writer stage."
+    >
+      <span
+        style={{
+          width: 22, height: 22, borderRadius: 6,
+          background: "#7c3aed", color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 900, flexShrink: 0,
+        }}
+        aria-hidden
+      >
+        ↪
+      </span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6d28d9", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>
+          You steered the next stage
+        </div>
+        <div style={{ fontSize: 13, color: "#0f172a", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+          {item.text}
+        </div>
+      </div>
     </div>
   );
 }

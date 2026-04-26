@@ -13,6 +13,7 @@ import { modulesRouter } from "./routes/modules";
 import { qcoreaiRouter } from "./routes/qcoreai";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
+import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -154,6 +155,7 @@ app.use("/api/qsign", qsignRouter);
 // ==========================
 app.use("/api/quantum-shield", quantumShieldRouter);
 app.use("/api/pipeline", pipelineRouter);
+app.use("/api/bureau", bureauRouter);
 app.use("/api/coach", coachRouter);
 // ==========================
 // Auth

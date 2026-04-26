@@ -821,6 +821,13 @@ export default function QRightPage() {
               >
                 ✓ Verify Certificate
               </Link>
+              <Link
+                href={`/bureau/upgrade/${result.certificate.id}`}
+                style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                title="Upgrade to Verified — adds real-name attestation by AEVION Bureau"
+              >
+                ⭐ Upgrade to Verified ($19)
+              </Link>
               <button
                 onClick={reset}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}

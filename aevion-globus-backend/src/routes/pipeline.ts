@@ -1185,6 +1185,10 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         algorithm: cert.algorithm,
         protectedAt: cert.protectedAt,
         status: cert.status,
+        verificationLevel: cert.authorVerificationLevel || "anonymous",
+        verifiedName: cert.authorVerifiedName || null,
+        verifiedAt: cert.authorVerifiedAt || null,
+        verifiedBy: cert.authorVerificationProvider || null,
       },
       integrity: {
         contentHashValid: hashValid,

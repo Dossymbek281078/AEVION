@@ -296,6 +296,7 @@ export default function QCoreMultiAgentPage() {
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -318,16 +319,21 @@ export default function QCoreMultiAgentPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [provRes, agRes, sessRes, priceRes] = await Promise.all([
+        const [provRes, agRes, sessRes, priceRes, healthRes] = await Promise.all([
           fetch(apiUrl("/api/qcoreai/providers")),
           fetch(apiUrl("/api/qcoreai/agents")),
           fetch(apiUrl("/api/qcoreai/sessions"), { headers: bearerHeader() }),
           fetch(apiUrl("/api/qcoreai/pricing")),
+          fetch(apiUrl("/api/qcoreai/health")),
         ]);
         const provData = await provRes.json().catch(() => ({}));
         const agData = await agRes.json().catch(() => ({}));
         const sessData = await sessRes.json().catch(() => ({}));
         const priceData = await priceRes.json().catch(() => ({}));
+        const healthData = await healthRes.json().catch(() => ({}));
+        if (typeof healthData?.webhookConfigured === "boolean") {
+          setWebhookConfigured(healthData.webhookConfigured);
+        }
 
         if (provData?.providers) setProviders(provData.providers);
         if (Array.isArray(agData?.strategies)) setStrategies(agData.strategies);
@@ -1032,6 +1038,26 @@ export default function QCoreMultiAgentPage() {
                 Compare all 3
               </label>
 
+              {webhookConfigured && (
+                <span
+                  title="Webhook is configured on the backend — every completed run is posted to your endpoint as a run.completed event."
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "5px 10px",
+                    borderRadius: 10,
+                    background: "rgba(56,189,248,0.18)",
+                    border: "1px solid rgba(56,189,248,0.4)",
+                    color: "#fff",
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  <span style={{ fontSize: 12 }}>🔗</span>
+                  Webhook wired
+                </span>
+              )}
               {liveRun && (
                 <LiveCostBadge run={liveRun} />
               )}

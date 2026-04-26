@@ -16,6 +16,7 @@ import {
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { rateLimit } from "../lib/rateLimit";
+import { isWebhookConfigured, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
   buildHistoryContext,
   createRun,
@@ -130,6 +131,7 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     activeProvider: resolveProvider(),
     storage: isDbReady() ? "postgres" : "in-memory",
     storageError: isDbReady() ? null : getDbError(),
+    webhookConfigured: isWebhookConfigured(),
     at: new Date().toISOString(),
   });
 });
@@ -507,15 +509,21 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   // Persist run finalization. When the client aborted mid-stream we save the
   // last agent output as a partial final so the user can still see what
   // arrived before they hit Stop.
+  let runStatus: "done" | "stopped" | "error" = "done";
+  let runFinal: string | null = finalContent;
   try {
     if (aborted) {
+      runStatus = "stopped";
+      runFinal = finalContent ?? lastAgentContent ?? null;
       await finishRun(runId, "stopped", {
         error: null,
-        finalContent: finalContent ?? lastAgentContent ?? null,
+        finalContent: runFinal,
         totalDurationMs,
         totalCostUsd: totalCost,
       });
     } else if (hadError && !finalContent) {
+      runStatus = "error";
+      runFinal = null;
       await finishRun(runId, "error", {
         error: hadError,
         finalContent: null,
@@ -534,6 +542,24 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     await touchSession(sessionId);
   } catch (e: any) {
     console.error("[QCoreAI] finishRun error:", e?.message);
+  }
+
+  // Fire-and-forget webhook for external integrations (Zapier, Make, etc.).
+  // Never blocks the SSE response and never throws back into the request loop.
+  if (isWebhookConfigured()) {
+    void notifyRunCompleted({
+      event: "run.completed",
+      runId,
+      sessionId,
+      status: runStatus,
+      strategy,
+      userInput,
+      finalContent: runFinal,
+      totalDurationMs,
+      totalCostUsd: totalCost,
+      error: hadError ?? null,
+      finishedAt: new Date().toISOString(),
+    });
   }
 
   if (!aborted) {

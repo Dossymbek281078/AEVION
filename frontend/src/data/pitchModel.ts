@@ -458,6 +458,79 @@ export const financials = {
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
+/* Use cases — the same stack viewed by 4 different buyers                    */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const useCases = {
+  title: "Same stack, four very different buyers",
+  intro:
+    "AEVION is one codebase that solves four distinct customer journeys. Each persona below pulls revenue " +
+    "from a different module mix — but every dollar settles into the same Trust Graph and the same wallet.",
+  rows: [
+    {
+      persona: "Independent musician",
+      avatar: "🎵",
+      story:
+        "Maya releases an AI-assisted album. Each track is registered in QRight (proof of authorship + timestamp), " +
+        "gets a Bureau certificate she can attach to streaming-platform takedown notices, is submitted to Awards/Music " +
+        "for community voting, and royalties from any verification or stream auto-flow into her AEVION Bank wallet.",
+      modulesUsed: ["QRIGHT", "BUREAU", "AWARDS", "BANK"],
+      revenueLine: "Per-cert SaaS + Bank take rate + Awards subscription tier.",
+    },
+    {
+      persona: "Boutique design / dev agency",
+      avatar: "🎨",
+      story:
+        "5-person studio delivers brand identities, code repos and product designs for 30+ clients/year. " +
+        "Every deliverable is registered in QRight with the client as co-author, signed via QSign, and the client " +
+        "receives a Bureau certificate with a public /verify URL embedded in the invoice. Disputes drop to zero.",
+      modulesUsed: ["QRIGHT", "QSIGN", "BUREAU", "QCONTRACT (roadmap)"],
+      revenueLine: "Volume-tier B2B Bureau plan + per-seat QContract.",
+    },
+    {
+      persona: "AI film studio",
+      avatar: "🎬",
+      story:
+        "AI-cinema startup pumps 50 short films per quarter. Each render is hashed in QRight, sealed by Quantum Shield, " +
+        "submitted to Awards/Film. Planet validators vote on originality and rights; winners get prize money in AEC " +
+        "directly to studio's Bank account, used to spin up the next render farm cycle.",
+      modulesUsed: ["QRIGHT", "SHIELD", "PLANET", "AWARDS", "BANK"],
+      revenueLine: "Submission fees + prize-pool sponsorship + Bank flow.",
+    },
+    {
+      persona: "Enterprise compliance officer",
+      avatar: "🏛",
+      story:
+        "ESG team at a regulated company uses Planet to certify which code modules and content have been validated. " +
+        "QSign audit log proves nothing was changed since approval. Bureau certificates are filed with the regulator. " +
+        "Multichat agents over QCoreAI answer compliance queries from internal teams.",
+      modulesUsed: ["PLANET", "QSIGN", "BUREAU", "MULTICHAT"],
+      revenueLine: "Annual enterprise license + per-cert + per-seat agent.",
+    },
+  ],
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Team — placeholder until founder is comfortable disclosing names           */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const team = {
+  title: "Team & advisors",
+  intro:
+    "Capital-efficient lean team — 12 working MVPs already shipped is the proof of velocity. " +
+    "Specific founding-team biographies and advisors are available under NDA via the investor demo.",
+  slots: [
+    { role: "Founder · CEO / Product", note: "Under NDA — book a demo" },
+    { role: "Engineering lead", note: "Under NDA — book a demo" },
+    { role: "GTM / Partnerships", note: "Under NDA — book a demo" },
+    { role: "Advisors (IP law, fintech, AI)", note: "Available on request" },
+  ],
+  proof:
+    "Proof points instead of bios: 12 production MVPs shipped, /pitch with live API metrics, " +
+    "27-node roadmap with shared infrastructure, multilingual EN/RU/KK production codebase.",
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
 /* Competitive landscape — "why not just X?"                                  */
 /* ────────────────────────────────────────────────────────────────────────── */
 

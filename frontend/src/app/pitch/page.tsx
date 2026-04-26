@@ -15,7 +15,9 @@ import {
   market,
   networkForces,
   risks,
+  team,
   thesis,
+  useCases,
   type LaunchStage,
   type ValueBucket,
 } from "@/data/pitchModel";
@@ -73,12 +75,14 @@ const TOC = [
   { id: "market", label: "Market" },
   { id: "network", label: "Network effects" },
   { id: "modules", label: "Modules" },
+  { id: "use-cases", label: "Use cases" },
   { id: "ecosystem", label: "Roadmap" },
   { id: "competitive", label: "Competition" },
   { id: "why-1b", label: "Why $1B+" },
   { id: "risks", label: "Risks" },
   { id: "gtm", label: "GTM" },
   { id: "financials", label: "Financials" },
+  { id: "team", label: "Team" },
 ];
 
 export default function PitchPage() {
@@ -189,9 +193,21 @@ export default function PitchPage() {
   }, []);
 
   return (
-    <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
+    <div className="pitch-root" style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
+      <style>{`
+        @media print {
+          .pitch-no-print { display: none !important; }
+          .pitch-root { background: #ffffff !important; color: #0f172a !important; }
+          .pitch-root * { color: #0f172a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pitch-root section, .pitch-root article { background: #ffffff !important; border-color: #cbd5e1 !important; page-break-inside: avoid; }
+          .pitch-root h1, .pitch-root h2, .pitch-root h3, .pitch-root h4 { color: #0f172a !important; -webkit-text-fill-color: #0f172a !important; }
+          .pitch-root a { color: #0d9488 !important; }
+          .demo-aurora { display: none !important; }
+        }
+      `}</style>
       {/* Scroll progress bar */}
       <div
+        className="pitch-no-print"
         style={{
           position: "fixed",
           top: 0,
@@ -207,6 +223,7 @@ export default function PitchPage() {
       {/* Sticky TOC — desktop: side panel, mobile: bottom collapsible */}
       {scrolled > 0.04 && !isMobile ? (
         <div
+          className="pitch-no-print"
           aria-label="Pitch sections"
           style={{
             position: "fixed",
@@ -256,6 +273,7 @@ export default function PitchPage() {
       {/* Mobile TOC — bottom-pinned chip that expands on tap */}
       {scrolled > 0.04 && isMobile ? (
         <div
+          className="pitch-no-print"
           aria-label="Pitch sections (mobile)"
           style={{
             position: "fixed",
@@ -425,7 +443,7 @@ export default function PitchPage() {
             <LivePill label="QTrade ops" value={metrics.qtradeOps} />
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <div className="pitch-no-print" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <a
               href="#why-1b"
               style={{
@@ -471,6 +489,27 @@ export default function PitchPage() {
             >
               {ask.ctaPrimary.label} →
             </a>
+            <button
+              type="button"
+              onClick={() => { if (typeof window !== "undefined") window.print(); }}
+              style={{
+                padding: "14px 24px",
+                borderRadius: 12,
+                background: "transparent",
+                border: "1px solid rgba(251,191,36,0.55)",
+                color: "#fbbf24",
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+              title="Print to PDF — opens browser print dialog with print-optimised layout"
+            >
+              <span aria-hidden>⤓</span> Save as PDF
+            </button>
           </div>
 
           <p style={{ marginTop: 32, fontSize: 13, color: "#64748b", letterSpacing: "0.05em" }}>
@@ -757,6 +796,84 @@ export default function PitchPage() {
             </div>
           );
         })}
+      </Section>
+
+      {/* ───────── USE CASES ───────── */}
+      <Section anchor="use-cases" eyebrow="One stack, four buyers" title={useCases.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{useCases.intro}</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {useCases.rows.map((u) => (
+            <article
+              key={u.persona}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr",
+                gap: 20,
+                padding: 24,
+                borderRadius: 16,
+                background: "rgba(15,23,42,0.7)",
+                border: "1px solid rgba(125,211,252,0.25)",
+                alignItems: "start",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 40,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 14,
+                  background: "rgba(125,211,252,0.12)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+                aria-hidden
+              >
+                {u.avatar}
+              </div>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 850, color: "#7dd3fc", margin: "0 0 10px", letterSpacing: "-0.01em" }}>
+                  {u.persona}
+                </h3>
+                <p style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.65, margin: "0 0 14px" }}>{u.story}</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {u.modulesUsed.map((mod) => (
+                    <span
+                      key={mod}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        letterSpacing: "0.1em",
+                        color: "#5eead4",
+                        background: "rgba(94,234,212,0.1)",
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(94,234,212,0.25)",
+                      }}
+                    >
+                      {mod}
+                    </span>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#fde68a",
+                    background: "rgba(251,191,36,0.08)",
+                    border: "1px solid rgba(251,191,36,0.25)",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    lineHeight: 1.55,
+                  }}
+                >
+                  <strong style={{ color: "#fbbf24" }}>Revenue line: </strong>
+                  {u.revenueLine}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
       </Section>
 
       {/* ───────── ECOSYSTEM NODES ───────── */}
@@ -1050,6 +1167,67 @@ export default function PitchPage() {
         <p style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, margin: 0, fontStyle: "italic" }}>
           {financials.disclaimer}
         </p>
+      </Section>
+
+      {/* ───────── TEAM ───────── */}
+      <Section anchor="team" eyebrow="The people executing" title={team.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{team.intro}</p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          {team.slots.map((s) => (
+            <article
+              key={s.role}
+              style={{
+                padding: 20,
+                borderRadius: 14,
+                background: "rgba(15,23,42,0.7)",
+                border: "1px dashed rgba(148,163,184,0.4)",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 999,
+                  background: "rgba(94,234,212,0.12)",
+                  border: "1px solid rgba(94,234,212,0.3)",
+                  margin: "0 auto 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 22,
+                  color: "#5eead4",
+                }}
+                aria-hidden
+              >
+                ●
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginBottom: 6, lineHeight: 1.3 }}>{s.role}</div>
+              <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>{s.note}</div>
+            </article>
+          ))}
+        </div>
+        <div
+          style={{
+            padding: "16px 18px",
+            borderRadius: 12,
+            background: "rgba(94,234,212,0.08)",
+            border: "1px solid rgba(94,234,212,0.25)",
+            fontSize: 14,
+            color: "#cbd5e1",
+            lineHeight: 1.6,
+          }}
+        >
+          <strong style={{ color: "#5eead4" }}>Velocity proof: </strong>
+          {team.proof}
+        </div>
       </Section>
 
       {/* ───────── ASK ───────── */}

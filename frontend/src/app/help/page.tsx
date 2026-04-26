@@ -6,6 +6,58 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 
 type FAQ = { q: string; a: string };
+type FaqCategory = "users" | "investors";
+
+const investorFaqs: FAQ[] = [
+  {
+    q: "How is AEVION worth $1B+?",
+    a: "Five independent axes: (1) first-mover monopoly on a unified IP+signature+bureau+compliance+wallet pipeline; (2) Trust Graph data moat that compounds with every action; (3) cross-vertical revenue across $340B TAM (IP, creator economy, payments) from a single codebase; (4) quantum-resistant crypto stack as institutional-grade trust signal; (5) 27 modules with near-zero marginal cost per node. The full breakdown lives at /pitch.",
+  },
+  {
+    q: "What is the round size and use of proceeds?",
+    a: "Raising for an 18-month sprint: harden the 12 launched MVPs, ship 4 of the 15 emerging nodes, lock 2 enterprise compliance pilots, and open 3 international IP-bureau partnerships. Capital allocation: ~50% engineering, ~30% GTM in three creator verticals, ~20% regulatory and partnerships.",
+  },
+  {
+    q: "What is the revenue model?",
+    a: "Three independent revenue streams composing on the same codebase: (1) per-certificate and per-verification SaaS for IP Bureau and Planet; (2) take-rate on AEVION Bank flows (royalties, advances, payouts); (3) seat licensing for QCoreAI / Multichat enterprise agents. We sell the same Trust Graph three times to three different buyers.",
+  },
+  {
+    q: "Who are your competitors?",
+    a: "Notarize and DocuSign for signatures, OpenTimestamps for blockchain proof, Stripe Atlas for creator payments, USPTO/EPO/WIPO for traditional IP filing, generic AI assistants for the QCoreAI surface. None of them offer the bundled pipeline. The detailed breakdown — with our advantage per competitor — is the 'Competition' section on /pitch.",
+  },
+  {
+    q: "What is your moat?",
+    a: "Four compounding network effects: data (Trust Graph edges accumulate), economic (creators ↔ fans through Bank), switching cost (the average user has 6+ scheduled flows after 90 days), and scope (every new module makes the existing modules more valuable at zero marginal cost). The graph is non-replicable after ~10K active users.",
+  },
+  {
+    q: "What about regulation?",
+    a: "Bureau cites six standing international frameworks (Berne, WIPO, TRIPS, eIDAS, ESIGN, KZ Digital Sig) — we ride the standards bodies, not predict them. Planet's voting layer adapts the validator quorum if frameworks shift. We partner with national IP bureaus rather than competing with them.",
+  },
+  {
+    q: "What is the team and burn?",
+    a: "Lean technical team, capital-efficient: 12 working MVPs already shipped at minimal cash burn — proof of execution velocity. Specific team and burn details available under NDA via the investor demo (mailto link in the ask section of /pitch).",
+  },
+  {
+    q: "What is the exit strategy?",
+    a: "Two natural paths. (A) Strategic acquisition by a major IP/legal/finance incumbent who needs the modern stack (Thomson Reuters, RELX, Stripe, Adobe). (B) IPO route via the compliance/Trust-OS positioning — comparable public market multiples favour platform plays over single-vertical SaaS.",
+  },
+  {
+    q: "Why now?",
+    a: "Three converging timing signals: (1) AI-generated content is exploding without an IP attribution layer; (2) post-quantum cryptography is becoming a board-level concern, and we're already shipping it; (3) creator-economy payouts are fragmented across 5+ vendors per creator — the bundling opportunity is at its peak.",
+  },
+  {
+    q: "What are the biggest risks?",
+    a: "Honestly listed at /pitch in the Risks section: regulatory drift, cold-start on Trust Graph density, LLM cost compression, single-vertical competitors, execution focus across 27 nodes, and post-quantum cliff. Each risk has a mitigation tied to a shipped product feature, not just a slide bullet.",
+  },
+  {
+    q: "Can I see live product, not just slides?",
+    a: "Yes — every module on /pitch is a working MVP. /qright registers IP in seconds. /bureau issues court-grade certificates. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: yahiin1978@gmail.com.",
+  },
+  {
+    q: "How do I follow up?",
+    a: "Email yahiin1978@gmail.com with subject 'AEVION investor demo'. We'll set up a 30-minute live walk-through (screen share, real backend, real data) and follow with a tailored deep-dive deck under NDA.",
+  },
+];
 
 const faqs: FAQ[] = [
   {
@@ -44,6 +96,8 @@ const faqs: FAQ[] = [
 
 export default function HelpPage() {
   const [open, setOpen] = useState<number | null>(null);
+  const [category, setCategory] = useState<FaqCategory>("users");
+  const activeFaqs = category === "investors" ? investorFaqs : faqs;
 
   return (
     <main>
@@ -103,9 +157,70 @@ export default function HelpPage() {
         </div>
 
         {/* FAQ */}
-        <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 14 }}>Frequently asked questions</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>Frequently asked questions</h2>
+          <div
+            role="tablist"
+            aria-label="FAQ audience"
+            style={{
+              display: "inline-flex",
+              gap: 0,
+              borderRadius: 10,
+              border: "1px solid rgba(15,23,42,0.15)",
+              overflow: "hidden",
+              background: "#fff",
+            }}
+          >
+            {(["users", "investors"] as const).map((c) => {
+              const active = category === c;
+              return (
+                <button
+                  key={c}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => { setCategory(c); setOpen(null); }}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    border: "none",
+                    background: active
+                      ? (c === "investors" ? "linear-gradient(135deg, #fbbf24, #f59e0b)" : "linear-gradient(135deg, #0d9488, #0ea5e9)")
+                      : "transparent",
+                    color: active ? "#fff" : "#334155",
+                    cursor: "pointer",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {c === "investors" ? "For investors" : "For users"}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {category === "investors" ? (
+          <p
+            style={{
+              fontSize: 13,
+              color: "#475569",
+              lineHeight: 1.55,
+              marginBottom: 14,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(251,191,36,0.08)",
+              border: "1px solid rgba(251,191,36,0.3)",
+            }}
+          >
+            Quick answers to the questions investors ask. Full narrative — at{" "}
+            <Link href="/pitch" style={{ color: "#b45309", fontWeight: 800 }}>
+              /pitch
+            </Link>
+            .
+          </p>
+        ) : null}
         <div style={{ display: "grid", gap: 8 }}>
-          {faqs.map((faq, i) => (
+          {activeFaqs.map((faq, i) => (
             <div
               key={i}
               style={{

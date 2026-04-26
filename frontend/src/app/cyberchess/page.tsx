@@ -9,6 +9,7 @@ import Piece, { type PieceSet } from "./Pieces";
 import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt } from "./BoardArt";
 import OpeningExplorer from "./OpeningExplorer";
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
+import RepertoireModal, { loadRepertoire, saveRepertoire, matchHist, type Repertoire } from "./Repertoire";
 import AiCoach from "./AiCoach";
 import CoachPredictions from "./CoachPredictions";
 import DailyMission, { bumpDaily } from "./DailyMission";
@@ -478,6 +479,13 @@ export default function CyberChessPage(){
   });
   const[p2pBump,sP2pBump]=useState(0);
   const applyingPeerMoveRef=useRef(false);
+  // ─── Personal Opening Repertoire ───
+  const[repertoire,sRepertoire]=useState<Repertoire>(()=>loadRepertoire());
+  const[repertoireOpen,sRepertoireOpen]=useState(false);
+  useEffect(()=>{saveRepertoire(repertoire)},[repertoire]);
+  const repMatches=useMemo(()=>matchHist(repertoire,hist,pCol),[repertoire,hist,pCol]);
+  const inBook=repMatches.some(m=>m.matchedPlies===hist.length);
+  const bookNextMove=repMatches.find(m=>m.nextMove)?.nextMove||null;
   const[showEndgames,sShowEndgames]=useState(false);
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   // Climb the Ladder tournament — beat AIs of growing difficulty in a row
@@ -1051,7 +1059,18 @@ export default function CyberChessPage(){
       // Save to history
       const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
       const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
-      saveGame(sg);sSavedGames(loadGames())}
+      saveGame(sg);sSavedGames(loadGames());
+      // Track repertoire performance: bump uses/wins/losses/draws on the deepest matching entry for this colour
+      try{
+        const fullHist=[...hist,mv.san];
+        const matches=matchHist(repertoire,fullHist,pCol);
+        if(matches.length>0){
+          const best=matches[0];
+          const userWon=r.includes("You win")||r.includes("AI timed out")||r.includes("соперник сдался")||r.includes("сдался");
+          const draw=r.includes("Stalemate")||r.includes("repetition")||r.includes("Insufficient")||r.includes("50-move")||r.includes("Draw agreed");
+          sRepertoire(rep=>({...rep,entries:rep.entries.map(e=>e.id===best.entry.id?{...e,uses:e.uses+1,wins:e.wins+(userWon?1:0),losses:e.losses+(!userWon&&!draw?1:0),draws:e.draws+(draw?1:0)}:e)}));
+        }
+      }catch{}}
     return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
 
   /* ── Premove execution ── */
@@ -2806,6 +2825,7 @@ export default function CyberChessPage(){
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
             }}>Take back{tab==="play"&&!hotseat?" · 3":""}</Btn>
             {savedGames.length>0&&(tab==="play"||tab==="coach")&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
+            {(tab==="play"||tab==="coach")&&<Btn size="sm" variant="secondary" onClick={()=>sRepertoireOpen(true)} title="Сохранённые дебютные линии">📚 Репертуар{repertoire.entries.length>0?` (${repertoire.entries.length})`:""}</Btn>}
           </div>}
           {over&&fenHist.length>2&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
             <Btn size="sm" variant="gold" onClick={()=>{
@@ -3050,13 +3070,27 @@ export default function CyberChessPage(){
             border:"1px solid #a7f3d0",
             boxShadow:"0 2px 8px rgba(5,150,105,0.08), inset 0 1px 0 rgba(255,255,255,0.6)"
           }}>
-            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:4}}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:4,flexWrap:"wrap"}}>
               <span style={{
                 fontSize:11,fontWeight:900,padding:"3px 8px",borderRadius:RADIUS.sm,
                 background:CC.brand,color:"#fff",
                 fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:1
               }}>{currentOpening.eco}</span>
               <span style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.name}</span>
+              {repertoire.entries.length>0&&hist.length>0&&(
+                inBook
+                  ? <span title="Эта позиция совпадает с твоим репертуаром" style={{fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:4,background:"#10b981",color:"#fff",letterSpacing:0.4}}>📖 В РЕПЕРТУАРЕ</span>
+                  : repMatches.length>0
+                    ? <span title={`Ты ушёл от своего репертуара на ${hist.length-repMatches[0].matchedPlies}-м ходу`} style={{fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:4,background:"#f59e0b",color:"#fff",letterSpacing:0.4}}>↗ ВНЕ КНИГИ</span>
+                    : null
+              )}
+              {bookNextMove&&inBook&&(tab==="play"||tab==="coach")&&on&&!over&&game.turn()===pCol&&(
+                <button onClick={()=>{
+                  try{const probe=new Chess(game.fen());const m=probe.move(bookNextMove);if(m){exec(m.from,m.to,m.promotion as any)}}catch{showToast(`Не удалось сыграть ${bookNextMove}`,"error")}
+                }}
+                  style={{marginLeft:"auto",border:"none",background:CC.brand,color:"#fff",padding:"3px 9px",borderRadius:4,fontSize:11,fontWeight:800,cursor:"pointer"}}
+                  title="Сыграть запланированный книжный ход">▶ {bookNextMove}</button>
+              )}
             </div>
             <div style={{fontSize:12,color:"#065f46",lineHeight:1.45}}>{currentOpening.desc}</div>
           </div>}
@@ -4566,6 +4600,18 @@ export default function CyberChessPage(){
         </div>
       </div>
     </Modal>
+
+    {/* Personal Opening Repertoire modal */}
+    <RepertoireModal
+      open={repertoireOpen}
+      onClose={()=>sRepertoireOpen(false)}
+      histSan={hist}
+      myColor={pCol}
+      ecoHint={currentOpening?{eco:currentOpening.eco,name:currentOpening.name}:null}
+      onPlayMove={(san)=>{
+        try{const probe=new Chess(game.fen());const m=probe.move(san);if(m){exec(m.from,m.to,m.promotion as any);sRepertoireOpen(false)}}catch{showToast(`Не удалось сыграть ${san}`,"error")}
+      }}
+    />
 
     {/* P2P Friend Play modal */}
     <Modal open={p2pOpen} onClose={()=>{sP2pOpen(false)}} size="md"

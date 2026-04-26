@@ -148,7 +148,35 @@ export default function SharedRunClient() {
 
   const { session, run, messages } = payload;
   const agentMessages = messages.filter((m) => m.role === "analyst" || m.role === "writer" || m.role === "critic");
+  const guidanceMessages = messages.filter((m) => m.role === "guidance");
+  const attachmentsMsg = messages.find((m) => m.role === "attachments");
+  const attachments: Array<{ id: string; title: string | null; kind: string | null }> = (() => {
+    if (!attachmentsMsg?.content) return [];
+    try {
+      const parsed = JSON.parse(attachmentsMsg.content);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((a: any) => a && typeof a.id === "string");
+    } catch {
+      return [];
+    }
+  })();
   const totalTok = messages.reduce((s, m) => s + (m.tokensIn ?? 0) + (m.tokensOut ?? 0), 0);
+
+  // Build a lookup of guidance items keyed by the index they should appear
+  // before in the agent-message trace. Walk messages in order.
+  const guidanceByIndex = new Map<number, typeof guidanceMessages>();
+  {
+    let agentIdx = 0;
+    for (const m of messages) {
+      if (m.role === "analyst" || m.role === "writer" || m.role === "critic") {
+        agentIdx++;
+      } else if (m.role === "guidance") {
+        const list = guidanceByIndex.get(agentIdx) || [];
+        list.push(m);
+        guidanceByIndex.set(agentIdx, list);
+      }
+    }
+  }
 
   return (
     <main style={{ background: "#f1f5f9", minHeight: "100vh", padding: "24px 16px" }}>
@@ -221,16 +249,57 @@ export default function SharedRunClient() {
           </div>
         </section>
 
-        {/* Agent trace */}
+        {/* Attached QRight objects */}
+        {attachments.length > 0 && (
+          <section style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
+              Attached QRight objects
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {attachments.map((a) => (
+                <span
+                  key={a.id}
+                  title={a.title || a.id}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    background: "rgba(13,148,136,0.1)",
+                    border: "1px solid rgba(13,148,136,0.3)",
+                    color: "#0f766e",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                  }}
+                >
+                  📎 {a.title || a.id.slice(0, 8)}
+                  {a.kind && <span style={{ fontSize: 10, opacity: 0.7 }}>· {a.kind}</span>}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Agent trace (with guidance chips interleaved) */}
         <section style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>
             Agent trace
           </div>
-          {agentMessages.map((m) => {
+          {/* Guidance items at index 0 (before any agent message) */}
+          {(guidanceByIndex.get(0) || []).map((g) => (
+            <SharedGuidanceChip key={`g0-${g.id}`} text={g.content} stage={g.stage} />
+          ))}
+          {agentMessages.map((m, idx) => {
             const s = styleFor(m, run.strategy);
+            // Render guidance chips placed BEFORE this agent message (index idx+1).
+            const guidanceBefore = guidanceByIndex.get(idx + 1) || [];
             return (
+              <div key={m.id} style={{ display: "contents" }}>
+                {guidanceBefore.length > 0 && guidanceBefore.map((g) => (
+                  <SharedGuidanceChip key={`g${idx}-${g.id}`} text={g.content} stage={g.stage} />
+                ))}
               <div
-                key={m.id}
                 style={{
                   padding: "12px 14px", borderRadius: 12,
                   background: "#fff", border: `1px solid ${s.color}33`,
@@ -263,6 +332,7 @@ export default function SharedRunClient() {
                 <div style={{ fontSize: 13, lineHeight: 1.55, color: "#0f172a" }}>
                   <MiniMarkdown source={m.content} />
                 </div>
+              </div>
               </div>
             );
           })}
@@ -305,6 +375,42 @@ export default function SharedRunClient() {
         </footer>
       </div>
     </main>
+  );
+}
+
+function SharedGuidanceChip({ text, stage }: { text: string; stage: string | null }) {
+  return (
+    <div
+      style={{
+        padding: "10px 14px", borderRadius: 10,
+        background: "rgba(196,181,253,0.18)",
+        border: "1px solid rgba(124,58,237,0.35)",
+        display: "flex",
+        gap: 10,
+        alignItems: "flex-start",
+      }}
+      title={`Mid-run human guidance${stage ? ` (before ${stage} stage)` : ""}`}
+    >
+      <span
+        style={{
+          width: 22, height: 22, borderRadius: 6,
+          background: "#7c3aed", color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 900, flexShrink: 0,
+        }}
+        aria-hidden
+      >
+        ↪
+      </span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6d28d9", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>
+          Mid-run guidance{stage ? ` · before ${stage}` : ""}
+        </div>
+        <div style={{ fontSize: 13, color: "#0f172a", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+          {text}
+        </div>
+      </div>
+    </div>
   );
 }
 

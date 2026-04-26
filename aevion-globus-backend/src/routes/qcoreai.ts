@@ -571,10 +571,21 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   if (attachments.length > 0) {
     // Surface attached QRight objects so the UI can chip them in the run
     // header. Lightweight payload — id + title + kind only.
-    send({
-      type: "qright_attached",
-      items: attachments.map((a) => ({ id: a.id, title: a.title, kind: a.kind })),
-    });
+    const attachmentItems = attachments.map((a) => ({ id: a.id, title: a.title, kind: a.kind }));
+    send({ type: "qright_attached", items: attachmentItems });
+    // Persist as a role="attachments" message so reload / share / export
+    // keep the chip context. ordering=1 reserves slot just after user (0).
+    try {
+      await insertMessage({
+        runId,
+        role: "attachments",
+        content: JSON.stringify(attachmentItems),
+        ordering: 1,
+      });
+    } catch (e: any) {
+      // Logging the persistence failure but not blocking the run.
+      console.warn("[QCoreAI] persist attachments failed:", e?.message);
+    }
   }
 
   // Register this run for mid-run guidance. The orchestrator will drain
@@ -585,7 +596,10 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const history = await buildHistoryContext(sessionId, 6);
 
   const runStart = Date.now();
-  let ordering = 1;
+  // ordering=0 is the user prompt (inserted in session-init block); slot 1
+  // is reserved for attachments when present, so the run-loop counter starts
+  // at 2. When no attachments, slot 1 stays empty — listMessages doesn't care.
+  let ordering = 2;
   const pendingByKey = new Map<string, { provider: string; model: string }>();
   const stageKey = (role: string, stage: string, instance?: string) =>
     `${role}|${stage}|${instance || ""}`;
@@ -613,6 +627,23 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
             provider: evt.provider,
             model: evt.model,
           });
+          break;
+        case "guidance_applied":
+          // Persist each drained guidance item so reload / share / export
+          // see the human's interjection in-place. role="guidance" is a
+          // sentinel the listMessages consumers can split out from agents.
+          try {
+            await insertMessage({
+              runId,
+              role: "guidance",
+              stage: evt.stage,
+              instance: evt.instance ?? null,
+              content: evt.text,
+              ordering: ordering++,
+            });
+          } catch (e: any) {
+            console.warn("[QCoreAI] persist guidance failed:", e?.message);
+          }
           break;
         case "agent_end": {
           const key = stageKey(evt.role, evt.stage, evt.instance);
@@ -899,10 +930,35 @@ function renderRunMarkdown(opts: { session: any; run: any; messages: any[] }): s
   lines.push("");
   lines.push(run.userInput || "");
   lines.push("");
+
+  // Attachments (QRight objects pre-fetched as Analyst context).
+  const attachmentsMsg = messages.find((m: any) => m.role === "attachments");
+  if (attachmentsMsg) {
+    let parsed: Array<{ id: string; title: string | null; kind: string | null }> = [];
+    try { parsed = JSON.parse(attachmentsMsg.content); } catch { /* ignore */ }
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      lines.push("## Attached QRight objects");
+      lines.push("");
+      for (const a of parsed) {
+        const label = [a.title, a.kind ? `(${a.kind})` : ""].filter(Boolean).join(" ");
+        lines.push(`- 📎 \`${a.id}\` — ${label || "(untitled)"}`);
+      }
+      lines.push("");
+    }
+  }
+
   lines.push("## Agent trace");
   lines.push("");
   for (const m of messages) {
-    if (m.role === "user" || m.role === "final") continue;
+    if (m.role === "user" || m.role === "final" || m.role === "attachments") continue;
+    if (m.role === "guidance") {
+      // Render guidance as a blockquote chip in-line with the trace.
+      lines.push(`> ↪ **Mid-run guidance** (before ${m.stage || "next"} stage):`);
+      lines.push("> ");
+      for (const ln of (m.content || "").split("\n")) lines.push(`> ${ln}`);
+      lines.push("");
+      continue;
+    }
     const tag = [m.role, m.stage, m.instance].filter(Boolean).join(" · ");
     const modelInfo = [m.provider, m.model].filter(Boolean).join(" / ");
     const tok = m.tokensIn != null || m.tokensOut != null ? ` · ${m.tokensIn ?? 0}→${m.tokensOut ?? 0} tok` : "";

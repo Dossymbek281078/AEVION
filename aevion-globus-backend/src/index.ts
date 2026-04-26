@@ -6,6 +6,7 @@ import cors from "cors";
 
 import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
+import { qsignV2Router } from "./routes/qsignV2";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
@@ -25,7 +26,7 @@ const app = express();
 const PORT = process.env.PORT || 4001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // Health-check
 app.get("/health", (_req, res) => {
@@ -75,7 +76,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.2.0",
+      version: "0.5.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -87,8 +88,37 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "List QRight (optional ?mine=1 + Bearer)" },
         post: { summary: "Create QRight object" },
       },
-      "/api/qsign/sign": { post: { summary: "Sign payload" } },
-      "/api/qsign/verify": { post: { summary: "Verify signature" } },
+      "/api/qsign/sign": { post: { summary: "[v1] Sign payload (HMAC, no persistence)" } },
+      "/api/qsign/verify": { post: { summary: "[v1] Stateless verify" } },
+      "/api/qsign/v2/health": { get: { summary: "[v2] QSign health + active kids" } },
+      "/api/qsign/v2/stats": {
+        get: {
+          summary:
+            "[v2] Public aggregate metrics (totals, last 24h, unique issuers, top countries, keys by status)",
+        },
+      },
+      "/api/qsign/v2/recent": {
+        get: {
+          summary:
+            "[v2] Sanitized recent signatures feed (id, kids, country, createdAt, revoked) · ?limit=1..20",
+        },
+      },
+      "/api/qsign/v2/sign": {
+        post: {
+          summary: "[v2] Sign payload (HMAC+Ed25519, RFC 8785, persisted, Bearer required)",
+        },
+      },
+      "/api/qsign/v2/verify": { post: { summary: "[v2] Stateless verify by canonical payload" } },
+      "/api/qsign/v2/verify/{id}": { get: { summary: "[v2] Verify persisted signature by id" } },
+      "/api/qsign/v2/{id}/public": { get: { summary: "[v2] Public shareable JSON view" } },
+      "/api/qsign/v2/keys": { get: { summary: "[v2] Key registry (JWKS-like; no secret material)" } },
+      "/api/qsign/v2/keys/{kid}": { get: { summary: "[v2] Single key detail by kid" } },
+      "/api/qsign/v2/keys/rotate": {
+        post: { summary: "[v2] Rotate active key for algo (admin only, overlap window)" },
+      },
+      "/api/qsign/v2/revoke/{id}": {
+        post: { summary: "[v2] Revoke signature (issuer or admin, causal link optional)" },
+      },
       "/api/auth/register": { post: {} },
       "/api/auth/login": { post: {} },
       "/api/auth/me": { get: {} },
@@ -148,6 +178,9 @@ app.use("/api/qtrade", qtradeRouter);
 app.use("/api/qright", qrightRouter);
 
 // ==========================
+// QSign — v1 (legacy) + v2 (RFC 8785, persisted, multi-algo)
+// ==========================
+app.use("/api/qsign/v2", qsignV2Router);
 app.use("/api/qsign", qsignRouter);
 
 // ==========================

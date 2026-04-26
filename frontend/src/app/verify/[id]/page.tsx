@@ -24,6 +24,10 @@ type VerifyData = {
     algorithm: string;
     protectedAt: string;
     status: string;
+    verificationLevel?: "anonymous" | "verified";
+    verifiedName?: string | null;
+    verifiedAt?: string | null;
+    verifiedBy?: string | null;
   };
   integrity: {
     contentHashValid: boolean;
@@ -265,15 +269,30 @@ export default function VerifyPage() {
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>{cert.title}</div>
               </div>
-              <div style={{
-                padding: "6px 14px",
-                borderRadius: 8,
-                background: cert.status === "active" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
-                color: cert.status === "active" ? "#10b981" : "#ef4444",
-                fontSize: 12,
-                fontWeight: 800,
-              }}>
-                {cert.status === "active" ? "✓ PROTECTED" : "⚠ " + cert.status.toUpperCase()}
+              <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
+                <div style={{
+                  padding: "6px 14px",
+                  borderRadius: 8,
+                  background: cert.status === "active" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+                  color: cert.status === "active" ? "#10b981" : "#ef4444",
+                  fontSize: 12,
+                  fontWeight: 800,
+                }}>
+                  {cert.status === "active" ? "✓ PROTECTED" : "⚠ " + cert.status.toUpperCase()}
+                </div>
+                {cert.verificationLevel === "verified" && (
+                  <div style={{
+                    padding: "4px 10px",
+                    borderRadius: 8,
+                    background: "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(79,70,229,0.25))",
+                    color: "#c7d2fe",
+                    fontSize: 10,
+                    fontWeight: 800,
+                    border: "1px solid rgba(165,180,252,0.4)",
+                  }}>
+                    ⭐ VERIFIED AUTHOR
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -298,6 +317,30 @@ export default function VerifyPage() {
               <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 4 }}>Description</div>
                 <div style={{ fontSize: 13, color: "#334155", lineHeight: 1.6 }}>{cert.description}</div>
+              </div>
+            )}
+
+            {cert.verificationLevel === "verified" && (
+              <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 12, background: "linear-gradient(135deg, rgba(99,102,241,0.06), rgba(79,70,229,0.06))", border: "1px solid rgba(99,102,241,0.25)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 18 }} aria-hidden>⭐</span>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "#312e81" }}>
+                    Author identity verified by AEVION Bureau
+                  </div>
+                  <InfoTip
+                    label="Verified Author tier"
+                    text="The author's government-issued ID was checked by AEVION's KYC partner. The bureau attests that the verified name matched the author named on this certificate at the time of verification."
+                  />
+                </div>
+                <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.55 }}>
+                  <b>{cert.verifiedName || cert.author}</b>
+                  {cert.verifiedAt && (
+                    <> · verified {new Date(cert.verifiedAt).toLocaleDateString()}</>
+                  )}
+                  {cert.verifiedBy && (
+                    <> · attested by AEVION (KYC partner: {cert.verifiedBy})</>
+                  )}
+                </div>
               </div>
             )}
 

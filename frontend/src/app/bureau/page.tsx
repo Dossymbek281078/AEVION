@@ -18,6 +18,9 @@ type Certificate = {
   protectedAt: string;
   verifiedCount: number;
   verifyUrl: string;
+  verificationLevel?: "anonymous" | "verified";
+  verifiedName?: string | null;
+  verifiedAt?: string | null;
 };
 
 const KIND_ICONS: Record<string, string> = {
@@ -134,6 +137,56 @@ export default function BureauPage() {
           </div>
         </div>
 
+        {/* ── Service Tiers ── */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Service Tiers</div>
+          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
+            Anonymous certificates are free and cryptographically complete. Higher tiers add identity attestation and (soon) notary co-signing — useful when an IP claim needs strong author identification in court.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            {[
+              {
+                name: "Free / Anonymous",
+                price: "$0",
+                blurb: "Full Qright stack: SHA-256 hash, HMAC, Ed25519, Shamir 2-of-3, OpenTimestamps Bitcoin anchor, browser-held author co-signature, offline verification bundle.",
+                badge: "✓ active",
+                badgeColor: "#059669",
+                cta: { label: "Protect work", href: "/qright" },
+              },
+              {
+                name: "Verified",
+                price: "$19 / cert",
+                blurb: "Author identity verified by KYC partner (passport / national ID). Bureau attests real-name authorship and stamps cert with the verification fingerprint.",
+                badge: "▲ available now",
+                badgeColor: "#4f46e5",
+                cta: { label: "Upgrade a cert", href: "/bureau" },
+              },
+              {
+                name: "Notarized",
+                price: "From $89 / cert",
+                blurb: "Licensed notary in KZ co-signs the certificate, producing an apostille-ready document admissible in EAEU courts. Filed-tier upgrade leads to full Kazpatent / WIPO PCT submission.",
+                badge: "soon",
+                badgeColor: "#94a3b8",
+                cta: null as { label: string; href: string } | null,
+              },
+            ].map((tier) => (
+              <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: tier.badgeColor }}>{tier.badge}</span>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>{tier.price}</div>
+                <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.55, flex: 1 }}>{tier.blurb}</div>
+                {tier.cta && (
+                  <Link href={tier.cta.href} style={{ marginTop: 6, padding: "8px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12, textAlign: "center" as const }}>
+                    {tier.cta.label}
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* ── Certificate Registry ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -165,7 +218,13 @@ export default function BureauPage() {
                       <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
-                      <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
+                      {cert.verificationLevel === "verified" ? (
+                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(13,148,136,0.15))", color: "#065f46", whiteSpace: "nowrap" as const, border: "1px solid rgba(16,185,129,0.3)" }}>
+                          ✓ VERIFIED AUTHOR
+                        </span>
+                      ) : (
+                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
+                      )}
                       {cert.verifiedCount > 0 && <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>}
                     </div>
                   </div>
@@ -188,6 +247,14 @@ export default function BureauPage() {
                     >
                       📄 PDF
                     </a>
+                    {cert.verificationLevel !== "verified" && (
+                      <Link
+                        href={`/bureau/upgrade/${cert.id}`}
+                        style={{ padding: "7px 14px", borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+                      >
+                        ⭐ Upgrade to Verified
+                      </Link>
+                    )}
                     <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Link</button>
                     <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy ID</button>
                   </div>

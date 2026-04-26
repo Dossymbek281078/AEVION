@@ -128,6 +128,14 @@ if ($useWT) {
 }
 Write-Host ""
 
+function QuoteIfNeeded($s) {
+  # Wrap in double quotes if the value contains whitespace; escape any embedded quotes.
+  if ($s -match '\s') {
+    return '"' + ($s -replace '"', '\"') + '"'
+  }
+  return $s
+}
+
 if ($useWT) {
   $wtArgs = New-Object System.Collections.Generic.List[string]
   $first = $true
@@ -136,22 +144,22 @@ if ($useWT) {
     if (-not $first) { $wtArgs.Add(";") }
     $wtArgs.Add("new-tab")
     $wtArgs.Add("--title")
-    $wtArgs.Add($s.title)
+    $wtArgs.Add((QuoteIfNeeded $s.title))
     $wtArgs.Add("-d")
-    $wtArgs.Add($s.path)
+    $wtArgs.Add((QuoteIfNeeded $s.path))
     $wtArgs.Add("powershell.exe")
     $wtArgs.Add("-NoExit")
     $wtArgs.Add("-ExecutionPolicy")
     $wtArgs.Add("Bypass")
     $wtArgs.Add("-File")
-    $wtArgs.Add($perSessionFile)
+    $wtArgs.Add((QuoteIfNeeded $perSessionFile))
     $first = $false
   }
   Start-Process wt.exe -ArgumentList $wtArgs.ToArray()
 } else {
   foreach ($s in $Sessions) {
     $perSessionFile = Join-Path $TempDir ($s.id + ".ps1")
-    Start-Process powershell -ArgumentList @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", $perSessionFile) | Out-Null
+    Start-Process powershell -ArgumentList @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", (QuoteIfNeeded $perSessionFile)) | Out-Null
   }
 }
 

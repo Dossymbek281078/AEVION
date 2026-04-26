@@ -130,6 +130,49 @@ async function ensureBureauTables(): Promise<void> {
   await pool.query(
     `ALTER TABLE "BureauVerification" ADD COLUMN IF NOT EXISTS "orgId" TEXT;`,
   );
+  // Phase C scaffold — notary registry (rows added manually by admin).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauNotary" (
+      "id" TEXT PRIMARY KEY,
+      "fullName" TEXT NOT NULL,
+      "licenseNumber" TEXT NOT NULL UNIQUE,
+      "jurisdiction" TEXT NOT NULL,
+      "city" TEXT,
+      "publicKeyEd25519" TEXT NOT NULL,
+      "publicKeyFingerprint" TEXT NOT NULL,
+      "contactEmail" TEXT,
+      "contractSignedAt" TIMESTAMPTZ,
+      "active" BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "deactivatedAt" TIMESTAMPTZ,
+      "monthlyVolumeLimit" INTEGER NOT NULL DEFAULT 200
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauNotary_jurisdiction_idx" ON "BureauNotary" ("jurisdiction");`,
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauNotarySignature" (
+      "id" TEXT PRIMARY KEY,
+      "notaryId" TEXT NOT NULL REFERENCES "BureauNotary"("id"),
+      "certId" TEXT NOT NULL,
+      "signedHash" TEXT NOT NULL,
+      "signature" TEXT NOT NULL,
+      "notaryRegistryRef" TEXT,
+      "signedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "revokedAt" TIMESTAMPTZ,
+      "revocationReason" TEXT
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauNotarySignature_certId_idx" ON "BureauNotarySignature" ("certId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauNotarySignature_notaryId_idx" ON "BureauNotarySignature" ("notaryId");`,
+  );
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "notarySignatureId" TEXT;`,
+  );
   bureauTablesReady = true;
 }
 
@@ -590,6 +633,74 @@ bureauRouter.post("/payment/webhook", async (req, res) => {
  * vendor URL. The route exists so end-to-end demos work without a
  * vendor account.
  */
+/* ─────────────────────  Notary registry (Phase C scaffold)  ────────── */
+
+/**
+ * GET /api/bureau/notaries
+ *
+ * Public list of active notarial partners. Verifiers use this to
+ * resolve a notarySignatureId on a certificate to a known, AEVION-vetted
+ * notary record. Anyone may read (this is metadata, not PII).
+ */
+bureauRouter.get("/notaries", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const jurisdiction =
+      typeof req.query.jurisdiction === "string"
+        ? req.query.jurisdiction
+        : null;
+    const params: string[] = [];
+    let where = `WHERE "active" = TRUE`;
+    if (jurisdiction) {
+      params.push(jurisdiction);
+      where += ` AND "jurisdiction" = $1`;
+    }
+    const { rows } = await pool.query(
+      `SELECT "id","fullName","licenseNumber","jurisdiction","city",
+              "publicKeyFingerprint","contractSignedAt","createdAt"
+         FROM "BureauNotary"
+        ${where}
+        ORDER BY "createdAt" ASC`,
+      params,
+    );
+    res.json({ notaries: rows });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "list notaries failed";
+    console.error("[Bureau] notaries list:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/bureau/notaries/:notaryId
+ *
+ * Detail view of a single notary, including the full Ed25519 public key
+ * (offline verifiers use this to check notary signatures without
+ * contacting AEVION).
+ */
+bureauRouter.get("/notaries/:notaryId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const { notaryId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "id","fullName","licenseNumber","jurisdiction","city",
+              "publicKeyEd25519","publicKeyFingerprint","contractSignedAt",
+              "createdAt","active","deactivatedAt"
+         FROM "BureauNotary"
+        WHERE "id" = $1`,
+      [notaryId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "notary not found" });
+    }
+    res.json(rows[0]);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "notary detail failed";
+    console.error("[Bureau] notary detail:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
 /* ─────────────────────────  Organizations  ─────────────────────── */
 
 /**

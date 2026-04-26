@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
+import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat } from "./ui";
+import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
+import { computeGameDNA, type GameDNA } from "./gameDna";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -62,9 +65,11 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
     if(l==="uciok"){this.ok=true;this.w!.postMessage("isready")}};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}}
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];try{this.w.postMessage("stop")}catch{};this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
+  terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[]}}}
 
 /* ═══ Minimax ═══ */
 const PV:Record<PieceSymbol,number>={p:100,n:320,b:330,r:500,q:900,k:0};
@@ -80,8 +85,20 @@ function mm(c:Chess,d:number,a:number,b:number,mx:boolean):number{if(!d)return e
 function best(c:Chess,d:number,rn:number):Move|null{const mv=c.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{c.move(m);const s=mm(c,Math.min(d,4)-1,-Infinity,Infinity,c.turn()==="w");c.undo();return{m,s:s+(Math.random()-.5)*rn}});sc.sort((a,b)=>c.turn()==="w"?b.s-a.s:a.s-b.s);return sc[0].m}
 
 /* ═══ Sound — neutral percussive (filtered noise bursts, no melody) ═══ */
-function snd(t:string){try{
-  const x=new AudioContext(),n=x.currentTime;
+const MK="aevion_chess_mute_v1";
+let _muted:boolean|null=null;
+function isMuted(){if(_muted===null){try{_muted=typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{_muted=false}}return !!_muted}
+function setMuted(v:boolean){_muted=v;try{localStorage.setItem(MK,v?"1":"0")}catch{}}
+// Shared AudioContext — creating one per sound leaks and trips browser limits.
+let _audioCtx:AudioContext|null=null;
+function getAudioCtx():AudioContext|null{
+  if(typeof window==="undefined")return null;
+  if(!_audioCtx){try{_audioCtx=new(window.AudioContext||(window as any).webkitAudioContext)()}catch{_audioCtx=null}}
+  if(_audioCtx&&_audioCtx.state==="suspended"){_audioCtx.resume().catch(()=>{})}
+  return _audioCtx;
+}
+function snd(t:string){if(isMuted())return;try{
+  const x=getAudioCtx();if(!x)return;const n=x.currentTime;
   // Generate short noise burst
   const dur = t==="capture"?0.12 : t==="check"?0.08 : t==="premove"?0.04 : t==="x"?0.25 : 0.05;
   const bufSize = Math.floor(x.sampleRate * dur);
@@ -125,15 +142,101 @@ const GK="aevion_chess_games_v1";
 function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
 function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;localStorage.setItem(GK,JSON.stringify(all))}catch{}}
 
+/* ═══ Chessy — in-game currency ═══ */
+type ChessyState={v:1;balance:number;lifetime:number;lastDaily?:string;streak:number;welcome:boolean;owned:Record<string,boolean>;ach:Record<string,number>};
+const CK="aevion_chessy_v1";
+const CHESSY_DEFAULT:ChessyState={v:1,balance:0,lifetime:0,streak:0,welcome:false,owned:{},ach:{}};
+function ldChessy():ChessyState{try{const s=localStorage.getItem(CK);if(!s)return {...CHESSY_DEFAULT};const r=JSON.parse(s);if(!r||r.v!==1)return {...CHESSY_DEFAULT};return {...CHESSY_DEFAULT,...r,owned:r.owned||{},ach:r.ach||{}}}catch{return {...CHESSY_DEFAULT}}}
+function svChessy(s:ChessyState){try{localStorage.setItem(CK,JSON.stringify(s))}catch{}}
+// Chessy transaction log (last 50 events) for shop "History" section
+type ChessyLogEntry={ts:number;amount:number;reason:string;sign:1|-1};
+const CLK="aevion_chessy_log_v1";
+function ldChessyLog():ChessyLogEntry[]{try{const s=localStorage.getItem(CLK);if(!s)return [];const r=JSON.parse(s);return Array.isArray(r)?r.slice(0,50):[]}catch{return []}}
+function svChessyLog(log:ChessyLogEntry[]){try{localStorage.setItem(CLK,JSON.stringify(log.slice(0,50)))}catch{}}
+function todayKey(){const d=new Date();return`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
+function daysSinceEpoch(){return Math.floor(Date.now()/86400000)}
+// Deterministic daily-puzzle index — same for all users on the same day
+function pickDailyIdx(total:number){if(total<=0)return 0;const n=daysSinceEpoch();let h=n*2654435761;h=(h^(h>>>16))>>>0;return h%total}
+type DailyState={v:1;date:string;idx:number;solved:boolean};
+const DK="aevion_daily_puzzle_v1";
+function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)return null;const r=JSON.parse(s);return r?.v===1?r:null}catch{return null}}
+function svDaily(s:DailyState){try{localStorage.setItem(DK,JSON.stringify(s))}catch{}}
+
+/* ═══ PGN utilities ═══ */
+function buildPGN(moves:string[],meta:{white?:string;black?:string;result?:string;date?:string;event?:string}={}):string{
+  const d=meta.date||new Date().toISOString().slice(0,10).replace(/-/g,".");
+  const headers=[
+    `[Event "${meta.event||"AEVION CyberChess"}"]`,
+    `[Site "aevion.app/cyberchess"]`,
+    `[Date "${d}"]`,
+    `[White "${meta.white||"White"}"]`,
+    `[Black "${meta.black||"Black"}"]`,
+    `[Result "${meta.result||"*"}"]`,
+  ];
+  const body:string[]=[];
+  for(let i=0;i<moves.length;i+=2){
+    const n=i/2+1;const w=moves[i];const b=moves[i+1];
+    body.push(b?`${n}. ${w} ${b}`:`${n}. ${w}`);
+  }
+  return headers.join("\n")+"\n\n"+body.join(" ")+(meta.result?` ${meta.result}`:" *");
+}
+// Parse SAN moves out of a PGN (ignoring headers, comments, variations, NAGs)
+function parsePGN(pgn:string):string[]{
+  // Strip headers [...]
+  let body=pgn.replace(/^\s*\[[^\]]*\][^\n]*\n/gm,"");
+  // Strip comments {...} and variations (...)
+  body=body.replace(/\{[^}]*\}/g,"").replace(/\([^)]*\)/g,"");
+  // Strip NAGs $1..$n and result tokens
+  body=body.replace(/\$\d+/g,"").replace(/\b(1-0|0-1|1\/2-1\/2|\*)\b/g,"");
+  // Strip move numbers "1." or "1..."
+  body=body.replace(/\d+\.(\.\.)?/g,"");
+  return body.split(/\s+/).filter(t=>t&&!/^\d+$/.test(t));
+}
+/* ═══ Endgame trainer — 12 classic positions ═══ */
+type Endgame={name:string;fen:string;goal:"Win"|"Draw";side:"w"|"b";hint:string;reward:number};
+const ENDGAMES:Endgame[]=[
+  {name:"KQ vs K",fen:"4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1",goal:"Win",side:"w",hint:"Отжимай чёрного короля к краю ферзём на «ход коня»: не ближе чем в 2 клетках. Когда король на краю — подведи своего и мат.",reward:15},
+  {name:"KR vs K",fen:"4k3/8/8/8/8/8/4R3/4K3 w - - 0 1",goal:"Win",side:"w",hint:"Короля соперника гоняй на 8-ю горизонталь, свой король — в оппозицию. Ладья отрезает, короли друг против друга, потом мат ладьёй.",reward:20},
+  {name:"Оппозиция: KP vs K (выигрыш)",fen:"4k3/8/8/8/8/4P3/4K3/8 w - - 0 1",goal:"Win",side:"w",hint:"Король перед пешкой — правило оппозиции. Если твой король на 6-й горизонтали впереди пешки — выигрыш, даже без темпа. Не торопи пешку.",reward:15},
+  {name:"KP vs K (ничья)",fen:"4k3/8/8/4K3/4P3/8/8/8 b - - 0 1",goal:"Draw",side:"b",hint:"Чёрные держат оппозицию. Следи чтобы король соперника не прошёл на 6-ю горизонталь впереди пешки — тогда ничья.",reward:12},
+  {name:"Lucena (ладейный)",fen:"1K6/1P1k4/8/8/8/8/6r1/2R5 w - - 0 1",goal:"Win",side:"w",hint:"Построй «мост»: ладья на 4-ю горизонталь, король выходит из-за пешки, ладья прикрывает от шахов. Классика теории.",reward:30},
+  {name:"Philidor (ничья)",fen:"4k3/R7/4K3/4P3/8/8/8/5r2 b - - 0 1",goal:"Draw",side:"b",hint:"Держи ладью на 3-й (6-й для белых) горизонтали пока пешка не пойдёт. Когда пешка двинется — сразу за спину с шахом. Ничья по теории.",reward:25},
+  {name:"Два слона против короля",fen:"8/8/4k3/8/8/2B5/1B2K3/8 w - - 0 1",goal:"Win",side:"w",hint:"Слоны контролируют две соседние диагонали — гоняй короля в угол. Твой король помогает. Занимает 15-20 ходов.",reward:25},
+  {name:"Конь + слон (угол цвета слона)",fen:"8/8/4k3/8/8/3NB3/4K3/8 w - - 0 1",goal:"Win",side:"w",hint:"Король соперника должен оказаться в углу того же цвета, что слон. Техника W-manoeuvre коня — сложно, но изучаемо.",reward:40},
+  {name:"Пешечный эндшпиль: треугольник",fen:"8/4k3/8/3KP3/8/8/8/8 w - - 0 1",goal:"Win",side:"w",hint:"Манёвр «треугольник» королём для передачи темпа. Цель — занять ключевое поле перед пешкой с оппозицией у соперника.",reward:18},
+  {name:"Ферзь против ладьи",fen:"8/8/8/8/4k3/8/4r3/4K2Q w - - 0 1",goal:"Win",side:"w",hint:"Известная позиция Филидора. Оттесняй короля к краю и следи за шахами. Длинная техника — до 30-40 ходов.",reward:45},
+  {name:"Ладья+пешка vs ладья (пешка f)",fen:"8/5pk1/8/8/8/5PK1/6R1/6r1 w - - 0 1",goal:"Win",side:"w",hint:"Крайние пешки f/h — тяжелее чем центральные. Короля за пешку и Lucena-мост. Если не получится — ничья.",reward:28},
+  {name:"KBN vs K (мат слоном и конём)",fen:"8/8/8/4k3/8/8/1N1B4/4K3 w - - 0 1",goal:"Win",side:"w",hint:"Самый сложный основной мат. Король соперника должен оказаться в углу цвета СЛОНА. Маршрут коня — W-pattern.",reward:50},
+];
+
+const ACH_LABELS:Record<string,string>={
+  first_win:"🏆 Первая победа",
+  wins_10:"🎖 10 побед",
+  wins_50:"🏅 50 побед",
+  beat_expert:"⚔ Победа над Expert",
+  beat_master:"👑 Победа над Master",
+  puzzles_10:"🧩 10 пазлов",
+  puzzles_50:"🧠 50 пазлов",
+  puzzles_100:"🎯 100 пазлов",
+  endgame_master:"🏰 Мастер эндшпилей",
+};
+
+/* ═══ Resume snapshot — autosave in-progress game ═══ */
+type ResumeSnap={v:1;fen:string;hist:string[];fenHist:string[];pCol:"w"|"b";aiI:number;tcI:number;useCustom:boolean;customMin:number;customInc:number;timeP:number;timeA:number;capW:string[];capB:string[];ts:number};
+const RSK="aevion_chess_resume_v1";
+function loadResume():ResumeSnap|null{try{const s=localStorage.getItem(RSK);if(!s)return null;const r=JSON.parse(s);if(r?.v!==1||!Array.isArray(r.hist)||!r.fen)return null;return r as ResumeSnap}catch{return null}}
+function saveResume(s:ResumeSnap){try{localStorage.setItem(RSK,JSON.stringify(s))}catch{}}
+function clearResume(){try{localStorage.removeItem(RSK)}catch{}}
+
 /* ═══ Timer ═══ */
-function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){const[t,sT]=useState(ini);const r=useRef<any>(null);useEffect(()=>{sT(ini)},[ini]);useEffect(()=>{if(r.current)clearInterval(r.current);if(act&&ini>0){r.current=setInterval(()=>sT(v=>{if(v<=1){clearInterval(r.current);onT();return 0}return v-1}),1000)}return()=>{if(r.current)clearInterval(r.current)}},[act,ini>0]);return{time:t,addInc:useCallback(()=>{if(inc>0)sT(v=>v+inc)},[inc]),reset:useCallback(()=>sT(ini),[ini])}}
+function useTimer(ini:number,inc:number,act:boolean,onT:()=>void){const[t,sT]=useState(ini);const r=useRef<any>(null);useEffect(()=>{sT(ini)},[ini]);useEffect(()=>{if(r.current)clearInterval(r.current);if(act&&ini>0){r.current=setInterval(()=>sT(v=>{if(v<=1){clearInterval(r.current);onT();return 0}return v-1}),1000)}return()=>{if(r.current)clearInterval(r.current)}},[act,ini>0]);return{time:t,addInc:useCallback(()=>{if(inc>0)sT(v=>v+inc)},[inc]),reset:useCallback(()=>sT(ini),[ini]),setTime:useCallback((v:number)=>sT(v),[])}}
 function fmt(s:number){return s<=0?"0:00":`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`}
 function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 
 /* ═══ Theme ═══ */
 const T={bg:"#f3f4f6",surface:"#fff",border:"#e5e7eb",text:"#111827",dim:"#6b7280",accent:"#059669",gold:"#d97706",danger:"#dc2626",blue:"#2563eb",purple:"#7c3aed",sel:"rgba(5,150,105,0.45)",valid:"rgba(5,150,105,0.35)",cap:"rgba(220,38,38,0.35)",last:"rgba(217,119,6,0.25)",chk:"rgba(220,38,38,0.55)",pm:"rgba(37,99,235,0.35)",pmS:"rgba(37,99,235,0.5)"};
 
-type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string};
+type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string;premium?:string};
 const BOARD_THEMES: BoardTheme[] = [
   {name:"Classic",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
   {name:"Emerald",light:"#eeeed2",dark:"#769656",border:"#769656",icon:"🌿"},
@@ -143,14 +246,58 @@ const BOARD_THEMES: BoardTheme[] = [
   {name:"Dark",light:"#b0b0b0",dark:"#555555",border:"#444444",icon:"🌑"},
   {name:"Ice",light:"#e8f4f8",dark:"#7eb8d0",border:"#5a9ab5",icon:"❄️"},
   {name:"Rose",light:"#f5e6e0",dark:"#c47a6c",border:"#b06858",icon:"🌹"},
+  // Premium (owned key in Chessy state)
+  {name:"Neon",light:"#1a0b2e",dark:"#ff00e6",border:"#7c3aed",icon:"⚡",premium:"theme_neon"},
+  {name:"Obsidian",light:"#1f2937",dark:"#0a0a0a",border:"#fbbf24",icon:"🖤",premium:"theme_obsidian"},
+  {name:"Sakura",light:"#ffe0ec",dark:"#f472b6",border:"#ec4899",icon:"🌸",premium:"theme_sakura"},
 ];
+
+/* ═══ StatusBar — game state badge with inline SVG icons ═══ */
+type StatusBarProps = {over:string|null;chk:boolean;think:boolean;myT:boolean;useSF:boolean;pmsLen:number;histLen:number;rat:number;rkI:string};
+function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarProps){
+  const isOver=!!over;
+  const isWin=isOver&&over!.includes("You win");
+  const sz={width:18,height:18,flexShrink:0};
+  const bg=isOver?(isWin?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface;
+  const bc=isOver?(isWin?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border;
+  const col=isOver?(isWin?T.accent:T.danger):chk?T.danger:think?T.gold:myT?T.accent:T.dim;
+  const label=isOver?over:chk?"Check!":think?(useSF?"Stockfish thinking…":"AI thinking…"):myT?"Your move":"AI's turn";
+  const icon=isOver?(isWin
+      ? <svg viewBox="0 0 24 24" fill={col} style={sz}><path d="M7 3h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V3zm-3 1h3v2a3 3 0 0 1-3-3V4zm13 0h3v1a3 3 0 0 1-3 3V4zM9 13h6v2l2 5H7l2-5v-2z"/></svg>
+      : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" style={sz}><circle cx="12" cy="12" r="9"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
+    ):chk
+      ? <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" style={sz}><path d="M12 3L2 20h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17.5" r="0.9" fill={col} stroke="none"/></svg>
+    :think
+      ? <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" style={{...sz,animation:"spin 1.8s linear infinite"}}><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15.5,14"/></svg>
+    :myT
+      ? <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={sz}><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+    : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={sz}><rect x="4" y="7" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1.4" fill={col} stroke="none"/><circle cx="15" cy="13" r="1.4" fill={col} stroke="none"/><line x1="12" y1="3" x2="12" y2="7"/></svg>;
+  return (
+    <div style={{padding:"10px 14px",borderRadius:10,background:bg,border:`1px solid ${bc}`}}>
+      {isOver ? (
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:900,fontSize:15,color:col}}>{icon}<span>{label}</span></div>
+          <div style={{fontSize:13,color:T.dim,marginTop:4,paddingLeft:26}}>{histLen} moves · {rat} {rkI}</div>
+        </div>
+      ) : (
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {icon}
+          <span style={{fontWeight:700,fontSize:14,color:T.text}}>{label}</span>
+          {pmsLen>0 && <span style={{padding:"2px 8px",borderRadius:5,fontSize:12,fontWeight:800,background:"#dbeafe",color:T.blue,marginLeft:"auto"}}>{pmsLen} premove{pmsLen>1?"s":""}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
-  const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=8?0:v}catch{return 0}});
+  const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=BOARD_THEMES.length?0:v}catch{return 0}});
+  const[muted,sMuted]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{return false}});
+  useEffect(()=>{setMuted(muted)},[muted]);
   const[voiceListening,sVoiceListening]=useState(false);
   const voiceRecRef=useRef<any>(null);
   useEffect(()=>{try{localStorage.setItem("aevion_chess_theme_v1",String(boardTheme))}catch{}},[boardTheme]);
@@ -230,6 +377,13 @@ export default function CyberChessPage(){
   const[pzCurrent,sPzCurrent]=useState<Puzzle|null>(null);
   const[pzSolvedCount,sPzSolvedCount]=useState(0);
   const[pzFailedCount,sPzFailedCount]=useState(0);
+  // Puzzle Rush state
+  const[rushActive,sRushActive]=useState(false);
+  const[rushScore,sRushScore]=useState(0);
+  const[rushStreak,sRushStreak]=useState(0);
+  const[rushBestStreak,sRushBestStreak]=useState(0);
+  const[rushBest,sRushBest]=useState(()=>{try{return parseInt(localStorage.getItem("aevion_puzzle_rush_best_v1")||"0")||0}catch{return 0}});
+  const[rushResult,sRushResult]=useState<null|{score:number;streak:number;best:number;chessy:number;isNewBest:boolean}>(null);
   // Multi-dimensional filters
   const[pzFilterGoal,sPzFilterGoal]=useState<string>("all"); // all, Mate, Best move
   const[pzFilterMate,sPzFilterMate]=useState<number>(0); // 0=any, 1=M1, 2=M2, 3=M3...
@@ -242,6 +396,69 @@ export default function CyberChessPage(){
   const[puzzleListOpen,sPuzzleListOpen]=useState(false);
   const[gamesModalOpen,sGamesModalOpen]=useState(false);
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
+  const[showHelp,sShowHelp]=useState(false);
+  const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
+  const[replaying,sReplaying]=useState(false);
+  const[replaySpeed,sReplaySpeed]=useState(1000);
+  type Arrow={from:Square;to:Square;c:string};
+  type SqHL={sq:Square;c:string};
+  const[arrows,sArrows]=useState<Arrow[]>([]);
+  const[sqHL,sSqHL]=useState<SqHL[]>([]);
+  const rcStartRef=useRef<Square|null>(null);
+  const annotColor=(e:{shiftKey?:boolean;ctrlKey?:boolean;altKey?:boolean})=>{
+    if(e.shiftKey)return "#ef4444"; // red
+    if(e.ctrlKey||e.altKey)return "#3b82f6"; // blue
+    return "#22c55e"; // green default
+  };
+  const clearAnnotations=useCallback(()=>{sArrows([]);sSqHL([])},[]);
+  const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
+  const[showShop,sShowShop]=useState(false);
+  const[showChessyInfo,sShowChessyInfo]=useState(false);
+  const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
+  const[showGameDna,sShowGameDna]=useState(false);
+  const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
+  // Opening Trainer state (killer #4)
+  const[showOpeningTrainer,sShowOpeningTrainer]=useState(false);
+  const[openingDrill,sOpeningDrill]=useState<null|{eco:string;name:string;moves:string[];ply:number;mistakes:number}>(null);
+  const[openingDrillFilter,sOpeningDrillFilter]=useState("");
+  // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
+  const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
+  const[dailyState,sDailyState]=useState<DailyState|null>(null);
+  const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
+  const[hotseat,sHotseat]=useState(false);
+  const[showEndgames,sShowEndgames]=useState(false);
+  const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
+  const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
+  useEffect(()=>{svChessy(chessy)},[chessy]);
+  const[chessyFloat,sChessyFloat]=useState<{amount:number;key:number}|null>(null);
+  const[chessyLog,sChessyLog]=useState<ChessyLogEntry[]>(()=>ldChessyLog());
+  useEffect(()=>{svChessyLog(chessyLog)},[chessyLog]);
+  const addChessy=useCallback((n:number,reason:string)=>{
+    if(n<=0)return;
+    sChessy(c=>({...c,balance:c.balance+n,lifetime:c.lifetime+n}));
+    sChessyLog(log=>[{ts:Date.now(),amount:n,reason,sign:1 as const},...log].slice(0,50));
+    showToast(`+${n} Chessy · ${reason}`,"success");
+    sChessyFloat({amount:n,key:Date.now()});
+  },[showToast]);
+  const spendChessy=useCallback((n:number,reason:string)=>{
+    let ok=false;
+    sChessy(c=>{if(c.balance<n)return c;ok=true;return {...c,balance:c.balance-n}});
+    if(ok){
+      sChessyLog(log=>[{ts:Date.now(),amount:n,reason,sign:-1 as const},...log].slice(0,50));
+      showToast(`−${n} Chessy · ${reason}`,"info");
+    }
+    else showToast(`Недостаточно Chessy (нужно ${n})`,"error");
+    return ok;
+  },[showToast]);
+  const unlockAch=useCallback((key:string,reward:number,label:string)=>{
+    sChessy(c=>{
+      if(c.ach[key])return c;
+      setTimeout(()=>{showToast(`🏆 ${label} · +${reward} Chessy`,"success");sChessyFloat({amount:reward,key:Date.now()})},300);
+      return {...c,balance:c.balance+reward,lifetime:c.lifetime+reward,ach:{...c.ach,[key]:Date.now()}};
+    });
+  },[showToast]);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -275,7 +492,51 @@ export default function CyberChessPage(){
     const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
   },[pzCategory]);
 
+  // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
+  useEffect(()=>{
+    if(PUZZLES.length===0)return;
+    const tk=todayKey();const saved=ldDaily();
+    if(saved&&saved.date===tk){sDailyState(saved);return}
+    const idx=pickDailyIdx(PUZZLES.length);
+    const next:DailyState={v:1,date:tk,idx,solved:false};
+    svDaily(next);sDailyState(next);
+  },[PUZZLES.length]);
+
+  // Watch-URL: on mount, if ?pgn=... is present, load the PGN into Analysis tab read-only.
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{
+      const params=new URLSearchParams(window.location.search);
+      const pgn=params.get("pgn");
+      if(!pgn)return;
+      const sans=parsePGN(decodeURIComponent(pgn));
+      if(!sans.length)return;
+      const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
+      for(const san of sans){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}else break}catch{break}}
+      if(!mh.length)return;
+      setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(0);
+      try{const first=new Chess();setGame(first);sBk(k=>k+1)}catch{}
+      showToast(`▶ Просмотр партии · ${mh.length} ходов`,"info");
+    }catch{}
+  },[]);
+
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
+    const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
+    // Chessy welcome + daily bonus + first-time tour
+    const c=ldChessy();const tk=todayKey();
+    let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
+    if(!c.welcome){
+      sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
+      setTimeout(()=>showToast("🎉 +50 Chessy · добро пожаловать!","success"),800);
+      if(!tourSeen)setTimeout(()=>sTourStep(0),1400);
+    }else if(c.lastDaily!==tk){
+      // Compute streak: consecutive days? Simple check — yesterday continues, else reset to 1
+      const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
+      const newStreak=c.lastDaily===yk?c.streak+1:1;
+      const bonus=newStreak>=7?100:newStreak>=3?30:5;
+      sChessy(x=>({...x,balance:x.balance+bonus,lifetime:x.lifetime+bonus,lastDaily:tk,streak:newStreak}));
+      setTimeout(()=>showToast(`☀ +${bonus} Chessy · ${newStreak}-й день подряд`,"success"),800);
+    }
     fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
     fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
       // Build FEN-indexed opening database for transposition detection
@@ -326,19 +587,36 @@ export default function CyberChessPage(){
   },[hist,openingsDb]);
   // Always load Stockfish for eval bar (not just for AI play)
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
+  // Terminate Stockfish worker on unmount so the WASM process doesn't outlive the page.
+  useEffect(()=>()=>{try{sfR.current?.terminate()}catch{};sfR.current=null},[]);
   // Live eval on position change - for play/coach/analysis tabs
+  // Hardened: 8s timeout + abort on cleanup (prevents stuck worker when user scrolls history fast)
   useEffect(()=>{
     if(setup||!sfR.current?.ready())return;
     if(tab!=="analysis"&&tab!=="play"&&tab!=="coach")return;
-    // In play/coach respect over state (game ended), but in analysis keep evaluating
     if(tab!=="analysis"&&over)return;
-    // Don't eval during AI thinking (Stockfish busy computing move)
     if(tab!=="analysis"&&think)return;
+    let done=false;
+    const sign=game.turn()==="w"?1:-1;
+    const to=setTimeout(()=>{
+      if(done)return;
+      done=true;
+      console.warn("[auto-eval] timeout 8s — abort, keep previous eval");
+      sfR.current?.stop();
+    },8000);
     sfR.current.eval(game.fen(),15,(cp,mate)=>{
-      const sign=game.turn()==="w"?1:-1;
+      if(done)return;
       sEvalCp(cp*sign);sEvalMate(mate*sign);
-    },()=>{});
-  },[bk,tab,setup,think,over]);
+    },()=>{done=true;clearTimeout(to)});
+    return()=>{done=true;clearTimeout(to);sfR.current?.stop()};
+  },[bk,tab,setup,think,over,sfOk]);
+
+  // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
+  // worker on browseIdx/tab changes; deps included `tab` so every tab switch fired
+  // `new SF(); s.init()` which loaded WASM and blocked the main thread ~500ms-1s each.
+  // Symptoms: lag during play, premove setTimeout missing deadlines, clock intervals
+  // getting throttled. The `stop()` call in the live-eval cleanup (plus stop at start
+  // of SF.eval, see class) is enough to abort a stale search without worker recycling.
 
   // Auto-evaluate each move in analysis tab — progressive: fast pass (d10), then refine (d18)
   useEffect(()=>{
@@ -407,6 +685,58 @@ export default function CyberChessPage(){
 
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
     const p=game.get(from);if(!p)return false;
+    // ── OPENING TRAINER — верификация хода против скрипта дебюта ──
+    if(openingDrill){
+      const expectedSan=openingDrill.moves[openingDrill.ply];
+      if(!expectedSan){return false}
+      // Determine user's attempted SAN
+      const probe=new Chess(game.fen());
+      let attemptSan="";
+      try{const pm=probe.move({from,to,promotion:pr||"q"});if(pm)attemptSan=pm.san}catch{}
+      if(!attemptSan)return false;
+      if(attemptSan!==expectedSan){
+        showToast(`✗ Ожидалось ${expectedSan} · попробуй ещё`,"error");
+        sOpeningDrill(d=>d?{...d,mistakes:d.mistakes+1}:null);
+        snd("capture");
+        return false;
+      }
+      // Correct — apply user move
+      let mv;try{mv=game.move({from,to,promotion:pr||"q"});}catch{mv=null}
+      if(!mv)return false;
+      sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);
+      snd("move");
+      const newPly=openingDrill.ply+1;
+      if(newPly>=openingDrill.moves.length){
+        const reward=openingDrill.mistakes===0?10:5;
+        addChessy(reward,`Дебют ${openingDrill.name}`);
+        showToast(`🎓 ${openingDrill.name} пройден! +${reward} Chessy`,"success");
+        sOpeningDrill(null);
+        return true;
+      }
+      // Schedule bot response from script
+      sOpeningDrill(d=>d?{...d,ply:newPly}:null);
+      setTimeout(()=>{
+        const odSnap={moves:openingDrill.moves,name:openingDrill.name,mistakes:openingDrill.mistakes,ply:newPly};
+        const botSan=odSnap.moves[odSnap.ply];if(!botSan)return;
+        try{
+          const bmv=game.move(botSan);
+          if(bmv){
+            sLm({from:bmv.from,to:bmv.to});sHist(h=>[...h,bmv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);
+            snd("move");
+            const nextPly=odSnap.ply+1;
+            if(nextPly>=odSnap.moves.length){
+              const reward=odSnap.mistakes===0?10:5;
+              addChessy(reward,`Дебют ${odSnap.name}`);
+              showToast(`🎓 ${odSnap.name} пройден! +${reward} Chessy`,"success");
+              sOpeningDrill(null);
+            }else{
+              sOpeningDrill(d=>d?{...d,ply:nextPly}:null);
+            }
+          }
+        }catch{}
+      },600);
+      return true;
+    }
     // Guess Best Move mode
     if(tab==="analysis"&&guessMode&&guessResult==="idle"&&guessBest){
       const attemptUci=`${from}${to}${pr||""}`;
@@ -446,17 +776,75 @@ export default function CyberChessPage(){
                 sPzCurrent({...pzCurrent,sol:pzCurrent.sol.slice(2)});
                 showToast("Продолжай решение...","info");
               }else{
-                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");
+                // Rush: +1..+3 sec по сложности, streak, score, Chessy
+                if(pzMode==="rush"){
+                  const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+                  sPzTimeLeft(v=>Math.min(180,v+bonus));
+                  sRushScore(s=>s+1);
+                  sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
+                  showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
+                }else if(pzMode==="timed3"||pzMode==="timed5"){
+                  const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+                  sPzTimeLeft(v=>v+bonus);
+                  showToast(`✓ +${bonus}с`,"success");
+                }else{
+                  showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+                }
+                const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
+                addChessy(reward,"пазл решён");
+                if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
+                if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+                  const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+                  setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
+                }
               }
             }catch{}
           },100); // fast response, no thinking delay
         }else{
           // Single-move puzzle — solved
-          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");
+          if(pzMode==="rush"){
+            const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+            sPzTimeLeft(v=>Math.min(180,v+bonus));
+            sRushScore(s=>s+1);
+            sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
+            showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
+          }else if(pzMode==="timed3"||pzMode==="timed5"){
+            const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
+            sPzTimeLeft(v=>v+bonus);
+            showToast(`✓ +${bonus}с`,"success");
+          }else{
+            showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+          }
+          const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
+          addChessy(reward,"пазл решён");
+          if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
+          // Daily puzzle bonus — first solve today
+          if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
+            const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+            setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
+          }
         }
         return true;
       }else{
-        sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");showToast(`✗ Not the best. Try again or see solution`,"error");
+        sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");
+        if(pzMode==="rush"){
+          sPzTimeLeft(v=>Math.max(0,v-5));
+          sRushStreak(0);
+          showToast(`✗ −5с · streak сброшен`,"error");
+          // Auto-advance in rush after miss (no retry)
+          setTimeout(()=>{
+            if(!fPz.length)return;
+            const nextIdx=(pzI+1)%fPz.length;
+            const pz=fPz[nextIdx];if(!pz)return;
+            const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+            sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
+            sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
+          },700);
+        }else{
+          showToast(`✗ Not the best. Try again or see solution`,"error");
+        }
         return false;
       }
     }
@@ -469,28 +857,72 @@ export default function CyberChessPage(){
     sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
     if(game.isGameOver()){
       let r="";
-      if(game.isCheckmate()){const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
-        if(w){const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success")}
-        else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}}
-      else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
+      if(game.isCheckmate()){
+        if(currentEndgame){
+          // Endgame trainer: checkmate delivered by the trainee side?
+          const traineeWon=game.turn()!==currentEndgame.side;
+          r=traineeWon?"Checkmate — цель достигнута! 🏆":"Checkmate — соперник выиграл";
+          if(traineeWon&&currentEndgame.goal==="Win"){
+            setTimeout(()=>{addChessy(currentEndgame.reward,`🏰 ${currentEndgame.name}`);unlockAch("endgame_master",80,"Мастер эндшпилей")},600);
+          }
+          sCurrentEndgame(null);
+        }else if(hotseat){
+          // Local 2-player: no rating change, small shared Chessy for playing a full game
+          const winner=game.turn()==="w"?"Чёрные":"Белые";
+          r=`Checkmate — ${winner} победили`;
+          setTimeout(()=>addChessy(3,"партия сыграна"),400);
+        }else{
+          const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
+          if(w){
+            const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);
+            const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success");
+            // Chessy reward: scale by AI difficulty × time category
+            const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
+            const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
+            const reward=Math.max(5,Math.round(10*aiMul*timeMul));
+            setTimeout(()=>addChessy(reward,`победа над ${lv.name}`),400);
+            // Achievements
+            const newWinCount=sts.w+1;
+            setTimeout(()=>{
+              if(newWinCount===1)unlockAch("first_win",50,"Первая победа");
+              if(newWinCount===10)unlockAch("wins_10",100,"10 побед");
+              if(newWinCount===50)unlockAch("wins_50",300,"50 побед");
+              if(aiI>=5)unlockAch("beat_master",200,"Победа над Master");
+              if(aiI>=4)unlockAch("beat_expert",100,"Победа над Expert");
+            },900);
+          }
+          else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+        }
+      }
+      else{r=game.isStalemate()?"Stalemate":game.isThreefoldRepetition()?"Threefold repetition":game.isInsufficientMaterial()?"Insufficient material":"50-move draw";
+        if(!hotseat&&!currentEndgame){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns)}
+        // Draw gives small consolation
+        setTimeout(()=>addChessy(2,"ничья"),400);
+        // Endgame trainer: draw target met?
+        if(currentEndgame&&currentEndgame.goal==="Draw"){
+          setTimeout(()=>{addChessy(currentEndgame.reward,`🏰 ${currentEndgame.name} — цель достигнута`);unlockAch("endgame_master",80,"Мастер эндшпилей")},600);
+          sCurrentEndgame(null);
+        }
+      }
       sOver(r);snd("x");sOn(false);sPms([]);
       // Save to history
       const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
-      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
+      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
       saveGame(sg);sSavedGames(loadGames())}
-    return true},[game,rat,lv.elo,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan]);
+    return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
-    if(game.turn()!==pCol||over||!pms.length)return;
+    const curPms=pmsRef.current;
+    if(game.turn()!==pCol||over||!curPms.length)return;
     // Skip invalid premoves at the head of the queue until we find a valid one
     const mvs=game.moves({verbose:true});
     let idx=0;
-    while(idx<pms.length){
-      const pm=pms[idx];
-      const ok=mvs.find(m=>m.from===pm.from&&m.to===pm.to);
+    while(idx<curPms.length){
+      const pm=curPms[idx];
+      const ok=mvs.find(m=>m.from===pm.from&&m.to===pm.to&&(pm.pr?m.promotion===pm.pr:!m.promotion));
       if(ok){
-        const rest=pms.slice(idx+1);
+        const rest=curPms.slice(idx+1);
         sPms(rest);
         exec(pm.from,pm.to,pm.pr);
         snd("premove");
@@ -498,9 +930,8 @@ export default function CyberChessPage(){
       }
       idx++;
     }
-    // None of the premoves is valid → clear all
     sPms([]);
-  },[game,over,pms,pCol,exec]);
+  },[game,over,pCol,exec]);
   const doPremoveRef=useRef(doPremove);
   useEffect(()=>{doPremoveRef.current=doPremove},[doPremove]);
 
@@ -510,9 +941,13 @@ export default function CyberChessPage(){
       if(e.key==="Escape"){
         if(pms.length>0||pmSel){sPms([]);sPmSel(null)}
       }
-      // Arrow key navigation through moves (when not typing in input)
+      // Global shortcuts (but not while typing in input)
       const target=e.target as HTMLElement;
       if(target?.tagName==="INPUT"||target?.tagName==="TEXTAREA"||target?.tagName==="SELECT")return;
+      if(e.key==="m"||e.key==="M"){e.preventDefault();sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})}
+      if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
+      if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
+      if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on)){e.preventDefault();newGRef.current()}}
       if(hist.length===0)return;
       if(e.key==="ArrowLeft"){
         e.preventDefault();
@@ -539,25 +974,121 @@ export default function CyberChessPage(){
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel,hist.length,fenHist,browseIdx]);
 
-  /* ── Premove trigger (fires instantly when it's player's turn) ── */
+  /* ── Autosave in-progress game ── */
+  useEffect(()=>{
+    if(tab!=="play"||!on||over||setup||hist.length===0)return;
+    const snap:ResumeSnap={v:1,fen:game.fen(),hist,fenHist,pCol,aiI,tcI,useCustom,customMin,customInc,timeP:pT.time,timeA:aT.time,capW,capB,ts:Date.now()};
+    saveResume(snap);
+  },[bk,tab,on,over,setup,hist.length]);
+  useEffect(()=>{if(over)clearResume()},[over]);
+
+  /* ── Auto post-game analysis in Play/Coach for instant accuracy card ── */
+  useEffect(()=>{
+    if(!over||(tab!=="play"&&tab!=="coach"))return;
+    if(!sfR.current?.ready()||fenHist.length<3)return;
+    if(analysis.length>=hist.length||analyzing)return;
+    const t=setTimeout(()=>runAnalysis(),400);
+    return()=>clearTimeout(t);
+  },[over,tab,sfOk,fenHist.length]);
+
+  /* ── Live Voice Commentary — Coach speaks after every move when enabled. ── */
+  const lastCommentaryBkRef=useRef<number>(-1);
+  useEffect(()=>{
+    if(!liveCommentary)return;
+    if(tab!=="play"&&tab!=="coach")return;
+    if(!on||over||setup)return;
+    if(hist.length===0)return;
+    if(lastCommentaryBkRef.current===bk)return;
+    lastCommentaryBkRef.current=bk;
+    if(typeof window==="undefined"||!window.speechSynthesis)return;
+    const lastSan=hist[hist.length-1];if(!lastSan)return;
+    const wasMyMove=hist.length%2===(pCol==="w"?1:0);
+    const isCapture=lastSan.includes("x");
+    const isCheck=lastSan.endsWith("+");
+    const isMate=lastSan.endsWith("#");
+    const isCastle=lastSan.startsWith("O");
+    const isPromotion=lastSan.includes("=");
+    let comment="";
+    if(isMate){comment=wasMyMove?"Мат! Отличная партия":"Мат. Хорошая игра"}
+    else if(isPromotion){comment=wasMyMove?"Превращение, новая фигура":"Соперник превратил пешку"}
+    else if(isCheck){comment="Шах"}
+    else if(isCastle){comment=wasMyMove?"Король в безопасности":"Соперник укрыл короля"}
+    else if(isCapture&&wasMyMove){comment="Ты взял фигуру"}
+    else if(isCapture&&!wasMyMove){comment="Внимание, соперник взял"}
+    // Engine-based delta (only on every 3rd move to avoid spam)
+    else if(hist.length%3===0&&Math.abs(evalCp)>=120){
+      const favoringMe=(evalCp>0)===(pCol==="w");
+      comment=favoringMe?"Позиция складывается в твою пользу":"Будь внимателен, позиция ухудшается";
+    }
+    if(!comment)return;
+    try{
+      const utt=new SpeechSynthesisUtterance(comment);
+      utt.lang="ru-RU";utt.rate=1.15;utt.volume=0.75;utt.pitch=1.0;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utt);
+    }catch{}
+  },[bk,liveCommentary,tab,on,over,setup,hist.length,pCol,evalCp]);
+
+  /* ── Clear annotations on tab switch, on a new move, and on history browse ── */
+  useEffect(()=>{clearAnnotations()},[tab,clearAnnotations]);
+  useEffect(()=>{clearAnnotations()},[bk,clearAnnotations]);
+  useEffect(()=>{clearAnnotations()},[browseIdx,clearAnnotations]);
+
+  /* ── Replay auto-advance ── */
+  useEffect(()=>{
+    if(!replaying||hist.length===0)return;
+    const t=setInterval(()=>{
+      const cur=browseIdx<0?hist.length:browseIdx;
+      const ni=cur+1;
+      if(ni>=hist.length){sReplaying(false);sBrowseIdx(-1);try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1)}catch{}return}
+      try{const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());snd("move")}catch{sReplaying(false)}
+    },replaySpeed);
+    return()=>clearInterval(t);
+  },[replaying,replaySpeed,browseIdx,hist.length,fenHist]);
+
+  /* ── Puzzle achievement tracker ── */
+  useEffect(()=>{
+    if(pzSolvedCount===10)unlockAch("puzzles_10",30,"10 пазлов решено");
+    if(pzSolvedCount===50)unlockAch("puzzles_50",150,"50 пазлов решено");
+    if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
+  },[pzSolvedCount,unlockAch]);
+
+  /* ── Premove trigger — микрозадача, чтобы не блокировать паинт; без pms в deps,
+     pmsRef читаем напрямую → нет каскада re-render'ов, если sPms(rest) обновил массив. ── */
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
-    if(game.turn()!==pCol||pms.length===0)return;
-    const t=setTimeout(()=>doPremoveRef.current(),20);
-    return()=>clearTimeout(t);
-  },[bk,over,on,tab,pms.length,pCol]);
+    if(game.turn()!==pCol)return;
+    if(pmsRef.current.length===0)return;
+    const id=requestAnimationFrame(()=>doPremoveRef.current());
+    return()=>cancelAnimationFrame(id);
+  },[bk,over,on,tab,pCol,pms.length]);
 
   /* ── AI turn trigger ── */
+  // Snapshot fen at trigger time so a late-arriving Stockfish bestmove
+  // can't try to apply itself on a position the user has already moved on.
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
+    if(hotseat)return; // two-player hotseat: no AI moves
+    if(openingDrill)return; // Opening Trainer plays bot moves from script
     if(game.turn()===pCol)return;
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
+    const fenAtTrigger=game.fen();
     if(useSF&&sfR.current?.ready()){
-      const t=setTimeout(()=>sfR.current!.go(game.fen(),SFD[aiI]||10,(f,t2,p)=>{if(f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any);sThink(false)}),Math.max(800,delay));
+      const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
+        // Only apply if the board is still on the same position we asked about.
+        try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any)}catch{}
+        sThink(false);
+      }),Math.max(800,delay));
       return()=>clearTimeout(t);
     }
-    const t=setTimeout(()=>{const c=new Chess(game.fen());const b=best(c,lv.depth,lv.rand);if(b)exec(b.from as Square,b.to as Square,b.promotion as any);sThink(false)},delay);
+    const t=setTimeout(()=>{
+      try{if(game.fen()!==fenAtTrigger){sThink(false);return}
+        const c=new Chess(fenAtTrigger);const b=best(c,lv.depth,lv.rand);
+        if(b)exec(b.from as Square,b.to as Square,b.promotion as any);
+      }catch{}
+      sThink(false);
+    },delay);
     return()=>clearTimeout(t);
   },[bk,over,on,tab]);
 
@@ -583,7 +1114,7 @@ export default function CyberChessPage(){
       return;
     }
     if(over)return;
-    const isAiTurn=game.turn()!==pCol;
+    const isAiTurn=!hotseat&&game.turn()!==pCol;
     const curPms=pmsRef.current;
     const curPmSel=pmSelRef.current;
 
@@ -612,7 +1143,9 @@ export default function CyberChessPage(){
         if(curPms.length>=pmLim){sPmSel(null);return}
         // Create premove (even onto own piece - it may be captured by opponent first)
         const pre:Pre={from:curPmSel,to:sq};
-        if(selPiece?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";
+        const promoRank=pCol==="w"?"8":"1";
+        if(selPiece?.type==="p"&&sq[1]===promoRank)pre.pr="q";
+        console.log("[premove] queued",curPmSel+"→"+sq+(pre.pr?"="+pre.pr:""));
         sPms(v=>[...v,pre]);
         sPmSel(null);
         snd("premove");
@@ -634,7 +1167,7 @@ export default function CyberChessPage(){
     if(think)return;
     const p=game.get(sq);
     // In analysis tab: play both sides freely (use whoever's turn it is)
-    const sideToMove=tab==="analysis"?game.turn():pCol;
+    const sideToMove=(tab==="analysis"||hotseat)?game.turn():pCol;
     if(sel){
       if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}
       if(p?.color===sideToMove){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}
@@ -647,10 +1180,49 @@ export default function CyberChessPage(){
   const dRef=useRef<Square|null>(null);
   const dS=(sq:Square)=>{const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
   const dD=(sq:Square)=>{if(!dRef.current)return;const f=dRef.current;dRef.current=null;
-    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};if(p?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
+    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const resumeGame=(s:ResumeSnap)=>{
+    try{
+      sTab("play");
+      sTcI(s.tcI);sUseCustom(s.useCustom);sCustomMin(s.customMin);sCustomInc(s.customInc);
+      sPCol(s.pCol);sAiI(chessy.owned.master_ai?s.aiI:Math.min(s.aiI,4));sFlip(s.pCol==="b");
+      const g=new Chess(s.fen);setGame(g);sBk(k=>k+1);
+      sHist(s.hist);sFenHist(s.fenHist);sCapW(s.capW);sCapB(s.capB);
+      sLm(null);sSel(null);sVm(new Set());sPromo(null);sThink(false);sPms([]);sPmSel(null);
+      sOver(null);sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);
+      sResumeOffer(null);
+      // Restore timer clocks after the useTimer's [ini]-effect resyncs.
+      // queueMicrotask runs before paint but after current effects; in practice
+      // the ini-effect fires during commit so we need a real tick — use rAF
+      // which lands just before the next paint, avoiding the ~ticking gap that
+      // setTimeout(0) sometimes produces on throttled tabs.
+      requestAnimationFrame(()=>{pT.setTime(s.timeP);aT.setTime(s.timeA)});
+      showToast(`Партия восстановлена · ${s.hist.length} ходов`,"success");
+    }catch{showToast("Не удалось восстановить партию","error");clearResume();sResumeOffer(null)}
+  };
+  const discardResume=()=>{clearResume();sResumeOffer(null)};
+  const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
+  const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
+  const loadEndgame=(eg:Endgame)=>{
+    try{
+      const g=new Chess(eg.fen);setGame(g);sBk(k=>k+1);
+      sTab("coach");sCoachAIEnabled(false);sEditorMode(false);
+      sHist([]);sFenHist([eg.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);
+      sPCol(eg.side);sFlip(eg.side==="b");sOn(false);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+      sCurrentEndgame(eg);sShowEndgames(false);
+      showToast(`🏰 ${eg.name} · цель: ${eg.goal==="Win"?"победа":"ничья"}`,"info");
+    }catch{showToast("Не удалось загрузить эндшпиль","error")}
+  };
+  const loadDailyPuzzle=()=>{
+    if(!dailyState||PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
+    const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
+    sTab("puzzles");
+    const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();sPzTimeLeft(0);
+    showToast(`☀ Пазл дня · ${pz.r}`,"info");
+  };
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Loading puzzles...","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("No puzzles match filter","error");return}const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
@@ -662,15 +1234,92 @@ export default function CyberChessPage(){
   const nextPz=useCallback(()=>{const nextIdx=(pzI+1)%Math.max(1,fPz.length);ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
 
-  // Puzzle timer
+  /* ── Blunder Rewind — превращает блундер игрока в персональный пазл.
+     Берёт позицию ДО ошибки, запрашивает у Stockfish лучший ход,
+     загружает как обычный puzzle (reusing pzCurrent infra). ── */
+  const rewindBlunder=useCallback((idx:number)=>{
+    if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+    const fen=fenHist[idx];
+    if(!fen){showToast("Позиция недоступна","error");return}
+    const g=new Chess(fen);
+    const side=g.turn();
+    const phase=idx<16?"Opening":idx<50?"Middlegame":"Endgame";
+    showToast("🧠 Считаю лучший ход…","info");
+    sfR.current.go(fen,14,(f,t,p)=>{
+      if(!f||!t){showToast("Не удалось найти лучший ход","error");return}
+      const bestUci=f+t+(p||"");
+      // Verify it's legal
+      try{const mv=g.move({from:f as Square,to:t as Square,promotion:(p||"q") as any});if(!mv){showToast("Лучший ход не определён","error");return}g.undo();}catch{showToast("Лучший ход не определён","error");return}
+      const pz:Puzzle={
+        fen,
+        sol:[bestUci],
+        name:`Переиграть ход ${idx+1}`,
+        r:1500,
+        theme:"Твоя ошибка",
+        phase:phase as any,
+        side,
+        goal:"Best move",
+      };
+      sTab("puzzles");
+      const g2=new Chess(fen);setGame(g2);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");
+      sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([fen]);
+      sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);
+      sPCol(g2.turn());sFlip(g2.turn()==="b");sEvalCp(0);sEvalMate(0);sPzTimeLeft(0);
+      showToast(`🎯 Переиграй ход ${idx+1}. Бонус +3 Chessy за правильный`,"info");
+    });
+  },[fenHist,showToast,pT,aT]);
+
+  // Puzzle timer — in rush, keep ticking even during brief 'correct' state before auto-advance
   useEffect(()=>{
-    if(tab!=="puzzles"||pzMode==="learn"||!pzCurrent||pzAttempt==="correct"||pzTimeLeft<=0)return;
+    if(tab!=="puzzles"||pzMode==="learn"||!pzCurrent||pzTimeLeft<=0)return;
+    if(pzMode!=="rush"&&pzAttempt==="correct")return;
     const t=setInterval(()=>sPzTimeLeft(v=>{
-      if(v<=1){sPzFailedCount(c=>c+1);sPzAttempt("wrong");return 0}
+      if(v<=1){
+        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong")}
+        return 0;
+      }
       return v-1;
     }),1000);
     return()=>clearInterval(t);
   },[tab,pzMode,pzCurrent,pzAttempt,pzTimeLeft]);
+
+  // Sync timer to current mode (fires on mode switch, even mid-puzzle)
+  useEffect(()=>{
+    if(tab!=="puzzles")return;
+    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false)}
+    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false)}
+    else if(pzMode==="rush"){sPzTimeLeft(90);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
+    else {sPzTimeLeft(0);sRushActive(false)}
+  },[pzMode,tab]);
+
+  // Rush end-of-session detection — fire only once per session
+  useEffect(()=>{
+    if(!rushActive||pzTimeLeft>0||pzMode!=="rush")return;
+    // Timer hit 0 during rush — finalize
+    const chessy=rushScore*2+rushBestStreak; // 2 Chessy per solve + streak bonus
+    const isNewBest=rushScore>rushBest;
+    if(isNewBest){sRushBest(rushScore);try{localStorage.setItem("aevion_puzzle_rush_best_v1",String(rushScore))}catch{}}
+    sRushResult({score:rushScore,streak:rushBestStreak,best:isNewBest?rushScore:rushBest,chessy,isNewBest});
+    sRushActive(false);
+    if(chessy>0)addChessy(chessy,`Puzzle Rush · ${rushScore} решено`);
+    if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
+    if(isNewBest&&rushScore>=25)unlockAch("rush_25",200,"Rush: 25 за сессию");
+  },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);
+
+  // Auto-advance to next puzzle in rush/timed modes after a correct solve
+  useEffect(()=>{
+    if(pzAttempt!=="correct"||pzMode==="learn")return;
+    const delay=pzMode==="rush"?600:1200;
+    const t=setTimeout(()=>{
+      if(!fPz.length)return;
+      const nextIdx=(pzI+1)%fPz.length;
+      const pz=fPz[nextIdx];if(!pz)return;
+      const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+      sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
+      sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
+    },delay);
+    return()=>clearTimeout(t);
+  },[pzAttempt,pzMode,pzI,fPz]);
 
   // Auto-load first puzzle when filters change
   useEffect(()=>{
@@ -789,251 +1438,597 @@ export default function CyberChessPage(){
     setTimeout(()=>startGuess(),100);
   },[fenHist,startGuess]);
 
-  const pmSet=new Set<string>();pms.forEach(p=>{pmSet.add(p.from);pmSet.add(p.to)});
-  // Virtual board: apply premoves to show ghost/shadow pieces at destinations
-  const virtualGame=(()=>{
+  const pmSet=useMemo(()=>{
+    const s=new Set<string>();pms.forEach(p=>{s.add(p.from);s.add(p.to)});return s;
+  },[pms]);
+  const pmToIdx=useMemo(()=>{
+    const m=new Map<string,number>();pms.forEach((p,i)=>{if(!m.has(p.to))m.set(p.to,i+1)});return m;
+  },[pms]);
+  // Virtual board is expensive (FEN round-trip + moves). Memo by bk + pms length/signature.
+  const virtualGame=useMemo(()=>{
     if(pms.length===0)return game;
     try{
       const g=new Chess(game.fen());
-      // Force turn to player color so premoves can be played
       for(const pm of pms){
         const fenParts=g.fen().split(" ");
         fenParts[1]=pCol;
-        // Reset en passant & castling flags that might block
         try{g.load(fenParts.join(" "));}catch{}
         const from=g.get(pm.from);
         if(!from||from.color!==pCol)continue;
-        // Try move, ignore if illegal
         try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
       }
       return g;
     }catch{return game;}
-  })();
+  },[game,bk,pms,pCol]);
   const bd=virtualGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
 
   const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:13,fontWeight:700,cursor:"pointer"}}>{label}</button>);
 
   return(<main style={{background:T.bg,minHeight:"100vh"}}>
     <ProductPageShell maxWidth={2000}><Wave1Nav/>
-      {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 10px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:34,height:34,borderRadius:9,background:"linear-gradient(135deg,#059669,#10b981)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,color:"#fff"}}>♞</div>
-          <div><div style={{fontSize:15,fontWeight:900,color:T.text}}>CyberChess</div><div style={{fontSize:14,color:T.dim}}>Stockfish 18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}</div></div>
+      {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
+      {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6}}>
+        <div style={{padding:"6px 12px",background:"rgba(124,58,237,0.2)",border:"1px solid rgba(124,58,237,0.4)",borderRadius:8,color:"#a78bfa",fontSize:12,fontWeight:800,letterSpacing:"0.05em"}}>📺 STREAMER MODE</div>
+        <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
+      </div>}
+      {/* Sticky glass header */}
+      {!streamerMode&&<div style={{
+        position:"sticky",top:0,zIndex:Z.sticky,
+        margin:"0 -12px 12px",padding:"10px 12px",
+        background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
+        borderBottom:`1px solid ${CC.border}`,
+        display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
+      }}>
+        {/* Logo */}
+        <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flex:"0 0 auto"}}>
+          <div style={{
+            width:38,height:38,borderRadius:RADIUS.md,
+            background:"linear-gradient(135deg,#059669 0%,#10b981 55%,#7c3aed 100%)",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:19,color:"#fff",boxShadow:SHADOW.sm
+          }}>♞</div>
+          <div style={{lineHeight:1.15}}>
+            <div style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2}}>CyberChess</div>
+            <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+              SF18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}
+            </div>
+          </div>
         </div>
-        <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:900,color:T.gold}}>{rat}</div><div style={{fontSize:14,color:T.dim}}>{rk.i} {rk.t}</div></div>
-      </div>
+
+        <div style={{flex:1}}/>
+
+        {/* Rating badge */}
+        <div style={{
+          display:"flex",alignItems:"center",gap:SPACE[2],padding:"4px 12px 4px 4px",
+          background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.full,
+          boxShadow:SHADOW.sm
+        }} title={`Rating ${rat} · ${rk.t}`}>
+          <div style={{
+            width:28,height:28,borderRadius:"50%",
+            background:CC.goldSoft,color:CC.gold,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:14,fontWeight:900
+          }}>{rk.i}</div>
+          <div style={{lineHeight:1.1}}>
+            <div style={{fontSize:15,fontWeight:900,color:CC.gold}}>{rat}</div>
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:700,letterSpacing:0.2}}>{rk.t.toUpperCase()}</div>
+          </div>
+        </div>
+
+        {/* Chessy balance pill + info button */}
+        <div style={{display:"inline-flex",alignItems:"center",gap:2}}>
+          <button
+            onClick={()=>sShowShop(true)}
+            title={`Chessy · баланс ${chessy.balance} · клик → магазин`}
+            aria-label="Chessy shop"
+            className="cc-focus-ring cc-touch"
+            style={{
+              display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
+              borderRadius:`${RADIUS.full}px 0 0 ${RADIUS.full}px`,
+              border:"1px solid #fcd34d",borderRight:"none",
+              background:"linear-gradient(135deg,#fef3c7,#fde68a)",
+              boxShadow:"0 2px 6px rgba(217,119,6,0.18)",
+              cursor:"pointer",fontSize:14,fontWeight:900,color:"#78350f",
+              transition:`transform ${MOTION.fast} ${MOTION.ease}`
+            }}
+            onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.96)"}}
+            onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+          >
+            <Icon.Coin width={18} height={18}/>
+            <span>{chessy.balance}</span>
+          </button>
+          <button
+            onClick={()=>sShowChessyInfo(true)}
+            title="Что такое Chessy?"
+            aria-label="Chessy info"
+            className="cc-focus-ring cc-touch"
+            style={{
+              display:"inline-flex",alignItems:"center",justifyContent:"center",
+              width:28,height:32,
+              borderRadius:`0 ${RADIUS.full}px ${RADIUS.full}px 0`,
+              border:"1px solid #fcd34d",
+              background:"linear-gradient(135deg,#fde68a,#fcd34d)",
+              boxShadow:"0 2px 6px rgba(217,119,6,0.18)",
+              cursor:"pointer",color:"#78350f"
+            }}
+          >
+            <Icon.Help width={14} height={14}/>
+          </button>
+        </div>
+
+        {/* Icon buttons */}
+        <Btn
+          variant={streamerMode?"accent":"secondary"}
+          size="sm"
+          icon={<span style={{fontSize:14}}>📺</span>}
+          active={streamerMode}
+          onClick={()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode — OBS-ready","info")}}
+          title={streamerMode?"Вернуть обычный вид":"Streamer mode для стримов (OBS)"}
+          ariaLabel="Streamer mode"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+        <Btn
+          variant={liveCommentary?"accent":"secondary"}
+          size="sm"
+          icon={<span style={{fontSize:13}}>🔊</span>}
+          onClick={()=>{sLiveCommentary(v=>!v);showToast(liveCommentary?"Live-комментарии выкл":"Live-комментарии вкл · Coach говорит вслух каждый ход","info")}}
+          title={liveCommentary?"Выключить live-комментарии":"Live commentary от Coach — читает ходы вслух"}
+          ariaLabel="Live commentary toggle"
+          active={liveCommentary}
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+        <Btn
+          variant="secondary"
+          size="sm"
+          icon={<Icon.Help/>}
+          onClick={()=>sShowHelp(true)}
+          title="Keyboard shortcuts (?)"
+          ariaLabel="Keyboard shortcuts"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+        <Btn
+          variant={muted?"danger":"secondary"}
+          size="sm"
+          icon={muted?<Icon.Mute/>:<Icon.Sound/>}
+          onClick={()=>{sMuted(v=>!v);showToast(muted?"Sound on":"Muted","info")}}
+          title={muted?"Unmute sounds (M)":"Mute sounds (M)"}
+          ariaLabel={muted?"Unmute":"Mute"}
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+      </div>}
+
+      {/* Resume offer banner */}
+      {resumeOffer&&(()=>{
+        const s=resumeOffer;const ago=Math.round((Date.now()-s.ts)/60000);
+        const tcLabel=s.useCustom?`${s.customMin}+${s.customInc}`:(TCS[s.tcI]?.name||"?");
+        return <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:12,borderRadius:10,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d",flexWrap:"wrap"}}>
+          <div style={{fontSize:18}}>⏸</div>
+          <div style={{flex:"1 1 200px",minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#92400e"}}>Незавершённая партия</div>
+            <div style={{fontSize:13,color:"#b45309"}}>{s.hist.length} ходов · {tcLabel} · {s.pCol==="w"?"белыми":"чёрными"} · {ago<1?"только что":`${ago} мин назад`}</div>
+          </div>
+          <button onClick={()=>resumeGame(s)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>▶ Продолжить</button>
+          <button onClick={discardResume} style={{padding:"8px 14px",borderRadius:8,border:`1px solid #fcd34d`,background:"#fff",color:"#92400e",fontWeight:700,fontSize:13,cursor:"pointer"}}>Отменить</button>
+        </div>;
+      })()}
 
       {/* Tabs */}
-      <div style={{display:"flex",gap:2,marginBottom:14,background:T.surface,borderRadius:10,padding:3,width:"fit-content",border:`1px solid ${T.border}`}}>
-        {(["play","puzzles","analysis","coach"] as const).map(t=><button key={t} onClick={()=>{
-          const fromPuzzle=tab==="puzzles"&&pzCurrent;
-          sTab(t);
-          if(t==="play")sSetup(true);
-          else if(t==="puzzles"){sOver(null);ldPz(0);}
-          else if(t==="coach"){
-            // Always start Coach with a fresh starting position — don't inherit from other tabs
-            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
-          }
-          else if(t==="analysis"&&fromPuzzle){
-            // Reset to starting position when coming from puzzle
-            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
-          }
-        }} style={{padding:"7px 16px",border:"none",borderRadius:7,background:tab===t?t==="analysis"?T.purple:t==="coach"?T.accent:T.accent:"transparent",color:tab===t?"#fff":T.dim,fontWeight:700,fontSize:14,cursor:"pointer"}}>{t==="play"?"Play":t==="puzzles"?"Puzzles":t==="analysis"?"⚡ Analysis":"🎓 Coach"}</button>)}
-      </div>
+      {!streamerMode&&<div style={{marginBottom:14,display:"flex",justifyContent:"flex-start"}}>
+        <UiTabs<"play"|"puzzles"|"analysis"|"coach">
+          variant="segment"
+          size="md"
+          value={tab}
+          onChange={(t)=>{
+            const fromPuzzle=tab==="puzzles"&&pzCurrent;
+            sTab(t);
+            if(t==="play")sSetup(true);
+            else if(t==="puzzles"){sOver(null);ldPz(0);}
+            else if(t==="coach"){
+              const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
+            }
+            else if(t==="analysis"&&fromPuzzle){
+              const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
+            }
+          }}
+          tabs={[
+            {value:"play",label:"Play",icon:<Icon.Play width={14} height={14}/>},
+            {value:"puzzles",label:"Puzzles",icon:<Icon.Target width={14} height={14}/>},
+            {value:"analysis",label:"Analysis",icon:<span style={{fontSize:13}}>⚡</span>},
+            {value:"coach",label:"Coach",icon:<span style={{fontSize:13}}>🎓</span>},
+          ]}
+        />
+      </div>}
 
       {/* LAUNCHPAD DASHBOARD */}
-      {setup&&tab==="play"&&<div style={{marginBottom:16}}>
-        {/* Category strip */}
-        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-          {(["Bullet","Blitz","Rapid"] as const).map(cat=>{
-            const catColor={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Classical:"#3b82f6"}[cat];
-            const catTcs=TCS.map((t,i)=>({t,i})).filter(x=>x.t.cat===cat);
-            return(<div key={cat} style={{flex:"1 1 280px",background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,padding:14,position:"relative",overflow:"hidden"}}>
-              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:catColor}}/>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-                <div style={{width:8,height:8,borderRadius:4,background:catColor}}/>
-                <div style={{fontSize:14,fontWeight:900,color:T.text,letterSpacing:"0.05em"}}>{cat.toUpperCase()}</div>
-                <div style={{fontSize:13,color:T.dim,marginLeft:"auto"}}>{cat==="Bullet"?"< 3 min":cat==="Blitz"?"3-8 min":"10-15 min"}</div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>
-                {catTcs.map(({t,i})=><button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} style={{padding:"10px 4px",borderRadius:8,border:!useCustom&&tcI===i?`2px solid ${catColor}`:`1px solid ${T.border}`,background:!useCustom&&tcI===i?`${catColor}15`:"#fff",color:!useCustom&&tcI===i?catColor:T.text,fontSize:13,fontWeight:!useCustom&&tcI===i?900:700,cursor:"pointer",fontFamily:"monospace"}}>{t.name}</button>)}
-              </div>
-            </div>);
-          })}
-          {/* Custom card */}
-          <div style={{flex:"1 1 140px",background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,padding:14,position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:T.purple}}/>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-              <div style={{width:8,height:8,borderRadius:4,background:T.purple}}/>
-              <div style={{fontSize:14,fontWeight:900,color:T.text,letterSpacing:"0.05em"}}>CUSTOM</div>
-            </div>
-            {showCustom?<div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:14,color:T.dim,width:28}}>Min</span>
-                <input type="number" min={1} max={60} value={customMin} onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))} style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:14,width:"100%"}}/>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:14,color:T.dim,width:28}}>Inc</span>
-                <input type="number" min={0} max={60} value={customInc} onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))} style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:14,width:"100%"}}/>
-              </div>
-              <button onClick={()=>{sUseCustom(true);sShowCustom(false)}} style={{padding:"6px",borderRadius:6,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Use {customMin}+{customInc}</button>
-            </div>:<button onClick={()=>sShowCustom(true)} style={{width:"100%",padding:"16px 4px",borderRadius:8,border:useCustom?`2px solid ${T.purple}`:`1px dashed ${T.border}`,background:useCustom?`${T.purple}15`:"#fff",color:useCustom?T.purple:T.dim,fontSize:14,fontWeight:800,cursor:"pointer"}}>{useCustom?`${customMin}+${customInc}`:"⚙ Set..."}</button>}
-          </div>
-        </div>
+      {setup&&tab==="play"&&!streamerMode&&(()=>{
+        const activeCat:"Bullet"|"Blitz"|"Rapid"|"Custom"=useCustom?"Custom":(TCS[tcI]?.cat as any)||"Blitz";
+        const catTcs=TCS.map((t,i)=>({t,i})).filter(x=>x.t.cat===activeCat);
+        const catColor={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Classical:"#3b82f6",Custom:CC.accent}[activeCat];
+        const totalGames=sts.w+sts.l+sts.d;
+        const winPct=totalGames?Math.round(sts.w/totalGames*100):0;
+        const achTotal=Object.keys(ACH_LABELS).length;
+        const achGot=Object.keys(chessy.ach).length;
+        const achPct=Math.round(achGot/achTotal*100);
+        return<div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
 
-        {/* Center preview card */}
-        <div style={{background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:14,border:`1px solid ${T.border}`,padding:20,marginBottom:12,boxShadow:"0 4px 14px rgba(0,0,0,0.04)"}}>
-          <div style={{display:"flex",flexWrap:"wrap",gap:20,alignItems:"center"}}>
-            {/* Preview left */}
-            <div style={{flex:"1 1 220px"}}>
-              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>FORMAT</div>
-              <div style={{fontSize:36,fontWeight:900,color:T.text,fontFamily:"monospace",lineHeight:1,marginBottom:4}}>{tc.name}</div>
-              <div style={{fontSize:13,color:T.dim}}>{tc.cat} · ~{Math.round(tc.ini/60*2+tc.inc*0.5)} min estimated</div>
-            </div>
-            {/* Color selector */}
-            <div>
-              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>COLOR</div>
-              <div style={{display:"flex",gap:6}}>
-                {([["w","♔"],["b","♚"]] as const).map(([v,ic])=><button key={v} onClick={()=>sPCol(v as ChessColor)} style={{width:44,height:44,borderRadius:10,border:pCol===v?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:pCol===v?"rgba(5,150,105,0.08)":"#fff",fontSize:22,cursor:"pointer",padding:0}}>{ic}</button>)}
-                <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} style={{width:44,height:44,borderRadius:10,border:`1px dashed ${T.border}`,background:"#fff",fontSize:16,cursor:"pointer",color:T.dim}} title="Random">🎲</button>
+          {/* ─── HERO: format + color + AI + actions ─── */}
+          <Card padding={SPACE[4]} elevation="md">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:SPACE[4]}}>
+
+              {/* Time format */}
+              <div>
+                <SectionHeader title="ФОРМАТ" hint={`≈ ${Math.round(tc.ini/60*2+tc.inc*0.5)} min`}/>
+                <UiTabs<"Bullet"|"Blitz"|"Rapid"|"Custom">
+                  variant="pill"
+                  size="sm"
+                  value={activeCat}
+                  onChange={(c)=>{
+                    if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
+                    sUseCustom(false);
+                    const first=TCS.findIndex(t=>t.cat===c);
+                    if(first>=0)sTcI(first);
+                  }}
+                  tabs={[
+                    {value:"Bullet",label:"Bullet"},
+                    {value:"Blitz",label:"Blitz"},
+                    {value:"Rapid",label:"Rapid"},
+                    {value:"Custom",label:"Custom"},
+                  ]}
+                />
+                {activeCat!=="Custom"?(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,marginTop:SPACE[2]}}>
+                    {catTcs.map(({t,i})=>{
+                      const selected=!useCustom&&tcI===i;
+                      return <button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} className="cc-focus-ring"
+                        style={{padding:"9px 0",borderRadius:RADIUS.sm,
+                          border:selected?`2px solid ${catColor}`:`1px solid ${CC.border}`,
+                          background:selected?`${catColor}15`:CC.surface1,
+                          color:selected?catColor:CC.text,
+                          fontSize:12,fontWeight:selected?900:700,cursor:"pointer",
+                          fontFamily:"ui-monospace, SFMono-Regular, monospace",
+                          transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                        {t.name}
+                      </button>;
+                    })}
+                  </div>
+                ):(
+                  <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],alignItems:"center"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
+                      Min <input type="number" min={1} max={60} value={customMin}
+                        onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))}
+                        style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
+                      +Inc <input type="number" min={0} max={60} value={customInc}
+                        onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))}
+                        style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
+                    </label>
+                    <Badge tone="accent" size="md">{customMin}+{customInc}</Badge>
+                  </div>
+                )}
               </div>
-            </div>
-            {/* AI opponent */}
-            <div style={{flex:"1 1 260px"}}>
-              <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>OPPONENT · {lv.name} {lv.elo}</div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="range" min={0} max={5} value={aiI} onChange={e=>sAiI(+e.target.value)} style={{flex:1,accentColor:lv.color}}/>
-                <div style={{fontSize:13,fontWeight:900,color:lv.color,minWidth:70,textAlign:"right"}}>{lv.name}{aiI>=3?" ⚡":""}</div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Action buttons */}
-        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-          <button onClick={()=>newG()} style={{flex:"2 1 240px",padding:"14px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${T.accent},#10b981)`,color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>▶ Quick Start</button>
-          <button onClick={()=>{
-            // Match Me: pick AI level close to user rating
-            const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
-            sAiI(targetIdx);
-            setTimeout(()=>newG(),50);
-          }} style={{flex:"1 1 160px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚡ Match Me<div style={{fontSize:13,color:T.dim,fontWeight:600,marginTop:2}}>AI ≈ {rat} ELO</div></button>
-          <button onClick={()=>sShowCustom(!showCustom)} style={{flex:"1 1 140px",padding:"14px",borderRadius:12,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontWeight:800,fontSize:13,cursor:"pointer"}}>⚙ Custom Time</button>
-        </div>
-
-        {/* Premove Queue — slider 1..20 */}
-        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <div style={{fontSize:14,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>⚡ Premove Queue</div>
-          <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,minWidth:140,accentColor:T.accent}}/>
-          <div style={{fontSize:15,fontWeight:900,color:T.accent,minWidth:32,textAlign:"center"}}>{pmLim}</div>
-          <div style={{fontSize:13,color:T.dim,flex:"1 1 180px"}}>{pmLim===1?"1 ход · как Lichess":pmLim>=15?`${pmLim} ходов · как Chess.com`:`${pmLim} ходов в очереди`}</div>
-          <div style={{fontSize:13,color:T.dim,flex:"1 1 100%",marginTop:2,fontStyle:"italic"}}>ПКМ — отменить последний · Esc — отменить все</div>
-        </div>
-
-        {/* Board Theme Selector */}
-        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:12}}>
-          <div style={{fontSize:14,color:T.dim,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase" as const,marginBottom:8}}>Board Theme</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {BOARD_THEMES.map((th,i)=>(
-              <button key={i} onClick={()=>sBoardTheme(i)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:boardTheme===i?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:boardTheme===i?"rgba(5,150,105,0.06)":"#fff",cursor:"pointer"}}>
-                <div style={{width:20,height:20,borderRadius:4,overflow:"hidden",display:"flex",flexShrink:0}}>
-                  <div style={{width:10,height:20,background:th.light}}/>
-                  <div style={{width:10,height:20,background:th.dark}}/>
+              {/* Color */}
+              <div>
+                <SectionHeader title="ЦВЕТ"/>
+                <div style={{display:"flex",gap:SPACE[2]}}>
+                  {([["w","♔","Белые"],["b","♚","Чёрные"]] as const).map(([v,ic,name])=>{
+                    const selected=pCol===v;
+                    return <button key={v} onClick={()=>sPCol(v as ChessColor)} className="cc-focus-ring"
+                      style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                        padding:"10px 0",borderRadius:RADIUS.md,
+                        border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:selected?CC.brandSoft:CC.surface1,
+                        color:selected?CC.brand:CC.text,
+                        cursor:"pointer",transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                      <span style={{fontSize:24,lineHeight:1}}>{ic}</span>
+                      <span style={{fontSize:11,fontWeight:700}}>{name}</span>
+                    </button>;
+                  })}
+                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Random"
+                    className="cc-focus-ring"
+                    style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                      padding:"10px 0",borderRadius:RADIUS.md,
+                      border:`1px dashed ${CC.borderStrong}`,background:CC.surface2,
+                      color:CC.textDim,cursor:"pointer"}}>
+                    <span style={{fontSize:22,lineHeight:1}}>🎲</span>
+                    <span style={{fontSize:11,fontWeight:700}}>Random</span>
+                  </button>
                 </div>
-                <span style={{fontSize:14,fontWeight:boardTheme===i?800:600,color:boardTheme===i?T.text:T.dim}}>{th.name}</span>
-              </button>))}
-          </div>
-        </div>
-
-        {/* Dashboard Widgets */}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {/* Rating Widget */}
-          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
-            <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Rating</div>
-            <div style={{fontSize:32,fontWeight:900,color:T.gold,lineHeight:1}}>{rat}</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:2}}>{rk.i} {rk.t}</div>
-            <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:8}}>
-              <div><span style={{fontSize:14,fontWeight:900,color:T.accent}}>{sts.w}</span><div style={{fontSize:8,color:T.dim}}>W</div></div>
-              <div><span style={{fontSize:14,fontWeight:900,color:T.danger}}>{sts.l}</span><div style={{fontSize:8,color:T.dim}}>L</div></div>
-              <div><span style={{fontSize:14,fontWeight:900,color:T.dim}}>{sts.d}</span><div style={{fontSize:8,color:T.dim}}>D</div></div>
-            </div>
-          </div>
-          {/* Win Rate Widget */}
-          <div style={{flex:"1 1 160px",background:"linear-gradient(135deg,#fff,#f9fafb)",borderRadius:12,border:`1px solid ${T.border}`,padding:16,textAlign:"center"}}>
-            <div style={{fontSize:13,color:T.dim,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Win Rate</div>
-            {(sts.w+sts.l+sts.d)>0?<>
-              <div style={{fontSize:32,fontWeight:900,color:Math.round(sts.w/(sts.w+sts.l+sts.d)*100)>=50?T.accent:T.danger,lineHeight:1}}>{Math.round(sts.w/(sts.w+sts.l+sts.d)*100)}%</div>
-              <div style={{fontSize:14,color:T.dim,marginTop:2}}>{sts.w+sts.l+sts.d} games played</div>
-              {/* Mini bar */}
-              <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",marginTop:8,background:"#f3f4f6"}}>
-                <div style={{width:`${sts.w/(sts.w+sts.l+sts.d)*100}%`,background:T.accent}}/>
-                <div style={{width:`${sts.d/(sts.w+sts.l+sts.d)*100}%`,background:"#9ca3af"}}/>
-                <div style={{width:`${sts.l/(sts.w+sts.l+sts.d)*100}%`,background:T.danger}}/>
               </div>
-            </>:<div style={{fontSize:14,color:T.dim,marginTop:8}}>No games yet</div>}
-          </div>
-          {/* Quick Puzzle Widget */}
-          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderRadius:12,border:"1px solid #bfdbfe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}>
-            <div style={{fontSize:13,color:T.blue,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Задачи</div>
-            <div style={{fontSize:28}}>🧩</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:4}}>{PUZZLES.length} puzzles</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.blue,marginTop:4}}>Решать →</div>
-          </div>
-          {/* AI Coach Widget */}
-          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderRadius:12,border:"1px solid #a7f3d0",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sTab("coach")}>
-            <div style={{fontSize:13,color:T.accent,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>AI Coach</div>
-            <div style={{fontSize:28}}>🎓</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:4}}>Разбор партии</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.accent,marginTop:4}}>Учиться →</div>
-          </div>
-          {/* Library Widget */}
-          <div style={{flex:"1 1 140px",background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderRadius:12,border:"1px solid #d8b4fe",padding:16,textAlign:"center",cursor:"pointer"}} onClick={()=>sTab("analysis")}>
-            <div style={{fontSize:13,color:T.purple,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:4}}>Анализ</div>
-            <div style={{fontSize:28}}>⚡</div>
-            <div style={{fontSize:13,color:T.dim,marginTop:4}}>MultiPV · Stockfish</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.purple,marginTop:4}}>Анализ →</div>
-          </div>
-        </div>
 
-        {/* Game History */}
-        {savedGames.length>0&&<div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-          <div style={{padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`}}>
-            <span style={{fontSize:14,fontWeight:800,color:T.text}}>Мои партии ({savedGames.length})</span>
-            <div style={{display:"flex",gap:3}}>
-              {["all","Bullet","Blitz","Rapid"].map(f=><button key={f} onClick={()=>sGamesFilter(f)} style={{padding:"3px 8px",borderRadius:5,border:"none",background:gamesFilter===f?T.accent:"#f3f4f6",color:gamesFilter===f?"#fff":T.dim,fontSize:13,fontWeight:700,cursor:"pointer"}}>{f==="all"?"Все":f}</button>)}
-            </div>
-          </div>
-          <div style={{maxHeight:200,overflowY:"auto"}}>
-            {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map(g=>{
-              const isWin=g.result.includes("You win")||g.result.includes("timed out");
-              const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
-              return(<button key={g.id} onClick={()=>{
-                // Load game into analysis
-                sTab("analysis");
-                const ch=new Chess();
-                for(const san of g.moves)try{ch.move(san)}catch{}
-                setGame(ch);sBk(k=>k+1);sHist(g.moves);
-                const fens=[new Chess().fen()];const tmp=new Chess();
-                for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
-                sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
-              }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",fontSize:13}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:14,fontWeight:900,color:isWin?T.accent:isDraw?T.dim:T.danger}}>{isWin?"W":isDraw?"D":"L"}</span>
-                  <div>
-                    <div style={{fontWeight:600,color:T.text}}>{g.opening||"Unknown"}</div>
-                    <div style={{fontSize:13,color:T.dim}}>{g.aiLevel} · {g.tc} · {g.moves.length} ходов</div>
+              {/* AI opponent */}
+              <div>
+                <SectionHeader title="СОПЕРНИК" hint={`${lv.name} · ${lv.elo} ELO${aiI===5&&!chessy.owned.master_ai?" 🔒":""}`}/>
+                <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                  <input type="range" min={0} max={chessy.owned.master_ai?5:4}
+                    value={Math.min(aiI,chessy.owned.master_ai?5:4)}
+                    onChange={e=>{const v=+e.target.value;if(v===5&&!chessy.owned.master_ai){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
+                    style={{flex:1,accentColor:lv.color}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",
+                    borderRadius:RADIUS.full,background:lv.color+"20",color:lv.color,
+                    fontSize:12,fontWeight:900,minWidth:80,justifyContent:"center"}}>
+                    {lv.name}{aiI>=3?" ⚡":""}
                   </div>
                 </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:14,fontWeight:700,color:T.dim}}>{g.rating}</div>
-                  <span style={{fontSize:8,padding:"1px 5px",borderRadius:3,background:g.category==="Bullet"?"#fecaca":g.category==="Blitz"?"#fef3c7":"#d1fae5",color:g.category==="Bullet"?T.danger:g.category==="Blitz"?"#92400e":T.accent,fontWeight:700}}>{g.category}</span>
+                {!chessy.owned.master_ai&&<button onClick={()=>sShowShop(true)}
+                  className="cc-focus-ring"
+                  style={{marginTop:SPACE[2],padding:"5px 10px",borderRadius:RADIUS.sm,
+                    border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
+                    fontSize:12,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+                  🔒 Master AI · 30 Chessy
+                </button>}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4],flexWrap:"wrap"}}>
+              <button onClick={()=>{sHotseat(false);newG()}} className="cc-focus-ring cc-touch"
+                style={{flex:"2 1 260px",padding:"14px 22px",borderRadius:RADIUS.lg,border:"none",
+                  background:`linear-gradient(135deg,${CC.brand},#10b981 60%,#14b8a6)`,color:"#fff",
+                  fontWeight:900,fontSize:15,cursor:"pointer",
+                  boxShadow:"0 8px 20px rgba(5,150,105,0.34), inset 0 1px 0 rgba(255,255,255,0.2)",
+                  display:"inline-flex",alignItems:"center",justifyContent:"center",gap:SPACE[2],
+                  letterSpacing:0.3,transition:`transform ${MOTION.fast} ${MOTION.ease}`}}
+                onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.98)"}}
+                onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}>
+                <Icon.Play width={18} height={18}/> QUICK START
+              </button>
+              <Btn size="lg" variant="secondary" onClick={()=>{
+                const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
+                const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
+                sAiI(capped);sHotseat(false);
+                setTimeout(()=>newG(),50);
+              }} style={{flex:"1 1 160px"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>⚡ Match Me</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat} ELO</span>
                 </div>
-              </button>)
-            })}
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);setTimeout(()=>newG(),50)}}
+                style={{flex:"1 1 160px",background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
+                  border:"1px solid #bfdbfe",color:CC.info}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>👥 Vs Человек</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>за одним экраном</span>
+                </div>
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>sShowOpeningTrainer(true)}
+                style={{flex:"1 1 160px",background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",
+                  border:"1px solid #d8b4fe",color:CC.accent}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>🎓 Opening Trainer</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>drill дебютов</span>
+                </div>
+              </Btn>
+            </div>
+          </Card>
+
+          {/* ─── Daily puzzle (full-width) ─── */}
+          {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
+            const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
+            return <button onClick={loadDailyPuzzle}
+              className="cc-focus-ring"
+              style={{padding:SPACE[4],borderRadius:RADIUS.lg,
+                border:solved?"1px solid #a7f3d0":"1px solid #fcd34d",
+                background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
+                cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3],
+                boxShadow:SHADOW.sm,transition:`all ${MOTION.base} ${MOTION.ease}`}}>
+              <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>{solved?"✅":"☀"}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>{solved?"Пазл дня решён":"Пазл дня"}</div>
+                <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:2}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Найди лучший ход"} · <span style={{color:CC.gold}}>{pz.r}</span></div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{solved?"Возвращайся завтра":`+50 Chessy · осталось ${24-new Date().getHours()} ч`}</div>
+              </div>
+              {!solved&&<Badge tone="brand" size="md">▶ Решить</Badge>}
+            </button>;
+          })()}
+
+          {/* ─── Board theme + Premove slider (consolidated) ─── */}
+          <Card padding={SPACE[3]}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
+              <SectionHeader title="ДОСКА"/>
+              <div style={{flex:1}}/>
+              <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:11,color:CC.textDim,fontWeight:700,letterSpacing:0.3,whiteSpace:"nowrap"}} title="Сколько премувов можно ставить в очередь">
+                <span>⚡ PREMOVE {pmLim}</span>
+                <input type="range" min={1} max={20} value={pmLim}
+                  onChange={e=>sPmLim(+e.target.value)}
+                  style={{width:100,accentColor:CC.brand}}/>
+              </label>
+            </div>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginTop:SPACE[2]}}>
+              {BOARD_THEMES.map((th,i)=>{
+                const locked=!!th.premium&&!chessy.owned[th.premium!];
+                const selected=boardTheme===i;
+                return <button key={i}
+                  className="cc-focus-ring"
+                  onClick={()=>{if(locked){showToast("Premium — доступно в магазине","info");sShowShop(true);return}sBoardTheme(i)}}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",
+                    borderRadius:RADIUS.full,
+                    border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                    background:selected?CC.brandSoft:locked?CC.surface2:CC.surface1,
+                    cursor:"pointer",opacity:locked?0.65:1,
+                    transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                  <div style={{width:22,height:16,borderRadius:4,overflow:"hidden",
+                    display:"flex",flexShrink:0,boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)"}}>
+                    <div style={{width:11,height:16,background:th.light}}/>
+                    <div style={{width:11,height:16,background:th.dark}}/>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{th.name}</span>
+                  {locked&&<span style={{fontSize:10,color:"#b45309"}}>🔒</span>}
+                </button>;
+              })}
+            </div>
+          </Card>
+
+          {/* ─── Dashboard widgets ─── */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:SPACE[2]}}>
+            {/* Rating */}
+            <Card padding={SPACE[3]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Rating</div>
+              <div style={{fontSize:28,fontWeight:900,color:CC.gold,lineHeight:1.1,marginTop:2}}>{rat}</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{rk.i} {rk.t}</div>
+              {savedGames.length>1&&(()=>{
+                const pts=[...savedGames].reverse().slice(-30).map(g=>g.rating);
+                if(pts.length<2)return null;
+                const mn=Math.min(...pts),mx=Math.max(...pts);const rng=Math.max(30,mx-mn);
+                const dx=100/(pts.length-1);
+                const path=pts.map((v,i)=>`${i===0?"M":"L"}${(i*dx).toFixed(1)} ${(24-((v-mn)/rng)*22).toFixed(1)}`).join(" ");
+                const trend=pts[pts.length-1]-pts[0];const col=trend>=0?CC.brand:CC.danger;
+                return <div style={{marginTop:4}}>
+                  <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{width:"100%",height:28}}>
+                    <path d={path} fill="none" stroke={col} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div style={{fontSize:10,fontWeight:700,color:col,marginTop:-2}}>{trend>=0?"+":""}{trend}</div>
+                </div>;
+              })()}
+              <div style={{display:"flex",justifyContent:"flex-start",gap:SPACE[2],marginTop:SPACE[2]}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:3}}><span style={{fontSize:13,fontWeight:900,color:CC.brand}}>{sts.w}</span><span style={{fontSize:10,color:CC.textDim}}>W</span></div>
+                <div style={{display:"flex",alignItems:"baseline",gap:3}}><span style={{fontSize:13,fontWeight:900,color:CC.danger}}>{sts.l}</span><span style={{fontSize:10,color:CC.textDim}}>L</span></div>
+                <div style={{display:"flex",alignItems:"baseline",gap:3}}><span style={{fontSize:13,fontWeight:900,color:CC.textDim}}>{sts.d}</span><span style={{fontSize:10,color:CC.textDim}}>D</span></div>
+              </div>
+            </Card>
+
+            {/* Chessy */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
+              style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderColor:"#fcd34d",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Chessy</div>
+              <div style={{display:"flex",alignItems:"baseline",gap:4,marginTop:2}}>
+                <Icon.Coin width={20} height={20}/>
+                <span style={{fontSize:26,fontWeight:900,color:"#78350f",lineHeight:1.1}}>{chessy.balance}</span>
+              </div>
+              <div style={{fontSize:11,color:"#b45309",marginTop:2}}>Всего {chessy.lifetime}</div>
+              {chessy.streak>=2&&<div style={{marginTop:SPACE[2],fontSize:10,fontWeight:800,color:"#92400e",background:"rgba(146,64,14,0.14)",padding:"2px 8px",borderRadius:RADIUS.full,display:"inline-flex",alignItems:"center",gap:3}}>🔥 {chessy.streak} дней</div>}
+              <div style={{fontSize:11,fontWeight:800,color:"#92400e",marginTop:SPACE[2]}}>Магазин →</div>
+            </Card>
+
+            {/* Achievements */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
+              style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",borderColor:"#c4b5fd",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Достижения</div>
+              <div style={{fontSize:26,fontWeight:900,color:CC.accent,lineHeight:1.1,marginTop:2}}>{achGot}<span style={{fontSize:14,color:CC.textDim}}>/{achTotal}</span></div>
+              <div style={{height:6,borderRadius:RADIUS.full,background:"#ede9fe",marginTop:SPACE[2],overflow:"hidden"}}>
+                <div style={{width:`${achPct}%`,height:"100%",background:`linear-gradient(90deg,${CC.accent},#a78bfa)`,transition:`width ${MOTION.slow} ${MOTION.ease}`}}/>
+              </div>
+              <div style={{fontSize:11,color:CC.accent,fontWeight:700,marginTop:SPACE[2]}}>{achPct}% открыто</div>
+            </Card>
+
+            {/* Win rate */}
+            <Card padding={SPACE[3]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Win Rate</div>
+              {totalGames>0?<>
+                <div style={{fontSize:28,fontWeight:900,color:winPct>=50?CC.brand:CC.danger,lineHeight:1.1,marginTop:2}}>{winPct}%</div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{totalGames} игр</div>
+                <div style={{display:"flex",height:6,borderRadius:RADIUS.full,overflow:"hidden",marginTop:SPACE[2],background:CC.surface3}}>
+                  <div style={{width:`${sts.w/totalGames*100}%`,background:CC.brand}}/>
+                  <div style={{width:`${sts.d/totalGames*100}%`,background:"#9ca3af"}}/>
+                  <div style={{width:`${sts.l/totalGames*100}%`,background:CC.danger}}/>
+                </div>
+              </>:<div style={{fontSize:12,color:CC.textDim,marginTop:SPACE[2]}}>Пока нет игр</div>}
+            </Card>
+
+            {/* Quick Puzzle */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
+              style={{background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderColor:"#bfdbfe",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.info,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Задачи</div>
+              <div style={{fontSize:26,marginTop:2}}>🧩</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{PUZZLES.length} puzzles</div>
+              <div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Случайная →</div>
+            </Card>
+
+            {/* Coach */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sTab("coach")}
+              style={{background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderColor:"#a7f3d0",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>AI Coach</div>
+              <div style={{fontSize:26,marginTop:2}}>🎓</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Разбор</div>
+              <div style={{fontSize:11,fontWeight:800,color:CC.brand,marginTop:SPACE[2]}}>Учиться →</div>
+            </Card>
+
+            {/* Library / Analysis */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sTab("analysis")}
+              style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#d8b4fe",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Analysis</div>
+              <div style={{fontSize:26,marginTop:2}}>⚡</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>MultiPV · SF</div>
+              <div style={{fontSize:11,fontWeight:800,color:CC.accent,marginTop:SPACE[2]}}>Анализ →</div>
+            </Card>
+
+            {/* Game DNA — персональные паттерны (killer #3) */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowGameDna(true)}
+              style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",borderColor:"#93c5fd",cursor:"pointer",gridColumn:gameDna.insights.length>0&&savedGames.length>0?"span 2":"auto"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:CC.info,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Game DNA</div>
+                <Badge tone="info" size="xs">🧬 new</Badge>
+              </div>
+              {savedGames.length>0?<>
+                <div style={{fontSize:12,color:CC.text,marginTop:SPACE[2],lineHeight:1.5,fontWeight:600,minHeight:48,maxHeight:60,overflow:"hidden"}}>
+                  {gameDna.insights[0]}
+                </div>
+                {gameDna.insights.length>1&&<div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>+{gameDna.insights.length-1} инсайтов →</div>}
+                {gameDna.insights.length<=1&&<div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Открыть →</div>}
+              </>:<>
+                <div style={{fontSize:26,marginTop:2}}>🧬</div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Сыграй 5+ партий</div>
+                <div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Разблокировать →</div>
+              </>}
+            </Card>
           </div>
-        </div>}
-      </div>}
+
+          {/* ─── Game History ─── */}
+          {savedGames.length>0&&<Card padding={0} elevation="sm">
+            <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${CC.border}`}}>
+              <span style={{fontSize:13,fontWeight:800,color:CC.text}}>Мои партии <span style={{color:CC.textDim,fontWeight:600}}>({savedGames.length})</span></span>
+              <UiTabs
+                variant="segment"
+                size="sm"
+                value={gamesFilter}
+                onChange={(v)=>sGamesFilter(v)}
+                tabs={[
+                  {value:"all",label:"Все"},
+                  {value:"Bullet",label:"Bullet"},
+                  {value:"Blitz",label:"Blitz"},
+                  {value:"Rapid",label:"Rapid"},
+                ]}
+              />
+            </div>
+            <div style={{maxHeight:220,overflowY:"auto"}}>
+              {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map(g=>{
+                const isWin=g.result.includes("You win")||g.result.includes("timed out");
+                const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+                const resCol=isWin?CC.brand:isDraw?CC.textDim:CC.danger;
+                const catBadge:"danger"|"gold"|"brand"=g.category==="Bullet"?"danger":g.category==="Blitz"?"gold":"brand";
+                return(<button key={g.id} className="cc-focus-ring" onClick={()=>{
+                  sTab("analysis");
+                  const ch=new Chess();
+                  for(const san of g.moves)try{ch.move(san)}catch{}
+                  setGame(ch);sBk(k=>k+1);sHist(g.moves);
+                  const fens=[new Chess().fen()];const tmp=new Chess();
+                  for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
+                  sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
+                }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                    <div style={{width:26,height:26,borderRadius:"50%",background:resCol+"18",color:resCol,
+                      display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>
+                      {isWin?"W":isDraw?"D":"L"}
+                    </div>
+                    <div>
+                      <div style={{fontWeight:700,color:CC.text,fontSize:13}}>{g.opening||"Unknown"}</div>
+                      <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{g.aiLevel} · {g.tc} · {g.moves.length} ходов</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                    <span style={{fontSize:13,fontWeight:800,color:CC.gold}}>{g.rating}</span>
+                    <Badge tone={catBadge} size="xs">{g.category}</Badge>
+                  </div>
+                </button>);
+              })}
+            </div>
+          </Card>}
+        </div>;
+      })()}
 
       {/* Board + Panel */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
@@ -1044,115 +2039,213 @@ export default function CyberChessPage(){
           </div>}
 
           <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px))",gap:4}}>
-            {/* Eval bar - shown in play/coach/analysis when Stockfish ready */}
+            {/* Eval bar — with W/B labels + centered numeric badge */}
             {sfOk&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
-              const pct=50+cp/30; // -1500..1500 → 0..100
+              const pct=50+cp/30;
               const wPct=Math.max(2,Math.min(98,pct));
               const label=evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp>=0?"+":"")+(evalCp/100).toFixed(2);
               const whiteTop=flip;
+              const topSide=whiteTop?"W":"B";
+              const botSide=whiteTop?"B":"W";
               const isWhiteBetter=evalMate!==0?evalMate>0:evalCp>=0;
-              return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                <div style={{fontSize:11,fontWeight:900,color:whiteTop?(isWhiteBetter?T.accent:T.danger):T.dim,fontFamily:"monospace",minHeight:14}}>{whiteTop?label:""}</div>
-                <div style={{width:28,flex:1,borderRadius:6,overflow:"hidden",border:"1px solid #475569",background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+              const badgeBg=isWhiteBetter?"#ffffff":"#1e293b";
+              const badgeFg=isWhiteBetter?"#0f172a":"#ffffff";
+              const pipStyle=(side:"W"|"B"):React.CSSProperties=>side==="W"
+                ? {background:"#f8fafc",color:CC.text,border:`1px solid ${CC.border}`}
+                : {background:"#1e293b",color:"#fff"};
+              return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:32}}>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(topSide)}}>{topSide}</div>
+                <div style={{width:28,flex:1,borderRadius:8,overflow:"hidden",border:`1px solid ${CC.borderStrong}`,background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.15)"}}>
                   {whiteTop?<>
-                    <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
-                    <div style={{flex:1,background:"#262626"}}/>
+                    <div style={{height:`${wPct}%`,background:"linear-gradient(180deg,#ffffff 0%,#e2e8f0 100%)",transition:"height 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
+                    <div style={{flex:1,background:"linear-gradient(180deg,#374151 0%,#1f2937 100%)"}}/>
                   </>:<>
-                    <div style={{flex:1,background:"#262626"}}/>
-                    <div style={{height:`${wPct}%`,background:"#f0f0f0",transition:"height 0.4s"}}/>
+                    <div style={{flex:1,background:"linear-gradient(180deg,#1f2937 0%,#374151 100%)"}}/>
+                    <div style={{height:`${wPct}%`,background:"linear-gradient(180deg,#e2e8f0 0%,#ffffff 100%)",transition:"height 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
                   </>}
+                  <div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",padding:"2px 5px",background:badgeBg,color:badgeFg,fontSize:10,fontWeight:900,fontFamily:"ui-monospace, monospace",borderRadius:4,boxShadow:"0 1px 3px rgba(0,0,0,0.3)",whiteSpace:"nowrap",minWidth:26,textAlign:"center",letterSpacing:0.3}}>{label}</div>
                 </div>
-                <div style={{fontSize:11,fontWeight:900,color:!whiteTop?(isWhiteBetter?T.accent:T.danger):T.dim,fontFamily:"monospace",minHeight:14}}>{!whiteTop?label:""}</div>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(botSide)}}>{botSide}</div>
               </div>);
             })()}
-            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:14,color:T.dim,fontWeight:700,textAlign:"center"}}>{8-r}</div>)}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)"}}>
+            <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative"}}>
+              {/* Arrow / highlight overlay */}
+              {(arrows.length>0||sqHL.length>0)&&(()=>{
+                const sqXY=(sq:Square):[number,number]=>{
+                  const f=FILES.indexOf(sq[0]);const r=8-parseInt(sq[1]);
+                  const c=flip?7-f:f;const rr=flip?7-r:r;
+                  return [c*12.5+6.25,rr*12.5+6.25];
+                };
+                return <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:5}}>
+                  <defs>
+                    {["#22c55e","#ef4444","#3b82f6","#eab308"].map(c=><marker key={c} id={`ah-${c.slice(1)}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="3" markerHeight="3" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={c}/></marker>)}
+                  </defs>
+                  {sqHL.map((h,i)=>{const[x,y]=sqXY(h.sq);return <circle key={i} cx={x} cy={y} r="5.5" fill="none" stroke={h.c} strokeWidth="1" opacity="0.85"/>;})}
+                  {arrows.map((a,i)=>{const[x1,y1]=sqXY(a.from);const[x2,y2]=sqXY(a.to);
+                    // Shorten so the arrowhead doesn't overlap the destination center
+                    const dx=x2-x1,dy=y2-y1,len=Math.max(0.01,Math.hypot(dx,dy));
+                    const tx=x2-(dx/len)*3.5,ty=y2-(dy/len)*3.5;
+                    return <line key={i} x1={x1} y1={y1} x2={tx} y2={ty} stroke={a.c} strokeWidth="1.8" strokeLinecap="round" markerEnd={`url(#ah-${a.c.slice(1)})`} opacity="0.85"/>;
+                  })}
+                </svg>;
+              })()}
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
                 const realP=game.get(sq);
                 const isShadow=pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color);
                 const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                return<div key={sq} onClick={()=>click(sq)} onContextMenu={e=>{e.preventDefault();e.stopPropagation();
-                  // Find premove at this square (either from or to) and remove it specifically
+                // Annotation mode: when the game is finished OR we're in analysis/coach (viewer mode),
+                // right-click draws arrows & highlights. During a live play game, right-click still
+                // removes premoves as before.
+                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
+                return<div key={sq} onClick={()=>{if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();click(sq)}} onMouseDown={e=>{if(e.button===2){rcStartRef.current=sq;e.preventDefault()}}} onMouseUp={e=>{
+                  if(e.button!==2)return;
+                  const start=rcStartRef.current;rcStartRef.current=null;
+                  if(!annotActive)return;
+                  if(!start)return;
+                  const col=annotColor(e);
+                  if(start===sq){
+                    // Toggle highlight on this square
+                    sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
+                  }else{
+                    // Arrow from start → sq; toggle if exact same arrow exists
+                    sArrows(a=>{const i=a.findIndex(x=>x.from===start&&x.to===sq&&x.c===col);if(i>=0)return a.filter((_,j)=>j!==i);return [...a,{from:start,to:sq,c:col}]});
+                  }
+                }} onContextMenu={e=>{e.preventDefault();e.stopPropagation();
+                  if(annotActive)return; // annotations already handled on mouseUp
+                  // Play mode: remove premove at this square (either from or to)
                   const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
                   if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
-                  // Otherwise fallback: remove last premove / clear selection
                   if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
                 }} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
-                  {iV&&!p&&<div style={{width:"28%",height:"28%",borderRadius:"50%",background:"rgba(5,150,105,0.5)",position:"absolute"}}/>}
-                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s"}}><Piece type={p.type} color={p.color}/></div>}
+                  {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)"}}/>}
+                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined}}><Piece type={p.type} color={p.color}/></div>}
+                  {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
                 </div>}))}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:14,color:T.dim,fontWeight:700}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Controls */}
-          <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
-            {btn("⇄ Flip",()=>sFlip(!flip),T.surface,T.dim)}
-            {btn("New Game",()=>{sSetup(true);sOn(false);sOver(null);sPms([])},T.accent,"#fff","none")}
-            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю...":"🎤 Голос",()=>{
+          <div style={{display:"flex",gap:6,marginTop:SPACE[2],flexWrap:"wrap"}}>
+            <Btn size="sm" variant="secondary" icon={<Icon.Flip width={14} height={14}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
+            <Btn size="sm" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
+            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
-              if(!SR){showToast("Браузер не поддерживает голосовой ввод","error");return}
-              if(voiceListening&&voiceRecRef.current){voiceRecRef.current.stop();return}
-              const rec=new SR();rec.lang="ru-RU";rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=3;
-              rec.onstart=()=>{sVoiceListening(true);showToast("Говорите: 'е2 е4' или 'конь f3'","info")};
-              rec.onend=()=>{sVoiceListening(false);voiceRecRef.current=null};
-              rec.onerror=(e:any)=>{sVoiceListening(false);
-                if(e.error==="network"){
-                  showToast("Голосу нужен интернет (Chrome speech API). Попробуй ввести ход вручную","error");
-                }else if(e.error==="not-allowed"){
-                  showToast("Разреши доступ к микрофону в браузере","error");
-                }else{
-                  showToast(`Ошибка: ${e.error}`,"error");
-                }
+              if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
+              if(voiceListening&&voiceRecRef.current){
+                try{voiceRecRef.current._stop=true;voiceRecRef.current.stop()}catch{}
+                sVoiceListening(false);voiceRecRef.current=null;
+                showToast("Голос выключен","info");
+                return;
+              }
+              const rec=new SR();
+              rec.lang="ru-RU";
+              rec.interimResults=false;
+              rec.continuous=true; // always-on — не надо жать каждый раз
+              rec.maxAlternatives=4;
+              rec._stop=false;
+              const parseVoice=(text:string):{from?:string;to?:string;san?:string;special?:string}=>{
+                let t=text.toLowerCase().trim().replace(/ё/g,"е");
+                // Special commands
+                if(/\b(новая\s+партия|новую\s+партию|new\s+game|начать\s+заново)\b/.test(t))return{special:"new"};
+                if(/\b(сдаюсь|сдаться|resign|признаю\s+поражение)\b/.test(t))return{special:"resign"};
+                if(/\b(переверни|переверни\s+доску|flip|flip\s+board)\b/.test(t))return{special:"flip"};
+                if(/\b(отмена|отмени|отменить|undo|отмени\s+ход)\b/.test(t))return{special:"undo"};
+                if(/\b(анализ|проанализируй|analyze|analysis)\b/.test(t))return{special:"analyze"};
+                if(/\b(выкл(ючи)?\s+голос|выключи\s+микрофон|stop\s+listening)\b/.test(t))return{special:"stopvoice"};
+                // Castling — broad coverage
+                if(/(коротк(ая|ую)\s+рокировк|короткая|short\s+castle|castle\s+short|king[-\s]?side|o-?o(?!-?o))/i.test(t))return{san:"O-O"};
+                if(/(длинн(ая|ую)\s+рокировк|длинная|long\s+castle|castle\s+long|queen[-\s]?side|o-?o-?o)/i.test(t))return{san:"O-O-O"};
+                // Russian letter → file (extended: phonetic spellings shaхматистов)
+                const rusMap:Record<string,string>={"а":"a","бэ":"b","б":"b","вэ":"c","в":"c","цэ":"c","ц":"c","с":"c","дэ":"d","д":"d","е":"e","эф":"f","ф":"f","жэ":"g","же":"g","ж":"g","ге":"g","г":"g","ха":"h","х":"h","аш":"h","эйч":"h"};
+                // English spoken: "e four", "knight f three"
+                const engFileMap:Record<string,string>={"ei":"a","bi":"b","си":"c","си-эн":"c","di":"d","ди":"d","ii":"e","эф":"f","джи":"g","эйч":"h","аш":"h","хэй":"h"};
+                // Number words (rus + eng)
+                const numMap:Record<string,string>={"один":"1","одну":"1","первую":"1","first":"1","one":"1","два":"2","две":"2","вторую":"2","second":"2","two":"2","три":"3","третью":"3","third":"3","three":"3","четыре":"4","четвертую":"4","four":"4","пять":"5","пятую":"5","five":"5","шесть":"6","шестую":"6","six":"6","семь":"7","седьмую":"7","seven":"7","восемь":"8","восьмую":"8","eight":"8"};
+                // Piece words — broad morphology
+                const pieceMap:Record<string,string>={
+                  "конь":"N","коня":"N","конём":"N","конем":"N","конику":"N","knight":"N","horse":"N",
+                  "слон":"B","слона":"B","слоном":"B","слоны":"B","bishop":"B",
+                  "ладья":"R","ладью":"R","ладьёй":"R","ладьей":"R","тура":"R","туру":"R","rook":"R",
+                  "ферзь":"Q","ферзя":"Q","ферзём":"Q","ферзем":"Q","королева":"Q","королеву":"Q","queen":"Q",
+                  "король":"K","короля":"K","королём":"K","королем":"K","king":"K",
+                  "пешка":"","пешку":"","пешкой":"","пешки":"","pawn":""
+                };
+                // Strip capture / connector words — they're fluff for parsing
+                t=t.replace(/\s+/g," ");
+                t=t.replace(/\b(идёт|идет|на|берёт|берет|бьёт|бьет|рубит|съест|съедает|съесть|captures|takes|to|move|move\s+to|-|—|—>|->|→|идет\s+на|идёт\s+на|играет)\b/g," ");
+                t=t.replace(/\s+/g," ");
+                for(const[k,v]of Object.entries(rusMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                for(const[k,v]of Object.entries(engFileMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                for(const[k,v]of Object.entries(numMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                // Promotion
+                let promo:"q"|"r"|"b"|"n"|undefined;
+                if(/(ферзь|ферзя|queen)\s*$/.test(t)||/\bв\s*(ферз[ьяеем]|queen)/.test(text)){promo="q";t=t.replace(/(ферзь|ферзя|queen)/g,"")}
+                else if(/(конь|коня|knight)\s*$/.test(t)||/\bв\s*(кон[ьяем]|knight)/.test(text)){promo="n";t=t.replace(/(конь|коня|knight)/g,"")}
+                else if(/(ладья|ладью|rook)\s*$/.test(t)||/\bв\s*(ладь[юея]|rook)/.test(text)){promo="r";t=t.replace(/(ладья|ладью|rook)/g,"")}
+                else if(/(слон|слона|bishop)\s*$/.test(t)||/\bв\s*(слон[ае]|bishop)/.test(text)){promo="b";t=t.replace(/(слон|слона|bishop)/g,"")}
+                // Extract piece
+                let piece="";
+                for(const[k,v]of Object.entries(pieceMap))if(t.includes(k)){piece=v;t=t.replace(k," ");break;}
+                t=t.replace(/\s+/g," ").trim();
+                // Extract squares — support "e2e4", "e2 e4", "e 2 e 4"
+                const sq=/([a-h])\s*([1-8])/g;const matches:string[]=[];let m;
+                while((m=sq.exec(t))!==null){matches.push(m[1]+m[2]);if(matches.length===2)break}
+                if(matches.length===2)return{from:matches[0],to:matches[1],san:promo?undefined:undefined};
+                if(matches.length===1&&piece)return{san:piece+matches[0]+(promo?"="+promo.toUpperCase():"")};
+                if(matches.length===1)return{san:matches[0]+(promo?"="+promo.toUpperCase():"")};
+                return{};
+              };
+              rec.onstart=()=>{sVoiceListening(true);showToast("🎤 Слушаю постоянно. Говори ходы или команды: 'конь эф три', 'новая партия', 'переверни'","info")};
+              rec.onend=()=>{
+                // continuous mode sometimes ends unexpectedly; auto-restart unless user stopped
+                if(rec._stop){sVoiceListening(false);voiceRecRef.current=null;return}
+                try{rec.start()}catch{sVoiceListening(false);voiceRecRef.current=null}
+              };
+              rec.onerror=(e:any)=>{
+                if(e.error==="no-speech"){return} // normal — user just silent
+                rec._stop=true;sVoiceListening(false);voiceRecRef.current=null;
+                if(e.error==="network")showToast("Голосу нужен интернет (Chrome speech API)","error");
+                else if(e.error==="not-allowed")showToast("Разреши доступ к микрофону","error");
+                else if(e.error==="aborted"){/* ignore */}
+                else showToast(`Голос: ${e.error}`,"error");
               };
               rec.onresult=(e:any)=>{
-                // Try all alternatives
+                const last=e.results[e.results.length-1];
+                if(!last.isFinal)return;
                 const alts:string[]=[];
-                for(let i=0;i<e.results[0].length;i++)alts.push(e.results[0][i].transcript);
-                const parseVoice=(text:string):{from?:string;to?:string;san?:string}=>{
-                  let t=text.toLowerCase().trim();
-                  // Russian letters to files
-                  const rusMap:Record<string,string>={"а":"a","б":"b","в":"c","с":"c","д":"d","е":"e","ф":"f","ж":"g","ге":"g","г":"g","х":"h","аш":"h","эйч":"h"};
-                  // Number words
-                  const numMap:Record<string,string>={"один":"1","одну":"1","два":"2","две":"2","три":"3","четыре":"4","пять":"5","шесть":"6","семь":"7","восемь":"8"};
-                  // Piece words
-                  const pieceMap:Record<string,string>={"конь":"N","коня":"N","конём":"N","конем":"N","слон":"B","слона":"B","слоном":"B","ладья":"R","ладью":"R","ладьёй":"R","ферзь":"Q","ферзя":"Q","ферзём":"Q","ферзем":"Q","король":"K","короля":"K","королём":"K","королем":"K"};
-                  // Castling
-                  if(/короткая\s+рокировка|короткую\s+рокировку|o-?o(?!-?o)/i.test(t))return{san:"O-O"};
-                  if(/длинная\s+рокировка|длинную\s+рокировку|o-?o-?o/i.test(t))return{san:"O-O-O"};
-                  // Replace Russian words with letters/numbers
-                  t=t.replace(/\s+/g," ");
-                  for(const[k,v]of Object.entries(rusMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                  for(const[k,v]of Object.entries(numMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                  // Extract piece if mentioned
-                  let piece="";
-                  for(const[k,v]of Object.entries(pieceMap))if(t.includes(k)){piece=v;t=t.replace(k,"").trim();break;}
-                  // Extract 2 squares like "e2 e4" or "e2e4"
-                  const sq=/([a-h])\s*([1-8])/g;const matches:string[]=[];let m;
-                  while((m=sq.exec(t))!==null){matches.push(m[1]+m[2]);if(matches.length===2)break}
-                  if(matches.length===2)return{from:matches[0],to:matches[1]};
-                  if(matches.length===1&&piece)return{san:piece+matches[0]};
-                  if(matches.length===1)return{san:matches[0]};
-                  return{};
-                };
+                for(let i=0;i<last.length;i++)alts.push(last[i].transcript);
                 let matched=false;
                 for(const alt of alts){
                   const v=parseVoice(alt);
+                  // Special commands
+                  if(v.special){
+                    matched=true;
+                    if(v.special==="new"){if(tab==="play")newG();else showToast("'Новая партия' работает в Play","info")}
+                    else if(v.special==="resign"){if(on&&!over){sOn(false);sOver("You resigned");snd("x")}}
+                    else if(v.special==="flip"){sFlip(f=>!f)}
+                    else if(v.special==="undo"){if(pms.length>0)sPms(p=>p.slice(0,-1));else if(hist.length>=2){const u1=game.undo();if(u1){const u2=game.undo();if(u2){sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sBk(k=>k+1)}else{try{game.move(u1.san)}catch{}}}}}
+                    else if(v.special==="analyze"){if(tab==="analysis"||tab==="coach"||over)runAnalysis();else showToast("Анализ — после партии или в Analysis","info")}
+                    else if(v.special==="stopvoice"){rec._stop=true;try{rec.stop()}catch{}}
+                    break;
+                  }
                   if(v.from&&v.to){
                     try{const mv=game.move({from:v.from as Square,to:v.to as Square,promotion:"q"});if(mv){exec(v.from as Square,v.to as Square);showToast(`✓ ${v.from}→${v.to}`,"success");matched=true;break}}catch{}
                   }else if(v.san){
                     try{const mv=game.move(v.san);if(mv){game.undo();const legal=game.moves({verbose:true}).find(x=>x.san===mv.san);if(legal){exec(legal.from,legal.to);showToast(`✓ ${v.san}`,"success");matched=true;break}}}catch{}
                   }
                 }
-                if(!matched)showToast(`Не распознал: "${alts[0]}"`,"error");
+                if(!matched)showToast(`🎤 "${alts[0]}" — не понял`,"error");
               };
-              voiceRecRef.current=rec;rec.start();
+              voiceRecRef.current=rec;
+              try{rec.start()}catch{showToast("Не удалось запустить микрофон","error")}
             },voiceListening?"#fee2e2":T.surface,voiceListening?T.danger:T.dim)}
-            {(tab==="play"||tab==="coach"||tab==="analysis")&&btn("⌨️ Ход текстом",()=>{
+            {(tab==="play"||tab==="coach"||tab==="analysis")&&<Btn size="sm" variant="secondary" onClick={()=>{
               const input=prompt("Введи ход в алгебраической нотации (например: e4, Nf3, O-O, exd5):");
               if(!input)return;
               const san=input.trim();
@@ -1161,66 +2254,215 @@ export default function CyberChessPage(){
                 if(mv){game.undo();const legal=game.moves({verbose:true}).find(x=>x.san===mv.san);if(legal){exec(legal.from,legal.to);showToast(`✓ ${san}`,"success")}}
                 else showToast(`Невозможный ход: ${san}`,"error");
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
-            },T.surface,T.dim)}
-            {over&&btn("Rematch",()=>newG(),"#f59e0b","#fff","none")}
-            {pms.length>0&&btn(`↩ Undo`,()=>sPms(p=>p.slice(0,-1)),"#eff6ff",T.blue,`1px solid rgba(37,99,235,0.3)`)}
-            {pms.length>0&&btn(`✕ Clear (${pms.length})`,()=>{sPms([]);sPmSel(null)},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
+            }}>⌨️ Ход текстом</Btn>}
+            {over&&<Btn size="sm" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
+            {pms.length>0&&<Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>sPms(p=>p.slice(0,-1))} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Undo</Btn>}
+            {pms.length>0&&<Btn size="sm" variant="secondary" onClick={()=>{sPms([]);sPmSel(null)}} style={{background:"#fef2f2",color:CC.danger,borderColor:"#fca5a5"}}>✕ Clear ({pms.length})</Btn>}
           </div>
-          {on&&!over&&!setup&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
-            {btn("🏳 Resign",()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")},"#fef2f2",T.danger,`1px solid rgba(220,38,38,0.2)`)}
-            {btn("½ Draw",()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")},"#fefce8","#92400e",`1px solid rgba(217,119,6,0.2)`)}
-            {btn("↩ Take back",()=>{if(hist.length>=2){game.undo();game.undo();sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1)}else showToast("No moves","error")},T.surface,T.dim)}
-            {savedGames.length>0&&(tab==="play"||tab==="coach")&&btn(`📜 История (${savedGames.length})`,()=>{
-              sGamesModalOpen(true);
-            },T.surface,T.dim)}
+          {on&&!over&&!setup&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
+            <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
+            <Btn size="sm" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
+            <Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{
+              if(hist.length<2){showToast("No moves","error");return}
+              if(think){showToast("AI думает — подожди","error");return}
+              const needChessy=tab==="play"&&!hotseat;
+              if(needChessy&&chessy.balance<3){showToast("Недостаточно Chessy (нужно 3)","error");return}
+              const u1=game.undo();
+              if(!u1){showToast("Takeback failed","error");return}
+              const u2=game.undo();
+              if(!u2){try{game.move(u1.san)}catch{}showToast("Takeback failed","error");return;}
+              if(needChessy)spendChessy(3,"takeback");
+              sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
+            }}>Take back{tab==="play"&&!hotseat?" · 3":""}</Btn>
+            {savedGames.length>0&&(tab==="play"||tab==="coach")&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
           </div>}
-          {over&&fenHist.length>2&&<div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
-            {btn("📊 Открыть в Analysis",()=>{
-              // Switch to analysis tab, keep current game's history
-              sTab("analysis");
-              sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
-              showToast("Партия открыта в анализе","info");
-            },T.purple,"#fff","none")}
-            {btn(analyzing?"⚡ Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze",runAnalysis,T.accent,"#fff","none")}
-            {savedGames.length>0&&btn(`📜 История (${savedGames.length})`,()=>{
-              sGamesModalOpen(true);
-            },T.surface,T.dim)}
+          {over&&fenHist.length>2&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
+            <Btn size="sm" variant="accent" onClick={()=>{
+              sTab("analysis");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
+              showToast("Партия открыта в анализе — запускаю разбор","info");
+              setTimeout(()=>{if(sfR.current?.ready()&&fenHist.length>=3)runAnalysis()},150);
+            }}>📊 Открыть в Analysis</Btn>
+            <Btn size="sm" variant="primary" loading={analyzing} onClick={runAnalysis}>
+              {analyzing?"Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze"}
+            </Btn>
+            {savedGames.length>0&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
+            <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
+              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+              const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
+              const pgn=buildPGN(hist,{white,black,result});
+              const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
+              const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
+              try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
+            } } style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Share PGN</Btn>
           </div>}
         </div>
 
         {/* Right panel */}
         <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
-          {/* Player block (top = opponent) */}
-          {!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#1e293b,#334155)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:14,flexShrink:0}}>🤖</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:800,color:T.text,display:"flex",alignItems:"center",gap:6}}>
-                {useSF?"Stockfish":"AI"} <span style={{fontSize:12,fontWeight:600,color:T.dim}}>({lv.elo})</span>
-                {game.turn()===aiC&&!over&&on&&<span style={{width:6,height:6,borderRadius:3,background:think?T.gold:T.dim,animation:think?"pulse 1s infinite":"none"}}/>}
-              </div>
-              {capW.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:2}} translate="no">{capW.join("")}</div>}
+          {/* Opening Drill HUD */}
+          {openingDrill&&<Card padding={SPACE[3]} tone="surface1"
+            style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[1]}}>
+              <Badge tone="accent" size="sm">{openingDrill.eco}</Badge>
+              <div style={{fontSize:13,fontWeight:800,color:CC.accent}}>🎓 Opening Drill</div>
+              <div style={{flex:1}}/>
+              <Btn size="xs" variant="ghost" onClick={()=>{sOpeningDrill(null);showToast("Drill прерван","info")}}>✕</Btn>
             </div>
-          </div>}
+            <div style={{fontSize:13,fontWeight:700,color:CC.text,marginBottom:SPACE[1]}}>{openingDrill.name}</div>
+            <div style={{height:6,borderRadius:RADIUS.full,background:"#ede9fe",overflow:"hidden",marginBottom:SPACE[1]}}>
+              <div style={{height:"100%",width:`${Math.round(openingDrill.ply/openingDrill.moves.length*100)}%`,background:`linear-gradient(90deg,${CC.accent},#a78bfa)`,transition:`width ${MOTION.base} ${MOTION.ease}`}}/>
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,display:"flex",justifyContent:"space-between"}}>
+              <span>Ход {openingDrill.ply+1} / {openingDrill.moves.length}</span>
+              {openingDrill.mistakes>0&&<span style={{color:CC.danger,fontWeight:800}}>× {openingDrill.mistakes}</span>}
+            </div>
+          </Card>}
+
+          {/* Player block (top = opponent) */}
+          {!setup&&(tab==="play"||tab==="coach")&&(()=>{
+            const isAiTurn=game.turn()===aiC&&!over&&on;
+            return <div style={{
+              padding:"10px 14px",borderRadius:RADIUS.lg,
+              background:CC.surface1,border:`1px solid ${isAiTurn?CC.borderStrong:CC.border}`,
+              display:"flex",alignItems:"center",gap:SPACE[3],
+              boxShadow:isAiTurn?"0 0 0 2px rgba(15,23,42,0.08)":SHADOW.sm,
+              transition:`all ${MOTION.base} ${MOTION.ease}`
+            }}>
+              <div style={{
+                width:40,height:40,borderRadius:RADIUS.md,
+                background:"linear-gradient(135deg,#1e293b,#334155 60%,#475569)",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                color:"#fff",fontSize:18,flexShrink:0,boxShadow:SHADOW.sm,
+                position:"relative"
+              }}>
+                🤖
+                {isAiTurn&&<span style={{
+                  position:"absolute",right:-2,bottom:-2,width:12,height:12,borderRadius:"50%",
+                  background:think?CC.gold:CC.textDim,
+                  border:"2px solid #fff",
+                  animation:think?"cc-pulse-glow 1.2s infinite":undefined
+                }}/>}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                  <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{useSF?"Stockfish":lv.name}</span>
+                  <Badge tone={useSF?"accent":"info"} size="xs">{lv.elo}</Badge>
+                  {think&&<Badge tone="gold" size="xs" icon={<Spinner size={10}/>}>думаю</Badge>}
+                </div>
+                {capW.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:4,color:CC.textDim}} translate="no">{capW.join("")}</div>}
+              </div>
+            </div>;
+          })()}
 
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:over?(over.includes("You win")?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface,border:`1px solid ${over?(over.includes("You win")?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border}`}}>
-            {over?<><div style={{fontWeight:900,fontSize:15,color:over.includes("You win")?T.accent:T.danger}}>{over}</div><div style={{fontSize:13,color:T.dim,marginTop:3}}>{hist.length} moves · {rat} {rk.i}</div></>:
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:8,height:8,borderRadius:4,background:chk?T.danger:think?T.gold:myT?T.accent:T.dim,animation:think?"pulse 1s infinite":"none"}}/>
-              <span style={{fontWeight:700,fontSize:14,color:T.text}}>{chk?"Check!":think?(useSF?"Stockfish…":"Thinking…"):myT?"Your move":"Ход AI"}</span>
-              {pms.length>0&&<span style={{padding:"2px 8px",borderRadius:5,fontSize:12,fontWeight:800,background:"#dbeafe",color:T.blue,marginLeft:"auto"}}>{pms.length} premove{pms.length>1?"s":""}</span>}
-            </div>}
-          </div>}
+          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {/* Post-game accuracy card (auto-appears once Stockfish finishes scoring each ply) */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&(()=>{
+            const wS={g:0,good:0,ina:0,mi:0,bl:0,loss:0,c:0};const bS={...wS};
+            for(let i=0;i<analysis.length;i++){
+              const isW=i%2===0;const s=isW?wS:bS;
+              const q=analysis[i].quality;
+              if(q==="great")s.g++;else if(q==="good")s.good++;else if(q==="inacc")s.ina++;else if(q==="mistake")s.mi++;else if(q==="blunder")s.bl++;
+              s.c++;
+              if(i>0){const prev=analysis[i-1].cp;const cur=analysis[i].cp;const pfm=isW?prev:-prev;const cfm=isW?cur:-cur;s.loss+=Math.max(0,Math.min(1000,pfm-cfm))}
+            }
+            const acc=(s:typeof wS)=>s.c===0?0:Math.max(0,Math.min(100,Math.round(100-(s.loss/s.c)/8)));
+            const meS=pCol==="w"?wS:bS;const aiS=pCol==="w"?bS:wS;
+            const meAcc=acc(meS);const aiAcc=acc(aiS);
+            const ac=(a:number)=>a>=85?T.accent:a>=70?T.blue:a>=50?"#ca8a04":T.danger;
+            const row=(lbl:string,s:typeof wS,a:number,flag:string)=>(
+              <div style={{flex:1,padding:"10px 12px",background:"#fff",borderRadius:8,border:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:6}}>
+                  <div style={{fontSize:12,fontWeight:800,color:T.dim,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{flag} {lbl}</div>
+                  <div style={{fontSize:22,fontWeight:900,color:ac(a),fontFamily:"monospace",lineHeight:1}}>{a}%</div>
+                </div>
+                <div style={{display:"flex",gap:8,fontSize:12,fontWeight:700}}>
+                  <span style={{color:T.accent}}>!{s.g}</span>
+                  <span style={{color:"#ca8a04"}}>?!{s.ina}</span>
+                  <span style={{color:"#ea580c"}}>?{s.mi}</span>
+                  <span style={{color:T.danger}}>??{s.bl}</span>
+                </div>
+              </div>);
+            return <div style={{marginTop:8,display:"flex",gap:8,padding:"12px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0"}}>
+              <div style={{flex:"0 0 100%",marginBottom:4,fontSize:13,fontWeight:800,color:"#065f46",letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📊 Точность партии</div>
+              {row("Ты",meS,meAcc,pCol==="w"?"⚪":"⚫")}
+              {row("AI",aiS,aiAcc,pCol==="w"?"⚫":"⚪")}
+            </div>;
+          })()}
+          {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
+
+          {/* ── Blunder Rewind — переиграть свои ошибки как пазлы ── */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>0&&(()=>{
+            const userIsWhite=pCol==="w";
+            const myErrors=analysis.map((a,i)=>({a,i}))
+              .filter(x=>{
+                const isUserMove=userIsWhite?x.i%2===0:x.i%2===1;
+                return isUserMove&&(x.a.quality==="blunder"||x.a.quality==="mistake");
+              })
+              .slice(0,6);
+            if(myErrors.length===0)return null;
+            return <div style={{marginTop:SPACE[2],padding:SPACE[3],borderRadius:RADIUS.lg,
+              background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #fcd34d",
+              boxShadow:SHADOW.sm}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
+                <span style={{fontSize:18}}>🎯</span>
+                <div style={{fontSize:13,fontWeight:900,color:"#92400e",letterSpacing:0.3}}>ПЕРЕИГРАТЬ ОШИБКИ</div>
+                <Badge tone="gold" size="xs">+3 Chessy за каждую</Badge>
+              </div>
+              <div style={{fontSize:11,color:"#b45309",marginBottom:SPACE[2],lineHeight:1.5}}>
+                Кликни на блундер — откроется позиция до ошибки, найди правильный ход.
+              </div>
+              <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+                {myErrors.map(({a,i})=>{
+                  const isBlunder=a.quality==="blunder";
+                  return <button key={i} onClick={()=>rewindBlunder(i)}
+                    className="cc-focus-ring"
+                    title={`Ход ${Math.floor(i/2)+1}${userIsWhite?"":"..."}  · ${isBlunder?"Блундер":"Ошибка"} · eval ${a.cp>=0?"+":""}${(a.cp/100).toFixed(1)}`}
+                    style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
+                      borderRadius:RADIUS.full,border:`1px solid ${isBlunder?"#fca5a5":"#fdba74"}`,
+                      background:isBlunder?"#fef2f2":"#fff7ed",
+                      color:isBlunder?CC.danger:"#c2410c",
+                      fontSize:12,fontWeight:800,cursor:"pointer",
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                    <span style={{fontSize:13,fontWeight:900}}>{isBlunder?"??":"?"}</span>
+                    <span>Ход {Math.floor(i/2)+1}{userIsWhite?".":"..."}</span>
+                  </button>;
+                })}
+              </div>
+            </div>;
+          })()}
 
           {/* My player block (bottom = me) */}
-          {!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"10px 14px",borderRadius:10,background:T.surface,border:`1px solid ${myT&&on&&!over?T.accent:T.border}`,display:"flex",alignItems:"center",gap:10,boxShadow:myT&&on&&!over?"0 0 0 2px rgba(5,150,105,0.15)":"none"}}>
-            <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#059669,#10b981)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:14,flexShrink:0}}>👤</div>
+          {!setup&&(tab==="play"||tab==="coach")&&<div style={{
+            padding:"10px 14px",borderRadius:RADIUS.lg,
+            background:CC.surface1,
+            border:`1px solid ${myT&&on&&!over?CC.brand:CC.border}`,
+            display:"flex",alignItems:"center",gap:SPACE[3],
+            boxShadow:myT&&on&&!over?"0 0 0 3px rgba(5,150,105,0.18), 0 2px 8px rgba(5,150,105,0.1)":SHADOW.sm,
+            transition:`all ${MOTION.base} ${MOTION.ease}`
+          }}>
+            <div style={{
+              width:40,height:40,borderRadius:RADIUS.md,
+              background:"linear-gradient(135deg,#059669 0%,#10b981 60%,#14b8a6)",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              color:"#fff",fontSize:18,flexShrink:0,boxShadow:SHADOW.sm,
+              position:"relative"
+            }}>
+              👤
+              {myT&&!over&&on&&<span style={{
+                position:"absolute",right:-2,bottom:-2,width:12,height:12,borderRadius:"50%",
+                background:CC.brand,border:"2px solid #fff",
+                boxShadow:"0 0 0 2px rgba(5,150,105,0.4)"
+              }}/>}
+            </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:800,color:T.text,display:"flex",alignItems:"center",gap:6}}>
-                You <span style={{fontSize:12,fontWeight:600,color:T.dim}}>({rat})</span>
-                {myT&&!over&&on&&<span style={{width:6,height:6,borderRadius:3,background:T.accent,marginLeft:"auto"}}/>}
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{hotseat?"Игрок":"You"}</span>
+                <Badge tone="gold" size="xs">{rat}</Badge>
+                <Badge tone="neutral" size="xs">{rk.i} {rk.t}</Badge>
               </div>
-              {capB.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:2}} translate="no">{capB.join("")}</div>}
+              {capB.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:4,color:CC.textDim}} translate="no">{capB.join("")}</div>}
             </div>
           </div>}
 
@@ -1235,12 +2477,21 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Opening detection */}
-          {currentOpening&&(on&&!setup||tab==="analysis")&&hist.length>0&&<div style={{padding:"10px 14px",borderRadius:10,background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1px solid #a7f3d0",boxShadow:"0 1px 4px rgba(5,150,105,0.08)"}}>
-            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
-              <span style={{fontSize:13,fontWeight:900,padding:"2px 7px",borderRadius:4,background:T.accent,color:"#fff",fontFamily:"monospace",letterSpacing:"0.05em"}}>{currentOpening.eco}</span>
-              <span style={{fontSize:13,fontWeight:800,color:T.text}}>{currentOpening.name}</span>
+          {currentOpening&&(on&&!setup||tab==="analysis")&&hist.length>0&&<div style={{
+            padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
+            background:"linear-gradient(135deg,#f0fdf4 0%,#ecfdf5 60%,#dcfce7)",
+            border:"1px solid #a7f3d0",
+            boxShadow:"0 2px 8px rgba(5,150,105,0.08), inset 0 1px 0 rgba(255,255,255,0.6)"
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:4}}>
+              <span style={{
+                fontSize:11,fontWeight:900,padding:"3px 8px",borderRadius:RADIUS.sm,
+                background:CC.brand,color:"#fff",
+                fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:1
+              }}>{currentOpening.eco}</span>
+              <span style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.name}</span>
             </div>
-            <div style={{fontSize:14,color:T.dim,lineHeight:1.4}}>{currentOpening.desc}</div>
+            <div style={{fontSize:12,color:"#065f46",lineHeight:1.45}}>{currentOpening.desc}</div>
           </div>}
 
           {/* Game Stats — per-side breakdown with eval graph */}
@@ -1375,11 +2626,23 @@ export default function CyberChessPage(){
           <div ref={hR} style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
             <div style={{padding:"8px 14px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:12,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim}}>Ходы {hist.length>0&&<span style={{color:T.accent,marginLeft:4}}>· {Math.ceil(hist.length/2)}</span>}{refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const}}>⚡ уточняю d18...</span>}</span>
-              {hist.length>0&&<div style={{display:"flex",gap:3}}>
-                <button onClick={()=>{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
-                <button onClick={()=>{const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
-                <button onClick={()=>{const ni=browseIdx<0?hist.length:Math.min(hist.length,browseIdx+1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni>=hist.length?-1:ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Вперёд">▶</button>
-                <button onClick={()=>{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
+              {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
+                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
+                <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
+                <button onClick={()=>{
+                  if(replaying){sReplaying(false);return}
+                  // If at end, rewind to start before starting replay
+                  if(browseIdx<0||browseIdx>=hist.length-1){try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null)}catch{}}
+                  sReplaying(true);
+                }} style={{padding:"3px 9px",borderRadius:4,border:`1px solid ${replaying?T.accent:T.border}`,background:replaying?"rgba(5,150,105,0.1)":"#fff",color:replaying?T.accent:T.text,fontSize:11,fontWeight:800,cursor:"pointer"}} title={replaying?"Пауза":"Авто-воспроизведение"}>{replaying?"❚❚":"▶"}</button>
+                {replaying&&<select value={replaySpeed} onChange={e=>sReplaySpeed(+e.target.value)} style={{padding:"2px 4px",borderRadius:4,border:`1px solid ${T.border}`,fontSize:11,cursor:"pointer",background:"#fff"}} title="Скорость">
+                  <option value={2000}>0.5x</option>
+                  <option value={1000}>1x</option>
+                  <option value={500}>2x</option>
+                  <option value={250}>4x</option>
+                </select>}
+                <button onClick={()=>{sReplaying(false);const ni=browseIdx<0?hist.length:Math.min(hist.length,browseIdx+1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni>=hist.length?-1:ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Вперёд">▶</button>
+                <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
               </div>}
             </div>
             <div style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0"}}>
@@ -1405,7 +2668,13 @@ export default function CyberChessPage(){
                     </span>
                   </React.Fragment>;
                 })}
-              </div>:<div style={{padding:"14px",textAlign:"center",fontSize:13,color:T.dim,fontStyle:"italic"}}>No moves yet</div>}
+              </div>:<div style={{padding:"28px 18px",textAlign:"center",color:CC.textMute}}>
+                <div style={{fontSize:32,marginBottom:SPACE[2],opacity:0.6}}>♟</div>
+                <div style={{fontSize:13,fontWeight:700,color:CC.textDim}}>Пока нет ходов</div>
+                <div style={{fontSize:11,color:CC.textMute,marginTop:4,lineHeight:1.5}}>
+                  {tab==="play"||tab==="coach"?"Сделай первый ход — история появится здесь":tab==="puzzles"?"Выбери позицию или загрузи пазл":"Загрузи PGN/FEN или введи ходы"}
+                </div>
+              </div>}
             </div>
           </div>
 
@@ -1422,9 +2691,21 @@ export default function CyberChessPage(){
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
                     <span style={{fontSize:14,fontWeight:900,padding:"4px 12px",borderRadius:7,background:pzCurrent.r<600?"#d1fae5":pzCurrent.r<1200?"#dbeafe":pzCurrent.r<1800?"#ede9fe":"#fee2e2",color:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger}}>{pzCurrent.r}</span>
-                    {pzTimeLeft>0&&<span style={{fontSize:14,fontWeight:900,color:pzTimeLeft<30?T.danger:T.text,fontFamily:"monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<30?"#fef2f2":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
+                    {pzTimeLeft>0&&<span style={{fontSize:14,fontWeight:900,color:pzTimeLeft<15?CC.danger:pzTimeLeft<30?CC.gold:CC.text,fontFamily:"ui-monospace, monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<15?"#fef2f2":pzTimeLeft<30?"#fef3c7":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
                   </div>
                 </div>
+                {/* Rush HUD — score + streak */}
+                {pzMode==="rush"&&rushActive&&<div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[2],padding:`${SPACE[2]}px ${SPACE[3]}px`,borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:0.5,textTransform:"uppercase" as const}}>RUSH</span>
+                    <Badge tone="gold" size="xs">{rushScore} решено</Badge>
+                  </div>
+                  <div style={{flex:1}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    {rushStreak>0&&<Badge tone="danger" size="xs">🔥 {rushStreak}</Badge>}
+                    {rushBest>0&&<Badge tone="neutral" size="xs">best {rushBest}</Badge>}
+                  </div>
+                </div>}
                 {/* Tags */}
                 <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
                   {[pzCurrent.phase,pzCurrent.theme].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
@@ -1434,29 +2715,33 @@ export default function CyberChessPage(){
                 {pzAttempt==="wrong"&&<div style={{fontSize:14,fontWeight:900,color:T.danger,padding:"8px 12px",background:"rgba(220,38,38,0.1)",borderRadius:7,marginBottom:10}}>✗ Неверно. Попробуй ещё</div>}
                 {pzAttempt==="shown"&&<div style={{fontSize:14,fontWeight:800,color:"#92400e",padding:"8px 12px",background:"#fffbeb",borderRadius:7,marginBottom:10,border:"1px solid #fde68a"}}>💡 Ответ: <span style={{fontFamily:"monospace",background:"#fef3c7",padding:"2px 8px",borderRadius:4}}>{pzCurrent.sol[0]}</span></div>}
                 {/* Actions */}
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button onClick={nextPz} style={{flex:"1 1 auto",minWidth:120,padding:"10px 18px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer"}}>▶ Следующая</button>
-                  <button onClick={randomPz} style={{padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.dim,fontSize:14,fontWeight:700,cursor:"pointer"}} title="Случайная">🎲</button>
-                  {pzAttempt==="wrong"&&<button onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}} style={{padding:"10px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fff",color:T.text,fontSize:13,fontWeight:700,cursor:"pointer"}}>↩ Заново</button>}
-                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<button onClick={()=>sPzAttempt("shown")} style={{padding:"10px 14px",borderRadius:8,border:`1px solid #fde68a`,background:"#fffbeb",color:"#92400e",fontSize:13,fontWeight:700,cursor:"pointer"}}>💡 Подсказка</button>}
+                <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+                  <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>
+                  <Btn size="md" variant="secondary" onClick={randomPz} title="Случайная">🎲</Btn>
+                  {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}}>Заново</Btn>}
+                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
                 </div>
               </div>
             </div>:<div style={{padding:"24px",textAlign:"center",color:T.dim,fontSize:14,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>Выбери задачу из списка ниже ↓</div>}
 
             {/* ── Stats strip ── */}
-            <div style={{display:"flex",gap:6}}>
-              <div style={{flex:1,padding:"10px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",textAlign:"center",border:"1px solid #a7f3d0"}}>
-                <div style={{fontSize:20,fontWeight:900,color:T.accent,lineHeight:1}}>{pzSolvedCount}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Решено</div>
-              </div>
-              <div style={{flex:1,padding:"10px",borderRadius:8,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",textAlign:"center",border:"1px solid #fecaca"}}>
-                <div style={{fontSize:20,fontWeight:900,color:T.danger,lineHeight:1}}>{pzFailedCount}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Ошибок</div>
-              </div>
-              <div style={{flex:1,padding:"10px",borderRadius:8,background:"#f3f4f6",textAlign:"center",border:`1px solid ${T.border}`}}>
-                <div style={{fontSize:20,fontWeight:900,color:T.text,lineHeight:1}}>{fPz.length}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>В фильтре</div>
-              </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))",gap:SPACE[2]}}>
+              <Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",borderColor:"#a7f3d0",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:CC.brand,lineHeight:1}}>{pzSolvedCount}</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Решено</div>
+              </Card>
+              <Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fef2f2,#fff1f2)",borderColor:"#fecaca",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:CC.danger,lineHeight:1}}>{pzFailedCount}</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Ошибок</div>
+              </Card>
+              <Card padding={SPACE[2]} tone="surface3" style={{textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:CC.text,lineHeight:1}}>{fPz.length}</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>В фильтре</div>
+              </Card>
+              {rushBest>0&&<Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderColor:"#fcd34d",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:"#78350f",lineHeight:1}}>{rushBest}</div>
+                <div style={{fontSize:10,color:"#92400e",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Rush best</div>
+              </Card>}
             </div>
 
             {/* ── Category Selector ── */}
@@ -1490,7 +2775,13 @@ export default function CyberChessPage(){
                     return false;
                   }).length;
                   const active=pzCategory===cat;
-                  return<button key={cat} onClick={()=>{sPzCategory(cat);sPzI(0);}} style={{padding:"8px 6px",borderRadius:7,border:active?`2px solid ${color}`:`1px solid ${T.border}`,background:active?`${color}15`:"#fff",color:active?color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                  return<button key={cat} onClick={()=>{
+                    // Reset conflicting filters so category selection is respected
+                    sPzCategory(cat);sPzI(0);
+                    if(cat!=="all"){
+                      sPzFilterGoal("all");sPzFilterMate(0);sPzFilterPhase("all");
+                    }
+                  }} style={{padding:"8px 6px",borderRadius:7,border:active?`2px solid ${color}`:`1px solid ${T.border}`,background:active?`${color}15`:"#fff",color:active?color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
                     <span style={{fontSize:13,fontWeight:800}}>{label}</span>
                     <span style={{fontSize:10,color:T.dim,fontWeight:700}}>{cnt}</span>
                   </button>;
@@ -1499,16 +2790,24 @@ export default function CyberChessPage(){
             </div>
 
             {/* ── Mode Selector ── */}
-            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,padding:"8px 10px"}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:6,letterSpacing:"0.08em",textTransform:"uppercase" as const}}>Режим</div>
-              <div style={{display:"flex",gap:4}}>
-                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["rush","⚡","Раш"]] as const).map(([m,ic,label])=>
-                  <button key={m} onClick={()=>sPzMode(m)} style={{flex:1,padding:"7px 4px",borderRadius:6,border:pzMode===m?`2px solid ${T.purple}`:`1px solid ${T.border}`,background:pzMode===m?"rgba(124,58,237,0.08)":"#fff",color:pzMode===m?T.purple:T.dim,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <Card padding={SPACE[2]} tone="surface1">
+              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?"+1..+3с per solve":pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":""}/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1]}}>
+                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
+                  const active=pzMode===m;
+                  return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
+                    style={{padding:"8px 4px",borderRadius:RADIUS.md,
+                      border:active?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,
+                      background:active?CC.accentSoft:CC.surface1,color:active?CC.accent:CC.textDim,
+                      fontSize:12,fontWeight:800,cursor:"pointer",
+                      display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
                     <span style={{fontSize:16}}>{ic}</span>
                     <span style={{fontSize:10,fontWeight:800}}>{label}</span>
-                  </button>)}
+                  </button>;
+                })}
               </div>
-            </div>
+            </Card>
 
             {/* ── Collapsible Filters ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
@@ -1557,7 +2856,8 @@ export default function CyberChessPage(){
             {/* ── Puzzle List (collapsible) ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
               <button onClick={()=>sPuzzleListOpen(!puzzleListOpen)} style={{width:"100%",padding:"10px 14px",borderBottom:puzzleListOpen?`1px solid ${T.border}`:"none",background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center",border:"none",cursor:"pointer"}}>
-                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 Список задач ({fPz.length})</span>
+                <span style={{fontSize:12,fontWeight:800,color:T.text,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>📋 Список задач ({fPz.length}/{PUZZLES.length})</span>
+                {PUZZLES.length<5000&&<button onClick={()=>sShowPuzzleExpand(true)} className="cc-focus-ring" style={{marginLeft:"auto",padding:"3px 10px",borderRadius:RADIUS.full,background:CC.accentSoft,color:CC.accent,border:`1px solid ${CC.accent}`,fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Расширить до 20k</button>}
                 <span style={{fontSize:11,color:T.dim,fontWeight:700,transform:puzzleListOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
               </button>
               {puzzleListOpen&&<>
@@ -1587,15 +2887,17 @@ export default function CyberChessPage(){
 
           {/* ── MultiPV Analysis Panel ── */}
           {tab==="analysis"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {/* Position import for Analysis */}
-            <div style={{borderRadius:10,background:"linear-gradient(135deg,#faf5ff,#f5f3ff)",border:"1px solid #ddd6fe",padding:"10px 12px"}}>
-              <div style={{fontSize:11,fontWeight:800,color:T.purple,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>📥 Источник позиции</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
+            {/* Position import for Analysis — расширенный source picker */}
+            <div style={{borderRadius:RADIUS.md,background:"linear-gradient(135deg,#faf5ff,#f5f3ff)",border:"1px solid #ddd6fe",padding:SPACE[3]}}>
+              <div style={{fontSize:11,fontWeight:800,color:CC.accent,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>📥 Источник позиции</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px,1fr))",gap:6}}>
+                {/* Empty start */}
                 <button onClick={()=>{
                   const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
                   showToast("Начальная позиция","info");
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🆕 Начальная</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🆕 Начальная</button>
 
+                {/* Last saved game */}
                 <button onClick={()=>{
                   if(savedGames.length===0){showToast("Нет сыгранных партий","error");return}
                   const last=savedGames[0];
@@ -1603,15 +2905,58 @@ export default function CyberChessPage(){
                   for(const san of last.moves){try{const mv=g.move(san);if(mv){mhist.push(mv.san);fh.push(g.fen())}}catch{break}}
                   setGame(g);sBk(k=>k+1);sHist(mhist);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b");
                   showToast(`Партия · ${mhist.length} ходов`,"success");
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📜 Последняя партия</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>📜 Последняя партия</button>
 
+                {/* All archive */}
+                <button onClick={()=>{if(savedGames.length===0){showToast("Архив пуст","info");return}sGamesModalOpen(true)}}
+                  className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>
+                  📚 Архив ({savedGames.length})
+                </button>
+
+                {/* Current puzzle */}
                 <button onClick={()=>{
                   if(!pzCurrent){showToast("Нет активного пазла","error");return}
                   const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
                   showToast(`Пазл · ${pzCurrent.name}`,"success");
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущий пазл</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🧩 Текущий пазл</button>
 
-                <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>
+                {/* Random puzzle */}
+                <button onClick={()=>{
+                  if(PUZZLES.length===0){showToast("Пазлы не загружены","error");return}
+                  const pz=PUZZLES[Math.floor(Math.random()*PUZZLES.length)];
+                  const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
+                  showToast(`🎲 Случайный пазл · ${pz.r} · ${pz.name}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🎲 Random пазл</button>
+
+                {/* Daily puzzle */}
+                <button onClick={()=>{
+                  if(!dailyState||!PUZZLES[dailyState.idx]){showToast("Daily puzzle не готов","error");return}
+                  const pz=PUZZLES[dailyState.idx];
+                  const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
+                  showToast(`☀ Пазл дня · ${pz.r}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Daily пазл</button>
+
+                {/* Random endgame study */}
+                <button onClick={()=>{
+                  if(ENDGAMES.length===0){showToast("Этюды недоступны","error");return}
+                  const eg=ENDGAMES[Math.floor(Math.random()*ENDGAMES.length)];
+                  const g=new Chess(eg.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([eg.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(eg.side);sFlip(eg.side==="b");
+                  showToast(`🏰 Этюд · ${eg.name}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🏰 Случайный этюд</button>
+
+                {/* Random opening line */}
+                <button onClick={()=>{
+                  if(!openingsDb||openingsDb.length===0){showToast("Дебюты не загружены","error");return}
+                  const op=openingsDb[Math.floor(Math.random()*openingsDb.length)];
+                  const g=new Chess();const fh:string[]=[g.fen()];const mh:string[]=[];
+                  const sans=(typeof op.moves==="string"?op.moves.split(/\s+/):[]).filter(Boolean);
+                  for(const san of sans){try{const mv=g.move(san);if(mv){mh.push(mv.san);fh.push(g.fen())}}catch{break}}
+                  setGame(g);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
+                  showToast(`♞ ${op.eco} · ${op.name}`,"info");
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>♞ Случайный дебют</button>
+
+                {/* PGN file */}
+                <label className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left",display:"block"}}>
                   📁 PGN файл
                   <input type="file" accept=".pgn,.txt" style={{display:"none"}} onChange={e=>{
                     const f=e.target.files?.[0];if(!f)return;
@@ -1627,12 +2972,14 @@ export default function CyberChessPage(){
                   }}/>
                 </label>
 
+                {/* FEN prompt */}
                 <button onClick={()=>{
                   const fen=prompt("Введите FEN позиции:");
                   if(!fen)return;
                   try{const g=new Chess(fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");showToast("FEN загружен","success")}catch{showToast("Неверный FEN","error")}
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🔤 FEN</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>🔤 FEN</button>
 
+                {/* PGN text */}
                 <button onClick={()=>{
                   const pgn=prompt("Вставьте PGN:");if(!pgn)return;
                   try{
@@ -1642,7 +2989,7 @@ export default function CyberChessPage(){
                     setGame(g2);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
                     showToast(`PGN · ${mh.length} ходов`,"success");
                   }catch{showToast("Неверный PGN","error")}
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>📋 PGN текст</button>
+                }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>📋 PGN текст</button>
               </div>
             </div>
             {/* Controls */}
@@ -1714,8 +3061,66 @@ export default function CyberChessPage(){
 
           {/* ── Coach Tab ── */}
           {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Mode selector — 5 ways to start a Coach session */}
+            {(()=>{
+              const modeBtn=(icon:string,title:string,sub:string,onClick:()=>void,active?:boolean)=>(
+                <button onClick={onClick} style={{padding:"11px 8px",borderRadius:9,border:active?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:active?"rgba(5,150,105,0.08)":"#fff",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",gap:4,alignItems:"center",minHeight:86,transition:"all 0.15s",boxShadow:active?"0 2px 8px rgba(5,150,105,0.12)":"none"}}>
+                  <span style={{fontSize:22,lineHeight:1}}>{icon}</span>
+                  <span style={{fontSize:12,fontWeight:800,color:active?T.accent:T.text,lineHeight:1.2}}>{title}</span>
+                  <span style={{fontSize:10,color:T.dim,lineHeight:1.3}}>{sub}</span>
+                </button>
+              );
+              const isVsAI=coachAIEnabled&&!editorMode&&on;
+              const isSolo=!coachAIEnabled&&!editorMode;
+              return (
+                <div style={{borderRadius:10,background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:800,color:T.accent,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>🎓 Как учимся</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:6}}>
+                    {modeBtn("🤖","Против AI","играй с ботом, Coach комментирует",()=>{
+                      sCoachAIEnabled(true);sEditorMode(false);
+                      const cl=pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();
+                      showToast("Новая игра против AI","success");
+                    },isVsAI)}
+                    {modeBtn("✋","За обоих","двигай сам обе стороны",()=>{
+                      sCoachAIEnabled(false);sEditorMode(false);
+                      const g=new Chess();setGame(g);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([g.fen()]);sCapW([]);sCapB([]);sPromo(null);sPms([]);sPmSel(null);sOn(false);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);
+                      showToast("Свободная игра за обоих","info");
+                    },isSolo&&hist.length===0)}
+                    {modeBtn("📥","Импорт","PGN / FEN / расстановка",()=>{
+                      sCoachAIEnabled(false);
+                      const el=document.getElementById("coach-import-section");
+                      if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
+                      showToast("Выбери источник ниже","info");
+                    })}
+                    {modeBtn("🧩","Из пазлов","активный пазл",()=>{
+                      if(!pzCurrent){showToast("Сначала выбери пазл во вкладке Puzzles","info");sTab("puzzles");return}
+                      const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(false);sEditorMode(false);
+                      showToast(`Пазл: ${pzCurrent.name}`,"success");
+                    })}
+                    {modeBtn("📜",savedGames.length>0?`Библиотека · ${savedGames.length}`:"Библиотека","твои партии",()=>{
+                      if(savedGames.length===0){showToast("Нет сыгранных партий — сыграй хотя бы одну","error");return}
+                      sGamesModalOpen(true);
+                    })}
+                    {modeBtn("🏰","Эндшпили",`${ENDGAMES.length} классических позиций`,()=>sShowEndgames(true))}
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Active endgame banner */}
+            {currentEndgame&&<div style={{padding:"10px 12px",borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",border:"1px solid #93c5fd"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                <span style={{fontSize:20}}>🏰</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:800,color:T.blue,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Активный эндшпиль · цель: {currentEndgame.goal==="Win"?"победа":"ничья"} за {currentEndgame.side==="w"?"белых":"чёрных"}</div>
+                  <div style={{fontSize:15,fontWeight:900,color:T.text,lineHeight:1.2,marginTop:2}}>{currentEndgame.name}</div>
+                </div>
+                <div style={{fontSize:13,fontWeight:900,color:"#78350f",background:"#fef3c7",padding:"3px 10px",borderRadius:10,whiteSpace:"nowrap"}}>+{currentEndgame.reward} C</div>
+              </div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginTop:4}}>{currentEndgame.hint}</div>
+              <button onClick={()=>sCurrentEndgame(null)} style={{marginTop:6,padding:"4px 10px",borderRadius:6,border:"1px solid "+T.border,background:"#fff",color:T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>Отказаться</button>
+            </div>}
             {/* Position import */}
-            <div style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe",padding:"10px 12px"}}>
+            <div id="coach-import-section" style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe",padding:"10px 12px"}}>
               <div style={{fontSize:11,fontWeight:800,color:T.blue,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>📥 Загрузить позицию</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
                 <button onClick={()=>{
@@ -1884,18 +3289,17 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:8}}>{(["q","r","b","n"] as const).map(pt=><button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} style={{padding:"8px 12px",borderRadius:10,border:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",width:60,height:60}}><Piece type={pt} color={pCol}/></button>)}</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);
-      const[categoryFilter,sCategoryFilter]=[gamesFilter,sGamesFilter];
+      const categoryFilter=gamesFilter;
+      const sCategoryFilter=sGamesFilter;
       const filtered=byCategory(categoryFilter);
-      // Rating history: reverse order (oldest first)
       const ratingHistory=[...savedGames].reverse().map((g,i)=>({x:i,y:g.rating}));
       const minR=Math.min(...ratingHistory.map(p=>p.y),rat)-50;
       const maxR=Math.max(...ratingHistory.map(p=>p.y),rat)+50;
       const range=Math.max(100,maxR-minR);
-      // Stats by category
       const catStats=(cat:string)=>{
         const games=byCategory(cat);
         const wins=games.filter(g=>g.result.includes("You win")||g.result.includes("win!")).length;
@@ -1903,86 +3307,632 @@ export default function CyberChessPage(){
         const draws=games.length-wins-losses;
         return{total:games.length,wins,losses,draws};
       };
-      return<div onClick={()=>sGamesModalOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:24,maxWidth:900,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div>
-              <div style={{fontSize:22,fontWeight:900,color:T.text}}>📜 Мои партии</div>
-              <div style={{fontSize:13,color:T.dim,marginTop:2}}>{savedGames.length} партий · текущий рейтинг {rat}</div>
-            </div>
-            <button onClick={()=>sGamesModalOpen(false)} style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",color:T.dim}}>✕ Закрыть</button>
+      return<Modal open={gamesModalOpen} onClose={()=>sGamesModalOpen(false)} size="xl"
+        title={<span>📜 Мои партии <span style={{fontSize:13,color:CC.textDim,fontWeight:600,marginLeft:8}}>{savedGames.length} · {rat} ELO</span></span>}>
+
+        {ratingHistory.length>1&&<div style={{background:"#0f172a",borderRadius:RADIUS.md,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[3],border:"1px solid #334155"}}>
+          <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2],display:"flex",justifyContent:"space-between"}}>
+            <span>📈 Прогресс рейтинга</span>
+            <span style={{fontSize:10,color:"#64748b"}}>{minR} — {maxR}</span>
           </div>
+          <svg viewBox={`0 0 ${Math.max(100,ratingHistory.length*8)} 80`} preserveAspectRatio="none" style={{width:"100%",height:90,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 100%)",borderRadius:6}}>
+            <line x1="0" y1="40" x2={ratingHistory.length*8} y2="40" stroke="#475569" strokeWidth="0.3" strokeDasharray="2,2"/>
+            <polyline fill="none" stroke="#7c3aed" strokeWidth="1.8" points={ratingHistory.map(p=>`${p.x*8},${80-((p.y-minR)/range)*80}`).join(" ")}/>
+            {ratingHistory.map(p=><circle key={p.x} cx={p.x*8} cy={80-((p.y-minR)/range)*80} r="1.8" fill="#a78bfa"/>)}
+          </svg>
+        </div>}
 
-          {/* Rating chart */}
-          {ratingHistory.length>1&&<div style={{background:"#0f172a",borderRadius:10,padding:"14px 16px",marginBottom:14,border:"1px solid #334155"}}>
-            <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
-              <span>📈 Прогресс рейтинга</span>
-              <span style={{fontSize:10,color:"#64748b"}}>{minR} — {maxR}</span>
-            </div>
-            <svg viewBox={`0 0 ${Math.max(100,ratingHistory.length*8)} 80`} preserveAspectRatio="none" style={{width:"100%",height:90,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 100%)",borderRadius:6}}>
-              <line x1="0" y1="40" x2={ratingHistory.length*8} y2="40" stroke="#475569" strokeWidth="0.3" strokeDasharray="2,2"/>
-              <polyline fill="none" stroke="#7c3aed" strokeWidth="1.8" points={ratingHistory.map(p=>`${p.x*8},${80-((p.y-minR)/range)*80}`).join(" ")}/>
-              {ratingHistory.map(p=><circle key={p.x} cx={p.x*8} cy={80-((p.y-minR)/range)*80} r="1.8" fill="#a78bfa"/>)}
-            </svg>
-          </div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:SPACE[2],marginBottom:SPACE[3]}}>
+          {(["all","Bullet","Blitz","Rapid"] as const).map(cat=>{
+            const s=catStats(cat);const active=categoryFilter===cat;
+            const icon=cat==="Bullet"?"⚡":cat==="Blitz"?"🔥":cat==="Rapid"?"⏱":"🎯";
+            const pct=s.total>0?Math.round(s.wins/s.total*100):0;
+            return<button key={cat} onClick={()=>sCategoryFilter(cat)}
+              className="cc-focus-ring"
+              style={{padding:SPACE[3],borderRadius:RADIUS.md,
+                border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                background:active?CC.brandSoft:CC.surface1,cursor:"pointer",textAlign:"left",
+                transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+              <div style={{fontSize:13,fontWeight:900,color:active?CC.brand:CC.text,marginBottom:SPACE[1]}}>{icon} {cat==="all"?"Все":cat}</div>
+              <div style={{fontSize:22,fontWeight:900,color:CC.text,lineHeight:1}}>{s.total}</div>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:700,marginTop:SPACE[1],textTransform:"uppercase" as const,letterSpacing:0.5}}>партий</div>
+              {s.total>0&&<div style={{marginTop:SPACE[2],display:"flex",gap:6,fontSize:11,fontWeight:800}}>
+                <span style={{color:CC.brand}}>{s.wins}W</span>
+                <span style={{color:CC.danger}}>{s.losses}L</span>
+                <span style={{color:CC.textDim}}>{s.draws}D</span>
+                <span style={{marginLeft:"auto",color:pct>=60?CC.brand:pct>=40?CC.info:CC.danger}}>{pct}%</span>
+              </div>}
+            </button>;
+          })}
+        </div>
 
-          {/* Category stats */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-            {(["all","Bullet","Blitz","Rapid"] as const).map(cat=>{
-              const s=catStats(cat);const active=categoryFilter===cat;
-              const icon=cat==="Bullet"?"⚡":cat==="Blitz"?"🔥":cat==="Rapid"?"⏱":"🎯";
-              const pct=s.total>0?Math.round(s.wins/s.total*100):0;
-              return<button key={cat} onClick={()=>sCategoryFilter(cat)} style={{padding:"12px",borderRadius:9,border:active?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:active?"rgba(5,150,105,0.06)":"#fff",cursor:"pointer",textAlign:"left"}}>
-                <div style={{fontSize:14,fontWeight:900,color:active?T.accent:T.text,marginBottom:6}}>{icon} {cat==="all"?"Все":cat}</div>
-                <div style={{fontSize:22,fontWeight:900,color:T.text,lineHeight:1}}>{s.total}</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700,marginTop:4,textTransform:"uppercase" as const,letterSpacing:"0.05em"}}>партий</div>
-                {s.total>0&&<div style={{marginTop:8,display:"flex",gap:6,fontSize:11,fontWeight:800}}>
-                  <span style={{color:T.accent}}>{s.wins}W</span>
-                  <span style={{color:T.danger}}>{s.losses}L</span>
-                  <span style={{color:T.dim}}>{s.draws}D</span>
-                  <span style={{marginLeft:"auto",color:pct>=60?T.accent:pct>=40?T.blue:T.danger}}>{pct}%</span>
-                </div>}
-              </button>;
-            })}
-          </div>
-
-          {/* Games list */}
-          <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:400,overflowY:"auto"}}>
-            {filtered.length===0?<div style={{padding:"40px",textAlign:"center",color:T.dim,fontSize:14}}>Нет партий в этой категории</div>:
-            filtered.map(g=>{
-              const isWin=g.result.includes("You win")||g.result.includes("win!");
-              const isDraw=g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
-              const date=new Date(g.date);
-              return<button key={g.id} onClick={()=>{
-                sGamesModalOpen(false);sTab("analysis");
-                const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
-                for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
-                setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);
-                showToast(`Партия открыта · ${mh.length} ходов`,"success");
-              }} style={{width:"100%",padding:"12px 16px",border:"none",borderBottom:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
-                <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0,flex:1}}>
-                  <span style={{fontSize:16,fontWeight:900,color:isWin?T.accent:isDraw?T.dim:T.danger,minWidth:24,textAlign:"center"}}>{isWin?"W":isDraw?"D":"L"}</span>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:2}}>{g.opening||"Без дебюта"}</div>
-                    <div style={{fontSize:11,color:T.dim,display:"flex",gap:8,flexWrap:"wrap"}}>
-                      <span>{g.category||"—"}</span>
-                      <span>· {g.aiLevel}</span>
-                      <span>· {g.tc}</span>
-                      <span>· {g.moves.length} ходов</span>
-                      <span>· {g.playerColor==="w"?"⚪":"⚫"}</span>
-                    </div>
+        <div style={{border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,overflow:"hidden",maxHeight:400,overflowY:"auto"}}>
+          {filtered.length===0?<div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>Нет партий в этой категории</div>:
+          filtered.map(g=>{
+            const isWin=g.result.includes("You win")||g.result.includes("win!");
+            const isDraw=g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+            const resCol=isWin?CC.brand:isDraw?CC.textDim:CC.danger;
+            const date=new Date(g.date);
+            return<button key={g.id} className="cc-focus-ring" onClick={()=>{
+              sGamesModalOpen(false);
+              const destTab=tab==="coach"?"coach":"analysis";
+              sTab(destTab);
+              const ch=new Chess();const fh:string[]=[ch.fen()];const mh:string[]=[];
+              for(const san of g.moves){try{const mv=ch.move(san);if(mv){mh.push(mv.san);fh.push(ch.fen())}}catch{break}}
+              setGame(ch);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(g.result);sOn(false);sSetup(false);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.playerColor);sFlip(g.playerColor==="b");
+              if(destTab==="coach"){sCoachAIEnabled(false);sEditorMode(false);}
+              showToast(`Партия открыта · ${mh.length} ходов${destTab==="coach"?" · Coach готов к разбору":""}`,"success");
+            }} style={{width:"100%",padding:`${SPACE[3]}px ${SPACE[4]}px`,border:"none",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[3],minWidth:0,flex:1}}>
+                <div style={{width:32,height:32,borderRadius:"50%",background:resCol+"18",color:resCol,
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0}}>
+                  {isWin?"W":isDraw?"D":"L"}
+                </div>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:14,fontWeight:700,color:CC.text,marginBottom:2}}>{g.opening||"Без дебюта"}</div>
+                  <div style={{fontSize:11,color:CC.textDim,display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+                    <span>{g.category||"—"}</span>
+                    <span>· {g.aiLevel}</span>
+                    <span>· {g.tc}</span>
+                    <span>· {g.moves.length} ходов</span>
+                    <span>· {g.playerColor==="w"?"⚪":"⚫"}</span>
                   </div>
                 </div>
-                <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
-                  <div style={{fontSize:13,fontWeight:900,color:T.text}}>{g.rating}</div>
-                  <div style={{fontSize:10,color:T.dim,marginTop:2}}>{date.toLocaleDateString("ru-RU")}</div>
-                </div>
-              </button>;
-            })}
+              </div>
+              <div style={{textAlign:"right",flexShrink:0,marginLeft:SPACE[2]}}>
+                <div style={{fontSize:13,fontWeight:900,color:CC.gold}}>{g.rating}</div>
+                <div style={{fontSize:10,color:CC.textDim,marginTop:2}}>{date.toLocaleDateString("ru-RU")}</div>
+              </div>
+            </button>;
+          })}
+        </div>
+      </Modal>;
+    })()}
+
+    {/* Chessy Shop */}
+    {showShop&&(()=>{
+      type ShopItem={id:string;name:string;desc:string;cost:number;kind:"unlock"|"action";onBuy?:()=>void;disabled?:boolean};
+      const items:ShopItem[]=[
+        {id:"master_ai",name:"Master AI (2400 ELO)",desc:"Разблокирует самого сильного соперника",cost:30,kind:"unlock"},
+        {id:"theme_neon",name:"Тема Neon ⚡",desc:"Киберпанк-доска, неоновый градиент",cost:50,kind:"unlock"},
+        {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
+        {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
+        {id:"ai_rival",name:"AI Rival «Алексей» 🧠",desc:"Персональный AI-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
+        {id:"hint_ghost",name:"Ghost-подсказка",desc:"На 3 секунды увидишь лучший ход прямо на доске (разовое использование в текущей партии)",cost:15,kind:"action",disabled:!on||!!over,onBuy:()=>{
+          if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+          sShowShop(false);
+          showToast("🧠 Считаю подсказку...","info");
+          sfR.current.go(game.fen(),12,(f,t)=>{
+            if(!f||!t){showToast("Не нашёл хода","error");return}
+            sArrows([{from:f as Square,to:t as Square,c:"#22c55e"}]);
+            setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),3000);
+          });
+        }},
+        {id:"deep_review",name:"Глубокий разбор партии",desc:"Coach пройдёт по всем ходам и выдаст план на будущее",cost:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
+      ];
+      const purchaseUnlock=(id:string,cost:number,name:string)=>{
+        if(chessy.owned[id]){showToast("Уже куплено","info");return}
+        if(!spendChessy(cost,`покупка: ${name}`))return;
+        sChessy(c=>({...c,owned:{...c.owned,[id]:true}}));
+        showToast(`✓ Куплено: ${name}`,"success");
+      };
+      return <Modal open={showShop} onClose={()=>sShowShop(false)} size="lg"
+        title={<span>🛒 Chessy · магазин <Badge tone="gold" size="md" style={{marginLeft:8}}><Icon.Coin width={12} height={12}/> {chessy.balance}</Badge></span>}>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:SPACE[2],marginBottom:SPACE[4]}}>
+          {items.map(it=>{
+            const owned=it.kind==="unlock"&&chessy.owned[it.id];
+            const afford=chessy.balance>=it.cost;
+            const dis=owned||it.disabled||!afford;
+            return <div key={it.id} style={{
+              padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
+              border:`1px solid ${owned?"#a7f3d0":CC.border}`,
+              background:owned?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":CC.surface1,
+              display:"flex",flexDirection:"column",gap:SPACE[2],
+              boxShadow:SHADOW.sm
+            }}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:SPACE[2]}}>
+                <div style={{fontWeight:900,color:CC.text,fontSize:14,lineHeight:1.3}}>{it.name}</div>
+                {owned?<Badge tone="brand" size="xs">✓ Куплено</Badge>:<Badge tone="gold" size="sm"><Icon.Coin width={11} height={11}/> {it.cost}</Badge>}
+              </div>
+              <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5}}>{it.desc}</div>
+              {!owned&&<Btn
+                disabled={!!dis}
+                variant={dis?"secondary":"primary"}
+                size="sm"
+                full
+                onClick={()=>{if(it.kind==="unlock")purchaseUnlock(it.id,it.cost,it.name);else if(it.onBuy){if(!spendChessy(it.cost,it.name))return;it.onBuy()}}}
+              >
+                {it.disabled?"Нужна сыгранная партия":!afford?`Нужно +${it.cost-chessy.balance}`:it.kind==="action"?"Использовать":"Купить"}
+              </Btn>}
+            </div>;
+          })}
+        </div>
+
+        <div style={{padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.md,
+          background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #fcd34d"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:SPACE[1]}}>💡 Как заработать Chessy</div>
+          <div style={{fontSize:12,color:"#b45309",lineHeight:1.7}}>
+            · Победа против AI: 5–160 (чем сильнее соперник и длиннее партия — тем больше)<br/>
+            · Пазл: 2–15 (по рейтингу)<br/>
+            · Daily-бонус: 5, 30 (streak 3), 100 (streak 7)<br/>
+            · Достижения: 30–400 за вехи
           </div>
         </div>
-      </div>;
+
+        {Object.keys(chessy.ach).length>0&&<div style={{marginTop:SPACE[3]}}>
+          <div style={{fontSize:12,fontWeight:800,color:CC.textDim,marginBottom:SPACE[2],textTransform:"uppercase" as const,letterSpacing:0.5}}>🏆 Достижения · {Object.keys(chessy.ach).length}</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {Object.keys(chessy.ach).map(k=><Badge key={k} tone="neutral" size="sm" style={{padding:"4px 10px"}}>{ACH_LABELS[k]||k}</Badge>)}
+          </div>
+        </div>}
+
+        {chessyLog.length>0&&<details style={{marginTop:SPACE[3]}}>
+          <summary style={{cursor:"pointer",fontSize:12,fontWeight:800,color:CC.textDim,textTransform:"uppercase" as const,letterSpacing:0.5,padding:`${SPACE[2]}px 0`}}>
+            📜 История Chessy · last {chessyLog.length}
+          </summary>
+          <div style={{marginTop:SPACE[2],maxHeight:240,overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md}}>
+            {chessyLog.map((e,i)=>{
+              const ago=Math.max(1,Math.round((Date.now()-e.ts)/60000));
+              const agoStr=ago<60?`${ago}м`:ago<1440?`${Math.round(ago/60)}ч`:`${Math.round(ago/1440)}д`;
+              return <div key={i} style={{
+                display:"flex",alignItems:"center",gap:SPACE[2],
+                padding:`${SPACE[1]+2}px ${SPACE[3]}px`,
+                borderBottom:i<chessyLog.length-1?`1px solid ${CC.border}`:"none",
+                fontSize:12
+              }}>
+                <span style={{fontWeight:900,color:e.sign>0?CC.brand:CC.danger,minWidth:40,fontFamily:"ui-monospace,monospace"}}>
+                  {e.sign>0?"+":"−"}{e.amount}
+                </span>
+                <span style={{flex:1,color:CC.text}}>{e.reason}</span>
+                <span style={{color:CC.textMute,fontSize:11}}>{agoStr}</span>
+              </div>;
+            })}
+          </div>
+        </details>}
+      </Modal>;
     })()}
+
+    {/* Endgame trainer modal */}
+    <Modal open={showEndgames} onClose={()=>sShowEndgames(false)} size="lg"
+      title="🏰 Тренировка эндшпилей">
+      <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
+        12 классических позиций от KP–K до KBN–K. Победил = Chessy + разбор от Алексея.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:SPACE[2]}}>
+        {ENDGAMES.map((eg,i)=>{
+          const gTone:"brand"|"info"=eg.goal==="Win"?"brand":"info";
+          return <button key={i} onClick={()=>loadEndgame(eg)}
+            className="cc-focus-ring"
+            style={{padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
+              border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",
+              textAlign:"left",display:"flex",flexDirection:"column",gap:SPACE[1],
+              transition:`all ${MOTION.base} ${MOTION.ease}`,
+              boxShadow:SHADOW.sm}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
+              <div style={{fontWeight:900,color:CC.text,fontSize:14,lineHeight:1.3}}>{eg.name}</div>
+              <Badge tone={gTone} size="xs">{eg.goal==="Win"?"Выиграть":"Удержать"} · {eg.side==="w"?"♔":"♚"}</Badge>
+            </div>
+            <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5}}>{eg.hint.slice(0,110)}{eg.hint.length>110?"…":""}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:SPACE[1]}}>
+              <Badge tone="gold" size="xs">+{eg.reward} Chessy</Badge>
+              <span style={{fontSize:12,fontWeight:800,color:CC.brand}}>Начать →</span>
+            </div>
+          </button>;
+        })}
+      </div>
+      <div style={{marginTop:SPACE[3],padding:`${SPACE[2]}px ${SPACE[3]}px`,
+        borderRadius:RADIUS.md,background:"#f0fdf4",border:"1px solid #a7f3d0",
+        fontSize:12,color:"#065f46"}}>
+        💡 Открываются в Coach — спроси Алексея, как играть. Голос включается в шапке Coach'а (🔊).
+      </div>
+    </Modal>
+
+    {/* First-time welcome tour */}
+    {tourStep>=0&&(()=>{
+      const slides=[
+        {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
+          <p style={{margin:"0 0 10px"}}>Полноценный шахматный тренажёр с ИИ-коучем, ежедневными задачами и собственной валютой.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Ты уже получил <b style={{color:"#b45309"}}>+50 Chessy</b> за регистрацию.</p>
+        </>},
+        {icon:"💰",title:"Зарабатывай Chessy",body:<>
+          <p style={{margin:"0 0 10px"}}>За победы, решённые пазлы, достижения и ежедневный заход. Streak 7 дней — +100.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Трать на премиум: разблокировка Master AI, эксклюзивные темы доски, глубокий разбор партии от тренера.</p>
+        </>},
+        {icon:"🎓",title:"ИИ-тренер Алексей",body:<>
+          <p style={{margin:"0 0 10px"}}>Задай любой вопрос по позиции — тренер ответит на основе Stockfish-анализа, без фантазий.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Можно <b>включить голос</b> в Coach — ответы будут зачитываться вслух. Этого нет на lichess и chess.com.</p>
+        </>},
+      ];
+      const s=slides[tourStep];const last=tourStep===slides.length-1;
+      const finish=()=>{try{localStorage.setItem("aevion_tour_seen_v1","1")}catch{}sTourStep(-1)};
+      return <Modal open={tourStep>=0} onClose={finish} size="sm" title={undefined}>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:52,lineHeight:1,marginBottom:10}}>{s.icon}</div>
+          <div style={{fontSize:20,fontWeight:900,color:CC.text,marginBottom:12,lineHeight:1.25}}>{s.title}</div>
+          <div style={{fontSize:14,color:CC.text,lineHeight:1.6,textAlign:"left"}}>{s.body}</div>
+          <div style={{display:"flex",justifyContent:"center",gap:5,margin:"18px 0"}}>
+            {slides.map((_,i)=><div key={i} style={{
+              width:i===tourStep?22:7,height:7,borderRadius:RADIUS.full,
+              background:i===tourStep?CC.brand:CC.surface3,
+              transition:`width ${MOTION.base} ${MOTION.ease}`
+            }}/>)}
+          </div>
+          <div style={{display:"flex",gap:SPACE[2]}}>
+            <Btn variant="secondary" size="md" full onClick={finish}>Пропустить</Btn>
+            <Btn variant="primary" size="md" full onClick={()=>{if(last)finish();else sTourStep(tourStep+1)}}
+              style={{flex:2,background:`linear-gradient(135deg,${CC.brand},#10b981)`}}>
+              {last?"Поехали! ▶":"Дальше →"}
+            </Btn>
+          </div>
+        </div>
+      </Modal>;
+    })()}
+
+    {/* Keyboard Shortcuts Help Overlay */}
+    <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title="⌨ Горячие клавиши">
+      <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Работают во всех вкладках, пока курсор не в поле ввода.</div>
+      <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 16px",fontSize:14,alignItems:"center"}}>
+        {[
+          ["←  / →","Листать ходы назад / вперёд"],
+          ["Home / End","К первому / последнему ходу"],
+          ["F","Перевернуть доску"],
+          ["M","Вкл./выкл. звук"],
+          ["N","Новая партия (в Play, до старта)"],
+          ["Esc","Сбросить все премувы"],
+          ["?","Показать / скрыть эту подсказку"],
+          ["ПКМ-drag","Стрелка на доске (Analysis / Coach / после партии)"],
+          ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
+        ].map(([k,v])=><React.Fragment key={k}>
+          <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:12,padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text,whiteSpace:"nowrap"}}>{k}</kbd>
+          <span style={{color:CC.text}}>{v}</span>
+        </React.Fragment>)}
+      </div>
+    </Modal>
+
+    {/* Opening Trainer modal — выбор дебюта */}
+    <Modal open={showOpeningTrainer} onClose={()=>sShowOpeningTrainer(false)} size="lg" title="🎓 Opening Trainer">
+      <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[3]}}>
+        Выбери дебют — бот сыграет чёрными, ты ведёшь белыми по скрипту. За безошибочный — <b>+10 Chessy</b>, с ошибками — <b>+5</b>.
+      </div>
+      <input
+        type="text"
+        value={openingDrillFilter}
+        onChange={e=>sOpeningDrillFilter(e.target.value)}
+        placeholder="🔍 Поиск: Сицилианская, Italian, B20..."
+        className="cc-focus-ring"
+        style={{width:"100%",padding:"8px 12px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,marginBottom:SPACE[3]}}
+      />
+      <div style={{maxHeight:400,overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md}}>
+        {(()=>{
+          const q=openingDrillFilter.trim().toLowerCase();
+          const list=(openingsDb||[]).filter(op=>{
+            if(!q)return true;
+            return op.name.toLowerCase().includes(q)||op.eco.toLowerCase().includes(q);
+          }).slice(0,80);
+          if(openingsDb.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>База дебютов загружается…</div>;
+          if(list.length===0)return <div style={{padding:40,textAlign:"center",color:CC.textDim,fontSize:14}}>Ничего не найдено</div>;
+          return list.map((op,i)=>{
+            const sans=(typeof op.moves==="string"?op.moves.split(/\s+/):[]).filter(Boolean);
+            if(sans.length<2)return null;
+            return <button key={op.eco+i}
+              className="cc-focus-ring"
+              onClick={()=>{
+                // Start drill
+                const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);
+                sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);
+                sPCol("w");sFlip(false);sOn(true);sSetup(false);sTab("play");
+                sOpeningDrill({eco:op.eco,name:op.name,moves:sans,ply:0,mistakes:0});
+                sShowOpeningTrainer(false);
+                showToast(`🎓 ${op.eco} · ${op.name} — ходи!`,"info");
+              }}
+              style={{width:"100%",padding:`${SPACE[3]}px ${SPACE[4]}px`,border:"none",
+                borderBottom:i<list.length-1?`1px solid ${CC.border}`:"none",
+                background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3]}}>
+              <Badge tone="accent" size="sm">{op.eco}</Badge>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:CC.text,marginBottom:2}}>{op.name}</div>
+                <div style={{fontSize:11,color:CC.textMute,fontFamily:"ui-monospace, monospace"}}>
+                  {sans.slice(0,6).join(" ")}{sans.length>6?" …":""}
+                  <span style={{marginLeft:6,color:CC.textDim}}>· {sans.length} полуходов</span>
+                </div>
+              </div>
+              <span style={{fontSize:12,fontWeight:800,color:CC.brand}}>▶</span>
+            </button>;
+          });
+        })()}
+      </div>
+    </Modal>
+
+    {/* Game DNA */}
+    <Modal open={showGameDna} onClose={()=>sShowGameDna(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🧬 Твой Game DNA <Badge tone="info" size="sm">{gameDna.total} партий</Badge></span>}>
+      {savedGames.length===0?<div style={{padding:SPACE[6],textAlign:"center",color:CC.textDim,fontSize:14}}>
+        <div style={{fontSize:40,marginBottom:SPACE[3]}}>🧬</div>
+        <div style={{fontWeight:800,marginBottom:SPACE[2]}}>Пока пусто</div>
+        <div>Сыграй 5–10 партий — AEVION построит твою персональную диагностику: лучший/худший дебют, любимое время, слабая фаза, тренды.</div>
+      </div>:<div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+
+        {/* Top stats */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:SPACE[2]}}>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Винрейт</div>
+            <div style={{fontSize:28,fontWeight:900,color:gameDna.winPct>=55?CC.brand:gameDna.winPct>=40?CC.info:CC.danger,lineHeight:1.1,marginTop:2}}>{gameDna.winPct}%</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{gameDna.wins}W {gameDna.losses}L {gameDna.draws}D</div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Streak</div>
+            <div style={{fontSize:28,fontWeight:900,
+              color:gameDna.currentStreak.type==="W"?CC.brand:gameDna.currentStreak.type==="L"?CC.danger:CC.textDim,
+              lineHeight:1.1,marginTop:2}}>{gameDna.currentStreak.count>0?`${gameDna.currentStreak.count}${gameDna.currentStreak.type}`:"—"}</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
+              {gameDna.currentStreak.type==="W"?"побед подряд":gameDna.currentStreak.type==="L"?"поражений":gameDna.currentStreak.type==="D"?"ничьих":"нейтрально"}
+            </div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Тренд 10</div>
+            <div style={{fontSize:28,fontWeight:900,
+              color:gameDna.recentTrend==="up"?CC.brand:gameDna.recentTrend==="down"?CC.danger:CC.textDim,
+              lineHeight:1.1,marginTop:2}}>
+              {gameDna.recentTrend==="up"?"↑":gameDna.recentTrend==="down"?"↓":gameDna.recentTrend==="flat"?"≈":"—"}
+              {gameDna.recentTrend!=="insufficient"&&<span style={{fontSize:16}}>{gameDna.recentWinPctDelta>0?"+":""}{gameDna.recentWinPctDelta}%</span>}
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
+              {gameDna.recentTrend==="up"?"рост":gameDna.recentTrend==="down"?"спад":gameDna.recentTrend==="flat"?"стабильно":"мало партий"}
+            </div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface2">
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Цвет</div>
+            <div style={{fontSize:28,lineHeight:1.1,marginTop:2}}>
+              {gameDna.preferredColor==="w"?"♔":gameDna.preferredColor==="b"?"♚":"⚖"}
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
+              W {gameDna.whiteWinPct}% · B {gameDna.blackWinPct}%
+            </div>
+          </Card>
+        </div>
+
+        {/* Insights list */}
+        <Card padding={SPACE[3]} tone="surface1">
+          <SectionHeader title="🔍 ИНСАЙТЫ" hint={`${gameDna.insights.length} персональных`}/>
+          <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+            {gameDna.insights.map((ins,i)=><div key={i} style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,background:CC.surface2,borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,color:CC.text,lineHeight:1.5}}>
+              {ins}
+            </div>)}
+          </div>
+        </Card>
+
+        {/* Openings breakdown */}
+        {gameDna.bestOpening&&<div style={{display:"grid",gridTemplateColumns:gameDna.worstOpening?"1fr 1fr":"1fr",gap:SPACE[2]}}>
+          <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderColor:"#a7f3d0"}}>
+            <SectionHeader title="🟢 СИЛЬНЫЙ ДЕБЮТ"/>
+            <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:SPACE[1]}}>{gameDna.bestOpening.opening}</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+              <Badge tone="brand" size="xs">{gameDna.bestOpening.winPct}% побед</Badge>
+              &nbsp;в {gameDna.bestOpening.total} партиях
+            </div>
+          </Card>
+          {gameDna.worstOpening&&gameDna.worstOpening.opening!==gameDna.bestOpening.opening&&
+            <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#fef2f2,#fff1f2)",borderColor:"#fca5a5"}}>
+              <SectionHeader title="🔴 СЛАБЫЙ ДЕБЮТ"/>
+              <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:SPACE[1]}}>{gameDna.worstOpening.opening}</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+                <Badge tone="danger" size="xs">{gameDna.worstOpening.winPct}% побед</Badge>
+                &nbsp;в {gameDna.worstOpening.total} партиях
+              </div>
+            </Card>}
+        </div>}
+
+        {/* Timing & length */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:SPACE[2]}}>
+          {gameDna.bestHour!==null&&<Card padding={SPACE[3]} tone="surface1">
+            <SectionHeader title="⏰ ЛУЧШЕЕ ВРЕМЯ"/>
+            <div style={{fontSize:20,fontWeight:900,color:CC.text,marginTop:SPACE[1]}}>
+              {gameDna.bestHour}:00–{(gameDna.bestHour+1)%24}:00
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+              {gameDna.bestHourWinPct}% побед в этот час
+            </div>
+          </Card>}
+          <Card padding={SPACE[3]} tone="surface1">
+            <SectionHeader title="⚡ ДЛИНА ПАРТИИ"/>
+            <div style={{fontSize:13,color:CC.text,marginTop:SPACE[1]}}>
+              Победы: <b>{Math.round(gameDna.avgLengthWin/2)}</b> ходов<br/>
+              Поражения: <b>{Math.round(gameDna.avgLengthLoss/2)}</b> ходов
+            </div>
+          </Card>
+          <Card padding={SPACE[3]} tone="surface1">
+            <SectionHeader title="📊 РЕЙТИНГ"/>
+            <div style={{fontSize:20,fontWeight:900,color:gameDna.ratingGrowth>=0?CC.brand:CC.danger,marginTop:SPACE[1]}}>
+              {gameDna.ratingGrowth>=0?"+":""}{gameDna.ratingGrowth}
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>
+              за {gameDna.total} партий
+            </div>
+          </Card>
+        </div>
+
+        <div style={{display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowGameDna(false)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{sShowGameDna(false);sGamesModalOpen(true)}}>📜 Все партии</Btn>
+        </div>
+      </div>}
+    </Modal>
+
+    {/* Puzzle Expansion instructions */}
+    <Modal open={showPuzzleExpand} onClose={()=>sShowPuzzleExpand(false)} size="md" title="🧩 Расширить базу пазлов до 20 000">
+      <div style={{fontSize:13,color:CC.text,lineHeight:1.6}}>
+        <p style={{margin:`0 0 ${SPACE[3]}px`}}>
+          Lichess выложил <b>~4 миллиона</b> пазлов под CC0. Мы можем импортировать лучшие 20 000 (~5 MB) с стратифицированной выборкой по рейтингу и темам — <b>~5 минут работы</b>, делается один раз.
+        </p>
+        <ol style={{margin:0,paddingLeft:20,fontSize:13,lineHeight:1.8}}>
+          <li>
+            Скачай CSV:&nbsp;
+            <a href="https://database.lichess.org/#puzzles" target="_blank" rel="noreferrer" style={{color:CC.brand,fontWeight:700}}>
+              database.lichess.org/#puzzles
+            </a>
+            &nbsp;(~300 МБ .zst)
+          </li>
+          <li>Распакуй (7-Zip на Windows или <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>zstd -d</code>)</li>
+          <li>Положи <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>lichess_db_puzzle.csv</code> в корень проекта <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>aevion-core/</code></li>
+          <li>
+            В PowerShell из корня:
+            <div style={{marginTop:SPACE[2],padding:SPACE[2],background:"#0f172a",color:"#d1d5db",borderRadius:RADIUS.sm,fontSize:11,fontFamily:"ui-monospace, monospace",overflowX:"auto",whiteSpace:"nowrap"}}>
+              node frontend/scripts/import-lichess-puzzles.mjs --in ./lichess_db_puzzle.csv --out ./frontend/public/puzzles.json --limit 20000 --min-rating 600 --max-rating 2600 --min-plays 100 --min-popularity 80
+            </div>
+          </li>
+          <li>Обнови страницу — <code style={{padding:"1px 5px",background:CC.surface3,borderRadius:4,fontSize:12}}>PUZZLES.length</code> станет 20 000.</li>
+        </ol>
+        <div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,fontSize:12,color:"#065f46"}}>
+          💡 Скрипт применяет стартовый ход соперника к FEN, так что загружаемая позиция уже «студент ходит». Фильтр по popularity/plays убирает шумные пазлы.
+        </div>
+        <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowPuzzleExpand(false)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{
+            const cmd="node frontend/scripts/import-lichess-puzzles.mjs --in ./lichess_db_puzzle.csv --out ./frontend/public/puzzles.json --limit 20000 --min-rating 600 --max-rating 2600 --min-plays 100 --min-popularity 80";
+            try{navigator.clipboard.writeText(cmd).then(()=>showToast("✓ Команда скопирована","success")).catch(()=>showToast("Не получилось","error"))}catch{showToast("Clipboard недоступен","error")}
+          }}>📋 Копировать команду</Btn>
+        </div>
+      </div>
+    </Modal>
+
+    {/* Chessy Explainer */}
+    <Modal open={showChessyInfo} onClose={()=>sShowChessyInfo(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon.Coin width={20} height={20}/> Как работает Chessy</span>}>
+      <div style={{fontSize:14,color:CC.text,lineHeight:1.55}}>
+        <p style={{margin:`0 0 ${SPACE[3]}px`}}>
+          <b>Chessy</b> — игровая валюта AEVION CyberChess. Зарабатывай, играя и решая пазлы. Трать на премиум-функции, подсказки и тренировки.
+        </p>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[3],marginBottom:SPACE[4]}}>
+          {/* Earn */}
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
+            <div style={{fontSize:12,fontWeight:900,color:CC.brand,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>💰 Как заработать</div>
+            <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
+              <li><b>Победа</b> 5–160 (зависит от силы AI и времени)</li>
+              <li><b>Пазл</b> 2–15 (по рейтингу задачи)</li>
+              <li><b>Daily puzzle</b> +50 за первое решение в день</li>
+              <li><b>Daily bonus</b> +5 / +30 (streak 3) / +100 (streak 7)</li>
+              <li><b>Puzzle Rush</b> 2 за пазл + бонус по best streak</li>
+              <li><b>Исправленная ошибка</b> +3 (Blunder Rewind)</li>
+              <li><b>Достижения</b> 30–400</li>
+              <li><b>Welcome</b> +50 при первом визите</li>
+            </ul>
+          </div>
+          {/* Spend */}
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`}}>
+            <div style={{fontSize:12,fontWeight:900,color:CC.danger,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>🛒 На что тратить</div>
+            <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
+              <li><b>Takeback</b> 3 (откат хода в партии vs AI)</li>
+              <li><b>Подсказка в пазле</b> 5</li>
+              <li><b>Ghost-подсказка</b> 15 (стрелка лучшего хода)</li>
+              <li><b>Глубокий разбор</b> 20 (Coach)</li>
+              <li><b>Master AI unlock</b> 30 (2400 ELO)</li>
+              <li><b>Premium-тема</b> 50 (Neon / Obsidian / Sakura)</li>
+              <li><b>AI Rival Алексей</b> 100 (beta)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.goldSoft,border:"1px solid #fcd34d",marginBottom:SPACE[3]}}>
+          <div style={{fontSize:12,fontWeight:900,color:"#92400e",letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>📊 Твоя статистика</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[2]}}>
+            <div><div style={{fontSize:11,color:"#b45309",fontWeight:700}}>Сейчас</div><div style={{fontSize:22,fontWeight:900,color:"#78350f"}}>{chessy.balance}</div></div>
+            <div><div style={{fontSize:11,color:"#b45309",fontWeight:700}}>Всего</div><div style={{fontSize:22,fontWeight:900,color:"#78350f"}}>{chessy.lifetime}</div></div>
+            <div><div style={{fontSize:11,color:"#b45309",fontWeight:700}}>Streak</div><div style={{fontSize:22,fontWeight:900,color:"#78350f"}}>{chessy.streak} дн.</div></div>
+          </div>
+        </div>
+
+        {/* Leaderboard — local simulated */}
+        {(()=>{
+          const board:{name:string;rating:number;chessy:number;country:string;isMe?:boolean}[]=[
+            {name:"Magnus C.",rating:2847,chessy:8800,country:"🇳🇴"},
+            {name:"Hikaru N.",rating:2795,chessy:7600,country:"🇺🇸"},
+            {name:"Fabiano C.",rating:2758,chessy:6900,country:"🇺🇸"},
+            {name:"Ding L.",rating:2720,chessy:5800,country:"🇨🇳"},
+            {name:"Alireza F.",rating:2692,chessy:5200,country:"🇫🇷"},
+            {name:"Anish G.",rating:2668,chessy:4700,country:"🇳🇱"},
+            {name:"Ian N.",rating:2633,chessy:4100,country:"🇷🇺"},
+            {name:"Wesley So",rating:2610,chessy:3600,country:"🇺🇸"},
+            {name:"Jan-Krz. D.",rating:2582,chessy:3100,country:"🇵🇱"},
+            {name:"Leinier D.",rating:2551,chessy:2800,country:"🇺🇸"},
+            {name:"Ты",rating:rat,chessy:chessy.lifetime,country:"🇰🇿",isMe:true},
+          ];
+          board.sort((a,b)=>b.rating-a.rating);
+          const meIdx=board.findIndex(x=>x.isMe);
+          return <div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:CC.accentSoft,border:`1px solid ${CC.accent}`}}>
+            <div style={{fontSize:12,fontWeight:900,color:CC.accent,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>
+              🏆 Глобальный лидерборд
+              <Badge tone="accent" size="xs" style={{marginLeft:6,fontSize:9}}>демо</Badge>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+              {board.slice(0,Math.max(10,meIdx+1)).map((p,i)=>{
+                const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
+                return <div key={i} style={{
+                  display:"flex",alignItems:"center",gap:SPACE[2],
+                  padding:"6px 10px",borderRadius:RADIUS.sm,
+                  background:p.isMe?CC.brandSoft:"rgba(255,255,255,0.5)",
+                  border:p.isMe?`1px solid ${CC.brand}`:"1px solid transparent"
+                }}>
+                  <div style={{width:24,textAlign:"center",fontSize:12,fontWeight:900,color:p.isMe?CC.brand:CC.textDim}}>
+                    {medal||`#${i+1}`}
+                  </div>
+                  <span style={{fontSize:14}}>{p.country}</span>
+                  <div style={{flex:1,fontSize:13,fontWeight:p.isMe?900:700,color:p.isMe?CC.brand:CC.text}}>{p.name}</div>
+                  <Badge tone="gold" size="xs">{p.rating}</Badge>
+                  <span style={{fontSize:11,color:CC.textDim,fontFamily:"ui-monospace, monospace",minWidth:50,textAlign:"right"}}>{p.chessy}c</span>
+                </div>;
+              })}
+            </div>
+            <div style={{fontSize:10,color:CC.textDim,marginTop:SPACE[2],fontStyle:"italic",lineHeight:1.4}}>
+              Топ-10 мировых гроссмейстеров — симулировано. Реальный лидерборд появится с запуском multiplayer.
+            </div>
+          </div>;
+        })()}
+
+        <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowChessyInfo(false)}>Понятно</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{sShowChessyInfo(false);sShowShop(true)}}>🛒 В магазин</Btn>
+        </div>
+      </div>
+    </Modal>
+
+    {/* Chessy gain floating animation */}
+    {chessyFloat&&<ChessyFloat key={chessyFloat.key} amount={chessyFloat.amount} onDone={()=>sChessyFloat(null)}/>}
+
+    {/* Puzzle Rush — final result */}
+    <Modal open={!!rushResult} onClose={()=>sRushResult(null)} size="sm" title={rushResult?.isNewBest?"🏆 Новый рекорд!":"⚡ Rush завершён"}>
+      {rushResult&&<div style={{textAlign:"center"}}>
+        <div style={{fontSize:60,lineHeight:1,marginBottom:SPACE[3]}}>{rushResult.isNewBest?"🏆":"⚡"}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[2],marginBottom:SPACE[4]}}>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
+            <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Решено</div>
+            <div style={{fontSize:28,fontWeight:900,color:CC.brand,lineHeight:1.1,marginTop:2}}>{rushResult.score}</div>
+          </div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"#fef2f2",border:"1px solid #fca5a5"}}>
+            <div style={{fontSize:10,color:CC.danger,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Streak 🔥</div>
+            <div style={{fontSize:28,fontWeight:900,color:CC.danger,lineHeight:1.1,marginTop:2}}>{rushResult.streak}</div>
+          </div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.goldSoft,border:"1px solid #fcd34d"}}>
+            <div style={{fontSize:10,color:CC.gold,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Лучшее</div>
+            <div style={{fontSize:28,fontWeight:900,color:CC.gold,lineHeight:1.1,marginTop:2}}>{rushResult.best}</div>
+          </div>
+        </div>
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d",marginBottom:SPACE[3]}}>
+          <div style={{fontSize:12,fontWeight:800,color:"#92400e"}}>Начислено Chessy</div>
+          <div style={{fontSize:22,fontWeight:900,color:"#78350f",display:"inline-flex",alignItems:"center",gap:4,marginTop:2}}>
+            <Icon.Coin width={20} height={20}/>+{rushResult.chessy}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sRushResult(null)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{
+            sRushResult(null);sPzMode("rush");
+            // Force reinit rush
+            sPzTimeLeft(90);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);
+          }}>⚡ Ещё раз</Btn>
+        </div>
+      </div>}
+    </Modal>
 
     </ProductPageShell></main>);
 }

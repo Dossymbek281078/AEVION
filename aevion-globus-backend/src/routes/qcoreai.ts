@@ -240,7 +240,7 @@ const sharedLimiter = rateLimit({
 
 qcoreaiRouter.get("/shared/:token", sharedLimiter, async (req, res) => {
   try {
-    const run = await getRunByShareToken(req.params.token);
+    const run = await getRunByShareToken(String(req.params.token || ""));
     if (!run) return res.status(404).json({ error: "not found" });
     const session = await getSessionPublic(run.sessionId);
     const messages = await listMessages(run.id);

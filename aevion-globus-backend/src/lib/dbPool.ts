@@ -20,6 +20,14 @@ export function getPool(): PgPoolInstance {
     pool.on("error", (err: Error) => {
       console.warn("[pg pool] idle client error:", err?.message || err);
     });
+    // Без этого обработчика падение idle-клиента превращается в
+    // unhandledRejection, которое роняет процесс Node.
+    pool.on("error", (err: Error) => {
+      console.error(
+        "[dbPool] idle client error:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
   }
   return pool;
 }

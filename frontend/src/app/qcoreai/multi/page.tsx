@@ -297,6 +297,8 @@ export default function QCoreMultiAgentPage() {
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [webhookConfigured, setWebhookConfigured] = useState(false);
+  // Sessions sidebar state — only honored on mobile via CSS, always-open on desktop.
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -1299,6 +1301,7 @@ export default function QCoreMultiAgentPage() {
         <div className="qc-layout">
           {/* Sessions sidebar */}
           <aside
+            className="qc-sidebar"
             style={{
               border: "1px solid rgba(15,23,42,0.1)",
               borderRadius: 14,
@@ -1310,6 +1313,33 @@ export default function QCoreMultiAgentPage() {
               overflowY: "auto",
             }}
           >
+            {/* Mobile-only collapse toggle. Hidden on desktop via CSS. */}
+            <button
+              type="button"
+              className="qc-sidebar-toggle"
+              onClick={() => setSidebarOpen((v) => !v)}
+              aria-expanded={sidebarOpen}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "#f8fafc",
+                color: "#0f172a",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                marginBottom: 10,
+                display: "none", // overridden on mobile
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <span>Sessions ({sessions.length})</span>
+              <span style={{ fontSize: 10, color: "#64748b" }}>{sidebarOpen ? "▲ Hide" : "▼ Show"}</span>
+            </button>
+            <div className="qc-sidebar-body" data-open={sidebarOpen ? "true" : "false"}>
             <button
               onClick={newSession}
               style={{
@@ -1373,6 +1403,7 @@ export default function QCoreMultiAgentPage() {
                 ))}
               </div>
             )}
+            </div>
           </aside>
 
           {/* Main conversation */}
@@ -1522,6 +1553,9 @@ export default function QCoreMultiAgentPage() {
           @media (max-width: 880px) {
             .qc-layout { grid-template-columns: 1fr; }
             .qc-pair-grid { grid-template-columns: 1fr; }
+            .qc-sidebar { max-height: none !important; position: static !important; }
+            .qc-sidebar-toggle { display: flex !important; }
+            .qc-sidebar-body[data-open="false"] { display: none; }
           }
         `}</style>
       </ProductPageShell>

@@ -155,6 +155,10 @@ export default function MultichatEnginePage() {
                 { t: "Live streaming", c: "#0369a1" },
                 { t: "Live cost + tokens", c: "#15803d" },
                 { t: "Mixed models per role", c: "#4338ca" },
+                { t: "Saveable presets", c: "#0d9488" },
+                { t: "Edit & resend", c: "#0891b2" },
+                { t: "Webhook on done", c: "#0284c7" },
+                { t: "Public share + OG preview", c: "#9333ea" },
                 { t: "Export JSON + Markdown", c: "#b45309" },
               ].map((b) => (
                 <span

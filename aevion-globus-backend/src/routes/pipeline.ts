@@ -1905,3 +1905,209 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
     return res.status(500).json({ ok: false, error: msg });
   }
 });
+
+/**
+ * GET /api/pipeline/certificate/:certId/bundle.json
+ *
+ * Self-contained verification bundle: a single JSON document that lets a
+ * third party verify the certificate's authenticity without contacting
+ * AEVION ever again. If our servers go down or the company ceases to
+ * exist, the holder of this bundle can still prove their claim.
+ *
+ * Bundle contents:
+ *  - certificate metadata (display fields)
+ *  - the canonical content hash + the exact JSON payload AEVION signed
+ *  - AEVION's Ed25519 public key + signature (verifiable with any
+ *    standard Ed25519 implementation)
+ *  - the QSign HMAC fields (informational — verifying HMAC requires the
+ *    server-side secret, so this is identity, not proof)
+ *  - the author's co-signing public key + signature, if present
+ *  - the OpenTimestamps proof bytes inline (base64) — verifiable against
+ *    the Bitcoin blockchain by any OT client
+ *  - the public Shamir witness shard + CID, so an external party can
+ *    re-anchor the witness to IPFS / Arweave for survival beyond AEVION
+ *
+ * The bundle is intentionally large (OT proof can be ~kB), but it's the
+ * one artifact a patent-bureau client should keep regardless of any
+ * other state in the world.
+ */
+pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
+  try {
+    await ensureTables();
+    const { certId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT * FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "certificate not found" });
+    }
+    const cert = rows[0];
+
+    // Reconstruct the exact payload AEVION's Ed25519 signed at /protect
+    // time. Must stay byte-for-byte aligned with the JSON.stringify({...})
+    // call there — see /protect for the source of truth. We extract the
+    // raw 32-byte public key by stripping the 12-byte Ed25519 SPKI prefix
+    // (RFC 8410, fixed format).
+    const spkiHex = String(cert.publicKeyEd25519 || "");
+    const spkiBuf = Buffer.from(spkiHex, "hex");
+    const aevionPublicKeyRawHex =
+      spkiBuf.length === 44 ? spkiBuf.subarray(12).toString("hex") : "";
+
+    const signedAtIso =
+      cert.signedAt instanceof Date
+        ? cert.signedAt.toISOString()
+        : cert.signedAt
+          ? String(cert.signedAt)
+          : null;
+
+    const aevionSignedPayload = signedAtIso
+      ? JSON.stringify({
+          objectId: cert.objectId,
+          title: cert.title,
+          contentHash: cert.contentHash,
+          signatureHmac: cert.signatureHmac,
+          publicKeyRawHex: aevionPublicKeyRawHex,
+          signedAt: signedAtIso,
+        })
+      : null;
+
+    // Public Shamir witness — anyone can re-pin it to IPFS to make the
+    // witness survive AEVION going down.
+    let witness: {
+      shieldId: string;
+      shardIndex: number;
+      sssShare: string;
+      hmac: string;
+      hmacKeyVersion: number;
+      witnessCid: string;
+    } | null = null;
+    if (cert.shieldId) {
+      const w = await pool.query(
+        `SELECT "shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid"
+         FROM "PublicShardWitness" WHERE "shieldId" = $1`,
+        [cert.shieldId],
+      );
+      const wr = w.rows?.[0];
+      if (wr) {
+        witness = {
+          shieldId: cert.shieldId,
+          shardIndex: wr.shardIndex,
+          sssShare: wr.sssShare,
+          hmac: wr.hmac,
+          hmacKeyVersion: wr.hmacKeyVersion,
+          witnessCid: wr.witnessCid,
+        };
+      }
+    }
+
+    const otsProof = cert.otsProof as Buffer | null;
+    const bundle = {
+      version: 1 as const,
+      bundleType: "aevion-verification-bundle" as const,
+      exportedAt: new Date().toISOString(),
+      certificate: {
+        id: cert.id,
+        objectId: cert.objectId,
+        shieldId: cert.shieldId,
+        title: cert.title,
+        kind: cert.kind,
+        description: cert.description,
+        author: cert.authorName || "Anonymous",
+        email: cert.authorEmail || null,
+        location:
+          [cert.city, cert.country].filter(Boolean).join(", ") || null,
+        contentHash: cert.contentHash,
+        algorithm: cert.algorithm,
+        protectedAt: cert.protectedAt,
+        status: cert.status,
+      },
+      proofs: {
+        contentHash: {
+          algo: "SHA-256",
+          value: cert.contentHash,
+          // Inputs are listed so the verifier can recompute the hash
+          // from these exact fields — same canonicalization as the
+          // AEVION server (see canonicalContentHash).
+          canonicalInputs: {
+            title: cert.title,
+            description: cert.description,
+            kind: cert.kind,
+            country: cert.country || null,
+            city: cert.city || null,
+          },
+        },
+        aevionEd25519: aevionSignedPayload
+          ? {
+              algo: "Ed25519",
+              publicKeySpkiHex: spkiHex,
+              publicKeyRawHex: aevionPublicKeyRawHex,
+              signedPayload: aevionSignedPayload,
+              signature: cert.signatureEd25519,
+            }
+          : null,
+        qsignHmac: signedAtIso
+          ? {
+              algo: "HMAC-SHA256",
+              keyVersion:
+                typeof cert.qsignKeyVersion === "number"
+                  ? cert.qsignKeyVersion
+                  : 1,
+              signedAt: signedAtIso,
+              signature: cert.signatureHmac,
+              note: "HMAC verification requires AEVION's server-side secret. Included for identity continuity; offline verifiers should rely on Ed25519.",
+            }
+          : null,
+        authorCosign:
+          cert.authorPublicKey && cert.authorSignature
+            ? {
+                algo: cert.authorKeyAlgo || "ed25519",
+                publicKeyBase64: cert.authorPublicKey,
+                signature: cert.authorSignature,
+                signedMessage: "contentHash (utf8)",
+                note: "Verify by signing the contentHash hex string (utf8 bytes) with this public key.",
+              }
+            : null,
+        openTimestamps: cert.otsStatus
+          ? {
+              status: cert.otsStatus,
+              bitcoinBlockHeight: cert.otsBitcoinBlockHeight ?? null,
+              stampedAt: cert.otsStampedAt ?? null,
+              upgradedAt: cert.otsUpgradedAt ?? null,
+              proofBase64: otsProof ? otsProof.toString("base64") : null,
+              note: "Verify with any OpenTimestamps client against the Bitcoin blockchain. The proof targets the contentHash exactly.",
+            }
+          : null,
+      },
+      shamirWitness: witness,
+      verification: {
+        howTo: [
+          "1. Recompute SHA-256 of stableStringify({city, country, description, kind, title}) where each value is NFC-normalized; missing kind defaults to 'other'. Compare with proofs.contentHash.value.",
+          "2. Verify proofs.aevionEd25519.signature using publicKeyRawHex over the UTF-8 bytes of proofs.aevionEd25519.signedPayload (a JSON string).",
+          "3. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
+          "4. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
+          "5. If proofs.openTimestamps shows status: bitcoin-confirmed, the certificate's existence is mathematically anchored to that block — independent of AEVION, IPFS, or any other party.",
+        ],
+        independence: [
+          "AEVION's Ed25519 signature can be verified with any Ed25519 library — we are not in the trust path.",
+          "The OpenTimestamps proof can be verified against Bitcoin block explorers — Bitcoin is the trust anchor.",
+          "If author co-signing is present, the user's own key — held only by them — provides a second independent layer.",
+          "This bundle is sufficient for proof of existence and authorship even if AEVION ceases to exist.",
+        ],
+      },
+    };
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="aevion-bundle-${certId}.json"`,
+    );
+    res.send(JSON.stringify(bundle, null, 2));
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "bundle export failed";
+    console.error("[Pipeline] bundle error:", msg);
+    if (!res.headersSent) {
+      res.status(500).json({ error: msg });
+    }
+  }
+});

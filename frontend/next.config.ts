@@ -16,19 +16,31 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Cross-Origin Isolation — нужно чтобы браузер разрешил SharedArrayBuffer,
-        // без которого Stockfish 18 (multi-threaded WASM) не запускается.
-        // Применяется ко всем страницам.
+        // All paths: full Cross-Origin Isolation for SharedArrayBuffer (Stockfish 18).
         source: "/:path*",
         headers: [
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin",
-          },
-          {
-            key: "Cross-Origin-Embedder-Policy",
-            value: "require-corp",
-          },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+        ],
+      },
+      {
+        // Studio hosts cross-origin iframes (Twitch / YouTube / Lichess).
+        // unsafe-none = no isolation = full third-party iframe support
+        // including cookies/storage that Twitch needs. Stockfish in the
+        // chess-internal iframe loses SharedArrayBuffer here — user can
+        // open the standalone /cyberchess tab via the pane "↗" button.
+        // NOTE: declared AFTER the catch-all so its values override.
+        source: "/cyberchess/studio",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+        ],
+      },
+      {
+        source: "/cyberchess/studio/:path*",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
         ],
       },
     ];

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import { COLOR, RADIUS, SHADOW, MOTION, SPACE, Z } from "./theme";
 
 /* ═══════════════════════════════════════════════════════════
@@ -327,10 +327,38 @@ export function Modal({ open, onClose, title, children, footer, size = "md",
    Tooltip
    ═══════════════════════════════════════════════════════════ */
 
-export function Tooltip({ label, children, placement = "top" }:
-  { label: string; children: React.ReactElement; placement?: "top"|"bottom"|"left"|"right" }) {
-  // Keep it simple: delegate to native title; rich tooltip impl can come later.
-  return React.cloneElement(children as any, { title: label });
+export function Tooltip({ label, children, placement = "top", delay = 350 }:
+  { label: React.ReactNode; children: React.ReactNode; placement?: "top"|"bottom"|"left"|"right"; delay?: number }) {
+  const [show, setShow] = useState(false);
+  const timer = useRef<any>(null);
+  if (label === undefined || label === null || label === "") return <>{children}</>;
+  const show$ = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setShow(true), delay); };
+  const hide$ = () => { clearTimeout(timer.current); setShow(false); };
+  const pos: React.CSSProperties =
+    placement === "bottom" ? { top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" } :
+    placement === "left"   ? { right: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" } :
+    placement === "right"  ? { left: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" } :
+                             { bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" };
+  return (
+    <span
+      onMouseEnter={show$} onMouseLeave={hide$}
+      onFocus={show$} onBlur={hide$}
+      style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
+    >
+      {children}
+      {show && (
+        <span role="tooltip" style={{
+          position: "absolute", ...pos,
+          background: COLOR.text, color: COLOR.textInv,
+          fontSize: 12, fontWeight: 600, lineHeight: 1.35,
+          padding: "6px 10px", borderRadius: RADIUS.md, boxShadow: SHADOW.md,
+          pointerEvents: "none", zIndex: Z.dropdown,
+          whiteSpace: "normal", maxWidth: 260, width: "max-content",
+          animation: `cc-tip-in ${MOTION.fast} ${MOTION.easeOut}`,
+        }}>{label}</span>
+      )}
+    </span>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════

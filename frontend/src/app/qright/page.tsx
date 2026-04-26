@@ -790,6 +790,9 @@ export default function QRightPage() {
                     <b>Even if AEVION goes down</b>, your Author Shard + the public Witness Shard (CID above) are enough to reconstruct the proof.
                   </li>
                 )}
+                <li>
+                  <b>Download the Verification Bundle</b> — a single <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code> with every proof needed to verify this certificate <em>without</em> AEVION. Drop it into <a href="/verify-offline" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}>/verify-offline</a> any time, on any machine, even years from now.
+                </li>
               </ol>
             </div>
 
@@ -802,6 +805,15 @@ export default function QRightPage() {
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 📄 Download PDF Certificate
+              </a>
+              <a
+                href={apiUrl(`/api/pipeline/certificate/${result.certificate.id}/bundle.json`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                title="A single .json with every proof — verifiable offline if AEVION ever disappears"
+              >
+                🛡️ Download Verification Bundle
               </a>
               <Link
                 href={`/verify/${result.certificate.id}`}

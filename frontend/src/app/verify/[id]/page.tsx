@@ -706,6 +706,39 @@ export default function VerifyPage() {
           </div>
         </div>
 
+        {/* Verifiable independence */}
+        <div style={{ borderRadius: 14, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(79,70,229,0.04))", padding: "16px 18px", marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 18 }} aria-hidden>🛡️</span>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#3730a3" }}>
+              Independent of AEVION
+            </div>
+            <InfoTip
+              label="Verification bundle"
+              text="A single .json containing every proof — the canonical inputs, AEVION's Ed25519 signature, the author co-signature, the OpenTimestamps Bitcoin proof. With this bundle and a browser, anyone can verify the certificate forever without contacting AEVION."
+            />
+          </div>
+          <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.55, marginBottom: 10 }}>
+            Download a self-contained verification bundle. If AEVION ever goes offline,
+            this single file plus a browser is enough to prove the certificate&apos;s
+            authenticity — Bitcoin and Ed25519 are the trust anchors, not us.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <a
+              href={apiUrl(`/api/pipeline/certificate/${cert.id}/bundle.json`)}
+              style={{ padding: "10px 16px", borderRadius: 10, background: "#4f46e5", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}
+            >
+              ⬇ Download bundle.json
+            </a>
+            <a
+              href="/verify-offline"
+              style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}
+            >
+              Open offline verifier →
+            </a>
+          </div>
+        </div>
+
         {/* Footer */}
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <a href="/qright" style={{

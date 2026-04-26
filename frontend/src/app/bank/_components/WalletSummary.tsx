@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   buildSparkline,
   formatRelative,
@@ -13,6 +14,7 @@ import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
 import { AnimatedMoney, BalanceTrendIndicator } from "./AnimatedMoney";
 import { CoinTower } from "./CoinTower";
+import { InfoTooltip } from "./InfoTooltip";
 import { Sparkline, StatCard } from "./primitives";
 
 export function WalletSummary({
@@ -22,6 +24,7 @@ export function WalletSummary({
   account: Account;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const sparkline = useMemo(
     () => buildSparkline(operations, account.balance, account.id),
     [operations, account.balance, account.id],
@@ -48,7 +51,7 @@ export function WalletSummary({
         <CoinTower balance={account.balance} height={140} coinWidth={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>
-            BALANCE TREND (14 DAYS)
+            {t("wallet.trend.title")}
           </div>
           <Sparkline data={sparkline} width={220} height={50} />
           <div
@@ -59,14 +62,19 @@ export function WalletSummary({
               marginTop: 2,
             }}
           >
-            {delta >= 0 ? "+" : ""}
-            {delta.toFixed(1)}% vs 14 days ago
+            {t("wallet.trend.delta", {
+              delta: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`,
+            })}
           </div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "2 1 400px" }}>
         <StatCard
-          label="Balance"
+          label={
+            <InfoTooltip text={t("tip.balance")} side="bottom">
+              <span>{t("wallet.stat.balance")}</span>
+            </InfoTooltip>
+          }
           value={
             <>
               <AnimatedMoney aec={account.balance} />
@@ -76,16 +84,34 @@ export function WalletSummary({
           accent="#0f766e"
         />
         <StatCard
-          label="Net flow 30d"
+          label={
+            <InfoTooltip text={t("tip.netflow")} side="bottom">
+              <span>{t("wallet.stat.netflow")}</span>
+            </InfoTooltip>
+          }
           value={formatCurrency(s.netFlow, code, { sign: true })}
           accent={s.netFlow >= 0 ? "#059669" : "#dc2626"}
-          hint={`In ${formatCurrency(s.incoming, code, { decimals: 0 })} · Out ${formatCurrency(s.outgoing, code, { decimals: 0 })}`}
+          hint={t("wallet.stat.netflow.hint", {
+            in: formatCurrency(s.incoming, code, { decimals: 0 }),
+            out: formatCurrency(s.outgoing, code, { decimals: 0 }),
+          })}
         />
-        <StatCard label="Operations 30d" value={String(s.count)} />
         <StatCard
-          label="Last activity"
+          label={
+            <InfoTooltip text={t("tip.ops")} side="bottom">
+              <span>{t("wallet.stat.ops")}</span>
+            </InfoTooltip>
+          }
+          value={String(s.count)}
+        />
+        <StatCard
+          label={
+            <InfoTooltip text={t("tip.lastActivity")} side="bottom">
+              <span>{t("wallet.stat.last")}</span>
+            </InfoTooltip>
+          }
           value={last ? formatRelative(new Date(last).toISOString()) : "—"}
-          hint={last ? undefined : "no operations yet"}
+          hint={last ? undefined : t("wallet.stat.last.empty")}
         />
       </div>
     </div>

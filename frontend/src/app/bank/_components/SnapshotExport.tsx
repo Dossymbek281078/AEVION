@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { achievementStats, evaluateAchievements } from "../_lib/achievements";
 import { loadAdvance } from "../_lib/advance";
 import { useBiometric } from "../_lib/BiometricContext";
@@ -31,19 +32,23 @@ export function SnapshotExport({
   operations: Operation[];
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem } = useEcosystemData();
   const { settings: biometric } = useBiometric();
   const { code } = useCurrency();
   const [busy, setBusy] = useState<"svg" | "text" | null>(null);
 
   const snapshot = useMemo<SnapshotData>(() => {
-    const trust = computeEcosystemTrustScore({
-      account,
-      operations,
-      royalty,
-      chess,
-      ecosystem,
-    });
+    const trust = computeEcosystemTrustScore(
+      {
+        account,
+        operations,
+        royalty,
+        chess,
+        ecosystem,
+      },
+      t,
+    );
     const peers = computePeerStanding({
       account,
       operations,
@@ -96,16 +101,16 @@ export function SnapshotExport({
       peerBestValue: best ? topPercentLabel(best.percentile) : "",
       peerRanks: peers,
     };
-  }, [account, operations, royalty, chess, ecosystem, biometric, code]);
+  }, [account, operations, royalty, chess, ecosystem, biometric, code, t]);
 
   const onDownload = () => {
     setBusy("svg");
     try {
       const svg = buildSnapshotSVG(snapshot);
       downloadSnapshot(svg, `aevion-snapshot-${snapshot.accountIdShort}.svg`);
-      notify("Snapshot downloaded", "success");
+      notify(t("snap.toast.downloaded"), "success");
     } catch {
-      notify("Snapshot generation failed", "error");
+      notify(t("snap.toast.failed"), "error");
     } finally {
       setBusy(null);
     }
@@ -116,9 +121,9 @@ export function SnapshotExport({
     try {
       const text = buildSnapshotText(snapshot);
       await navigator.clipboard.writeText(text);
-      notify("Text summary copied", "success");
+      notify(t("snap.toast.copied"), "success");
     } catch {
-      notify("Clipboard blocked — try downloading SVG", "error");
+      notify(t("snap.toast.blocked"), "error");
     } finally {
       setBusy(null);
     }
@@ -163,18 +168,17 @@ export function SnapshotExport({
               ⇪
             </span>
             <h2 id="snapshot-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0, scrollMarginTop: 80 }}>
-              Snapshot export
+              {t("snap.title")}
             </h2>
           </div>
           <p style={{ fontSize: 13, color: "#334155", lineHeight: 1.6, margin: "0 0 12px" }}>
-            One-click SVG of your wallet state — balance, Trust Score, peer percentiles and
-            achievements in a single shareable card. Drop it into a pitch deck, a tweet or a DM.
+            {t("snap.subtitle")}
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={onDownload}
               disabled={busy !== null}
-              aria-label="Download snapshot as SVG"
+              aria-label={t("snap.btn.download.aria")}
               style={{
                 padding: "10px 18px",
                 borderRadius: 10,
@@ -190,12 +194,12 @@ export function SnapshotExport({
                 boxShadow: "0 4px 14px rgba(14,165,233,0.3)",
               }}
             >
-              {busy === "svg" ? "Generating…" : "Download SVG"}
+              {busy === "svg" ? t("snap.btn.generating") : t("snap.btn.download")}
             </button>
             <button
               onClick={() => void onCopyText()}
               disabled={busy !== null}
-              aria-label="Copy summary as text"
+              aria-label={t("snap.btn.copy.aria")}
               style={{
                 padding: "10px 14px",
                 borderRadius: 10,
@@ -207,7 +211,7 @@ export function SnapshotExport({
                 cursor: busy !== null ? "default" : "pointer",
               }}
             >
-              {busy === "text" ? "…" : "Copy summary"}
+              {busy === "text" ? "…" : t("snap.btn.copy")}
             </button>
           </div>
         </div>
@@ -230,7 +234,7 @@ export function SnapshotExport({
               marginBottom: 6,
             }}
           >
-            AEVION BANK · SNAPSHOT PREVIEW
+            {t("snap.preview.eyebrow")}
           </div>
           <div
             style={{
@@ -254,8 +258,7 @@ export function SnapshotExport({
             {snapshot.balanceLabel}
           </div>
           <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
-            Trust {snapshot.trustScore}/100 · {snapshot.trustTier.toUpperCase()} · 30d earnings{" "}
-            {snapshot.earnings30dLabel}
+            {t("snap.preview.trust", { score: snapshot.trustScore, tier: snapshot.trustTier.toUpperCase(), amt: snapshot.earnings30dLabel })}
           </div>
           <div
             style={{
@@ -267,12 +270,12 @@ export function SnapshotExport({
             }}
           >
             <div style={{ fontWeight: 700 }}>
-              Best: {snapshot.peerBestLabel}
+              {t("snap.preview.best", { label: snapshot.peerBestLabel })}
               <br />
               <span style={{ color: "#0369a1", fontWeight: 800 }}>{snapshot.peerBestValue}</span>
             </div>
             <div style={{ fontWeight: 700, textAlign: "right" as const }}>
-              Achievements
+              {t("snap.preview.achievements")}
               <br />
               <span style={{ color: "#0f172a", fontWeight: 900, fontSize: 14 }}>
                 {snapshot.achievementsEarned}

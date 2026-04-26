@@ -1,19 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
 import {
   CATEGORY_COLOR,
-  CATEGORY_DESCRIPTION,
-  CATEGORY_LABEL,
-  PERIOD_LABEL,
+  CATEGORY_DESCRIPTION_KEY,
+  CATEGORY_LABEL_KEY,
+  PERIOD_LABEL_KEY,
   summariseSpending,
   type SpendCategory,
   type SpendingPeriod,
 } from "../_lib/spending";
 import type { Operation } from "../_lib/types";
 import { Legend, PieChart } from "./charts";
+import { InfoTooltip } from "./InfoTooltip";
 import { Money } from "./Money";
 
 const PERIODS: SpendingPeriod[] = ["thisMonth", "last30d"];
@@ -25,6 +27,7 @@ export function SpendingInsights({
   accountId: string;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const [period, setPeriod] = useState<SpendingPeriod>("thisMonth");
   const { code } = useCurrency();
 
@@ -36,7 +39,7 @@ export function SpendingInsights({
   const pieData = summary.byCategory
     .filter((b) => b.amount > 0)
     .map((b) => ({
-      label: CATEGORY_LABEL[b.category],
+      label: t(CATEGORY_LABEL_KEY[b.category]),
       value: b.amount,
       color: CATEGORY_COLOR[b.category],
     }));
@@ -70,9 +73,11 @@ export function SpendingInsights({
           id="spending-heading"
           style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
         >
-          Spending insights
+          <InfoTooltip text={t("tip.spending")} side="bottom">
+            <span>{t("si.title")}</span>
+          </InfoTooltip>
         </h2>
-        <div role="group" aria-label="Period" style={{ display: "flex", gap: 4 }}>
+        <div role="group" aria-label={t("si.period.aria")} style={{ display: "flex", gap: 4 }}>
           {PERIODS.map((p) => {
             const active = period === p;
             return (
@@ -91,7 +96,7 @@ export function SpendingInsights({
                   cursor: "pointer",
                 }}
               >
-                {PERIOD_LABEL[p]}
+                {t(PERIOD_LABEL_KEY[p])}
               </button>
             );
           })}
@@ -109,8 +114,7 @@ export function SpendingInsights({
             borderRadius: 10,
           }}
         >
-          No outgoing transfers in {PERIOD_LABEL[period].toLowerCase()}. Insights will appear once
-          you spend.
+          {t("si.empty", { period: t(PERIOD_LABEL_KEY[period]).toLowerCase() })}
         </div>
       ) : (
         <>
@@ -145,7 +149,7 @@ export function SpendingInsights({
                   }}
                 >
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.06em" }}>
-                    SPENT
+                    {t("si.donut.label")}
                   </div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", lineHeight: 1.1 }}>
                     <Money aec={summary.totalSpent} decimals={0} />
@@ -157,7 +161,7 @@ export function SpendingInsights({
                 items={summary.byCategory
                   .filter((b) => b.amount > 0)
                   .map((b) => ({
-                    label: CATEGORY_LABEL[b.category],
+                    label: t(CATEGORY_LABEL_KEY[b.category]),
                     color: CATEGORY_COLOR[b.category],
                     hint: formatCurrency(b.amount, code, { decimals: 0 }),
                   }))}
@@ -195,7 +199,7 @@ export function SpendingInsights({
                         }}
                       />
                       <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
-                        {CATEGORY_LABEL[b.category]}
+                        {t(CATEGORY_LABEL_KEY[b.category])}
                       </span>
                       <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
                         {b.count}×
@@ -209,7 +213,7 @@ export function SpendingInsights({
                       aria-valuenow={Math.round(pct)}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-label={`${CATEGORY_LABEL[b.category]} share`}
+                      aria-label={t("si.share.aria", { label: t(CATEGORY_LABEL_KEY[b.category]) })}
                       style={{
                         height: 4,
                         borderRadius: 999,
@@ -235,11 +239,10 @@ export function SpendingInsights({
                         color: "#64748b",
                       }}
                     >
-                      <span>{CATEGORY_DESCRIPTION[b.category]}</span>
+                      <span>{t(CATEGORY_DESCRIPTION_KEY[b.category])}</span>
                       {prev > 0 || b.amount > 0 ? (
                         <span style={{ color: dColor, fontWeight: 700 }}>
-                          {delta > 0 ? "+" : ""}
-                          {delta.toFixed(0)}% vs prev
+                          {t("si.delta", { sign: delta > 0 ? "+" : "", n: delta.toFixed(0) })}
                         </span>
                       ) : null}
                     </div>
@@ -257,29 +260,29 @@ export function SpendingInsights({
             }}
           >
             <InsightCard
-              label="Vs previous period"
+              label={t("si.tile.trend")}
               value={`${trendUp ? "+" : ""}${summary.pctVsPrev.toFixed(0)}%`}
-              hint={`prev ${formatCurrency(summary.totalSpentPrev, code, { decimals: 0 })}`}
+              hint={t("si.tile.trend.hint", { amt: formatCurrency(summary.totalSpentPrev, code, { decimals: 0 }) })}
               accent={trendColor}
             />
             <InsightCard
-              label="Top category"
-              value={summary.topCategory ? CATEGORY_LABEL[summary.topCategory] : "—"}
+              label={t("si.tile.top")}
+              value={summary.topCategory ? t(CATEGORY_LABEL_KEY[summary.topCategory]) : "—"}
               hint={
                 summary.topCategory
                   ? formatCurrency(summary.byCategory[0].amount, code, { decimals: 0 })
-                  : "no spending"
+                  : t("si.tile.top.empty")
               }
               accent={summary.topCategory ? CATEGORY_COLOR[summary.topCategory] : "#94a3b8"}
             />
             <InsightCard
-              label="Biggest payment"
+              label={t("si.tile.biggest")}
               value={
                 summary.biggestTx ? formatCurrency(summary.biggestTx.op.amount, code) : "—"
               }
               hint={
                 summary.biggestTx
-                  ? CATEGORY_LABEL[summary.biggestTx.category as SpendCategory]
+                  ? t(CATEGORY_LABEL_KEY[summary.biggestTx.category as SpendCategory])
                   : ""
               }
               accent={
@@ -289,17 +292,16 @@ export function SpendingInsights({
               }
             />
             <InsightCard
-              label="Operations"
+              label={t("si.tile.ops")}
               value={String(summary.count)}
-              hint="categorised this period"
+              hint={t("si.tile.ops.hint")}
             />
           </div>
         </>
       )}
 
       <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        Categories are inferred from recurring schedules and your address book. Future: server-side
-        ML categoriser when transaction memos ship.
+        {t("si.footer")}
       </div>
     </section>
   );

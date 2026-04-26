@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useRecurring } from "../_hooks/useRecurring";
 import * as contactsLib from "../_lib/contacts";
 import {
   formatCountdown,
   formatPast,
-  PERIOD_LABEL,
   type RecurrencePeriod,
   type Recurring,
 } from "../_lib/recurring";
@@ -22,6 +22,10 @@ type Props = {
 
 const PERIOD_OPTIONS: RecurrencePeriod[] = ["daily", "weekly", "biweekly", "monthly"];
 
+function periodKey(p: RecurrencePeriod): string {
+  return `period.${p}`;
+}
+
 function todayLocalISO(): string {
   const d = new Date();
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
@@ -29,6 +33,7 @@ function todayLocalISO(): string {
 }
 
 export function RecurringPayments({ myAccountId, balance, send, notify }: Props) {
+  const { t } = useI18n();
   const { items, add, remove, toggle } = useRecurring({ send, notify });
   const [formOpen, setFormOpen] = useState<boolean>(false);
 
@@ -57,24 +62,24 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
     const trimmedTo = to.trim();
     const n = parseFloat(amount);
     if (!trimmedTo.startsWith("acc_")) {
-      notify("Recipient must be an account ID (acc_...)", "error");
+      notify(t("rec.toast.recipient"), "error");
       return;
     }
     if (trimmedTo === myAccountId) {
-      notify("Cannot schedule to yourself", "error");
+      notify(t("rec.toast.self"), "error");
       return;
     }
     if (!Number.isFinite(n) || n <= 0) {
-      notify("Invalid amount", "error");
+      notify(t("rec.toast.amount"), "error");
       return;
     }
     if (!label.trim()) {
-      notify("Give it a label (e.g. Netflix, Salary)", "error");
+      notify(t("rec.toast.label"), "error");
       return;
     }
     const starts = new Date(startsAt);
     if (Number.isNaN(starts.getTime())) {
-      notify("Invalid start date", "error");
+      notify(t("rec.toast.startDate"), "error");
       return;
     }
     const finalNick = nickname.trim() || contactsLib.contactsById().get(trimmedTo) || "";
@@ -86,7 +91,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
       label: label.trim(),
       startsAt: starts.toISOString(),
     });
-    notify(`Recurring "${label.trim()}" scheduled`, "success");
+    notify(t("rec.toast.scheduled", { label: label.trim() }), "success");
     reset();
     setFormOpen(false);
   };
@@ -119,7 +124,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
             id="recurring-heading"
             style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
           >
-            Recurring payments
+            {t("rec.title")}
           </h2>
           {items.length > 0 ? (
             <span
@@ -132,7 +137,10 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
                 fontWeight: 800,
               }}
             >
-              {activeCount} active · {items.length - activeCount} paused
+              {t("rec.status.activePaused", {
+                active: activeCount,
+                paused: items.length - activeCount,
+              })}
             </span>
           ) : null}
         </div>
@@ -151,7 +159,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
             cursor: "pointer",
           }}
         >
-          {formOpen ? "Cancel" : "+ Add recurring"}
+          {formOpen ? t("rec.cancel") : t("rec.add")}
         </button>
       </div>
 
@@ -169,16 +177,16 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
           }}
         >
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
-            <Field label="Label">
+            <Field label={t("rec.field.label")}>
               <input
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="Netflix, Salary to Maria…"
+                placeholder={t("rec.field.label.placeholder")}
                 maxLength={60}
                 style={inputStyle}
               />
             </Field>
-            <Field label="Recipient account ID">
+            <Field label={t("rec.field.recipient")}>
               <input
                 ref={toInputRef}
                 value={to}
@@ -189,16 +197,16 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
             </Field>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-            <Field label="Nickname (optional)">
+            <Field label={t("rec.field.nickname")}>
               <input
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
-                placeholder="Landlord, Co-author…"
+                placeholder={t("rec.field.nickname.placeholder")}
                 maxLength={40}
                 style={inputStyle}
               />
             </Field>
-            <Field label="Amount AEC">
+            <Field label={t("rec.field.amount")}>
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -209,7 +217,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
                 style={inputStyle}
               />
             </Field>
-            <Field label="Period">
+            <Field label={t("rec.field.period")}>
               <select
                 value={period}
                 onChange={(e) => setPeriod(e.target.value as RecurrencePeriod)}
@@ -217,12 +225,12 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
               >
                 {PERIOD_OPTIONS.map((p) => (
                   <option key={p} value={p}>
-                    {PERIOD_LABEL[p]}
+                    {t(periodKey(p))}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="First run">
+            <Field label={t("rec.field.startsAt")}>
               <input
                 type="datetime-local"
                 value={startsAt}
@@ -248,7 +256,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
                 cursor: "pointer",
               }}
             >
-              Cancel
+              {t("rec.cancel")}
             </button>
             <button
               onClick={save}
@@ -263,12 +271,11 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
                 cursor: "pointer",
               }}
             >
-              Schedule
+              {t("rec.save")}
             </button>
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8" }}>
-            Available balance: <Money aec={balance} /> · Insufficient funds will auto-pause the
-            schedule.
+            {t("rec.balance.label")} <Money aec={balance} /> · {t("rec.balance.hint")}
           </div>
         </div>
       ) : null}
@@ -284,7 +291,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
             borderRadius: 10,
           }}
         >
-          No recurring payments yet. Automate subscriptions, salaries or royalty splits.
+          {t("rec.empty")}
         </div>
       ) : (
         <ul
@@ -309,6 +316,7 @@ function RecurringRow({
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const shortTo = r.toAccountId.length > 12 ? `${r.toAccountId.slice(0, 8)}…${r.toAccountId.slice(-4)}` : r.toAccountId;
   const color = r.active ? "#0f766e" : "#94a3b8";
   return (
@@ -355,24 +363,24 @@ function RecurringRow({
               color,
             }}
           >
-            {r.active ? "Active" : "Paused"}
+            {r.active ? t("rec.row.active") : t("rec.row.paused")}
           </span>
         </div>
         <div style={{ fontSize: 12, color: "#334155", fontWeight: 700 }}>
-          <Money aec={r.amount} /> · {PERIOD_LABEL[r.period]}
+          <Money aec={r.amount} /> · {t(periodKey(r.period))}
         </div>
         <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-          To {r.recipientNickname ? <strong>{r.recipientNickname}</strong> : <code style={{ fontFamily: "ui-monospace, monospace" }}>{shortTo}</code>}
+          {t("rec.row.toLabel")} {r.recipientNickname ? <strong>{r.recipientNickname}</strong> : <code style={{ fontFamily: "ui-monospace, monospace" }}>{shortTo}</code>}
           {" · "}
-          {r.active ? `next ${formatCountdown(r.nextRunAt)}` : "paused"}
+          {r.active ? t("rec.row.next", { when: formatCountdown(r.nextRunAt, t) }) : t("rec.row.pausedShort")}
           {" · "}
-          {formatPast(r.lastRunAt)} · {r.runs} runs
+          {formatPast(r.lastRunAt, t)} · {t("rec.row.runs", { n: r.runs })}
         </div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <button
           onClick={() => onToggle(r.id)}
-          aria-label={r.active ? `Pause ${r.label}` : `Resume ${r.label}`}
+          aria-label={t(r.active ? "rec.aria.pause" : "rec.aria.resume", { label: r.label })}
           style={{
             padding: "6px 10px",
             borderRadius: 8,
@@ -384,13 +392,13 @@ function RecurringRow({
             cursor: "pointer",
           }}
         >
-          {r.active ? "Pause" : "Resume"}
+          {r.active ? t("rec.btn.pause") : t("rec.btn.resume")}
         </button>
         <button
           onClick={() => {
-            if (confirm(`Delete recurring "${r.label}"?`)) onRemove(r.id);
+            if (confirm(t("rec.confirm.delete", { label: r.label }))) onRemove(r.id);
           }}
-          aria-label={`Delete ${r.label}`}
+          aria-label={t("rec.aria.delete", { label: r.label })}
           style={{
             padding: "6px 10px",
             borderRadius: 8,
@@ -402,7 +410,7 @@ function RecurringRow({
             cursor: "pointer",
           }}
         >
-          Delete
+          {t("rec.btn.delete")}
         </button>
       </div>
     </li>

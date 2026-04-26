@@ -50,12 +50,33 @@ export const FORMAT_LABEL: Record<ChessFormat, string> = {
   swiss: "Swiss",
 };
 
+/** i18n keys parallel to {@link FORMAT_LABEL}. */
+export const FORMAT_LABEL_KEY: Record<ChessFormat, string> = {
+  bullet: "chess.format.bullet",
+  blitz: "chess.format.blitz",
+  rapid: "chess.format.rapid",
+  classical: "chess.format.classical",
+  swiss: "chess.format.swiss",
+};
+
 export const FORMAT_TIME: Record<ChessFormat, string> = {
   bullet: "1+0",
   blitz: "3+2",
   rapid: "10+5",
   classical: "30+30",
   swiss: "Swiss",
+};
+
+/**
+ * i18n keys for time-control labels. "Swiss" reuses the format label key
+ * because the time control is itself the format name.
+ */
+export const FORMAT_TIME_KEY: Record<ChessFormat, string> = {
+  bullet: "chess.time.bullet",
+  blitz: "chess.time.blitz",
+  rapid: "chess.time.rapid",
+  classical: "chess.time.classical",
+  swiss: "chess.format.swiss",
 };
 
 const TOURNAMENT_NAMES: readonly string[] = [
@@ -161,15 +182,27 @@ export async function fetchChessSummary(accountId: string): Promise<ChessSummary
   return generateChess(accountId);
 }
 
-export function formatCountdown(targetIso: string): string {
-  const t = new Date(targetIso).getTime();
-  if (!Number.isFinite(t)) return "—";
-  const diff = t - Date.now();
-  if (diff < 0) return "live";
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+/**
+ * Returns a short countdown string like `"in 2d 3h"` or `"in 5m"`. Pass an
+ * optional `t` translator to localize; without it the original English copy
+ * is returned (so server / snapshot code can call this safely).
+ */
+export function formatCountdown(targetIso: string, t?: Translator): string {
+  const ts = new Date(targetIso).getTime();
+  if (!Number.isFinite(ts)) return "—";
+  const diff = ts - Date.now();
+  if (diff < 0) return t ? t("chess.countdown.live") : "live";
   const days = Math.floor(diff / 86_400_000);
   const hours = Math.floor((diff % 86_400_000) / 3_600_000);
   const minutes = Math.floor((diff % 3_600_000) / 60_000);
-  if (days > 0) return `in ${days}d ${hours}h`;
-  if (hours > 0) return `in ${hours}h ${minutes}m`;
-  return `in ${Math.max(1, minutes)}m`;
+  if (days > 0) {
+    return t ? t("chess.countdown.dh", { days, hours }) : `in ${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return t ? t("chess.countdown.hm", { hours, minutes }) : `in ${hours}h ${minutes}m`;
+  }
+  const m = Math.max(1, minutes);
+  return t ? t("chess.countdown.m", { minutes: m }) : `in ${m}m`;
 }

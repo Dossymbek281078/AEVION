@@ -1,18 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
-type Tab = { id: string; anchorId: string; label: string; icon: string };
+type Tab = { id: string; anchorId: string; labelKey: string; icon: string };
 
 const TABS: Tab[] = [
-  { id: "wallet", anchorId: "bank-anchor-wallet", label: "Wallet", icon: "₳" },
-  { id: "ecosystem", anchorId: "bank-anchor-ecosystem", label: "Pulse", icon: "✺" },
-  { id: "forecast", anchorId: "bank-anchor-forecast", label: "Forecast", icon: "↗" },
-  { id: "trust", anchorId: "bank-anchor-trust", label: "Trust", icon: "★" },
-  { id: "achievements", anchorId: "bank-anchor-achievements", label: "Badges", icon: "◆" },
+  { id: "wallet", anchorId: "bank-anchor-wallet", labelKey: "mtb.tab.wallet", icon: "₳" },
+  { id: "ecosystem", anchorId: "bank-anchor-ecosystem", labelKey: "mtb.tab.ecosystem", icon: "✺" },
+  { id: "forecast", anchorId: "bank-anchor-forecast", labelKey: "mtb.tab.forecast", icon: "↗" },
+  { id: "trust", anchorId: "bank-anchor-trust", labelKey: "mtb.tab.trust", icon: "★" },
+  { id: "achievements", anchorId: "bank-anchor-achievements", labelKey: "mtb.tab.achievements", icon: "◆" },
 ];
 
 export function MobileTabBar() {
+  const { t } = useI18n();
   const [active, setActive] = useState<string>("wallet");
 
   const jump = useCallback((tab: Tab) => {
@@ -70,7 +72,7 @@ export function MobileTabBar() {
       `}</style>
       <nav
         className="aevion-mobile-tabbar"
-        aria-label="Bank section navigation"
+        aria-label={t("mtb.aria.nav")}
         style={{
           position: "fixed",
           left: 12,
@@ -93,7 +95,7 @@ export function MobileTabBar() {
               key={tab.id}
               onClick={() => jump(tab)}
               aria-current={isActive ? "true" : undefined}
-              aria-label={`Jump to ${tab.label}`}
+              aria-label={t("mtb.aria.jump", { label: t(tab.labelKey) })}
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -115,7 +117,7 @@ export function MobileTabBar() {
               <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>
                 {tab.icon}
               </span>
-              <span style={{ fontSize: 10, letterSpacing: "0.04em" }}>{tab.label}</span>
+              <span style={{ fontSize: 10, letterSpacing: "0.04em" }}>{t(tab.labelKey)}</span>
             </button>
           );
         })}

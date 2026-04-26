@@ -9,6 +9,7 @@ import { formatCurrency } from "../_lib/currency";
 import { formatRelative } from "../_lib/format";
 import { absoluteRequestUrl } from "../_lib/paymentRequest";
 import type { Circle } from "../_lib/circles";
+import { useI18n } from "@/lib/i18n";
 import { btnSecondary, inputStyle } from "./formPrimitives";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
@@ -22,6 +23,7 @@ type Props = {
 };
 
 export function SocialCircles({ myAccountId, myNickname, balance, send, notify }: Props) {
+  const { t } = useI18n();
   const { items, add, remove, postMessage } = useCircles();
   const [formOpen, setFormOpen] = useState<boolean>(false);
   const [name, setName] = useState<string>("");
@@ -49,18 +51,18 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
 
   const create = () => {
     if (!name.trim()) {
-      notify("Give the circle a name", "error");
+      notify(t("circles.toast.nameRequired"), "error");
       return;
     }
     if (selectedIds.size === 0) {
-      notify("Pick at least one member", "error");
+      notify(t("circles.toast.pickMember"), "error");
       return;
     }
     const members = contacts
       .filter((c) => selectedIds.has(c.id))
       .map((c) => ({ accountId: c.id, nickname: c.nickname }));
     const c = add(name.trim(), members);
-    notify(`"${c.name}" created`, "success");
+    notify(t("circles.toast.created", { name: c.name }), "success");
     setName("");
     setSelectedIds(new Set());
     setFormOpen(false);
@@ -94,7 +96,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
           id="circles-heading"
           style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
         >
-          Circles · group chats + payments
+          {t("circles.heading")}
           {items.length > 0 ? (
             <span
               style={{
@@ -126,7 +128,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
             cursor: "pointer",
           }}
         >
-          {formOpen ? "Cancel" : "+ New circle"}
+          {formOpen ? t("circles.btn.cancel") : t("circles.btn.new")}
         </button>
       </div>
 
@@ -144,23 +146,23 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
           }}
         >
           <label style={{ display: "grid", gap: 4 }}>
-            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Circle name</span>
+            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{t("circles.field.name.label")}</span>
             <input
               ref={nameInputRef}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Trip crew, Roommates, Co-authors…"
+              placeholder={t("circles.field.name.placeholder")}
               maxLength={60}
               style={inputStyle}
             />
           </label>
           <div>
             <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 6 }}>
-              Members ({selectedIds.size})
+              {t("circles.members.label", { count: selectedIds.size })}
             </div>
             {contacts.length === 0 ? (
               <div style={{ fontSize: 12, color: "#94a3b8" }}>
-                Add people to your address book first (via Send AEC form).
+                {t("circles.members.empty")}
               </div>
             ) : (
               <div style={{ display: "grid", gap: 4, maxHeight: 160, overflowY: "auto" as const }}>
@@ -196,7 +198,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
           </div>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={() => setFormOpen(false)} style={btnSecondary}>
-              Cancel
+              {t("circles.btn.cancel")}
             </button>
             <button
               onClick={create}
@@ -211,7 +213,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
                 cursor: "pointer",
               }}
             >
-              Create
+              {t("circles.btn.create")}
             </button>
           </div>
         </div>
@@ -228,7 +230,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
             borderRadius: 10,
           }}
         >
-          No circles yet. Create one to group chat + pay with your collaborators.
+          {t("circles.empty")}
         </div>
       ) : (
         <div
@@ -269,7 +271,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
                       {c.name}
                     </div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-                      {c.members.length} members · {c.messages.length} messages
+                      {t("circles.list.meta", { members: c.members.length, messages: c.messages.length })}
                     </div>
                   </button>
                 </li>
@@ -286,10 +288,10 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
                 send={send}
                 postMessage={postMessage}
                 onDelete={() => {
-                  if (confirm(`Delete circle "${active.name}"?`)) {
+                  if (confirm(t("circles.confirm.delete", { name: active.name }))) {
                     remove(active.id);
                     setActiveId(null);
-                    notify("Circle deleted", "info");
+                    notify(t("circles.toast.deleted"), "info");
                   }
                 }}
                 notify={notify}
@@ -305,7 +307,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
                   borderRadius: 10,
                 }}
               >
-                Select a circle to open chat.
+                {t("circles.detail.placeholder")}
               </div>
             )}
           </div>
@@ -334,6 +336,7 @@ function CircleDetail({
   onDelete: () => void;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const [text, setText] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
   const [recipientId, setRecipientId] = useState<string>(circle.members[0]?.accountId ?? "");
@@ -359,16 +362,16 @@ function CircleDetail({
   const postSend = async () => {
     const n = parseFloat(amount);
     if (!Number.isFinite(n) || n <= 0) {
-      notify("Invalid amount", "error");
+      notify(t("circles.toast.invalidAmount"), "error");
       return;
     }
     const rec = circle.members.find((m) => m.accountId === recipientId);
     if (!rec) {
-      notify("Pick a recipient", "error");
+      notify(t("circles.toast.pickRecipient"), "error");
       return;
     }
     if (n > balance) {
-      notify("Insufficient funds", "error");
+      notify(t("circles.toast.insufficient"), "error");
       return;
     }
     setBusy(true);
@@ -379,30 +382,30 @@ function CircleDetail({
       authorId: myAccountId,
       authorNickname: myNickname,
       kind: "sent",
-      text: `Sent ${formatCurrency(n, code)} to ${rec.nickname}`,
+      text: t("circles.message.sent", { amount: formatCurrency(n, code), nickname: rec.nickname }),
       amount: n,
       recipient: rec.accountId,
     });
     setAmount("");
-    notify(`Sent ${formatCurrency(n, code)} to ${rec.nickname}`, "success");
+    notify(t("circles.toast.sent", { amount: formatCurrency(n, code), nickname: rec.nickname }), "success");
   };
 
   const postRequest = () => {
     const n = parseFloat(amount);
     if (!Number.isFinite(n) || n <= 0) {
-      notify("Invalid amount", "error");
+      notify(t("circles.toast.invalidAmount"), "error");
       return;
     }
     postMessage(circle.id, {
       authorId: myAccountId,
       authorNickname: myNickname,
       kind: "requested",
-      text: `Requested ${formatCurrency(n, code)} from everyone`,
+      text: t("circles.message.requested", { amount: formatCurrency(n, code) }),
       amount: n,
       memo: circle.name,
     });
     setAmount("");
-    notify("Request posted. Tap Copy link on the bubble to share.", "success");
+    notify(t("circles.toast.requestPosted"), "success");
   };
 
   return (
@@ -433,7 +436,7 @@ function CircleDetail({
         </div>
         <button
           onClick={onDelete}
-          aria-label={`Delete ${circle.name}`}
+          aria-label={t("circles.detail.btn.deleteAria", { name: circle.name })}
           style={{
             padding: "4px 10px",
             borderRadius: 6,
@@ -445,7 +448,7 @@ function CircleDetail({
             cursor: "pointer",
           }}
         >
-          Delete
+          {t("circles.detail.btn.delete")}
         </button>
       </div>
 
@@ -453,7 +456,7 @@ function CircleDetail({
         ref={feedRef}
         role="log"
         aria-live="polite"
-        aria-label={`${circle.name} messages`}
+        aria-label={t("circles.detail.messagesAria", { name: circle.name })}
         style={{
           padding: 10,
           borderRadius: 10,
@@ -467,7 +470,7 @@ function CircleDetail({
       >
         {circle.messages.length === 0 ? (
           <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0", textAlign: "center" as const }}>
-            No messages yet. Say hi or send someone AEC.
+            {t("circles.detail.empty")}
           </div>
         ) : (
           circle.messages.map((m) => <Bubble key={m.id} msg={m} myAccountId={myAccountId} notify={notify} />)
@@ -481,8 +484,8 @@ function CircleDetail({
           onKeyDown={(e) => {
             if (e.key === "Enter") postText();
           }}
-          placeholder="Type a message…"
-          aria-label="Message"
+          placeholder={t("circles.detail.message.placeholder")}
+          aria-label={t("circles.detail.message.aria")}
           style={{ ...inputStyle, flex: 1 }}
         />
         <button
@@ -498,7 +501,7 @@ function CircleDetail({
             cursor: "pointer",
           }}
         >
-          Post
+          {t("circles.detail.btn.post")}
         </button>
       </div>
 
@@ -506,7 +509,7 @@ function CircleDetail({
         <select
           value={recipientId}
           onChange={(e) => setRecipientId(e.target.value)}
-          aria-label="Recipient"
+          aria-label={t("circles.detail.recipient.aria")}
           style={{ ...inputStyle, flex: "1 1 120px", cursor: "pointer" }}
         >
           {circle.members.map((m) => (
@@ -521,8 +524,8 @@ function CircleDetail({
           type="number"
           min="0"
           step="0.01"
-          placeholder="0.00 AEC"
-          aria-label="Amount AEC"
+          placeholder={t("circles.detail.amount.placeholder")}
+          aria-label={t("circles.detail.amount.aria")}
           style={{ ...inputStyle, flex: "0 0 120px" }}
         />
         <button
@@ -539,7 +542,7 @@ function CircleDetail({
             cursor: busy ? "default" : "pointer",
           }}
         >
-          {busy ? "Sending…" : "Send"}
+          {busy ? t("circles.detail.btn.sending") : t("circles.detail.btn.send")}
         </button>
         <button
           onClick={postRequest}
@@ -554,7 +557,7 @@ function CircleDetail({
             cursor: "pointer",
           }}
         >
-          Request
+          {t("circles.detail.btn.request")}
         </button>
       </div>
     </div>
@@ -570,6 +573,7 @@ function Bubble({
   myAccountId: string;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const mine = msg.authorId === myAccountId;
   const palette =
     msg.kind === "sent"
@@ -585,9 +589,9 @@ function Bubble({
     const url = absoluteRequestUrl({ to: myAccountId, amount: msg.amount, memo: msg.memo });
     try {
       await navigator.clipboard.writeText(url);
-      notify("Request link copied", "success");
+      notify(t("circles.bubble.toast.copied"), "success");
     } catch {
-      notify("Clipboard blocked", "error");
+      notify(t("circles.bubble.toast.blocked"), "error");
     }
   };
 
@@ -613,10 +617,10 @@ function Bubble({
           marginBottom: 2,
         }}
       >
-        <span style={{ fontWeight: 700 }}>{mine ? "You" : msg.authorNickname}</span>
+        <span style={{ fontWeight: 700 }}>{mine ? t("circles.bubble.you") : msg.authorNickname}</span>
         <span>· {formatRelative(msg.createdAt)}</span>
-        {msg.kind === "sent" ? <span style={{ color: "#065f46", fontWeight: 700 }}>· sent</span> : null}
-        {msg.kind === "requested" ? <span style={{ color: "#9d174d", fontWeight: 700 }}>· request</span> : null}
+        {msg.kind === "sent" ? <span style={{ color: "#065f46", fontWeight: 700 }}>{t("circles.bubble.sent")}</span> : null}
+        {msg.kind === "requested" ? <span style={{ color: "#9d174d", fontWeight: 700 }}>{t("circles.bubble.request")}</span> : null}
       </div>
       <div style={{ fontSize: 13, color: palette.fg, fontWeight: 600 }}>{msg.text}</div>
       {msg.kind === "requested" ? (
@@ -634,10 +638,9 @@ function Bubble({
             cursor: "pointer",
           }}
         >
-          Copy pay link
+          {t("circles.bubble.btn.copy")}
         </button>
       ) : null}
     </div>
   );
 }
-

@@ -6,32 +6,42 @@ export type ScenarioKey = "conservative" | "realistic" | "optimistic";
 export type Scenario = {
   key: ScenarioKey;
   label: string;
+  /** i18n key for {@link label}; consumers should prefer `t(labelKey)`. */
+  labelKey: string;
   multiplier: number;
   color: string;
   description: string;
+  /** i18n key for {@link description}; consumers should prefer `t(descriptionKey)`. */
+  descriptionKey: string;
 };
 
 export const SCENARIOS: Scenario[] = [
   {
     key: "conservative",
     label: "Conservative",
+    labelKey: "forecast.scenario.conservative.label",
     multiplier: 0.75,
     color: "#64748b",
     description: "25 % softer than today's pace — accounts for dips in verification volume.",
+    descriptionKey: "forecast.scenario.conservative.description",
   },
   {
     key: "realistic",
     label: "Realistic",
+    labelKey: "forecast.scenario.realistic.label",
     multiplier: 1.0,
     color: "#0d9488",
     description: "Current 30-day pace extrapolated forward.",
+    descriptionKey: "forecast.scenario.realistic.description",
   },
   {
     key: "optimistic",
     label: "Optimistic",
+    labelKey: "forecast.scenario.optimistic.label",
     multiplier: 1.35,
     color: "#d97706",
     description: "35 % lift — royalties compound as IP catalogue grows.",
+    descriptionKey: "forecast.scenario.optimistic.description",
   },
 ];
 

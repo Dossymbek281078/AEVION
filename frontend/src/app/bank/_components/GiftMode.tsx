@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import * as contactsLib from "../_lib/contacts";
 import type { Contact } from "../_lib/contacts";
 import { useCurrency } from "../_lib/CurrencyContext";
@@ -30,6 +31,7 @@ type Props = {
 };
 
 export function GiftMode({ myAccountId, balance, send, notify }: Props) {
+  const { t } = useI18n();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [recipientId, setRecipientId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -68,7 +70,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
           const ok = await sendRef.current(g.recipientAccountId, g.amount);
           if (ok) {
             updateGiftStatus(g.id, { status: "sent", sentAt: new Date().toISOString() });
-            notify(`🎁 Timelocked gift to ${g.recipientNickname} unlocked — ${g.amount.toFixed(2)} AEC sent`, "success");
+            notify(t("gift.notify.unlocked", { nickname: g.recipientNickname, amount: g.amount.toFixed(2) }), "success");
           }
         } catch {
           // Leave pending; surface quietly next tick.
@@ -81,7 +83,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
       window.removeEventListener("focus", sync);
       window.clearInterval(id);
     };
-  }, [notify]);
+  }, [notify, t]);
 
   const theme = getTheme(themeId);
   const amountNum = parseFloat(amount);
@@ -89,23 +91,23 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
 
   const submit = async () => {
     if (!recipient) {
-      notify("Pick a recipient", "error");
+      notify(t("gift.notify.pickRecipient"), "error");
       return;
     }
     if (recipient.id === myAccountId) {
-      notify("You can't gift yourself", "error");
+      notify(t("gift.notify.cannotGiftSelf"), "error");
       return;
     }
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      notify("Invalid amount", "error");
+      notify(t("gift.notify.invalidAmount"), "error");
       return;
     }
     if (amountNum > balance) {
-      notify("Insufficient funds", "error");
+      notify(t("gift.notify.insufficient"), "error");
       return;
     }
     if (!message.trim()) {
-      notify("Add a message to make it personal", "error");
+      notify(t("gift.notify.messageRequired"), "error");
       return;
     }
 
@@ -133,7 +135,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
       setAmount("");
       setMessage("");
       setUnlockDate("");
-      notify(`🔐 Timelock gift scheduled for ${new Date(unlockIso).toLocaleString()}`, "success");
+      notify(t("gift.notify.scheduled", { date: new Date(unlockIso).toLocaleString() }), "success");
       return;
     }
 
@@ -153,19 +155,19 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
       setHistory(loadGifts());
       setAmount("");
       setMessage("");
-      notify(`Gift sent to ${recipient.nickname}`, "success");
+      notify(t("gift.notify.sent", { nickname: recipient.nickname }), "success");
     }
     setBusy(false);
   };
 
   const cancelPending = (g: Gift) => {
     if (!canCancelGift(g)) {
-      notify("Commit-lock window reached — gift will fire as scheduled.", "info");
+      notify(t("gift.notify.commitLock"), "info");
       return;
     }
-    if (!confirm(`Cancel timelock gift to ${g.recipientNickname}?`)) return;
+    if (!confirm(t("gift.confirm.cancel", { nickname: g.recipientNickname }))) return;
     updateGiftStatus(g.id, { status: "cancelled" });
-    notify(`Timelock gift cancelled`, "info");
+    notify(t("gift.notify.cancelled"), "info");
   };
 
   const pending = history.filter((g) => g.status === "pending");
@@ -201,10 +203,10 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
         </span>
         <div>
           <h2 id="gift-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-            Gift mode
+            {t("gift.heading")}
           </h2>
           <div style={{ fontSize: 11, color: "#94a3b8" }}>
-            Send AEC with a custom card — birthdays, thanks, royalty splits.
+            {t("gift.subtitle")}
           </div>
         </div>
       </div>
@@ -219,14 +221,14 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
       >
         <div style={{ display: "grid", gap: 8 }}>
           <label style={{ display: "grid", gap: 4 }}>
-            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Recipient</span>
+            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{t("gift.field.recipient")}</span>
             <select
               ref={recipientRef}
               value={recipientId}
               onChange={(e) => setRecipientId(e.target.value)}
               style={inputStyle}
             >
-              {contacts.length === 0 ? <option value="">No contacts yet</option> : null}
+              {contacts.length === 0 ? <option value="">{t("gift.field.recipient.empty")}</option> : null}
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nickname}
@@ -235,23 +237,23 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
             </select>
           </label>
           <label style={{ display: "grid", gap: 4 }}>
-            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Amount AEC</span>
+            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{t("gift.field.amount")}</span>
             <input
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               type="number"
               min="0"
               step="0.01"
-              placeholder="25.00"
+              placeholder={t("gift.field.amount.placeholder")}
               style={inputStyle}
             />
           </label>
           <label style={{ display: "grid", gap: 4 }}>
-            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Message</span>
+            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{t("gift.field.message")}</span>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Happy birthday! Treat yourself ♫"
+              placeholder={t("gift.field.message.placeholder")}
               maxLength={200}
               rows={3}
               style={{
@@ -266,29 +268,29 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
           </label>
           <div>
             <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 6 }}>
-              Theme
+              {t("gift.field.theme")}
             </div>
             <div
               role="radiogroup"
-              aria-label="Gift card theme"
+              aria-label={t("gift.field.theme.aria")}
               style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
             >
-              {GIFT_THEMES.map((t) => {
-                const active = t.id === themeId;
+              {GIFT_THEMES.map((gt) => {
+                const active = gt.id === themeId;
                 return (
                   <button
-                    key={t.id}
+                    key={gt.id}
                     role="radio"
                     aria-checked={active}
-                    onClick={() => setThemeId(t.id)}
-                    title={t.label}
+                    onClick={() => setThemeId(gt.id)}
+                    title={gt.label}
                     style={{
                       width: 44,
                       height: 44,
                       borderRadius: 10,
                       border: active ? "2px solid #0f172a" : "1px solid rgba(15,23,42,0.12)",
-                      background: t.gradient,
-                      color: t.textColor,
+                      background: gt.gradient,
+                      color: gt.textColor,
                       fontSize: 16,
                       fontWeight: 900,
                       cursor: "pointer",
@@ -298,7 +300,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
                       boxShadow: active ? "0 2px 8px rgba(15,23,42,0.2)" : "none",
                     }}
                   >
-                    {t.icon}
+                    {gt.icon}
                   </button>
                 );
               })}
@@ -306,7 +308,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
           </div>
           <label style={{ display: "grid", gap: 4 }}>
             <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
-              Unlock at <span style={{ color: "#94a3b8", fontWeight: 600 }}>(optional timelock)</span>
+              {t("gift.field.unlock")} <span style={{ color: "#94a3b8", fontWeight: 600 }}>{t("gift.field.unlock.optional")}</span>
             </span>
             <input
               value={unlockDate}
@@ -315,8 +317,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               style={inputStyle}
             />
             <span style={{ fontSize: 10, color: "#94a3b8" }}>
-              Leave blank to send now. With a future date, transfer auto-fires at unlock
-              — cancellable up to 1 hour before.
+              {t("gift.field.unlock.hint")}
             </span>
           </label>
           <button
@@ -339,19 +340,19 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
             }}
           >
             {busy
-              ? "Sending…"
+              ? t("gift.btn.sending")
               : contacts.length === 0
-                ? "Add a contact first"
+                ? t("gift.btn.addContactFirst")
                 : unlockDate && Date.parse(new Date(unlockDate).toISOString()) > Date.now()
-                  ? "🔐 Schedule timelock gift"
-                  : "Send gift"}
+                  ? t("gift.btn.scheduleTimelock")
+                  : t("gift.btn.send")}
           </button>
         </div>
 
         <GiftPreview
           theme={theme.id}
           amount={Number.isFinite(amountNum) ? amountNum : 0}
-          message={message || "Your message will appear here"}
+          message={message || t("gift.preview.placeholder")}
           recipientNickname={recipient?.nickname || "—"}
           currencyCode={code}
         />
@@ -369,7 +370,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               marginBottom: 8,
             }}
           >
-            🔐 Timelock · pending unlock
+            {t("gift.section.pending")}
           </div>
           <div
             style={{
@@ -401,7 +402,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               marginBottom: 8,
             }}
           >
-            Sent gifts
+            {t("gift.section.sent")}
           </div>
           <div
             style={{
@@ -432,6 +433,7 @@ function PendingGiftRow({
   now: number;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const unlockMs = g.unlockAt ? Date.parse(g.unlockAt) : 0;
   const remainingMs = Math.max(0, unlockMs - now);
   const sec = Math.floor(remainingMs / 1000);
@@ -486,7 +488,7 @@ function PendingGiftRow({
           {g.amount.toFixed(2)} AEC → {g.recipientNickname}
         </div>
         <div style={{ fontSize: 10, color: "#64748b", marginTop: 1 }}>
-          Unlocks {new Date(unlockMs).toLocaleString()} · {g.message.slice(0, 60)}
+          {t("gift.row.unlocks", { date: new Date(unlockMs).toLocaleString(), message: g.message.slice(0, 60) })}
         </div>
       </div>
       <span
@@ -505,7 +507,7 @@ function PendingGiftRow({
         onClick={onCancel}
         disabled={!canCancel}
         aria-disabled={!canCancel}
-        title={canCancel ? "Cancel timelock gift" : "Commit-lock window reached"}
+        title={canCancel ? t("gift.row.cancel.title") : t("gift.row.locked.title")}
         style={{
           padding: "4px 8px",
           borderRadius: 7,
@@ -517,7 +519,7 @@ function PendingGiftRow({
           cursor: canCancel ? "pointer" : "not-allowed",
         }}
       >
-        {canCancel ? "Cancel" : "🔒 Locked"}
+        {canCancel ? t("gift.row.cancel") : t("gift.row.locked")}
       </button>
     </div>
   );
@@ -536,15 +538,16 @@ function GiftPreview({
   recipientNickname: string;
   currencyCode: "AEC" | "USD" | "EUR" | "KZT";
 }) {
-  const t = getTheme(theme);
+  const { t } = useI18n();
+  const gt = getTheme(theme);
   return (
     <div
-      aria-label="Gift card preview"
+      aria-label={t("gift.preview.aria")}
       style={{
         padding: 18,
         borderRadius: 14,
-        background: t.gradient,
-        color: t.textColor,
+        background: gt.gradient,
+        color: gt.textColor,
         minHeight: 220,
         display: "flex",
         flexDirection: "column",
@@ -562,7 +565,7 @@ function GiftPreview({
           width: 140,
           height: 140,
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${t.accent}44 0%, transparent 70%)`,
+          background: `radial-gradient(circle, ${gt.accent}44 0%, transparent 70%)`,
         }}
       />
       <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" as const }}>
@@ -579,7 +582,7 @@ function GiftPreview({
             fontWeight: 900,
           }}
         >
-          {t.icon}
+          {gt.icon}
         </span>
         <div
           style={{
@@ -590,7 +593,7 @@ function GiftPreview({
             opacity: 0.85,
           }}
         >
-          {t.label} · AEVION gift
+          {t("gift.preview.brand", { label: gt.label })}
         </div>
       </div>
       <div
@@ -606,7 +609,7 @@ function GiftPreview({
         {message}
       </div>
       <div style={{ position: "relative" as const }}>
-        <div style={{ fontSize: 11, opacity: 0.85, fontWeight: 700 }}>To {recipientNickname}</div>
+        <div style={{ fontSize: 11, opacity: 0.85, fontWeight: 700 }}>{t("gift.preview.to", { nickname: recipientNickname })}</div>
         <div
           style={{
             fontSize: 22,

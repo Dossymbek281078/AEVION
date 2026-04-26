@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useSavings } from "../_hooks/useSavings";
 import { absoluteRequestUrl } from "../_lib/paymentRequest";
 import {
   forecastGoal,
   ICON_COLOR,
-  ICON_LABEL,
+  ICON_LABEL_KEY,
   ICON_SYMBOL,
   type GoalForecast,
   type GoalIcon,
@@ -24,6 +25,7 @@ type Props = {
 const ICON_CHOICES: GoalIcon[] = ["travel", "vacation", "home", "gear", "star", "heart", "coffee", "music"];
 
 export function SavingsGoals({ accountId, notify }: Props) {
+  const { t } = useI18n();
   const { goals, add, remove, contribute, reset } = useSavings();
   const [formOpen, setFormOpen] = useState<boolean>(false);
   const [label, setLabel] = useState<string>("");
@@ -46,11 +48,11 @@ export function SavingsGoals({ accountId, notify }: Props) {
   const save = () => {
     const n = parseFloat(target);
     if (!label.trim()) {
-      notify("Give the goal a name", "error");
+      notify(t("savings.toast.name"), "error");
       return;
     }
     if (!Number.isFinite(n) || n <= 0) {
-      notify("Invalid target amount", "error");
+      notify(t("savings.toast.target"), "error");
       return;
     }
     let deadlineISO: string | null = null;
@@ -59,7 +61,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
       if (!Number.isNaN(d.getTime())) deadlineISO = d.toISOString();
     }
     add({ label: label.trim(), icon, targetAec: n, deadlineISO });
-    notify(`Goal "${label.trim()}" created`, "success");
+    notify(t("savings.toast.created", { label: label.trim() }), "success");
     resetForm();
     setFormOpen(false);
   };
@@ -89,7 +91,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
           id="savings-heading"
           style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
         >
-          Savings goals
+          {t("savings.title")}
           {goals.length > 0 ? (
             <span
               style={{
@@ -102,7 +104,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
                 fontWeight: 800,
               }}
             >
-              {goals.filter((g) => !g.completedAt).length} active
+              {t("savings.activePill", { n: goals.filter((g) => !g.completedAt).length })}
             </span>
           ) : null}
         </h2>
@@ -121,7 +123,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
             cursor: "pointer",
           }}
         >
-          {formOpen ? "Cancel" : "+ New goal"}
+          {formOpen ? t("savings.cta.cancel") : t("savings.cta.new")}
         </button>
       </div>
 
@@ -139,17 +141,17 @@ export function SavingsGoals({ accountId, notify }: Props) {
           }}
         >
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
-            <Field label="Name">
+            <Field label={t("savings.field.name")}>
               <input
                 ref={firstInputRef}
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="Vacation to Bali, MacBook Pro…"
+                placeholder={t("savings.field.name.placeholder")}
                 maxLength={60}
                 style={inputStyle}
               />
             </Field>
-            <Field label="Target AEC">
+            <Field label={t("savings.field.target")}>
               <input
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
@@ -160,7 +162,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
                 style={inputStyle}
               />
             </Field>
-            <Field label="Deadline (optional)">
+            <Field label={t("savings.field.deadline")}>
               <input
                 type="date"
                 value={deadline}
@@ -170,7 +172,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
             </Field>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 6 }}>Icon</div>
+            <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 6 }}>{t("savings.field.icon")}</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Icon">
               {ICON_CHOICES.map((ic) => {
                 const active = icon === ic;
@@ -179,9 +181,9 @@ export function SavingsGoals({ accountId, notify }: Props) {
                     key={ic}
                     role="radio"
                     aria-checked={active}
-                    aria-label={ICON_LABEL[ic]}
+                    aria-label={t(ICON_LABEL_KEY[ic])}
                     onClick={() => setIcon(ic)}
-                    title={ICON_LABEL[ic]}
+                    title={t(ICON_LABEL_KEY[ic])}
                     style={{
                       width: 34,
                       height: 34,
@@ -211,7 +213,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
               }}
               style={btnSecondary}
             >
-              Cancel
+              {t("savings.cta.cancel")}
             </button>
             <button
               onClick={save}
@@ -226,7 +228,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
                 cursor: "pointer",
               }}
             >
-              Create goal
+              {t("savings.cta.create")}
             </button>
           </div>
         </div>
@@ -243,7 +245,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
             borderRadius: 10,
           }}
         >
-          No goals yet. Save for a vacation, emergency fund, or next piece of gear.
+          {t("savings.empty")}
         </div>
       ) : (
         <div
@@ -268,22 +270,22 @@ export function SavingsGoals({ accountId, notify }: Props) {
                 notify={notify}
                 onAdd={(amt) => {
                   contribute(g.id, amt);
-                  notify(`+${amt.toFixed(2)} AEC to "${g.label}"`, "success");
+                  notify(t("savings.toast.added", { amt: amt.toFixed(2), label: g.label }), "success");
                 }}
                 onWithdraw={(amt) => {
                   contribute(g.id, -amt);
-                  notify(`Withdrew ${amt.toFixed(2)} AEC from "${g.label}"`, "info");
+                  notify(t("savings.toast.withdrew", { amt: amt.toFixed(2), label: g.label }), "info");
                 }}
                 onReset={() => {
-                  if (confirm(`Withdraw everything from "${g.label}"?`)) {
+                  if (confirm(t("savings.confirm.reset", { label: g.label }))) {
                     reset(g.id);
-                    notify(`"${g.label}" reset`, "info");
+                    notify(t("savings.toast.reset", { label: g.label }), "info");
                   }
                 }}
                 onDelete={() => {
-                  if (confirm(`Delete goal "${g.label}"?`)) {
+                  if (confirm(t("savings.confirm.delete", { label: g.label }))) {
                     remove(g.id);
-                    notify(`"${g.label}" deleted`, "info");
+                    notify(t("savings.toast.deleted", { label: g.label }), "info");
                   }
                 }}
               />
@@ -311,9 +313,10 @@ function GoalCard({
   onReset: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   const [amt, setAmt] = useState<string>("");
   const [shareOpen, setShareOpen] = useState<boolean>(false);
-  const forecast: GoalForecast = forecastGoal(g);
+  const forecast: GoalForecast = forecastGoal(g, t);
   const color = ICON_COLOR[g.icon];
   const completed = forecast.status === "completed";
   const remainingAec = Math.max(0, g.targetAec - g.currentAec);
@@ -326,9 +329,9 @@ function GoalCard({
       absoluteRequestUrl({
         to: accountId,
         amount: suggestedContributionAec,
-        memo: `Gift for "${g.label}"`,
+        memo: t("savings.share.memo", { label: g.label }),
       }),
-    [accountId, suggestedContributionAec, g.label],
+    [accountId, suggestedContributionAec, g.label, t],
   );
 
   // Celebrate the null → set transition on completedAt.
@@ -417,8 +420,8 @@ function GoalCard({
         <div style={{ display: "flex", gap: 2 }}>
           <button
             onClick={() => setShareOpen(true)}
-            aria-label={`Share ${g.label} for contributions`}
-            title="Share goal · contribution QR"
+            aria-label={t("savings.card.aria.share", { label: g.label })}
+            title={t("savings.card.share")}
             style={{
               background: "transparent",
               border: "none",
@@ -433,7 +436,7 @@ function GoalCard({
           </button>
           <button
             onClick={onDelete}
-            aria-label={`Delete ${g.label}`}
+            aria-label={t("savings.card.aria.delete", { label: g.label })}
             style={{
               background: "transparent",
               border: "none",
@@ -503,7 +506,7 @@ function GoalCard({
       {completed ? (
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={onReset} style={{ ...btnSecondary, flex: 1 }}>
-            Withdraw all
+            {t("savings.card.withdrawAll")}
           </button>
         </div>
       ) : (
@@ -519,11 +522,11 @@ function GoalCard({
               if (e.key === "Enter") apply("add");
             }}
             style={{ ...inputStyle, flex: 1 }}
-            aria-label="Amount to add or withdraw"
+            aria-label={t("savings.card.aria.amount")}
           />
           <button
             onClick={() => apply("add")}
-            aria-label={`Add funds to ${g.label}`}
+            aria-label={t("savings.card.aria.add", { label: g.label })}
             style={{
               padding: "8px 12px",
               borderRadius: 8,
@@ -535,11 +538,11 @@ function GoalCard({
               cursor: "pointer",
             }}
           >
-            Add
+            {t("savings.card.add")}
           </button>
           <button
             onClick={() => apply("withdraw")}
-            aria-label={`Withdraw from ${g.label}`}
+            aria-label={t("savings.card.aria.withdraw", { label: g.label })}
             style={{
               padding: "8px 12px",
               borderRadius: 8,
@@ -644,6 +647,7 @@ function GoalShareModal({
   onClose: () => void;
   notify: (msg: string, type?: "success" | "error" | "info") => void;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -655,9 +659,9 @@ function GoalShareModal({
   const doCopy = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
-      notify("Share link copied", "success");
+      notify(t("savings.share.toast.copied"), "success");
     } catch {
-      notify("Clipboard blocked — copy manually", "error");
+      notify(t("savings.share.toast.blocked"), "error");
     }
   };
 
@@ -669,8 +673,8 @@ function GoalShareModal({
     }
     try {
       await nav.share({
-        title: `Contribute to "${goal.label}"`,
-        text: `Help me hit my AEVION savings goal.`,
+        title: t("savings.share.native.title", { label: goal.label }),
+        text: t("savings.share.native.text"),
         url: shareUrl,
       });
     } catch {
@@ -714,16 +718,16 @@ function GoalShareModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>
-              Share "{goal.label}"
+              {t("savings.share.title", { label: goal.label })}
             </div>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-              Friends can scan this QR to contribute. Suggested: {suggestedAec.toFixed(0)} AEC.
+              {t("savings.share.subtitle", { amt: suggestedAec.toFixed(0) })}
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close share dialog"
+            aria-label={t("savings.share.close")}
             style={{
               background: "transparent",
               border: "none",
@@ -774,7 +778,7 @@ function GoalShareModal({
               cursor: "pointer",
             }}
           >
-            Copy link
+            {t("savings.share.copy")}
           </button>
           <button
             type="button"
@@ -791,13 +795,12 @@ function GoalShareModal({
               cursor: "pointer",
             }}
           >
-            Share →
+            {t("savings.share.share")}
           </button>
         </div>
 
         <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.45 }}>
-          Holographic QR · animation is the liveness signal — screenshots won't move.
-          When scanned, opens a pre-filled SendForm for your contact.
+          {t("savings.share.footer")}
         </div>
       </div>
     </div>

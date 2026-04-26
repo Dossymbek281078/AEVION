@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { computeWealthForecast, SCENARIOS, type ScenarioKey } from "../_lib/forecast";
-import { SOURCE_COLOR, SOURCE_LABEL } from "../_lib/ecosystem";
+import { SOURCE_COLOR, SOURCE_LABEL_KEY } from "../_lib/ecosystem";
 import { loadGoals, type SavingsGoal } from "../_lib/savings";
 import type { Account } from "../_lib/types";
+import { InfoTooltip } from "./InfoTooltip";
 import { Money } from "./Money";
 import { SkeletonBlock } from "./Skeleton";
 
 type Horizon = "d30" | "d90" | "d365";
-const HORIZON_LABEL: Record<Horizon, string> = { d30: "30 days", d90: "3 months", d365: "1 year" };
+const HORIZON_LABEL_KEY: Record<Horizon, string> = { d30: "wf.horizon.d30", d90: "wf.horizon.d90", d365: "wf.horizon.d365" };
 
 export function WealthForecast({ account }: { account: Account }) {
+  const { t } = useI18n();
   const { ecosystem } = useEcosystemData();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [scenario, setScenario] = useState<ScenarioKey>("realistic");
@@ -41,7 +44,7 @@ export function WealthForecast({ account }: { account: Account }) {
           background: "linear-gradient(180deg, rgba(14,165,233,0.04) 0%, #ffffff 100%)",
         }}
       >
-        <SkeletonBlock label="Computing wealth forecast" minHeight={240} />
+        <SkeletonBlock label={t("wf.loading")} minHeight={240} />
       </section>
     );
   }
@@ -95,10 +98,10 @@ export function WealthForecast({ account }: { account: Account }) {
               id="wealth-forecast-heading"
               style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#0369a1" }}
             >
-              Wealth forecast
+              {t("wf.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-              Forward-looking view based on your 30-day earning pace across all AEVION modules.
+              {t("wf.subtitle")}
             </div>
           </div>
         </div>
@@ -113,27 +116,35 @@ export function WealthForecast({ account }: { account: Account }) {
         }}
       >
         <StatTile
-          label="Earning pace"
+          label={
+            <InfoTooltip text={t("tip.earningPace")} side="bottom">
+              <span>{t("wf.tile.pace")}</span>
+            </InfoTooltip>
+          }
           value={<Money aec={forecast.monthlyRate} decimals={0} />}
-          hint={`per month · ${forecast.dailyRate.toFixed(2)} AEC/day`}
+          hint={t("wf.tile.pace.hint", { daily: forecast.dailyRate.toFixed(2) })}
           accent="#0369a1"
         />
         <StatTile
-          label="7d trend"
+          label={t("wf.tile.trend")}
           value={`${forecast.trendPct >= 0 ? "+" : ""}${forecast.trendPct.toFixed(0)}%`}
-          hint="vs 30d average"
+          hint={t("wf.tile.trend.hint")}
           accent={trendColor}
         />
         <StatTile
-          label="1-year run rate"
+          label={
+            <InfoTooltip text={t("tip.runRate")} side="bottom">
+              <span>{t("wf.tile.runrate")}</span>
+            </InfoTooltip>
+          }
           value={<Money aec={forecast.yearlyRate} decimals={0} compact />}
-          hint="if pace holds"
+          hint={t("wf.tile.runrate.hint")}
           accent="#0d9488"
         />
         <StatTile
-          label="Active goals"
+          label={t("wf.tile.goals")}
           value={String(forecast.goalETAs.length)}
-          hint={forecast.goalETAs.length ? "projected below" : "create one to track ETA"}
+          hint={forecast.goalETAs.length ? t("wf.tile.goals.hint.has") : t("wf.tile.goals.hint.empty")}
           accent="#7c3aed"
         />
       </div>
@@ -157,7 +168,7 @@ export function WealthForecast({ account }: { account: Account }) {
             marginBottom: 10,
           }}
         >
-          <div style={{ display: "flex", gap: 4 }} role="group" aria-label="Scenario">
+          <div style={{ display: "flex", gap: 4 }} role="group" aria-label={t("wf.scenario.aria")}>
             {SCENARIOS.map((s) => {
               const active = s.key === scenario;
               return (
@@ -176,13 +187,13 @@ export function WealthForecast({ account }: { account: Account }) {
                     cursor: "pointer",
                   }}
                 >
-                  {s.label}
+                  {t(s.labelKey)}
                 </button>
               );
             })}
           </div>
-          <div style={{ display: "flex", gap: 4 }} role="group" aria-label="Horizon">
-            {(Object.keys(HORIZON_LABEL) as Horizon[]).map((h) => {
+          <div style={{ display: "flex", gap: 4 }} role="group" aria-label={t("wf.horizon.aria")}>
+            {(Object.keys(HORIZON_LABEL_KEY) as Horizon[]).map((h) => {
               const active = h === horizon;
               return (
                 <button
@@ -200,7 +211,7 @@ export function WealthForecast({ account }: { account: Account }) {
                     cursor: "pointer",
                   }}
                 >
-                  {HORIZON_LABEL[h]}
+                  {t(HORIZON_LABEL_KEY[h])}
                 </button>
               );
             })}
@@ -225,7 +236,7 @@ export function WealthForecast({ account }: { account: Account }) {
                 color: "#64748b",
               }}
             >
-              Projected balance in {HORIZON_LABEL[horizon]}
+              {t("wf.projected", { horizon: t(HORIZON_LABEL_KEY[horizon]) })}
             </div>
             <div
               style={{
@@ -240,8 +251,7 @@ export function WealthForecast({ account }: { account: Account }) {
               {formatCurrency(horizonValue, code, { decimals: 0 })}
             </div>
             <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-              {gain >= 0 ? "+" : ""}
-              {formatCurrency(gain, code, { decimals: 0 })} vs today · {activeScenario.description}
+              {t("wf.projected.delta", { sign: gain >= 0 ? "+" : "", amt: formatCurrency(gain, code, { decimals: 0 }), description: t(activeScenario.descriptionKey) })}
             </div>
           </div>
           <div
@@ -269,7 +279,7 @@ export function WealthForecast({ account }: { account: Account }) {
                   }}
                 >
                   <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>
-                    {HORIZON_LABEL[h]}
+                    {t(HORIZON_LABEL_KEY[h])}
                   </div>
                   <div
                     style={{
@@ -306,7 +316,7 @@ export function WealthForecast({ account }: { account: Account }) {
               marginBottom: 8,
             }}
           >
-            Goal ETAs ({forecast.goalETAs.length})
+            {t("wf.goalEtas", { n: forecast.goalETAs.length })}
           </div>
           {forecast.goalETAs.length === 0 ? (
             <div
@@ -318,7 +328,7 @@ export function WealthForecast({ account }: { account: Account }) {
                 borderRadius: 10,
               }}
             >
-              Create a savings goal below and we'll show when you'll hit it at current pace.
+              {t("wf.goalEtas.empty")}
             </div>
           ) : (
             <ul
@@ -353,17 +363,17 @@ export function WealthForecast({ account }: { account: Account }) {
                       {g.label}
                     </div>
                     <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-                      <Money aec={g.remaining} decimals={0} /> remaining
+                      <Money aec={g.remaining} decimals={0} />{t("wf.goalEta.remaining")}
                       {g.daysToComplete != null && g.etaISO
-                        ? ` · by ${new Date(g.etaISO).toLocaleDateString(undefined, {
+                        ? t("wf.goalEta.byDate", { date: new Date(g.etaISO).toLocaleDateString(undefined, {
                             month: "short",
                             day: "numeric",
                             year:
                               new Date(g.etaISO).getFullYear() !== new Date().getFullYear()
                                 ? "numeric"
                                 : undefined,
-                          })}`
-                        : " · need positive inflow to forecast"}
+                          }) })
+                        : t("wf.goalEta.noInflow")}
                     </div>
                   </div>
                   <div
@@ -393,7 +403,7 @@ export function WealthForecast({ account }: { account: Account }) {
               marginBottom: 8,
             }}
           >
-            Pace breakdown · last 30d
+            {t("wf.pace.title")}
           </div>
           {forecast.topSourceShare.length === 0 || forecast.topSourceShare[0].amount === 0 ? (
             <div
@@ -405,7 +415,7 @@ export function WealthForecast({ account }: { account: Account }) {
                 borderRadius: 10,
               }}
             >
-              No ecosystem inflow yet. Register work in QRight or play a tournament to start.
+              {t("wf.pace.empty")}
             </div>
           ) : (
             <ul
@@ -436,7 +446,7 @@ export function WealthForecast({ account }: { account: Account }) {
                         }}
                       />
                       <span style={{ flex: 1, fontWeight: 700, color: "#0f172a" }}>
-                        {SOURCE_LABEL[row.source]}
+                        {t(SOURCE_LABEL_KEY[row.source])}
                       </span>
                       <span style={{ fontWeight: 800, color: "#0f172a" }}>
                         <Money aec={row.amount} decimals={0} />
@@ -450,7 +460,7 @@ export function WealthForecast({ account }: { account: Account }) {
                       aria-valuenow={Math.round(row.share * 100)}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-label={`${SOURCE_LABEL[row.source]} share`}
+                      aria-label={t("wf.pace.aria", { label: t(SOURCE_LABEL_KEY[row.source]) })}
                       style={{
                         height: 4,
                         borderRadius: 999,
@@ -476,8 +486,7 @@ export function WealthForecast({ account }: { account: Account }) {
       </div>
 
       <div style={{ marginTop: 12, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        Projections extrapolate your 30-day pace. Goal ETAs assume you'll set aside ~50 % of net
-        inflow. Not investment advice.
+        {t("wf.footer")}
       </div>
     </section>
   );
@@ -489,7 +498,7 @@ function StatTile({
   hint,
   accent,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   hint: string;
   accent: string;
@@ -503,8 +512,8 @@ function StatTile({
         background: "#fff",
       }}
     >
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-        {label.toUpperCase()}
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" as const }}>
+        {label}
       </div>
       <div
         style={{

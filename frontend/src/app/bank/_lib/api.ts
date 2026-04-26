@@ -1,6 +1,13 @@
 // Thin typed client over /api/qtrade/* and /api/auth/me.
-// Backend gaps tracked separately (see bank/page.tsx header): no JWT middleware on qtrade,
-// no pagination, no email→accountId resolver.
+//
+// Frontend-side hardening (Phase 3, 2026-04-26):
+//   - All qtrade calls now send Bearer token (backend may or may not enforce yet,
+//     but we no longer leak unauth requests).
+//   - unwrap() distinguishes network errors (typed as "network") from HTTP errors
+//     so the UI can render targeted messages.
+//   - lookupAccountByEmail() resolves an email → accountId by querying the
+//     accounts list, removing the requirement that recipients use raw acc_<uuid>.
+//   - pingBackend() drives the health banner.
 
 import { apiUrl } from "@/lib/apiBase";
 import type { Account, Me, Operation } from "./types";
@@ -37,11 +44,42 @@ function readToken(): string {
   }
 }
 
-async function unwrap<T>(res: Response, fallback: string): Promise<T> {
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = readToken();
+  const headers: Record<string, string> = { ...extra };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+class ApiError extends Error {
+  kind: "network" | "http";
+  status: number;
+  constructor(kind: "network" | "http", status: number, message: string) {
+    super(message);
+    this.kind = kind;
+    this.status = status;
+    this.name = "ApiError";
+  }
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  fallbackMessage: string,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(path), init);
+  } catch {
+    throw new ApiError("network", 0, "Network: backend unreachable");
+  }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = data && typeof data === "object" && "error" in data ? String((data as { error: unknown }).error) : `${fallback} (${res.status})`;
-    throw new Error(msg);
+    const msg =
+      data && typeof data === "object" && "error" in data
+        ? String((data as { error: unknown }).error)
+        : `${fallbackMessage} (${res.status})`;
+    throw new ApiError("http", res.status, msg);
   }
   return data as T;
 }
@@ -51,7 +89,7 @@ export async function fetchMe(): Promise<Me | null> {
   if (!token) return null;
   try {
     const res = await fetch(apiUrl("/api/auth/me"), {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: authHeaders(),
     });
     if (!res.ok) return null;
     const data = await res.json().catch(() => null);
@@ -62,62 +100,117 @@ export async function fetchMe(): Promise<Me | null> {
 }
 
 export async function listAccounts(): Promise<Account[]> {
-  const res = await fetch(apiUrl("/api/qtrade/accounts"));
-  const data = await unwrap<{ items: Account[] }>(res, "Load accounts failed");
+  const data = await request<{ items: Account[] }>(
+    "/api/qtrade/accounts",
+    { headers: authHeaders() },
+    "Load accounts failed",
+  );
   return Array.isArray(data.items) ? data.items : [];
 }
 
 export async function createAccount(owner: string): Promise<Account> {
-  const res = await fetch(apiUrl("/api/qtrade/accounts"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ owner }),
-  });
-  return unwrap<Account>(res, "Create account failed");
+  return request<Account>(
+    "/api/qtrade/accounts",
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ owner }),
+    },
+    "Create account failed",
+  );
 }
 
 export async function listOperations(): Promise<Operation[]> {
-  const res = await fetch(apiUrl("/api/qtrade/operations"));
-  const data = await unwrap<{ items: Operation[] }>(res, "Load operations failed");
+  const data = await request<{ items: Operation[] }>(
+    "/api/qtrade/operations",
+    { headers: authHeaders() },
+    "Load operations failed",
+  );
   return Array.isArray(data.items) ? data.items : [];
 }
 
 export async function topUp(accountId: string, amount: number): Promise<{ id: string; balance: number; updatedAt: string }> {
-  const res = await fetch(apiUrl("/api/qtrade/topup"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accountId, amount }),
-  });
-  return unwrap<{ id: string; balance: number; updatedAt: string }>(res, "Top-up failed");
+  return request<{ id: string; balance: number; updatedAt: string }>(
+    "/api/qtrade/topup",
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ accountId, amount }),
+    },
+    "Top-up failed",
+  );
 }
 
 export async function transfer(from: string, to: string, amount: number): Promise<Transfer> {
-  const res = await fetch(apiUrl("/api/qtrade/transfer"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to, amount }),
-  });
-  return unwrap<Transfer>(res, "Transfer failed");
+  return request<Transfer>(
+    "/api/qtrade/transfer",
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ from, to, amount }),
+    },
+    "Transfer failed",
+  );
 }
 
 export async function signPayload(payload: unknown): Promise<SignResult> {
-  const res = await fetch(apiUrl("/api/qsign/sign"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return unwrap<SignResult>(res, "Sign failed");
+  return request<SignResult>(
+    "/api/qsign/sign",
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    },
+    "Sign failed",
+  );
 }
 
 export async function verifySignature(payload: unknown, signature: string): Promise<VerifyResult> {
-  const res = await fetch(apiUrl("/api/qsign/verify"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ payload, signature }),
-  });
-  return unwrap<VerifyResult>(res, "Verify failed");
+  return request<VerifyResult>(
+    "/api/qsign/verify",
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ payload, signature }),
+    },
+    "Verify failed",
+  );
 }
 
 export function operationsCsvUrl(): string {
   return apiUrl("/api/qtrade/operations.csv");
 }
+
+// Resolve an email or account ID into a concrete account ID.
+// Accepts: "acc_…" (returns as-is), or "user@host" (looks up via /api/qtrade/accounts).
+// Returns null when no match found. Pure email matching is case-insensitive.
+export async function lookupAccountByEmail(query: string): Promise<string | null> {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("acc_")) return trimmed;
+  if (!trimmed.includes("@")) return null;
+  try {
+    const items = await listAccounts();
+    const target = trimmed.toLowerCase();
+    const match = items.find((a) => (a.owner || "").toLowerCase() === target);
+    return match?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Lightweight liveness check. Used by the BackendStatus banner — fires on mount
+// and every 60s. Returns true if the backend responds at all (any HTTP status).
+export async function pingBackend(): Promise<boolean> {
+  try {
+    const res = await fetch(apiUrl("/api/health"), {
+      method: "GET",
+      cache: "no-store",
+    });
+    return res.ok || res.status === 404; // 404 = endpoint missing but server alive
+  } catch {
+    return false;
+  }
+}
+
+export { ApiError };

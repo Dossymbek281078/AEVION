@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
+import { lookupAccountByEmail } from "../_lib/api";
 import {
   AUTOPILOT_EVENT,
   loadConfig as loadAutopilotConfig,
@@ -21,6 +23,7 @@ type Props = {
 };
 
 export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
+  const { t } = useI18n();
   const { settings: bioSettings, guard: bioGuard } = useBiometric();
   const [to, setTo] = useState<string>(prefill?.to ?? "");
   const [amount, setAmount] = useState<string>(prefill?.amount ? String(prefill.amount) : "");
@@ -92,26 +95,38 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
   );
 
   const submit = async () => {
-    const trimmedTo = to.trim();
+    const rawTo = to.trim();
     const n = parseFloat(amount);
-    if (!trimmedTo) {
-      onError("Enter recipient account ID");
+    if (!rawTo) {
+      onError(t("send.error.recipient.empty"));
       return;
     }
-    if (!trimmedTo.startsWith("acc_")) {
-      onError("Recipient must be an account ID (acc_...)");
-      return;
+    // Resolve email → accountId (acc_… ids are returned as-is by the resolver).
+    let trimmedTo = rawTo;
+    if (!rawTo.startsWith("acc_")) {
+      if (!rawTo.includes("@")) {
+        onError(t("send.error.recipient.format"));
+        return;
+      }
+      setBusy(true);
+      const resolved = await lookupAccountByEmail(rawTo);
+      setBusy(false);
+      if (!resolved) {
+        onError(t("send.error.notFound"));
+        return;
+      }
+      trimmedTo = resolved;
     }
     if (trimmedTo === myId) {
-      onError("Cannot send to yourself");
+      onError(t("send.error.self"));
       return;
     }
     if (!Number.isFinite(n) || n <= 0) {
-      onError("Invalid amount");
+      onError(t("send.error.amount"));
       return;
     }
     if (n > balance) {
-      onError("Insufficient funds");
+      onError(t("send.error.funds"));
       return;
     }
     const fs = loadFreeze();
@@ -119,22 +134,20 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
       const wait = secondsUntilSober(fs);
       onError(
         wait > 0
-          ? `Wallet frozen — sober window ${wait}s left`
-          : "Wallet frozen — unfreeze in Copilot",
+          ? t("send.error.frozen.wait", { wait })
+          : t("send.error.frozen.unfreeze"),
       );
       return;
     }
     if (guardEnabled && timelockReserve > 0 && balance - n < timelockReserve) {
-      onError(
-        `Timelock guard · ${timelockReserve.toFixed(2)} AEC reserved for upcoming gifts`,
-      );
+      onError(t("send.error.timelock", { amt: timelockReserve.toFixed(2) }));
       return;
     }
     setBusy(true);
     if (bioSettings && n >= bioSettings.threshold) {
       const allowed = await bioGuard(n);
       if (!allowed) {
-        onError("Biometric verification cancelled or failed");
+        onError(t("send.error.bio"));
         setBusy(false);
         return;
       }
@@ -195,7 +208,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
           <span aria-hidden="true" style={{ fontSize: 14 }}>
             🔒
           </span>
-          Wallet frozen — outgoing transfers blocked. Unfreeze via Copilot ✦.
+          {t("send.frozen.banner")}
         </div>
       ) : null}
       <div
@@ -208,7 +221,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
           gap: 8,
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 15 }}>Send AEC</div>
+        <div style={{ fontWeight: 900, fontSize: 15 }}>{t("send.title")}</div>
         {contacts.length > 0 ? (
           <div style={{ position: "relative" as const }} ref={pickerRef}>
             <button
@@ -224,7 +237,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
                 cursor: "pointer",
               }}
             >
-              Contacts ({contacts.length})
+              {t("send.contacts.btn", { n: contacts.length })}
             </button>
             {showPicker ? (
               <div
@@ -280,7 +293,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
                     </button>
                     <button
                       onClick={() => deleteContact(c.id)}
-                      title="Remove"
+                      title={t("send.contact.remove")}
                       style={{
                         background: "transparent",
                         border: "none",
@@ -302,12 +315,12 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
       <div style={{ display: "grid", gap: 8 }}>
         <div>
           <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>
-            Recipient account ID
+            {t("send.recipient.label")}
           </div>
           <input
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            placeholder="acc_..."
+            placeholder="acc_… or email@example.com"
             style={{
               width: "100%",
               padding: "10px 14px",
@@ -319,13 +332,13 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
           />
           {existingContact ? (
             <div style={{ marginTop: 4, fontSize: 11, color: "#0f766e", fontWeight: 700 }}>
-              Known contact: {existingContact.nickname}
+              {t("send.contact.known", { nickname: existingContact.nickname })}
             </div>
           ) : to.trim().startsWith("acc_") && to.trim().length > 10 ? (
             <input
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              placeholder="Save as contact (nickname, optional)"
+              placeholder={t("send.contact.save.placeholder")}
               style={{
                 width: "100%",
                 marginTop: 6,
@@ -341,7 +354,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>
-              Amount AEC
+              {t("send.amount.label")}
             </div>
             <input
               value={amount}
@@ -377,9 +390,9 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
               cursor: busy || frozen ? "not-allowed" : "pointer",
               whiteSpace: "nowrap" as const,
             }}
-            title={frozen ? "Wallet frozen — unfreeze in Copilot" : undefined}
+            title={frozen ? t("send.frozen.tooltip") : undefined}
           >
-            {frozen ? "Frozen" : busy ? "Sending…" : "Send"}
+            {frozen ? t("send.cta.frozen") : busy ? t("send.cta.sending") : t("send.cta.send")}
           </button>
         </div>
         {memo ? (
@@ -393,20 +406,17 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
               border: "1px solid rgba(124,58,237,0.15)",
             }}
           >
-            Memo: <strong>{memo}</strong>
+            {t("send.memo.label")} <strong>{memo}</strong>
           </div>
         ) : null}
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
-        Fee 0.1% · Instant · Available: {balance.toFixed(2)} AEC
-        {bioSettings ? <> · Biometric required ≥ {bioSettings.threshold} AEC</> : null}
+        {t("send.footer.fee", { balance: balance.toFixed(2) })}
+        {bioSettings ? t("send.footer.biom", { threshold: bioSettings.threshold }) : null}
         {guardEnabled && timelockReserve > 0 ? (
-          <>
-            {" · "}
-            <span style={{ color: "#7c3aed", fontWeight: 700 }}>
-              🔐 Reserved for timelock: {timelockReserve.toFixed(2)} AEC
-            </span>
-          </>
+          <span style={{ color: "#7c3aed", fontWeight: 700 }}>
+            {t("send.footer.timelock", { reserved: timelockReserve.toFixed(2) })}
+          </span>
         ) : null}
       </div>
     </section>

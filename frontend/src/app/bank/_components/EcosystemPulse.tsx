@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
-import { SOURCE_COLOR, SOURCE_LABEL } from "../_lib/ecosystem";
+import { SOURCE_COLOR, SOURCE_LABEL_KEY } from "../_lib/ecosystem";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { formatCountdown } from "../_lib/chess";
 import type { Operation } from "../_lib/types";
@@ -43,6 +44,7 @@ export function EcosystemPulse({
   accountId: string;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem } = useEcosystemData();
   const { code } = useCurrency();
 
@@ -62,8 +64,8 @@ export function EcosystemPulse({
     }
     const qrightSecondary = royalty
       ? royalty.works.length > 0
-        ? `${royalty.works.length} works · ${royalty.works.reduce((s, w) => s + w.verifications, 0)} verifications total`
-        : "No works registered yet"
+        ? t("ep.row.qright.secondary.has", { works: royalty.works.length, ver: royalty.works.reduce((s, w) => s + w.verifications, 0) })
+        : t("ep.row.qright.secondary.empty")
       : "—";
 
     // Chess today / upcoming
@@ -80,9 +82,9 @@ export function EcosystemPulse({
     }
     const nextUp = chess?.upcoming[0];
     const chessSecondary = nextUp
-      ? `Next: ${nextUp.name} · ${formatCountdown(nextUp.startsAt)}`
+      ? t("ep.row.chess.secondary.next", { name: nextUp.name, countdown: formatCountdown(nextUp.startsAt, t) })
       : chess
-        ? `Rating ${chess.currentRating}`
+        ? t("ep.row.chess.secondary.rating", { n: chess.currentRating })
         : "—";
 
     // Planet today
@@ -96,7 +98,7 @@ export function EcosystemPulse({
         planetAmount += ev.amount;
       }
     }
-    const planetSecondary = `${ecosystem.perSource.planet.last30d.toFixed(0)} AEC last 30d`;
+    const planetSecondary = t("ep.row.planet.secondary", { amt: ecosystem.perSource.planet.last30d.toFixed(0) });
 
     // Banking today
     let bankingCount = 0;
@@ -109,7 +111,7 @@ export function EcosystemPulse({
         if (op.to === accountId) bankingAmount += op.amount;
       }
     }
-    const bankingSecondary = `${ecosystem.perSource.banking.last30d.toFixed(0)} AEC in last 30d`;
+    const bankingSecondary = t("ep.row.banking.secondary", { amt: ecosystem.perSource.banking.last30d.toFixed(0) });
 
     return [
       {
@@ -117,30 +119,30 @@ export function EcosystemPulse({
         icon: SOURCE_ICON.qright,
         todayCount: qrightCount,
         todayAmount: qrightAmount,
-        primary: qrightCount > 0 ? `${qrightCount} verifications` : "No verifications today",
+        primary: qrightCount > 0 ? t("ep.row.qright.has", { n: qrightCount }) : t("ep.row.qright.empty"),
         secondary: qrightSecondary,
         href: "/qright",
-        cta: "Open QRight",
+        cta: t("ep.row.qright.cta"),
       },
       {
         source: "chess",
         icon: SOURCE_ICON.chess,
         todayCount: chessCount,
         todayAmount: chessAmount,
-        primary: chessCount > 0 ? `${chessCount} tournament${chessCount === 1 ? "" : "s"} today` : "No games today",
+        primary: chessCount > 0 ? (chessCount === 1 ? t("ep.row.chess.has.one") : t("ep.row.chess.has.many", { n: chessCount })) : t("ep.row.chess.empty"),
         secondary: chessSecondary,
         href: "/cyberchess",
-        cta: "Play CyberChess",
+        cta: t("ep.row.chess.cta"),
       },
       {
         source: "planet",
         icon: SOURCE_ICON.planet,
         todayCount: planetCount,
         todayAmount: planetAmount,
-        primary: planetCount > 0 ? `${planetCount} bonus event${planetCount === 1 ? "" : "s"}` : "No Planet events today",
+        primary: planetCount > 0 ? (planetCount === 1 ? t("ep.row.planet.has.one") : t("ep.row.planet.has.many", { n: planetCount })) : t("ep.row.planet.empty"),
         secondary: planetSecondary,
         href: "/planet",
-        cta: "Visit Planet",
+        cta: t("ep.row.planet.cta"),
       },
       {
         source: "banking",
@@ -149,14 +151,14 @@ export function EcosystemPulse({
         todayAmount: bankingAmount,
         primary:
           bankingCount > 0
-            ? `${bankingCount} operation${bankingCount === 1 ? "" : "s"} today`
-            : "No banking activity today",
+            ? (bankingCount === 1 ? t("ep.row.banking.has.one") : t("ep.row.banking.has.many", { n: bankingCount }))
+            : t("ep.row.banking.empty"),
         secondary: bankingSecondary,
         href: "/qtrade",
-        cta: "Open QTrade",
+        cta: t("ep.row.banking.cta"),
       },
     ];
-  }, [royalty, chess, ecosystem, operations, accountId]);
+  }, [royalty, chess, ecosystem, operations, accountId, t]);
 
   if (!rows) {
     return (
@@ -169,7 +171,7 @@ export function EcosystemPulse({
           background: "linear-gradient(180deg, rgba(13,148,136,0.04) 0%, #ffffff 100%)",
         }}
       >
-        <SkeletonBlock label="Loading ecosystem pulse" minHeight={180} />
+        <SkeletonBlock label={t("ep.loading")} minHeight={180} />
       </section>
     );
   }
@@ -221,11 +223,10 @@ export function EcosystemPulse({
               id="ecosystem-pulse-heading"
               style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#134e4a" }}
             >
-              Today across AEVION
+              {t("ep.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-              Live cross-module snapshot — your banking, QRight, CyberChess and Planet activity in
-              one row.
+              {t("ep.subtitle")}
             </div>
           </div>
         </div>
@@ -240,7 +241,7 @@ export function EcosystemPulse({
             letterSpacing: "0.04em",
           }}
         >
-          {eventsToday} events · {formatCurrency(totalToday, code, { decimals: 2, sign: totalToday > 0 })}
+          {t("ep.summary", { events: eventsToday, amt: formatCurrency(totalToday, code, { decimals: 2, sign: totalToday > 0 }) })}
         </div>
       </div>
 
@@ -262,7 +263,7 @@ export function EcosystemPulse({
             <li key={r.source}>
               <Link
                 href={r.href}
-                aria-label={`${r.cta} — ${r.primary}`}
+                aria-label={t("ep.row.aria", { cta: r.cta, primary: r.primary })}
                 style={{
                   display: "block",
                   padding: "12px 14px",
@@ -313,7 +314,7 @@ export function EcosystemPulse({
                         color: "#64748b",
                       }}
                     >
-                      {SOURCE_LABEL[r.source]}
+                      {t(SOURCE_LABEL_KEY[r.source])}
                     </div>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { loadAdvance, type Advance } from "../_lib/advance";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { convertFromAec, formatCurrency } from "../_lib/currency";
@@ -71,6 +72,7 @@ function buildNodes({
   goals,
   recurring,
   advance,
+  t,
 }: {
   royalty: ReturnType<typeof useEcosystemData>["royalty"];
   chess: ReturnType<typeof useEcosystemData>["chess"];
@@ -78,6 +80,7 @@ function buildNodes({
   goals: SavingsGoal[];
   recurring: Recurring[];
   advance: Advance | null;
+  t: (k: string, vars?: Record<string, string | number>) => string;
 }): Node[] {
   const list: Node[] = [];
 
@@ -92,7 +95,7 @@ function buildNodes({
       color: CATEGORY_COLOR.goal,
       magnitudeAec: g.targetAec,
       directionIn: false,
-      subtitle: `${(progress * 100).toFixed(0)}% · ${g.currentAec.toFixed(0)}/${g.targetAec.toFixed(0)} AEC`,
+      subtitle: t("wc.node.goal.subtitle", { pct: (progress * 100).toFixed(0), current: g.currentAec.toFixed(0), target: g.targetAec.toFixed(0) }),
       anchorId: null,
     });
   }
@@ -102,12 +105,12 @@ function buildNodes({
     list.push({
       id: "royalty",
       category: "royalty",
-      label: "QRight royalties",
+      label: t("wc.node.royalty"),
       icon: CATEGORY_ICON.royalty,
       color: CATEGORY_COLOR.royalty,
       magnitudeAec: royalty30,
       directionIn: true,
-      subtitle: `+${royalty30.toFixed(2)} AEC projected (30d)`,
+      subtitle: t("wc.node.royalty.subtitle", { amt: royalty30.toFixed(2) }),
       anchorId: null,
     });
   }
@@ -117,12 +120,12 @@ function buildNodes({
     list.push({
       id: "chess",
       category: "chess",
-      label: "CyberChess prizes",
+      label: t("wc.node.chess"),
       icon: CATEGORY_ICON.chess,
       color: CATEGORY_COLOR.chess,
       magnitudeAec: chessTotal,
       directionIn: true,
-      subtitle: `${chessTotal.toFixed(0)} AEC won · ${chess?.topThreeFinishes ?? 0} podium${(chess?.topThreeFinishes ?? 0) === 1 ? "" : "s"}`,
+      subtitle: (chess?.topThreeFinishes ?? 0) === 1 ? t("wc.node.chess.subtitle.one", { amt: chessTotal.toFixed(0) }) : t("wc.node.chess.subtitle.many", { amt: chessTotal.toFixed(0), n: chess?.topThreeFinishes ?? 0 }),
       anchorId: null,
     });
   }
@@ -132,12 +135,12 @@ function buildNodes({
     list.push({
       id: "planet",
       category: "planet",
-      label: "Planet bonuses",
+      label: t("wc.node.planet"),
       icon: CATEGORY_ICON.planet,
       color: CATEGORY_COLOR.planet,
       magnitudeAec: planetLast90,
       directionIn: true,
-      subtitle: `${planetLast90.toFixed(0)} AEC · 90d`,
+      subtitle: t("wc.node.planet.subtitle", { amt: planetLast90.toFixed(0) }),
       anchorId: null,
     });
   }
@@ -147,12 +150,12 @@ function buildNodes({
     list.push({
       id: "recurring",
       category: "recurring",
-      label: "Recurring outflow",
+      label: t("wc.node.recurring"),
       icon: CATEGORY_ICON.recurring,
       color: CATEGORY_COLOR.recurring,
       magnitudeAec: recurring30,
       directionIn: false,
-      subtitle: `−${recurring30.toFixed(0)} AEC scheduled (30d)`,
+      subtitle: t("wc.node.recurring.subtitle", { amt: recurring30.toFixed(0) }),
       anchorId: null,
     });
   }
@@ -161,12 +164,12 @@ function buildNodes({
     list.push({
       id: "advance",
       category: "advance",
-      label: "Salary advance",
+      label: t("wc.node.advance"),
       icon: CATEGORY_ICON.advance,
       color: CATEGORY_COLOR.advance,
       magnitudeAec: advance.outstanding,
       directionIn: false,
-      subtitle: `${advance.outstanding.toFixed(2)} AEC outstanding`,
+      subtitle: t("wc.node.advance.subtitle", { amt: advance.outstanding.toFixed(2) }),
       anchorId: null,
     });
   }
@@ -182,6 +185,7 @@ export function WealthConstellation({
   account: Account;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem } = useEcosystemData();
   const { code } = useCurrency();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
@@ -224,8 +228,8 @@ export function WealthConstellation({
   }, []);
 
   const nodes = useMemo(
-    () => buildNodes({ royalty, chess, ecosystem, goals, recurring, advance }),
-    [royalty, chess, ecosystem, goals, recurring, advance],
+    () => buildNodes({ royalty, chess, ecosystem, goals, recurring, advance, t }),
+    [royalty, chess, ecosystem, goals, recurring, advance, t],
   );
 
   // Geometry
@@ -319,17 +323,17 @@ export function WealthConstellation({
           </span>
           <div>
             <h2 id="constellation-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-              Wealth Constellation
+              {t("wc.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-              Your financial gravity well — live streams around the wallet core.
+              {t("wc.subtitle")}
             </div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 14, fontSize: 11, fontWeight: 700 }}>
-          <span style={{ color: "#34d399" }}>↑ in {inflowAec.toFixed(0)} AEC</span>
-          <span style={{ color: "#f87171" }}>↓ out {outflowAec.toFixed(0)} AEC</span>
-          <span style={{ color: "#93c5fd" }}>◉ {nodes.length} streams</span>
+          <span style={{ color: "#34d399" }}>{t("wc.in", { amt: inflowAec.toFixed(0) })}</span>
+          <span style={{ color: "#f87171" }}>{t("wc.out", { amt: outflowAec.toFixed(0) })}</span>
+          <span style={{ color: "#93c5fd" }}>{t("wc.streams", { n: nodes.length })}</span>
         </div>
       </div>
 
@@ -338,7 +342,7 @@ export function WealthConstellation({
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="xMidYMid meet"
           role="img"
-          aria-label={`Wealth constellation with ${nodes.length} streams around the wallet core`}
+          aria-label={t("wc.svg.aria", { n: nodes.length })}
           style={{ width: "100%", height: "auto", display: "block" }}
         >
           <defs>
@@ -439,7 +443,7 @@ export function WealthConstellation({
             textAnchor="middle"
             style={{ fontSize: 11, fontWeight: 900, fill: "#0f172a", letterSpacing: "0.04em" }}
           >
-            WALLET
+            {t("wc.core.label")}
           </text>
           <text
             x={cx}
@@ -557,7 +561,7 @@ export function WealthConstellation({
               color: "#94a3b8",
             }}
           >
-            Add a goal, earn a royalty, or set up recurring to populate the constellation.
+            {t("wc.empty")}
           </div>
         ) : null}
       </div>

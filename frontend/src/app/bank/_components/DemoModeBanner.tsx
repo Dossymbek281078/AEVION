@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { clearDemoSeed, hasDemoSeed, seedDemo } from "../_lib/demoSeed";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
@@ -14,13 +15,14 @@ export function DemoModeBanner({
   requested: boolean;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const [active, setActive] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (requested && !hasDemoSeed()) {
       seedDemo(accountId);
-      notify("Demo data loaded — 3 goals · 2 recurring · 1 circle · 1 split · 3 gifts", "success");
+      notify(t("demo.toast.loaded"), "success");
       // Nudge listeners that derive from storage to re-read.
       window.dispatchEvent(new Event("storage"));
       window.dispatchEvent(new Event("aevion:signatures-changed"));
@@ -65,17 +67,16 @@ export function DemoModeBanner({
         ⟡
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 800, fontSize: 13, color: "#0369a1" }}>Demo data loaded</div>
+        <div style={{ fontWeight: 800, fontSize: 13, color: "#0369a1" }}>{t("demo.title")}</div>
         <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-          Goals, recurring, circles and gifts pre-populated for the investor walk-through. Reset
-          anytime to start fresh.
+          {t("demo.subtitle")}
         </div>
       </div>
       <button
         onClick={() => {
           clearDemoSeed();
           setActive(false);
-          notify("Demo data cleared", "info");
+          notify(t("demo.toast.cleared"), "info");
           if (typeof window !== "undefined") {
             window.dispatchEvent(new Event("storage"));
             window.dispatchEvent(new Event("aevion:signatures-changed"));
@@ -92,7 +93,7 @@ export function DemoModeBanner({
           cursor: "pointer",
         }}
       >
-        Reset
+        {t("demo.btn.reset")}
       </button>
     </div>
   );

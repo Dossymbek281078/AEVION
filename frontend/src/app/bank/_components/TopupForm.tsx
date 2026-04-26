@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 export function TopupForm({
   onTopup,
 }: {
   onTopup: (amount: number) => Promise<boolean>;
 }) {
+  const { t } = useI18n();
   const [amount, setAmount] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
 
@@ -29,12 +31,12 @@ export function TopupForm({
       }}
     >
       <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 12, color: "#065f46" }}>
-        Top up (demo)
+        {t("topup.title")}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
         <div style={{ flex: "1 1 140px" }}>
           <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>
-            Amount AEC
+            {t("topup.amount")}
           </div>
           <input
             value={amount}
@@ -70,11 +72,11 @@ export function TopupForm({
             whiteSpace: "nowrap" as const,
           }}
         >
-          {busy ? "Adding…" : "Top up"}
+          {busy ? t("topup.adding") : t("topup.cta")}
         </button>
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
-        Demo instant credit. Real card / crypto rails will replace this.
+        {t("topup.note")}
       </div>
     </section>
   );

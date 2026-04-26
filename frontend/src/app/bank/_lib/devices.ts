@@ -22,6 +22,43 @@ export type Device = {
   current: boolean;
 };
 
+/**
+ * The browser / OS sniff returns a small fixed set of identifiers ("Chrome",
+ * "macOS", "Unknown" …) that are persisted to localStorage in raw English
+ * form. Translation happens at render time via these keys.
+ */
+export const BROWSER_LABEL_KEY: Record<string, string> = {
+  Edge: "devices.browser.edge",
+  Chrome: "devices.browser.chrome",
+  Firefox: "devices.browser.firefox",
+  Safari: "devices.browser.safari",
+  "Mobile Safari": "devices.browser.mobileSafari",
+  Unknown: "devices.unknown",
+};
+
+export const OS_LABEL_KEY: Record<string, string> = {
+  Windows: "devices.os.windows",
+  macOS: "devices.os.macos",
+  Android: "devices.os.android",
+  iOS: "devices.os.ios",
+  Linux: "devices.os.linux",
+  Unknown: "devices.unknown",
+};
+
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+/** Translate a stored browser identifier; falls back to the raw value. */
+export function localizedBrowser(name: string, t?: Translator): string {
+  const key = BROWSER_LABEL_KEY[name];
+  return key && t ? t(key) : name;
+}
+
+/** Translate a stored OS identifier; falls back to the raw value. */
+export function localizedOS(name: string, t?: Translator): string {
+  const key = OS_LABEL_KEY[name];
+  return key && t ? t(key) : name;
+}
+
 function isDevice(x: unknown): x is Device {
   if (!x || typeof x !== "object") return false;
   const d = x as Partial<Device>;

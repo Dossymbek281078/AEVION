@@ -6,6 +6,8 @@ import { computePeerStanding, topPercentLabel, type PeerRank } from "../_lib/pee
 import { computeEcosystemTrustScore } from "../_lib/trust";
 import type { Account, Operation } from "../_lib/types";
 import { SkeletonBlock } from "./Skeleton";
+import { InfoTooltip } from "./InfoTooltip";
+import { useI18n } from "@/lib/i18n";
 
 export function PeerStanding({
   account,
@@ -14,17 +16,21 @@ export function PeerStanding({
   account: Account;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem, loaded } = useEcosystemData();
 
   const ranks = useMemo<PeerRank[] | null>(() => {
     if (!loaded && !ecosystem) return null;
-    const trust = computeEcosystemTrustScore({
-      account,
-      operations,
-      royalty,
-      chess,
-      ecosystem,
-    });
+    const trust = computeEcosystemTrustScore(
+      {
+        account,
+        operations,
+        royalty,
+        chess,
+        ecosystem,
+      },
+      t,
+    );
     return computePeerStanding({
       account,
       operations,
@@ -33,7 +39,7 @@ export function PeerStanding({
       chess,
       ecosystem,
     });
-  }, [account, operations, royalty, chess, ecosystem, loaded]);
+  }, [account, operations, royalty, chess, ecosystem, loaded, t]);
 
   if (!ranks) {
     return (
@@ -46,7 +52,7 @@ export function PeerStanding({
           background: "linear-gradient(180deg, rgba(124,58,237,0.03) 0%, #ffffff 100%)",
         }}
       >
-        <SkeletonBlock label="Loading peer standing" minHeight={200} />
+        <SkeletonBlock label={t("peer.loading")} minHeight={200} />
       </section>
     );
   }
@@ -101,10 +107,12 @@ export function PeerStanding({
               id="peer-standing-heading"
               style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#4c1d95" }}
             >
-              Network standing
+              <InfoTooltip text={t("tip.peerStanding")} side="bottom">
+                <span>{t("peer.title")}</span>
+              </InfoTooltip>
             </h2>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-              Where you rank among the ~{ranks[0].total.toLocaleString()} active AEVION wallets.
+              {t("peer.subtitle", { total: ranks[0].total.toLocaleString() })}
             </div>
           </div>
         </div>
@@ -119,7 +127,7 @@ export function PeerStanding({
             letterSpacing: "0.04em",
           }}
         >
-          Best dimension: {best.label} · {topPercentLabel(best.percentile)}
+          {t("peer.bestDim", { label: t(best.labelKey), pct: topPercentLabel(best.percentile, t) })}
         </div>
       </div>
 
@@ -147,14 +155,14 @@ export function PeerStanding({
           lineHeight: 1.45,
         }}
       >
-        Percentiles are projected from your current stats against a calibrated distribution.
-        Real-time leaderboard lands when <code>/api/ecosystem/leaderboard</code> ships.
+        {t("peer.footer")}
       </div>
     </section>
   );
 }
 
 function RankRow({ r }: { r: PeerRank }) {
+  const { t } = useI18n();
   const pct = r.percentile * 100;
   const medianPos = Math.min(95, Math.max(5, 50));
   return (
@@ -196,10 +204,13 @@ function RankRow({ r }: { r: PeerRank }) {
               whiteSpace: "nowrap" as const,
             }}
           >
-            {r.label}
+            {t(r.labelKey)}
           </div>
           <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>
-            You: {r.userValueLabel} · peer median: {r.peerMedianLabel}
+            {t("peer.row.youMedian", {
+              you: r.userValueLabelKey ? t(r.userValueLabelKey, r.userValueLabelVars) : r.userValueLabel,
+              median: r.peerMedianLabelKey ? t(r.peerMedianLabelKey, r.peerMedianLabelVars) : r.peerMedianLabel,
+            })}
           </div>
         </div>
         <div
@@ -210,7 +221,7 @@ function RankRow({ r }: { r: PeerRank }) {
             whiteSpace: "nowrap" as const,
           }}
         >
-          {topPercentLabel(r.percentile)}
+          {topPercentLabel(r.percentile, t)}
         </div>
       </div>
 
@@ -226,7 +237,7 @@ function RankRow({ r }: { r: PeerRank }) {
         aria-valuenow={Math.round(pct)}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`${r.label} percentile ${pct.toFixed(0)}`}
+        aria-label={t("peer.row.aria", { label: t(r.labelKey), n: pct.toFixed(0) })}
       >
         <div
           style={{
@@ -247,7 +258,7 @@ function RankRow({ r }: { r: PeerRank }) {
             background: "rgba(15,23,42,0.35)",
             transform: "translateX(-50%)",
           }}
-          title="Peer median"
+          title={t("peer.row.medianTitle")}
         />
       </div>
 
@@ -260,8 +271,8 @@ function RankRow({ r }: { r: PeerRank }) {
           marginTop: 4,
         }}
       >
-        <span>Rank ≈ #{r.rank.toLocaleString()} of {r.total.toLocaleString()}</span>
-        <span style={{ fontWeight: 800, color: r.color }}>{pct.toFixed(0)}th pct</span>
+        <span>{t("peer.row.rank", { rank: r.rank.toLocaleString(), total: r.total.toLocaleString() })}</span>
+        <span style={{ fontWeight: 800, color: r.color }}>{pct.toFixed(0)}{t("peer.row.percentSuffix")}</span>
       </div>
     </li>
   );

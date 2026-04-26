@@ -47,7 +47,7 @@ export function StatCard({
   accent,
   hint,
 }: {
-  label: string;
+  label: ReactNode;
   value: ReactNode;
   accent?: string;
   hint?: string;

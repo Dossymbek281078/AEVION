@@ -1,14 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useAdvance } from "../_hooks/useAdvance";
 import { eligibilityFor } from "../_lib/advance";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { formatRelative } from "../_lib/format";
-import { computeEcosystemTrustScore, tierColor, tierLabel } from "../_lib/trust";
+import { computeEcosystemTrustScore, tierColor, tierLabelKey } from "../_lib/trust";
 import type { Account, Operation } from "../_lib/types";
+import { InfoTooltip } from "./InfoTooltip";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
@@ -20,6 +22,7 @@ type Props = {
 };
 
 export function SalaryAdvance({ account, operations, topup, notify }: Props) {
+  const { t } = useI18n();
   const { advance, request, repayManual, close } = useAdvance({
     accountId: account.id,
     operations,
@@ -30,8 +33,8 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
   const { code } = useCurrency();
 
   const trust = useMemo(
-    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }),
-    [account, operations, royalty, chess, ecosystem],
+    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }, t),
+    [account, operations, royalty, chess, ecosystem, t],
   );
 
   const eligibility = eligibilityFor(trust.tier);
@@ -39,14 +42,14 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
 
   const doRequest = async (amount: number) => {
     if (amount <= 0 || amount > eligibility.limit) {
-      notify("Invalid advance amount", "error");
+      notify(t("advance.toast.invalid"), "error");
       return;
     }
     setRequesting(true);
     const ok = await topup(amount);
     if (ok) {
       request(amount);
-      notify(`${formatCurrency(amount, code)} advance credited`, "success");
+      notify(t("advance.toast.credited", { amt: formatCurrency(amount, code) }), "success");
     }
     setRequesting(false);
   };
@@ -102,25 +105,31 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
               id="advance-heading"
               style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
             >
-              Instant advance
+              {t("advance.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-              Trust tier: <strong style={{ color }}>{tierLabel[trust.tier]}</strong> · score {trust.score}/100
+              <InfoTooltip text={t("tip.trustTier")} side="bottom">
+                <span>
+                  {t("advance.tier.label")} <strong style={{ color }}>{t(tierLabelKey[trust.tier])}</strong>{t("advance.tier.score", { n: trust.score })}
+                </span>
+              </InfoTooltip>
             </div>
           </div>
         </div>
-        <div
-          style={{
-            padding: "4px 12px",
-            borderRadius: 999,
-            background: `${color}14`,
-            color,
-            fontSize: 11,
-            fontWeight: 800,
-          }}
-        >
-          Limit: {formatCurrency(eligibility.limit, code, { decimals: 0 })}
-        </div>
+        <InfoTooltip text={t("tip.advanceLimit")} side="bottom">
+          <div
+            style={{
+              padding: "4px 12px",
+              borderRadius: 999,
+              background: `${color}14`,
+              color,
+              fontSize: 11,
+              fontWeight: 800,
+            }}
+          >
+            {t("advance.limit.label", { amt: formatCurrency(eligibility.limit, code, { decimals: 0 }) })}
+          </div>
+        </InfoTooltip>
       </div>
 
       {eligibility.limit === 0 ? (
@@ -135,8 +144,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
             lineHeight: 1.5,
           }}
         >
-          {eligibility.reason}. Protect creative work in QRight, play CyberChess, complete Planet
-          tasks — your Trust Score grows, and so does your advance limit.
+          {eligibility.reason}{t("advance.zeroLimit.suffix")}
         </div>
       ) : !advance || advance.closedAt ? (
         <>
@@ -148,8 +156,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
               marginBottom: 12,
             }}
           >
-            {eligibility.reason}. Instant credit with auto-repayment from your incoming royalty /
-            chess / Planet streams ({eligibility.rateLabel}).
+            {eligibility.reason}{t("advance.subtitle.suffix", { rate: eligibility.rateLabel })}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {[0.25, 0.5, 1].map((frac) => {
@@ -176,7 +183,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
             })}
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
-            Tap an amount — money lands instantly via qtrade; auto-repays as earnings arrive.
+            {t("advance.cta.note")}
           </div>
         </>
       ) : (
@@ -189,14 +196,14 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
               marginBottom: 12,
             }}
           >
-            <MiniStat label="Principal" value={formatCurrency(advance.principal, code)} />
+            <MiniStat label={t("advance.stat.principal")} value={formatCurrency(advance.principal, code)} />
             <MiniStat
-              label="Outstanding"
+              label={t("advance.stat.outstanding")}
               value={formatCurrency(advance.outstanding, code)}
               accent={advance.outstanding === 0 ? "#059669" : color}
             />
-            <MiniStat label="Repaid" value={formatCurrency(advance.principal - advance.outstanding, code)} accent="#059669" />
-            <MiniStat label="Since" value={formatRelative(advance.startedAt)} />
+            <MiniStat label={t("advance.stat.repaid")} value={formatCurrency(advance.principal - advance.outstanding, code)} accent="#059669" />
+            <MiniStat label={t("advance.stat.since")} value={formatRelative(advance.startedAt)} />
           </div>
           <div style={{ marginBottom: 12 }}>
             <div
@@ -210,7 +217,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
               aria-valuenow={Math.round(progress)}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-label="Advance repayment progress"
+              aria-label={t("advance.progress.aria")}
             >
               <div
                 style={{
@@ -224,17 +231,17 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
               />
             </div>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
-              {progress.toFixed(1)}% repaid ·{" "}
+              {t("advance.progress.percent", { n: progress.toFixed(1) })}
               {advance.outstanding > 0
-                ? "Auto-sweep active — 50% of each incoming transfer repays the advance"
-                : "Fully repaid — request again anytime"}
+                ? t("advance.progress.active").trim()
+                : t("advance.progress.fully").trim()}
             </div>
           </div>
 
           {advance.outstanding > 0 ? (
             <div style={{ display: "flex", gap: 6, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
               <label style={{ display: "grid", gap: 4, flex: "1 1 140px" }}>
-                <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Manual repay AEC</span>
+                <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{t("advance.repay.label")}</span>
                 <input
                   value={repayInput}
                   onChange={(e) => setRepayInput(e.target.value)}
@@ -255,12 +262,12 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
                 onClick={() => {
                   const n = parseFloat(repayInput);
                   if (!Number.isFinite(n) || n <= 0) {
-                    notify("Invalid repay amount", "error");
+                    notify(t("advance.repay.invalid"), "error");
                     return;
                   }
                   repayManual(n);
                   setRepayInput("");
-                  notify(`Repaid ${formatCurrency(n, code)}`, "success");
+                  notify(t("advance.repay.toast", { amt: formatCurrency(n, code) }), "success");
                 }}
                 style={{
                   padding: "8px 16px",
@@ -273,14 +280,14 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
                   cursor: "pointer",
                 }}
               >
-                Repay
+                {t("advance.repay.cta")}
               </button>
             </div>
           ) : (
             <button
               onClick={() => {
                 close();
-                notify("Advance closed — you can request a new one", "info");
+                notify(t("advance.toast.closed"), "info");
               }}
               style={{
                 padding: "8px 16px",
@@ -293,7 +300,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
                 cursor: "pointer",
               }}
             >
-              Close & request new
+              {t("advance.close")}
             </button>
           )}
 
@@ -309,7 +316,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
                   textTransform: "uppercase" as const,
                 }}
               >
-                Repayment history ({advance.repayments.length})
+                {t("advance.history.summary", { n: advance.repayments.length })}
               </summary>
               <ul
                 style={{
@@ -335,7 +342,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
                     }}
                   >
                     <span style={{ color: "#64748b" }}>
-                      {r.kind === "auto" ? "Auto-repay" : "Manual repay"} · {formatRelative(r.at)}
+                      {r.kind === "auto" ? t("advance.history.auto") : t("advance.history.manual")} · {formatRelative(r.at)}
                     </span>
                     <span style={{ color: "#059669", fontWeight: 700 }}>
                       −{formatCurrency(r.amount, code)}

@@ -19,6 +19,8 @@ export type PeerDimension = "trust" | "creator" | "chess" | "wealth";
 export type PeerRank = {
   dimension: PeerDimension;
   label: string;
+  /** i18n key for {@link label}; consumers should prefer `t(labelKey)`. */
+  labelKey: string;
   icon: string;
   color: string;
   // Percentile: 0.95 → top 5 %.
@@ -27,8 +29,20 @@ export type PeerRank = {
   total: number;
   userValue: number;
   userValueLabel: string;
+  /** i18n key for {@link userValueLabel}; optional (raw EN is the fallback). */
+  userValueLabelKey?: string;
+  userValueLabelVars?: Record<string, string | number>;
   peerMedian: number;
   peerMedianLabel: string;
+  peerMedianLabelKey?: string;
+  peerMedianLabelVars?: Record<string, string | number>;
+};
+
+export const DIMENSION_LABEL_KEY: Record<PeerDimension, string> = {
+  trust: "peer.dim.trust",
+  creator: "peer.dim.creator",
+  chess: "peer.dim.chess",
+  wealth: "peer.dim.wealth",
 };
 
 // Seeded network size that looks plausible — drifts slowly with accountId
@@ -85,10 +99,14 @@ export function computePeerStanding(input: {
     color: string;
     value: number;
     valueLabel: string;
+    valueLabelKey?: string;
+    valueLabelVars?: Record<string, string | number>;
     target: number;
     k: number;
     median: number;
     medianLabel: string;
+    medianLabelKey?: string;
+    medianLabelVars?: Record<string, string | number>;
   }> = [
     {
       dimension: "trust",
@@ -97,10 +115,14 @@ export function computePeerStanding(input: {
       color: "#0d9488",
       value: trustScore,
       valueLabel: `${trustScore} / 100`,
+      valueLabelKey: "peer.value.scoreOf100",
+      valueLabelVars: { score: trustScore },
       target: 60,
       k: 3.5,
       median: 42,
       medianLabel: "42 / 100",
+      medianLabelKey: "peer.value.scoreOf100",
+      medianLabelVars: { score: 42 },
     },
     {
       dimension: "creator",
@@ -109,10 +131,14 @@ export function computePeerStanding(input: {
       color: "#7c3aed",
       value: ipVerifications,
       valueLabel: `${ipVerifications} verifications`,
+      valueLabelKey: "peer.value.verifications",
+      valueLabelVars: { n: ipVerifications },
       target: 80,
       k: 2.4,
       median: 34,
       medianLabel: "34 verifications",
+      medianLabelKey: "peer.value.verifications",
+      medianLabelVars: { n: 34 },
     },
     {
       dimension: "chess",
@@ -121,10 +147,14 @@ export function computePeerStanding(input: {
       color: "#d97706",
       value: chessRating,
       valueLabel: chessRating ? String(chessRating) : "no games",
+      valueLabelKey: chessRating ? "peer.value.rating" : "peer.value.noGames",
+      valueLabelVars: chessRating ? { n: chessRating } : undefined,
       target: 1450,
       k: 3.0,
       median: 1280,
       medianLabel: "1 280",
+      medianLabelKey: "peer.value.rating",
+      medianLabelVars: { n: "1 280" },
     },
     {
       dimension: "wealth",
@@ -146,6 +176,7 @@ export function computePeerStanding(input: {
     return {
       dimension: d.dimension,
       label: d.label,
+      labelKey: DIMENSION_LABEL_KEY[d.dimension],
       icon: d.icon,
       color: d.color,
       percentile,
@@ -153,17 +184,28 @@ export function computePeerStanding(input: {
       total,
       userValue: d.value,
       userValueLabel: d.valueLabel,
+      userValueLabelKey: d.valueLabelKey,
+      userValueLabelVars: d.valueLabelVars,
       peerMedian: d.median,
       peerMedianLabel: d.medianLabel,
+      peerMedianLabelKey: d.medianLabelKey,
+      peerMedianLabelVars: d.medianLabelVars,
     };
   });
 }
 
-export function topPercentLabel(percentile: number): string {
-  const top = Math.round((1 - percentile) * 100);
-  if (top <= 1) return "Top 1 %";
-  if (top <= 5) return `Top ${top} %`;
-  if (top <= 25) return `Top ${top} %`;
-  if (top <= 50) return `Top ${top} %`;
-  return `${top} % away from top`;
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+/**
+ * Returns a short label like `"Top 5 %"` or `"38 % away from top"` describing
+ * how the user ranks. When a `t` translator is provided, the result is
+ * localized; otherwise the original English copy is returned (snapshot/export
+ * code relies on the raw EN form).
+ */
+export function topPercentLabel(percentile: number, t?: Translator): string {
+  const top = Math.max(1, Math.round((1 - percentile) * 100));
+  if (top <= 50) {
+    return t ? t("peer.topPercent.top", { pct: top }) : `Top ${top} %`;
+  }
+  return t ? t("peer.topPercent.away", { pct: top }) : `${top} % away from top`;
 }

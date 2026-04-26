@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useBiometric } from "../_lib/BiometricContext";
 import { formatRelative } from "../_lib/format";
+import { useI18n } from "@/lib/i18n";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
 export function BiometricCard({ email, notify }: { email: string; notify: Notify }) {
+  const { t } = useI18n();
   const { supported, settings, enroll, disable, setThreshold } = useBiometric();
   const [threshold, setThresholdInput] = useState<string>("100");
   const [busy, setBusy] = useState<boolean>(false);
@@ -47,10 +49,10 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
           </span>
           <div>
             <h3 id="bio-heading" style={{ fontSize: 14, fontWeight: 800, margin: 0, color: "#0f172a" }}>
-              Biometric protection
+              {t("bio.title.unsupported")}
             </h3>
             <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-              This browser/device doesn&apos;t expose Touch ID, Windows Hello or a hardware key.
+              {t("bio.unsupported")}
             </div>
           </div>
         </div>
@@ -100,10 +102,10 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
             </span>
             <div style={{ minWidth: 0 }}>
               <h3 id="bio-heading" style={{ fontSize: 14, fontWeight: 800, margin: 0, color: "#0f172a" }}>
-                Add biometric protection
+                {t("bio.title.add")}
               </h3>
               <div style={{ fontSize: 12, color: "#334155", marginTop: 2, lineHeight: 1.5 }}>
-                Require Touch ID / Windows Hello / hardware key for transfers above the threshold.
+                {t("bio.add.subtitle")}
               </div>
             </div>
           </div>
@@ -118,7 +120,7 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
           }}
         >
           <label style={{ display: "grid", gap: 4, flex: "1 1 140px", minWidth: 140 }}>
-            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Threshold AEC</span>
+            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{t("bio.threshold.label")}</span>
             <input
               value={threshold}
               onChange={(e) => setThresholdInput(e.target.value)}
@@ -139,15 +141,15 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
             onClick={async () => {
               const n = parseFloat(threshold);
               if (!Number.isFinite(n) || n <= 0) {
-                notify("Invalid threshold", "error");
+                notify(t("bio.toast.invalidThreshold"), "error");
                 return;
               }
               setBusy(true);
-              notify("Confirm with your authenticator…", "info");
+              notify(t("bio.toast.confirm"), "info");
               const result = await enroll(email, n);
               setBusy(false);
-              if (result) notify("Biometric protection enabled", "success");
-              else notify("Enrollment cancelled or failed", "error");
+              if (result) notify(t("bio.toast.enabled"), "success");
+              else notify(t("bio.toast.cancelled"), "error");
             }}
             disabled={busy}
             style={{
@@ -162,7 +164,7 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
               whiteSpace: "nowrap" as const,
             }}
           >
-            {busy ? "Waiting…" : "Enable"}
+            {busy ? t("bio.btn.waiting") : t("bio.btn.enable")}
           </button>
         </div>
       </section>
@@ -210,19 +212,18 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
           </span>
           <div style={{ minWidth: 0 }}>
             <h3 id="bio-heading" style={{ fontSize: 14, fontWeight: 800, margin: 0, color: "#065f46" }}>
-              Biometric protection · ON
+              {t("bio.title.on")}
             </h3>
             <div style={{ fontSize: 12, color: "#334155", marginTop: 2 }}>
-              Transfers ≥ <strong>{settings.threshold} AEC</strong> require verification ·{" "}
-              enrolled {formatRelative(settings.enrolledAt)}
+              {t("bio.on.subtitle.prefix")}<strong>{settings.threshold} AEC</strong>{t("bio.on.subtitle.middle", { when: formatRelative(settings.enrolledAt) })}
             </div>
           </div>
         </div>
         <button
           onClick={() => {
-            if (confirm("Disable biometric protection?")) {
+            if (confirm(t("bio.confirm.disable"))) {
               disable();
-              notify("Biometric protection disabled", "info");
+              notify(t("bio.toast.disabled"), "info");
             }
           }}
           style={{
@@ -236,7 +237,7 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
             cursor: "pointer",
           }}
         >
-          Disable
+          {t("bio.btn.disable")}
         </button>
       </div>
       <div
@@ -249,7 +250,7 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
         }}
       >
         <label style={{ display: "grid", gap: 4, flex: "1 1 140px", minWidth: 140 }}>
-          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Change threshold</span>
+          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{t("bio.changeThreshold.label")}</span>
           <input
             value={threshold}
             onChange={(e) => setThresholdInput(e.target.value)}
@@ -269,11 +270,11 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
           onClick={() => {
             const n = parseFloat(threshold);
             if (!Number.isFinite(n) || n <= 0) {
-              notify("Invalid threshold", "error");
+              notify(t("bio.toast.invalidThreshold"), "error");
               return;
             }
             setThreshold(n);
-            notify(`Threshold set to ${n} AEC`, "success");
+            notify(t("bio.toast.thresholdSet", { n }), "success");
           }}
           style={{
             padding: "8px 14px",
@@ -286,7 +287,7 @@ export function BiometricCard({ email, notify }: { email: string; notify: Notify
             cursor: "pointer",
           }}
         >
-          Update
+          {t("bio.btn.update")}
         </button>
       </div>
     </section>

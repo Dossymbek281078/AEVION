@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   hasSeenTour,
   markTourSeen,
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState<boolean>(false);
   const [stepIdx, setStepIdx] = useState<number>(0);
 
@@ -41,6 +43,13 @@ export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
   const step: TourStep = TOUR_STEPS[stepIdx] ?? TOUR_STEPS[0];
   const isFirst = stepIdx === 0;
   const isLast = stepIdx === TOUR_STEPS.length - 1;
+  const stepLabel = t(`tour.step.${step.id}.label`) || step.label;
+  const stepHeadline = t(`tour.step.${step.id}.headline`) || step.headline;
+  const stepBody = t(`tour.step.${step.id}.body`) || step.body;
+  const stepTipKey = `tour.step.${step.id}.tip`;
+  const stepTipTranslated = t(stepTipKey);
+  const stepTip =
+    stepTipTranslated && stepTipTranslated !== stepTipKey ? stepTipTranslated : step.tip;
 
   const showAndAdvance = () => {
     scrollToAnchor(step.anchorId);
@@ -101,11 +110,11 @@ export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
               color: "#0369a1",
             }}
           >
-            Tour · {stepIdx + 1} / {TOUR_STEPS.length} · {step.label}
+            {t("tour.label")} · {stepIdx + 1} / {TOUR_STEPS.length} · {stepLabel}
           </div>
           <button
             onClick={() => close(true)}
-            aria-label="Skip tour"
+            aria-label={t("tour.btn.skip.aria")}
             style={{
               background: "transparent",
               border: "none",
@@ -129,10 +138,10 @@ export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
             letterSpacing: "-0.02em",
           }}
         >
-          {step.headline}
+          {stepHeadline}
         </h2>
-        <p style={{ fontSize: 14, color: "#334155", lineHeight: 1.6, margin: 0 }}>{step.body}</p>
-        {step.tip ? (
+        <p style={{ fontSize: 14, color: "#334155", lineHeight: 1.6, margin: 0 }}>{stepBody}</p>
+        {stepTip ? (
           <div
             style={{
               padding: "10px 12px",
@@ -144,8 +153,8 @@ export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
               lineHeight: 1.5,
             }}
           >
-            <strong style={{ letterSpacing: "0.04em" }}>Tip · </strong>
-            {step.tip}
+            <strong style={{ letterSpacing: "0.04em" }}>{t("tour.tip")} · </strong>
+            {stepTip}
           </div>
         ) : null}
 
@@ -178,7 +187,7 @@ export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
               cursor: "pointer",
             }}
           >
-            Skip tour
+            {t("tour.btn.skip")}
           </button>
           <div style={{ display: "flex", gap: 6 }}>
             <button
@@ -195,7 +204,7 @@ export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
                 cursor: isFirst ? "default" : "pointer",
               }}
             >
-              Back
+              {t("tour.btn.back")}
             </button>
             <button
               onClick={showAndAdvance}
@@ -211,7 +220,7 @@ export function OnboardingTour({ forceOpen, autoFirstVisit }: Props) {
                 boxShadow: "0 4px 14px rgba(14,165,233,0.3)",
               }}
             >
-              {isLast ? "Show me & finish" : "Show me → Next"}
+              {isLast ? t("tour.btn.finish") : t("tour.btn.next")}
             </button>
           </div>
         </div>

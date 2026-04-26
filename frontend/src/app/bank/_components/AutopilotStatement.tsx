@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useI18n } from "@/lib/i18n";
+import { InfoTooltip } from "./InfoTooltip";
 import {
   AUTOPILOT_EVENT,
   loadActions as loadAutopilotActions,
@@ -13,11 +15,7 @@ type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
 type Window = "7d" | "30d" | "all";
 
-const WINDOW_LABEL: Record<Window, string> = {
-  "7d": "Last 7 days",
-  "30d": "Last 30 days",
-  all: "All time",
-};
+const WINDOW_LABEL_KEY: Record<Window, string> = { "7d": "ap.window.7d", "30d": "ap.window.30d", all: "ap.window.all" };
 
 const WINDOW_MS: Record<Window, number> = {
   "7d": 7 * 24 * 60 * 60 * 1000,
@@ -86,11 +84,11 @@ function computeStats(
   };
 }
 
-function statementSvg(stats: Stats, accountId: string): string {
+function statementSvg(stats: Stats, accountId: string, windowLabel: string): string {
   const width = 640;
   const height = 400;
   const pad = 24;
-  const title = `AEVION Autopilot · ${WINDOW_LABEL[stats.window]}`;
+  const title = `AEVION Autopilot · ${windowLabel}`;
 
   const tiles = [
     { label: "AEC moved to goals", value: stats.movedTotalAec.toFixed(2), color: "#059669" },
@@ -149,6 +147,7 @@ export function AutopilotStatement({
   accountId: string;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const [window, setWindow] = useState<Window>("30d");
   const [actions, setActions] = useState<AutopilotAction[]>([]);
   const [freezeLog, setFreezeLog] = useState<FreezeEvent[]>([]);
@@ -186,7 +185,7 @@ export function AutopilotStatement({
 
   const downloadSvg = useCallback(() => {
     try {
-      const svg = statementSvg(stats, accountId);
+      const svg = statementSvg(stats, accountId, t(WINDOW_LABEL_KEY[stats.window]));
       const blob = new Blob([svg], { type: "image/svg+xml" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -196,32 +195,30 @@ export function AutopilotStatement({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      notify(`Exported Autopilot statement (${WINDOW_LABEL[stats.window]})`, "success");
+      notify(t("ap.toast.exported", { window: t(WINDOW_LABEL_KEY[stats.window]) }), "success");
     } catch {
-      notify("Export failed", "error");
+      notify(t("ap.toast.exportFailed"), "error");
     }
-  }, [stats, accountId, notify]);
+  }, [stats, accountId, notify, t]);
 
   const narrative = useMemo(() => {
-    if (!hasAny) return "Autopilot has nothing to report yet — enable it and come back after a few actions.";
+    if (!hasAny) return t("ap.narrative.empty");
     const parts: string[] = [];
     if (stats.movedTotalAec > 0) {
-      parts.push(
-        `moved ${stats.movedTotalAec.toFixed(2)} AEC into goals${
-          stats.goalsCompleted.length > 0
-            ? `, completed ${stats.goalsCompleted.length} (${stats.goalsCompleted.map((g) => g.label).join(", ")})`
-            : ""
-        }`,
-      );
+      let str = t("ap.narrative.moved", { amt: stats.movedTotalAec.toFixed(2) });
+      if (stats.goalsCompleted.length > 0) {
+        str += t("ap.narrative.completed", { n: stats.goalsCompleted.length, names: stats.goalsCompleted.map((g) => g.label).join(", ") });
+      }
+      parts.push(str);
     }
     if (stats.anomalyFreezes > 0) {
-      parts.push(`caught ${stats.anomalyFreezes} suspicious burst${stats.anomalyFreezes === 1 ? "" : "s"}`);
+      parts.push(stats.anomalyFreezes === 1 ? t("ap.narrative.bursts.one") : t("ap.narrative.bursts.many", { n: stats.anomalyFreezes }));
     }
     if (stats.manualFreezes > 0) {
-      parts.push(`responded to ${stats.manualFreezes} manual freeze${stats.manualFreezes === 1 ? "" : "s"}`);
+      parts.push(stats.manualFreezes === 1 ? t("ap.narrative.manual.one") : t("ap.narrative.manual.many", { n: stats.manualFreezes }));
     }
-    return `In the ${WINDOW_LABEL[stats.window].toLowerCase()}, Autopilot ${parts.join(" · ")}.`;
-  }, [stats, hasAny]);
+    return t("ap.narrative.lead", { window: t(WINDOW_LABEL_KEY[stats.window]).toLowerCase(), parts: parts.join(" · ") });
+  }, [stats, hasAny, t]);
 
   return (
     <section
@@ -264,16 +261,16 @@ export function AutopilotStatement({
           </span>
           <div>
             <h2 id="statement-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-              Autopilot statement
+              {t("ap.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-              Proof of value · what Autopilot did for you, with rule breakdown and security events.
+              {t("ap.subtitle")}
             </div>
           </div>
         </div>
         <div
           role="tablist"
-          aria-label="Window"
+          aria-label={t("ap.window.aria")}
           style={{ display: "flex", gap: 4 }}
         >
           {(["7d", "30d", "all"] as Window[]).map((w) => {
@@ -295,7 +292,7 @@ export function AutopilotStatement({
                   cursor: "pointer",
                 }}
               >
-                {WINDOW_LABEL[w]}
+                {t(WINDOW_LABEL_KEY[w])}
               </button>
             );
           })}
@@ -311,23 +308,27 @@ export function AutopilotStatement({
         }}
       >
         <StatTile
-          label="Moved to goals"
+          label={
+            <InfoTooltip text={t("tip.autopilotMoved")} side="top">
+              <span>{t("ap.tile.moved")}</span>
+            </InfoTooltip>
+          }
           value={`${stats.movedTotalAec.toFixed(2)} AEC`}
           accent="#059669"
         />
-        <StatTile label="Actions" value={String(stats.actionCount)} accent="#0ea5e9" />
-        <StatTile label="Bursts caught" value={String(stats.anomalyFreezes)} accent="#dc2626" />
-        <StatTile label="Goals completed" value={String(stats.goalsCompleted.length)} accent="#d97706" />
+        <StatTile label={t("ap.tile.actions")} value={String(stats.actionCount)} accent="#0ea5e9" />
+        <StatTile label={t("ap.tile.bursts")} value={String(stats.anomalyFreezes)} accent="#dc2626" />
+        <StatTile label={t("ap.tile.goals")} value={String(stats.goalsCompleted.length)} accent="#d97706" />
       </div>
 
       {stats.movedTotalAec > 0 ? (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", marginBottom: 4 }}>
-            Rule breakdown
+            {t("ap.rule.title")}
           </div>
           <div
             role="img"
-            aria-label={`Rule 1: ${stats.movedByRule1Aec.toFixed(2)} AEC; Rule 2: ${stats.movedByRule2Aec.toFixed(2)} AEC`}
+            aria-label={t("ap.rule.aria", { r1: stats.movedByRule1Aec.toFixed(2), r2: stats.movedByRule2Aec.toFixed(2) })}
             style={{
               height: 12,
               borderRadius: 999,
@@ -360,10 +361,10 @@ export function AutopilotStatement({
             }}
           >
             <span style={{ color: "#0ea5e9" }}>
-              ● Rule #1 catch-up: {stats.movedByRule1Aec.toFixed(2)} AEC
+              {t("ap.rule.r1", { amt: stats.movedByRule1Aec.toFixed(2) })}
             </span>
             <span style={{ color: "#059669" }}>
-              ● Rule #2 inflow-split: {stats.movedByRule2Aec.toFixed(2)} AEC
+              {t("ap.rule.r2", { amt: stats.movedByRule2Aec.toFixed(2) })}
             </span>
           </div>
         </div>
@@ -389,7 +390,7 @@ export function AutopilotStatement({
               marginBottom: 4,
             }}
           >
-            Goals completed
+            {t("ap.goals.title")}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {stats.goalsCompleted.map((g) => (
@@ -432,7 +433,7 @@ export function AutopilotStatement({
           type="button"
           onClick={downloadSvg}
           disabled={!hasAny}
-          aria-label="Download Autopilot statement as SVG"
+          aria-label={t("ap.cta.download.aria")}
           style={{
             padding: "6px 12px",
             borderRadius: 8,
@@ -445,15 +446,12 @@ export function AutopilotStatement({
             whiteSpace: "nowrap",
           }}
         >
-          Download SVG
+          {t("ap.cta.download")}
         </button>
       </div>
 
       <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 8, lineHeight: 1.45 }}>
-        Security events in window: {stats.manualFreezes} manual freeze
-        {stats.manualFreezes === 1 ? "" : "s"} · {stats.anomalyFreezes} anomaly freeze
-        {stats.anomalyFreezes === 1 ? "" : "s"} · {stats.unfreezes} unfreeze
-        {stats.unfreezes === 1 ? "" : "s"}. All figures on-device, no backend.
+        {t("ap.security.line", { manual: stats.manualFreezes, ms: stats.manualFreezes === 1 ? "" : "s", anomaly: stats.anomalyFreezes, as: stats.anomalyFreezes === 1 ? "" : "s", unfreezes: stats.unfreezes, us: stats.unfreezes === 1 ? "" : "s" })}
       </div>
     </section>
   );
@@ -464,7 +462,7 @@ function StatTile({
   value,
   accent,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   accent: string;
 }) {

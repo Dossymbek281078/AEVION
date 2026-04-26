@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
@@ -9,7 +10,7 @@ import { formatRelative } from "../_lib/format";
 import {
   KIND_COLOR,
   KIND_ICON,
-  KIND_LABEL,
+  KIND_LABEL_KEY,
   simulateRoyaltyEvent,
   type RoyaltyEvent,
 } from "../_lib/royalties";
@@ -43,6 +44,7 @@ function LivePulse({ active, color = "#dc2626" }: { active: boolean; color?: str
 }
 
 function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) {
+  const { t } = useI18n();
   const color = KIND_COLOR[ev.workKind];
   const { code } = useCurrency();
   return (
@@ -90,7 +92,7 @@ function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) 
           {ev.workTitle}
         </div>
         <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-          {KIND_LABEL[ev.workKind]} · verified from {ev.verifier} · {formatRelative(ev.timestamp)}
+          {t("rs.event.subtitle", { kind: t(KIND_LABEL_KEY[ev.workKind]), verifier: ev.verifier, when: formatRelative(ev.timestamp) })}
         </div>
       </div>
       <div style={{ fontWeight: 900, fontSize: 13, color, whiteSpace: "nowrap" as const }}>
@@ -101,6 +103,7 @@ function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) 
 }
 
 export function RoyaltyStream() {
+  const { t } = useI18n();
   const { royalty: data } = useEcosystemData();
   const [liveEvents, setLiveEvents] = useState<RoyaltyEvent[]>([]);
   const [paused, setPaused] = useState<boolean>(false);
@@ -167,7 +170,7 @@ export function RoyaltyStream() {
           background: "linear-gradient(180deg, rgba(124,58,237,0.03) 0%, #ffffff 100%)",
         }}
       >
-        <SkeletonBlock label="Loading QRight royalty stream" />
+        <SkeletonBlock label={t("rs.loading")} />
       </section>
     );
   }
@@ -213,13 +216,13 @@ export function RoyaltyStream() {
             }}
           >
             <LivePulse active={!paused && !prm} color={paused ? "#64748b" : "#dc2626"} />
-            {paused ? "Paused" : "Live"}
+            {paused ? t("rs.paused") : t("rs.live")}
           </div>
           <h2
             id="royalty-stream-heading"
             style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#4c1d95" }}
           >
-            QRight royalty stream
+            {t("rs.title")}
           </h2>
         </div>
         <button
@@ -236,7 +239,7 @@ export function RoyaltyStream() {
             cursor: "pointer",
           }}
         >
-          {paused ? "Resume" : "Pause"}
+          {paused ? t("rs.btn.resume") : t("rs.btn.pause")}
         </button>
       </div>
 
@@ -257,13 +260,13 @@ export function RoyaltyStream() {
           }}
         >
           <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-            TOTAL EARNED (90D)
+            {t("rs.tile.total")}
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#4c1d95", letterSpacing: "-0.02em" }}>
             {formatCurrency(totalRoyalties, code)}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            {totalVerifications} verifications · {data.works.length} works
+            {t("rs.tile.total.hint", { verifications: totalVerifications, works: data.works.length })}
           </div>
         </div>
         <div
@@ -275,13 +278,13 @@ export function RoyaltyStream() {
           }}
         >
           <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-            AVG / DAY (7D)
+            {t("rs.tile.avg")}
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#047857", letterSpacing: "-0.02em" }}>
             {formatCurrency(data.avgPerDay7d, code)}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            30d avg: {formatCurrency(data.avgPerDay30d, code)}
+            {t("rs.tile.avg.hint", { amt: formatCurrency(data.avgPerDay30d, code) })}
           </div>
         </div>
         <div
@@ -293,13 +296,13 @@ export function RoyaltyStream() {
           }}
         >
           <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-            NEXT 30 DAYS (EST.)
+            {t("rs.tile.next")}
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0369a1", letterSpacing: "-0.02em" }}>
             ~{formatCurrency(data.estimated30d, code)}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            Based on 7d trend
+            {t("rs.tile.next.hint")}
           </div>
         </div>
       </div>
@@ -322,16 +325,16 @@ export function RoyaltyStream() {
               marginBottom: 8,
             }}
           >
-            Recent verifications
+            {t("rs.recent")}
           </div>
           <ul
             aria-live="polite"
-            aria-label="Live royalty events"
+            aria-label={t("rs.live.aria")}
             style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}
           >
             {feed.length === 0 ? (
               <li style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>
-                No verifications yet.
+                {t("rs.recent.empty")}
               </li>
             ) : (
               feed.map((ev) => (
@@ -352,7 +355,7 @@ export function RoyaltyStream() {
               marginBottom: 8,
             }}
           >
-            Top 5 works by earnings
+            {t("rs.top")}
           </div>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
             {topWorks.map((w, i) => {
@@ -411,7 +414,7 @@ export function RoyaltyStream() {
                     aria-valuenow={Math.round(pct)}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label={`${w.title}: ${w.totalRoyalties.toFixed(2)} AEC`}
+                    aria-label={t("rs.top.aria", { title: w.title, amt: w.totalRoyalties.toFixed(2) })}
                     style={{
                       height: 5,
                       borderRadius: 999,
@@ -446,7 +449,7 @@ export function RoyaltyStream() {
         }}
       >
         <div style={{ fontSize: 11, color: "#94a3b8" }}>
-          Each verification of your IP pays a micro-royalty. More work registered = more streams.
+          {t("rs.footer")}
         </div>
         <Link
           href="/qright"
@@ -461,7 +464,7 @@ export function RoyaltyStream() {
             whiteSpace: "nowrap" as const,
           }}
         >
-          Open QRight · register work →
+          {t("rs.cta")}
         </Link>
       </div>
     </section>

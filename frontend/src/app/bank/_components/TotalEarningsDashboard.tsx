@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import {
   periodTotals,
   SOURCE_COLOR,
-  SOURCE_DESCRIPTION,
-  SOURCE_LABEL,
+  SOURCE_DESCRIPTION_KEY,
+  SOURCE_LABEL_KEY,
   type EarningSource,
 } from "../_lib/ecosystem";
 import { formatRelative } from "../_lib/format";
@@ -15,10 +15,12 @@ import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { Legend, PieChart, StackedAreaChart, type StackedSeries } from "./charts";
 import { Sparkline } from "./primitives";
 import { SkeletonBlock } from "./Skeleton";
+import { InfoTooltip } from "./InfoTooltip";
+import { useI18n } from "@/lib/i18n";
 
 type Period = "30d" | "90d" | "365d";
 const PERIOD_DAYS: Record<Period, number> = { "30d": 30, "90d": 90, "365d": 365 };
-const PERIOD_LABEL: Record<Period, string> = { "30d": "30d", "90d": "90d", "365d": "1y" };
+const PERIOD_LABEL_KEY: Record<Period, string> = { "30d": "te.period.30d", "90d": "te.period.90d", "365d": "te.period.365d" };
 const SOURCES: EarningSource[] = ["banking", "qright", "chess", "planet"];
 
 function sourceIcon(s: EarningSource): string {
@@ -26,6 +28,7 @@ function sourceIcon(s: EarningSource): string {
 }
 
 export function TotalEarningsDashboard() {
+  const { t } = useI18n();
   const { ecosystem: summary } = useEcosystemData();
   const [period, setPeriod] = useState<Period>("30d");
   const { code } = useCurrency();
@@ -38,11 +41,11 @@ export function TotalEarningsDashboard() {
     const slice = summary.daily.slice(-days);
     return SOURCES.map((src) => ({
       key: src,
-      label: SOURCE_LABEL[src],
+      label: t(SOURCE_LABEL_KEY[src]),
       color: SOURCE_COLOR[src],
       values: slice.map((d) => d[src]),
     }));
-  }, [summary, days]);
+  }, [summary, days, t]);
 
   if (!summary || !totals) {
     return (
@@ -55,14 +58,14 @@ export function TotalEarningsDashboard() {
           background: "linear-gradient(180deg, #ffffff 0%, rgba(13,148,136,0.03) 100%)",
         }}
       >
-        <SkeletonBlock label="Loading ecosystem earnings" minHeight={280} />
+        <SkeletonBlock label={t("te.loading")} minHeight={280} />
       </section>
     );
   }
 
   const sliceForSpark = summary.daily.slice(-days);
   const pieData = SOURCES.map((src) => ({
-    label: SOURCE_LABEL[src],
+    label: t(SOURCE_LABEL_KEY[src]),
     value: totals[src],
     color: SOURCE_COLOR[src],
   }));
@@ -99,13 +102,15 @@ export function TotalEarningsDashboard() {
               marginBottom: 4,
             }}
           >
-            Total AEVION earnings
+            {t("te.eyebrow")}
           </div>
           <h2 id="total-earnings-heading" style={{ fontSize: 18, fontWeight: 900, margin: 0, color: "#0f172a" }}>
-            Across banking, IP royalties, chess & Planet
+            <InfoTooltip text={t("tip.totalEarnings")} side="bottom">
+              <span>{t("te.title")}</span>
+            </InfoTooltip>
           </h2>
         </div>
-        <div role="group" aria-label="Period" style={{ display: "flex", gap: 4 }}>
+        <div role="group" aria-label={t("te.period.aria")} style={{ display: "flex", gap: 4 }}>
           {(Object.keys(PERIOD_DAYS) as Period[]).map((p) => {
             const active = period === p;
             return (
@@ -124,7 +129,7 @@ export function TotalEarningsDashboard() {
                   cursor: "pointer",
                 }}
               >
-                {PERIOD_LABEL[p]}
+                {t(PERIOD_LABEL_KEY[p])}
               </button>
             );
           })}
@@ -155,7 +160,7 @@ export function TotalEarningsDashboard() {
               }}
             >
               <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.06em" }}>
-                TOTAL {PERIOD_LABEL[period]}
+                {t("te.donut.total", { period: t(PERIOD_LABEL_KEY[period]) })}
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", lineHeight: 1.1 }}>
                 {formatCurrency(totals.total, code, { decimals: 0 })}
@@ -165,7 +170,7 @@ export function TotalEarningsDashboard() {
           </div>
           <Legend
             items={SOURCES.map((src) => ({
-              label: SOURCE_LABEL[src],
+              label: t(SOURCE_LABEL_KEY[src]),
               color: SOURCE_COLOR[src],
               hint: formatCurrency(totals[src], code, { decimals: 0 }),
             }))}
@@ -210,7 +215,7 @@ export function TotalEarningsDashboard() {
                     {sourceIcon(src)}
                   </span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>
-                    {SOURCE_LABEL[src]}
+                    {t(SOURCE_LABEL_KEY[src])}
                   </span>
                 </div>
                 <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
@@ -220,7 +225,7 @@ export function TotalEarningsDashboard() {
                   <Sparkline data={spark} width={140} height={24} color={SOURCE_COLOR[src]} />
                 </div>
                 <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                  {SOURCE_DESCRIPTION[src]}
+                  {t(SOURCE_DESCRIPTION_KEY[src])}
                 </div>
               </div>
             );
@@ -239,7 +244,7 @@ export function TotalEarningsDashboard() {
             marginBottom: 6,
           }}
         >
-          Stacked by source · {PERIOD_LABEL[period]}
+          {t("te.stacked", { period: t(PERIOD_LABEL_KEY[period]) })}
         </div>
         <StackedAreaChart series={series} width={640} height={120} />
       </div>
@@ -255,11 +260,11 @@ export function TotalEarningsDashboard() {
             marginBottom: 8,
           }}
         >
-          Recent ecosystem activity
+          {t("te.recent")}
         </div>
         {summary.recent.length === 0 ? (
           <div style={{ fontSize: 12, color: "#94a3b8", padding: "10px 0" }}>
-            No ecosystem activity in the last 30 days.
+            {t("te.recent.empty")}
           </div>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
@@ -308,7 +313,7 @@ export function TotalEarningsDashboard() {
                     {ev.title}
                   </div>
                   <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-                    {SOURCE_LABEL[ev.source]} · {formatRelative(ev.timestamp)}
+                    {t(SOURCE_LABEL_KEY[ev.source])} · {formatRelative(ev.timestamp)}
                     {ev.meta ? ` · ${ev.meta}` : ""}
                   </div>
                 </div>
@@ -322,8 +327,7 @@ export function TotalEarningsDashboard() {
       </div>
 
       <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        Banking figures are live from <code>/api/qtrade/operations</code>. QRight, CyberChess and
-        Planet streams are simulated pending ecosystem endpoints.
+        {t("te.footer")}
       </div>
     </section>
   );

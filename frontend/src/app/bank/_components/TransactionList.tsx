@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import * as contactsLib from "../_lib/contacts";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
@@ -34,6 +35,7 @@ export function TransactionList({
   csvUrl: string;
   onCopyId: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState<string>("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export function TransactionList({
           gap: 8,
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 16 }}>Transaction history</div>
+        <div style={{ fontWeight: 900, fontSize: 16 }}>{t("tx.title")}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <a
             href={csvUrl}
@@ -121,7 +123,7 @@ export function TransactionList({
               textDecoration: "none",
             }}
           >
-            Export CSV
+            {t("tx.export")}
           </a>
           <button
             onClick={onRefresh}
@@ -137,18 +139,18 @@ export function TransactionList({
               cursor: loading ? "default" : "pointer",
             }}
           >
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? t("tx.refreshing") : t("tx.refresh")}
           </button>
         </div>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-        {filterBtn("all", `All (${sorted.length})`)}
-        {filterBtn("in", "Incoming")}
-        {filterBtn("out", "Outgoing")}
+        {filterBtn("all", t("tx.filter.all", { n: sorted.length }))}
+        {filterBtn("in", t("tx.filter.in"))}
+        {filterBtn("out", t("tx.filter.out"))}
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search ID, contact, nickname…"
+          placeholder={t("tx.search.placeholder")}
           style={{
             flex: "1 1 160px",
             minWidth: 160,
@@ -168,7 +170,7 @@ export function TransactionList({
             color: "#94a3b8",
           }}
         >
-          {sorted.length === 0 ? "No transactions yet. Top up to see your first operation." : "No matches."}
+          {sorted.length === 0 ? t("tx.empty.none") : t("tx.empty.search")}
         </div>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
@@ -254,18 +256,19 @@ export function TransactionList({
                       fontSize: 12,
                     }}
                   >
-                    <KV label="Operation ID" value={op.id} copyable onCopy={() => onCopyId(op.id)} />
+                    <KV label={t("tx.kv.id")} value={op.id} copyable onCopy={() => onCopyId(op.id)} copyLabel={t("tx.copy")} />
                     {d.counterparty ? (
                       <KV
-                        label={d.signed >= 0 ? "From" : "To"}
+                        label={d.signed >= 0 ? t("tx.kv.from") : t("tx.kv.to")}
                         value={d.counterparty}
                         copyable
                         onCopy={() => onCopyId(d.counterparty || "")}
+                        copyLabel={t("tx.copy")}
                       />
                     ) : null}
-                    <KV label="Timestamp" value={new Date(op.createdAt).toLocaleString()} />
-                    <KV label="Kind" value={op.kind} />
-                    <KV label="Amount" value={`${formatCurrency(op.amount, code)} (${op.amount.toFixed(2)} AEC)`} />
+                    <KV label={t("tx.kv.timestamp")} value={new Date(op.createdAt).toLocaleString()} />
+                    <KV label={t("tx.kv.kind")} value={op.kind} />
+                    <KV label={t("tx.kv.amount")} value={`${formatCurrency(op.amount, code)} (${op.amount.toFixed(2)} AEC)`} />
                   </div>
                 ) : null}
               </div>
@@ -282,7 +285,7 @@ export function TransactionList({
             textAlign: "center" as const,
           }}
         >
-          Showing 50 of {filtered.length}. Backend pagination coming soon.
+          {t("tx.more", { total: filtered.length })}
         </div>
       ) : null}
     </section>
@@ -294,11 +297,13 @@ function KV({
   value,
   copyable,
   onCopy,
+  copyLabel = "Copy",
 }: {
   label: string;
   value: string;
   copyable?: boolean;
   onCopy?: () => void;
+  copyLabel?: string;
 }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -329,7 +334,7 @@ function KV({
             cursor: "pointer",
           }}
         >
-          Copy
+          {copyLabel}
         </button>
       ) : null}
     </div>

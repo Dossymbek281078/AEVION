@@ -29,6 +29,22 @@ export const CATEGORY_DESCRIPTION: Record<SpendCategory, string> = {
   untagged: "Outgoing transfers we couldn't classify",
 };
 
+// i18n keys parallel to CATEGORY_LABEL / CATEGORY_DESCRIPTION.
+// UI should use these with the global `t()` helper; raw English maps stay for export paths.
+export const CATEGORY_LABEL_KEY: Record<SpendCategory, string> = {
+  subscriptions: "spending.category.subscriptions.label",
+  tips: "spending.category.tips.label",
+  contacts: "spending.category.contacts.label",
+  untagged: "spending.category.untagged.label",
+};
+
+export const CATEGORY_DESCRIPTION_KEY: Record<SpendCategory, string> = {
+  subscriptions: "spending.category.subscriptions.description",
+  tips: "spending.category.tips.description",
+  contacts: "spending.category.contacts.description",
+  untagged: "spending.category.untagged.description",
+};
+
 export type CategorisedOp = {
   op: Operation;
   category: SpendCategory;
@@ -46,6 +62,11 @@ export type SpendingPeriod = "thisMonth" | "last30d";
 export const PERIOD_LABEL: Record<SpendingPeriod, string> = {
   thisMonth: "This month",
   last30d: "Last 30 days",
+};
+
+export const PERIOD_LABEL_KEY: Record<SpendingPeriod, string> = {
+  thisMonth: "spending.period.thisMonth.label",
+  last30d: "spending.period.last30d.label",
 };
 
 function periodWindow(period: SpendingPeriod): { start: number; end: number; prevStart: number; prevEnd: number } {

@@ -5,6 +5,7 @@ import { clearDemoSeed, hasDemoSeed, seedDemo } from "../_lib/demoSeed";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { CURRENCIES, type CurrencyCode } from "../_lib/currency";
 import { resetTour } from "../_lib/onboarding";
+import { useI18n } from "@/lib/i18n";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
@@ -51,6 +52,7 @@ export function CommandPalette({
   hasWallet: boolean;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const { code, setCode } = useCurrency();
   const [open, setOpen] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
@@ -88,9 +90,9 @@ export function CommandPalette({
   const switchCurrency = useCallback(
     (c: CurrencyCode) => {
       setCode(c);
-      notify(`Currency: ${c}`, "info");
+      notify(t("palette.toast.currency", { c }), "info");
     },
-    [setCode, notify],
+    [setCode, notify, t],
   );
 
   const relaunchTour = useCallback(() => {
@@ -104,42 +106,45 @@ export function CommandPalette({
     if (!accountId) return;
     if (hasDemoSeed()) {
       clearDemoSeed();
-      notify("Demo data cleared", "info");
+      notify(t("palette.toast.demo.cleared"), "info");
     } else {
       seedDemo(accountId);
-      notify("Demo data loaded", "success");
+      notify(t("palette.toast.demo.loaded"), "success");
     }
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new Event("aevion:signatures-changed"));
-  }, [accountId, notify]);
+  }, [accountId, notify, t]);
 
   const actions = useMemo<PaletteAction[]>(() => {
     const a: PaletteAction[] = [];
+    const navSection = t("palette.section.navigate");
+    const currencySection = t("palette.section.currency");
+    const actionsSection = t("palette.section.actions");
 
     if (hasWallet) {
       a.push(
-        { id: "nav.wallet", section: "Navigate", icon: "◎", label: "Jump to Wallet", hint: "Balance & coin tower", keywords: ["balance", "summary", "top"], run: () => scrollToId("bank-anchor-wallet") },
-        { id: "nav.constellation", section: "Navigate", icon: "✧", label: "Jump to Wealth Constellation", hint: "Live money-flow map", keywords: ["map", "streams", "graph", "visual"], run: () => scrollToId("bank-anchor-constellation") },
-        { id: "nav.ecosystem", section: "Navigate", icon: "✦", label: "Jump to Ecosystem Pulse", hint: "Live peer activity", keywords: ["pulse", "peers", "activity"], run: () => scrollToId("bank-anchor-ecosystem") },
-        { id: "nav.forecast", section: "Navigate", icon: "⇗", label: "Jump to Wealth Forecast", hint: "3 scenarios · 3 horizons", keywords: ["projection", "future", "scenarios"], run: () => scrollToId("bank-anchor-forecast") },
-        { id: "nav.trust", section: "Navigate", icon: "✓", label: "Jump to Trust Score", hint: "Tier progress · next-tier steps", keywords: ["tier", "score", "ranking"], run: () => scrollToId("bank-anchor-trust") },
-        { id: "nav.tiers", section: "Navigate", icon: "◆", label: "Jump to Tier Unlocks", hint: "What you get at Growing / Trusted / Elite", keywords: ["tier", "unlock", "perks", "benefits"], run: () => scrollToId("bank-anchor-tiers") },
-        { id: "nav.statement", section: "Navigate", icon: "⚡", label: "Jump to Autopilot Statement", hint: "7d / 30d / all-time value report + SVG export", keywords: ["statement", "report", "autopilot", "proof"], run: () => scrollToId("statement-heading") },
-        { id: "nav.achievements", section: "Navigate", icon: "★", label: "Jump to Achievements", hint: "18 badges across 4 tracks", keywords: ["badges", "unlock", "goals"], run: () => scrollToId("bank-anchor-achievements") },
-        { id: "nav.referrals", section: "Navigate", icon: "➤", label: "Jump to Invite & Earn", hint: "Referral program", keywords: ["referral", "invite", "earn"], run: () => scrollToId("referrals-heading") },
-        { id: "nav.snapshot", section: "Navigate", icon: "↓", label: "Jump to Snapshot", hint: "Export SVG / text summary", keywords: ["export", "download", "share"], run: () => scrollToId("snapshot-heading") },
-        { id: "nav.audit", section: "Navigate", icon: "✎", label: "Jump to Audit Log", hint: "QSign signatures · export JSON", keywords: ["qsign", "signatures", "verify"], run: () => scrollToId("audit-heading") },
-        { id: "nav.audit-unified", section: "Navigate", icon: "☰", label: "Jump to Unified Audit Timeline", hint: "All 4 sources in one feed + export", keywords: ["unified", "timeline", "audit", "export"], run: () => scrollToId("unified-audit-heading") },
+        { id: "nav.wallet", section: navSection, icon: "◎", label: t("palette.nav.wallet.label"), hint: t("palette.nav.wallet.hint"), keywords: ["balance", "summary", "top"], run: () => scrollToId("bank-anchor-wallet") },
+        { id: "nav.constellation", section: navSection, icon: "✧", label: t("palette.nav.constellation.label"), hint: t("palette.nav.constellation.hint"), keywords: ["map", "streams", "graph", "visual"], run: () => scrollToId("bank-anchor-constellation") },
+        { id: "nav.ecosystem", section: navSection, icon: "✦", label: t("palette.nav.ecosystem.label"), hint: t("palette.nav.ecosystem.hint"), keywords: ["pulse", "peers", "activity"], run: () => scrollToId("bank-anchor-ecosystem") },
+        { id: "nav.forecast", section: navSection, icon: "⇗", label: t("palette.nav.forecast.label"), hint: t("palette.nav.forecast.hint"), keywords: ["projection", "future", "scenarios"], run: () => scrollToId("bank-anchor-forecast") },
+        { id: "nav.trust", section: navSection, icon: "✓", label: t("palette.nav.trust.label"), hint: t("palette.nav.trust.hint"), keywords: ["tier", "score", "ranking"], run: () => scrollToId("bank-anchor-trust") },
+        { id: "nav.tiers", section: navSection, icon: "◆", label: t("palette.nav.tiers.label"), hint: t("palette.nav.tiers.hint"), keywords: ["tier", "unlock", "perks", "benefits"], run: () => scrollToId("bank-anchor-tiers") },
+        { id: "nav.statement", section: navSection, icon: "⚡", label: t("palette.nav.statement.label"), hint: t("palette.nav.statement.hint"), keywords: ["statement", "report", "autopilot", "proof"], run: () => scrollToId("statement-heading") },
+        { id: "nav.achievements", section: navSection, icon: "★", label: t("palette.nav.achievements.label"), hint: t("palette.nav.achievements.hint"), keywords: ["badges", "unlock", "goals"], run: () => scrollToId("bank-anchor-achievements") },
+        { id: "nav.referrals", section: navSection, icon: "➤", label: t("palette.nav.referrals.label"), hint: t("palette.nav.referrals.hint"), keywords: ["referral", "invite", "earn"], run: () => scrollToId("referrals-heading") },
+        { id: "nav.snapshot", section: navSection, icon: "↓", label: t("palette.nav.snapshot.label"), hint: t("palette.nav.snapshot.hint"), keywords: ["export", "download", "share"], run: () => scrollToId("snapshot-heading") },
+        { id: "nav.audit", section: navSection, icon: "✎", label: t("palette.nav.audit.label"), hint: t("palette.nav.audit.hint"), keywords: ["qsign", "signatures", "verify"], run: () => scrollToId("audit-heading") },
+        { id: "nav.audit-unified", section: navSection, icon: "☰", label: t("palette.nav.auditUnified.label"), hint: t("palette.nav.auditUnified.hint"), keywords: ["unified", "timeline", "audit", "export"], run: () => scrollToId("unified-audit-heading") },
       );
     }
 
     for (const c of CURRENCIES) {
       a.push({
         id: `currency.${c}`,
-        section: "Currency",
+        section: currencySection,
         icon: c === code ? "●" : "○",
-        label: `Currency: ${c}${c === code ? " (current)" : ""}`,
-        hint: c === "AEC" ? "Native token" : `Switch display to ${c}`,
+        label: c === code ? t("palette.currency.label.current", { c }) : t("palette.currency.label", { c }),
+        hint: c === "AEC" ? t("palette.currency.hint.native") : t("palette.currency.hint.switch", { c }),
         keywords: ["switch", "convert", c.toLowerCase()],
         run: () => switchCurrency(c),
       });
@@ -147,17 +152,17 @@ export function CommandPalette({
 
     if (hasWallet) {
       a.push(
-        { id: "action.tour", section: "Actions", icon: "↻", label: "Take the tour", hint: "5-step walk-through", keywords: ["onboarding", "guide", "help"], run: relaunchTour },
-        { id: "action.demo", section: "Actions", icon: demoActive ? "✗" : "⟡", label: demoActive ? "Clear demo data" : "Load demo data", hint: demoActive ? "Remove seed from storage" : "Goals · recurring · circle · split · gifts", keywords: ["seed", "mock", "sample"], run: toggleDemo },
+        { id: "action.tour", section: actionsSection, icon: "↻", label: t("palette.action.tour.label"), hint: t("palette.action.tour.hint"), keywords: ["onboarding", "guide", "help"], run: relaunchTour },
+        { id: "action.demo", section: actionsSection, icon: demoActive ? "✗" : "⟡", label: demoActive ? t("palette.action.demo.clear.label") : t("palette.action.demo.load.label"), hint: demoActive ? t("palette.action.demo.clear.hint") : t("palette.action.demo.load.hint"), keywords: ["seed", "mock", "sample"], run: toggleDemo },
       );
     }
 
     a.push({
       id: "nav.portal",
-      section: "Navigate",
+      section: navSection,
       icon: "↗",
-      label: "Back to AEVION portal",
-      hint: "Main site",
+      label: t("palette.nav.portal.label"),
+      hint: t("palette.nav.portal.hint"),
       keywords: ["home", "root", "exit"],
       run: () => {
         window.location.href = "/";
@@ -165,7 +170,7 @@ export function CommandPalette({
     });
 
     return a;
-  }, [hasWallet, code, demoActive, switchCurrency, relaunchTour, toggleDemo]);
+  }, [hasWallet, code, demoActive, switchCurrency, relaunchTour, toggleDemo, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -235,7 +240,7 @@ export function CommandPalette({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Command palette"
+      aria-label={t("palette.aria.dialog")}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
@@ -298,8 +303,8 @@ export function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKey}
-            placeholder="Search — jump, switch currency, run tour…"
-            aria-label="Search actions"
+            placeholder={t("palette.search.placeholder")}
+            aria-label={t("palette.aria.search")}
             style={{
               flex: 1,
               border: "none",
@@ -319,14 +324,14 @@ export function CommandPalette({
               textTransform: "uppercase",
             }}
           >
-            {filtered.length} action{filtered.length === 1 ? "" : "s"}
+            {filtered.length === 1 ? t("palette.count.one", { n: filtered.length }) : t("palette.count.many", { n: filtered.length })}
           </span>
         </div>
 
         <ul
           ref={listRef}
           role="listbox"
-          aria-label="Actions"
+          aria-label={t("palette.aria.list")}
           style={{
             listStyle: "none",
             padding: 6,
@@ -344,7 +349,7 @@ export function CommandPalette({
                 color: "#94a3b8",
               }}
             >
-              No matches for “{query}”
+              {t("palette.empty", { q: query })}
             </li>
           ) : (
             grouped.map((group) => (
@@ -442,7 +447,7 @@ export function CommandPalette({
                               textTransform: "uppercase",
                             }}
                           >
-                            ⏎ run
+                            ⏎ {t("palette.row.run")}
                           </span>
                         ) : null}
                       </li>
@@ -469,13 +474,13 @@ export function CommandPalette({
         >
           <span>
             <kbd style={{ fontFamily: "ui-monospace, monospace" }}>↑</kbd>
-            <kbd style={{ fontFamily: "ui-monospace, monospace" }}>↓</kbd> navigate
+            <kbd style={{ fontFamily: "ui-monospace, monospace" }}>↓</kbd> {t("palette.kbd.navigate")}
           </span>
           <span>
-            <kbd style={{ fontFamily: "ui-monospace, monospace" }}>⏎</kbd> run
+            <kbd style={{ fontFamily: "ui-monospace, monospace" }}>⏎</kbd> {t("palette.kbd.run")}
           </span>
           <span>
-            <kbd style={{ fontFamily: "ui-monospace, monospace" }}>esc</kbd> close
+            <kbd style={{ fontFamily: "ui-monospace, monospace" }}>esc</kbd> {t("palette.kbd.close")}
           </span>
         </div>
       </div>

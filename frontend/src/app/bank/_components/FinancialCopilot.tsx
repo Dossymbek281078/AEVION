@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   applyExecute,
   AUTOPILOT_EVENT,
@@ -35,7 +36,7 @@ import { loadRecurring, type Recurring } from "../_lib/recurring";
 import { forecastGoal, GOALS_EVENT, loadGoals, type SavingsGoal } from "../_lib/savings";
 import { perksByTier } from "../_lib/tierPerks";
 import { computeEcosystemTrustScore } from "../_lib/trust";
-import { tierLabel, type TrustTier } from "../_lib/trust";
+import { tierLabelKey, type TrustTier } from "../_lib/trust";
 
 function perksAtTier(tier: TrustTier): number {
   return perksByTier(tier).length;
@@ -110,6 +111,7 @@ export function FinancialCopilot({
   operations: Operation[];
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem } = useEcosystemData();
   const { settings: bioSettings, guard: bioGuard } = useBiometric();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
@@ -180,18 +182,16 @@ export function FinancialCopilot({
 
   const doFreeze = useCallback(() => {
     if (freezeState) return;
-    const ok = window.confirm(
-      "Freeze wallet?\n\nAll outgoing transfers blocked for 5 minutes. Unfreeze afterwards via biometric or time expiry.",
-    );
+    const ok = window.confirm(t("copilot.freeze.confirm"));
     if (!ok) return;
     freezeNow("manual");
-    notify("🔒 Wallet frozen · 5 min sober window started", "info");
-  }, [freezeState, notify]);
+    notify(t("copilot.freeze.toast.frozen"), "info");
+  }, [freezeState, notify, t]);
 
   const doUnfreeze = useCallback(async () => {
     if (!freezeState) return;
     if (freezeSecondsLeft > 0) {
-      notify(`Sober window: ${freezeSecondsLeft}s left`, "info");
+      notify(t("copilot.freeze.toast.soberLeft", { seconds: freezeSecondsLeft }), "info");
       return;
     }
     let biometricOk = !bioSettings;
@@ -202,19 +202,24 @@ export function FinancialCopilot({
         biometricOk = false;
       }
       if (!biometricOk) {
-        notify("Biometric verification failed or cancelled", "error");
+        notify(t("copilot.freeze.toast.bioFailed"), "error");
         return;
       }
     }
     const result = await tryUnfreeze(biometricOk);
     if (result.ok) {
-      notify("Wallet unfrozen", "success");
+      notify(t("copilot.freeze.toast.unfrozen"), "success");
     } else if (result.reason === "sober-window") {
-      notify(`Sober window: ${result.secondsLeft ?? "?"}s left`, "info");
+      notify(
+        result.secondsLeft != null
+          ? t("copilot.freeze.toast.soberLeft", { seconds: result.secondsLeft })
+          : t("copilot.freeze.toast.soberLeftUnknown"),
+        "info",
+      );
     } else {
-      notify(`Unfreeze failed: ${result.reason}`, "error");
+      notify(t("copilot.freeze.toast.failed", { reason: result.reason }), "error");
     }
-  }, [freezeState, freezeSecondsLeft, bioSettings, bioGuard, notify]);
+  }, [freezeState, freezeSecondsLeft, bioSettings, bioGuard, notify, t]);
 
   // Autopilot tick — read latest state via ref to avoid re-arming the interval
   // on every goals/recurring/actions change.
@@ -244,7 +249,7 @@ export function FinancialCopilot({
         const nextActions = applyExecute(decision, tickStateRef.current.actions);
         setAutopilotActions(nextActions);
         setAutopilotState(decision.nextState);
-        notify(`Autopilot · ${decision.action.note}`, "success");
+        notify(t("copilot.autopilot.toast", { note: decision.action.note }), "success");
       } else {
         // Still commit the observed balance so inflow detection has a baseline
         // on the next tick — without this, rule #2 never fires on the first run.
@@ -259,7 +264,7 @@ export function FinancialCopilot({
       window.clearTimeout(initial);
       window.clearInterval(id);
     };
-  }, [autopilotConfig.enabled, notify]);
+  }, [autopilotConfig.enabled, notify, t]);
 
   // Anomaly watchdog — fires more often (15s) than the tick loop because its
   // job is fast detection of suspicious outgoing bursts. Separate from tick
@@ -280,7 +285,7 @@ export function FinancialCopilot({
       };
       commitState(nextState);
       setAutopilotState(nextState);
-      notify(`🔒 Auto-freeze · ${decision.burstCount} transfers in burst`, "error");
+      notify(t("copilot.autoFreeze.toast", { count: decision.burstCount }), "error");
     };
     const initial = window.setTimeout(check, 2000);
     const id = window.setInterval(check, 15_000);
@@ -290,7 +295,7 @@ export function FinancialCopilot({
     };
     // Watchdog depends on whether a freeze is already active so it doesn't
     // loop; operations is included so a just-arrived op triggers check soon.
-  }, [autopilotConfig.enabled, autopilotConfig.anomalyWatchdog, freezeState, operations, notify]);
+  }, [autopilotConfig.enabled, autopilotConfig.anomalyWatchdog, freezeState, operations, notify, t]);
 
   const toggleAutopilot = useCallback(() => {
     setAutopilotConfig((prev) => {
@@ -319,8 +324,8 @@ export function FinancialCopilot({
   }, [operations, freezeState]);
 
   const trust = useMemo(
-    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }),
-    [account, operations, royalty, chess, ecosystem],
+    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }, t),
+    [account, operations, royalty, chess, ecosystem, t],
   );
 
   const insights = useMemo<Insight[]>(() => {
@@ -337,10 +342,10 @@ export function FinancialCopilot({
         id: "burst",
         kind: "warn",
         icon: "⚠",
-        title: `${burst.length} operations in last 20 min`,
-        body: "Unusual burst — verify each signature in the audit log.",
+        title: t("copilot.ins.burst.title", { count: burst.length }),
+        body: t("copilot.ins.burst.body"),
         priority: 9,
-        cta: { label: "Open audit", run: () => scrollToId("audit-heading") },
+        cta: { label: t("copilot.ins.burst.cta"), run: () => scrollToId("audit-heading") },
       });
     }
 
@@ -356,11 +361,11 @@ export function FinancialCopilot({
           id: `goal-behind-${g.id}`,
           kind: "warn",
           icon: "⏱",
-          title: `Goal "${g.label}" behind schedule`,
-          body: `Add ~${Math.ceil(perDayNeeded)} AEC/day to hit your ${fc.daysLeft}-day deadline.`,
+          title: t("copilot.ins.goal.title", { label: g.label }),
+          body: t("copilot.ins.goal.body", { perDay: Math.ceil(perDayNeeded), days: fc.daysLeft }),
           priority: 8,
           cta: {
-            label: "Open goals",
+            label: t("copilot.ins.goal.cta"),
             run: () => {
               const el = document.querySelector<HTMLElement>('[aria-labelledby="savings-heading"], [aria-label*="Savings"]');
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -391,11 +396,15 @@ export function FinancialCopilot({
           id: "recurring-shortfall",
           kind: "warn",
           icon: "↯",
-          title: "Recurring outflow exceeds balance",
-          body: `Next 30 days: ${due30d.toFixed(0)} AEC due · balance ${account.balance.toFixed(0)} AEC · short by ${shortfall.toFixed(0)}.`,
+          title: t("copilot.ins.recShortfall.title"),
+          body: t("copilot.ins.recShortfall.body", {
+            due: due30d.toFixed(0),
+            balance: account.balance.toFixed(0),
+            short: shortfall.toFixed(0),
+          }),
           priority: 10,
           cta: {
-            label: "Jump to top-up",
+            label: t("copilot.ins.recShortfall.cta"),
             run: () => {
               const btn = document.querySelector<HTMLElement>("form[aria-label*='Top up'], form[aria-label*='topup']");
               btn?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -407,8 +416,8 @@ export function FinancialCopilot({
           id: "recurring-pressure",
           kind: "info",
           icon: "•",
-          title: "Recurring claims >75% of balance",
-          body: `${due30d.toFixed(0)} AEC locked to schedules over 30 days. Consider a buffer.`,
+          title: t("copilot.ins.recPressure.title"),
+          body: t("copilot.ins.recPressure.body", { due: due30d.toFixed(0) }),
           priority: 5,
         });
       }
@@ -426,11 +435,20 @@ export function FinancialCopilot({
           kind: "opportunity",
           icon: imminent ? "↑" : "↗",
           title: imminent
-            ? `${trust.pointsToNextTier} pts from ${tierLabel[trust.nextTier]} — go!`
-            : `${trust.pointsToNextTier} pts to ${tierLabel[trust.nextTier]} tier`,
-          body: `${perksAhead} new perks unlock · ${trust.checklist[0]?.label ?? "One more action nudges your Trust Score into the next tier."}`,
+            ? t("copilot.ins.tier.title.imminent", {
+                points: trust.pointsToNextTier,
+                tier: t(tierLabelKey[trust.nextTier]),
+              })
+            : t("copilot.ins.tier.title.near", {
+                points: trust.pointsToNextTier,
+                tier: t(tierLabelKey[trust.nextTier]),
+              }),
+          body: t("copilot.ins.tier.body", {
+            perks: perksAhead,
+            hint: trust.checklist[0]?.label ?? t("copilot.ins.tier.bodyFallback"),
+          }),
           priority: imminent ? 9 : 7,
-          cta: { label: "See tier unlocks", run: () => scrollToId("bank-anchor-tiers") },
+          cta: { label: t("copilot.ins.tier.cta"), run: () => scrollToId("bank-anchor-tiers") },
         });
       }
     }
@@ -441,11 +459,11 @@ export function FinancialCopilot({
         id: "biometric-off",
         kind: "opportunity",
         icon: "✦",
-        title: "Enable biometric guard",
-        body: "3+ operations on this device. One-tap Face/Touch ID on transfers over a threshold.",
+        title: t("copilot.ins.bio.title"),
+        body: t("copilot.ins.bio.body"),
         priority: 6,
         cta: {
-          label: "Set up",
+          label: t("copilot.ins.bio.cta"),
           run: () => {
             const el = document.querySelector<HTMLElement>('[aria-labelledby*="biometric"]');
             el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -461,10 +479,13 @@ export function FinancialCopilot({
         id: "royalty-income",
         kind: "success",
         icon: "♪",
-        title: `+${est30.toFixed(2)} AEC royalty projected (30d)`,
-        body: `${royalty?.works.length ?? 0} QRight work${(royalty?.works.length ?? 0) === 1 ? "" : "s"} streaming. Auto-split to goals?`,
+        title: t("copilot.ins.royalty.title", { amount: est30.toFixed(2) }),
+        body: t("copilot.ins.royalty.body", {
+          count: royalty?.works.length ?? 0,
+          plural: (royalty?.works.length ?? 0) === 1 ? "" : "s",
+        }),
         priority: 4,
-        cta: { label: "Royalties", run: () => {
+        cta: { label: t("copilot.ins.royalty.cta"), run: () => {
           const el = document.querySelector<HTMLElement>("[aria-labelledby*='royalty']");
           el?.scrollIntoView({ behavior: "smooth", block: "start" });
         } },
@@ -483,11 +504,11 @@ export function FinancialCopilot({
           id: "idle-setup-recurring",
           kind: "info",
           icon: "↻",
-          title: `${Math.floor(daysIdle)}d since last activity`,
-          body: "A recurring salary or savings transfer keeps Trust Score and Achievements warm.",
+          title: t("copilot.ins.idle.title", { days: Math.floor(daysIdle) }),
+          body: t("copilot.ins.idle.body"),
           priority: 3,
           cta: {
-            label: "Set up",
+            label: t("copilot.ins.idle.cta"),
             run: () => {
               const el = document.querySelector<HTMLElement>('[aria-labelledby*="recurring"]');
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -513,11 +534,18 @@ export function FinancialCopilot({
         id: `timelock-${first.g.id}`,
         kind: "info",
         icon: "🔐",
-        title: `Gift unlocks in ~${hoursLeft}h`,
-        body: `${first.g.amount.toFixed(2)} AEC → ${first.g.recipientNickname}${imminent.length > 1 ? ` (+${imminent.length - 1} more soon)` : ""}. Ensure balance stays above ${first.g.amount.toFixed(0)} AEC.`,
+        title: t("copilot.ins.timelock.title", { hours: hoursLeft }),
+        body: t("copilot.ins.timelock.body", {
+          amount: first.g.amount.toFixed(2),
+          nickname: first.g.recipientNickname,
+          more: imminent.length > 1
+            ? t("copilot.ins.timelock.bodyMore", { count: imminent.length - 1 })
+            : "",
+          floor: first.g.amount.toFixed(0),
+        }),
         priority: 6,
         cta: {
-          label: "Open gift",
+          label: t("copilot.ins.timelock.cta"),
           run: () => {
             const el = document.getElementById("gift-heading");
             el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -532,11 +560,11 @@ export function FinancialCopilot({
         id: "network-empty",
         kind: "info",
         icon: "◈",
-        title: "No Circles yet",
-        body: "Create a shared group to split bills, send gifts, or request payments.",
+        title: t("copilot.ins.network.title"),
+        body: t("copilot.ins.network.body"),
         priority: 2,
         cta: {
-          label: "Circles",
+          label: t("copilot.ins.network.cta"),
           run: () => {
             const el = document.querySelector<HTMLElement>('[aria-labelledby*="circles"]');
             el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -549,7 +577,7 @@ export function FinancialCopilot({
       .filter((i) => !(i.id in dismissed))
       .sort((a, b) => b.priority - a.priority)
       .slice(0, 6);
-  }, [operations, goals, recurring, account.balance, trust, bioSettings, royalty, circlesCount, pending, dismissed]);
+  }, [operations, goals, recurring, account.balance, trust, bioSettings, royalty, circlesCount, pending, dismissed, t]);
 
   const dismiss = useCallback((id: string) => {
     setDismissed((prev) => {
@@ -567,8 +595,8 @@ export function FinancialCopilot({
       saveDismissed(next);
       return next;
     });
-    notify("Insights cleared for 24h", "info");
-  }, [insights, notify]);
+    notify(t("copilot.toast.cleared"), "info");
+  }, [insights, notify, t]);
 
   // Derive a single "headline" insight for the collapsed pill.
   const headline = insights[0] ?? null;
@@ -578,7 +606,7 @@ export function FinancialCopilot({
 
   return (
     <aside
-      aria-label="Financial Copilot"
+      aria-label={t("copilot.aria.label")}
       className="aevion-bank-copilot-offset"
       style={{
         position: "fixed",
@@ -604,7 +632,7 @@ export function FinancialCopilot({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label={open ? "Close Copilot" : "Open Copilot"}
+        aria-label={open ? t("copilot.btn.close") : t("copilot.btn.open")}
         style={{
           display: "grid",
           gridTemplateColumns: "32px 1fr auto",
@@ -650,7 +678,7 @@ export function FinancialCopilot({
         </span>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: "#0f172a", letterSpacing: "0.02em" }}>
-            Copilot {autopilotConfig.enabled ? "· Autopilot" : ""}
+            {t("copilot.title")} {autopilotConfig.enabled ? t("copilot.title.autopilot") : ""}
             {insights.length > 0 ? ` · ${insights.length}` : ""}
           </div>
           <div
@@ -663,7 +691,7 @@ export function FinancialCopilot({
               marginTop: 1,
             }}
           >
-            {headline ? headline.title : "No active nudges — all quiet."}
+            {headline ? headline.title : t("copilot.headline.empty")}
           </div>
         </div>
         <span
@@ -689,7 +717,7 @@ export function FinancialCopilot({
         >
           {freezeState ? (
             <section
-              aria-label="Panic Freeze active"
+              aria-label={t("copilot.freeze.section.aria")}
               role="alert"
               style={{
                 border: "1px solid rgba(220,38,38,0.35)",
@@ -721,13 +749,15 @@ export function FinancialCopilot({
                 </span>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 900, color: "#991b1b" }}>
-                    Wallet frozen · {freezeState.reason === "anomaly" ? "auto" : "manual"}
+                    {freezeState.reason === "anomaly"
+                      ? t("copilot.freeze.status.auto")
+                      : t("copilot.freeze.status.manual")}
                   </div>
                   <div style={{ fontSize: 10, color: "#7f1d1d", marginTop: 1, lineHeight: 1.4 }}>
-                    Outgoing blocked · since {formatRelativeShort(freezeState.frozenAt)} ago
+                    {t("copilot.freeze.detail.since", { ago: formatRelativeShort(freezeState.frozenAt) })}
                     {freezeSecondsLeft > 0
-                      ? ` · sober window ${freezeSecondsLeft}s`
-                      : " · sober window passed"}
+                      ? t("copilot.freeze.detail.window", { seconds: freezeSecondsLeft })
+                      : t("copilot.freeze.detail.passed")}
                   </div>
                 </div>
               </div>
@@ -751,10 +781,10 @@ export function FinancialCopilot({
                 }}
               >
                 {freezeSecondsLeft > 0
-                  ? `Unfreeze in ${freezeSecondsLeft}s`
+                  ? t("copilot.freeze.btn.unfreezeIn", { seconds: freezeSecondsLeft })
                   : bioSettings
-                    ? "Unfreeze · biometric required"
-                    : "Unfreeze now"}
+                    ? t("copilot.freeze.btn.unfreezeBio")
+                    : t("copilot.freeze.btn.unfreeze")}
               </button>
             </section>
           ) : null}
@@ -776,10 +806,10 @@ export function FinancialCopilot({
                 color: "#64748b",
               }}
             >
-              No active nudges — Copilot is watching in the background.
+              {t("copilot.empty.main")}
               <br />
               <span style={{ fontSize: 10, color: "#94a3b8" }}>
-                Add goals, recurring, or top up to see personalised signals.
+                {t("copilot.empty.hint")}
               </span>
             </div>
           ) : (
@@ -862,7 +892,7 @@ export function FinancialCopilot({
                       <button
                         type="button"
                         onClick={() => dismiss(ins.id)}
-                        aria-label={`Dismiss "${ins.title}"`}
+                        aria-label={t("copilot.dismiss.aria", { title: ins.title })}
                         style={{
                           padding: "4px 8px",
                           borderRadius: 7,
@@ -874,7 +904,7 @@ export function FinancialCopilot({
                           cursor: "pointer",
                         }}
                       >
-                        Dismiss
+                        {t("copilot.dismiss")}
                       </button>
                     </div>
                   </div>
@@ -894,7 +924,7 @@ export function FinancialCopilot({
                 fontWeight: 700,
               }}
             >
-              <span>Sorted by urgency · local signals only</span>
+              <span>{t("copilot.footer.sortedBy")}</span>
               <button
                 type="button"
                 onClick={dismissAll}
@@ -907,7 +937,7 @@ export function FinancialCopilot({
                   cursor: "pointer",
                 }}
               >
-                Dismiss all 24h
+                {t("copilot.footer.dismissAll")}
               </button>
             </div>
           ) : null}
@@ -925,12 +955,12 @@ export function FinancialCopilot({
               }}
             >
               <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.35 }}>
-                Emergency lock · 5-min sober window + biometric unfreeze.
+                {t("copilot.freeze.footer")}
               </div>
               <button
                 type="button"
                 onClick={doFreeze}
-                aria-label="Panic Freeze — lock outgoing transfers"
+                aria-label={t("copilot.freeze.aria.panic")}
                 style={{
                   padding: "5px 10px",
                   borderRadius: 7,
@@ -943,7 +973,7 @@ export function FinancialCopilot({
                   whiteSpace: "nowrap",
                 }}
               >
-                🔒 Panic Freeze
+                {t("copilot.freeze.btn.panic")}
               </button>
             </div>
           ) : null}
@@ -970,10 +1000,11 @@ function AutopilotPanel({
   onUpdate: <K extends keyof AutopilotConfig>(key: K, value: AutopilotConfig[K]) => void;
   onSimulate: () => { tick: TickDecision; anomaly: AnomalyDecision };
 }) {
+  const { t } = useI18n();
   const recent = actions.slice(0, 3);
   const last24h = actions.filter((a) => {
-    const t = Date.parse(a.at);
-    return Number.isFinite(t) && Date.now() - t < 24 * 60 * 60 * 1000;
+    const ts = Date.parse(a.at);
+    return Number.isFinite(ts) && Date.now() - ts < 24 * 60 * 60 * 1000;
   });
   const movedToday = last24h.reduce((s, a) => s + a.amount, 0);
   const [preview, setPreview] = useState<{ tick: TickDecision; anomaly: AnomalyDecision; at: number } | null>(null);
@@ -985,7 +1016,7 @@ function AutopilotPanel({
 
   return (
     <section
-      aria-label="Autopilot"
+      aria-label={t("copilot.ap.aria")}
       style={{
         border: config.enabled ? "1px solid rgba(5,150,105,0.35)" : "1px solid rgba(15,23,42,0.08)",
         background: config.enabled ? "rgba(5,150,105,0.04)" : "rgba(15,23,42,0.02)",
@@ -1001,7 +1032,7 @@ function AutopilotPanel({
           type="button"
           role="switch"
           aria-checked={config.enabled}
-          aria-label="Toggle Autopilot"
+          aria-label={t("copilot.ap.toggle.aria")}
           onClick={onToggle}
           style={{
             width: 38,
@@ -1032,19 +1063,19 @@ function AutopilotPanel({
         </button>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: "#0f172a" }}>
-            Autopilot ⚡ {config.enabled ? "active" : "off"}
+            {config.enabled ? t("copilot.ap.title.active") : t("copilot.ap.title.off")}
           </div>
           <div style={{ fontSize: 10, color: "#64748b", marginTop: 1, lineHeight: 1.4 }}>
             {config.enabled
-              ? `Moved ${movedToday.toFixed(2)} / ${config.dailyCapAec} AEC last 24h · tick every 60s`
-              : "Opt-in: I can move small amounts into goals behind schedule."}
+              ? t("copilot.ap.subtitle.active", { moved: movedToday.toFixed(2), cap: config.dailyCapAec })
+              : t("copilot.ap.subtitle.off")}
           </div>
         </div>
         <button
           type="button"
           onClick={onToggleSettings}
           aria-expanded={settingsOpen}
-          aria-label="Autopilot settings"
+          aria-label={t("copilot.ap.settings.aria")}
           style={{
             padding: "4px 8px",
             borderRadius: 6,
@@ -1070,8 +1101,8 @@ function AutopilotPanel({
           }}
         >
           <SettingRow
-            label="Daily cap"
-            hint="Max AEC autopilot moves in rolling 24h"
+            label={t("copilot.ap.set.dailyCap.label")}
+            hint={t("copilot.ap.set.dailyCap.hint")}
             value={config.dailyCapAec}
             unit="AEC"
             min={5}
@@ -1080,8 +1111,8 @@ function AutopilotPanel({
             onChange={(v) => onUpdate("dailyCapAec", v)}
           />
           <SettingRow
-            label="Per tick max"
-            hint="Cap for a single move (1 per 60s)"
+            label={t("copilot.ap.set.perTick.label")}
+            hint={t("copilot.ap.set.perTick.hint")}
             value={config.perTickMaxAec}
             unit="AEC"
             min={1}
@@ -1090,8 +1121,8 @@ function AutopilotPanel({
             onChange={(v) => onUpdate("perTickMaxAec", v)}
           />
           <SettingRow
-            label="Safety buffer"
-            hint="Keep balance ≥ 30d recurring × this ratio"
+            label={t("copilot.ap.set.buffer.label")}
+            hint={t("copilot.ap.set.buffer.hint")}
             value={config.safetyBufferRatio}
             unit="×"
             min={1}
@@ -1100,8 +1131,8 @@ function AutopilotPanel({
             onChange={(v) => onUpdate("safetyBufferRatio", v)}
           />
           <SettingRow
-            label="Deadline window"
-            hint="Rule #1: only catch-up goals with ≤ this many days left"
+            label={t("copilot.ap.set.deadline.label")}
+            hint={t("copilot.ap.set.deadline.hint")}
             value={config.maxDaysLeft}
             unit="d"
             min={7}
@@ -1121,11 +1152,11 @@ function AutopilotPanel({
               fontWeight: 800,
             }}
           >
-            Rule #2 · Split on inflow
+            {t("copilot.ap.rule2.title")}
           </div>
           <SettingRow
-            label="Inflow share"
-            hint="% of new inflow auto-routed to the best goal. 0 = off."
+            label={t("copilot.ap.set.inflowShare.label")}
+            hint={t("copilot.ap.set.inflowShare.hint")}
             value={config.inflowSharePct}
             unit="%"
             min={0}
@@ -1134,8 +1165,8 @@ function AutopilotPanel({
             onChange={(v) => onUpdate("inflowSharePct", v)}
           />
           <SettingRow
-            label="Min trigger"
-            hint="Only engage rule #2 on inflow deltas ≥ this AEC"
+            label={t("copilot.ap.set.inflowMin.label")}
+            hint={t("copilot.ap.set.inflowMin.hint")}
             value={config.inflowMinTriggerAec}
             unit="AEC"
             min={1}
@@ -1155,17 +1186,20 @@ function AutopilotPanel({
               fontWeight: 800,
             }}
           >
-            Rule #3 · Anomaly watchdog
+            {t("copilot.ap.rule3.title")}
           </div>
           <ToggleRow
-            label="Auto-freeze on burst"
-            hint={`≥ ${config.anomalyBurstCount} transfers in ${config.anomalyWindowMin}min + ≥ 20% of balance → 5-min freeze`}
+            label={t("copilot.ap.set.watchdog.label")}
+            hint={t("copilot.ap.set.watchdog.hint", {
+              count: config.anomalyBurstCount,
+              window: config.anomalyWindowMin,
+            })}
             checked={config.anomalyWatchdog}
             onChange={(v) => onUpdate("anomalyWatchdog", v)}
           />
           <SettingRow
-            label="Burst count"
-            hint="How many outgoing transfers in the window trigger watchdog"
+            label={t("copilot.ap.set.burstCount.label")}
+            hint={t("copilot.ap.set.burstCount.hint")}
             value={config.anomalyBurstCount}
             unit="ops"
             min={2}
@@ -1174,8 +1208,8 @@ function AutopilotPanel({
             onChange={(v) => onUpdate("anomalyBurstCount", v)}
           />
           <SettingRow
-            label="Burst window"
-            hint="Rolling window for counting outgoing transfers"
+            label={t("copilot.ap.set.burstWindow.label")}
+            hint={t("copilot.ap.set.burstWindow.hint")}
             value={config.anomalyWindowMin}
             unit="min"
             min={5}
@@ -1195,17 +1229,17 @@ function AutopilotPanel({
               fontWeight: 800,
             }}
           >
-            Rule #4 · Timelock balance-guard
+            {t("copilot.ap.rule4.title")}
           </div>
           <ToggleRow
-            label="Reserve balance for upcoming gifts"
-            hint={`Block outgoing if it would push balance below the sum of gifts unlocking in the next ${config.timelockGuardHr}h`}
+            label={t("copilot.ap.set.timelockGuard.label")}
+            hint={t("copilot.ap.set.timelockGuard.hint", { hours: config.timelockGuardHr })}
             checked={config.timelockGuard}
             onChange={(v) => onUpdate("timelockGuard", v)}
           />
           <SettingRow
-            label="Guard window"
-            hint="Look-ahead horizon for reserve calculation"
+            label={t("copilot.ap.set.timelockHr.label")}
+            hint={t("copilot.ap.set.timelockHr.hint")}
             value={config.timelockGuardHr}
             unit="h"
             min={1}
@@ -1214,13 +1248,7 @@ function AutopilotPanel({
             onChange={(v) => onUpdate("timelockGuardHr", v)}
           />
           <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.45, marginTop: 4 }}>
-            Autopilot is deterministic: one action per 60s tick, never overdrafts the safety
-            buffer, never exceeds the daily cap, never signs cross-account transfers. Rule #2
-            (inflow-split) fires first when it qualifies; rule #1 (catch-up) is the fallback.
-            Rule #3 (anomaly-watchdog) runs every 15s and, when enabled, auto-triggers the same
-            5-min Panic Freeze — with a 10-min cooldown between consecutive auto-freezes.
-            Rule #4 (timelock balance-guard) blocks outgoing transfers that would jeopardise
-            pending-gift auto-fires. Every action lands in the audit feed below.
+            {t("copilot.ap.summary")}
           </div>
 
           <div
@@ -1235,12 +1263,12 @@ function AutopilotPanel({
             }}
           >
             <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.35, flex: 1 }}>
-              Dry-run · evaluate current state without mutating anything.
+              {t("copilot.ap.dryrun.label")}
             </div>
             <button
               type="button"
               onClick={runSimulate}
-              aria-label="Simulate next tick now"
+              aria-label={t("copilot.ap.dryrun.btn.aria")}
               style={{
                 padding: "5px 10px",
                 borderRadius: 7,
@@ -1253,7 +1281,7 @@ function AutopilotPanel({
                 whiteSpace: "nowrap",
               }}
             >
-              Simulate now
+              {t("copilot.ap.dryrun.btn")}
             </button>
           </div>
 
@@ -1313,6 +1341,7 @@ function SimulationPreview({
 }: {
   preview: { tick: TickDecision; anomaly: AnomalyDecision; at: number };
 }) {
+  const { t } = useI18n();
   const tickExecutes = preview.tick.status === "execute";
   const anomalyFires = preview.anomaly.status === "freeze";
   const anyAction = tickExecutes || anomalyFires;
@@ -1342,38 +1371,39 @@ function SimulationPreview({
         }}
       >
         <span>
-          Preview {anyAction ? "· would act" : "· would skip"}
+          {anyAction ? t("copilot.sim.preview.would") : t("copilot.sim.preview.skip")}
         </span>
         <span style={{ color: "#94a3b8", fontWeight: 700 }}>
           {new Date(preview.at).toLocaleTimeString()}
         </span>
       </div>
       <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 700 }}>
-        Tick:{" "}
+        {t("copilot.sim.tick.label")}
         {preview.tick.status === "execute" ? (
           <span style={{ color: "#059669" }}>⚡ {preview.tick.action.note}</span>
         ) : (
           <span style={{ color: "#64748b", fontWeight: 600 }}>
-            skip · {preview.tick.reason}
+            {t("copilot.sim.tick.skip", { reason: preview.tick.reason })}
           </span>
         )}
       </div>
       <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 700 }}>
-        Watchdog:{" "}
+        {t("copilot.sim.watchdog.label")}
         {preview.anomaly.status === "freeze" ? (
           <span style={{ color: "#dc2626" }}>
-            🔒 freeze · burst {preview.anomaly.burstCount} ·{" "}
-            {preview.anomaly.burstValueAec.toFixed(0)} AEC
+            {t("copilot.sim.watchdog.freeze", {
+              count: preview.anomaly.burstCount,
+              value: preview.anomaly.burstValueAec.toFixed(0),
+            })}
           </span>
         ) : (
           <span style={{ color: "#64748b", fontWeight: 600 }}>
-            idle · {preview.anomaly.reason}
+            {t("copilot.sim.watchdog.idle", { reason: preview.anomaly.reason })}
           </span>
         )}
       </div>
       <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.4 }}>
-        Simulation only — nothing was mutated. Real tick fires every 60s;
-        watchdog every 15s.
+        {t("copilot.sim.note")}
       </div>
     </div>
   );
@@ -1390,6 +1420,7 @@ function ToggleRow({
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: "grid", gap: 2 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -1398,7 +1429,7 @@ function ToggleRow({
           type="button"
           role="switch"
           aria-checked={checked}
-          aria-label={`${label} ${checked ? "on" : "off"}`}
+          aria-label={`${label} ${checked ? t("copilot.ap.toggle.on") : t("copilot.ap.toggle.off")}`}
           onClick={() => onChange(!checked)}
           style={{
             width: 34,

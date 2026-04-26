@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { convertFromAec, formatCurrency } from "../_lib/currency";
 import { GIFTS_EVENT, pendingGifts, type Gift } from "../_lib/gifts";
 import { loadRecurring, type Recurring } from "../_lib/recurring";
 import type { Account } from "../_lib/types";
 
-type Horizon = { key: "24h" | "7d" | "30d"; label: string; ms: number };
+type Horizon = { key: "24h" | "7d" | "30d"; ms: number };
 
 const HORIZONS: Horizon[] = [
-  { key: "24h", label: "24h", ms: 24 * 60 * 60 * 1000 },
-  { key: "7d", label: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
-  { key: "30d", label: "30d", ms: 30 * 24 * 60 * 60 * 1000 },
+  { key: "24h", ms: 24 * 60 * 60 * 1000 },
+  { key: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
+  { key: "30d", ms: 30 * 24 * 60 * 60 * 1000 },
 ];
 
 const PERIOD_DAYS = { daily: 1, weekly: 7, biweekly: 14, monthly: 30 } as const;
@@ -47,6 +48,7 @@ function giftSumWithin(gifts: Gift[], windowMs: number, now: number): number {
 }
 
 export function BalanceProjection({ account }: { account: Account }) {
+  const { t } = useI18n();
   const { code } = useCurrency();
   const [recurring, setRecurring] = useState<Recurring[]>([]);
   const [pending, setPending] = useState<Gift[]>([]);
@@ -130,31 +132,32 @@ export function BalanceProjection({ account }: { account: Account }) {
             id="projection-heading"
             style={{ fontSize: 11, fontWeight: 900, color: "#0f172a", letterSpacing: "0.02em" }}
           >
-            Balance projection
+            {t("projection.title")}
           </div>
           <div style={{ fontSize: 10, color: "#64748b" }}>
-            Net of pending timelock gifts + recurring outflows.
+            {t("projection.subtitle")}
           </div>
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 0 }} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <Pill label="Now" value={display(account.balance)} accent="#0f172a" emphasis />
+        <Pill label={t("projection.now")} value={display(account.balance)} accent="#0f172a" emphasis />
         {projections.map((p) => {
           const negative = p.projected < 0;
           const pressured = !negative && p.delta < -account.balance * 0.5;
           const accent = negative ? "#dc2626" : pressured ? "#d97706" : "#059669";
+          const horizonLabel = t(`projection.h.${p.key}`);
           return (
             <Pill
               key={p.key}
-              label={p.label}
+              label={horizonLabel}
               value={display(p.projected)}
               accent={accent}
               delta={p.delta}
               hint={
                 p.giftOut + p.recurringOut > 0
                   ? `−${display(p.giftOut + p.recurringOut)}` +
-                    (p.giftOut > 0 ? ` (gifts ${display(p.giftOut)})` : "")
+                    (p.giftOut > 0 ? ` ${t("projection.hint.gifts", { amt: display(p.giftOut) })}` : "")
                   : undefined
               }
             />

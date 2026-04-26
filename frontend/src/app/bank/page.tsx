@@ -22,6 +22,7 @@ import { ActivityTimeline } from "./_components/ActivityTimeline";
 import { AdvisorChat } from "./_components/AdvisorChat";
 import { AuditPanel } from "./_components/AuditPanel";
 import { AutopilotStatement } from "./_components/AutopilotStatement";
+import { BackendStatus } from "./_components/BackendStatus";
 import { BalanceProjection } from "./_components/BalanceProjection";
 import { DemoModeBanner } from "./_components/DemoModeBanner";
 import { BankHero } from "./_components/BankHero";
@@ -37,6 +38,7 @@ import { MobileTabBar } from "./_components/MobileTabBar";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { ReferralsPanel } from "./_components/ReferralsPanel";
+import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { TierProgression } from "./_components/TierProgression";
 import { GiftMode } from "./_components/GiftMode";
@@ -64,11 +66,14 @@ import { operationsCsvUrl } from "./_lib/api";
 import { BiometricProvider } from "./_lib/BiometricContext";
 import { CurrencyProvider } from "./_lib/CurrencyContext";
 import { EcosystemDataProvider } from "./_lib/EcosystemDataContext";
+import { useI18n } from "@/lib/i18n";
 import { decodePaymentRequest } from "./_lib/paymentRequest";
 
 function BankContent() {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useActiveTab();
 
   const { token, me, checked: authChecked } = useAuthMe();
 
@@ -125,6 +130,7 @@ function BankContent() {
   return (
     <div className="aevion-bank-root">
       <A11yStyles />
+      <BackendStatus />
       <CommandPalette
         accountId={account?.id ?? null}
         hasWallet={hasWallet}
@@ -142,7 +148,7 @@ function BankContent() {
 
       {!authChecked ? (
         <div style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
-          Checking session…
+          {t("loading.session")}
         </div>
       ) : null}
 
@@ -158,7 +164,7 @@ function BankContent() {
           }}
         >
           <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-            Sign in to open your AEVION Bank account
+            {t("auth.signIn.title")}
           </div>
           <div
             style={{
@@ -170,8 +176,7 @@ function BankContent() {
               margin: "0 auto 18px",
             }}
           >
-            Your wallet is tied to your AEVION identity. Sign in or create an account — we&apos;ll
-            auto-provision an AEC wallet and a Trust Graph profile for you.
+            {t("auth.signIn.desc")}
           </div>
           <Link
             href="/auth"
@@ -187,7 +192,7 @@ function BankContent() {
               boxShadow: "0 4px 14px rgba(13,148,136,0.3)",
             }}
           >
-            Sign in / Register →
+            {t("auth.signIn.cta")}
           </Link>
         </section>
       ) : null}
@@ -203,10 +208,10 @@ function BankContent() {
           }}
         >
           <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 6, color: "#991b1b" }}>
-            Session expired
+            {t("auth.expired.title")}
           </div>
           <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14 }}>
-            Your auth token is no longer valid. Please sign in again.
+            {t("auth.expired.desc")}
           </div>
           <Link
             href="/auth"
@@ -221,14 +226,14 @@ function BankContent() {
               textDecoration: "none",
             }}
           >
-            Sign in again →
+            {t("auth.expired.cta")}
           </Link>
         </section>
       ) : null}
 
       {me && loading && !account ? (
         <div style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
-          Loading your wallet…
+          {t("loading.wallet")}
         </div>
       ) : null}
 
@@ -243,11 +248,10 @@ function BankContent() {
           }}
         >
           <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-            Create your AEVION Bank account
+            {t("provision.title")}
           </div>
           <div style={{ fontSize: 14, color: "#334155", lineHeight: 1.6, marginBottom: 16 }}>
-            One-click provisioning — tied to {me?.email}. You&apos;ll get a unique account ID, QR
-            code, and a Trust Graph profile.
+            {t("provision.desc", { email: me?.email ?? "" })}
           </div>
           <button
             onClick={() => void provision()}
@@ -264,7 +268,7 @@ function BankContent() {
               boxShadow: provisioning ? "none" : "0 4px 14px rgba(13,148,136,0.3)",
             }}
           >
-            {provisioning ? "Creating…" : "Create wallet"}
+            {provisioning ? t("provision.creating") : t("provision.cta")}
           </button>
         </section>
       ) : null}
@@ -281,143 +285,152 @@ function BankContent() {
             autoFirstVisit={true}
           />
           <ConceptPrimer />
-          <BalanceProjection account={account} />
-          <TotalEarningsDashboard />
-          <div id="bank-anchor-constellation" style={{ scrollMarginTop: 20 }}>
-            <WealthConstellation account={account} operations={operations} />
-          </div>
-          <div id="bank-anchor-ecosystem" style={{ scrollMarginTop: 20 }}>
-            <EcosystemPulse accountId={account.id} operations={operations} />
-          </div>
-          <div id="bank-anchor-forecast" style={{ scrollMarginTop: 20 }}>
-            <WealthForecast account={account} />
-          </div>
-          <div id="bank-anchor-trust" style={{ scrollMarginTop: 20 }}>
-            <TrustScoreCard account={account} operations={operations} />
-          </div>
-          <div id="bank-anchor-tiers" style={{ scrollMarginTop: 20 }}>
-            <TierProgression account={account} operations={operations} notify={notify} />
-          </div>
-          <div id="bank-anchor-statement" style={{ scrollMarginTop: 20 }}>
-            <AutopilotStatement accountId={account.id} notify={notify} />
-          </div>
-          <PeerStanding account={account} operations={operations} />
-          <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
-          <SalaryAdvance
-            account={account}
-            operations={operations}
-            topup={handleTopup}
-            notify={notify}
-          />
-          <RoyaltyStream />
-          <ChessWinnings />
-          <div id="bank-anchor-achievements" style={{ scrollMarginTop: 20 }}>
-            <AchievementsPanel account={account} operations={operations} />
-          </div>
 
-          <ReferralsPanel account={account} notify={notify} />
-          <SnapshotExport account={account} operations={operations} notify={notify} />
+          <SectionTabs active={activeTab} onChange={setActiveTab} />
+
+          <TabPanel id="overview" active={activeTab}>
+            <BalanceProjection account={account} />
+            <div id="bank-anchor-constellation" style={{ scrollMarginTop: 20 }}>
+              <WealthConstellation account={account} operations={operations} />
+            </div>
+            <div id="bank-anchor-ecosystem" style={{ scrollMarginTop: 20 }}>
+              <EcosystemPulse accountId={account.id} operations={operations} />
+            </div>
+            <AccountIdCard
+              accountId={account.id}
+              onCopy={() => void copyToClipboard(account.id, "Account ID copied")}
+            />
+            <PaymentRequestPanel
+              accountId={account.id}
+              onCopy={(msg) => showToast(msg, "success")}
+            />
+          </TabPanel>
+
+          <TabPanel id="earn" active={activeTab}>
+            <TotalEarningsDashboard />
+            <div id="bank-anchor-forecast" style={{ scrollMarginTop: 20 }}>
+              <WealthForecast account={account} />
+            </div>
+            <RoyaltyStream />
+            <ChessWinnings />
+            <SpendingInsights accountId={account.id} operations={operations} />
+            <div id="bank-anchor-statement" style={{ scrollMarginTop: 20 }}>
+              <AutopilotStatement accountId={account.id} notify={notify} />
+            </div>
+          </TabPanel>
+
+          <TabPanel id="send" active={activeTab}>
+            {prefill ? (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(124,58,237,0.3)",
+                  background: "rgba(124,58,237,0.06)",
+                  fontSize: 13,
+                  color: "#4c1d95",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <strong>Incoming payment request</strong>
+                <span style={{ color: "#64748b" }}>
+                  Pre-filled below
+                  {prefill.amount ? `: ${prefill.amount.toFixed(2)} AEC` : ""}
+                  {prefill.memo ? ` · ${prefill.memo}` : ""}
+                </span>
+              </div>
+            ) : null}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: 16,
+              }}
+            >
+              <TopupForm onTopup={handleTopup} />
+              <SendForm
+                myId={account.id}
+                balance={account.balance}
+                prefill={prefill}
+                onSend={handleSend}
+                onError={onError}
+              />
+            </div>
+
+            <RecurringPayments
+              myAccountId={account.id}
+              balance={account.balance}
+              send={send}
+              notify={notify}
+            />
+
+            <SplitBills myAccountId={account.id} notify={notify} />
+
+            <SocialCircles
+              myAccountId={account.id}
+              myNickname={me.name || me.email}
+              balance={account.balance}
+              send={send}
+              notify={notify}
+            />
+
+            <GiftMode
+              myAccountId={account.id}
+              balance={account.balance}
+              send={send}
+              notify={notify}
+            />
+
+            <TransactionList
+              myId={account.id}
+              operations={operations}
+              loading={loading}
+              onRefresh={() => void load()}
+              csvUrl={operationsCsvUrl()}
+              onCopyId={(id) => void copyToClipboard(id)}
+            />
+          </TabPanel>
+
+          <TabPanel id="grow" active={activeTab}>
+            <div id="bank-anchor-trust" style={{ scrollMarginTop: 20 }}>
+              <TrustScoreCard account={account} operations={operations} />
+            </div>
+            <div id="bank-anchor-tiers" style={{ scrollMarginTop: 20 }}>
+              <TierProgression account={account} operations={operations} notify={notify} />
+            </div>
+            <PeerStanding account={account} operations={operations} />
+            <div id="bank-anchor-achievements" style={{ scrollMarginTop: 20 }}>
+              <AchievementsPanel account={account} operations={operations} />
+            </div>
+            <SavingsGoals accountId={account.id} notify={notify} />
+            <SalaryAdvance
+              account={account}
+              operations={operations}
+              topup={handleTopup}
+              notify={notify}
+            />
+            <ReferralsPanel account={account} notify={notify} />
+          </TabPanel>
+
+          <TabPanel id="security" active={activeTab}>
+            <BiometricCard email={me.email} notify={notify} />
+            <ActivityTimeline myId={account.id} operations={operations} />
+            <div id="bank-anchor-audit-unified" style={{ scrollMarginTop: 20 }}>
+              <UnifiedAuditFeed accountId={account.id} operations={operations} notify={notify} />
+            </div>
+            <AuditPanel notify={notify} />
+            <DeviceManagement accountId={account.id} notify={notify} />
+            <SnapshotExport account={account} operations={operations} notify={notify} />
+          </TabPanel>
+
+          <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
           <FinancialCopilot account={account} operations={operations} notify={notify} />
           <HelpMenu accountId={account.id} notify={notify} />
           <MobileTabBar />
-          <AccountIdCard
-            accountId={account.id}
-            onCopy={() => void copyToClipboard(account.id, "Account ID copied")}
-          />
-          <BiometricCard email={me.email} notify={notify} />
-          <PaymentRequestPanel
-            accountId={account.id}
-            onCopy={(msg) => showToast(msg, "success")}
-          />
-
-          <SavingsGoals accountId={account.id} notify={notify} />
-
-          {prefill ? (
-            <div
-              style={{
-                marginBottom: 12,
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(124,58,237,0.3)",
-                background: "rgba(124,58,237,0.06)",
-                fontSize: 13,
-                color: "#4c1d95",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <strong>Incoming payment request</strong>
-              <span style={{ color: "#64748b" }}>
-                Pre-filled below
-                {prefill.amount ? `: ${prefill.amount.toFixed(2)} AEC` : ""}
-                {prefill.memo ? ` · ${prefill.memo}` : ""}
-              </span>
-            </div>
-          ) : null}
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: 16,
-              marginBottom: 24,
-            }}
-          >
-            <TopupForm onTopup={handleTopup} />
-            <SendForm
-              myId={account.id}
-              balance={account.balance}
-              prefill={prefill}
-              onSend={handleSend}
-              onError={onError}
-            />
-          </div>
-
-          <RecurringPayments
-            myAccountId={account.id}
-            balance={account.balance}
-            send={send}
-            notify={notify}
-          />
-
-          <SpendingInsights accountId={account.id} operations={operations} />
-
-          <SplitBills myAccountId={account.id} notify={notify} />
-
-          <SocialCircles
-            myAccountId={account.id}
-            myNickname={me.name || me.email}
-            balance={account.balance}
-            send={send}
-            notify={notify}
-          />
-
-          <GiftMode
-            myAccountId={account.id}
-            balance={account.balance}
-            send={send}
-            notify={notify}
-          />
-
-          <TransactionList
-            myId={account.id}
-            operations={operations}
-            loading={loading}
-            onRefresh={() => void load()}
-            csvUrl={operationsCsvUrl()}
-            onCopyId={(id) => void copyToClipboard(id)}
-          />
-
-          <ActivityTimeline myId={account.id} operations={operations} />
-
-          <div id="bank-anchor-audit-unified" style={{ scrollMarginTop: 20 }}>
-            <UnifiedAuditFeed accountId={account.id} operations={operations} notify={notify} />
-          </div>
-          <AuditPanel notify={notify} />
-
-          <DeviceManagement accountId={account.id} notify={notify} />
         </EcosystemDataProvider>
       ) : null}
 

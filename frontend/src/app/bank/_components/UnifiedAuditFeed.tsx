@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   AUTOPILOT_EVENT,
   loadActions as loadAutopilotActions,
@@ -20,18 +21,18 @@ type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
 const FILTERS: Array<AuditSource | "all"> = ["all", "operation", "signature", "autopilot", "freeze"];
 
-function formatRelative(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  const diff = Date.now() - t;
+function formatRelative(iso: string, t: (k: string, vars?: Record<string, string | number>) => string): string {
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return "";
+  const diff = Date.now() - ts;
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec}s ago`;
+  if (sec < 60) return t("uaudit.relative.s", { n: sec });
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return t("uaudit.relative.m", { n: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return t("uaudit.relative.h", { n: hr });
   const d = Math.floor(hr / 24);
-  if (d < 30) return `${d}d ago`;
+  if (d < 30) return t("uaudit.relative.d", { n: d });
   return new Date(iso).toLocaleDateString();
 }
 
@@ -44,6 +45,7 @@ export function UnifiedAuditFeed({
   operations: Operation[];
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const [signatures, setSignatures] = useState<SignedOperation[]>([]);
   const [autopilotActions, setAutopilotActions] = useState<AutopilotAction[]>([]);
   const [freezeLog, setFreezeLog] = useState<FreezeEvent[]>([]);
@@ -120,11 +122,11 @@ export function UnifiedAuditFeed({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      notify(`Exported ${entries.length} audit entries`, "success");
+      notify(t("uaudit.toast.exported", { n: entries.length }), "success");
     } catch {
-      notify("Export failed", "error");
+      notify(t("uaudit.toast.exportFail"), "error");
     }
-  }, [accountId, operations.length, signatures.length, autopilotActions.length, freezeLog.length, entries, notify]);
+  }, [accountId, operations.length, signatures.length, autopilotActions.length, freezeLog.length, entries, notify, t]);
 
   return (
     <section
@@ -167,11 +169,10 @@ export function UnifiedAuditFeed({
           </span>
           <div>
             <h2 id="unified-audit-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-              Unified Audit Timeline
+              {t("uaudit.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-              One chronological source of truth · operations, QSign signatures, autopilot actions,
-              freeze events.
+              {t("uaudit.subtitle")}
             </div>
           </div>
         </div>
@@ -179,7 +180,7 @@ export function UnifiedAuditFeed({
           type="button"
           onClick={doExport}
           disabled={entries.length === 0}
-          aria-label="Export unified audit JSON"
+          aria-label={t("uaudit.btn.export.aria")}
           style={{
             padding: "6px 12px",
             borderRadius: 8,
@@ -191,7 +192,7 @@ export function UnifiedAuditFeed({
             cursor: entries.length === 0 ? "default" : "pointer",
           }}
         >
-          Export unified JSON
+          {t("uaudit.btn.export")}
         </button>
       </div>
 
@@ -203,11 +204,11 @@ export function UnifiedAuditFeed({
           marginBottom: 12,
         }}
         role="tablist"
-        aria-label="Filter audit feed"
+        aria-label={t("uaudit.filter.aria")}
       >
         {FILTERS.map((f) => {
           const active = filter === f;
-          const label = f === "all" ? "All" : SOURCE_LABEL[f];
+          const label = f === "all" ? t("uaudit.filter.all") : SOURCE_LABEL[f];
           const color = f === "all" ? "#0f172a" : SOURCE_COLOR[f];
           const count = f === "all" ? entries.length : counts[f];
           return (
@@ -258,7 +259,7 @@ export function UnifiedAuditFeed({
             color: "#94a3b8",
           }}
         >
-          Nothing in this slice yet. Top up, enable Autopilot, or send a transfer to populate.
+          {t("uaudit.empty")}
         </div>
       ) : (
         <ul role="list" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 5 }}>
@@ -342,7 +343,7 @@ export function UnifiedAuditFeed({
                   whiteSpace: "nowrap",
                 }}
               >
-                {formatRelative(e.at)}
+                {formatRelative(e.at, t)}
               </span>
             </li>
           ))}
@@ -350,8 +351,7 @@ export function UnifiedAuditFeed({
       )}
 
       <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 10, lineHeight: 1.45 }}>
-        Shown: {filtered.length} of {entries.length} entries · last 60. Export bundles all four
-        sources plus counts; ideal for support tickets, tax season, or independent audit.
+        {t("uaudit.footer", { filtered: filtered.length, total: entries.length })}
       </div>
     </section>
   );

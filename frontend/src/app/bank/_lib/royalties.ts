@@ -65,6 +65,17 @@ export const KIND_LABEL: Record<IPKind, string> = {
   video: "Video",
 };
 
+// i18n keys parallel to KIND_LABEL. UI should use these with the global `t()` helper;
+// the raw English map above remains for snapshot/export paths that want stable strings.
+export const KIND_LABEL_KEY: Record<IPKind, string> = {
+  music: "royalty.kind.music.label",
+  photo: "royalty.kind.photo.label",
+  code: "royalty.kind.code.label",
+  design: "royalty.kind.design.label",
+  writing: "royalty.kind.writing.label",
+  video: "royalty.kind.video.label",
+};
+
 const COUNTRIES = ["JP", "DE", "KZ", "US", "FR", "BR", "IN", "GB", "CA", "AU", "SG", "NL"];
 
 function computeEstimated(events: RoyaltyEvent[]): {

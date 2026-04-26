@@ -52,6 +52,18 @@ export const ICON_LABEL: Record<GoalIcon, string> = {
   music: "Hobby",
 };
 
+/** i18n keys parallel to {@link ICON_LABEL}. */
+export const ICON_LABEL_KEY: Record<GoalIcon, string> = {
+  travel: "savings.icon.travel",
+  vacation: "savings.icon.vacation",
+  home: "savings.icon.home",
+  gear: "savings.icon.gear",
+  star: "savings.icon.star",
+  heart: "savings.icon.heart",
+  coffee: "savings.icon.coffee",
+  music: "savings.icon.music",
+};
+
 function isGoal(x: unknown): x is SavingsGoal {
   if (!x || typeof x !== "object") return false;
   const g = x as Partial<SavingsGoal>;
@@ -97,7 +109,16 @@ export type GoalForecast = {
   hint: string;
 };
 
-export function forecastGoal(g: SavingsGoal): GoalForecast {
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+/**
+ * Goal pacing forecast. When a `t` translator is passed, the `hint` string is
+ * localized; otherwise the original English copy is returned (so server-side
+ * code, snapshots, and tests remain stable without an i18n context).
+ */
+export function forecastGoal(g: SavingsGoal, t?: Translator): GoalForecast {
+  const tr: Translator = t ?? ((_k, _v) => _k);
+  const useT = typeof t === "function";
   const progressPct = Math.min(100, (g.currentAec / Math.max(0.01, g.targetAec)) * 100);
   const remaining = Math.max(0, g.targetAec - g.currentAec);
 
@@ -108,7 +129,7 @@ export function forecastGoal(g: SavingsGoal): GoalForecast {
       daysLeft: null,
       daysToReachAtRate: null,
       status: "completed",
-      hint: "Goal reached",
+      hint: useT ? tr("savings.forecast.completed") : "Goal reached",
     };
   }
 
@@ -129,7 +150,14 @@ export function forecastGoal(g: SavingsGoal): GoalForecast {
       daysLeft,
       daysToReachAtRate: null,
       status: "idle",
-      hint: daysLeft != null ? `${daysLeft}d left · add funds to start` : "Add funds to start",
+      hint:
+        daysLeft != null
+          ? useT
+            ? tr("savings.forecast.idleWithDeadline", { days: daysLeft })
+            : `${daysLeft}d left · add funds to start`
+          : useT
+            ? tr("savings.forecast.idleNoDeadline")
+            : "Add funds to start",
     };
   }
 
@@ -143,16 +171,21 @@ export function forecastGoal(g: SavingsGoal): GoalForecast {
         daysLeft,
         daysToReachAtRate: daysToReach,
         status: "onTrack",
-        hint: `On track · ${daysLeft}d left`,
+        hint: useT
+          ? tr("savings.forecast.onTrackDeadline", { days: daysLeft })
+          : `On track · ${daysLeft}d left`,
       };
     }
+    const perDay = ((remaining - ratePerDay * daysLeft) / Math.max(1, daysLeft)).toFixed(2);
     return {
       progressPct,
       remaining,
       daysLeft,
       daysToReachAtRate: daysToReach,
       status: "behind",
-      hint: `Behind · need +${((remaining - ratePerDay * daysLeft) / Math.max(1, daysLeft)).toFixed(2)}/day`,
+      hint: useT
+        ? tr("savings.forecast.behind", { perDay })
+        : `Behind · need +${perDay}/day`,
     };
   }
 
@@ -162,6 +195,8 @@ export function forecastGoal(g: SavingsGoal): GoalForecast {
     daysLeft: null,
     daysToReachAtRate: daysToReach,
     status: "onTrack",
-    hint: `~${Math.ceil(daysToReach)}d at current rate`,
+    hint: useT
+      ? tr("savings.forecast.onTrackOpen", { days: Math.ceil(daysToReach) })
+      : `~${Math.ceil(daysToReach)}d at current rate`,
   };
 }

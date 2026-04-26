@@ -1,9 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useI18n } from "@/lib/i18n";
 import { CurrencySwitcher } from "./Money";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }) {
+  const { t } = useI18n();
   return (
     <div
       style={{
@@ -14,26 +17,36 @@ export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }
     >
       <div
         style={{
-          display: "inline-block",
-          padding: "4px 12px",
-          borderRadius: 999,
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase" as const,
-          border: "1px solid rgba(255,255,255,0.2)",
-          background: "rgba(255,255,255,0.08)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
           marginBottom: 14,
+          flexWrap: "wrap",
         }}
       >
-        AEVION Bank · digital finance layer
+        <div
+          style={{
+            display: "inline-block",
+            padding: "4px 12px",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase" as const,
+            border: "1px solid rgba(255,255,255,0.2)",
+            background: "rgba(255,255,255,0.08)",
+          }}
+        >
+          {t("hero.badge")}
+        </div>
+        <LanguageSwitcher variant="hero" />
       </div>
       <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 8px", letterSpacing: "-0.03em" }}>
-        Ecosystem digital bank
+        {t("hero.title")}
       </h1>
       <p style={{ margin: 0, fontSize: 15, opacity: 0.88, lineHeight: 1.6, maxWidth: 600 }}>
-        Wallet, P2P transfers between creators, automatic royalties for content usage, Awards
-        payouts. Every transaction linked to Trust Graph.
+        {t("hero.subtitle")}
       </p>
       {email ? (
         <div
@@ -49,7 +62,7 @@ export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }
           }}
         >
           <span style={{ opacity: 0.75 }}>
-            Signed in as <strong>{email}</strong>
+            {t("hero.signedIn")} <strong>{email}</strong>
           </span>
           <CurrencySwitcher />
         </div>

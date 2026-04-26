@@ -8,6 +8,9 @@ export type AnomalyKind = "large" | "newRecipient" | "burst" | "lateNight";
 export type Anomaly = {
   kind: AnomalyKind;
   message: string;
+  /** i18n key for {@link message}; consumers can prefer `t(messageKey, messageVars)`. */
+  messageKey?: string;
+  messageVars?: Record<string, string | number>;
   severity: "low" | "medium" | "high";
 };
 
@@ -16,6 +19,14 @@ export const ANOMALY_LABEL: Record<AnomalyKind, string> = {
   newRecipient: "New recipient",
   burst: "Burst",
   lateNight: "Late-night",
+};
+
+/** i18n keys parallel to {@link ANOMALY_LABEL}. */
+export const ANOMALY_LABEL_KEY: Record<AnomalyKind, string> = {
+  large: "anomaly.large",
+  newRecipient: "anomaly.newRecipient",
+  burst: "anomaly.burst",
+  lateNight: "anomaly.lateNight",
 };
 
 export const ANOMALY_COLOR: Record<AnomalyKind, string> = {
@@ -47,9 +58,12 @@ export function detectAnomalies(op: Operation, history: Operation[], myId: strin
   const med = median(outgoings.map((h) => h.amount));
 
   if (med > 0 && op.amount > med * 3) {
+    const ratio = (op.amount / med).toFixed(1);
     out.push({
       kind: "large",
-      message: `${(op.amount / med).toFixed(1)}× your typical transfer`,
+      message: `${ratio}× your typical transfer`,
+      messageKey: "anomaly.msg.large",
+      messageVars: { ratio },
       severity: op.amount > med * 6 ? "high" : "medium",
     });
   }
@@ -67,6 +81,7 @@ export function detectAnomalies(op: Operation, history: Operation[], myId: strin
       out.push({
         kind: "newRecipient",
         message: "First transfer to this account",
+        messageKey: "anomaly.msg.newRecipient",
         severity: "low",
       });
     }
@@ -85,6 +100,8 @@ export function detectAnomalies(op: Operation, history: Operation[], myId: strin
     out.push({
       kind: "burst",
       message: `${burstCount} outgoing in 5 min`,
+      messageKey: "anomaly.msg.burst",
+      messageVars: { count: burstCount },
       severity: burstCount >= 5 ? "high" : "medium",
     });
   }
@@ -92,9 +109,12 @@ export function detectAnomalies(op: Operation, history: Operation[], myId: strin
   const date = new Date(op.createdAt);
   const hour = date.getHours();
   if (hour >= 2 && hour < 5) {
+    const time = `${hour.toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
     out.push({
       kind: "lateNight",
-      message: `Late-night activity at ${hour.toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`,
+      message: `Late-night activity at ${time}`,
+      messageKey: "anomaly.msg.lateNight",
+      messageVars: { time },
       severity: "low",
     });
   }

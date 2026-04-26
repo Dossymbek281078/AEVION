@@ -67,7 +67,9 @@ function nextTier(current: TrustTier): TrustTier | null {
   return idx >= 0 && idx < TIER_ORDER.length - 1 ? TIER_ORDER[idx + 1] : null;
 }
 
-export function computeEcosystemTrustScore(input: TrustInputs): TrustScore {
+export type TrustTranslate = (key: string, vars?: Record<string, string | number>) => string;
+
+export function computeEcosystemTrustScore(input: TrustInputs, t: TrustTranslate): TrustScore {
   const { account, operations, royalty, chess, ecosystem } = input;
 
   const createdMs = new Date(account.createdAt).getTime();
@@ -115,88 +117,120 @@ export function computeEcosystemTrustScore(input: TrustInputs): TrustScore {
   const factors: TrustFactor[] = [
     {
       key: "age",
-      label: "Account age",
+      label: t("trust.factor.age.label"),
       cluster: "banking",
       points: curve(ageDays, TARGET.ageDays),
       max: 100,
       weight: 0.8,
-      hint: `${Math.round(ageDays)}d`,
+      hint: t("trust.factor.age.hint", { days: Math.round(ageDays) }),
       nextMilestone:
-        ageDays < TARGET.ageDays ? `${Math.max(1, Math.ceil(TARGET.ageDays - ageDays))}d to hit target` : null,
+        ageDays < TARGET.ageDays
+          ? t("trust.factor.age.next", { days: Math.max(1, Math.ceil(TARGET.ageDays - ageDays)) })
+          : null,
     },
     {
       key: "volume",
-      label: "Banking volume",
+      label: t("trust.factor.volume.label"),
       cluster: "banking",
       points: curve(volume, TARGET.volumeAec),
       max: 100,
       weight: 1.2,
-      hint: `${volume.toFixed(0)} AEC`,
-      nextMilestone: volume < TARGET.volumeAec ? `${Math.ceil(TARGET.volumeAec - volume)} AEC to target` : null,
+      hint: t("trust.factor.volume.hint", { amount: volume.toFixed(0) }),
+      nextMilestone:
+        volume < TARGET.volumeAec
+          ? t("trust.factor.volume.next", { amount: Math.ceil(TARGET.volumeAec - volume) })
+          : null,
     },
     {
       key: "network",
-      label: "Network",
+      label: t("trust.factor.network.label"),
       cluster: "banking",
       points: curve(counterparties.size, TARGET.network),
       max: 100,
       weight: 1.0,
-      hint: `${counterparties.size} contact${counterparties.size === 1 ? "" : "s"}`,
+      hint:
+        counterparties.size === 1
+          ? t("trust.factor.network.hint.one", { count: counterparties.size })
+          : t("trust.factor.network.hint.many", { count: counterparties.size }),
       nextMilestone:
-        counterparties.size < TARGET.network ? `${TARGET.network - counterparties.size} more contacts` : null,
+        counterparties.size < TARGET.network
+          ? t("trust.factor.network.next", { count: TARGET.network - counterparties.size })
+          : null,
     },
     {
       key: "activity",
-      label: "Activity",
+      label: t("trust.factor.activity.label"),
       cluster: "banking",
       points: curve(operations.length, TARGET.activity),
       max: 100,
       weight: 1.1,
-      hint: `${operations.length} op${operations.length === 1 ? "" : "s"}`,
+      hint:
+        operations.length === 1
+          ? t("trust.factor.activity.hint.one", { count: operations.length })
+          : t("trust.factor.activity.hint.many", { count: operations.length }),
       nextMilestone:
-        operations.length < TARGET.activity ? `${TARGET.activity - operations.length} more operations` : null,
+        operations.length < TARGET.activity
+          ? t("trust.factor.activity.next", { count: TARGET.activity - operations.length })
+          : null,
     },
     {
       key: "ip-portfolio",
-      label: "IP portfolio",
+      label: t("trust.factor.ipPortfolio.label"),
       cluster: "ecosystem",
       points: curve(ipWorks, TARGET.ipWorks),
       max: 100,
       weight: 1.2,
-      hint: `${ipWorks} work${ipWorks === 1 ? "" : "s"}`,
-      nextMilestone: ipWorks < TARGET.ipWorks ? `Register ${TARGET.ipWorks - ipWorks} more in QRight` : null,
+      hint:
+        ipWorks === 1
+          ? t("trust.factor.ipPortfolio.hint.one", { count: ipWorks })
+          : t("trust.factor.ipPortfolio.hint.many", { count: ipWorks }),
+      nextMilestone:
+        ipWorks < TARGET.ipWorks
+          ? t("trust.factor.ipPortfolio.next", { count: TARGET.ipWorks - ipWorks })
+          : null,
     },
     {
       key: "ip-reach",
-      label: "IP reach",
+      label: t("trust.factor.ipReach.label"),
       cluster: "ecosystem",
       points: curve(ipVerifications, TARGET.ipReach),
       max: 100,
       weight: 1.1,
-      hint: `${ipVerifications} verifications`,
+      hint: t("trust.factor.ipReach.hint", { count: ipVerifications }),
       nextMilestone:
-        ipVerifications < TARGET.ipReach ? `${TARGET.ipReach - ipVerifications} verifications to target` : null,
+        ipVerifications < TARGET.ipReach
+          ? t("trust.factor.ipReach.next", { count: TARGET.ipReach - ipVerifications })
+          : null,
     },
     {
       key: "chess",
-      label: "Chess skill",
+      label: t("trust.factor.chess.label"),
       cluster: "ecosystem",
       points: chessScore,
       max: 100,
       weight: 0.7,
-      hint: chessRating ? `${chessRating} · ${chessTopThree} podium${chessTopThree === 1 ? "" : "s"}` : "no games",
-      nextMilestone: chessScore < 80 ? "Place top-3 in a tournament" : null,
+      hint: chessRating
+        ? chessTopThree === 1
+          ? t("trust.factor.chess.hint.one", { rating: chessRating, podiums: chessTopThree })
+          : t("trust.factor.chess.hint.many", { rating: chessRating, podiums: chessTopThree })
+        : t("trust.factor.chess.hint.none"),
+      nextMilestone: chessScore < 80 ? t("trust.factor.chess.next") : null,
     },
     {
       key: "planet",
-      label: "Planet progress",
+      label: t("trust.factor.planet.label"),
       cluster: "ecosystem",
       points: curve(planetBonuses, TARGET.planetAec),
       max: 100,
       weight: 1.0,
-      hint: `${planetTasksCount} task${planetTasksCount === 1 ? "" : "s"}`,
+      hint:
+        planetTasksCount === 1
+          ? t("trust.factor.planet.hint.one", { count: planetTasksCount })
+          : t("trust.factor.planet.hint.many", { count: planetTasksCount }),
       nextMilestone:
-        planetBonuses < TARGET.planetAec ? `${Math.ceil(TARGET.planetAec - planetBonuses)} AEC in bonuses` : null,
+        planetBonuses < TARGET.planetAec
+          ? t("trust.factor.planet.next", { amount: Math.ceil(TARGET.planetAec - planetBonuses) })
+          : null,
     },
   ];
 
@@ -245,9 +279,23 @@ export const tierLabel: Record<TrustTier, string> = {
   elite: "Elite",
 };
 
+export const tierLabelKey: Record<TrustTier, string> = {
+  new: "trust.tier.new.label",
+  growing: "trust.tier.growing.label",
+  trusted: "trust.tier.trusted.label",
+  elite: "trust.tier.elite.label",
+};
+
 export const tierDescription: Record<TrustTier, string> = {
   new: "Just started — build reputation via activity across AEVION modules.",
   growing: "Active participant. Earning trust across banking and ecosystem.",
   trusted: "Recognised contributor. Transfers, IP and tournaments trusted by peers.",
   elite: "Top tier. Your Trust Graph unlocks perks across the ecosystem.",
+};
+
+export const tierDescriptionKey: Record<TrustTier, string> = {
+  new: "trust.tier.new.description",
+  growing: "trust.tier.growing.description",
+  trusted: "trust.tier.trusted.description",
+  elite: "trust.tier.elite.description",
 };

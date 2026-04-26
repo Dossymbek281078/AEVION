@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { formatRelative } from "../_lib/format";
-import { listDevices, registerCurrentDevice, revokeDevice, type Device } from "../_lib/devices";
+import {
+  listDevices,
+  localizedBrowser,
+  localizedOS,
+  registerCurrentDevice,
+  revokeDevice,
+  type Device,
+} from "../_lib/devices";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
@@ -19,6 +27,7 @@ export function DeviceManagement({
   accountId: string;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const [devices, setDevices] = useState<Device[]>([]);
 
   useEffect(() => {
@@ -56,7 +65,7 @@ export function DeviceManagement({
             id="devices-heading"
             style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
           >
-            Devices &amp; sessions
+            {t("dev.title")}
           </h2>
           <span
             style={{
@@ -68,14 +77,14 @@ export function DeviceManagement({
               fontWeight: 800,
             }}
           >
-            {devices.length} signed in
+            {t("dev.signedIn", { n: devices.length })}
           </span>
         </div>
       </div>
 
       {devices.length === 0 ? (
         <div style={{ fontSize: 13, color: "#94a3b8", padding: 12 }}>
-          Loading device list…
+          {t("dev.loading")}
         </div>
       ) : (
         <ul role="list" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
@@ -85,12 +94,19 @@ export function DeviceManagement({
               d={d}
               onRevoke={() => {
                 if (d.current) {
-                  notify("To revoke the current device, sign out instead", "info");
+                  notify(t("dev.toast.cantRevokeCurrent"), "info");
                   return;
                 }
-                if (confirm(`Revoke ${d.browser} on ${d.os}?`)) {
+                if (
+                  confirm(
+                    t("dev.confirm.revoke", {
+                      browser: localizedBrowser(d.browser, t),
+                      os: localizedOS(d.os, t),
+                    }),
+                  )
+                ) {
                   setDevices(revokeDevice(d.id));
-                  notify("Device revoked", "success");
+                  notify(t("dev.toast.revoked"), "success");
                 }
               }}
             />
@@ -99,14 +115,14 @@ export function DeviceManagement({
       )}
 
       <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        Current device fingerprint is real (browser, OS, screen, language, timezone). Other entries
-        seeded for demo until <code>/api/auth/sessions</code> ships server-side session tracking.
+        {t("dev.footer")}
       </div>
     </section>
   );
 }
 
 function DeviceRow({ d, onRevoke }: { d: Device; onRevoke: () => void }) {
+  const { t } = useI18n();
   const accent = d.current ? "#0f766e" : "#475569";
   return (
     <li
@@ -150,7 +166,7 @@ function DeviceRow({ d, onRevoke }: { d: Device; onRevoke: () => void }) {
           }}
         >
           <span style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
-            {d.browser} · {d.os}
+            {localizedBrowser(d.browser, t)} · {localizedOS(d.os, t)}
           </span>
           {d.current ? (
             <span
@@ -165,7 +181,7 @@ function DeviceRow({ d, onRevoke }: { d: Device; onRevoke: () => void }) {
                 textTransform: "uppercase" as const,
               }}
             >
-              Current
+              {t("dev.row.current")}
             </span>
           ) : null}
         </div>
@@ -173,14 +189,21 @@ function DeviceRow({ d, onRevoke }: { d: Device; onRevoke: () => void }) {
           {d.location} · {d.screen} · {d.language} · {d.timezone}
         </div>
         <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-          First seen {formatRelative(d.firstSeenAt)} · last active {formatRelative(d.lastActiveAt)}
+          {t("dev.row.firstSeen", { first: formatRelative(d.firstSeenAt), last: formatRelative(d.lastActiveAt) })}
         </div>
       </div>
       <button
         onClick={onRevoke}
         disabled={d.current}
-        aria-label={d.current ? "Cannot revoke current device" : `Revoke ${d.browser} on ${d.os}`}
-        title={d.current ? "Sign out from header to revoke this device" : undefined}
+        aria-label={
+          d.current
+            ? t("dev.btn.revoke.aria.current")
+            : t("dev.btn.revoke.aria", {
+                browser: localizedBrowser(d.browser, t),
+                os: localizedOS(d.os, t),
+              })
+        }
+        title={d.current ? t("dev.btn.revoke.title.current") : undefined}
         style={{
           padding: "6px 12px",
           borderRadius: 8,
@@ -192,7 +215,7 @@ function DeviceRow({ d, onRevoke }: { d: Device; onRevoke: () => void }) {
           cursor: d.current ? "not-allowed" : "pointer",
         }}
       >
-        Revoke
+        {t("dev.btn.revoke")}
       </button>
     </li>
   );

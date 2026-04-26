@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import {
   CATEGORY_COLOR,
-  CATEGORY_LABEL,
+  CATEGORY_LABEL_KEY,
   perksByTier,
   TIER_GATE,
   TIER_ORDER,
@@ -15,8 +16,8 @@ import {
 import {
   computeEcosystemTrustScore,
   tierColor,
-  tierDescription,
-  tierLabel,
+  tierDescriptionKey,
+  tierLabelKey,
   type TrustTier,
 } from "../_lib/trust";
 import type { Account, Operation } from "../_lib/types";
@@ -33,11 +34,12 @@ export function TierProgression({
   operations: Operation[];
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem } = useEcosystemData();
 
   const trust = useMemo(
-    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }),
-    [account, operations, royalty, chess, ecosystem],
+    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }, t),
+    [account, operations, royalty, chess, ecosystem, t],
   );
 
   const currentIdx = tierIndex(trust.tier);
@@ -79,7 +81,7 @@ export function TierProgression({
       }
       const perksUnlocked = perksByTier(trust.tier).length;
       notify(
-        `🎉 Tier up! You reached ${tierLabel[trust.tier]} · ${perksUnlocked} new perks unlocked`,
+        t("tiers.toast.tierUp", { tier: t(tierLabelKey[trust.tier]), n: perksUnlocked }),
         "success",
       );
       setCelebrate(true);
@@ -94,7 +96,7 @@ export function TierProgression({
         /* ignore */
       }
     }
-  }, [trust.tier, currentIdx, notify]);
+  }, [trust.tier, currentIdx, notify, t]);
 
   // Position marker on the timeline — score % of max (100).
   const markerPct = Math.min(100, Math.max(0, trust.score));
@@ -139,7 +141,7 @@ export function TierProgression({
             borderTopRightRadius: 14,
           }}
         >
-          ✨ Tier unlocked · {tierLabel[trust.tier]}
+          {t("tiers.celebrate", { tier: t(tierLabelKey[trust.tier]) })}
         </div>
       ) : null}
       <div
@@ -172,13 +174,13 @@ export function TierProgression({
           </span>
           <div>
             <h2 id="tiers-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-              Tier progression · what you unlock
+              {t("tiers.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-              Every AEVION Trust point pulls the entire ecosystem closer.
+              {t("tiers.subtitle")}
               {nextTier
-                ? ` ${trust.pointsToNextTier} pts to ${tierLabel[nextTier]}.`
-                : " You're at the peak."}
+                ? t("tiers.subtitle.toNext", { pts: trust.pointsToNextTier, tier: t(tierLabelKey[nextTier]) })
+                : t("tiers.subtitle.peak")}
             </div>
           </div>
         </div>
@@ -201,7 +203,7 @@ export function TierProgression({
               textTransform: "uppercase",
             }}
           >
-            {tierLabel[trust.tier]} · {trust.score}
+            {t(tierLabelKey[trust.tier])} · {trust.score}
           </span>
         </div>
       </div>
@@ -229,12 +231,12 @@ export function TierProgression({
               transition: "width 600ms ease",
             }}
           />
-          {TIER_ORDER.map((t) => {
-            const pct = TIER_GATE[t];
+          {TIER_ORDER.map((tier) => {
+            const pct = TIER_GATE[tier];
             const reached = trust.score >= pct;
             return (
               <div
-                key={t}
+                key={tier}
                 style={{
                   position: "absolute",
                   top: "50%",
@@ -243,12 +245,12 @@ export function TierProgression({
                   width: 14,
                   height: 14,
                   borderRadius: "50%",
-                  background: reached ? tierColor[t] : "#fff",
-                  border: `2px solid ${reached ? tierColor[t] : "rgba(15,23,42,0.2)"}`,
-                  boxShadow: reached ? `0 0 0 3px ${tierColor[t]}22` : "none",
+                  background: reached ? tierColor[tier] : "#fff",
+                  border: `2px solid ${reached ? tierColor[tier] : "rgba(15,23,42,0.2)"}`,
+                  boxShadow: reached ? `0 0 0 3px ${tierColor[tier]}22` : "none",
                   transition: "background 200ms ease",
                 }}
-                aria-label={`${tierLabel[t]} gate at ${pct}`}
+                aria-label={t("tiers.gate.aria", { tier: t(tierLabelKey[tier]), pct })}
               />
             );
           })}
@@ -268,28 +270,28 @@ export function TierProgression({
               transition: "left 600ms ease",
             }}
           >
-            ▼ You · {trust.score}
+            {t("tiers.youHere", { score: trust.score })}
           </div>
         </div>
         {/* Labels under dots */}
         <div style={{ position: "relative", height: 16, marginTop: 6 }}>
-          {TIER_ORDER.map((t) => {
-            const pct = TIER_GATE[t];
+          {TIER_ORDER.map((tier) => {
+            const pct = TIER_GATE[tier];
             const reached = trust.score >= pct;
             return (
               <div
-                key={`${t}-label`}
+                key={`${tier}-label`}
                 style={{
                   position: "absolute",
                   left: `${pct}%`,
                   transform: "translateX(-50%)",
                   fontSize: 10,
                   fontWeight: 800,
-                  color: reached ? tierColor[t] : "#94a3b8",
+                  color: reached ? tierColor[tier] : "#94a3b8",
                   whiteSpace: "nowrap",
                 }}
               >
-                {tierLabel[t]} <span style={{ opacity: 0.6, fontWeight: 600 }}>({pct})</span>
+                {t(tierLabelKey[tier])} <span style={{ opacity: 0.6, fontWeight: 600 }}>({pct})</span>
               </div>
             );
           })}
@@ -304,15 +306,15 @@ export function TierProgression({
           gap: 10,
         }}
       >
-        {TIER_ORDER.map((t, i) => {
-          const perks = perksByTier(t);
-          const isCurrent = t === trust.tier;
-          const isNext = nextTier === t;
+        {TIER_ORDER.map((tier, i) => {
+          const perks = perksByTier(tier);
+          const isCurrent = tier === trust.tier;
+          const isNext = nextTier === tier;
           const unlocked = i <= currentIdx;
           return (
             <TierCard
-              key={t}
-              tier={t}
+              key={tier}
+              tier={tier}
               perks={perks}
               isCurrent={isCurrent}
               isNext={isNext}
@@ -348,7 +350,7 @@ export function TierProgression({
               color: tierColor[nextTier],
             }}
           >
-            Fastest path to {tierLabel[nextTier]}
+            {t("tiers.fastestPath", { tier: t(tierLabelKey[nextTier]) })}
           </span>
           {trust.checklist.slice(0, 3).map((c, i) => (
             <span
@@ -389,8 +391,9 @@ function TierCard({
   nextMilestone: string | null;
   pointsToGate: number;
 }) {
+  const { t } = useI18n();
   const color = tierColor[tier];
-  const description = tierDescription[tier];
+  const description = t(tierDescriptionKey[tier]);
 
   return (
     <article
@@ -442,7 +445,7 @@ function TierCard({
               letterSpacing: "0.02em",
             }}
           >
-            {tierLabel[tier]}
+            {t(tierLabelKey[tier])}
           </div>
           <div
             style={{
@@ -453,7 +456,13 @@ function TierCard({
               letterSpacing: "0.06em",
             }}
           >
-            {isCurrent ? "You're here" : isNext ? `Next · ${pointsToGate} pts` : unlocked ? "Unlocked" : "Locked"}
+            {isCurrent
+              ? t("tiers.card.here")
+              : isNext
+                ? t("tiers.card.next", { pts: pointsToGate })
+                : unlocked
+                  ? t("tiers.card.unlocked")
+                  : t("tiers.card.locked")}
           </div>
         </div>
       </div>
@@ -492,6 +501,7 @@ function TierCard({
 }
 
 function PerkRow({ perk, unlocked }: { perk: Perk; unlocked: boolean }) {
+  const { t } = useI18n();
   const catColor = CATEGORY_COLOR[perk.category as PerkCategory];
   return (
     <li
@@ -528,9 +538,9 @@ function PerkRow({ perk, unlocked }: { perk: Perk; unlocked: boolean }) {
             color: unlocked ? "#0f172a" : "#64748b",
             lineHeight: 1.3,
           }}
-          title={CATEGORY_LABEL[perk.category as PerkCategory]}
+          title={t(CATEGORY_LABEL_KEY[perk.category as PerkCategory])}
         >
-          {perk.label}
+          {t(perk.labelKey)}
         </div>
         <div
           style={{
@@ -540,7 +550,7 @@ function PerkRow({ perk, unlocked }: { perk: Perk; unlocked: boolean }) {
             marginTop: 1,
           }}
         >
-          {perk.hint}
+          {t(perk.hintKey)}
         </div>
       </div>
     </li>

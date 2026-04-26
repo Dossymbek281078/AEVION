@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { absoluteRequestUrl } from "../_lib/paymentRequest";
 import { QRCodeView } from "./QRCode";
 
@@ -10,6 +11,7 @@ type Props = {
 };
 
 export function PaymentRequestPanel({ accountId, onCopy }: Props) {
+  const { t } = useI18n();
   const [amount, setAmount] = useState<string>("");
   const [memo, setMemo] = useState<string>("");
   const [showQR, setShowQR] = useState<boolean>(false);
@@ -26,9 +28,9 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url);
-      onCopy("Request link copied");
+      onCopy(t("preq.toast.copied"));
     } catch {
-      onCopy("Clipboard blocked — copy manually");
+      onCopy(t("preq.toast.blocked"));
     }
   };
 
@@ -39,8 +41,12 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
     }
     try {
       await navigator.share({
-        title: "AEVION Bank — payment request",
-        text: memo ? `Pay me ${amount} AEC (${memo})` : `Pay me ${amount || "any amount"} AEC`,
+        title: t("preq.share.title"),
+        text: memo
+          ? t("preq.share.text.memo", { amount, memo })
+          : amount
+          ? t("preq.share.text.amount", { amount })
+          : t("preq.share.text.any"),
         url,
       });
     } catch {
@@ -68,7 +74,7 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
           gap: 8,
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 15, color: "#4c1d95" }}>Request payment</div>
+        <div style={{ fontWeight: 900, fontSize: 15, color: "#4c1d95" }}>{t("preq.title")}</div>
         <button
           onClick={() => setShowQR((v) => !v)}
           style={{
@@ -82,7 +88,7 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
             cursor: "pointer",
           }}
         >
-          {showQR ? "Hide QR" : "Show QR"}
+          {showQR ? t("preq.btn.hideQR") : t("preq.btn.showQR")}
         </button>
       </div>
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -90,7 +96,7 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
           <div style={{ flexShrink: 0 }}>
             <QRCodeView value={url} size={160} />
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "center" as const }}>
-              Scan to pay
+              {t("preq.qr.scanHint")}
             </div>
           </div>
         ) : null}
@@ -98,7 +104,7 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 120px" }}>
               <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>
-                Amount AEC (optional)
+                {t("preq.field.amount")}
               </div>
               <input
                 value={amount}
@@ -118,12 +124,12 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
             </div>
             <div style={{ flex: "2 1 180px" }}>
               <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>
-                Memo (optional)
+                {t("preq.field.memo")}
               </div>
               <input
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
-                placeholder="Coffee, royalty split…"
+                placeholder={t("preq.field.memo.placeholder")}
                 maxLength={80}
                 style={{
                   width: "100%",
@@ -165,7 +171,7 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
                 cursor: "pointer",
               }}
             >
-              Copy link
+              {t("preq.btn.copyLink")}
             </button>
             <button
               onClick={() => void share()}
@@ -180,11 +186,11 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
                 cursor: "pointer",
               }}
             >
-              Share
+              {t("preq.btn.share")}
             </button>
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-            Anyone opening this link will see Send form pre-filled with your ID, amount and memo.
+            {t("preq.footer")}
           </div>
         </div>
       </div>

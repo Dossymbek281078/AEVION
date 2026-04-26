@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useSignatures } from "../_hooks/useSignatures";
 import { formatRelative } from "../_lib/format";
 import type { SignedOperation, VerifyState } from "../_lib/signatures";
@@ -12,11 +13,11 @@ const STATE_COLOR: Record<VerifyState, string> = {
   error: "#d97706",
 };
 
-const STATE_LABEL: Record<VerifyState, string> = {
-  unknown: "Unverified",
-  valid: "Valid",
-  invalid: "Tampered",
-  error: "Error",
+const STATE_LABEL_KEY: Record<VerifyState, string> = {
+  unknown: "audit.state.unknown",
+  valid: "audit.state.valid",
+  invalid: "audit.state.invalid",
+  error: "audit.state.error",
 };
 
 export function AuditPanel({
@@ -24,6 +25,7 @@ export function AuditPanel({
 }: {
   notify: (msg: string, type?: "success" | "error" | "info") => void;
 }) {
+  const { t } = useI18n();
   const { items, verifyOne, verifyAll, verifying, clear } = useSignatures();
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -71,11 +73,10 @@ export function AuditPanel({
               id="audit-heading"
               style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
             >
-              Audit log · QSign signatures
+              {t("audit.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-              Each operation HMAC-signed via <code>/api/qsign/sign</code>; verify any time
-              against <code>/api/qsign/verify</code>.
+              {t("audit.subtitle")}
             </div>
           </div>
         </div>
@@ -83,11 +84,11 @@ export function AuditPanel({
           <button
             onClick={async () => {
               if (items.length === 0) {
-                notify("No signed operations yet", "info");
+                notify(t("audit.toast.empty"), "info");
                 return;
               }
               await verifyAll();
-              notify(`Verified ${items.length} signatures`, "success");
+              notify(t("audit.toast.verified", { n: items.length }), "success");
             }}
             disabled={verifying || items.length === 0}
             style={{
@@ -101,7 +102,7 @@ export function AuditPanel({
               cursor: verifying || items.length === 0 ? "default" : "pointer",
             }}
           >
-            {verifying ? "Verifying…" : "Verify all"}
+            {verifying ? t("audit.btn.verifying") : t("audit.btn.verifyAll")}
           </button>
           {items.length > 0 ? (
             <button
@@ -123,12 +124,12 @@ export function AuditPanel({
                   a.click();
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
-                  notify(`Exported ${items.length} signatures`, "success");
+                  notify(t("audit.toast.exported", { n: items.length }), "success");
                 } catch {
-                  notify("Export failed", "error");
+                  notify(t("audit.toast.exportFail"), "error");
                 }
               }}
-              aria-label="Download audit log as JSON"
+              aria-label={t("audit.btn.export.aria")}
               style={{
                 padding: "6px 12px",
                 borderRadius: 8,
@@ -140,15 +141,15 @@ export function AuditPanel({
                 cursor: "pointer",
               }}
             >
-              Export JSON
+              {t("audit.btn.export")}
             </button>
           ) : null}
           {items.length > 0 ? (
             <button
               onClick={() => {
-                if (confirm("Clear local audit log? Backend keeps the operation history.")) {
+                if (confirm(t("audit.confirm.clear"))) {
                   clear();
-                  notify("Audit log cleared", "info");
+                  notify(t("audit.toast.cleared"), "info");
                 }
               }}
               style={{
@@ -162,7 +163,7 @@ export function AuditPanel({
                 cursor: "pointer",
               }}
             >
-              Clear
+              {t("audit.btn.clear")}
             </button>
           ) : null}
         </div>
@@ -179,8 +180,7 @@ export function AuditPanel({
             borderRadius: 10,
           }}
         >
-          No signatures yet. Make a transfer or top-up — each operation gets HMAC-signed
-          automatically.
+          {t("audit.empty")}
         </div>
       ) : (
         <ul role="list" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
@@ -192,7 +192,7 @@ export function AuditPanel({
               onToggle={() => setExpanded((v) => (v === sig.id ? null : sig.id))}
               onVerify={async () => {
                 await verifyOne(sig);
-                notify(`Re-verified ${sig.id.slice(0, 12)}…`, "info");
+                notify(t("audit.toast.reverified", { idShort: sig.id.slice(0, 12) }), "info");
               }}
             />
           ))}
@@ -208,7 +208,7 @@ export function AuditPanel({
             textAlign: "center" as const,
           }}
         >
-          Showing 20 of {items.length} signatures
+          {t("audit.more", { n: items.length })}
         </div>
       ) : null}
     </section>
@@ -226,6 +226,7 @@ function SignatureRow({
   onToggle: () => void;
   onVerify: () => void;
 }) {
+  const { t } = useI18n();
   const color = STATE_COLOR[sig.verified];
   return (
     <li
@@ -253,7 +254,7 @@ function SignatureRow({
         }}
       >
         <span
-          aria-label={STATE_LABEL[sig.verified]}
+          aria-label={t(STATE_LABEL_KEY[sig.verified])}
           style={{
             width: 8,
             height: 8,
@@ -276,8 +277,7 @@ function SignatureRow({
             {sig.id}
           </div>
           <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 1 }}>
-            {sig.kind} · {sig.algo} · signed {formatRelative(sig.signedAt)}
-            {sig.verifiedAt ? ` · checked ${formatRelative(sig.verifiedAt)}` : ""}
+            {sig.kind} · {sig.algo} · {t("audit.row.signed", { when: formatRelative(sig.signedAt) })}{sig.verifiedAt ? t("audit.row.checked", { when: formatRelative(sig.verifiedAt) }) : ""}
           </div>
         </div>
         <span
@@ -289,7 +289,7 @@ function SignatureRow({
             textTransform: "uppercase" as const,
           }}
         >
-          {STATE_LABEL[sig.verified]}
+          {t(STATE_LABEL_KEY[sig.verified])}
         </span>
         <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{expanded ? "▲" : "▼"}</span>
       </button>
@@ -312,7 +312,7 @@ function SignatureRow({
               flexWrap: "wrap",
             }}
           >
-            <span style={{ color: "#64748b", fontWeight: 700, minWidth: 80 }}>Signature</span>
+            <span style={{ color: "#64748b", fontWeight: 700, minWidth: 80 }}>{t("audit.row.signature")}</span>
             <code
               style={{
                 flex: 1,
@@ -328,7 +328,7 @@ function SignatureRow({
           </div>
           <div style={{ fontSize: 11 }}>
             <span style={{ color: "#64748b", fontWeight: 700, minWidth: 80, display: "inline-block" }}>
-              Payload
+              {t("audit.row.payload")}
             </span>
             <pre
               style={{
@@ -360,7 +360,7 @@ function SignatureRow({
                 cursor: "pointer",
               }}
             >
-              Verify now
+              {t("audit.row.verifyNow")}
             </button>
           </div>
         </div>

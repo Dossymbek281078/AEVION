@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
 import { describeOp } from "../_lib/format";
 import {
   ANOMALY_COLOR,
-  ANOMALY_LABEL,
+  ANOMALY_LABEL_KEY,
   detectAnomalies,
   type Anomaly,
 } from "../_lib/anomaly";
@@ -24,26 +25,26 @@ type DayGroup = {
   flagged: number;
 };
 
-function dayLabel(d: Date): string {
+function dayLabel(d: Date, t: (k: string, vars?: Record<string, string | number>) => string): string {
   const today = new Date();
   const todayKey = today.toISOString().slice(0, 10);
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
   const yKey = yesterday.toISOString().slice(0, 10);
   const dKey = d.toISOString().slice(0, 10);
-  if (dKey === todayKey) return "Today";
-  if (dKey === yKey) return "Yesterday";
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  if (dKey === todayKey) return t("activity.day.today");
+  if (dKey === yKey) return t("activity.day.yesterday");
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-function groupByDay(entries: TimelineEntry[]): DayGroup[] {
+function groupByDay(entries: TimelineEntry[], t: (k: string, vars?: Record<string, string | number>) => string): DayGroup[] {
   const map = new Map<string, DayGroup>();
   for (const e of entries) {
     const d = new Date(e.op.createdAt);
     const key = d.toISOString().slice(0, 10);
     let g = map.get(key);
     if (!g) {
-      g = { key, label: dayLabel(d), entries: [], flagged: 0 };
+      g = { key, label: dayLabel(d, t), entries: [], flagged: 0 };
       map.set(key, g);
     }
     g.entries.push(e);
@@ -70,6 +71,7 @@ export function ActivityTimeline({
   myId: string;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const { code } = useCurrency();
 
   const entries = useMemo<TimelineEntry[]>(() => {
@@ -82,7 +84,7 @@ export function ActivityTimeline({
     }));
   }, [operations, myId]);
 
-  const groups = useMemo(() => groupByDay(entries), [entries]);
+  const groups = useMemo(() => groupByDay(entries, t), [entries, t]);
   const totalFlagged = entries.reduce((s, e) => s + (e.anomalies.length > 0 ? 1 : 0), 0);
 
   return (
@@ -111,7 +113,7 @@ export function ActivityTimeline({
             id="activity-heading"
             style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
           >
-            Activity timeline
+            {t("activity.title")}
           </h2>
           {totalFlagged > 0 ? (
             <span
@@ -124,7 +126,7 @@ export function ActivityTimeline({
                 fontWeight: 800,
               }}
             >
-              {totalFlagged} flagged
+              {t("activity.flagged", { n: totalFlagged })}
             </span>
           ) : (
             <span
@@ -137,12 +139,12 @@ export function ActivityTimeline({
                 fontWeight: 800,
               }}
             >
-              all clear
+              {t("activity.allClear")}
             </span>
           )}
         </div>
         <div style={{ fontSize: 11, color: "#94a3b8" }}>
-          last {entries.length} events
+          {t("activity.lastEvents", { n: entries.length })}
         </div>
       </div>
 
@@ -157,7 +159,7 @@ export function ActivityTimeline({
             borderRadius: 10,
           }}
         >
-          No activity yet. Operations and anomaly checks will appear here.
+          {t("activity.empty")}
         </div>
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
@@ -184,8 +186,7 @@ export function ActivityTimeline({
                 </span>
                 <div style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.08)" }} />
                 <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
-                  {g.entries.length} {g.entries.length === 1 ? "event" : "events"}
-                  {g.flagged ? ` · ${g.flagged} flagged` : ""}
+                  {g.entries.length === 1 ? t("activity.day.events.one") : t("activity.day.events.many", { n: g.entries.length })}{g.flagged ? t("activity.day.flagged", { n: g.flagged }) : ""}
                 </span>
               </div>
               <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
@@ -199,8 +200,7 @@ export function ActivityTimeline({
       )}
 
       <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        Anomaly checks run client-side over your operation history. Heuristics: amount vs your
-        median, first-time recipients, bursts, late-night activity.
+        {t("activity.footer")}
       </div>
     </section>
   );
@@ -215,6 +215,7 @@ function TimelineRow({
   myId: string;
   code: "AEC" | "USD" | "EUR" | "KZT";
 }) {
+  const { t } = useI18n();
   const { op, anomalies } = entry;
   const d = describeOp(op, myId);
   const flagged = anomalies.length > 0;
@@ -274,30 +275,36 @@ function TimelineRow({
             {d.label}
             {d.counterparty ? ` · ${d.counterparty.slice(0, 10)}…` : ""}
           </span>
-          {anomalies.map((a) => (
-            <span
-              key={a.kind}
-              title={a.message}
-              aria-label={`${ANOMALY_LABEL[a.kind]} anomaly: ${a.message}`}
-              style={{
-                padding: "1px 8px",
-                borderRadius: 999,
-                fontSize: 9,
-                fontWeight: 800,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase" as const,
-                background: `${ANOMALY_COLOR[a.kind]}18`,
-                color: ANOMALY_COLOR[a.kind],
-                border: `1px solid ${ANOMALY_COLOR[a.kind]}55`,
-              }}
-            >
-              {ANOMALY_LABEL[a.kind]}
-            </span>
-          ))}
+          {anomalies.map((a) => {
+            const label = t(ANOMALY_LABEL_KEY[a.kind]);
+            const message = a.messageKey ? t(a.messageKey, a.messageVars) : a.message;
+            return (
+              <span
+                key={a.kind}
+                title={message}
+                aria-label={t("activity.row.aria", { label, message })}
+                style={{
+                  padding: "1px 8px",
+                  borderRadius: 999,
+                  fontSize: 9,
+                  fontWeight: 800,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase" as const,
+                  background: `${ANOMALY_COLOR[a.kind]}18`,
+                  color: ANOMALY_COLOR[a.kind],
+                  border: `1px solid ${ANOMALY_COLOR[a.kind]}55`,
+                }}
+              >
+                {label}
+              </span>
+            );
+          })}
         </div>
         <div style={{ fontSize: 11, color: "#64748b" }}>
           <time dateTime={op.createdAt}>{formatTime(op.createdAt)}</time>
-          {anomalies.length > 0 ? ` · ${anomalies.map((a) => a.message).join(" · ")}` : ""}
+          {anomalies.length > 0
+            ? ` · ${anomalies.map((a) => (a.messageKey ? t(a.messageKey, a.messageVars) : a.message)).join(" · ")}`
+            : ""}
         </div>
       </div>
       <div

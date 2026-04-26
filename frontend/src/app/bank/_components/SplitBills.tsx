@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useSplits } from "../_hooks/useSplits";
 import * as contactsLib from "../_lib/contacts";
 import type { Contact } from "../_lib/contacts";
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function SplitBills({ myAccountId, notify }: Props) {
+  const { t } = useI18n();
   const { items, add, remove, togglePaid } = useSplits();
   const [formOpen, setFormOpen] = useState<boolean>(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -57,11 +59,11 @@ export function SplitBills({ myAccountId, notify }: Props) {
   const addAdHoc = () => {
     const id = adHocId.trim();
     if (!id.startsWith("acc_")) {
-      notify("ID must start with acc_", "error");
+      notify(t("split.toast.idPrefix"), "error");
       return;
     }
     if (id === myAccountId) {
-      notify("Don't split with yourself", "error");
+      notify(t("split.toast.selfSplit"), "error");
       return;
     }
     const nick = adHocNick.trim() || id.slice(0, 10) + "…";
@@ -100,15 +102,15 @@ export function SplitBills({ myAccountId, notify }: Props) {
 
   const save = () => {
     if (!label.trim()) {
-      notify("Give the bill a name", "error");
+      notify(t("split.toast.needName"), "error");
       return;
     }
     if (!Number.isFinite(totalNum) || totalNum <= 0) {
-      notify("Invalid total", "error");
+      notify(t("split.toast.invalidTotal"), "error");
       return;
     }
     if (participants.length === 0) {
-      notify("Pick at least one participant", "error");
+      notify(t("split.toast.needParticipant"), "error");
       return;
     }
     let shares;
@@ -119,7 +121,10 @@ export function SplitBills({ myAccountId, notify }: Props) {
       });
       const sum = parsed.reduce((s, p) => s + p.amount, 0);
       if (Math.abs(sum - totalNum) > 0.01) {
-        notify(`Custom amounts sum to ${sum.toFixed(2)}, expected ${totalNum.toFixed(2)}`, "error");
+        notify(
+          t("split.toast.customMismatch", { sum: sum.toFixed(2), total: totalNum.toFixed(2) }),
+          "error",
+        );
         return;
       }
       shares = parsed.map((p) => ({
@@ -133,7 +138,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
       shares = splitEqually(totalNum, participants);
     }
     add(label, totalNum, shares);
-    notify(`"${label}" split with ${participants.length} people`, "success");
+    notify(t("split.toast.created", { label, count: participants.length }), "success");
     resetForm();
     setFormOpen(false);
   };
@@ -163,7 +168,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
           id="splits-heading"
           style={{ fontSize: 16, fontWeight: 900, margin: 0 }}
         >
-          Split bills
+          {t("split.title")}
           {items.length > 0 ? (
             <span
               style={{
@@ -176,7 +181,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
                 fontWeight: 800,
               }}
             >
-              {items.filter((b) => !billStatus(b).settled).length} open
+              {t("split.badge.open", { n: items.filter((b) => !billStatus(b).settled).length })}
             </span>
           ) : null}
         </h2>
@@ -195,7 +200,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
             cursor: "pointer",
           }}
         >
-          {formOpen ? "Cancel" : "+ New split"}
+          {formOpen ? t("split.btn.cancel") : t("split.btn.new")}
         </button>
       </div>
 
@@ -213,17 +218,17 @@ export function SplitBills({ myAccountId, notify }: Props) {
           }}
         >
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
-            <Field label="Bill name">
+            <Field label={t("split.field.name")}>
               <input
                 ref={labelRef}
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="Dinner at Sunset…"
+                placeholder={t("split.field.name.placeholder")}
                 maxLength={60}
                 style={inputStyle}
               />
             </Field>
-            <Field label="Total AEC">
+            <Field label={t("split.field.total")}>
               <input
                 value={total}
                 onChange={(e) => setTotal(e.target.value)}
@@ -246,7 +251,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
               }}
             >
               <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
-                Participants ({participants.length})
+                {t("split.participants", { n: participants.length })}
               </span>
               <label style={{ fontSize: 11, color: "#334155", fontWeight: 700, cursor: "pointer" }}>
                 <input
@@ -255,12 +260,12 @@ export function SplitBills({ myAccountId, notify }: Props) {
                   onChange={(e) => setCustomMode(e.target.checked)}
                   style={{ marginRight: 6 }}
                 />
-                Custom amounts
+                {t("split.customAmounts")}
               </label>
             </div>
             {contacts.length === 0 ? (
               <div style={{ fontSize: 12, color: "#94a3b8" }}>
-                Add people via their account ID below.
+                {t("split.contacts.empty")}
               </div>
             ) : (
               <div style={{ display: "grid", gap: 4, maxHeight: 180, overflowY: "auto" as const }}>
@@ -310,7 +315,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
                           }
                           placeholder="0.00"
                           style={{ ...inputStyle, width: 90, padding: "4px 8px", fontSize: 12 }}
-                          aria-label={`Custom share for ${c.nickname}`}
+                          aria-label={t("split.aria.customShare", { nick: c.nickname })}
                         />
                       ) : null}
                     </div>
@@ -321,7 +326,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <Field label="Add by account ID">
+            <Field label={t("split.field.adhocId")}>
               <input
                 value={adHocId}
                 onChange={(e) => setAdHocId(e.target.value)}
@@ -329,22 +334,22 @@ export function SplitBills({ myAccountId, notify }: Props) {
                 style={{ ...inputStyle, fontFamily: "ui-monospace, monospace" }}
               />
             </Field>
-            <Field label="Nickname">
+            <Field label={t("split.field.nickname")}>
               <input
                 value={adHocNick}
                 onChange={(e) => setAdHocNick(e.target.value)}
-                placeholder="Maria, John…"
+                placeholder={t("split.field.nickname.placeholder")}
                 style={inputStyle}
               />
             </Field>
             <button onClick={addAdHoc} style={btnSecondary}>
-              Add
+              {t("split.btn.add")}
             </button>
           </div>
 
           {equalPreview && !customMode ? (
             <div style={{ fontSize: 12, color: "#334155" }}>
-              Equal split: <strong><Money aec={equalPreview[0].amount} /></strong> per person (first participant absorbs any rounding)
+              {t("split.preview.equal.prefix")}<strong><Money aec={equalPreview[0].amount} /></strong>{t("split.preview.equal.suffix")}
             </div>
           ) : null}
           {customMode && participants.length > 0 ? (
@@ -355,7 +360,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
                 fontWeight: 700,
               }}
             >
-              Custom total: <Money aec={customTotal} /> / <Money aec={totalNum} />
+              {t("split.preview.customTotal")}<Money aec={customTotal} /> / <Money aec={totalNum} />
             </div>
           ) : null}
 
@@ -367,7 +372,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
               }}
               style={btnSecondary}
             >
-              Cancel
+              {t("split.btn.cancel")}
             </button>
             <button
               onClick={save}
@@ -382,7 +387,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
                 cursor: "pointer",
               }}
             >
-              Create split
+              {t("split.btn.create")}
             </button>
           </div>
         </div>
@@ -399,7 +404,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
             borderRadius: 10,
           }}
         >
-          No splits yet. Divide dinners, trips or gift pools between contacts.
+          {t("split.list.empty")}
         </div>
       ) : (
         <ul role="list" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
@@ -410,7 +415,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
               myAccountId={myAccountId}
               onTogglePaid={(share) => togglePaid(b.id, share)}
               onRemove={() => {
-                if (confirm(`Delete split "${b.label}"?`)) remove(b.id);
+                if (confirm(t("split.confirm.delete", { label: b.label }))) remove(b.id);
               }}
               notify={notify}
             />
@@ -434,6 +439,7 @@ function BillRow({
   onRemove: () => void;
   notify: (msg: string, type?: "success" | "error" | "info") => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState<boolean>(false);
   const status = billStatus(bill);
   const progressPct = status.total > 0 ? (status.paid / status.total) * 100 : 0;
@@ -443,9 +449,9 @@ function BillRow({
     const url = absoluteRequestUrl({ to: myAccountId, amount, memo: bill.label });
     try {
       await navigator.clipboard.writeText(url);
-      notify(`Link for ${accountId.slice(0, 8)}… copied`, "success");
+      notify(t("split.toast.linkCopied", { id: accountId.slice(0, 8) }), "success");
     } catch {
-      notify("Clipboard blocked — copy manually", "error");
+      notify(t("split.toast.clipboardBlocked"), "error");
     }
   };
 
@@ -487,14 +493,14 @@ function BillRow({
             {bill.label}
           </div>
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-            <Money aec={bill.totalAec} /> · {status.paid}/{status.total} paid · {formatRelative(bill.createdAt)}
+            <Money aec={bill.totalAec} /> · {status.paid}/{status.total} {t("split.row.paidSuffix")} · {formatRelative(bill.createdAt)}
           </div>
           <div
             role="progressbar"
             aria-valuenow={Math.round(progressPct)}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`${bill.label} settled ${status.paid} of ${status.total}`}
+            aria-label={t("split.aria.progress", { label: bill.label, paid: status.paid, total: status.total })}
             style={{
               height: 4,
               borderRadius: 999,
@@ -541,7 +547,7 @@ function BillRow({
                 type="checkbox"
                 checked={s.paid}
                 onChange={() => onTogglePaid(s.accountId)}
-                aria-label={`Mark ${s.nickname} as paid`}
+                aria-label={t("split.aria.markPaid", { nick: s.nickname })}
               />
               <div style={{ minWidth: 0 }}>
                 <div
@@ -571,7 +577,7 @@ function BillRow({
               </div>
               <button
                 onClick={() => void copyLink(s.accountId, s.amount)}
-                aria-label={`Copy payment link for ${s.nickname}`}
+                aria-label={t("split.aria.copyLink", { nick: s.nickname })}
                 style={{
                   padding: "4px 10px",
                   borderRadius: 6,
@@ -583,19 +589,19 @@ function BillRow({
                   cursor: "pointer",
                 }}
               >
-                Copy link
+                {t("split.btn.copyLink")}
               </button>
               {s.paid ? (
-                <span style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✓ paid</span>
+                <span style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>{t("split.row.statusPaid")}</span>
               ) : (
-                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>pending</span>
+                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>{t("split.row.statusPending")}</span>
               )}
             </div>
           ))}
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <button
               onClick={onRemove}
-              aria-label={`Delete ${bill.label}`}
+              aria-label={t("split.aria.deleteBill", { label: bill.label })}
               style={{
                 padding: "6px 12px",
                 borderRadius: 8,
@@ -607,7 +613,7 @@ function BillRow({
                 cursor: "pointer",
               }}
             >
-              Delete split
+              {t("split.btn.delete")}
             </button>
           </div>
         </div>
@@ -615,4 +621,3 @@ function BillRow({
     </li>
   );
 }
-

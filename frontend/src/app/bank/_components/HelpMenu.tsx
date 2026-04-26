@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { clearDemoSeed, hasDemoSeed, seedDemo } from "../_lib/demoSeed";
 import { resetTour } from "../_lib/onboarding";
 
@@ -14,6 +15,7 @@ export function HelpMenu({
   accountId: string;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState<boolean>(false);
   const [demoActive, setDemoActive] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -47,11 +49,11 @@ export function HelpMenu({
     if (demoActive) {
       clearDemoSeed();
       setDemoActive(false);
-      notify("Demo data cleared", "info");
+      notify(t("helpmenu.toast.demoCleared"), "info");
     } else {
       seedDemo(accountId);
       setDemoActive(true);
-      notify("Demo data loaded", "success");
+      notify(t("helpmenu.toast.demoLoaded"), "success");
     }
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new Event("aevion:signatures-changed"));
@@ -86,7 +88,7 @@ export function HelpMenu({
     >
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label={open ? "Close help menu" : "Open help menu"}
+        aria-label={open ? t("helpmenu.aria.close") : t("helpmenu.aria.open")}
         aria-expanded={open}
         style={{
           width: 48,
@@ -111,7 +113,7 @@ export function HelpMenu({
       {open ? (
         <div
           role="menu"
-          aria-label="Help menu"
+          aria-label={t("helpmenu.aria.menu")}
           style={{
             width: 240,
             background: "#fff",
@@ -133,12 +135,12 @@ export function HelpMenu({
               borderBottom: "1px solid rgba(15,23,42,0.06)",
             }}
           >
-            Quick actions
+            {t("helpmenu.section.quickActions")}
           </div>
           <MenuItem
             icon="⌘"
-            label="Command palette"
-            hint={`Press ${isMac ? "⌘" : "Ctrl"}+K — search & jump anywhere`}
+            label={t("helpmenu.item.palette.label")}
+            hint={t("helpmenu.item.palette.hint", { key: isMac ? "⌘" : "Ctrl" })}
             onClick={() => {
               setOpen(false);
               window.dispatchEvent(
@@ -152,17 +154,17 @@ export function HelpMenu({
               );
             }}
           />
-          <MenuItem icon="↻" label="Take the tour" hint="5-step walk-through" onClick={relaunchTour} />
+          <MenuItem icon="↻" label={t("helpmenu.item.tour.label")} hint={t("helpmenu.item.tour.hint")} onClick={relaunchTour} />
           <MenuItem
             icon={demoActive ? "✓" : "⟡"}
-            label={demoActive ? "Clear demo data" : "Load demo data"}
-            hint={demoActive ? "removes seed from storage" : "goals · recurring · circle · split"}
+            label={demoActive ? t("helpmenu.item.demoClear.label") : t("helpmenu.item.demoLoad.label")}
+            hint={demoActive ? t("helpmenu.item.demoClear.hint") : t("helpmenu.item.demoLoad.hint")}
             onClick={toggleDemo}
           />
           <MenuItem
             icon="↓"
-            label="Jump to snapshot"
-            hint="Download SVG / copy text"
+            label={t("helpmenu.item.snapshot.label")}
+            hint={t("helpmenu.item.snapshot.hint")}
             onClick={() => {
               setOpen(false);
               const el = document.getElementById("snapshot-heading");
@@ -171,8 +173,8 @@ export function HelpMenu({
           />
           <MenuItem
             icon="➤"
-            label="Jump to Invite & Earn"
-            hint="Referral program"
+            label={t("helpmenu.item.invite.label")}
+            hint={t("helpmenu.item.invite.hint")}
             onClick={() => {
               setOpen(false);
               const el = document.getElementById("referrals-heading");
@@ -181,8 +183,8 @@ export function HelpMenu({
           />
           <MenuItemLink
             icon="↗"
-            label="AEVION portal"
-            hint="Back to main site"
+            label={t("helpmenu.item.portal.label")}
+            hint={t("helpmenu.item.portal.hint")}
             href="/"
             onNavigate={() => setOpen(false)}
           />
@@ -195,7 +197,7 @@ export function HelpMenu({
               lineHeight: 1.45,
             }}
           >
-            Stuck? Press <kbd style={{ fontFamily: "ui-monospace, monospace" }}>Esc</kbd> to close.
+            {t("helpmenu.footer.stuck")} <kbd style={{ fontFamily: "ui-monospace, monospace" }}>Esc</kbd> {t("helpmenu.footer.toClose")}
           </div>
         </div>
       ) : null}

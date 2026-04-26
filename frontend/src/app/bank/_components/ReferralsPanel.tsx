@@ -16,6 +16,7 @@ import {
 } from "../_lib/referrals";
 import type { Account } from "../_lib/types";
 import { Money } from "./Money";
+import { useI18n } from "@/lib/i18n";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 
@@ -26,6 +27,7 @@ export function ReferralsPanel({
   account: Account;
   notify: Notify;
 }) {
+  const { t } = useI18n();
   const [origin, setOrigin] = useState<string>("");
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -49,14 +51,14 @@ export function ReferralsPanel({
       await navigator.clipboard.writeText(value);
       notify(msg, "success");
     } catch {
-      notify("Clipboard blocked — copy manually", "error");
+      notify(t("ref.toast.blocked"), "error");
     }
   };
 
   const shareNative = async () => {
     const payload = {
-      title: "Join me on AEVION Bank",
-      text: `Use my code ${stats.code} — we both earn AEC when you join.`,
+      title: t("ref.share.title"),
+      text: t("ref.share.text", { code: stats.code }),
       url: stats.shareUrl,
     };
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
@@ -64,10 +66,10 @@ export function ReferralsPanel({
         await navigator.share(payload);
       } catch {
         // user cancelled or share unsupported — fallback to clipboard
-        await copy(stats.shareUrl, "Invite link copied");
+        await copy(stats.shareUrl, t("ref.toast.invite"));
       }
     } else {
-      await copy(stats.shareUrl, "Invite link copied");
+      await copy(stats.shareUrl, t("ref.toast.invite"));
     }
   };
 
@@ -115,11 +117,10 @@ export function ReferralsPanel({
               id="referrals-heading"
               style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#0f172a" }}
             >
-              Invite & earn
+              {t("ref.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
-              Share your code — get <strong>{REFERRAL_BONUS_AEC} AEC</strong> per joiner, they get{" "}
-              <strong>{INVITEE_BOOST_AEC} AEC</strong> on first top-up.
+              {t("ref.subtitle.html", { bonus: REFERRAL_BONUS_AEC, boost: INVITEE_BOOST_AEC })}
             </div>
           </div>
         </div>
@@ -152,7 +153,7 @@ export function ReferralsPanel({
               marginBottom: 6,
             }}
           >
-            Your referral code
+            {t("ref.code.label")}
           </div>
           <div
             style={{
@@ -179,8 +180,8 @@ export function ReferralsPanel({
               {stats.code}
             </code>
             <button
-              onClick={() => void copy(stats.code, "Code copied")}
-              aria-label="Copy referral code"
+              onClick={() => void copy(stats.code, t("ref.toast.code"))}
+              aria-label={t("ref.aria.copyCode")}
               style={{
                 padding: "8px 14px",
                 borderRadius: 10,
@@ -192,7 +193,7 @@ export function ReferralsPanel({
                 cursor: "pointer",
               }}
             >
-              Copy
+              {t("ref.copy")}
             </button>
           </div>
           <div
@@ -223,10 +224,10 @@ export function ReferralsPanel({
                 boxShadow: `0 4px 14px ${accent}44`,
               }}
             >
-              Share link
+              {t("ref.btn.share")}
             </button>
             <button
-              onClick={() => void copy(stats.shareUrl, "Invite link copied")}
+              onClick={() => void copy(stats.shareUrl, t("ref.toast.invite"))}
               style={{
                 padding: "8px 14px",
                 borderRadius: 10,
@@ -238,7 +239,7 @@ export function ReferralsPanel({
                 cursor: "pointer",
               }}
             >
-              Copy link
+              {t("ref.btn.copyLink")}
             </button>
           </div>
         </div>
@@ -261,7 +262,7 @@ export function ReferralsPanel({
           >
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-                INVITED
+                {t("ref.stat.invited")}
               </div>
               <div
                 style={{
@@ -274,11 +275,11 @@ export function ReferralsPanel({
               >
                 {stats.invited}
               </div>
-              <div style={{ fontSize: 10, color: "#94a3b8" }}>people</div>
+              <div style={{ fontSize: 10, color: "#94a3b8" }}>{t("ref.stat.invited.unit")}</div>
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-                EARNED
+                {t("ref.stat.earned")}
               </div>
               <div
                 style={{
@@ -310,7 +311,7 @@ export function ReferralsPanel({
                 aria-valuenow={Math.round(pct)}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label={`Progress to ${TIER_LABEL[stats.nextTierLabel]} tier`}
+                aria-label={t("ref.next.aria", { tier: TIER_LABEL[stats.nextTierLabel] })}
               >
                 <div
                   style={{
@@ -329,17 +330,13 @@ export function ReferralsPanel({
                   color: "#64748b",
                 }}
               >
-                <span>
-                  {stats.invitesToNextTier} invite
-                  {stats.invitesToNextTier === 1 ? "" : "s"} to{" "}
-                  <strong style={{ color: accent }}>{TIER_LABEL[stats.nextTierLabel]}</strong>
-                </span>
+                <span>{t("ref.next.label", { n: stats.invitesToNextTier, plural: stats.invitesToNextTier === 1 ? "" : t("ref.next.invitePlural"), tier: TIER_LABEL[stats.nextTierLabel] })}</span>
                 <span style={{ fontWeight: 800, color: accent }}>{pct.toFixed(0)}%</span>
               </div>
             </>
           ) : (
             <div style={{ fontSize: 11, color: accent, fontWeight: 800 }}>
-              You&apos;re already at the top tier — thanks for growing AEVION.
+              {t("ref.atTop")}
             </div>
           )}
         </div>
@@ -357,7 +354,7 @@ export function ReferralsPanel({
               marginBottom: 6,
             }}
           >
-            Recently joined via your code
+            {t("ref.recentTitle")}
           </div>
           <ul
             role="list"
@@ -403,7 +400,7 @@ export function ReferralsPanel({
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
                   {r.nickname}
                   <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 6 }}>
-                    joined {formatRelative(r.joinedAt)}
+                    {t("ref.recent.joined", { when: formatRelative(r.joinedAt) })}
                   </span>
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 900, color: accent }}>
@@ -424,14 +421,12 @@ export function ReferralsPanel({
             lineHeight: 1.5,
           }}
         >
-          No joiners yet. Share the code with friends — each joiner earns you{" "}
-          <strong>{REFERRAL_BONUS_AEC} AEC</strong> once they top up.
+          {t("ref.empty", { bonus: REFERRAL_BONUS_AEC })}
         </div>
       )}
 
       <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        {TIER_DESCRIPTION[stats.tier]} Referral credits land automatically via{" "}
-        <code>POST /api/referrals/claim</code> once the endpoint ships.
+        {TIER_DESCRIPTION[stats.tier]}{t("ref.footer.suffix")}
       </div>
     </section>
   );

@@ -60,6 +60,23 @@ export const SOURCE_DESCRIPTION: Record<EarningSource, string> = {
   planet: "Progress bonuses from Planet Engine",
 };
 
+// i18n keys parallel to SOURCE_LABEL / SOURCE_DESCRIPTION.
+// UI components should use these with the global `t()` helper; the raw English
+// maps above remain for snapshot/export logic that wants stable, locale-free strings.
+export const SOURCE_LABEL_KEY: Record<EarningSource, string> = {
+  banking: "ecosystem.source.banking.label",
+  qright: "ecosystem.source.qright.label",
+  chess: "ecosystem.source.chess.label",
+  planet: "ecosystem.source.planet.label",
+};
+
+export const SOURCE_DESCRIPTION_KEY: Record<EarningSource, string> = {
+  banking: "ecosystem.source.banking.description",
+  qright: "ecosystem.source.qright.description",
+  chess: "ecosystem.source.chess.description",
+  planet: "ecosystem.source.planet.description",
+};
+
 function dateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }

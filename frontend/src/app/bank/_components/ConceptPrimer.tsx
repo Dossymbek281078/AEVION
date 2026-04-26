@@ -1,77 +1,58 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-// In-page primer: the single block that answers "what is this, and why".
-// Surfaces above the product on first visit; dismissable (per-device).
-// Keeps AEVION Bank approachable even when the feature surface is deep —
-// new users see a clear value proposition and an ecosystem map before they
-// scroll into Copilot / Constellation / Autopilot.
+import { useI18n } from "@/lib/i18n";
 
 const DISMISS_KEY = "aevion_bank_primer_dismissed_v1";
 
 type Audience = "user" | "creator" | "investor";
 
-const AUDIENCE_CONTENT: Record<
-  Audience,
-  { label: string; headline: string; bullets: string[]; accent: string }
-> = {
+const AUDIENCE_META: Record<Audience, { labelKey: string; headlineKey: string; bulletKeys: string[]; accent: string }> = {
   user: {
-    label: "If you're here to save",
-    headline: "A wallet that actively helps you reach goals",
-    bullets: [
-      "AI Copilot watches 8 signals on-device and nudges you before you overspend.",
-      "Autopilot can move small amounts into goals behind schedule — with hard daily caps.",
-      "Panic Freeze locks outgoing transfers in one tap, with a 5-minute sober window.",
-    ],
+    labelKey: "primer.audience.user",
+    headlineKey: "primer.user.headline",
+    bulletKeys: ["primer.user.b1", "primer.user.b2", "primer.user.b3"],
     accent: "#0ea5e9",
   },
   creator: {
-    label: "If you make things",
-    headline: "Your reputation becomes your credit",
-    bullets: [
-      "Trust Score aggregates 8 factors across QRight (IP), CyberChess, Planet, and your banking activity.",
-      "Royalty streams from QRight flow straight into your wallet — share goals via holographic QR.",
-      "Achievements unlock tiers; tiers unlock advance lines and perks across 27 AEVION modules.",
-    ],
+    labelKey: "primer.audience.creator",
+    headlineKey: "primer.creator.headline",
+    bulletKeys: ["primer.creator.b1", "primer.creator.b2", "primer.creator.b3"],
     accent: "#d97706",
   },
   investor: {
-    label: "If you're evaluating",
-    headline: "Capital-light fintech with an ecosystem moat",
-    bullets: [
-      "Client-side sovereignty: goals, recurring, gifts all live on-device. Zero vendor lock-in.",
-      "Regulator-ready by design: QSign HMAC audit, Shamir SSS 2-of-3, no lending licence needed for v1.",
-      "Trust Graph is a compounding moat: each of 27 AEVION products adds a Trust factor.",
-    ],
+    labelKey: "primer.audience.investor",
+    headlineKey: "primer.investor.headline",
+    bulletKeys: ["primer.investor.b1", "primer.investor.b2", "primer.investor.b3"],
     accent: "#7c3aed",
   },
 };
 
-type FlowNode = { id: string; label: string; icon: string; x: number; y: number; color: string };
-type FlowEdge = { from: string; to: string; label?: string };
+type FlowNode = { id: string; labelKey: string; icon: string; x: number; y: number; color: string };
+type FlowEdge = { from: string; to: string; labelKey?: string };
 
 const NODES: FlowNode[] = [
-  { id: "user", label: "You", icon: "◉", x: 300, y: 165, color: "#f1f5f9" },
-  { id: "bank", label: "Bank", icon: "₿", x: 300, y: 30, color: "#0ea5e9" },
-  { id: "qright", label: "QRight", icon: "♪", x: 500, y: 70, color: "#d97706" },
-  { id: "qsign", label: "QSign", icon: "✎", x: 560, y: 220, color: "#059669" },
-  { id: "chess", label: "CyberChess", icon: "♞", x: 420, y: 310, color: "#7c3aed" },
-  { id: "planet", label: "Planet", icon: "◈", x: 180, y: 310, color: "#10b981" },
-  { id: "qcore", label: "QCoreAI", icon: "✦", x: 40, y: 220, color: "#0369a1" },
-  { id: "qright2", label: "", icon: "", x: 100, y: 70, color: "#d97706" },
+  { id: "user", labelKey: "primer.flow.user", icon: "◉", x: 300, y: 165, color: "#f1f5f9" },
+  { id: "bank", labelKey: "primer.flow.bank", icon: "₿", x: 300, y: 30, color: "#0ea5e9" },
+  { id: "qright", labelKey: "primer.flow.qright", icon: "♪", x: 500, y: 70, color: "#d97706" },
+  { id: "qsign", labelKey: "primer.flow.qsign", icon: "✎", x: 560, y: 220, color: "#059669" },
+  { id: "chess", labelKey: "primer.flow.chess", icon: "♞", x: 420, y: 310, color: "#7c3aed" },
+  { id: "planet", labelKey: "primer.flow.planet", icon: "◈", x: 180, y: 310, color: "#10b981" },
+  { id: "qcore", labelKey: "primer.flow.qcore", icon: "✦", x: 40, y: 220, color: "#0369a1" },
+  { id: "qright2", labelKey: "", icon: "", x: 100, y: 70, color: "#d97706" },
 ];
 
 const EDGES: FlowEdge[] = [
-  { from: "user", to: "bank", label: "wallet" },
-  { from: "user", to: "qright", label: "IP streams" },
-  { from: "user", to: "qsign", label: "audit" },
-  { from: "user", to: "chess", label: "prizes" },
-  { from: "user", to: "planet", label: "bonuses" },
-  { from: "user", to: "qcore", label: "AI" },
+  { from: "user", to: "bank", labelKey: "primer.flow.edge.wallet" },
+  { from: "user", to: "qright", labelKey: "primer.flow.edge.ip" },
+  { from: "user", to: "qsign", labelKey: "primer.flow.edge.audit" },
+  { from: "user", to: "chess", labelKey: "primer.flow.edge.prizes" },
+  { from: "user", to: "planet", labelKey: "primer.flow.edge.bonuses" },
+  { from: "user", to: "qcore", labelKey: "primer.flow.edge.ai" },
 ];
 
 export function ConceptPrimer() {
+  const { t } = useI18n();
   const [dismissed, setDismissed] = useState<boolean>(false);
   const [audience, setAudience] = useState<Audience>("user");
   const [loaded, setLoaded] = useState<boolean>(false);
@@ -122,7 +103,7 @@ export function ConceptPrimer() {
           gap: 8,
         }}
       >
-        <span>Concept primer hidden.</span>
+        <span>{t("primer.hidden")}</span>
         <button
           type="button"
           onClick={restore}
@@ -135,13 +116,13 @@ export function ConceptPrimer() {
             cursor: "pointer",
           }}
         >
-          Show again
+          {t("primer.showAgain")}
         </button>
       </div>
     );
   }
 
-  const content = AUDIENCE_CONTENT[audience];
+  const meta = AUDIENCE_META[audience];
 
   return (
     <section
@@ -160,7 +141,7 @@ export function ConceptPrimer() {
       <button
         type="button"
         onClick={dismiss}
-        aria-label="Hide concept primer"
+        aria-label={t("primer.dismissLabel")}
         style={{
           position: "absolute",
           top: 10,
@@ -198,7 +179,7 @@ export function ConceptPrimer() {
               marginBottom: 4,
             }}
           >
-            AEVION Bank · Concept
+            {t("primer.eyebrow")}
           </div>
           <h2
             id="primer-heading"
@@ -210,9 +191,9 @@ export function ConceptPrimer() {
               lineHeight: 1.15,
             }}
           >
-            The bank that earns <em style={{ color: "#0ea5e9", fontStyle: "normal" }}>with</em> you —{" "}
-            <br />
-            not from you.
+            {t("primer.title.a")}{" "}
+            <em style={{ color: "#0ea5e9", fontStyle: "normal" }}>{t("primer.title.b")}</em>{" "}
+            {t("primer.title.c")}
           </h2>
           <p
             style={{
@@ -223,11 +204,7 @@ export function ConceptPrimer() {
               maxWidth: 520,
             }}
           >
-            AEVION Bank is the financial layer of a <strong>27-product ecosystem</strong>. Your
-            wallet sees royalties from your IP (QRight), chess prize money (CyberChess), Planet
-            bonuses, and peer transfers — all feeding one <strong>Trust Score</strong> that
-            unlocks advances, tiers, and perks. A private AI Copilot watches it for you, and an
-            Autopilot moves small amounts toward your goals — opt-in, capped, audited.
+            {t("primer.body")}
           </p>
 
           <div
@@ -235,8 +212,8 @@ export function ConceptPrimer() {
             aria-label="Audience"
             style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}
           >
-            {(Object.keys(AUDIENCE_CONTENT) as Audience[]).map((key) => {
-              const c = AUDIENCE_CONTENT[key];
+            {(Object.keys(AUDIENCE_META) as Audience[]).map((key) => {
+              const m = AUDIENCE_META[key];
               const active = audience === key;
               return (
                 <button
@@ -248,8 +225,8 @@ export function ConceptPrimer() {
                   style={{
                     padding: "6px 12px",
                     borderRadius: 999,
-                    border: active ? `1px solid ${c.accent}` : "1px solid rgba(15,23,42,0.12)",
-                    background: active ? c.accent : "#fff",
+                    border: active ? `1px solid ${m.accent}` : "1px solid rgba(15,23,42,0.12)",
+                    background: active ? m.accent : "#fff",
                     color: active ? "#fff" : "#334155",
                     fontSize: 11,
                     fontWeight: 800,
@@ -257,7 +234,7 @@ export function ConceptPrimer() {
                     transition: "background 160ms ease, color 160ms ease",
                   }}
                 >
-                  {c.label}
+                  {t(m.labelKey)}
                 </button>
               );
             })}
@@ -268,23 +245,23 @@ export function ConceptPrimer() {
               background: "#fff",
               borderRadius: 12,
               padding: "12px 14px",
-              border: `1px solid ${content.accent}33`,
+              border: `1px solid ${meta.accent}33`,
             }}
           >
             <div
               style={{
                 fontSize: 13,
                 fontWeight: 900,
-                color: content.accent,
+                color: meta.accent,
                 marginBottom: 6,
               }}
             >
-              {content.headline}
+              {t(meta.headlineKey)}
             </div>
             <ul style={{ margin: 0, paddingLeft: 16, display: "grid", gap: 4 }}>
-              {content.bullets.map((b, i) => (
+              {meta.bulletKeys.map((bKey, i) => (
                 <li key={i} style={{ fontSize: 12, color: "#334155", lineHeight: 1.5 }}>
-                  {b}
+                  {t(bKey)}
                 </li>
               ))}
             </ul>
@@ -302,7 +279,7 @@ export function ConceptPrimer() {
             }}
           >
             <span>
-              Try{" "}
+              {t("primer.try.cmdk")}{" "}
               <kbd
                 style={{
                   padding: "1px 6px",
@@ -313,21 +290,22 @@ export function ConceptPrimer() {
                 }}
               >
                 ⌘K
-              </kbd>
-              {" "}to jump anywhere
+              </kbd>{" "}
+              {t("primer.try.cmdkAfter")}
             </span>
-            <span>· Copilot lives bottom-right</span>
-            <span>· Scroll ↓ to see your constellation</span>
+            <span>{t("primer.try.copilot")}</span>
+            <span>{t("primer.try.scroll")}</span>
           </div>
         </div>
 
-        <FlowDiagram activeAudience={audience} accent={content.accent} />
+        <FlowDiagram activeAudience={audience} accent={meta.accent} />
       </div>
     </section>
   );
 }
 
 function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; accent: string }) {
+  const { t } = useI18n();
   const [prm, setPrm] = useState<boolean>(false);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
@@ -338,7 +316,6 @@ function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; acc
     return () => mq.removeEventListener?.("change", update);
   }, []);
 
-  // Highlight relevant edges per audience to reinforce the narrative.
   const highlighted: Record<Audience, string[]> = {
     user: ["bank", "qcore"],
     creator: ["qright", "qsign", "chess"],
@@ -369,10 +346,9 @@ function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; acc
         viewBox="0 0 600 370"
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label="AEVION ecosystem around your wallet"
+        aria-label={t("primer.flow.label")}
         style={{ width: "100%", height: "auto", display: "block" }}
       >
-        {/* Edges */}
         {EDGES.map((e) => {
           const from = NODES.find((n) => n.id === e.from);
           const to = NODES.find((n) => n.id === e.to);
@@ -397,7 +373,7 @@ function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; acc
                       }
                 }
               />
-              {e.label ? (
+              {e.labelKey ? (
                 <text
                   x={(from.x + to.x) / 2}
                   y={(from.y + to.y) / 2 - 4}
@@ -410,15 +386,14 @@ function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; acc
                     textTransform: "uppercase",
                   }}
                 >
-                  {e.label}
+                  {t(e.labelKey)}
                 </text>
               ) : null}
             </g>
           );
         })}
 
-        {/* Nodes */}
-        {NODES.filter((n) => n.label).map((n) => {
+        {NODES.filter((n) => n.labelKey).map((n) => {
           const hot = hotNodes.has(n.id) || n.id === "user";
           const isUser = n.id === "user";
           const r = isUser ? 28 : 22;
@@ -463,7 +438,7 @@ function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; acc
                   letterSpacing: "0.02em",
                 }}
               >
-                {n.label}
+                {n.labelKey ? t(n.labelKey) : ""}
               </text>
             </g>
           );
@@ -484,7 +459,7 @@ function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; acc
           marginTop: 4,
         }}
       >
-        You are the core. The ecosystem flows around you.
+        {t("primer.flow.caption")}
       </div>
     </div>
   );

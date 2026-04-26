@@ -84,29 +84,36 @@ export function saveRecurring(items: Recurring[]): void {
   }
 }
 
-export function formatCountdown(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return "—";
-  const diff = t - Date.now();
-  if (diff <= 0) return "due now";
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+export function formatCountdown(iso: string, tr?: Translator): string {
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "—";
+  const diff = ms - Date.now();
+  if (diff <= 0) return tr ? tr("rec.countdown.due") : "due now";
   const mins = Math.floor(diff / 60_000);
   const hours = Math.floor(mins / 60);
   const days = Math.floor(hours / 24);
-  if (days > 0) return `in ${days}d ${hours % 24}h`;
-  if (hours > 0) return `in ${hours}h ${mins % 60}m`;
-  return `in ${Math.max(1, mins)}m`;
+  if (days > 0) {
+    return tr ? tr("rec.countdown.dh", { days, hours: hours % 24 }) : `in ${days}d ${hours % 24}h`;
+  }
+  if (hours > 0) {
+    return tr ? tr("rec.countdown.hm", { hours, minutes: mins % 60 }) : `in ${hours}h ${mins % 60}m`;
+  }
+  const m = Math.max(1, mins);
+  return tr ? tr("rec.countdown.m", { minutes: m }) : `in ${m}m`;
 }
 
-export function formatPast(iso: string | null): string {
-  if (!iso) return "never run";
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return "—";
-  const diff = Date.now() - t;
+export function formatPast(iso: string | null, tr?: Translator): string {
+  if (!iso) return tr ? tr("rec.past.never") : "never run";
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "—";
+  const diff = Date.now() - ms;
   const mins = Math.floor(diff / 60_000);
   const hours = Math.floor(mins / 60);
   const days = Math.floor(hours / 24);
-  if (days > 0) return `ran ${days}d ago`;
-  if (hours > 0) return `ran ${hours}h ago`;
-  if (mins > 0) return `ran ${mins}m ago`;
-  return "ran just now";
+  if (days > 0) return tr ? tr("rec.past.d", { days }) : `ran ${days}d ago`;
+  if (hours > 0) return tr ? tr("rec.past.h", { hours }) : `ran ${hours}h ago`;
+  if (mins > 0) return tr ? tr("rec.past.m", { minutes: mins }) : `ran ${mins}m ago`;
+  return tr ? tr("rec.past.justNow") : "ran just now";
 }

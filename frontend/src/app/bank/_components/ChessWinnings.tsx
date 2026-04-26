@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   formatCountdown,
-  FORMAT_LABEL,
-  FORMAT_TIME,
+  FORMAT_LABEL_KEY,
+  FORMAT_TIME_KEY,
   type TournamentResult,
 } from "../_lib/chess";
 import { useCurrency } from "../_lib/CurrencyContext";
@@ -28,6 +29,7 @@ function placeBadge(place: number) {
 }
 
 function ResultRow({ r }: { r: TournamentResult }) {
+  const { t } = useI18n();
   const badge = placeBadge(r.place);
   const deltaColor = r.ratingDelta >= 0 ? "#059669" : "#dc2626";
   const { code } = useCurrency();
@@ -44,7 +46,7 @@ function ResultRow({ r }: { r: TournamentResult }) {
       }}
     >
       <span
-        aria-label={`Finished ${badge.label} of ${r.totalPlayers}`}
+        aria-label={t("cw.place.aria", { label: badge.label, total: r.totalPlayers })}
         style={{
           width: 34,
           height: 34,
@@ -80,8 +82,7 @@ function ResultRow({ r }: { r: TournamentResult }) {
           {r.name}
         </div>
         <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-          {FORMAT_LABEL[r.format]} {FORMAT_TIME[r.format]} · {r.totalPlayers} players ·{" "}
-          {formatRelative(r.finishedAt)}
+          {t("cw.result.subtitle", { format: t(FORMAT_LABEL_KEY[r.format]), time: t(FORMAT_TIME_KEY[r.format]), players: r.totalPlayers, when: formatRelative(r.finishedAt) })}
         </div>
       </div>
       <div style={{ textAlign: "right" as const, flexShrink: 0 }}>
@@ -105,6 +106,7 @@ function ResultRow({ r }: { r: TournamentResult }) {
 }
 
 export function ChessWinnings() {
+  const { t } = useI18n();
   const { chess: data } = useEcosystemData();
   const { code } = useCurrency();
 
@@ -132,7 +134,7 @@ export function ChessWinnings() {
           background: "linear-gradient(180deg, rgba(217,119,6,0.03) 0%, #ffffff 100%)",
         }}
       >
-        <SkeletonBlock label="Loading CyberChess tournament history" />
+        <SkeletonBlock label={t("cw.loading")} />
       </section>
     );
   }
@@ -187,7 +189,7 @@ export function ChessWinnings() {
             id="chess-winnings-heading"
             style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#78350f" }}
           >
-            CyberChess winnings
+            {t("cw.title")}
           </h2>
         </div>
         <div
@@ -204,8 +206,8 @@ export function ChessWinnings() {
             color: "#92400e",
           }}
         >
-          Rating <strong style={{ fontSize: 13 }}>{data.currentRating}</strong>
-          <span style={{ color: "#b45309", opacity: 0.7 }}>· peak {data.peakRating}</span>
+          {t("cw.rating.label")} <strong style={{ fontSize: 13 }}>{data.currentRating}</strong>
+          <span style={{ color: "#b45309", opacity: 0.7 }}>{t("cw.rating.peak", { n: data.peakRating })}</span>
         </div>
       </div>
 
@@ -226,12 +228,12 @@ export function ChessWinnings() {
           }}
         >
           <div style={{ fontSize: 10, fontWeight: 700, color: "#78350f", letterSpacing: "0.06em" }}>
-            TOTAL WON
+            {t("cw.tile.totalWon")}
           </div>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#d97706", letterSpacing: "-0.02em" }}>
             {formatCurrency(data.totalWon, code, { decimals: 0 })}
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>all tournaments</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t("cw.tile.totalWon.hint")}</div>
         </div>
         <div
           style={{
@@ -242,12 +244,12 @@ export function ChessWinnings() {
           }}
         >
           <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-            WINS
+            {t("cw.tile.wins")}
           </div>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
             {data.wins} <span style={{ fontSize: 11, color: "#94a3b8" }}>/ {data.tournamentsPlayed}</span>
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{winRate}% win rate</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t("cw.tile.wins.hint", { n: winRate })}</div>
         </div>
         <div
           style={{
@@ -258,12 +260,12 @@ export function ChessWinnings() {
           }}
         >
           <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-            TOP 3 FINISHES
+            {t("cw.tile.top3")}
           </div>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
             {data.topThreeFinishes}
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{top3Rate}% of tournaments</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t("cw.tile.top3.hint", { n: top3Rate })}</div>
         </div>
         <div
           style={{
@@ -274,12 +276,11 @@ export function ChessWinnings() {
           }}
         >
           <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
-            RATING TREND
+            {t("cw.tile.trend")}
           </div>
           <Sparkline data={data.ratingSeries} width={140} height={28} color="#d97706" />
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            {data.ratingSeries.length} games
-            {peakPos >= 0 ? ` · peak @${peakPos + 1}` : ""}
+            {t("cw.tile.trend.hint", { n: data.ratingSeries.length })}{peakPos >= 0 ? t("cw.tile.trend.peak", { n: peakPos + 1 }) : ""}
           </div>
         </div>
       </div>
@@ -302,10 +303,10 @@ export function ChessWinnings() {
               marginBottom: 8,
             }}
           >
-            Recent results
+            {t("cw.recent")}
           </div>
           {data.results.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>No tournaments yet.</div>
+            <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>{t("cw.recent.empty")}</div>
           ) : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
               {data.results.slice(0, 5).map((r) => (
@@ -326,7 +327,7 @@ export function ChessWinnings() {
               marginBottom: 8,
             }}
           >
-            Upcoming tournaments
+            {t("cw.upcoming")}
           </div>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
             {data.upcoming.map((u) => (
@@ -362,8 +363,7 @@ export function ChessWinnings() {
                       {u.name}
                     </div>
                     <div style={{ fontSize: 11, color: "#b45309", marginTop: 1 }}>
-                      {FORMAT_LABEL[u.format]} {FORMAT_TIME[u.format]} · {u.players} signed up ·{" "}
-                      {formatCountdown(u.startsAt)}
+                      {t("cw.upcoming.subtitle", { format: t(FORMAT_LABEL_KEY[u.format]), time: t(FORMAT_TIME_KEY[u.format]), players: u.players, countdown: formatCountdown(u.startsAt, t) })}
                     </div>
                   </div>
                   <div
@@ -374,7 +374,7 @@ export function ChessWinnings() {
                       whiteSpace: "nowrap" as const,
                     }}
                   >
-                    {formatCurrency(u.prizePool, code, { decimals: 0 })} pool
+                    {t("cw.pool", { amt: formatCurrency(u.prizePool, code, { decimals: 0 }) })}
                   </div>
                 </div>
               </li>
@@ -394,7 +394,7 @@ export function ChessWinnings() {
         }}
       >
         <div style={{ fontSize: 11, color: "#94a3b8" }}>
-          Prizes auto-deposit to your wallet when a tournament finalises.
+          {t("cw.footer")}
         </div>
         <Link
           href="/cyberchess"
@@ -409,7 +409,7 @@ export function ChessWinnings() {
             whiteSpace: "nowrap" as const,
           }}
         >
-          Play now →
+          {t("cw.cta")}
         </Link>
       </div>
     </section>

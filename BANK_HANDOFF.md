@@ -1,4 +1,4 @@
-# AEVION Bank — Session Handoff (last updated 2026-04-23)
+# AEVION Bank — Session Handoff (last updated 2026-04-26 · Phase 4)
 
 Snapshot to pick up work on the bank track. Read this first next session, then [`CLAUDE.md`](./CLAUDE.md) for session rules.
 
@@ -8,11 +8,101 @@ Snapshot to pick up work on the bank track. Read this first next session, then [
 
 - **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer` — не отдельное приложение, дерево совпадает со всем `aevion-core`).
 - **Ветка:** `bank-payment-layer`.
-- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `171c766`.
-- **Last commit:** `171c766 feat(bank): accessibility polish — skip link, focus ring, scroll margin`.
-- **Ahead of `main`:** 43 commits (1 modular rewrite + 32 features + 5 refactors + 5 polish/fix).
+- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `738241f`.
+- **Last commit (local, uncommitted):** working tree dirty — full i18n sweep + tab shell + tooltips + backend wiring (see "Session 2026-04-26" below).
+- **Ahead of `main`:** 50 commits (pushed) + uncommitted i18n/UX/backend work in progress.
 - **PR URL (unmerged):** https://github.com/Dossymbek281078/AEVION/pull/new/bank-payment-layer
-- **Build:** green. `npm run verify` (from `aevion-core` root) passes.
+- **Build:** green. `tsc --noEmit` exits 0; `next build` produces /bank static.
+
+---
+
+## Session 2026-04-26 — i18n + tab shell + tooltips + backend wiring
+
+Multi-stage push to make Bank UI a working, multilingual product. All changes uncommitted (await user push).
+
+### What shipped
+
+**1. Multilingual (RU / EN / KZ)** — extended global `frontend/src/lib/i18n.tsx`:
+- Added `kk` (Kazakh) as third language; auto-detect browser locale; persist choice
+- Enhanced `t()` with `{var}` interpolation
+- 3-button `LangSwitch` (used in `SiteHeader` + new hero-themed `LanguageSwitcher`)
+- ~700+ translation keys across all bank components
+
+**2. Tab shell** — new `_components/SectionTabs.tsx`:
+- 5 logical tabs: Overview / Earn / Send & Pay / Grow / Security
+- Sticky nav with blur backdrop, persists to localStorage
+- 36-section flat scroll → ordered, navigable structure
+
+**3. Deep translation passes** — 6 passes covering ~36 components:
+- Pass A: WalletSummary, TopupForm, SendForm
+- Pass B: BalanceProjection, TransactionList, RecurringPayments
+- Pass C: TrustScoreCard, TierProgression, SavingsGoals, SalaryAdvance, ReferralsPanel, PeerStanding, AchievementsPanel
+- Pass D: BiometricCard, AuditPanel, UnifiedAuditFeed, DeviceManagement, ActivityTimeline, SnapshotExport
+- Pass E: TotalEarningsDashboard, WealthForecast, RoyaltyStream, ChessWinnings, SpendingInsights, AutopilotStatement, WealthConstellation, EcosystemPulse
+- Pass F: SplitBills, SocialCircles, GiftMode, AdvisorChat, FinancialCopilot, CommandPalette, HelpMenu, MobileTabBar, OnboardingTour, DemoModeBanner, AccountIdCard, PaymentRequestPanel
+- Hero, ConceptPrimer (with SVG flow diagram), all auth/provision/loading states
+- Method: I added i18n keys per pass, then delegated mechanical t()-replacement to parallel general-purpose agents (4–8 in parallel per pass) — finished in hours instead of days
+
+**4. Phase 2: hover tooltips for key metrics** — new `_components/InfoTooltip.tsx`:
+- CSS-only positional tooltip with `?` icon
+- Applied to: balance, net flow, ops, last activity, Trust Score, advance limit, earning pace, run rate, peer standing, total earnings, spending, autopilot moved
+- 12 explanation keys translated to RU/KZ/EN
+- StatCard / StatTile `label` widened to `ReactNode` to accept tooltip wrappers
+
+**5. Phase 3: backend wiring (frontend-side)** — `_lib/api.ts` + new `_components/BackendStatus.tsx`:
+- All `/api/qtrade/*` calls now send `Authorization: Bearer <token>` header
+- `request()` helper distinguishes network errors from HTTP errors (`ApiError` class with `kind: "network" | "http"`)
+- `lookupAccountByEmail()` resolves email → accountId via `/api/qtrade/accounts` lookup
+- SendForm now accepts both `acc_…` IDs AND emails
+- `pingBackend()` health check → red banner appears if backend unreachable
+
+### Phase 4: Domain-label i18n refactor (DONE this session)
+
+Domain libs that produced English strings → now lib-layer is i18n-aware.
+
+**Strategy:**
+- Static label maps: added parallel `*_KEY` map exposing i18n keys; consumers call `t(MAP_KEY[k])`. Original EN maps kept exported for snapshot/SVG-export code that wants stable English.
+- Functions returning formatted strings with vars (`computeEcosystemTrustScore`, `topPercentLabel`, `formatCountdown`, `formatPast`, `forecastGoal`): accept optional `t` param.
+- All ~270 new keys added in 3 languages (EN / RU / KK) into `BANK_EXTRA_*` blocks of `frontend/src/lib/i18n.tsx`.
+
+**Libs refactored:**
+- `_lib/trust.ts` — `tierLabelKey`, `tierDescriptionKey`; `computeEcosystemTrustScore(input, t)` produces all factor labels/hints/milestones via t()
+- `_lib/tierPerks.ts` — `CATEGORY_LABEL_KEY`; `Perk.labelKey` / `Perk.hintKey`
+- `_lib/ecosystem.ts` — `SOURCE_LABEL_KEY`, `SOURCE_DESCRIPTION_KEY`
+- `_lib/royalties.ts` — `KIND_LABEL_KEY`
+- `_lib/spending.ts` — `CATEGORY_LABEL_KEY`, `CATEGORY_DESCRIPTION_KEY`, `PERIOD_LABEL_KEY`
+- `_lib/achievements.ts` — `CATEGORY_LABEL_KEY`; per-achievement `labelKey` / `descriptionKey` / `progressLabelKey` / `progressLabelVars`
+- `_lib/peerRanks.ts` — `DIMENSION_LABEL_KEY`; `PeerRank.labelKey` / `userValueLabelKey` / `peerMedianLabelKey`; `topPercentLabel(p, t?)`
+- `_lib/anomaly.ts` — `ANOMALY_LABEL_KEY`; `Anomaly.messageKey` / `messageVars`
+- `_lib/savings.ts` — `ICON_LABEL_KEY`; `forecastGoal(g, t?)` returns translated `hint`
+- `_lib/chess.ts` — `FORMAT_LABEL_KEY`, `FORMAT_TIME_KEY`; `formatCountdown(iso, t?)`
+- `_lib/forecast.ts` — `Scenario.labelKey` / `descriptionKey`
+- `_lib/devices.ts` — `BROWSER_LABEL_KEY` + `OS_LABEL_KEY` + `localizedBrowser(name, t?)` / `localizedOS(name, t?)` (storage keeps raw EN to survive lang switches)
+- `_lib/recurring.ts` — `formatCountdown(iso, t?)` and `formatPast(iso, t?)` (in addition to existing `period.*` keys)
+
+**Components updated to consume the new keys:** AchievementsPanel, PeerStanding, ActivityTimeline, SavingsGoals, ChessWinnings, EcosystemPulse, RecurringPayments, WealthForecast, DeviceManagement, TrustScoreCard, TierProgression, SalaryAdvance, FinancialCopilot, AdvisorChat, SnapshotExport, RoyaltyStream, SpendingInsights, TotalEarningsDashboard.
+
+**Build:** `tsc --noEmit` exit 0; `next build` produces /bank static.
+
+**Method:** dispatched 3 parallel general-purpose agents (one per group of libs), aggregated translation JSON per agent into staging file, then merged into i18n.tsx in 3 inserts (one per language). Race-conditions on shared consumer files (AdvisorChat, FinancialCopilot, SnapshotExport, WealthForecast) resolved automatically by Edit tool's read-before-write contract.
+
+**Backward-compat:** Original EN `*_LABEL` / `Achievement.label` / `PeerRank.label` / `Anomaly.message` / `Scenario.label` exports preserved — `_lib/snapshot.ts` keeps generating English share-cards regardless of UI lang.
+
+### Files added this session
+
+- `_lib/api.ts` (rewritten with auth + email resolver + ApiError)
+- `_components/SectionTabs.tsx`
+- `_components/LanguageSwitcher.tsx` (hero-styled)
+- `_components/InfoTooltip.tsx`
+- `_components/BackendStatus.tsx`
+
+### Files modified this session
+
+- `frontend/src/lib/i18n.tsx` — kk language + ~700+ bank keys + interpolation + 3-button LangSwitch
+- `frontend/src/app/bank/page.tsx` — tab restructure + LanguageSwitcher in Hero + BackendStatus
+- ~36 components in `_components/` — useI18n applied, hardcoded strings → t() calls
+- `_components/primitives.tsx` — StatCard label widened to ReactNode
+- ~12 components got hover tooltips on key metric labels
 
 ## Shipped feature list (chronological)
 

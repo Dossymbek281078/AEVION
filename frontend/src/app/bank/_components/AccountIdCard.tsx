@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { QRCodeView } from "./QRCode";
+import { useI18n } from "@/lib/i18n";
 
 export function AccountIdCard({
   accountId,
@@ -10,6 +11,7 @@ export function AccountIdCard({
   accountId: string;
   onCopy: () => void;
 }) {
+  const { t } = useI18n();
   const [showQR, setShowQR] = useState<boolean>(false);
 
   return (
@@ -32,7 +34,7 @@ export function AccountIdCard({
           gap: 8,
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 16 }}>Your account ID</div>
+        <div style={{ fontWeight: 900, fontSize: 16 }}>{t("accid.title")}</div>
         <button
           onClick={() => setShowQR((v) => !v)}
           style={{
@@ -46,7 +48,7 @@ export function AccountIdCard({
             cursor: "pointer",
           }}
         >
-          {showQR ? "Hide QR" : "Show QR"}
+          {showQR ? t("accid.btn.hideQR") : t("accid.btn.showQR")}
         </button>
       </div>
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -54,7 +56,7 @@ export function AccountIdCard({
           <div style={{ flexShrink: 0 }}>
             <QRCodeView value={accountId} size={160} />
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "center" as const }}>
-              Scan to get your ID
+              {t("accid.qr.scanHint")}
             </div>
           </div>
         ) : null}
@@ -90,12 +92,11 @@ export function AccountIdCard({
                 cursor: "pointer",
               }}
             >
-              Copy
+              {t("accid.btn.copy")}
             </button>
           </div>
           <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>
-            Share this ID with other creators to receive AEC. Or generate a payment request link
-            below — it auto-fills amount and memo for them.
+            {t("accid.footer")}
           </div>
         </div>
       </div>

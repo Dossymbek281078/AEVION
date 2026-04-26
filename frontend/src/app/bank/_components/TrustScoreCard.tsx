@@ -1,16 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
+import { useI18n } from "@/lib/i18n";
 import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import {
   computeEcosystemTrustScore,
   tierColor,
-  tierDescription,
-  tierLabel,
+  tierDescriptionKey,
+  tierLabelKey,
   type TrustTier,
 } from "../_lib/trust";
 import type { Account, Operation } from "../_lib/types";
 import { RadarChart } from "./charts";
+import { InfoTooltip } from "./InfoTooltip";
 
 export function TrustScoreCard({
   account,
@@ -19,11 +21,12 @@ export function TrustScoreCard({
   account: Account;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem } = useEcosystemData();
 
   const trust = useMemo(
-    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }),
-    [account, operations, royalty, chess, ecosystem],
+    () => computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }, t),
+    [account, operations, royalty, chess, ecosystem, t],
   );
 
   const color = tierColor[trust.tier];
@@ -64,7 +67,7 @@ export function TrustScoreCard({
               }))}
               size={220}
               color={color}
-              ariaLabel={`Ecosystem Trust radar, overall score ${trust.score} of 100`}
+              ariaLabel={t("trust.radar.aria", { score: trust.score })}
             />
             <div
               style={{
@@ -115,20 +118,22 @@ export function TrustScoreCard({
               marginBottom: 4,
             }}
           >
-            Ecosystem Trust Score · {tierLabel[trust.tier]}
+            <InfoTooltip text={t("tip.trustScore")} side="bottom">
+              <span>{t("trust.eyebrow", { tier: t(tierLabelKey[trust.tier]) })}</span>
+            </InfoTooltip>
           </div>
           <h2
             id="trust-heading"
             style={{ fontSize: 18, fontWeight: 900, margin: "0 0 6px", color: "#0f172a" }}
           >
-            Your reputation across AEVION
+            {t("trust.title")}
           </h2>
           <p style={{ fontSize: 13, color: "#334155", lineHeight: 1.6, margin: "0 0 12px" }}>
-            {tierDescription[trust.tier]}
+            {t(tierDescriptionKey[trust.tier])}
           </p>
           <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
-            <FactorGroup title="Banking" color="#0f766e" factors={bankingFactors} />
-            <FactorGroup title="Ecosystem" color={color} factors={ecoFactors} />
+            <FactorGroup title={t("trust.group.banking")} color="#0f766e" factors={bankingFactors} />
+            <FactorGroup title={t("trust.group.ecosystem")} color={color} factors={ecoFactors} />
           </div>
         </div>
       </div>
@@ -155,7 +160,7 @@ export function TrustScoreCard({
               marginBottom: 8,
             }}
           >
-            Fastest wins
+            {t("trust.fastestWins")}
           </div>
           <ul
             role="list"
@@ -223,6 +228,7 @@ function TierProgress({
   pointsToGo: number;
   color: string;
 }) {
+  const { t } = useI18n();
   const gateCurrent: Record<TrustTier, number> = { new: 0, growing: 20, trusted: 50, elite: 80 };
   const from = gateCurrent[currentTier];
   const to = gateCurrent[nextTier];
@@ -246,11 +252,13 @@ function TierProgress({
           marginBottom: 6,
         }}
       >
-        <span style={{ color: "#64748b", fontWeight: 700 }}>
-          {tierLabel[currentTier]} → <strong style={{ color }}>{tierLabel[nextTier]}</strong>
-        </span>
+        <InfoTooltip text={t("tip.trustTier")} side="bottom">
+          <span style={{ color: "#64748b", fontWeight: 700 }}>
+            {t(tierLabelKey[currentTier])} → <strong style={{ color }}>{t(tierLabelKey[nextTier])}</strong>
+          </span>
+        </InfoTooltip>
         <span style={{ color, fontWeight: 800 }}>
-          {pointsToGo} point{pointsToGo === 1 ? "" : "s"} to go
+          {t("trust.tierProgress.suffix", { n: pointsToGo })}
         </span>
       </div>
       <div
@@ -258,7 +266,7 @@ function TierProgress({
         aria-valuenow={Math.round(pct)}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`Progress to ${tierLabel[nextTier]}`}
+        aria-label={t("trust.tierProgress.aria", { tier: t(tierLabelKey[nextTier]) })}
         style={{
           height: 6,
           borderRadius: 999,

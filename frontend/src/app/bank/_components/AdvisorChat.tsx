@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import { loadAdvance } from "../_lib/advance";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { formatCurrency } from "../_lib/currency";
@@ -9,20 +10,20 @@ import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { lastActivityMs, stats30d } from "../_lib/format";
 import { loadGoals } from "../_lib/savings";
 import { categoriseOps } from "../_lib/spending";
-import { computeEcosystemTrustScore, tierLabel } from "../_lib/trust";
+import { computeEcosystemTrustScore, tierLabelKey } from "../_lib/trust";
 import type { Account, Me, Operation } from "../_lib/types";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
 type ChatRole = "system" | "user" | "assistant";
 type ChatMessage = { role: ChatRole; content: string };
 
-const SUGGESTIONS = [
-  "Should I take a salary advance?",
-  "How can I boost my Trust Score?",
-  "Am I saving enough for my goals?",
-  "What's my spending pattern telling me?",
-  "Any red flags in my recent activity?",
-];
+const SUGGESTION_KEYS = [
+  "advisor.suggestion.advance",
+  "advisor.suggestion.trust",
+  "advisor.suggestion.goals",
+  "advisor.suggestion.spending",
+  "advisor.suggestion.redflags",
+] as const;
 
 export function AdvisorChat({
   account,
@@ -36,6 +37,7 @@ export function AdvisorChat({
   notify: Notify;
 }) {
   const { royalty, chess, ecosystem } = useEcosystemData();
+  const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
@@ -48,7 +50,7 @@ export function AdvisorChat({
   }, [messages.length, busy]);
 
   const buildSystemPrompt = (): string => {
-    const trust = computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem });
+    const trust = computeEcosystemTrustScore({ account, operations, royalty, chess, ecosystem }, t);
     const advance = loadAdvance();
     const goals = loadGoals();
     const activeGoals = goals.filter((g) => !g.completedAt);
@@ -67,7 +69,7 @@ export function AdvisorChat({
       `User snapshot:`,
       `- Email: ${me.email}`,
       `- Wallet balance: ${account.balance.toFixed(2)} AEC`,
-      `- Trust Score: ${trust.score}/100 (tier: ${tierLabel[trust.tier]})`,
+      `- Trust Score: ${trust.score}/100 (tier: ${t(tierLabelKey[trust.tier])})`,
       `- 30-day net flow: ${s30.netFlow.toFixed(2)} AEC (in ${s30.incoming.toFixed(0)}, out ${s30.outgoing.toFixed(0)})`,
       `- 30-day operations count: ${s30.count}`,
       `- Last activity: ${last ? new Date(last).toISOString() : "never"}`,
@@ -109,16 +111,16 @@ export function AdvisorChat({
         body: JSON.stringify({ messages: payloadMessages }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || `AI request failed (${res.status})`);
+      if (!res.ok) throw new Error(data?.error || t("advisor.error.requestFailed", { status: res.status }));
       setProvider(typeof data?.provider === "string" ? data.provider : null);
-      const reply = typeof data?.reply === "string" ? data.reply : "(empty reply)";
+      const reply = typeof data?.reply === "string" ? data.reply : t("advisor.error.emptyReply");
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Advisor unavailable";
+      const msg = e instanceof Error ? e.message : t("advisor.error.unavailable");
       notify(msg, "error");
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `_Advisor unavailable: ${msg}_` },
+        { role: "assistant", content: t("advisor.error.unavailableMsg", { msg }) },
       ]);
     } finally {
       setBusy(false);
@@ -168,11 +170,11 @@ export function AdvisorChat({
           </span>
           <div>
             <h2 id="advisor-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-              AI advisor · powered by QCoreAI
+              {t("advisor.heading")}
             </h2>
             <div style={{ fontSize: 11, color: "#94a3b8" }}>
-              Knows your balance, Trust Score, advances, goals, royalties — all client-side context.
-              {provider ? ` · via ${provider}` : ""}
+              {t("advisor.subtitle")}
+              {provider ? t("advisor.via", { provider }) : ""}
             </div>
           </div>
         </div>
@@ -181,7 +183,7 @@ export function AdvisorChat({
             onClick={() => {
               setMessages([]);
               setProvider(null);
-              notify("Chat cleared", "info");
+              notify(t("advisor.toast.cleared"), "info");
             }}
             style={{
               padding: "6px 12px",
@@ -194,7 +196,7 @@ export function AdvisorChat({
               cursor: "pointer",
             }}
           >
-            Clear
+            {t("advisor.btn.clear")}
           </button>
         ) : null}
       </div>
@@ -203,7 +205,7 @@ export function AdvisorChat({
         ref={feedRef}
         role="log"
         aria-live="polite"
-        aria-label="Advisor conversation"
+        aria-label={t("advisor.aria.feed")}
         style={{
           padding: 12,
           borderRadius: 10,
@@ -226,8 +228,7 @@ export function AdvisorChat({
               textAlign: "center" as const,
             }}
           >
-            Ask anything about your money. I see your balance ({formatCurrency(account.balance, code)}),
-            Trust Score, goals, recent ops — and respond in plain language.
+            {t("advisor.empty", { balance: formatCurrency(account.balance, code) })}
           </div>
         ) : (
           visibleMessages.map((m, i) => (
@@ -235,7 +236,7 @@ export function AdvisorChat({
           ))
         )}
         {busy ? (
-          <Bubble role="assistant" content="thinking…" muted />
+          <Bubble role="assistant" content={t("advisor.thinking")} muted />
         ) : null}
       </div>
 
@@ -247,25 +248,28 @@ export function AdvisorChat({
           marginBottom: 8,
         }}
       >
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            onClick={() => void ask(s)}
-            disabled={busy}
-            style={{
-              padding: "5px 10px",
-              borderRadius: 999,
-              border: "1px solid rgba(124,58,237,0.25)",
-              background: "rgba(124,58,237,0.04)",
-              color: "#4c1d95",
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: busy ? "default" : "pointer",
-            }}
-          >
-            {s}
-          </button>
-        ))}
+        {SUGGESTION_KEYS.map((key) => {
+          const label = t(key);
+          return (
+            <button
+              key={key}
+              onClick={() => void ask(label)}
+              disabled={busy}
+              style={{
+                padding: "5px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(124,58,237,0.25)",
+                background: "rgba(124,58,237,0.04)",
+                color: "#4c1d95",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: busy ? "default" : "pointer",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       <div style={{ display: "flex", gap: 6 }}>
@@ -275,8 +279,8 @@ export function AdvisorChat({
           onKeyDown={(e) => {
             if (e.key === "Enter") void ask(input);
           }}
-          placeholder="Ask about your finances…"
-          aria-label="Message advisor"
+          placeholder={t("advisor.input.placeholder")}
+          aria-label={t("advisor.input.aria")}
           style={{
             flex: 1,
             padding: "10px 14px",
@@ -300,13 +304,12 @@ export function AdvisorChat({
             cursor: busy || !input.trim() ? "default" : "pointer",
           }}
         >
-          {busy ? "…" : "Ask"}
+          {busy ? t("advisor.btn.busy") : t("advisor.btn.ask")}
         </button>
       </div>
 
       <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        Context (balance, trust, goals, recent ops) is sent with each question. Backend selects
-        provider based on configured API keys (Claude / GPT / Gemini / DeepSeek / Grok).
+        {t("advisor.footer")}
       </div>
     </section>
   );

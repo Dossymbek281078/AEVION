@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   achievementStats,
   CATEGORY_COLOR,
-  CATEGORY_LABEL,
+  CATEGORY_LABEL_KEY,
   evaluateAchievements,
   TIER_COLOR,
   type Achievement,
@@ -17,13 +17,14 @@ import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { GOALS_EVENT, loadGoals } from "../_lib/savings";
 import { loadSignatures, SIGNATURE_EVENT } from "../_lib/signatures";
 import type { Account, Operation } from "../_lib/types";
+import { useI18n } from "@/lib/i18n";
 
-const FILTERS: Array<{ key: AchievementCategory | "all"; label: string }> = [
-  { key: "all", label: "All" },
-  { key: "banking", label: "Banking" },
-  { key: "creator", label: "Creator" },
-  { key: "ecosystem", label: "Ecosystem" },
-  { key: "security", label: "Security" },
+const FILTERS: Array<{ key: AchievementCategory | "all"; labelKey: string }> = [
+  { key: "all", labelKey: "ach.filter.all" },
+  { key: "banking", labelKey: "ach.filter.banking" },
+  { key: "creator", labelKey: "ach.filter.creator" },
+  { key: "ecosystem", labelKey: "ach.filter.ecosystem" },
+  { key: "security", labelKey: "ach.filter.security" },
 ];
 
 export function AchievementsPanel({
@@ -33,6 +34,7 @@ export function AchievementsPanel({
   account: Account;
   operations: Operation[];
 }) {
+  const { t } = useI18n();
   const { royalty, chess, ecosystem } = useEcosystemData();
   const { settings: biometric } = useBiometric();
   const [goals, setGoals] = useState<ReturnType<typeof loadGoals>>([]);
@@ -136,10 +138,10 @@ export function AchievementsPanel({
           </span>
           <div>
             <h2 id="achievements-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
-              Achievements
+              {t("ach.title")}
             </h2>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-              {stats.earned} of {stats.total} unlocked · {stats.pct.toFixed(0)}%
+              {t("ach.subtitle", { earned: stats.earned, total: stats.total, pct: stats.pct.toFixed(0) })}
             </div>
           </div>
         </div>
@@ -164,7 +166,7 @@ export function AchievementsPanel({
                   cursor: "pointer",
                 }}
               >
-                {f.label}
+                {t(f.labelKey)}
               </button>
             );
           })}
@@ -177,7 +179,7 @@ export function AchievementsPanel({
           aria-valuenow={Math.round(stats.pct)}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Achievements unlocked ${stats.earned} of ${stats.total}`}
+          aria-label={t("ach.aria.progress", { earned: stats.earned, total: stats.total })}
           style={{
             height: 8,
             borderRadius: 999,
@@ -220,7 +222,7 @@ export function AchievementsPanel({
                   fontWeight: 700,
                 }}
               >
-                {CATEGORY_LABEL[cat]} {s.earned}/{s.total}
+                {t(CATEGORY_LABEL_KEY[cat])} {s.earned}/{s.total}
               </span>
             );
           })}
@@ -247,6 +249,7 @@ export function AchievementsPanel({
 }
 
 function AchievementCard({ achievement }: { achievement: Achievement }) {
+  const { t } = useI18n();
   const { earned } = achievement;
   const tierColor = TIER_COLOR[achievement.tier];
   const catColor = CATEGORY_COLOR[achievement.category];
@@ -299,7 +302,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
               whiteSpace: "nowrap" as const,
             }}
           >
-            {achievement.label}
+            {t(achievement.labelKey)}
           </div>
           <div
             style={{
@@ -311,12 +314,12 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
               marginTop: 1,
             }}
           >
-            {achievement.tier} · {CATEGORY_LABEL[achievement.category]}
+            {achievement.tier} · {t(CATEGORY_LABEL_KEY[achievement.category])}
           </div>
         </div>
         {earned ? (
           <span
-            aria-label="Unlocked"
+            aria-label={t("ach.card.unlocked.aria")}
             style={{
               width: 24,
               height: 24,
@@ -336,7 +339,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
         ) : null}
       </div>
       <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.45 }}>
-        {achievement.description}
+        {t(achievement.descriptionKey)}
       </div>
       <div>
         <div
@@ -344,7 +347,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
           aria-valuenow={pct}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`${achievement.label}: ${pct}%`}
+          aria-label={t("ach.card.aria.progress", { label: t(achievement.labelKey), pct })}
           style={{
             height: 4,
             borderRadius: 999,
@@ -370,7 +373,11 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
             marginTop: 3,
           }}
         >
-          <span>{achievement.progressLabel}</span>
+          <span>
+            {achievement.progressLabelKey
+              ? t(achievement.progressLabelKey, achievement.progressLabelVars)
+              : achievement.progressLabel}
+          </span>
           <span style={{ fontWeight: 700, color: earned ? tierColor : "#64748b" }}>{pct}%</span>
         </div>
       </div>

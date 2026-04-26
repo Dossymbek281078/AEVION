@@ -49,14 +49,36 @@ const bucketLabel: Record<ValueBucket, string> = {
   compliance: "Compliance",
 };
 
+const TOC = [
+  { id: "pillars", label: "Pillars" },
+  { id: "market", label: "Market" },
+  { id: "network", label: "Network effects" },
+  { id: "modules", label: "Modules" },
+  { id: "ecosystem", label: "Roadmap" },
+  { id: "why-1b", label: "Why $1B+" },
+  { id: "gtm", label: "GTM" },
+  { id: "financials", label: "Financials" },
+];
+
 export default function PitchPage() {
   const [scrolled, setScrolled] = useState(0);
+  const [activeSection, setActiveSection] = useState<string>(TOC[0].id);
 
   useEffect(() => {
     const onScroll = () => {
       const h = document.documentElement;
       const pct = h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight);
       setScrolled(Math.min(1, Math.max(0, pct)));
+      // Find which section is in the viewport (top 40%)
+      const offsetLine = window.innerHeight * 0.4;
+      let current = TOC[0].id;
+      for (const t of TOC) {
+        const el = document.getElementById(t.id);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.top <= offsetLine) current = t.id;
+      }
+      setActiveSection(current);
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -94,6 +116,53 @@ export default function PitchPage() {
           transition: "width 80ms ease-out",
         }}
       />
+
+      {/* Sticky TOC — appears after hero scrolls out */}
+      <div
+        aria-label="Pitch sections"
+        style={{
+          position: "fixed",
+          top: 12,
+          right: 12,
+          zIndex: 80,
+          display: scrolled > 0.04 ? "flex" : "none",
+          flexDirection: "column",
+          gap: 4,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: "rgba(2,6,23,0.85)",
+          border: "1px solid rgba(94,234,212,0.2)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          maxWidth: 180,
+        }}
+      >
+        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.18em", color: "#5eead4", marginBottom: 2 }}>
+          PITCH MAP
+        </div>
+        {TOC.map((t) => {
+          const isActive = activeSection === t.id;
+          return (
+            <a
+              key={t.id}
+              href={`#${t.id}`}
+              style={{
+                fontSize: 12,
+                fontWeight: isActive ? 800 : 600,
+                color: isActive ? "#fbbf24" : "#94a3b8",
+                textDecoration: "none",
+                padding: "4px 8px",
+                borderRadius: 6,
+                background: isActive ? "rgba(251,191,36,0.1)" : "transparent",
+                borderLeft: isActive ? "2px solid #fbbf24" : "2px solid transparent",
+                transition: "all 120ms",
+              }}
+            >
+              {t.label}
+            </a>
+          );
+        })}
+      </div>
 
       {/* ───────── HERO ───────── */}
       <section

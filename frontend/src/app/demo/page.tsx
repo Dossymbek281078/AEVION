@@ -290,6 +290,23 @@ export default function DemoShowcasePage() {
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
             <Link
+              href="/pitch"
+              style={{
+                display: "inline-block",
+                padding: "14px 28px",
+                borderRadius: 12,
+                background: "linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.18))",
+                border: "1px solid rgba(251,191,36,0.55)",
+                color: "#fef3c7",
+                fontWeight: 800,
+                textDecoration: "none",
+                fontSize: 16,
+                boxShadow: "0 8px 32px rgba(251,191,36,0.25)",
+              }}
+            >
+              Investor pitch · $1B+ →
+            </Link>
+            <Link
               href="/demo/deep"
               style={{
                 display: "inline-block",

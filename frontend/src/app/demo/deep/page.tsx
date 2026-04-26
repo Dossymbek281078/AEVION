@@ -152,13 +152,34 @@ export default function DemoDeepPage() {
         ))}
 
         <footer style={{ marginTop: 32, textAlign: "center", color: "#94a3b8", fontSize: 14, lineHeight: 1.6 }}>
-          <p style={{ margin: "0 0 16px" }}>
+          <p style={{ margin: "0 0 20px" }}>
             Полный визуальный нарратив по 27 узлам — на{" "}
             <Link href="/demo" style={{ color: "#5eead4" }}>
               /demo
             </Link>
+            . Инвестиционный взгляд (TAM, network effects, defensibility, GTM, ARR-траектория) — на{" "}
+            <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>
+              /pitch
+            </Link>
             .
           </p>
+          <Link
+            href="/pitch"
+            style={{
+              display: "inline-block",
+              padding: "12px 24px",
+              borderRadius: 12,
+              background: "linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.18))",
+              border: "1px solid rgba(251,191,36,0.55)",
+              color: "#fef3c7",
+              fontWeight: 800,
+              textDecoration: "none",
+              fontSize: 15,
+              boxShadow: "0 8px 32px rgba(251,191,36,0.25)",
+            }}
+          >
+            Investor pitch · why $1B+ →
+          </Link>
         </footer>
       </div>
     </div>

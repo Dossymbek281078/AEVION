@@ -87,3 +87,14 @@ model QCoreMessage {
 
   @@index([runId, ordering])
 }
+
+/// Per-user webhook config for run.completed deliveries. One row per JWT sub.
+/// URL is mandatory; secret is optional (HMAC-SHA256 of the body when present).
+/// Falls back to env QCORE_WEBHOOK_URL when no row exists for the run's user.
+model QCoreUserWebhook {
+  userId    String   @id
+  url       String
+  secret    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

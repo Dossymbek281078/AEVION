@@ -23,6 +23,12 @@ import {
   renderAttachmentsContext,
 } from "../services/qcoreai/attachments";
 import {
+  deleteUserWebhook,
+  getUserWebhook,
+  setUserWebhook,
+  validateWebhookUrl,
+} from "../services/qcoreai/userWebhooks";
+import {
   buildHistoryContext,
   createRun,
   deleteSession,
@@ -139,6 +145,75 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     webhookConfigured: isWebhookConfigured(),
     at: new Date().toISOString(),
   });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Per-user webhook config (auth-required)
+
+   Lets each authenticated user point QCoreAI run.completed events at their
+   own URL. Falls back to the env-level webhook when no user-row exists.
+   The URL is validated (HTTPS or HTTP, and we block obvious internal
+   targets unless QCORE_ALLOW_INTERNAL_WEBHOOKS=1 in dev). Secret is never
+   echoed back — GET returns `hasSecret` only.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/me/webhook", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const cfg = await getUserWebhook(auth.sub);
+    if (!cfg) return res.status(404).json({ error: "no webhook configured" });
+    return res.json({
+      url: cfg.url,
+      hasSecret: !!cfg.secret,
+      createdAt: cfg.createdAt,
+      updatedAt: cfg.updatedAt,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: "lookup failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.put("/me/webhook", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  if (!isDbReady()) {
+    return res.status(503).json({ error: "user webhooks require database (in-memory mode)" });
+  }
+  const url = validateWebhookUrl(req.body?.url);
+  if (!url) {
+    return res.status(400).json({
+      error: "invalid url — must be http(s) and not loopback/private (set QCORE_ALLOW_INTERNAL_WEBHOOKS=1 in dev to override)",
+    });
+  }
+  const rawSecret = req.body?.secret;
+  let secret: string | null = null;
+  if (typeof rawSecret === "string" && rawSecret.trim()) {
+    secret = rawSecret.trim().slice(0, 256);
+  }
+  try {
+    const cfg = await setUserWebhook(auth.sub, url, secret);
+    if (!cfg) return res.status(500).json({ error: "save failed" });
+    return res.json({
+      url: cfg.url,
+      hasSecret: !!cfg.secret,
+      createdAt: cfg.createdAt,
+      updatedAt: cfg.updatedAt,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: "save failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/me/webhook", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const removed = await deleteUserWebhook(auth.sub);
+    return res.json({ ok: removed });
+  } catch (err: any) {
+    return res.status(500).json({ error: "delete failed", details: err?.message });
+  }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -630,22 +705,36 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   }
 
   // Fire-and-forget webhook for external integrations (Zapier, Make, etc.).
-  // Never blocks the SSE response and never throws back into the request loop.
-  if (isWebhookConfigured()) {
-    void notifyRunCompleted({
-      event: "run.completed",
-      runId,
-      sessionId,
-      status: runStatus,
-      strategy,
-      userInput,
-      finalContent: runFinal,
-      totalDurationMs,
-      totalCostUsd: totalCost,
-      error: hadError ?? null,
-      finishedAt: new Date().toISOString(),
-    });
-  }
+  // Per-user webhook (if the run's user has one) takes precedence over the
+  // env-level fallback. Never blocks the SSE response and never throws.
+  void (async () => {
+    let userOverride: { url: string; secret: string | null } | null = null;
+    if (userId) {
+      try {
+        const cfg = await getUserWebhook(userId);
+        if (cfg) userOverride = { url: cfg.url, secret: cfg.secret };
+      } catch {
+        // If the per-user lookup fails we still try the env-level webhook.
+      }
+    }
+    if (!userOverride && !isWebhookConfigured()) return;
+    await notifyRunCompleted(
+      {
+        event: "run.completed",
+        runId,
+        sessionId,
+        status: runStatus,
+        strategy,
+        userInput,
+        finalContent: runFinal,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+        error: hadError ?? null,
+        finishedAt: new Date().toISOString(),
+      },
+      userOverride
+    );
+  })();
 
   // Deregister mid-run guidance queue regardless of how the run finished.
   // Any guidance posted after this point gets a 404 — accurate.

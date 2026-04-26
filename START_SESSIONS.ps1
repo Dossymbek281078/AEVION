@@ -14,26 +14,33 @@
 #
 #  How it works:
 #    1. Refreshes main + ensures 5 worktrees exist for the new tracks.
-#    2. Writes one tiny .ps1 per session into %TEMP%\AEVION_SESSIONS\.
-#       (This avoids the Windows Terminal `;` parsing pitfall when a brief
-#        contains semicolons.)
-#    3. Opens 10 Windows Terminal tabs (or 10 PowerShell windows fallback)
-#       and each tab runs its own per-session .ps1 via -File.
-#    4. Does NOT auto-launch claude -- you start it yourself per tab.
+#    2. Reads session metadata (titles + RU briefs) from SESSIONS_DATA.json
+#       which sits next to this script.
+#    3. Writes one per-session .ps1 into %TEMP%\AEVION_SESSIONS\ with
+#       UTF-8 BOM so Windows PowerShell 5.1 reads Cyrillic correctly.
+#    4. Opens 10 Windows Terminal tabs (or 10 PowerShell windows fallback).
+#    5. Does NOT auto-launch claude -- you start it yourself per tab.
 #
-#  Pure ASCII -- safe for Windows PowerShell 5.1 default encoding.
+#  This file itself is pure ASCII so it always parses on PS 5.1.
 # =============================================================================
 
 $ErrorActionPreference = "Continue"
-$RepoRoot = "C:\Users\user\aevion-core"
-$BankWT   = "$RepoRoot\frontend-bank"
-$TempDir  = Join-Path $env:TEMP "AEVION_SESSIONS"
+$RepoRoot   = "C:\Users\user\aevion-core"
+$BankWT     = "$RepoRoot\frontend-bank"
+$DataFile   = Join-Path $BankWT "SESSIONS_DATA.json"
+$TempDir    = Join-Path $env:TEMP "AEVION_SESSIONS"
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "  AEVION : launching 10 parallel work sessions" -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
+
+if (-not (Test-Path $DataFile)) {
+  Write-Host "ERROR: SESSIONS_DATA.json not found at $DataFile" -ForegroundColor Red
+  Write-Host "Make sure the JSON sits next to START_SESSIONS.ps1." -ForegroundColor Red
+  exit 1
+}
 
 # -----------------------------------------------------------------------------
 # Step 1. Refresh main and ensure worktrees
@@ -69,152 +76,41 @@ foreach ($wt in $Worktrees) {
 Write-Host ""
 
 # -----------------------------------------------------------------------------
-# Step 2. Define the 10 sessions (briefs are pure ASCII)
+# Step 2. Load session data (UTF-8 JSON with Russian briefs)
 # -----------------------------------------------------------------------------
-$Sessions = @(
-  @{
-    Title = "A1-Bank-polish"
-    Path  = $BankWT
-    Brief = @(
-      "Track: Bank UI polish (already shipped 18 features + 5 Autopilot rules + multilingual).",
-      "Branch: bank-payment-layer (PR 5 open). Worktree: frontend-bank/",
-      "Goals today: bug-fix sweep, UX micro-polish, mobile responsiveness audit,",
-      "  performance (Lighthouse), accessibility (axe), final QA before merge to main.",
-      "Start: cd frontend  then  claude"
-    )
-  },
-  @{
-    Title = "A2-Pitch-evolution"
-    Path  = $BankWT
-    Brief = @(
-      "Track: /pitch tour expansion (live metrics, competitive, risks, OG, FAQ shipped).",
-      "Branch: bank-payment-layer. Files: src/app/pitch/, src/data/pitchModel.ts",
-      "Goals: case-study quotes, real partner logos when allowed, video walkthrough",
-      "  links, clearer Year 1 traction chart, optional /pitch/print route.",
-      "Start: cd frontend  then  claude"
-    )
-  },
-  @{
-    Title = "A3-Demo-refresh"
-    Path  = $BankWT
-    Brief = @(
-      "Track: rewrite /demo and /demo/deep with the new pitchModel narrative.",
-      "Branch: bank-payment-layer. Files: src/app/demo/, src/data/demoNarrative.ts, demoDeep.ts",
-      "Goals: align /demo with /pitch numbers, add live metrics row to /demo,",
-      "  fill /demo/deep with architecture diagrams, threat model, perf budgets.",
-      "Start: cd frontend  then  claude"
-    )
-  },
-  @{
-    Title = "A4-Multichat-to-live"
-    Path  = $BankWT
-    Brief = @(
-      "Track: take Multichat Engine from beta to live.",
-      "Branch: bank-payment-layer. Files: src/app/multichat-engine/, /api/qcoreai/chat",
-      "Goals: parallel session UI, role isolation per agent, persistence,",
-      "  white-label B2B preview, ship as a real consumable product surface.",
-      "Start: cd frontend  then  claude"
-    )
-  },
-  @{
-    Title = "A5-Awards-UX"
-    Path  = $BankWT
-    Brief = @(
-      "Track: real submission flow for Awards/Music + Awards/Film.",
-      "Branch: bank-payment-layer. Files: src/app/awards/{music,film}/, AwardPortal component",
-      "Goals: submission form, vote UI, leaderboard with live Planet stats,",
-      "  AEC payout preview tied to Bank, jury panel mechanics.",
-      "Start: cd frontend  then  claude"
-    )
-  },
-  @{
-    Title = "B1-Globus-polish"
-    Path  = "$RepoRoot\frontend-globus"
-    Brief = @(
-      "NEW track: rewrite the home page (the Globus / 27-node map) to wow investors.",
-      "Branch: globus-polish (forked from main). Worktree: frontend-globus/",
-      "Goals: interactive 3D / SVG map, click any node -> live status drawer,",
-      "  hero refresh aligned with /pitch numbers, pull /api/globus/projects live.",
-      "First file to read: frontend/src/app/page.tsx (998 lines -- careful).",
-      "Start: cd frontend  then  npm install --include=optional  then  claude"
-    )
-  },
-  @{
-    Title = "B2-AEC-Exchange"
-    Path  = "$RepoRoot\frontend-exchange"
-    Brief = @(
-      "NEW track: AEC internal exchange / liquidity engine.",
-      "Branch: aec-exchange. Worktree: frontend-exchange/",
-      "Goals: design /exchange route -- order book for AEC vs module-credit pairs",
-      "  (royalty credit, chess credit, planet credit), AMM-style pricing,",
-      "  treasury controls. Ship as preview behind feature flag.",
-      "Backend contracts to propose: /api/exchange/book, /quote, /trade.",
-      "Start: cd frontend  then  npm install --include=optional  then  claude"
-    )
-  },
-  @{
-    Title = "B3-Payments-rail"
-    Path  = "$RepoRoot\frontend-payments"
-    Brief = @(
-      "NEW track: cross-module payments hardening (Bank, QTrade, Awards, Planet).",
-      "Branch: payments-rail. Worktree: frontend-payments/",
-      "Goals: unified send-money primitive used by every module, settlement",
-      "  audit log, recurring + scheduled + split + gift modes consolidated,",
-      "  reconciliation report, real-time balance everywhere.",
-      "Files: src/app/bank/_components/SendForm.tsx, _lib/api.ts",
-      "Start: cd frontend  then  npm install --include=optional  then  claude"
-    )
-  },
-  @{
-    Title = "B4-GTM-pricing-apidocs"
-    Path  = "$RepoRoot\frontend-gtm"
-    Brief = @(
-      "NEW track: investor-grade /pricing + /api-docs.",
-      "Branch: gtm-pricing-api. Worktree: frontend-gtm/",
-      "Goals: tiered pricing page (Free / Pro / Enterprise) per module bundle,",
-      "  hosted /api-docs reading from /api/openapi.json with try-it console,",
-      "  partner program landing, embeds for iframe marketing.",
-      "Start: cd frontend  then  npm install --include=optional  then  claude"
-    )
-  },
-  @{
-    Title = "B5-Chess-tournaments"
-    Path  = "$RepoRoot\frontend-chess"
-    Brief = @(
-      "NEW track: real CyberChess tournaments with AEC prize pools.",
-      "Branch: chess-tournaments. Worktree: frontend-chess/",
-      "Goals: tournament creation, brackets, live spectating, AEC entry fees,",
-      "  Trust-Score-gated brackets (elite-only), anti-cheat hooks via Trust Graph,",
-      "  prize-pool auto-payout to Bank.",
-      "Files: src/app/cyberchess/page.tsx (1137 lines -- read engine first)",
-      "Start: cd frontend  then  npm install --include=optional  then  claude"
-    )
-  }
-)
+$jsonRaw = Get-Content -Raw -Encoding UTF8 -LiteralPath $DataFile
+$data    = $jsonRaw | ConvertFrom-Json
+$Sessions = $data.sessions
+$UiReady  = $data.ui.ready
 
 # -----------------------------------------------------------------------------
 # Step 3. Generate per-session .ps1 files in %TEMP%\AEVION_SESSIONS\
+#         (with UTF-8 BOM so PS 5.1 renders Cyrillic correctly)
 # -----------------------------------------------------------------------------
 if (-not (Test-Path $TempDir)) {
   New-Item -ItemType Directory -Path $TempDir | Out-Null
 }
 
+$utf8Bom = New-Object System.Text.UTF8Encoding $true
+
 foreach ($s in $Sessions) {
-  $perSessionFile = Join-Path $TempDir ($s.Title + ".ps1")
-  $lines = New-Object System.Collections.Generic.List[string]
-  $lines.Add('$Host.UI.RawUI.WindowTitle = "' + $s.Title + '"')
-  $lines.Add('Set-Location -LiteralPath "' + $s.Path + '"')
-  $lines.Add('Write-Host ""')
-  $lines.Add('Write-Host "=== ' + $s.Title + ' ===" -ForegroundColor Cyan')
-  foreach ($line in $s.Brief) {
+  $perSessionFile = Join-Path $TempDir ($s.id + ".ps1")
+  $sb = New-Object System.Text.StringBuilder
+  [void]$sb.AppendLine('chcp 65001 > $null')
+  [void]$sb.AppendLine('[Console]::OutputEncoding = [System.Text.Encoding]::UTF8')
+  [void]$sb.AppendLine('$Host.UI.RawUI.WindowTitle = "' + $s.title.Replace('"', '`"') + '"')
+  [void]$sb.AppendLine('Set-Location -LiteralPath "' + $s.path + '"')
+  [void]$sb.AppendLine('Write-Host ""')
+  [void]$sb.AppendLine('Write-Host "=== ' + $s.title.Replace('"', '`"') + ' ===" -ForegroundColor Cyan')
+  foreach ($line in $s.brief) {
     $safe = $line.Replace('"', '`"')
-    $lines.Add('Write-Host "  ' + $safe + '" -ForegroundColor Gray')
+    [void]$sb.AppendLine('Write-Host "  ' + $safe + '" -ForegroundColor Gray')
   }
-  $lines.Add('Write-Host ""')
-  $lines.Add('Write-Host "Ready. Type: claude" -ForegroundColor Green')
-  $lines.Add('Write-Host ""')
-  # ASCII-safe write
-  [System.IO.File]::WriteAllLines($perSessionFile, $lines.ToArray(), [System.Text.Encoding]::ASCII)
+  [void]$sb.AppendLine('Write-Host ""')
+  $readySafe = $UiReady.Replace('"', '`"')
+  [void]$sb.AppendLine('Write-Host "' + $readySafe + '" -ForegroundColor Green')
+  [void]$sb.AppendLine('Write-Host ""')
+  [System.IO.File]::WriteAllText($perSessionFile, $sb.ToString(), $utf8Bom)
 }
 
 # -----------------------------------------------------------------------------
@@ -233,18 +129,16 @@ if ($useWT) {
 Write-Host ""
 
 if ($useWT) {
-  # Build a single wt invocation. Each new-tab references its own .ps1 file
-  # via -File, so no semicolons leak into wt's argument parser.
   $wtArgs = New-Object System.Collections.Generic.List[string]
   $first = $true
   foreach ($s in $Sessions) {
-    $perSessionFile = Join-Path $TempDir ($s.Title + ".ps1")
+    $perSessionFile = Join-Path $TempDir ($s.id + ".ps1")
     if (-not $first) { $wtArgs.Add(";") }
     $wtArgs.Add("new-tab")
     $wtArgs.Add("--title")
-    $wtArgs.Add($s.Title)
+    $wtArgs.Add($s.title)
     $wtArgs.Add("-d")
-    $wtArgs.Add($s.Path)
+    $wtArgs.Add($s.path)
     $wtArgs.Add("powershell.exe")
     $wtArgs.Add("-NoExit")
     $wtArgs.Add("-ExecutionPolicy")
@@ -256,7 +150,7 @@ if ($useWT) {
   Start-Process wt.exe -ArgumentList $wtArgs.ToArray()
 } else {
   foreach ($s in $Sessions) {
-    $perSessionFile = Join-Path $TempDir ($s.Title + ".ps1")
+    $perSessionFile = Join-Path $TempDir ($s.id + ".ps1")
     Start-Process powershell -ArgumentList @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", $perSessionFile) | Out-Null
   }
 }
@@ -265,6 +159,7 @@ Write-Host ""
 Write-Host "[3/3] Done." -ForegroundColor Green
 Write-Host ""
 Write-Host "Tip: each tab/window has its own brief and cwd ready. Type 'claude' to start." -ForegroundColor Cyan
+Write-Host "     Tab titles are editable: right-click tab > Rename." -ForegroundColor Cyan
 Write-Host "     Read SESSIONS_README.md for the full plan and per-track first prompts." -ForegroundColor Cyan
 Write-Host ("     Per-session scripts live in: " + $TempDir) -ForegroundColor DarkGray
 Write-Host ""

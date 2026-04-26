@@ -9,6 +9,7 @@ import {
   moduleBenefits,
   planetLayer,
 } from "@/data/demoNarrative";
+import { ecosystemNodes, launchedModules, networkForces } from "@/data/pitchModel";
 import { apiUrl } from "@/lib/apiBase";
 
 type ApiProject = {
@@ -21,6 +22,22 @@ type ApiProject = {
   priority: number;
 };
 
+type LiveMetrics = {
+  qrightObjects: number | null;
+  certifiedArtifacts: number | null;
+  participants: number | null;
+  shieldRecords: number | null;
+  qtradeOps: number | null;
+};
+
+const DEMO_METRICS: LiveMetrics = {
+  qrightObjects: 184,
+  certifiedArtifacts: 27,
+  participants: 312,
+  shieldRecords: 96,
+  qtradeOps: 1450,
+};
+
 const marqueePhrases = [
   "AEVION · unified trust platform",
   "27 product nodes · one pipeline",
@@ -30,9 +47,57 @@ const marqueePhrases = [
   "From idea to certificate — in one system",
 ];
 
+const PIPELINE_STEPS = [
+  {
+    icon: "📝",
+    code: "QRIGHT",
+    title: "Describe & hash",
+    body: "Author fills a 4-field form. SHA-256 of the payload is bound to the JWT identity and geolocation.",
+    duration: "~15s",
+  },
+  {
+    icon: "🔏",
+    code: "QSIGN",
+    title: "HMAC seal",
+    body: "Canonical JSON of the registry entry is signed with HMAC-SHA256. Same payload format every time.",
+    duration: "~5s",
+  },
+  {
+    icon: "🛡",
+    code: "SHIELD + BUREAU",
+    title: "Ed25519 + Shamir → certificate",
+    body: "High-value records auto-shard via Quantum Shield (2-of-3). Bureau wraps everything in a court-grade PDF.",
+    duration: "~30s",
+  },
+  {
+    icon: "🌍",
+    code: "PLANET",
+    title: "Multi-validator review",
+    body: "Validators vote, the certificate gains a public verify URL, and the artifact joins the Planet evidence root.",
+    duration: "~10s",
+  },
+  {
+    icon: "💳",
+    code: "BANK",
+    title: "Royalties settle",
+    body: "Awards prizes, verification fees and downstream royalties auto-flow into the AEVION Bank wallet (AEC).",
+    duration: "~5s",
+  },
+];
+
+const FLYWHEEL_PICKS = ["DATA", "ECON", "SCOPE"] as const;
+
 export default function DemoShowcasePage() {
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<LiveMetrics>({
+    qrightObjects: null,
+    certifiedArtifacts: null,
+    participants: null,
+    shieldRecords: null,
+    qtradeOps: null,
+  });
+  const [metricsLive, setMetricsLive] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +117,56 @@ export default function DemoShowcasePage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [qr, ps, qs, qt] = await Promise.all([
+          fetch(apiUrl("/api/qright/objects")).catch(() => null),
+          fetch(apiUrl("/api/planet/stats")).catch(() => null),
+          fetch(apiUrl("/api/quantum-shield/records")).catch(() => null),
+          fetch(apiUrl("/api/qtrade/summary")).catch(() => null),
+        ]);
+        if (cancelled) return;
+
+        const next: LiveMetrics = { ...DEMO_METRICS };
+        let anyOk = false;
+
+        if (qr && qr.ok) {
+          const j = await qr.json().catch(() => null);
+          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; anyOk = true; }
+        }
+        if (ps && ps.ok) {
+          const j = await ps.json().catch(() => null);
+          if (j) {
+            next.certifiedArtifacts = j.certifiedArtifactVersions ?? next.certifiedArtifacts;
+            next.participants = j.eligibleParticipants ?? next.participants;
+            anyOk = true;
+          }
+        }
+        if (qs && qs.ok) {
+          const j = await qs.json().catch(() => null);
+          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; anyOk = true; }
+        }
+        if (qt && qt.ok) {
+          const j = await qt.json().catch(() => null);
+          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; anyOk = true; }
+        }
+
+        if (!cancelled) {
+          setMetrics(next);
+          setMetricsLive(anyOk);
+        }
+      } catch {
+        if (!cancelled) {
+          setMetrics(DEMO_METRICS);
+          setMetricsLive(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const displayRows = useMemo(() => {
@@ -77,6 +192,14 @@ export default function DemoShowcasePage() {
     const line = marqueePhrases.join("   ·   ");
     return `${line}   ·   ${line}`;
   }, []);
+
+  const liveMvpCount = launchedModules.filter((m) => m.stage === "live").length;
+  const emergingCount = ecosystemNodes.length;
+
+  const flywheelCards = useMemo(
+    () => FLYWHEEL_PICKS.map((code) => networkForces.find((f) => f.code === code)).filter((x): x is (typeof networkForces)[number] => Boolean(x)),
+    []
+  );
 
   return (
     <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
@@ -134,8 +257,9 @@ export default function DemoShowcasePage() {
               margin: 0,
             }}
           >
-            Below in detail: why the entire platform matters for investors, why each node exists, and how the cross-cutting
-            Planet layer connects compliance with registry and signatures. No mandatory buttons: just scroll.
+            What does this <em>do</em>? Below: the live ecosystem pulse, the 90-second pipeline from
+            idea to certificate, all 27 product nodes, and the cross-module flywheel that makes the
+            sum bigger than its parts. For the <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>$1B+ valuation thesis</Link>, see /pitch.
           </p>
 
           <div style={{ marginTop: 28 }} className="demo-marquee-wrap">
@@ -203,6 +327,177 @@ export default function DemoShowcasePage() {
           </ul>
         </article>
 
+        {/* ───────── LIVE ECOSYSTEM PULSE ───────── */}
+        <section
+          aria-label="Live ecosystem pulse"
+          style={{
+            marginBottom: 56,
+            padding: 28,
+            borderRadius: 20,
+            border: "1px solid rgba(94,234,212,0.25)",
+            background: "linear-gradient(165deg, rgba(15,23,42,0.85), rgba(8,47,73,0.35))",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, color: "#fff" }}>
+              Live ecosystem pulse
+            </h2>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.15em",
+                color: metricsLive ? "#34d399" : "#fbbf24",
+                background: metricsLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
+                padding: "4px 10px",
+                borderRadius: 999,
+                textTransform: "uppercase",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 999,
+                  background: metricsLive ? "#34d399" : "#fbbf24",
+                }}
+                aria-hidden
+              />
+              {metricsLive ? "LIVE" : "DEMO"}
+            </span>
+          </div>
+          <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, margin: "0 0 18px" }}>
+            Pulled in parallel from QRight, Planet, Quantum Shield and QTrade. Falls back to a fixed
+            demo snapshot when the backend is offline — same pattern as /pitch.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <LivePill label="QRight records" value={metrics.qrightObjects} />
+            <LivePill label="Bureau certs" value={metrics.certifiedArtifacts} />
+            <LivePill label="Planet participants" value={metrics.participants} />
+            <LivePill label="Shielded artifacts" value={metrics.shieldRecords} />
+            <LivePill label="QTrade ops" value={metrics.qtradeOps} />
+          </div>
+        </section>
+
+        {/* ───────── 90-SECOND PIPELINE TIMELINE ───────── */}
+        <section
+          aria-label="Idea to certificate in 90 seconds"
+          style={{
+            marginBottom: 56,
+            padding: 28,
+            borderRadius: 20,
+            border: "1px solid rgba(167,139,250,0.3)",
+            background: "linear-gradient(165deg, rgba(15,23,42,0.85), rgba(67,56,202,0.18))",
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#c4b5fd", marginBottom: 8 }}>
+            ONE PIPELINE
+          </div>
+          <h2 style={{ fontSize: 24, fontWeight: 900, margin: "0 0 8px", color: "#fff" }}>
+            From idea to certificate in 90 seconds
+          </h2>
+          <p style={{ fontSize: 14, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 22px" }}>
+            QRight → QSign → Quantum Shield + Bureau → Planet → Bank. Five hops, one JWT, one Trust
+            Graph edge per hop. The whole chain runs in a typical creator session.
+          </p>
+          <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 12 }}>
+            {PIPELINE_STEPS.map((step, i) => (
+              <li
+                key={step.code}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto auto 1fr auto",
+                  gap: 14,
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  borderRadius: 14,
+                  background: "rgba(15,23,42,0.65)",
+                  border: "1px solid rgba(94,234,212,0.18)",
+                }}
+              >
+                <span
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 999,
+                    background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    color: "#fff",
+                    flexShrink: 0,
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }} aria-hidden>
+                  {step.icon}
+                </span>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#5eead4", marginBottom: 2 }}>
+                    {step.code}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 2 }}>{step.title}</div>
+                  <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.5 }}>{step.body}</div>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: "#fbbf24",
+                    background: "rgba(251,191,36,0.1)",
+                    border: "1px solid rgba(251,191,36,0.3)",
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {step.duration}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* ───────── STAT STRIP ABOVE THE 27-NODE GRID ───────── */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 14,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "14px 20px",
+            marginBottom: 24,
+            borderRadius: 12,
+            background: "rgba(15,23,42,0.6)",
+            border: "1px solid rgba(94,234,212,0.2)",
+            fontSize: 14,
+            color: "#cbd5e1",
+            fontWeight: 700,
+          }}
+        >
+          <span><strong style={{ color: "#34d399" }}>{liveMvpCount} live MVPs</strong></span>
+          <span style={{ color: "#475569" }}>·</span>
+          <span><strong style={{ color: "#7dd3fc" }}>{emergingCount} emerging nodes</strong></span>
+          <span style={{ color: "#475569" }}>·</span>
+          <span><strong style={{ color: "#fbbf24" }}>$340B</strong> addressable market</span>
+        </div>
+
         <h2
           style={{
             fontSize: 13,
@@ -221,7 +516,6 @@ export default function DemoShowcasePage() {
               const narrative = moduleBenefits[p.id];
               if (!narrative) return null;
               const title = p.name?.trim() || narrative.tagline;
-              const showTagline = !!(p.name?.trim() && narrative.tagline);
               return (
                 <article
                   key={p.id}
@@ -274,6 +568,88 @@ export default function DemoShowcasePage() {
               );
             })}
         </div>
+
+        {/* ───────── CROSS-MODULE FLYWHEEL ───────── */}
+        <section
+          aria-label="Cross-module flywheel"
+          style={{
+            marginTop: 56,
+            paddingTop: 32,
+            borderTop: "1px solid rgba(51,65,85,0.5)",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: "0.2em",
+              color: "#94a3b8",
+              margin: "0 0 8px",
+              textTransform: "uppercase",
+            }}
+          >
+            Cross-module flywheel
+          </h2>
+          <p style={{ fontSize: 14, color: "#cbd5e1", lineHeight: 1.6, margin: "0 0 20px" }}>
+            Three of the four network forces that compound across the 27 nodes. The fourth (switching
+            costs) is detailed in the /pitch deck.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: 14,
+            }}
+          >
+            {flywheelCards.map((f) => (
+              <article
+                key={f.code}
+                style={{
+                  padding: 20,
+                  borderRadius: 14,
+                  background: "rgba(15,23,42,0.7)",
+                  border: "1px solid rgba(167,139,250,0.3)",
+                  position: "relative",
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 14,
+                    right: 14,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: "0.15em",
+                    color: "#a78bfa",
+                    background: "rgba(167,139,250,0.12)",
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                  }}
+                >
+                  {f.code}
+                </span>
+                <h3 style={{ fontSize: 15, fontWeight: 850, color: "#fff", margin: "0 0 10px", paddingRight: 56, lineHeight: 1.3 }}>
+                  {f.title}
+                </h3>
+                <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.55, margin: "0 0 12px" }}>{f.body}</p>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#a78bfa",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    background: "rgba(167,139,250,0.08)",
+                    borderLeft: "2px solid #a78bfa",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  ↻ {f.flywheel}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <footer
           style={{
@@ -342,5 +718,26 @@ export default function DemoShowcasePage() {
         </footer>
       </div>
     </div>
+  );
+}
+
+function LivePill({ label, value }: { label: string; value: number | null }) {
+  const display = value == null ? "…" : value.toLocaleString("en-US");
+  return (
+    <span
+      style={{
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#cbd5e1",
+        background: "rgba(15,23,42,0.65)",
+        padding: "6px 12px",
+        borderRadius: 999,
+        border: "1px solid rgba(94,234,212,0.2)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <strong style={{ color: "#5eead4", marginRight: 6 }}>{display}</strong>
+      <span style={{ color: "#94a3b8" }}>{label}</span>
+    </span>
   );
 }

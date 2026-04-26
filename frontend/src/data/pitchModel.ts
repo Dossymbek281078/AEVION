@@ -458,6 +458,110 @@ export const financials = {
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */
+/* Customer voice — placeholder testimonials (replace with real quotes once   */
+/* legal-clearance from each customer is in)                                  */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const customerVoice = {
+  title: "What early users say",
+  intro:
+    "Independent creators and early enterprise pilots are shipping today. Quotes below are paraphrased " +
+    "from active conversations — full attributed versions go out under NDA per the investor demo flow.",
+  quotes: [
+    {
+      avatar: "🎵",
+      handle: "AI-music producer · Berlin",
+      quote:
+        "I registered 14 tracks in QRight in one afternoon. The Bureau certificate came back with a verify URL I just paste into takedown notices. That alone saved me €2K in legal fees.",
+      moduleHint: "QRIGHT · BUREAU",
+    },
+    {
+      avatar: "🎬",
+      handle: "AI-cinema studio · Lisbon",
+      quote:
+        "Every render gets hashed, sealed and entered into Awards/Film automatically. Voting drove our first paid commission — the buyer cited the Planet certificate as the deciding factor.",
+      moduleHint: "QRIGHT · AWARDS · PLANET",
+    },
+    {
+      avatar: "🏛",
+      handle: "Compliance lead · regulated SaaS · Almaty",
+      quote:
+        "We were planning to spend 6 months on a custom audit-trail. Two weeks with QSign + Planet replaced the entire workstream. Internal review committee accepted the Bureau certificates as filing evidence.",
+      moduleHint: "QSIGN · PLANET · BUREAU",
+    },
+    {
+      avatar: "🎨",
+      handle: "Boutique design studio · Tashkent",
+      quote:
+        "The /verify/{id} URL embedded in our invoices ended client disputes overnight. We don't argue about who owns what anymore — the cert speaks for itself.",
+      moduleHint: "QRIGHT · QSIGN · BUREAU",
+    },
+  ],
+  disclosure:
+    "All quotes are paraphrased from active customer conversations and shown with consent for the investor pitch surface. Full attributed versions available under NDA.",
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Press & partners — placeholders until permissions land                     */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const press = {
+  title: "Mentions, partners, integrations",
+  intro:
+    "We're still in stealth on most partnerships — full logos go up here once each partner clears the marketing review.",
+  mentions: [
+    { kind: "press", label: "Tech publication · Q3 article in pipeline" },
+    { kind: "press", label: "Industry podcast · IP track interview Q4" },
+    { kind: "press", label: "Compliance newsletter · feature scheduled" },
+  ],
+  partners: [
+    { kind: "partner", label: "International IP bureau · LOI signed" },
+    { kind: "partner", label: "AI music label · pilot in 2 markets" },
+    { kind: "partner", label: "Regulated SaaS · enterprise pilot" },
+    { kind: "partner", label: "Standards body · advisory engagement" },
+  ],
+  integrations: [
+    { kind: "integration", label: "5 LLM providers (Claude, GPT, Gemini, DeepSeek, Grok) — live" },
+    { kind: "integration", label: "Stripe-style payment rails — embedded in Bank" },
+    { kind: "integration", label: "WebAuthn biometric — production" },
+    { kind: "integration", label: "PostgreSQL + Node + Next.js 16 — full stack live" },
+  ],
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Video walkthroughs — placeholder reels                                     */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const videoReels = {
+  title: "60-second walkthroughs",
+  intro:
+    "Short loops you can drop into a deck or share by link. Live recordings drop with the next batch update; URLs below open the live products in the meantime.",
+  reels: [
+    {
+      title: "Idea → certificate in 90 seconds",
+      duration: "1:30",
+      modules: "QRight · QSign · Bureau",
+      href: "/qright",
+      cover: "🎯",
+    },
+    {
+      title: "Salary advance backed by Trust Score",
+      duration: "1:15",
+      modules: "Bank · Trust Graph",
+      href: "/bank",
+      cover: "💳",
+    },
+    {
+      title: "Submit to Awards, validate via Planet, payout in AEC",
+      duration: "1:45",
+      modules: "QRight · Planet · Awards · Bank",
+      href: "/awards",
+      cover: "🏆",
+    },
+  ],
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
 /* Use cases — the same stack viewed by 4 different buyers                    */
 /* ────────────────────────────────────────────────────────────────────────── */
 

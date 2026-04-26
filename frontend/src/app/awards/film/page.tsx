@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { AwardPortal } from "../AwardPortal";
+import { AwardsTrackPanel } from "../_components/AwardsTrackPanel";
 
 export const metadata: Metadata = {
   title: "AEVION Film Awards — premium for AI and digital cinema",
@@ -142,6 +143,8 @@ export default function FilmAwardsPage() {
           </div>
         </div>
       </section>
+
+      <AwardsTrackPanel track="film" />
 
       <AwardPortal variant="film" />
     </div>

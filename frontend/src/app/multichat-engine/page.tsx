@@ -1,41 +1,21 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
-import { getBackendOrigin } from "@/lib/apiBase";
+import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
 import { launchedModules } from "@/data/pitchModel";
 
-export const metadata = {
-  title: "AEVION Multichat Engine — parallel agents on QCoreAI",
-  description:
-    "Beta MVP of the AEVION Multichat Engine: a single chat backend over QCoreAI, with a roadmap to parallel agent sessions and white-label B2B agents.",
-};
+/* ─────────────────────────────────────────────────────────────────
+ * Static content (was in the server page before client conversion)
+ * ────────────────────────────────────────────────────────────── */
 
 const HERO_STATS: Array<{ label: string; value: string; hint: string }> = [
   { label: "Backend", value: "/api/qcoreai/chat", hint: "Single endpoint live" },
-  { label: "Stage", value: "Beta MVP", hint: "Roadmap to parallel agents" },
+  { label: "Stage", value: "Beta MVP", hint: "Parallel agents shipped" },
   { label: "Providers", value: "5", hint: "via QCoreAI router" },
   { label: "B2B angle", value: "White-label", hint: "AEVION inside SaaS line" },
-];
-
-const ROADMAP: Array<{ phase: string; title: string; body: string }> = [
-  {
-    phase: "Now",
-    title: "Single chat surface over QCoreAI",
-    body:
-      "Working POST /api/qcoreai/chat with model switching across Claude, GPT-4o, Gemini, DeepSeek, Grok. Health endpoint live for ops.",
-  },
-  {
-    phase: "Next",
-    title: "Parallel sessions with role isolation",
-    body:
-      "Multiple agent tabs in one window — code, finance, IP, content — each holding its own context, system prompt and tool scope. Shared identity, isolated memory.",
-  },
-  {
-    phase: "Then",
-    title: "White-label B2B agents",
-    body:
-      "Brandable agent surfaces sold as 'AEVION inside' for enterprise. Per-seat pricing, central LLM cost accounting, SSO via AEVION Auth.",
-  },
 ];
 
 const VISION_BULLETS = [
@@ -45,9 +25,341 @@ const VISION_BULLETS = [
   "Centralised model spend across the platform: predictable per-token economics, single biggest OPEX win in the company.",
 ];
 
+/* ─────────────────────────────────────────────────────────────────
+ * Multichat data model
+ * ────────────────────────────────────────────────────────────── */
+
+type Role =
+  | "General"
+  | "Code"
+  | "Finance"
+  | "IP/Legal"
+  | "Compliance"
+  | "Translator";
+
+type ChatMsg = { role: "user" | "assistant"; content: string };
+
+type Agent = {
+  id: string;
+  role: Role;
+  provider: string;
+  model: string;
+  title: string;
+  messages: ChatMsg[];
+  busy: boolean;
+};
+
+type ProviderInfo = {
+  id: string;
+  name: string;
+  models: string[];
+  defaultModel: string;
+  configured: boolean;
+};
+
+const STORAGE_KEY = "aevion_multichat_v1";
+const MAX_AGENTS = 6;
+const MAX_MESSAGES_KEPT = 50;
+
+const ROLES: Role[] = [
+  "General",
+  "Code",
+  "Finance",
+  "IP/Legal",
+  "Compliance",
+  "Translator",
+];
+
+const ROLE_COLORS: Record<Role, { bg: string; border: string; fg: string }> = {
+  General:    { bg: "rgba(94,234,212,0.18)",  border: "rgba(94,234,212,0.45)",  fg: "#5eead4" },
+  Code:       { bg: "rgba(125,211,252,0.18)", border: "rgba(125,211,252,0.45)", fg: "#7dd3fc" },
+  Finance:    { bg: "rgba(250,204,21,0.18)",  border: "rgba(250,204,21,0.45)",  fg: "#facc15" },
+  "IP/Legal": { bg: "rgba(196,181,253,0.18)", border: "rgba(196,181,253,0.45)", fg: "#c4b5fd" },
+  Compliance: { bg: "rgba(248,113,113,0.18)", border: "rgba(248,113,113,0.45)", fg: "#fca5a5" },
+  Translator: { bg: "rgba(134,239,172,0.18)", border: "rgba(134,239,172,0.45)", fg: "#86efac" },
+};
+
+const ROLE_SYSTEM_PROMPT: Record<Role, string> = {
+  General:
+    "You are a helpful AEVION assistant. Be concise, clear and friendly. Answer in the user's language.",
+  Code:
+    "You are a senior software engineer. Output runnable, idiomatic code with brief explanations. Prefer TypeScript / Node / React unless told otherwise.",
+  Finance:
+    "You are a quantitative finance analyst for AEVION Bank users. Reason about portfolios, royalties, cashflow and risk. Cite assumptions. Never give specific investment advice.",
+  "IP/Legal":
+    "You are an IP and contract lawyer working inside AEVION QRight. Identify risks, suggest clauses, and flag jurisdiction issues. You are not a substitute for a licensed attorney — say so when relevant.",
+  Compliance:
+    "You are a compliance officer covering KYC, AML, data privacy (GDPR), sanctions and audit. Be cautious, structured, and cite regulation names where possible.",
+  Translator:
+    "You are a professional translator. Detect the source language, then translate into the target language requested by the user (default: English). Preserve tone and terminology.",
+};
+
+const DEMO_REPLIES: Record<Role, string> = {
+  General:
+    "(demo) The live AI engine is unreachable right now. In production I would route your question through QCoreAI and return a concise answer here.",
+  Code:
+    "(demo) Here is a refactored version:\n\n```ts\nfunction example(x: number) {\n  return x * 2;\n}\n```\nThe live engine is offline; this is a stub response.",
+  Finance:
+    "(demo) Based on a hypothetical portfolio: ~62% equities, ~28% fixed income, ~10% cash. Sharpe ~0.9. The live engine is offline; this is a stub response.",
+  "IP/Legal":
+    "(demo) Two clauses to review: (1) assignment of derivative works, (2) jurisdiction. Recommend escrowing source via QSign. Live engine offline.",
+  Compliance:
+    "(demo) Suggested KYC tier: T2 (PEP screening + proof of address). Logged for audit. Live engine offline.",
+  Translator:
+    "(demo) Source: en → Target: ru. \"Hello\" → \"Привет\". Live engine offline.",
+};
+
+/* Shorter pretty model names — same map as /qcoreai */
+const prettyModel = (m: string) => {
+  const map: Record<string, string> = {
+    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
+    "gpt-4o": "GPT-4o",
+    "gpt-4o-mini": "GPT-4o Mini",
+    "gpt-4-turbo": "GPT-4 Turbo",
+    "gemini-2.5-flash": "Gemini 2.5 Flash",
+    "gemini-2.0-flash-001": "Gemini 2.0 Flash",
+    "gemini-2.0-flash": "Gemini 2.0 Flash",
+    "gemini-1.5-pro": "Gemini 1.5 Pro",
+    "deepseek-chat": "DeepSeek Chat",
+    "deepseek-reasoner": "DeepSeek Reasoner",
+    "grok-3": "Grok 3",
+    "grok-3-mini": "Grok 3 Mini",
+  };
+  return map[m] || m;
+};
+
+const newId = () =>
+  (typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `a_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`);
+
+const titleFromMessage = (role: Role, content: string) => {
+  const trimmed = content.trim().replace(/\s+/g, " ");
+  if (!trimmed) return role;
+  const snippet = trimmed.length > 36 ? `${trimmed.slice(0, 33)}…` : trimmed;
+  return `${role} · ${snippet}`;
+};
+
+const makeAgent = (overrides: Partial<Agent> = {}): Agent => ({
+  id: newId(),
+  role: "General",
+  provider: "anthropic",
+  model: "claude-sonnet-4-20250514",
+  title: "General",
+  messages: [],
+  busy: false,
+  ...overrides,
+});
+
+/* ─────────────────────────────────────────────────────────────────
+ * Page
+ * ────────────────────────────────────────────────────────────── */
+
 export default function MultichatEnginePage() {
   const origin = getBackendOrigin();
   const m = launchedModules.find((x) => x.id === "multichat-engine");
+
+  /* Providers (loaded from backend, optional) */
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/qcoreai/providers"));
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data?.providers)) {
+          setProviders(data.providers as ProviderInfo[]);
+        }
+      } catch {
+        /* silent — provider switcher will hide gracefully */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* Agents — restore from localStorage on mount */
+  const [agents, setAgents] = useState<Agent[]>([makeAgent()]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Strip any stuck busy flags from a previous session.
+          setAgents(
+            parsed.slice(0, MAX_AGENTS).map((a: Agent) => ({ ...a, busy: false }))
+          );
+        }
+      }
+    } catch {
+      /* ignore corrupted state */
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(agents));
+    } catch {
+      /* quota / privacy mode — ignore */
+    }
+  }, [agents, hydrated]);
+
+  /* Agent operations */
+  const addAgent = useCallback(() => {
+    setAgents((cur) => {
+      if (cur.length >= MAX_AGENTS) return cur;
+      // Pick the next role that isn't already used, fall back to General
+      const used = new Set(cur.map((a) => a.role));
+      const nextRole = ROLES.find((r) => !used.has(r)) ?? "General";
+      return [...cur, makeAgent({ role: nextRole, title: nextRole })];
+    });
+  }, []);
+
+  const removeAgent = useCallback((id: string) => {
+    setAgents((cur) => {
+      const next = cur.filter((a) => a.id !== id);
+      return next.length === 0 ? [makeAgent()] : next;
+    });
+  }, []);
+
+  const updateAgent = useCallback(
+    (id: string, patch: Partial<Agent> | ((a: Agent) => Partial<Agent>)) => {
+      setAgents((cur) =>
+        cur.map((a) => {
+          if (a.id !== id) return a;
+          const p = typeof patch === "function" ? patch(a) : patch;
+          return { ...a, ...p };
+        })
+      );
+    },
+    []
+  );
+
+  const clearAll = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const ok = window.confirm(
+      "Wipe all agents and conversations? This cannot be undone."
+    );
+    if (!ok) return;
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    setAgents([makeAgent()]);
+  }, []);
+
+  /* Send message for a specific agent */
+  const sendMessage = useCallback(
+    async (agentId: string, text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      // Optimistic append + busy
+      let snapshot: Agent | undefined;
+      setAgents((cur) =>
+        cur.map((a) => {
+          if (a.id !== agentId) return a;
+          const nextMessages: ChatMsg[] = [
+            ...a.messages,
+            { role: "user" as const, content: trimmed },
+          ].slice(-MAX_MESSAGES_KEPT);
+          const nextTitle =
+            a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title;
+          const updated: Agent = {
+            ...a,
+            messages: nextMessages,
+            title: nextTitle,
+            busy: true,
+          };
+          snapshot = updated;
+          return updated;
+        })
+      );
+      if (!snapshot) return;
+
+      const systemPrompt = ROLE_SYSTEM_PROMPT[snapshot.role];
+      const apiMessages = [
+        { role: "system" as const, content: systemPrompt },
+        ...snapshot.messages.map((mm) => ({ role: mm.role, content: mm.content })),
+      ];
+
+      let replyText = "";
+      let demoFallback = false;
+
+      try {
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        try {
+          const t = localStorage.getItem("aevion_auth_token_v1");
+          if (t) headers.Authorization = `Bearer ${t}`;
+        } catch {
+          /* ignore */
+        }
+
+        const body: Record<string, unknown> = { messages: apiMessages };
+        if (snapshot.provider) body.provider = snapshot.provider;
+        if (snapshot.model) body.model = snapshot.model;
+
+        const res = await fetch(apiUrl("/api/qcoreai/chat"), {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+        if (typeof data?.reply === "string") {
+          replyText = data.reply;
+        } else if (typeof data?.content === "string") {
+          replyText = data.content;
+        } else {
+          replyText = JSON.stringify(data, null, 2);
+        }
+      } catch {
+        demoFallback = true;
+        replyText = DEMO_REPLIES[snapshot.role];
+      }
+
+      setAgents((cur) =>
+        cur.map((a) => {
+          if (a.id !== agentId) return a;
+          const finalContent = demoFallback ? replyText : replyText;
+          const nextMessages: ChatMsg[] = [
+            ...a.messages,
+            { role: "assistant" as const, content: finalContent },
+          ].slice(-MAX_MESSAGES_KEPT);
+          return { ...a, messages: nextMessages, busy: false };
+        })
+      );
+    },
+    []
+  );
+
+  /* Layout: 1 col → 1, 2-3 → auto-fit, 4+ → 2 cols (CSS handles mobile) */
+  const gridStyle = useMemo<React.CSSProperties>(() => {
+    const n = agents.length;
+    if (n <= 1) return { display: "grid", gridTemplateColumns: "1fr", gap: 16 };
+    if (n <= 3)
+      return {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+        gap: 16,
+      };
+    return {
+      display: "grid",
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      gap: 16,
+    };
+  }, [agents.length]);
 
   return (
     <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
@@ -140,8 +452,8 @@ export default function MultichatEnginePage() {
           </div>
 
           <div style={{ marginTop: 28, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link
-              href="/qcoreai"
+            <a
+              href="#live"
               style={{
                 display: "inline-block",
                 padding: "14px 28px",
@@ -154,7 +466,23 @@ export default function MultichatEnginePage() {
                 boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
               }}
             >
-              Open chat (QCoreAI) →
+              Try parallel agents ↓
+            </a>
+            <Link
+              href="/qcoreai"
+              style={{
+                display: "inline-block",
+                padding: "14px 28px",
+                borderRadius: 12,
+                background: "rgba(148,163,184,0.12)",
+                border: "1px solid rgba(148,163,184,0.35)",
+                color: "#e2e8f0",
+                fontWeight: 750,
+                textDecoration: "none",
+                fontSize: 16,
+              }}
+            >
+              Single chat (QCoreAI) →
             </Link>
             <a
               href={`${origin}/api/qcoreai/health`}
@@ -178,7 +506,7 @@ export default function MultichatEnginePage() {
         </div>
       </section>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 24px 80px" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px 80px" }}>
         <PitchValueCallout moduleId="multichat-engine" variant="dark" />
 
         <section
@@ -209,56 +537,106 @@ export default function MultichatEnginePage() {
           </ul>
         </section>
 
-        <section style={{ marginTop: 40 }}>
-          <h2
+        {/* ──────────────────────────────────────────────────────
+         *  LIVE: parallel agent grid
+         * ────────────────────────────────────────────────────── */}
+        <section
+          id="live"
+          style={{
+            marginTop: 40,
+            padding: 24,
+            borderRadius: 20,
+            border: "1px solid rgba(94,234,212,0.25)",
+            background: "linear-gradient(165deg, rgba(15,23,42,0.9), rgba(13,148,136,0.10))",
+          }}
+        >
+          <div
             style={{
-              fontSize: 13,
-              fontWeight: 800,
-              letterSpacing: "0.2em",
-              color: "#94a3b8",
-              margin: "0 0 16px",
-              textTransform: "uppercase",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 12,
+              marginBottom: 18,
             }}
           >
-            What we will ship next
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {ROADMAP.map((r, idx) => (
-              <article
-                key={r.title}
+            <div>
+              <div
                 style={{
-                  padding: 22,
-                  borderRadius: 16,
-                  border: "1px solid rgba(51,65,85,0.6)",
-                  background: "rgba(15,23,42,0.65)",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  gap: 18,
-                  alignItems: "start",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: "0.2em",
+                  color: "#5eead4",
+                  textTransform: "uppercase",
+                  marginBottom: 6,
                 }}
               >
-                <div
-                  style={{
-                    minWidth: 64,
-                    padding: "8px 12px",
-                    borderRadius: 999,
-                    background: idx === 0 ? "rgba(94,234,212,0.18)" : "rgba(125,211,252,0.12)",
-                    border: `1px solid ${idx === 0 ? "rgba(94,234,212,0.4)" : "rgba(125,211,252,0.3)"}`,
-                    color: idx === 0 ? "#5eead4" : "#7dd3fc",
-                    fontWeight: 900,
-                    fontSize: 11,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    textAlign: "center",
-                  }}
-                >
-                  {r.phase}
-                </div>
-                <div>
-                  <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 800, color: "#f8fafc" }}>{r.title}</h3>
-                  <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: "#cbd5e1" }}>{r.body}</p>
-                </div>
-              </article>
+                Live · parallel agents
+              </div>
+              <h2
+                style={{
+                  fontSize: 22,
+                  fontWeight: 900,
+                  margin: 0,
+                  color: "#fff",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                {agents.length}/{MAX_AGENTS} active session{agents.length === 1 ? "" : "s"}
+              </h2>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={addAgent}
+                disabled={agents.length >= MAX_AGENTS}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(94,234,212,0.45)",
+                  background:
+                    agents.length >= MAX_AGENTS
+                      ? "rgba(94,234,212,0.06)"
+                      : "linear-gradient(135deg, rgba(13,148,136,0.6), rgba(14,165,233,0.55))",
+                  color: agents.length >= MAX_AGENTS ? "#475569" : "#fff",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  cursor: agents.length >= MAX_AGENTS ? "not-allowed" : "pointer",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                + Spawn agent
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(248,113,113,0.35)",
+                  background: "rgba(248,113,113,0.08)",
+                  color: "#fca5a5",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+
+          <div className="multichat-grid" style={gridStyle}>
+            {agents.map((a) => (
+              <AgentPanel
+                key={a.id}
+                agent={a}
+                providers={providers}
+                onChange={(patch) => updateAgent(a.id, patch)}
+                onClose={() => removeAgent(a.id)}
+                onSend={(text) => sendMessage(a.id, text)}
+              />
             ))}
           </div>
         </section>
@@ -347,6 +725,385 @@ export default function MultichatEnginePage() {
           </div>
         </footer>
       </div>
+
+      {/* Inline keyframes + responsive grid (no global CSS edits) */}
+      <style jsx>{`
+        @keyframes mc-blink {
+          0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+          40%           { opacity: 1;   transform: translateY(-2px); }
+        }
+        @media (max-width: 720px) {
+          :global(.multichat-grid) {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Sub-component: per-agent panel
+ * ────────────────────────────────────────────────────────────── */
+
+function AgentPanel(props: {
+  agent: Agent;
+  providers: ProviderInfo[];
+  onChange: (patch: Partial<Agent> | ((a: Agent) => Partial<Agent>)) => void;
+  onClose: () => void;
+  onSend: (text: string) => void;
+}) {
+  const { agent, providers, onChange, onClose, onSend } = props;
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [agent.messages.length, agent.busy]);
+
+  const provider = providers.find((p) => p.id === agent.provider);
+  const availableModels = provider?.models ?? [];
+  const colors = ROLE_COLORS[agent.role];
+
+  const submit = () => {
+    const t = input.trim();
+    if (!t || agent.busy) return;
+    onSend(t);
+    setInput("");
+  };
+
+  const onRoleChange = (role: Role) => {
+    onChange((a) => ({
+      role,
+      // If the panel still has an auto-generated title (== old role), update it.
+      title: a.messages.length === 0 ? role : a.title,
+    }));
+  };
+
+  const onProviderChange = (providerId: string) => {
+    const p = providers.find((pp) => pp.id === providerId);
+    onChange({
+      provider: providerId,
+      model: p?.defaultModel ?? agent.model,
+    });
+  };
+
+  const visibleMessages = agent.messages.slice(-MAX_MESSAGES_KEPT);
+
+  return (
+    <article
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        borderRadius: 16,
+        border: `1px solid ${colors.border}`,
+        background: "rgba(15,23,42,0.85)",
+        minHeight: 480,
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <header
+        style={{
+          padding: "12px 14px",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          borderBottom: "1px solid rgba(51,65,85,0.5)",
+          background: "rgba(2,6,23,0.4)",
+        }}
+      >
+        <select
+          value={agent.role}
+          onChange={(e) => onRoleChange(e.target.value as Role)}
+          aria-label="Agent role"
+          style={{
+            padding: "5px 8px",
+            borderRadius: 8,
+            border: `1px solid ${colors.border}`,
+            background: colors.bg,
+            color: colors.fg,
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            cursor: "pointer",
+          }}
+        >
+          {ROLES.map((r) => (
+            <option key={r} value={r} style={{ background: "#0f172a", color: "#fff" }}>
+              {r}
+            </option>
+          ))}
+        </select>
+
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+          }}
+        >
+          <div
+            title={agent.title}
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#f8fafc",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {agent.title}
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            {providers.length > 0 ? (
+              <>
+                <select
+                  value={agent.provider}
+                  onChange={(e) => onProviderChange(e.target.value)}
+                  aria-label="Provider"
+                  style={{
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(148,163,184,0.25)",
+                    background: "rgba(15,23,42,0.6)",
+                    color: "#cbd5e1",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {providers.map((p) => (
+                    <option
+                      key={p.id}
+                      value={p.id}
+                      disabled={!p.configured}
+                      style={{ background: "#0f172a", color: "#fff" }}
+                    >
+                      {p.name}{p.configured ? "" : " (no key)"}
+                    </option>
+                  ))}
+                </select>
+                {availableModels.length > 0 ? (
+                  <select
+                    value={agent.model}
+                    onChange={(e) => onChange({ model: e.target.value })}
+                    aria-label="Model"
+                    style={{
+                      padding: "2px 6px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(148,163,184,0.25)",
+                      background: "rgba(15,23,42,0.6)",
+                      color: "#cbd5e1",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      maxWidth: 160,
+                    }}
+                  >
+                    {availableModels.map((mm) => (
+                      <option key={mm} value={mm} style={{ background: "#0f172a", color: "#fff" }}>
+                        {prettyModel(mm)}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </>
+            ) : (
+              <span style={{ fontSize: 10, color: "#64748b" }}>{prettyModel(agent.model)}</span>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close agent"
+          title="Close agent"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: "rgba(15,23,42,0.6)",
+            color: "#94a3b8",
+            cursor: "pointer",
+            fontWeight: 800,
+            fontSize: 14,
+            lineHeight: 1,
+          }}
+        >
+          ×
+        </button>
+      </header>
+
+      {/* Messages */}
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: 14,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          minHeight: 280,
+          maxHeight: 460,
+          background: "rgba(2,6,23,0.55)",
+        }}
+      >
+        {visibleMessages.length === 0 ? (
+          <div
+            style={{
+              margin: "auto",
+              textAlign: "center",
+              color: "#64748b",
+              fontSize: 13,
+              padding: 20,
+            }}
+          >
+            <div style={{ fontSize: 28, marginBottom: 6 }}>◈</div>
+            <div style={{ fontWeight: 700, color: "#cbd5e1", marginBottom: 4 }}>
+              {agent.role} agent ready
+            </div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              System prompt is preset. Send a message to start.
+            </div>
+          </div>
+        ) : (
+          visibleMessages.map((mm, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                justifyContent: mm.role === "user" ? "flex-end" : "flex-start",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: "88%",
+                  padding: "9px 12px",
+                  borderRadius:
+                    mm.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                  background:
+                    mm.role === "user"
+                      ? "linear-gradient(135deg, #0d9488, #0ea5e9)"
+                      : "rgba(30,41,59,0.85)",
+                  color: "#f8fafc",
+                  border:
+                    mm.role === "user"
+                      ? "none"
+                      : "1px solid rgba(71,85,105,0.5)",
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                {mm.content}
+              </div>
+            </div>
+          ))
+        )}
+
+        {agent.busy ? (
+          <div style={{ display: "flex", justifyContent: "flex-start" }}>
+            <div
+              style={{
+                padding: "9px 12px",
+                borderRadius: "12px 12px 12px 4px",
+                background: "rgba(30,41,59,0.85)",
+                border: "1px solid rgba(71,85,105,0.5)",
+                display: "inline-flex",
+                gap: 4,
+                alignItems: "center",
+              }}
+              aria-label="Agent is typing"
+            >
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: colors.fg,
+                    display: "inline-block",
+                    animation: `mc-blink 1.2s ${i * 0.15}s infinite ease-in-out`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Input */}
+      <div
+        style={{
+          padding: 10,
+          display: "flex",
+          gap: 8,
+          alignItems: "flex-end",
+          borderTop: "1px solid rgba(51,65,85,0.5)",
+          background: "rgba(2,6,23,0.55)",
+        }}
+      >
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder={`Message ${agent.role}...`}
+          disabled={agent.busy}
+          rows={2}
+          style={{
+            flex: 1,
+            resize: "none",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: "rgba(15,23,42,0.7)",
+            color: "#f8fafc",
+            fontSize: 13,
+            lineHeight: 1.4,
+            outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={agent.busy || !input.trim()}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            border: "none",
+            background:
+              agent.busy || !input.trim()
+                ? "rgba(94,234,212,0.18)"
+                : "linear-gradient(135deg, #0d9488, #0ea5e9)",
+            color: agent.busy || !input.trim() ? "#475569" : "#fff",
+            fontWeight: 800,
+            fontSize: 13,
+            cursor: agent.busy || !input.trim() ? "not-allowed" : "pointer",
+            letterSpacing: "0.02em",
+          }}
+        >
+          {agent.busy ? "…" : "Send"}
+        </button>
+      </div>
+    </article>
   );
 }

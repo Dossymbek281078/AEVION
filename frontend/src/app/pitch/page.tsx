@@ -8,16 +8,19 @@ import {
   ask,
   billionDefense,
   competitive,
+  customerVoice,
   ecosystemNodes,
   financials,
   gtm,
   launchedModules,
   market,
   networkForces,
+  press,
   risks,
   team,
   thesis,
   useCases,
+  videoReels,
   type LaunchStage,
   type ValueBucket,
 } from "@/data/pitchModel";
@@ -72,13 +75,16 @@ const bucketLabel: Record<ValueBucket, string> = {
 
 const TOC = [
   { id: "pillars", label: "Pillars" },
+  { id: "videos", label: "Walkthroughs" },
   { id: "market", label: "Market" },
   { id: "network", label: "Network effects" },
   { id: "modules", label: "Modules" },
   { id: "use-cases", label: "Use cases" },
+  { id: "voices", label: "Customer voice" },
   { id: "ecosystem", label: "Roadmap" },
   { id: "competitive", label: "Competition" },
   { id: "why-1b", label: "Why $1B+" },
+  { id: "press", label: "Partners & press" },
   { id: "risks", label: "Risks" },
   { id: "gtm", label: "GTM" },
   { id: "financials", label: "Financials" },
@@ -489,9 +495,8 @@ export default function PitchPage() {
             >
               {ask.ctaPrimary.label} →
             </a>
-            <button
-              type="button"
-              onClick={() => { if (typeof window !== "undefined") window.print(); }}
+<Link
+              href="/pitch/print"
               style={{
                 padding: "14px 24px",
                 borderRadius: 12,
@@ -500,16 +505,15 @@ export default function PitchPage() {
                 color: "#fbbf24",
                 fontWeight: 700,
                 fontSize: 15,
-                cursor: "pointer",
-                fontFamily: "inherit",
+                textDecoration: "none",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
               }}
-              title="Print to PDF — opens browser print dialog with print-optimised layout"
+              title="Opens a print-optimised page that auto-launches the browser print dialog (Save as PDF)."
             >
               <span aria-hidden>⤓</span> Save as PDF
-            </button>
+            </Link>
           </div>
 
           <p style={{ marginTop: 32, fontSize: 13, color: "#64748b", letterSpacing: "0.05em" }}>
@@ -543,6 +547,42 @@ export default function PitchPage() {
               <h3 style={{ fontSize: 20, fontWeight: 850, color: "#fff", margin: "0 0 10px", lineHeight: 1.25 }}>{p.title}</h3>
               <p style={{ fontSize: 14, lineHeight: 1.6, color: "#cbd5e1", margin: 0 }}>{p.body}</p>
             </article>
+          ))}
+        </div>
+      </Section>
+
+      {/* ───────── VIDEO WALKTHROUGHS ───────── */}
+      <Section anchor="videos" eyebrow="Show, don't tell" title={videoReels.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{videoReels.intro}</p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 16,
+          }}
+        >
+          {videoReels.reels.map((r) => (
+            <Link
+              key={r.title}
+              href={r.href}
+              style={{
+                padding: 22,
+                borderRadius: 16,
+                background: "linear-gradient(165deg, rgba(15,23,42,0.85), rgba(125,211,252,0.08))",
+                border: "1px solid rgba(125,211,252,0.3)",
+                textDecoration: "none",
+                color: "inherit",
+                display: "block",
+                transition: "transform 120ms",
+              }}
+            >
+              <div style={{ fontSize: 36, marginBottom: 12 }} aria-hidden>{r.cover}</div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.15em", color: "#7dd3fc", marginBottom: 6, textTransform: "uppercase" }}>
+                {r.duration} · {r.modules}
+              </div>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: "#fff", margin: "0 0 10px", lineHeight: 1.35 }}>{r.title}</h3>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#5eead4" }}>Open the live module →</span>
+            </Link>
           ))}
         </div>
       </Section>
@@ -876,6 +916,51 @@ export default function PitchPage() {
         </div>
       </Section>
 
+      {/* ───────── CUSTOMER VOICE ───────── */}
+      <Section anchor="voices" eyebrow="What early users say" title={customerVoice.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{customerVoice.intro}</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          {customerVoice.quotes.map((q) => (
+            <article
+              key={q.handle}
+              style={{
+                padding: 22,
+                borderRadius: 16,
+                background: "rgba(15,23,42,0.7)",
+                border: "1px solid rgba(94,234,212,0.25)",
+                position: "relative",
+              }}
+            >
+              <span
+                style={{
+                  position: "absolute",
+                  top: -10,
+                  left: 18,
+                  fontSize: 32,
+                  background: "#020617",
+                  padding: "0 6px",
+                  lineHeight: 1,
+                }}
+                aria-hidden
+              >
+                "
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 24 }} aria-hidden>{q.avatar}</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#5eead4" }}>{q.handle}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.1em" }}>{q.moduleHint}</div>
+                </div>
+              </div>
+              <p style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.65, margin: 0, fontStyle: "italic" }}>{q.quote}</p>
+            </article>
+          ))}
+        </div>
+        <p style={{ marginTop: 20, fontSize: 12, color: "#64748b", fontStyle: "italic", lineHeight: 1.55 }}>
+          {customerVoice.disclosure}
+        </p>
+      </Section>
+
       {/* ───────── ECOSYSTEM NODES ───────── */}
       <Section
         anchor="ecosystem"
@@ -1016,6 +1101,16 @@ export default function PitchPage() {
               </div>
             </article>
           ))}
+        </div>
+      </Section>
+
+      {/* ───────── PARTNERS & PRESS ───────── */}
+      <Section anchor="press" eyebrow="Ecosystem traction" title={press.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{press.intro}</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+          <PressColumn title="Press" items={press.mentions} accent="#7dd3fc" />
+          <PressColumn title="Partners" items={press.partners} accent="#fbbf24" />
+          <PressColumn title="Integrations live today" items={press.integrations} accent="#5eead4" />
         </div>
       </Section>
 
@@ -1343,6 +1438,60 @@ function Section({
         {children}
       </div>
     </section>
+  );
+}
+
+function PressColumn({ title, items, accent }: { title: string; items: ReadonlyArray<{ kind: string; label: string }>; accent: string }) {
+  return (
+    <article
+      style={{
+        padding: 22,
+        borderRadius: 16,
+        background: "rgba(15,23,42,0.7)",
+        border: `1px solid ${accent}40`,
+      }}
+    >
+      <h3
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          letterSpacing: "0.15em",
+          color: accent,
+          textTransform: "uppercase",
+          margin: "0 0 14px",
+        }}
+      >
+        {title}
+      </h3>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+        {items.map((it) => (
+          <li
+            key={it.label}
+            style={{
+              fontSize: 13,
+              color: "#cbd5e1",
+              lineHeight: 1.55,
+              paddingLeft: 14,
+              position: "relative",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 6,
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: accent,
+              }}
+              aria-hidden
+            />
+            {it.label}
+          </li>
+        ))}
+      </ul>
+    </article>
   );
 }
 

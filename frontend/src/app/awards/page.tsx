@@ -4,6 +4,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { getApiBase } from "@/lib/apiBase";
 import { launchedModules } from "@/data/pitchModel";
+import { HubLeaderboard } from "./_components/HubLeaderboard";
 
 export const metadata: Metadata = {
   title: "AEVION Awards — music and film on the Planet validator layer",
@@ -296,6 +297,8 @@ export default async function AwardsHomePage() {
             ))}
           </div>
         </section>
+
+        <HubLeaderboard />
 
         <section style={{ marginTop: 40 }}>
           <h2

@@ -1,18 +1,79 @@
-# AEVION Bank — Session Handoff (last updated 2026-04-26 · Phase 4)
+# AEVION Bank — Session Handoff (last updated 2026-04-26 · overnight push)
 
 Snapshot to pick up work on the bank track. Read this first next session, then [`CLAUDE.md`](./CLAUDE.md) for session rules.
 
 ---
 
-## Branch / repo state
+## Branch / repo state (overnight 2026-04-26 → 2026-04-27)
 
-- **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer` — не отдельное приложение, дерево совпадает со всем `aevion-core`).
+- **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer`).
 - **Ветка:** `bank-payment-layer`.
-- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `738241f`.
-- **Last commit (local, uncommitted):** working tree dirty — full i18n sweep + tab shell + tooltips + backend wiring (see "Session 2026-04-26" below).
-- **Ahead of `main`:** 50 commits (pushed) + uncommitted i18n/UX/backend work in progress.
-- **PR URL (unmerged):** https://github.com/Dossymbek281078/AEVION/pull/new/bank-payment-layer
-- **Build:** green. `tsc --noEmit` exits 0; `next build` produces /bank static.
+- **Remote:** `github.com/Dossymbek281078/AEVION` — fully pushed through tonight.
+- **PR #5:** https://github.com/Dossymbek281078/AEVION/pull/5 — open, ready to review/merge.
+- **Build:** green. `tsc --noEmit` exits 0; `next build` produces 26 routes (all key pages static, /pitch/opengraph-image dynamic-edge).
+
+## Overnight log (2026-04-26 → 2026-04-27)
+
+While user was away, the following landed in 6 commits:
+
+1. **`feat(pitch): SEO/OG metadata + sticky TOC + demo↔pitch crosslinks`** (`e552603`)
+2. **`feat(pitch): live metrics + competitive + risks + mobile TOC + OG image`** (`2c1a56d`)
+3. **`feat(pitch+help): investor FAQ + print/PDF + use cases + team + 10-session launcher`** (`b8539dd`)
+4. **`fix(sessions): * 4 fix-up commits`** — PowerShell launcher hardened across PS5.1 encoding / wt arg quoting / per-session temp .ps1 with BOM
+5. **`feat(sessions): auto-pull every worktree on launch + bootstrap docs`** (`856d636`)
+6. **`feat: A2-A5 overnight bundle — pitch evolution, demo refresh, multichat live, awards UX`** (`cd923ac`)
+7. **`feat: SEO meta + sitemap + a11y + changelog`** (this commit)
+
+### What shipped overnight (functional summary)
+
+**Investor pitch surface (`/pitch` + `/pitch/print`):**
+- Sticky TOC with scroll-spy (15 sections), mobile bottom-pinned chip
+- Live API metrics in hero (4-endpoint parallel fetch + LIVE/DEMO badge)
+- New sections: Walkthroughs, Use cases, Customer voice, Partners & press, Risks, Team, Competition
+- $1B+ defense (5-axis), GTM (4-phase), financials (Year 1 → Year 5 ARR)
+- /pitch/print — flat black-on-white auto-print layout for PDF export
+- OG image generated via opengraph-image.tsx for LinkedIn/Twitter/email previews
+
+**Help (`/help`):**
+- "For users" / "For investors" tab toggle with 12 investor FAQ
+
+**Demo (`/demo` + `/demo/deep`):**
+- /demo: live ecosystem pulse, 90s pipeline timeline, stat strip, cross-module flywheel, gold /pitch CTA
+- /demo/deep: 8 technical sections (architecture, crypto, API, threat model, perf, deployment, multilingual, next steps), EN translation
+
+**Multichat (`/multichat-engine`):**
+- Beta → live: working parallel-agent grid with 6 roles, persistence, demo-mode fallback, 5 LLM providers
+
+**Awards (`/awards/*`):**
+- Real submission forms (music + film), voting UI with rank #1/2/3 medals, hub leaderboard widget, AEC payout banners
+
+**SEO + plumbing:**
+- layout.tsx with metadata for /demo, /bank, /multichat-engine, /awards (canonical URLs, OG, Twitter cards)
+- sitemap.ts (23 routes prioritised) + robots.ts
+- /changelog page with recent shipped highlights
+
+**Accessibility (globals.css):**
+- prefers-reduced-motion: disable heavy animations
+- :focus-visible global ring (kbd users only)
+- .sr-only utility for screen-reader-only text
+- prefers-reduced-motion-aware smooth scroll
+
+**Tooling — 10-session launcher (next-day workflow):**
+- `START_SESSIONS.ps1` — pure ASCII, parses on Windows PowerShell 5.1
+- `SESSIONS_DATA.json` — 10 sessions with project-named titles + RU briefs
+- `SESSIONS_README.md` — full plan + per-track first prompts + bootstrap for fresh laptop
+- Auto-creates 5 Group-B worktrees + auto-pulls every worktree
+- Per-session .ps1 generated in %TEMP% with UTF-8 BOM + chcp 65001 for Cyrillic
+- One command to launch: `& "C:\Users\user\aevion-core\frontend-bank\START_SESSIONS.ps1"`
+
+### What's NOT done (left for tomorrow's sessions)
+
+- Group B tracks (5 new modules) are scaffolded as worktrees but no code yet — pick them up via launcher tabs B1–B5
+- /qcoreai own metadata layout (still inheriting site default)
+- A1 deep accessibility audit is partial — globals.css now has the foundations, individual components need axe-style review
+- Real customer testimonials (placeholders only — replace once legal clearance lands)
+- Real partner logos (placeholders only)
+- Real video walkthroughs (links currently point to live modules)
 
 ---
 

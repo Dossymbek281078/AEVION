@@ -7,8 +7,18 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { InfoTip } from "@/components/InfoTip";
 import { apiUrl } from "@/lib/apiBase";
+import { canonicalContentHash } from "@/lib/canonicalContentHash";
+import {
+  exportAuthorKeyBackup,
+  getOrCreateAuthorKey,
+  importAuthorKeyBackup,
+  isCosignSupported,
+  type AuthorKey,
+  type AuthorKeyBackup,
+} from "@/lib/aevionAuthorKey";
 
 const TOUR_KEY = "aevion_qright_tour_seen_v1";
+const KEY_BACKUP_KEY = "aevion_author_key_backed_up_v1";
 
 type CertificateData = {
   id: string;
@@ -66,6 +76,9 @@ type PipelineResult = {
     cid: string;
     witnessUrl: string;
   };
+  cosign?:
+    | { present: false }
+    | { present: true; algo: string; authorKeyFingerprint: string };
   certificate: CertificateData;
 };
 
@@ -128,6 +141,83 @@ export default function QRightPage() {
     } catch {}
   };
 
+  /* ── Author co-signing keypair ── */
+  const [cosignSupported, setCosignSupported] = useState<boolean | null>(null);
+  const [authorKey, setAuthorKey] = useState<AuthorKey | null>(null);
+  const [needsBackup, setNeedsBackup] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supported = await isCosignSupported();
+        if (cancelled) return;
+        setCosignSupported(supported);
+        if (!supported) return;
+
+        const { key, isNew } = await getOrCreateAuthorKey();
+        if (cancelled) return;
+        setAuthorKey(key);
+
+        const backedUp = (() => {
+          try {
+            return localStorage.getItem(KEY_BACKUP_KEY) === key.fingerprint;
+          } catch {
+            return false;
+          }
+        })();
+        setNeedsBackup(isNew || !backedUp);
+      } catch (e) {
+        if (!cancelled) setKeyError((e as Error).message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const downloadKeyBackup = async () => {
+    try {
+      const backup: AuthorKeyBackup = await exportAuthorKeyBackup();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aevion-author-key-${backup.fingerprint}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      try {
+        localStorage.setItem(KEY_BACKUP_KEY, backup.fingerprint);
+      } catch {}
+      setNeedsBackup(false);
+      showToast("Author key backup downloaded — store it safely!", "success");
+    } catch (e) {
+      showToast("Backup failed: " + (e as Error).message, "error");
+    }
+  };
+
+  const restoreKeyFromFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const backup = JSON.parse(String(reader.result)) as AuthorKeyBackup;
+        const key = await importAuthorKeyBackup(backup);
+        setAuthorKey(key);
+        try {
+          localStorage.setItem(KEY_BACKUP_KEY, key.fingerprint);
+        } catch {}
+        setNeedsBackup(false);
+        showToast(`Restored key ${key.fingerprint}`, "success");
+      } catch (e) {
+        showToast("Restore failed: " + (e as Error).message, "error");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const authHeaders = (): HeadersInit => {
     try {
       const raw = localStorage.getItem(TOKEN_KEY);
@@ -179,6 +269,27 @@ export default function QRightPage() {
     ];
 
     try {
+      // Pre-compute the canonical content hash and co-sign it with the
+      // user's browser-held Ed25519 key BEFORE we hit the server. The
+      // server will recompute the same hash and verify the signature
+      // against `authorPublicKey` — any byte drift fails before any DB
+      // write.
+      let cosignFields: { authorPublicKey?: string; authorSignature?: string } = {};
+      if (authorKey) {
+        const hash = await canonicalContentHash({
+          title: title.trim(),
+          description: description.trim(),
+          kind,
+          country: country.trim() || null,
+          city: city.trim() || null,
+        });
+        const sig = await authorKey.sign(hash);
+        cosignFields = {
+          authorPublicKey: authorKey.publicKeyBase64,
+          authorSignature: sig,
+        };
+      }
+
       const res = await fetch(apiUrl("/api/pipeline/protect"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -190,6 +301,7 @@ export default function QRightPage() {
           ownerEmail: ownerEmail.trim() || undefined,
           country: country.trim() || undefined,
           city: city.trim() || undefined,
+          ...cosignFields,
         }),
       });
 
@@ -287,6 +399,65 @@ export default function QRightPage() {
                 </div>
               ))}
             </div>
+
+            {/* Author identity panel — your client-side keypair */}
+            {cosignSupported === false && (
+              <div role="alert" style={{ borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", padding: "12px 16px", marginBottom: 14, fontSize: 12, color: "#991b1b" }}>
+                Your browser does not support Ed25519 in WebCrypto. Co-signing is disabled — your work will still be protected by AEVION&apos;s 3-layer stack, but without the user-held key layer.
+              </div>
+            )}
+            {keyError && (
+              <div role="alert" style={{ borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", padding: "12px 16px", marginBottom: 14, fontSize: 12, color: "#991b1b" }}>
+                Author key error: {keyError}
+              </div>
+            )}
+            {authorKey && (
+              <div style={{ borderRadius: 14, border: needsBackup ? "2px solid #f59e0b" : "1px solid rgba(13,148,136,0.2)", background: needsBackup ? "#fffbeb" : "rgba(13,148,136,0.04)", padding: "14px 16px", marginBottom: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: needsBackup ? 8 : 0 }}>
+                  <span style={{ fontSize: 18 }} aria-hidden>🔑</span>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: needsBackup ? "#92400e" : "#0f766e" }}>
+                    Your author identity
+                  </div>
+                  <InfoTip
+                    label="Author co-signing"
+                    text="Your browser holds an Ed25519 keypair only known to you. Every certificate you create is also signed with this key, so even if AEVION is breached, attackers cannot forge new certificates in your name without your private key."
+                  />
+                  <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "monospace", color: "#475569", background: "#fff", padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.08)" }}>
+                    ed25519:{authorKey.fingerprint}
+                  </span>
+                </div>
+                {needsBackup && (
+                  <>
+                    <div style={{ fontSize: 12, color: "#78350f", lineHeight: 1.55, marginBottom: 8 }}>
+                      <b>Back up your key now.</b> If you lose this browser AND the backup, you cannot issue new claims under this identity. Existing certificates remain verifiable forever.
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={downloadKeyBackup}
+                        style={{ padding: "10px 14px", borderRadius: 10, border: "none", background: "#78350f", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+                      >
+                        ⬇ Download key backup (.json)
+                      </button>
+                      <label
+                        style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #92400e", background: "#fff", color: "#92400e", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                      >
+                        Restore from file
+                        <input
+                          type="file"
+                          accept="application/json"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) restoreKeyFromFile(f);
+                          }}
+                          style={{ display: "none" }}
+                        />
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {showTour && (
               <div
@@ -481,13 +652,38 @@ export default function QRightPage() {
                 </div>
 
                 <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.05)", border: "1px solid rgba(13,148,136,0.15)", fontSize: 12, color: "#0f766e", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-                  <b>3-layer protection active:</b>
-                  <span>SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir&apos;s Secret Sharing ({result.shield.shards} shards, threshold {result.shield.threshold})</span>
+                  <b>{result.cosign?.present ? "4-layer protection active:" : "3-layer protection active:"}</b>
+                  <span>SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir&apos;s Secret Sharing ({result.shield.shards} shards, threshold {result.shield.threshold}){result.cosign?.present ? " + author co-signature" : ""}</span>
                   <InfoTip
-                    label="Why 3 layers?"
-                    text="Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards."
+                    label="Why these layers?"
+                    text={
+                      result.cosign?.present
+                        ? "Each layer detects a different attack. The author co-signature is the strongest: even if AEVION is breached and all platform keys leak, attackers still cannot forge new certificates in your name without your browser-held private key."
+                        : "Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards."
+                    }
                   />
                 </div>
+
+                {result.cosign?.present && (
+                  <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.2)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 18 }} aria-hidden>✍️</span>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: "#065f46" }}>
+                        Co-signed by your author key
+                        <InfoTip
+                          label="Author co-signature"
+                          text="This certificate carries a second Ed25519 signature made with your private key (held only in your browser, never sent to AEVION). Even if AEVION's keys leak, this layer alone proves you authored the work."
+                        />
+                      </div>
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
+                        Author key fingerprint:&nbsp;
+                        <span style={{ fontFamily: "monospace", color: "#0f172a", fontWeight: 700 }}>
+                          ed25519:{result.cosign.authorKeyFingerprint}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

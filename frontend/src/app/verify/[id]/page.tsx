@@ -36,6 +36,9 @@ type VerifyData = {
     shieldLegacy?: boolean;
     shards: number;
     threshold: number;
+    authorCosign?:
+      | { present: false }
+      | { present: true; valid: boolean; fingerprint: string };
   };
   bitcoinAnchor?: {
     status: "pending" | "bitcoin-confirmed" | "failed" | "not_stamped";
@@ -415,6 +418,25 @@ export default function VerifyPage() {
                     detail: integrity.shieldLegacy === true ? "Legacy — not real SSS" : `${integrity.shards} shards, threshold ${integrity.threshold} (Shamir SSS)`,
                     tip: { name: "Shamir Secret Sharing", text: "The Ed25519 private key is split into 3 shards. Any 2 reconstruct it; any 1 alone reveals nothing. AEVION never holds 2 of them." },
                   },
+                  (() => {
+                    const co = integrity.authorCosign;
+                    if (!co || !co.present) {
+                      return {
+                        label: "Author Co-Signature",
+                        status: false,
+                        detail: "Not signed by author (legacy single-party cert)",
+                        tip: { name: "Author co-signing", text: "Modern AEVION certificates carry a second Ed25519 signature held only by the author's browser. This row was protected before that layer existed — its other integrity checks remain valid." },
+                      };
+                    }
+                    return {
+                      label: "Author Co-Signature",
+                      status: co.valid,
+                      detail: co.valid
+                        ? `Verified · author key ed25519:${co.fingerprint}`
+                        : `Signature mismatch · purported key ed25519:${co.fingerprint || "unknown"}`,
+                      tip: { name: "Author co-signing", text: "An Ed25519 signature made with the author's browser-held private key. AEVION never sees this key — even a full platform breach cannot forge a valid co-signature for someone else's identity." },
+                    };
+                  })(),
                   {
                     label: "Certificate Status",
                     status: cert.status === "active",

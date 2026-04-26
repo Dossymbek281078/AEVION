@@ -81,6 +81,9 @@ type RunState = {
   /** Optional mid-run guidance items, rendered as inline chips before the
       agent stage they steered. */
   guidance?: GuidanceItem[];
+  /** QRight objects pre-attached to this run (server-resolved from the
+      requested IDs). */
+  attachments?: QRightObjectLite[];
   verdict?: { approved: boolean; feedback: string };
   finalContent?: string;
   error?: string;
@@ -143,8 +146,15 @@ type SSEPayload =
   | { type: "final"; content: string }
   | { type: "error"; message: string; role?: AgentRole }
   | { type: "guidance_applied"; stage: Stage; role: AgentRole; text: string; instance?: string }
+  | { type: "qright_attached"; items: { id: string; title: string | null; kind: string | null }[] }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number }
   | { type: "sse_end" };
+
+type QRightObjectLite = {
+  id: string;
+  title: string | null;
+  kind: string | null;
+};
 
 /* ═══════════════════════════════════════════════════════════════════════
    Role styling
@@ -318,6 +328,9 @@ export default function QCoreMultiAgentPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // Mid-run guidance input value.
   const [guidanceText, setGuidanceText] = useState("");
+  // QRight objects available to attach as context (lazy-loaded on first config-open).
+  const [qrightObjects, setQrightObjects] = useState<QRightObjectLite[] | null>(null);
+  const [attachedIds, setAttachedIds] = useState<string[]>([]);
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -378,6 +391,32 @@ export default function QCoreMultiAgentPage() {
       }
     })();
   }, []);
+
+  /* ── Lazy-load QRight objects when config panel opens (one fetch per page life) ── */
+  useEffect(() => {
+    if (!configOpen) return;
+    if (qrightObjects !== null) return;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/qright/objects"), { headers: bearerHeader() });
+        if (!res.ok) {
+          setQrightObjects([]);
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setQrightObjects(
+          items.slice(0, 50).map((o: any) => ({
+            id: String(o?.id ?? ""),
+            title: typeof o?.title === "string" ? o.title : null,
+            kind: typeof o?.kind === "string" ? o.kind : null,
+          })).filter((o: QRightObjectLite) => o.id)
+        );
+      } catch {
+        setQrightObjects([]);
+      }
+    })();
+  }, [configOpen, qrightObjects]);
 
   /* ── Load saved presets on mount ── */
   useEffect(() => {
@@ -588,7 +627,7 @@ export default function QCoreMultiAgentPage() {
     abortRef.current = controller;
 
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         input: msg,
         sessionId: activeSessionId,
         strategy: useStrategy,
@@ -600,6 +639,7 @@ export default function QCoreMultiAgentPage() {
           critic: useOverrides.critic,
         },
       };
+      if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...bearerHeader() },
@@ -715,6 +755,11 @@ export default function QCoreMultiAgentPage() {
           case "final":
             setRuns((prev) =>
               prev.map((r) => (r.id === realRunId ? { ...r, finalContent: payload.content } : r))
+            );
+            break;
+          case "qright_attached":
+            setRuns((prev) =>
+              prev.map((r) => (r.id === realRunId ? { ...r, attachments: payload.items } : r))
             );
             break;
           case "guidance_applied":
@@ -1344,6 +1389,92 @@ export default function QCoreMultiAgentPage() {
                     />
                   ))}
               </div>
+              {/* QRight attachments — pre-fetched as Analyst context */}
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    📎 Attach QRight objects
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    Selected ones become Analyst context — agents reason against your registered IP.
+                  </span>
+                </div>
+                {qrightObjects === null ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading…</div>
+                ) : qrightObjects.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                    No QRight objects found. Register one at{" "}
+                    <Link href="/qright" style={{ color: "#0d9488", fontWeight: 700 }}>QRight</Link> first.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {qrightObjects.map((o) => {
+                      const checked = attachedIds.includes(o.id);
+                      return (
+                        <label
+                          key={o.id}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "5px 10px",
+                            borderRadius: 999,
+                            border: `1px solid ${checked ? "#0d9488" : "#e2e8f0"}`,
+                            background: checked ? "rgba(13,148,136,0.08)" : "#f8fafc",
+                            color: checked ? "#0f766e" : "#475569",
+                            fontSize: 12,
+                            fontWeight: checked ? 700 : 500,
+                            cursor: "pointer",
+                            maxWidth: "100%",
+                          }}
+                          title={o.title || o.id}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setAttachedIds((prev) =>
+                                e.target.checked ? [...prev, o.id] : prev.filter((x) => x !== o.id)
+                              );
+                            }}
+                            style={{ accentColor: "#0d9488", cursor: "pointer" }}
+                          />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 240 }}>
+                            {o.title || o.id.slice(0, 8)}
+                          </span>
+                          {o.kind && (
+                            <span style={{ fontSize: 10, opacity: 0.6 }}>({o.kind})</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {attachedIds.length > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#0f766e", fontWeight: 700 }}>
+                    {attachedIds.length} attached — Analyst will see them as factual grounding.
+                    <button
+                      type="button"
+                      onClick={() => setAttachedIds([])}
+                      style={{
+                        marginLeft: 8, border: "none", background: "transparent",
+                        color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {strategy === "sequential" && (
                 <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 700 }}>Revision rounds:</span>
@@ -2015,6 +2146,34 @@ function RunCard({
           {run.userInput}
         </div>
       </div>
+
+      {/* Attached QRight objects — visible reminder of the factual context
+          the agents are working from. */}
+      {run.attachments && run.attachments.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10, justifyContent: "flex-end" }}>
+          {run.attachments.map((a) => (
+            <span
+              key={a.id}
+              title={a.title || a.id}
+              style={{
+                padding: "3px 9px",
+                borderRadius: 999,
+                background: "rgba(13,148,136,0.1)",
+                border: "1px solid rgba(13,148,136,0.3)",
+                color: "#0f766e",
+                fontSize: 11,
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              📎 {a.title || a.id.slice(0, 8)}
+              {a.kind && <span style={{ fontSize: 10, opacity: 0.7 }}>· {a.kind}</span>}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Agent turns (pair up parallel/debate writers) — guidance chips
           are interleaved at their `beforeTurnIndex` positions so the

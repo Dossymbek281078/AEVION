@@ -3,19 +3,38 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { apiUrl } from "@/lib/apiBase";
 import {
   ask,
   billionDefense,
+  competitive,
   ecosystemNodes,
   financials,
   gtm,
   launchedModules,
   market,
   networkForces,
+  risks,
   thesis,
   type LaunchStage,
   type ValueBucket,
 } from "@/data/pitchModel";
+
+type LiveMetrics = {
+  qrightObjects: number | null;
+  certifiedArtifacts: number | null;
+  participants: number | null;
+  shieldRecords: number | null;
+  qtradeOps: number | null;
+};
+
+const DEMO_METRICS: LiveMetrics = {
+  qrightObjects: 184,
+  certifiedArtifacts: 27,
+  participants: 312,
+  shieldRecords: 96,
+  qtradeOps: 1450,
+};
 
 const stageLabel: Record<LaunchStage, string> = {
   live: "Live",
@@ -55,7 +74,9 @@ const TOC = [
   { id: "network", label: "Network effects" },
   { id: "modules", label: "Modules" },
   { id: "ecosystem", label: "Roadmap" },
+  { id: "competitive", label: "Competition" },
   { id: "why-1b", label: "Why $1B+" },
+  { id: "risks", label: "Risks" },
   { id: "gtm", label: "GTM" },
   { id: "financials", label: "Financials" },
 ];
@@ -63,13 +84,29 @@ const TOC = [
 export default function PitchPage() {
   const [scrolled, setScrolled] = useState(0);
   const [activeSection, setActiveSection] = useState<string>(TOC[0].id);
+  const [isMobile, setIsMobile] = useState(false);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [metrics, setMetrics] = useState<LiveMetrics>({
+    qrightObjects: null,
+    certifiedArtifacts: null,
+    participants: null,
+    shieldRecords: null,
+    qtradeOps: null,
+  });
+  const [metricsLive, setMetricsLive] = useState(false);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 720);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => {
       const h = document.documentElement;
       const pct = h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight);
       setScrolled(Math.min(1, Math.max(0, pct)));
-      // Find which section is in the viewport (top 40%)
       const offsetLine = window.innerHeight * 0.4;
       let current = TOC[0].id;
       for (const t of TOC) {
@@ -83,6 +120,56 @@ export default function PitchPage() {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [qr, ps, qs, qt] = await Promise.all([
+          fetch(apiUrl("/api/qright/objects")).catch(() => null),
+          fetch(apiUrl("/api/planet/stats")).catch(() => null),
+          fetch(apiUrl("/api/quantum-shield/records")).catch(() => null),
+          fetch(apiUrl("/api/qtrade/summary")).catch(() => null),
+        ]);
+        if (cancelled) return;
+
+        let next: LiveMetrics = { ...DEMO_METRICS };
+        let anyOk = false;
+
+        if (qr && qr.ok) {
+          const j = await qr.json().catch(() => null);
+          if (Array.isArray(j?.items)) { next.qrightObjects = j.items.length; anyOk = true; }
+        }
+        if (ps && ps.ok) {
+          const j = await ps.json().catch(() => null);
+          if (j) {
+            next.certifiedArtifacts = j.certifiedArtifactVersions ?? next.certifiedArtifacts;
+            next.participants = j.eligibleParticipants ?? next.participants;
+            anyOk = true;
+          }
+        }
+        if (qs && qs.ok) {
+          const j = await qs.json().catch(() => null);
+          if (Array.isArray(j?.items)) { next.shieldRecords = j.items.length; anyOk = true; }
+        }
+        if (qt && qt.ok) {
+          const j = await qt.json().catch(() => null);
+          if (j?.operationCount != null) { next.qtradeOps = j.operationCount; anyOk = true; }
+        }
+
+        if (!cancelled) {
+          setMetrics(next);
+          setMetricsLive(anyOk);
+        }
+      } catch {
+        if (!cancelled) {
+          setMetrics(DEMO_METRICS);
+          setMetricsLive(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const liveCount = launchedModules.filter((m) => m.stage === "live").length;
@@ -117,52 +204,123 @@ export default function PitchPage() {
         }}
       />
 
-      {/* Sticky TOC — appears after hero scrolls out */}
-      <div
-        aria-label="Pitch sections"
-        style={{
-          position: "fixed",
-          top: 12,
-          right: 12,
-          zIndex: 80,
-          display: scrolled > 0.04 ? "flex" : "none",
-          flexDirection: "column",
-          gap: 4,
-          padding: "10px 12px",
-          borderRadius: 12,
-          background: "rgba(2,6,23,0.85)",
-          border: "1px solid rgba(94,234,212,0.2)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          maxWidth: 180,
-        }}
-      >
-        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.18em", color: "#5eead4", marginBottom: 2 }}>
-          PITCH MAP
+      {/* Sticky TOC — desktop: side panel, mobile: bottom collapsible */}
+      {scrolled > 0.04 && !isMobile ? (
+        <div
+          aria-label="Pitch sections"
+          style={{
+            position: "fixed",
+            top: 12,
+            right: 12,
+            zIndex: 80,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            padding: "10px 12px",
+            borderRadius: 12,
+            background: "rgba(2,6,23,0.85)",
+            border: "1px solid rgba(94,234,212,0.2)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            maxWidth: 180,
+          }}
+        >
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.18em", color: "#5eead4", marginBottom: 2 }}>
+            PITCH MAP
+          </div>
+          {TOC.map((t) => {
+            const isActive = activeSection === t.id;
+            return (
+              <a
+                key={t.id}
+                href={`#${t.id}`}
+                style={{
+                  fontSize: 12,
+                  fontWeight: isActive ? 800 : 600,
+                  color: isActive ? "#fbbf24" : "#94a3b8",
+                  textDecoration: "none",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  background: isActive ? "rgba(251,191,36,0.1)" : "transparent",
+                  borderLeft: isActive ? "2px solid #fbbf24" : "2px solid transparent",
+                  transition: "all 120ms",
+                }}
+              >
+                {t.label}
+              </a>
+            );
+          })}
         </div>
-        {TOC.map((t) => {
-          const isActive = activeSection === t.id;
-          return (
-            <a
-              key={t.id}
-              href={`#${t.id}`}
-              style={{
-                fontSize: 12,
-                fontWeight: isActive ? 800 : 600,
-                color: isActive ? "#fbbf24" : "#94a3b8",
-                textDecoration: "none",
-                padding: "4px 8px",
-                borderRadius: 6,
-                background: isActive ? "rgba(251,191,36,0.1)" : "transparent",
-                borderLeft: isActive ? "2px solid #fbbf24" : "2px solid transparent",
-                transition: "all 120ms",
-              }}
-            >
-              {t.label}
-            </a>
-          );
-        })}
-      </div>
+      ) : null}
+
+      {/* Mobile TOC — bottom-pinned chip that expands on tap */}
+      {scrolled > 0.04 && isMobile ? (
+        <div
+          aria-label="Pitch sections (mobile)"
+          style={{
+            position: "fixed",
+            bottom: 12,
+            left: 12,
+            right: 12,
+            zIndex: 80,
+            background: "rgba(2,6,23,0.95)",
+            border: "1px solid rgba(94,234,212,0.3)",
+            borderRadius: 12,
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            overflow: "hidden",
+          }}
+        >
+          <button
+            onClick={() => setTocOpen((v) => !v)}
+            aria-expanded={tocOpen}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              background: "transparent",
+              border: "none",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 700,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              cursor: "pointer",
+            }}
+          >
+            <span>
+              <span style={{ color: "#5eead4", letterSpacing: "0.15em", fontSize: 10, marginRight: 8 }}>PITCH MAP</span>
+              <span style={{ color: "#fbbf24" }}>{TOC.find((t) => t.id === activeSection)?.label ?? "—"}</span>
+            </span>
+            <span style={{ color: "#94a3b8", fontSize: 16 }}>{tocOpen ? "▾" : "▴"}</span>
+          </button>
+          {tocOpen ? (
+            <div style={{ padding: "0 8px 8px", display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {TOC.map((t) => {
+                const isActive = activeSection === t.id;
+                return (
+                  <a
+                    key={t.id}
+                    href={`#${t.id}`}
+                    onClick={() => setTocOpen(false)}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: isActive ? 800 : 600,
+                      color: isActive ? "#fbbf24" : "#cbd5e1",
+                      textDecoration: "none",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      background: isActive ? "rgba(251,191,36,0.15)" : "rgba(148,163,184,0.1)",
+                    }}
+                  >
+                    {t.label}
+                  </a>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ───────── HERO ───────── */}
       <section
@@ -224,13 +382,47 @@ export default function PitchPage() {
               display: "flex",
               flexWrap: "wrap",
               gap: 16,
-              marginBottom: 28,
+              marginBottom: 16,
             }}
           >
             <HeroStat value={`${liveCount}`} unit="live MVPs" hint={`of ${totalNodes} planned nodes`} />
             <HeroStat value="$340B" unit="addressable market" hint="IP + creators + payments" />
             <HeroStat value="$2B+" unit="modelled ARR" hint="by year 5" />
             <HeroStat value="$1B+" unit="defensible valuation" hint="five-axis defense" />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              marginBottom: 28,
+              alignItems: "center",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.15em",
+                color: metricsLive ? "#34d399" : "#fbbf24",
+                background: metricsLive ? "rgba(52,211,153,0.12)" : "rgba(251,191,36,0.12)",
+                padding: "4px 10px",
+                borderRadius: 999,
+                textTransform: "uppercase",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: metricsLive ? "#34d399" : "#fbbf24" }} aria-hidden />
+              {metricsLive ? "Live data from API" : "Demo snapshot (backend offline)"}
+            </span>
+            <LivePill label="QRight records" value={metrics.qrightObjects} />
+            <LivePill label="Bureau certs" value={metrics.certifiedArtifacts} />
+            <LivePill label="Planet participants" value={metrics.participants} />
+            <LivePill label="Shielded artifacts" value={metrics.shieldRecords} />
+            <LivePill label="QTrade ops" value={metrics.qtradeOps} />
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -623,6 +815,54 @@ export default function PitchPage() {
         </div>
       </Section>
 
+      {/* ───────── COMPETITIVE ───────── */}
+      <Section anchor="competitive" eyebrow="Competitive landscape" title={competitive.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{competitive.intro}</p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+            gap: 16,
+          }}
+        >
+          {competitive.alternatives.map((c) => (
+            <article
+              key={c.name}
+              style={{
+                padding: 22,
+                borderRadius: 16,
+                background: "rgba(15,23,42,0.7)",
+                border: "1px solid rgba(244,114,182,0.25)",
+              }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#f472b6", marginBottom: 4, textTransform: "uppercase" }}>
+                {c.category}
+              </div>
+              <h3 style={{ fontSize: 17, fontWeight: 850, color: "#fff", margin: "0 0 12px", lineHeight: 1.3 }}>{c.name}</h3>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#fb7185", marginBottom: 4, textTransform: "uppercase" }}>
+                  Their gap
+                </div>
+                <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.55, margin: 0 }}>{c.weakness}</p>
+              </div>
+              <div
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: "rgba(94,234,212,0.08)",
+                  borderLeft: "2px solid #5eead4",
+                }}
+              >
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#5eead4", marginBottom: 4, textTransform: "uppercase" }}>
+                  AEVION wins because
+                </div>
+                <p style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.55, margin: 0 }}>{c.aevionWin}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </Section>
+
       {/* ───────── WHY $1B+ ───────── */}
       <Section anchor="why-1b" eyebrow="Defensibility stack" title={billionDefense.title}>
         <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{billionDefense.intro}</p>
@@ -659,6 +899,58 @@ export default function PitchPage() {
               </div>
             </article>
           ))}
+        </div>
+      </Section>
+
+      {/* ───────── RISKS ───────── */}
+      <Section anchor="risks" eyebrow="Honest answers" title={risks.title}>
+        <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.65, margin: "0 0 28px" }}>{risks.intro}</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {risks.rows.map((r) => {
+            const sevColor =
+              r.severity === "high" ? "#fb7185" : r.severity === "medium" ? "#fbbf24" : "#86efac";
+            return (
+              <article
+                key={r.risk}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto 1fr",
+                  gap: 18,
+                  padding: 20,
+                  borderRadius: 14,
+                  background: "rgba(15,23,42,0.7)",
+                  border: `1px solid ${sevColor}33`,
+                  alignItems: "start",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 900,
+                    letterSpacing: "0.15em",
+                    color: sevColor,
+                    background: `${sevColor}18`,
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    textTransform: "uppercase",
+                    height: "fit-content",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {r.severity}
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 850, color: "#fff", margin: "0 0 8px", lineHeight: 1.35 }}>
+                    {r.risk}
+                  </h3>
+                  <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, margin: 0 }}>
+                    <strong style={{ color: "#5eead4" }}>Mitigation: </strong>
+                    {r.mitigation}
+                  </p>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </Section>
 
@@ -873,6 +1165,27 @@ function Section({
         {children}
       </div>
     </section>
+  );
+}
+
+function LivePill({ label, value }: { label: string; value: number | null }) {
+  const display = value == null ? "…" : value.toLocaleString("en-US");
+  return (
+    <span
+      style={{
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#cbd5e1",
+        background: "rgba(15,23,42,0.65)",
+        padding: "6px 12px",
+        borderRadius: 999,
+        border: "1px solid rgba(94,234,212,0.2)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <strong style={{ color: "#5eead4", marginRight: 6 }}>{display}</strong>
+      <span style={{ color: "#94a3b8" }}>{label}</span>
+    </span>
   );
 }
 

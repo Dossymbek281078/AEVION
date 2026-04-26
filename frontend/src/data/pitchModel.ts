@@ -457,6 +457,107 @@ export const financials = {
     "Modelled, not promised. Inputs: comparable SaaS take rates, observed creator-economy GMV, and historical IP-bureau cert pricing.",
 } as const;
 
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Competitive landscape — "why not just X?"                                  */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const competitive = {
+  title: "Why not just X? — the competitive landscape",
+  intro:
+    "AEVION competes with point-solutions in five adjacent markets. None offer the unified pipeline; " +
+    "more importantly, none can build the Trust Graph that compounds across them.",
+  alternatives: [
+    {
+      name: "Notarize / DocuSign / Adobe Sign",
+      category: "Digital signatures",
+      weakness:
+        "Sign-only. No registry, no compliance, no creator economy, no wallet. Customers still need 4 other vendors.",
+      aevionWin:
+        "QSign is one of 27 modules — same payload format, same Trust Graph edge, same audit log. Bundled at zero marginal cost.",
+    },
+    {
+      name: "Blockchain timestamping (OpenTimestamps, Bitcoin OP_RETURN)",
+      category: "Proof of existence",
+      weakness:
+        "Cryptographic proof exists, but no human-readable certificate, no legal framework citation, no validator network, no royalty rails on top.",
+      aevionWin:
+        "QRight + Bureau wraps the same hash in a court-grade certificate citing 6 international frameworks, plus auto-routes royalties via Bank.",
+    },
+    {
+      name: "Stripe Atlas / Stripe Connect for creators",
+      category: "Creator payments",
+      weakness:
+        "Excellent at moving money. Knows nothing about IP, validation, awards, or reputation. Cannot underwrite credit against creative output.",
+      aevionWin:
+        "AEVION Bank issues salary advances against Trust Score (which composites IP, chess, Planet, awards, network). Stripe sees a payment; we see a graph.",
+    },
+    {
+      name: "Traditional patent offices (USPTO, EPO, WIPO)",
+      category: "IP enforcement",
+      weakness:
+        "$5K–$25K per filing, 6–18 months turnaround. Built for inventions, not for digital creative output (music, code, designs, AI artefacts).",
+      aevionWin:
+        "Bureau issues the same legally-defensible certificate in seconds, denominated in international frameworks the office itself recognises (Berne, WIPO, TRIPS).",
+    },
+    {
+      name: "Generic AI assistants (ChatGPT, Claude, Gemini)",
+      category: "AI surface",
+      weakness:
+        "Domain-blind. Cannot read your IP portfolio, your wallet, your tier or your tournament history.",
+      aevionWin:
+        "QCoreAI is bundled with full ecosystem context. Bank's Advisor knows your goals; Multichat agents specialise per domain. Sticky because it's useful.",
+    },
+  ],
+} as const;
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Risks & mitigations — the honest answer                                    */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export const risks = {
+  title: "Risks we know about — and what we do about them",
+  intro:
+    "Every $1B+ company faces real risks. We list ours openly and ship mitigations into the product itself, not just into a slide.",
+  rows: [
+    {
+      severity: "high",
+      risk: "Regulatory drift in IP and digital signatures",
+      mitigation:
+        "Bureau cites 6 standing international frameworks (Berne, WIPO, TRIPS, eIDAS, ESIGN, KZ Digital Sig) — we ride the standards body, not predict them. Planet voting layer adapts the validator quorum if frameworks shift.",
+    },
+    {
+      severity: "high",
+      risk: "Cold start on the Trust Graph (network effect needs density)",
+      mitigation:
+        "Wedge is independent creators (no graph required for them to extract value from a single QRight cert). Cross-module gravity kicks in only after wedge is monetised — graph is a bonus, not a precondition.",
+    },
+    {
+      severity: "medium",
+      risk: "LLM cost and provider lock-in (QCoreAI margin compression)",
+      mitigation:
+        "QCoreAI routes across 5 providers (Claude/GPT/Gemini/DeepSeek/Grok) and auto-selects per task. QFusionAI roadmap deepens this. We negotiate from a portfolio position, never single-vendor.",
+    },
+    {
+      severity: "medium",
+      risk: "Single-vertical competitor undercuts one bucket (e.g. an IP-only startup)",
+      mitigation:
+        "Defensible through bundling: a creator using QRight also gets royalties through Bank, validation through Planet, recognition through Awards. Switching out QRight breaks 4 other workflows.",
+    },
+    {
+      severity: "medium",
+      risk: "Execution risk on 27 nodes — focus dilution",
+      mitigation:
+        "Only 12 of 27 nodes are committed to ship in the next 18 months. Remaining 15 are roadmap signals (cheap optionality), not parallel work-streams. Engineering capital concentrated on the 4 highest-revenue modules first.",
+    },
+    {
+      severity: "low",
+      risk: "Quantum-computing breakthroughs invalidate today's signatures",
+      mitigation:
+        "Quantum Shield (Ed25519 + Shamir SSS) already deployed. Migration path to lattice-based PQC is design-anticipated; certificates can be re-signed under future schemes without breaking the chain.",
+    },
+  ],
+} as const;
+
 export const ask = {
   title: "The ask",
   body:

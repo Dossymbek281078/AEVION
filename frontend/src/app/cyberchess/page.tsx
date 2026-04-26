@@ -10,6 +10,8 @@ import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt } from "./BoardArt";
 import OpeningExplorer from "./OpeningExplorer";
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import RepertoireModal, { loadRepertoire, saveRepertoire, matchHist, type Repertoire } from "./Repertoire";
+import TablebasePanel from "./Tablebase";
+import { FAMOUS_GAMES } from "./FamousGames";
 import AiCoach from "./AiCoach";
 import CoachPredictions from "./CoachPredictions";
 import DailyMission, { bumpDaily } from "./DailyMission";
@@ -482,6 +484,7 @@ export default function CyberChessPage(){
   // ─── Personal Opening Repertoire ───
   const[repertoire,sRepertoire]=useState<Repertoire>(()=>loadRepertoire());
   const[repertoireOpen,sRepertoireOpen]=useState(false);
+  const[famousOpen,sFamousOpen]=useState(false);
   useEffect(()=>{saveRepertoire(repertoire)},[repertoire]);
   const repMatches=useMemo(()=>matchHist(repertoire,hist,pCol),[repertoire,hist,pCol]);
   const inBook=repMatches.some(m=>m.matchedPlies===hist.length);
@@ -2459,6 +2462,18 @@ export default function CyberChessPage(){
               <div style={{fontSize:11,fontWeight:800,color:CC.accent,marginTop:SPACE[2]}}>Анализ →</div>
             </Card>
 
+            {/* Famous Games — public-domain classical match library */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sFamousOpen(true)}
+              style={{background:"linear-gradient(135deg,#fef3c7,#fffbeb)",borderColor:"#fcd34d",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Великие партии</div>
+                <Badge tone="gold" size="xs">{FAMOUS_GAMES.length}</Badge>
+              </div>
+              <div style={{fontSize:26,marginTop:2}}>🏆</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2,lineHeight:1.4}}>Морфи · Каспаров · Карлсен</div>
+              <div style={{fontSize:11,fontWeight:800,color:"#92400e",marginTop:SPACE[2]}}>Изучить →</div>
+            </Card>
+
             {/* Game DNA — персональные паттерны (killer #3) */}
             <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowGameDna(true)}
               style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",borderColor:"#93c5fd",cursor:"pointer",gridColumn:gameDna.insights.length>0&&savedGames.length>0?"span 2":"auto"}}>
@@ -3094,6 +3109,19 @@ export default function CyberChessPage(){
             </div>
             <div style={{fontSize:12,color:"#065f46",lineHeight:1.45}}>{currentOpening.desc}</div>
           </div>}
+
+          {/* Tablebase — perfect play for endgames ≤7 pieces */}
+          {(tab==="analysis"||tab==="coach")&&hist.length>14&&(
+            <TablebasePanel fen={game.fen()} enabled={true}
+              onPlay={(uci,san)=>{
+                if(tab==="analysis"||(tab==="coach"&&!on)){
+                  try{const m=game.move(san);if(m){sLm({from:m.from,to:m.to});sHist(h=>[...h,m.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);snd("move")}}catch{showToast("Не удалось сыграть ход","error")}
+                }else if(on&&game.turn()===pCol){
+                  try{const from=uci.slice(0,2) as Square;const to=uci.slice(2,4) as Square;exec(from,to,(uci[4]||undefined) as any)}catch{}
+                }else{showToast("Сейчас не твой ход","info");}
+              }}
+            />
+          )}
 
           {/* Opening Explorer — branches from current position (analysis/coach tab, opening phase) */}
           {(tab==="analysis"||tab==="coach")&&hist.length<=22&&openingsDb.length>0&&(
@@ -4598,6 +4626,50 @@ export default function CyberChessPage(){
             try{navigator.clipboard.writeText(cmd).then(()=>showToast("✓ Команда скопирована","success")).catch(()=>showToast("Не получилось","error"))}catch{showToast("Clipboard недоступен","error")}
           }}>📋 Копировать команду</Btn>
         </div>
+      </div>
+    </Modal>
+
+    {/* Famous Games library modal */}
+    <Modal open={famousOpen} onClose={()=>sFamousOpen(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🏆 Великие партии истории</span>}>
+      <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>
+        Шедевры от Морфи до Карлсена. Кликни на партию — она откроется в Analysis-табе с полной разметкой ходов.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:SPACE[2]}}>
+        {FAMOUS_GAMES.map(g=>{
+          const resCol=g.result==="1-0"?CC.brand:g.result==="0-1"?CC.danger:CC.textDim;
+          return <button key={g.id} className="cc-focus-ring"
+            onClick={()=>{
+              try{
+                const ch=new Chess();const fens:string[]=[ch.fen()];const moves:string[]=[];
+                for(const san of g.pgn.trim().split(/\s+/)){
+                  try{const mv=ch.move(san);if(mv){moves.push(mv.san);fens.push(ch.fen())}else{break}}catch{break}
+                }
+                if(moves.length===0){showToast("Не удалось разобрать партию","error");return}
+                setGame(ch);sBk(k=>k+1);sHist(moves);sFenHist(fens);
+                sOver(g.result==="1-0"?"Checkmate! White wins (история)":g.result==="0-1"?"Checkmate — Black wins (история)":"Draw (история)");
+                sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());sCapW([]);sCapB([]);
+                sFamousOpen(false);
+                showToast(`📖 Загружено: ${g.title}`,"success");
+              }catch{showToast("Ошибка загрузки PGN","error")}
+            }}
+            style={{padding:SPACE[3],borderRadius:RADIUS.lg,
+              border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",
+              textAlign:"left",display:"flex",flexDirection:"column",gap:SPACE[1],
+              transition:`all ${MOTION.fast} ${MOTION.ease}`,boxShadow:SHADOW.sm}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:20,lineHeight:1}}>{g.emoji}</span>
+              <span style={{fontSize:13,fontWeight:900,color:CC.text,flex:1}}>{g.title}</span>
+              <span style={{fontSize:10,fontWeight:900,color:resCol,fontFamily:"ui-monospace,monospace"}}>{g.result}</span>
+            </div>
+            <div style={{fontSize:11,color:CC.textDim,fontStyle:"italic"}}>{g.subtitle}</div>
+            <div style={{fontSize:11,color:CC.text,marginTop:2}}>{g.lesson}</div>
+            <div style={{fontSize:10,color:CC.textMute,marginTop:2,display:"flex",gap:6,flexWrap:"wrap"}}>
+              <span>{g.white}</span><span>vs</span><span>{g.black}</span>
+              {g.eco&&<span style={{padding:"1px 5px",background:CC.brandSoft,color:CC.brand,borderRadius:3,fontFamily:"monospace",fontWeight:700}}>{g.eco}</span>}
+            </div>
+          </button>;
+        })}
       </div>
     </Modal>
 

@@ -6,24 +6,333 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
 import { launchedModules } from "@/data/pitchModel";
+import { useI18n, type Lang } from "@/lib/i18n";
+
+/* ─────────────────────────────────────────────────────────────────
+ * Module-local i18n — lives next to the module instead of bloating
+ * the global dictionary in src/lib/i18n.tsx.
+ * ────────────────────────────────────────────────────────────── */
+
+const MC_STRINGS: Record<Lang, Record<string, string>> = {
+  en: {
+    "mc.badge": "Multichat Engine · Live",
+    "mc.title.a": "Parallel agents,",
+    "mc.title.b": "one identity, one window",
+    "mc.subtitle.fallback":
+      "Parallel agent sessions over QCoreAI — code, finance, IP, content in one window.",
+    "mc.stat.backend.label": "Backend",
+    "mc.stat.backend.hint": "Single endpoint live",
+    "mc.stat.stage.label": "Stage",
+    "mc.stat.stage.value": "Live",
+    "mc.stat.stage.hint": "Parallel agents shipped",
+    "mc.stat.providers.label": "Providers",
+    "mc.stat.providers.hint": "via QCoreAI router",
+    "mc.stat.b2b.label": "B2B angle",
+    "mc.stat.b2b.value": "White-label",
+    "mc.stat.b2b.hint": "AEVION inside SaaS line",
+    "mc.cta.try": "Try parallel agents ↓",
+    "mc.cta.single": "Single chat (QCoreAI) →",
+    "mc.cta.health": "QCoreAI health",
+    "mc.ctx.label": "Personalised",
+    "mc.ctx.work": "{n} IP work",
+    "mc.ctx.works": "{n} IP works",
+    "mc.ctx.toggle": "Inject into agents",
+    "mc.ctx.toggle.title":
+      "Inject your real AEVION account state into agent system prompts",
+    "mc.vision.eyebrow": "The vision",
+    "mc.vision.title": "From a chat box to an agent operating system",
+    "mc.vision.body.fallback":
+      "Users open four tabs to work with four different AI assistants. Multichat Engine collapses that into a single window — and then layers parallel agents on top, each with its own role, memory and tool scope.",
+    "mc.vision.b1":
+      "One window, many agents — no more juggling 4 browser tabs for 4 different AIs.",
+    "mc.vision.b2":
+      "Each session inherits AEVION context: your IP portfolio (QRight), your wallet (Bank), your tier (Trust Score), your awards.",
+    "mc.vision.b3":
+      "Agents can cross-call each other through QCoreAI routing — Code agent hands off to Finance agent without losing context.",
+    "mc.vision.b4":
+      "Centralised model spend across the platform: predictable per-token economics, single biggest OPEX win in the company.",
+    "mc.preset.eyebrow": "Quick start",
+    "mc.preset.title": "One click → curated agent bundle",
+    "mc.preset.note":
+      "Replaces current agents. Settings persist in localStorage.",
+    "mc.preset.investor.name": "Investor pack",
+    "mc.preset.investor.desc":
+      "Story + financials + IP defense in one window",
+    "mc.preset.founder.name": "Founder ops",
+    "mc.preset.founder.desc": "Code, money, regulation — parallel decisions",
+    "mc.preset.legal.name": "Legal review",
+    "mc.preset.legal.desc": "Contracts, compliance, multilingual clauses",
+    "mc.preset.global.name": "Multilingual support",
+    "mc.preset.global.desc": "Customer ops in any language",
+    "mc.preset.fullstack.name": "Full stack",
+    "mc.preset.fullstack.desc": "Every role at once — only for power users",
+    "mc.live.eyebrow": "Live · parallel agents",
+    "mc.live.count.one": "{n}/{max} active session",
+    "mc.live.count.many": "{n}/{max} active sessions",
+    "mc.live.spawn": "+ Spawn agent",
+    "mc.live.clearAll": "Clear all",
+    "mc.live.confirm.wipe":
+      "Wipe all agents and conversations? This cannot be undone.",
+    "mc.live.confirm.preset":
+      "Replace {cur} agent(s) (some have conversation history) with \"{name}\" ({n} agents)?",
+    "mc.killer.eyebrow": "Killer feature",
+    "mc.network.eyebrow": "Network role",
+    "mc.footer.body":
+      "Multichat Engine is the social and agent glue for the rest of AEVION — Planet voting, Bank Advisor, Awards judging, customer service.",
+    "mc.footer.pitch": "Investor pitch →",
+    "mc.footer.demo": "Live demo →",
+    "mc.footer.qcoreai": "Open QCoreAI →",
+    "mc.panel.prompt": "✎ Prompt",
+    "mc.panel.prompt.custom": "✎ Prompt · custom",
+    "mc.panel.prompt.title": "Edit this agent's system prompt",
+    "mc.panel.export.md": "↓ MD",
+    "mc.panel.export.md.title": "Export conversation as Markdown",
+    "mc.panel.export.json": "↓ JSON",
+    "mc.panel.export.json.title": "Export conversation as JSON",
+    "mc.panel.msg.one": "{n} msg",
+    "mc.panel.msg.many": "{n} msgs",
+    "mc.panel.editor.label": "System prompt for this agent",
+    "mc.panel.editor.save": "Save",
+    "mc.panel.editor.reset": "Reset to default",
+    "mc.panel.editor.cancel": "Cancel",
+    "mc.panel.empty.title": "{role} agent ready",
+    "mc.panel.empty.desc":
+      "System prompt is preset. Send a message to start.",
+    "mc.panel.placeholder":
+      "Message {role}…  (try @code, @finance, @legal to relay)",
+    "mc.panel.send": "Send",
+    "mc.panel.relay": "Relay:",
+    "mc.panel.role.aria": "Agent role",
+    "mc.panel.provider.aria": "Provider",
+    "mc.panel.model.aria": "Model",
+    "mc.panel.close.aria": "Close agent",
+    "mc.panel.close.title": "Close agent",
+    "mc.panel.typing.aria": "Agent is typing",
+    "mc.handoff.noTarget":
+      "No active @{tag} agent in this window. Click \"+ Spawn agent\" and pick role \"{role}\" to enable handoff.",
+  },
+  ru: {
+    "mc.badge": "Multichat Engine · Live",
+    "mc.title.a": "Параллельные агенты,",
+    "mc.title.b": "одна личность, одно окно",
+    "mc.subtitle.fallback":
+      "Параллельные сессии агентов поверх QCoreAI — код, финансы, IP, контент в одном окне.",
+    "mc.stat.backend.label": "Бэкенд",
+    "mc.stat.backend.hint": "Один эндпоинт",
+    "mc.stat.stage.label": "Стадия",
+    "mc.stat.stage.value": "Live",
+    "mc.stat.stage.hint": "Параллельные агенты в проде",
+    "mc.stat.providers.label": "Провайдеры",
+    "mc.stat.providers.hint": "через QCoreAI router",
+    "mc.stat.b2b.label": "B2B",
+    "mc.stat.b2b.value": "White-label",
+    "mc.stat.b2b.hint": "AEVION внутри SaaS продукта",
+    "mc.cta.try": "К параллельным агентам ↓",
+    "mc.cta.single": "Один чат (QCoreAI) →",
+    "mc.cta.health": "Здоровье QCoreAI",
+    "mc.ctx.label": "Персонализация",
+    "mc.ctx.work": "{n} IP-объект",
+    "mc.ctx.works": "{n} IP-объектов",
+    "mc.ctx.toggle": "Вшить в агентов",
+    "mc.ctx.toggle.title":
+      "Подмешать данные вашего AEVION-аккаунта в system prompt агентов",
+    "mc.vision.eyebrow": "Видение",
+    "mc.vision.title": "От чат-окна к ОС агентов",
+    "mc.vision.body.fallback":
+      "Люди открывают четыре вкладки, чтобы пользоваться четырьмя разными AI-ассистентами. Multichat Engine схлопывает их в одно окно и накладывает параллельных агентов — у каждого своя роль, память и tool scope.",
+    "mc.vision.b1":
+      "Одно окно, много агентов — никаких 4 вкладок ради 4 разных AI.",
+    "mc.vision.b2":
+      "Каждая сессия знает контекст AEVION: ваш IP-портфель (QRight), кошелёк (Bank), Trust Score, Awards.",
+    "mc.vision.b3":
+      "Агенты могут вызывать друг друга через QCoreAI — Code-агент передаёт задачу Finance-агенту, не теряя контекст.",
+    "mc.vision.b4":
+      "Централизованные расходы на модели на платформе: предсказуемая токен-экономика, главный OPEX-выигрыш компании.",
+    "mc.preset.eyebrow": "Быстрый старт",
+    "mc.preset.title": "Один клик → готовый набор агентов",
+    "mc.preset.note":
+      "Заменит текущих агентов. Настройки сохранятся в localStorage.",
+    "mc.preset.investor.name": "Инвестор-пак",
+    "mc.preset.investor.desc": "Story + финансы + IP-защита в одном окне",
+    "mc.preset.founder.name": "Founder ops",
+    "mc.preset.founder.desc": "Код, деньги, регуляция — параллельные решения",
+    "mc.preset.legal.name": "Юр. ревью",
+    "mc.preset.legal.desc": "Контракты, compliance, многоязычные оговорки",
+    "mc.preset.global.name": "Multilingual support",
+    "mc.preset.global.desc": "Поддержка клиентов на любом языке",
+    "mc.preset.fullstack.name": "Full stack",
+    "mc.preset.fullstack.desc": "Все роли сразу — для опытных",
+    "mc.live.eyebrow": "Live · параллельные агенты",
+    "mc.live.count.one": "{n}/{max} активная сессия",
+    "mc.live.count.many": "{n}/{max} активных сессий",
+    "mc.live.spawn": "+ Добавить агента",
+    "mc.live.clearAll": "Очистить всё",
+    "mc.live.confirm.wipe":
+      "Удалить всех агентов и переписки? Отменить нельзя.",
+    "mc.live.confirm.preset":
+      "Заменить {cur} агент(ов) (часть с историей) на \"{name}\" ({n} агента)?",
+    "mc.killer.eyebrow": "Killer-фича",
+    "mc.network.eyebrow": "Роль в сети",
+    "mc.footer.body":
+      "Multichat Engine — социальный и agent-клей всего AEVION: голосование Planet, Advisor в Bank, жюри Awards, клиентская поддержка.",
+    "mc.footer.pitch": "Инвестор-питч →",
+    "mc.footer.demo": "Live demo →",
+    "mc.footer.qcoreai": "Открыть QCoreAI →",
+    "mc.panel.prompt": "✎ Prompt",
+    "mc.panel.prompt.custom": "✎ Prompt · свой",
+    "mc.panel.prompt.title": "Редактировать system prompt этого агента",
+    "mc.panel.export.md": "↓ MD",
+    "mc.panel.export.md.title": "Скачать переписку как Markdown",
+    "mc.panel.export.json": "↓ JSON",
+    "mc.panel.export.json.title": "Скачать переписку как JSON",
+    "mc.panel.msg.one": "{n} сообщение",
+    "mc.panel.msg.many": "{n} сообщений",
+    "mc.panel.editor.label": "System prompt для этого агента",
+    "mc.panel.editor.save": "Сохранить",
+    "mc.panel.editor.reset": "По умолчанию",
+    "mc.panel.editor.cancel": "Отмена",
+    "mc.panel.empty.title": "Агент {role} готов",
+    "mc.panel.empty.desc":
+      "System prompt задан. Отправьте сообщение, чтобы начать.",
+    "mc.panel.placeholder":
+      "Сообщение для {role}…  (попробуйте @code, @finance, @legal)",
+    "mc.panel.send": "Отправить",
+    "mc.panel.relay": "Relay:",
+    "mc.panel.role.aria": "Роль агента",
+    "mc.panel.provider.aria": "Провайдер",
+    "mc.panel.model.aria": "Модель",
+    "mc.panel.close.aria": "Закрыть агента",
+    "mc.panel.close.title": "Закрыть агента",
+    "mc.panel.typing.aria": "Агент печатает",
+    "mc.handoff.noTarget":
+      "В этом окне нет активного @{tag}-агента. Нажмите \"+ Добавить агента\" и выберите роль \"{role}\".",
+  },
+  kk: {
+    "mc.badge": "Multichat Engine · Live",
+    "mc.title.a": "Параллель агенттер,",
+    "mc.title.b": "бір тұлға, бір терезе",
+    "mc.subtitle.fallback":
+      "QCoreAI үстіндегі параллель агент-сессиялар — код, қаржы, IP, контент бір терезеде.",
+    "mc.stat.backend.label": "Бэкенд",
+    "mc.stat.backend.hint": "Бірыңғай эндпоинт",
+    "mc.stat.stage.label": "Стадия",
+    "mc.stat.stage.value": "Live",
+    "mc.stat.stage.hint": "Параллель агенттер шықты",
+    "mc.stat.providers.label": "Провайдерлер",
+    "mc.stat.providers.hint": "QCoreAI router арқылы",
+    "mc.stat.b2b.label": "B2B",
+    "mc.stat.b2b.value": "White-label",
+    "mc.stat.b2b.hint": "AEVION SaaS өнімі ішінде",
+    "mc.cta.try": "Параллель агенттер ↓",
+    "mc.cta.single": "Жалғыз чат (QCoreAI) →",
+    "mc.cta.health": "QCoreAI денсаулығы",
+    "mc.ctx.label": "Жекелендірілген",
+    "mc.ctx.work": "{n} IP-объект",
+    "mc.ctx.works": "{n} IP-объект",
+    "mc.ctx.toggle": "Агенттерге қосу",
+    "mc.ctx.toggle.title":
+      "Сіздің AEVION-аккаунт күйіңіз агент system prompt-қа қосылады",
+    "mc.vision.eyebrow": "Идея",
+    "mc.vision.title": "Чат-терезеден агент-ОС-ға дейін",
+    "mc.vision.body.fallback":
+      "Адамдар 4 түрлі AI үшін 4 бет ашады. Multichat Engine оларды бір терезеге біріктіреді — әр агенттің өз рөлі, жадысы және tool scope болады.",
+    "mc.vision.b1": "Бір терезе, көп агент — 4 бет керек емес.",
+    "mc.vision.b2":
+      "Әр сессия AEVION контекстін біледі: IP-портфель (QRight), кошелёк (Bank), Trust Score, Awards.",
+    "mc.vision.b3":
+      "Агенттер бір-біріне QCoreAI арқылы хабар жібере алады — Code Finance-қа береді, контекст жоғалмайды.",
+    "mc.vision.b4":
+      "Платформадағы модель шығынын орталықтандыру — ең үлкен OPEX-ұтыс.",
+    "mc.preset.eyebrow": "Жылдам бастау",
+    "mc.preset.title": "Бір клик → даяр агент жинағы",
+    "mc.preset.note":
+      "Қазіргі агенттерді ауыстырады. Параметрлер localStorage-те сақталады.",
+    "mc.preset.investor.name": "Инвестор-пак",
+    "mc.preset.investor.desc": "Story + қаржы + IP-қорғаныс бір терезеде",
+    "mc.preset.founder.name": "Founder ops",
+    "mc.preset.founder.desc": "Код, ақша, реттеу — параллель шешімдер",
+    "mc.preset.legal.name": "Заң ревью",
+    "mc.preset.legal.desc": "Шарттар, compliance, көптілді тармақтар",
+    "mc.preset.global.name": "Multilingual support",
+    "mc.preset.global.desc": "Кез келген тілде клиент қолдау",
+    "mc.preset.fullstack.name": "Full stack",
+    "mc.preset.fullstack.desc": "Барлық рөл бірден — тәжірибеліге",
+    "mc.live.eyebrow": "Live · параллель агенттер",
+    "mc.live.count.one": "{n}/{max} белсенді сессия",
+    "mc.live.count.many": "{n}/{max} белсенді сессия",
+    "mc.live.spawn": "+ Агент қосу",
+    "mc.live.clearAll": "Бәрін тазалау",
+    "mc.live.confirm.wipe":
+      "Барлық агент пен әңгімелерді өшіру керек пе? Қайтару мүмкін емес.",
+    "mc.live.confirm.preset":
+      "{cur} агент(ті) (бөлігінде тарих бар) \"{name}\" ({n} агент) орнына ауыстыру керек пе?",
+    "mc.killer.eyebrow": "Killer-фича",
+    "mc.network.eyebrow": "Желідегі рөл",
+    "mc.footer.body":
+      "Multichat Engine — AEVION-ның агент-желімі: Planet дауысы, Bank Advisor, Awards қазылар алқасы, клиент қолдау.",
+    "mc.footer.pitch": "Инвестор питч →",
+    "mc.footer.demo": "Live demo →",
+    "mc.footer.qcoreai": "QCoreAI ашу →",
+    "mc.panel.prompt": "✎ Prompt",
+    "mc.panel.prompt.custom": "✎ Prompt · жеке",
+    "mc.panel.prompt.title": "Осы агенттің system prompt-ын өзгерту",
+    "mc.panel.export.md": "↓ MD",
+    "mc.panel.export.md.title": "Әңгімені Markdown ретінде жүктеу",
+    "mc.panel.export.json": "↓ JSON",
+    "mc.panel.export.json.title": "Әңгімені JSON ретінде жүктеу",
+    "mc.panel.msg.one": "{n} хабар",
+    "mc.panel.msg.many": "{n} хабар",
+    "mc.panel.editor.label": "Бұл агент үшін system prompt",
+    "mc.panel.editor.save": "Сақтау",
+    "mc.panel.editor.reset": "Әдепкіге қайтару",
+    "mc.panel.editor.cancel": "Болдырмау",
+    "mc.panel.empty.title": "{role} агенті дайын",
+    "mc.panel.empty.desc":
+      "System prompt алдын ала қойылған. Бастау үшін хабар жіберіңіз.",
+    "mc.panel.placeholder":
+      "{role}-ге хабар…  (@code, @finance, @legal көріңіз)",
+    "mc.panel.send": "Жіберу",
+    "mc.panel.relay": "Relay:",
+    "mc.panel.role.aria": "Агент рөлі",
+    "mc.panel.provider.aria": "Провайдер",
+    "mc.panel.model.aria": "Модель",
+    "mc.panel.close.aria": "Агентті жабу",
+    "mc.panel.close.title": "Агентті жабу",
+    "mc.panel.typing.aria": "Агент жазып жатыр",
+    "mc.handoff.noTarget":
+      "Бұл терезеде белсенді @{tag}-агент жоқ. handoff қосу үшін \"+ Агент қосу\" басып, \"{role}\" рөлін таңдаңыз.",
+  },
+};
+
+function makeMcT(lang: Lang) {
+  return (key: string, vars?: Record<string, string | number>): string => {
+    let raw = MC_STRINGS[lang][key] ?? MC_STRINGS.en[key] ?? key;
+    if (vars) {
+      for (const [k, v] of Object.entries(vars)) {
+        raw = raw.split(`{${k}}`).join(String(v));
+      }
+    }
+    return raw;
+  };
+}
 
 /* ─────────────────────────────────────────────────────────────────
  * Static content (was in the server page before client conversion)
  * ────────────────────────────────────────────────────────────── */
 
-const HERO_STATS: Array<{ label: string; value: string; hint: string }> = [
-  { label: "Backend", value: "/api/qcoreai/chat", hint: "Single endpoint live" },
-  { label: "Stage", value: "Live", hint: "Parallel agents shipped" },
-  { label: "Providers", value: "5", hint: "via QCoreAI router" },
-  { label: "B2B angle", value: "White-label", hint: "AEVION inside SaaS line" },
+const HERO_STAT_DEFS: Array<{
+  labelKey: string;
+  valueKey: string | null;
+  valueFixed: string | null;
+  hintKey: string;
+}> = [
+  { labelKey: "mc.stat.backend.label", valueKey: null, valueFixed: "/api/qcoreai/chat", hintKey: "mc.stat.backend.hint" },
+  { labelKey: "mc.stat.stage.label", valueKey: "mc.stat.stage.value", valueFixed: null, hintKey: "mc.stat.stage.hint" },
+  { labelKey: "mc.stat.providers.label", valueKey: null, valueFixed: "5", hintKey: "mc.stat.providers.hint" },
+  { labelKey: "mc.stat.b2b.label", valueKey: "mc.stat.b2b.value", valueFixed: null, hintKey: "mc.stat.b2b.hint" },
 ];
 
-const VISION_BULLETS = [
-  "One window, many agents — no more juggling 4 browser tabs for 4 different AIs.",
-  "Each session inherits AEVION context: your IP portfolio (QRight), your wallet (Bank), your tier (Trust Score), your awards.",
-  "Agents can cross-call each other through QCoreAI routing — Code agent hands off to Finance agent without losing context.",
-  "Centralised model spend across the platform: predictable per-token economics, single biggest OPEX win in the company.",
-];
+const VISION_BULLET_KEYS = ["mc.vision.b1", "mc.vision.b2", "mc.vision.b3", "mc.vision.b4"];
 
 /* ─────────────────────────────────────────────────────────────────
  * Multichat data model
@@ -259,40 +568,40 @@ function exportConversation(agent: Agent, format: "md" | "json") {
 
 type Preset = {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descKey: string;
   roles: Role[];
 };
 
 const PRESETS: Preset[] = [
   {
     id: "investor",
-    name: "Investor pack",
-    description: "Story + financials + IP defense in one window",
+    nameKey: "mc.preset.investor.name",
+    descKey: "mc.preset.investor.desc",
     roles: ["General", "Finance", "IP/Legal"],
   },
   {
     id: "founder",
-    name: "Founder ops",
-    description: "Code, money, regulation — parallel decisions",
+    nameKey: "mc.preset.founder.name",
+    descKey: "mc.preset.founder.desc",
     roles: ["Code", "Finance", "Compliance"],
   },
   {
     id: "legal",
-    name: "Legal review",
-    description: "Contracts, compliance, multilingual clauses",
+    nameKey: "mc.preset.legal.name",
+    descKey: "mc.preset.legal.desc",
     roles: ["IP/Legal", "Compliance", "Translator"],
   },
   {
     id: "global",
-    name: "Multilingual support",
-    description: "Customer ops in any language",
+    nameKey: "mc.preset.global.name",
+    descKey: "mc.preset.global.desc",
     roles: ["General", "Translator"],
   },
   {
     id: "fullstack",
-    name: "Full stack",
-    description: "Every role at once — only for power users",
+    nameKey: "mc.preset.fullstack.name",
+    descKey: "mc.preset.fullstack.desc",
     roles: ["General", "Code", "Finance", "IP/Legal", "Compliance", "Translator"],
   },
 ];
@@ -315,6 +624,10 @@ const makeAgent = (overrides: Partial<Agent> = {}): Agent => ({
 export default function MultichatEnginePage() {
   const origin = getBackendOrigin();
   const m = launchedModules.find((x) => x.id === "multichat-engine");
+
+  /* Module-local i18n */
+  const { lang } = useI18n();
+  const t = useMemo(() => makeMcT(lang), [lang]);
 
   /* Providers (loaded from backend, optional) */
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -505,9 +818,7 @@ export default function MultichatEnginePage() {
 
   const clearAll = useCallback(() => {
     if (typeof window === "undefined") return;
-    const ok = window.confirm(
-      "Wipe all agents and conversations? This cannot be undone."
-    );
+    const ok = window.confirm(t("mc.live.confirm.wipe"));
     if (!ok) return;
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -515,7 +826,7 @@ export default function MultichatEnginePage() {
       /* ignore */
     }
     setAgents([makeAgent()]);
-  }, []);
+  }, [t]);
 
   /* Replace the current agent set with a preset bundle */
   const applyPreset = useCallback((preset: Preset) => {
@@ -524,7 +835,11 @@ export default function MultichatEnginePage() {
     const hasHistory = cur.some((a) => a.messages.length > 0);
     if (hasHistory) {
       const ok = window.confirm(
-        `Replace ${cur.length} agent(s) (some have conversation history) with "${preset.name}" (${preset.roles.length} agents)?`
+        t("mc.live.confirm.preset", {
+          cur: cur.length,
+          name: t(preset.nameKey),
+          n: preset.roles.length,
+        })
       );
       if (!ok) return;
     }
@@ -537,7 +852,7 @@ export default function MultichatEnginePage() {
       const el = document.getElementById("live");
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
-  }, []);
+  }, [t]);
 
   /* Low-level: call /api/qcoreai/chat with role+model+history, get reply */
   const callChat = useCallback(
@@ -672,7 +987,10 @@ export default function MultichatEnginePage() {
               { role: "user" as const, content: trimmed },
               {
                 role: "assistant" as const,
-                content: `No active @${ROLE_TAG[mentionRole]} agent in this window. Click "+ Spawn agent" and pick role "${mentionRole}" to enable handoff.`,
+                content: t("mc.handoff.noTarget", {
+                  tag: ROLE_TAG[mentionRole],
+                  role: mentionRole,
+                }),
               },
             ].slice(-MAX_MESSAGES_KEPT);
             return {
@@ -722,7 +1040,7 @@ export default function MultichatEnginePage() {
         })
       );
     },
-    [callChat, buildSystemPrompt]
+    [callChat, buildSystemPrompt, t]
   );
 
   /* Layout: 1 col → 1, 2-3 → auto-fit, 4+ → 2 cols (CSS handles mobile) */
@@ -768,7 +1086,7 @@ export default function MultichatEnginePage() {
               marginBottom: 16,
             }}
           >
-            Multichat Engine · Live
+            {t("mc.badge")}
           </p>
           <h1
             style={{
@@ -783,10 +1101,10 @@ export default function MultichatEnginePage() {
               backgroundClip: "text",
             }}
           >
-            Parallel agents,
+            {t("mc.title.a")}
             <br />
             <span style={{ fontSize: "0.62em", fontWeight: 800, letterSpacing: "-0.02em" }}>
-              one identity, one window
+              {t("mc.title.b")}
             </span>
           </h1>
           <p
@@ -798,8 +1116,7 @@ export default function MultichatEnginePage() {
               margin: 0,
             }}
           >
-            {m?.tagline ??
-              "Parallel agent sessions over QCoreAI — code, finance, IP, content in one window."}
+            {m?.tagline ?? t("mc.subtitle.fallback")}
           </p>
 
           <div
@@ -810,26 +1127,29 @@ export default function MultichatEnginePage() {
               gap: 14,
             }}
           >
-            {HERO_STATS.map((s) => (
-              <div
-                key={s.label}
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(94,234,212,0.25)",
-                  background: "rgba(15,23,42,0.65)",
-                  backdropFilter: "blur(6px)",
-                }}
-              >
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#5eead4", textTransform: "uppercase" }}>
-                  {s.label}
+            {HERO_STAT_DEFS.map((s) => {
+              const value = s.valueFixed ?? (s.valueKey ? t(s.valueKey) : "");
+              return (
+                <div
+                  key={s.labelKey}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(94,234,212,0.25)",
+                    background: "rgba(15,23,42,0.65)",
+                    backdropFilter: "blur(6px)",
+                  }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#5eead4", textTransform: "uppercase" }}>
+                    {t(s.labelKey)}
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#f8fafc", letterSpacing: "-0.01em" }}>
+                    {value}
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8", lineHeight: 1.4 }}>{t(s.hintKey)}</div>
                 </div>
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#f8fafc", letterSpacing: "-0.01em" }}>
-                  {s.value}
-                </div>
-                <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8", lineHeight: 1.4 }}>{s.hint}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div style={{ marginTop: 28, display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -847,7 +1167,7 @@ export default function MultichatEnginePage() {
                 boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
               }}
             >
-              Try parallel agents ↓
+              {t("mc.cta.try")}
             </a>
             <Link
               href="/qcoreai"
@@ -863,7 +1183,7 @@ export default function MultichatEnginePage() {
                 fontSize: 16,
               }}
             >
-              Single chat (QCoreAI) →
+              {t("mc.cta.single")}
             </Link>
             <a
               href={`${origin}/api/qcoreai/health`}
@@ -881,7 +1201,7 @@ export default function MultichatEnginePage() {
                 fontSize: 16,
               }}
             >
-              QCoreAI health
+              {t("mc.cta.health")}
             </a>
           </div>
 
@@ -911,14 +1231,16 @@ export default function MultichatEnginePage() {
                   color: "#5eead4",
                 }}
               >
-                Personalised
+                {t("mc.ctx.label")}
               </span>
               {userCtx.email ? <span>· {userCtx.email}</span> : null}
               {userCtx.balance != null ? (
                 <span>· {userCtx.balance.toLocaleString("en-US")} AEC</span>
               ) : null}
               {userCtx.qrightCount != null && userCtx.qrightCount > 0 ? (
-                <span>· {userCtx.qrightCount} IP work{userCtx.qrightCount === 1 ? "" : "s"}</span>
+                <span>
+                  · {t(userCtx.qrightCount === 1 ? "mc.ctx.work" : "mc.ctx.works", { n: userCtx.qrightCount })}
+                </span>
               ) : null}
               <label
                 style={{
@@ -931,7 +1253,7 @@ export default function MultichatEnginePage() {
                   color: ctxEnabled ? "#5eead4" : "#94a3b8",
                   fontWeight: 700,
                 }}
-                title="Inject your real AEVION account state into agent system prompts"
+                title={t("mc.ctx.toggle.title")}
               >
                 <input
                   type="checkbox"
@@ -939,7 +1261,7 @@ export default function MultichatEnginePage() {
                   onChange={(e) => setCtxEnabled(e.target.checked)}
                   style={{ accentColor: "#5eead4" }}
                 />
-                Inject into agents
+                {t("mc.ctx.toggle")}
               </label>
             </div>
           ) : null}
@@ -959,19 +1281,18 @@ export default function MultichatEnginePage() {
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#5eead4", marginBottom: 10, textTransform: "uppercase" }}>
-            The vision
+            {t("mc.vision.eyebrow")}
           </div>
           <h2 style={{ fontSize: 26, fontWeight: 900, margin: "0 0 14px", color: "#fff", letterSpacing: "-0.02em" }}>
-            From a chat box to an agent operating system
+            {t("mc.vision.title")}
           </h2>
           <p style={{ fontSize: 16, lineHeight: 1.7, color: "#cbd5e1", margin: "0 0 20px" }}>
-            {m?.problem ??
-              "Users open four tabs to work with four different AI assistants. Multichat Engine collapses that into a single window — and then layers parallel agents on top, each with its own role, memory and tool scope."}
+            {m?.problem ?? t("mc.vision.body.fallback")}
           </p>
           <ul style={{ margin: 0, paddingLeft: 22, color: "#e2e8f0", lineHeight: 1.75, fontSize: 15 }}>
-            {VISION_BULLETS.map((b) => (
-              <li key={b.slice(0, 40)} style={{ marginBottom: 10 }}>
-                {b}
+            {VISION_BULLET_KEYS.map((k) => (
+              <li key={k} style={{ marginBottom: 10 }}>
+                {t(k)}
               </li>
             ))}
           </ul>
@@ -992,14 +1313,14 @@ export default function MultichatEnginePage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#fbbf24", textTransform: "uppercase", marginBottom: 4 }}>
-                Quick start
+                {t("mc.preset.eyebrow")}
               </div>
               <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>
-                One click → curated agent bundle
+                {t("mc.preset.title")}
               </h2>
             </div>
             <span style={{ fontSize: 12, color: "#94a3b8" }}>
-              Replaces current agents. Settings persist in localStorage.
+              {t("mc.preset.note")}
             </span>
           </div>
           <div
@@ -1035,10 +1356,10 @@ export default function MultichatEnginePage() {
                 }}
               >
                 <div style={{ fontSize: 14, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>
-                  {p.name}
+                  {t(p.nameKey)}
                 </div>
                 <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5, marginBottom: 10 }}>
-                  {p.description}
+                  {t(p.descKey)}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {p.roles.map((r) => {
@@ -1101,7 +1422,7 @@ export default function MultichatEnginePage() {
                   marginBottom: 6,
                 }}
               >
-                Live · parallel agents
+                {t("mc.live.eyebrow")}
               </div>
               <h2
                 style={{
@@ -1112,7 +1433,10 @@ export default function MultichatEnginePage() {
                   letterSpacing: "-0.02em",
                 }}
               >
-                {agents.length}/{MAX_AGENTS} active session{agents.length === 1 ? "" : "s"}
+                {t(agents.length === 1 ? "mc.live.count.one" : "mc.live.count.many", {
+                  n: agents.length,
+                  max: MAX_AGENTS,
+                })}
               </h2>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1135,7 +1459,7 @@ export default function MultichatEnginePage() {
                   letterSpacing: "0.02em",
                 }}
               >
-                + Spawn agent
+                {t("mc.live.spawn")}
               </button>
               <button
                 type="button"
@@ -1152,7 +1476,7 @@ export default function MultichatEnginePage() {
                   letterSpacing: "0.02em",
                 }}
               >
-                Clear all
+                {t("mc.live.clearAll")}
               </button>
             </div>
           </div>
@@ -1166,6 +1490,7 @@ export default function MultichatEnginePage() {
                 onChange={(patch) => updateAgent(a.id, patch)}
                 onClose={() => removeAgent(a.id)}
                 onSend={(text) => sendMessage(a.id, text)}
+                t={t}
               />
             ))}
           </div>
@@ -1182,11 +1507,11 @@ export default function MultichatEnginePage() {
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#93c5fd", marginBottom: 10, textTransform: "uppercase" }}>
-              Killer feature
+              {t("mc.killer.eyebrow")}
             </div>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.65, color: "#dbeafe" }}>{m.killerFeature}</p>
             <div style={{ marginTop: 14, fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#93c5fd", textTransform: "uppercase" }}>
-              Network role
+              {t("mc.network.eyebrow")}
             </div>
             <p style={{ margin: "8px 0 0", fontSize: 14, lineHeight: 1.65, color: "#cbd5e1" }}>{m.networkRole}</p>
           </section>
@@ -1201,7 +1526,7 @@ export default function MultichatEnginePage() {
           }}
         >
           <p style={{ color: "#94a3b8", fontSize: 15, lineHeight: 1.6, marginBottom: 20 }}>
-            Multichat Engine is the social and agent glue for the rest of AEVION — Planet voting, Bank Advisor, Awards judging, customer service.
+            {t("mc.footer.body")}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
             <Link
@@ -1218,7 +1543,7 @@ export default function MultichatEnginePage() {
                 fontSize: 15,
               }}
             >
-              Investor pitch →
+              {t("mc.footer.pitch")}
             </Link>
             <Link
               href="/demo"
@@ -1234,7 +1559,7 @@ export default function MultichatEnginePage() {
                 fontSize: 15,
               }}
             >
-              Live demo →
+              {t("mc.footer.demo")}
             </Link>
             <Link
               href="/qcoreai"
@@ -1250,7 +1575,7 @@ export default function MultichatEnginePage() {
                 boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
               }}
             >
-              Open QCoreAI →
+              {t("mc.footer.qcoreai")}
             </Link>
           </div>
         </footer>
@@ -1282,8 +1607,9 @@ function AgentPanel(props: {
   onChange: (patch: Partial<Agent> | ((a: Agent) => Partial<Agent>)) => void;
   onClose: () => void;
   onSend: (text: string) => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
-  const { agent, providers, onChange, onClose, onSend } = props;
+  const { agent, providers, onChange, onClose, onSend, t } = props;
   const [input, setInput] = useState("");
   const [editingPrompt, setEditingPrompt] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState(agent.customSystemPrompt ?? "");
@@ -1356,7 +1682,7 @@ function AgentPanel(props: {
         <select
           value={agent.role}
           onChange={(e) => onRoleChange(e.target.value as Role)}
-          aria-label="Agent role"
+          aria-label={t("mc.panel.role.aria")}
           style={{
             padding: "5px 8px",
             borderRadius: 8,
@@ -1405,7 +1731,7 @@ function AgentPanel(props: {
                 <select
                   value={agent.provider}
                   onChange={(e) => onProviderChange(e.target.value)}
-                  aria-label="Provider"
+                  aria-label={t("mc.panel.provider.aria")}
                   style={{
                     padding: "2px 6px",
                     borderRadius: 6,
@@ -1432,7 +1758,7 @@ function AgentPanel(props: {
                   <select
                     value={agent.model}
                     onChange={(e) => onChange({ model: e.target.value })}
-                    aria-label="Model"
+                    aria-label={t("mc.panel.model.aria")}
                     style={{
                       padding: "2px 6px",
                       borderRadius: 6,
@@ -1462,8 +1788,8 @@ function AgentPanel(props: {
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close agent"
-          title="Close agent"
+          aria-label={t("mc.panel.close.aria")}
+          title={t("mc.panel.close.title")}
           style={{
             width: 28,
             height: 28,
@@ -1496,7 +1822,7 @@ function AgentPanel(props: {
         <button
           type="button"
           onClick={() => setEditingPrompt((v) => !v)}
-          title="Edit this agent's system prompt"
+          title={t("mc.panel.prompt.title")}
           style={{
             padding: "3px 8px",
             borderRadius: 6,
@@ -1510,13 +1836,13 @@ function AgentPanel(props: {
             letterSpacing: "0.04em",
           }}
         >
-          ✎ Prompt{agent.customSystemPrompt?.trim() ? " · custom" : ""}
+          {agent.customSystemPrompt?.trim() ? t("mc.panel.prompt.custom") : t("mc.panel.prompt")}
         </button>
         <button
           type="button"
           onClick={() => exportConversation(agent, "md")}
           disabled={agent.messages.length === 0}
-          title="Export conversation as Markdown"
+          title={t("mc.panel.export.md.title")}
           style={{
             padding: "3px 8px",
             borderRadius: 6,
@@ -1527,13 +1853,13 @@ function AgentPanel(props: {
             fontWeight: 700,
           }}
         >
-          ↓ MD
+          {t("mc.panel.export.md")}
         </button>
         <button
           type="button"
           onClick={() => exportConversation(agent, "json")}
           disabled={agent.messages.length === 0}
-          title="Export conversation as JSON"
+          title={t("mc.panel.export.json.title")}
           style={{
             padding: "3px 8px",
             borderRadius: 6,
@@ -1545,10 +1871,10 @@ function AgentPanel(props: {
             fontFamily: "ui-monospace, SFMono-Regular, monospace",
           }}
         >
-          ↓ JSON
+          {t("mc.panel.export.json")}
         </button>
         <span style={{ marginLeft: "auto", color: "#475569", fontSize: 10 }}>
-          {agent.messages.length} msg{agent.messages.length === 1 ? "" : "s"}
+          {t(agent.messages.length === 1 ? "mc.panel.msg.one" : "mc.panel.msg.many", { n: agent.messages.length })}
         </span>
       </div>
 
@@ -1562,7 +1888,7 @@ function AgentPanel(props: {
           }}
         >
           <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 6, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            System prompt for this agent
+            {t("mc.panel.editor.label")}
           </div>
           <textarea
             value={draftPrompt}
@@ -1603,7 +1929,7 @@ function AgentPanel(props: {
                 letterSpacing: "0.04em",
               }}
             >
-              Save
+              {t("mc.panel.editor.save")}
             </button>
             <button
               type="button"
@@ -1623,7 +1949,7 @@ function AgentPanel(props: {
                 fontSize: 11,
               }}
             >
-              Reset to default
+              {t("mc.panel.editor.reset")}
             </button>
             <button
               type="button"
@@ -1642,7 +1968,7 @@ function AgentPanel(props: {
                 fontSize: 11,
               }}
             >
-              Cancel
+              {t("mc.panel.editor.cancel")}
             </button>
           </div>
         </div>
@@ -1675,10 +2001,10 @@ function AgentPanel(props: {
           >
             <div style={{ fontSize: 28, marginBottom: 6 }}>◈</div>
             <div style={{ fontWeight: 700, color: "#cbd5e1", marginBottom: 4 }}>
-              {agent.role} agent ready
+              {t("mc.panel.empty.title", { role: agent.role })}
             </div>
             <div style={{ fontSize: 12, color: "#64748b" }}>
-              System prompt is preset. Send a message to start.
+              {t("mc.panel.empty.desc")}
             </div>
           </div>
         ) : (
@@ -1763,7 +2089,7 @@ function AgentPanel(props: {
                 gap: 4,
                 alignItems: "center",
               }}
-              aria-label="Agent is typing"
+              aria-label={t("mc.panel.typing.aria")}
             >
               {[0, 1, 2].map((i) => (
                 <span
@@ -1803,7 +2129,7 @@ function AgentPanel(props: {
               submit();
             }
           }}
-          placeholder={`Message ${agent.role}…  (try @code, @finance, @legal to relay)`}
+          placeholder={t("mc.panel.placeholder", { role: agent.role })}
           disabled={agent.busy}
           rows={2}
           style={{
@@ -1839,7 +2165,7 @@ function AgentPanel(props: {
             letterSpacing: "0.02em",
           }}
         >
-          {agent.busy ? "…" : "Send"}
+          {agent.busy ? "…" : t("mc.panel.send")}
         </button>
       </div>
 
@@ -1857,7 +2183,7 @@ function AgentPanel(props: {
           alignItems: "center",
         }}
       >
-        <span style={{ fontWeight: 700, color: "#94a3b8" }}>Relay:</span>
+        <span style={{ fontWeight: 700, color: "#94a3b8" }}>{t("mc.panel.relay")}</span>
         {(["code", "finance", "legal", "compliance", "translator", "general"] as const).map((tag) => (
           <span
             key={tag}

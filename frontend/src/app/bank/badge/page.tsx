@@ -73,8 +73,18 @@ export default function BadgeConfiguratorPage() {
     return `${origin}/bank/badge/${encodeURIComponent(accountId)}?${params.toString()}`;
   }, [origin, accountId, score, tier, name, theme]);
 
-  const htmlSnippet = `<a href="${origin}/bank">\n  <img src="${badgeUrl}" alt="AEVION Trust Badge" width="360" height="96" />\n</a>`;
-  const mdSnippet = `[![AEVION Trust Badge](${badgeUrl})](${origin}/bank)`;
+  // Click-through target: the embedded badge image links to a public profile
+  // page so visitors get a richer landing than /bank's full app.
+  const profileUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("score", score.toFixed(3));
+    params.set("tier", tier);
+    if (name) params.set("name", name);
+    return `${origin}/bank/share/${encodeURIComponent(accountId)}?${params.toString()}`;
+  }, [origin, accountId, score, tier, name]);
+
+  const htmlSnippet = `<a href="${profileUrl}">\n  <img src="${badgeUrl}" alt="AEVION Trust Badge" width="360" height="96" />\n</a>`;
+  const mdSnippet = `[![AEVION Trust Badge](${badgeUrl})](${profileUrl})`;
 
   const copy = async (text: string, key: string) => {
     try {

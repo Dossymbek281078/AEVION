@@ -21,6 +21,39 @@ type Card = {
 
 const CARDS: Array<{ groupKey: string; items: Card[] }> = [
   {
+    groupKey: "explore.group.story",
+    items: [
+      {
+        href: "/bank/about",
+        iconBg: "linear-gradient(135deg, #5eead4, #6366f1)",
+        iconChar: "✦",
+        titleKey: "explore.card.about.title",
+        hintKey: "explore.card.about.hint",
+      },
+      {
+        href: "/bank/trust",
+        iconBg: "linear-gradient(135deg, #7c3aed, #a78bfa)",
+        iconChar: "◯",
+        titleKey: "explore.card.trust.title",
+        hintKey: "explore.card.trust.hint",
+      },
+      {
+        href: "/bank/security",
+        iconBg: "linear-gradient(135deg, #db2777, #f472b6)",
+        iconChar: "⛨",
+        titleKey: "explore.card.security.title",
+        hintKey: "explore.card.security.hint",
+      },
+      {
+        href: "/bank/card",
+        iconBg: "linear-gradient(135deg, #6d28d9, #312e81)",
+        iconChar: "▭",
+        titleKey: "explore.card.card.title",
+        hintKey: "explore.card.card.hint",
+      },
+    ],
+  },
+  {
     groupKey: "explore.group.daily",
     items: [
       {

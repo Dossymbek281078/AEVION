@@ -399,7 +399,15 @@ export default function PricingPage() {
                   letterSpacing: "-0.02em",
                 }}
               >
-                {tier.name}
+                <Link
+                  href={`/pricing/${tier.id}`}
+                  style={{
+                    color: "inherit",
+                    textDecoration: "none",
+                  }}
+                >
+                  {tier.name}
+                </Link>
               </h3>
               <p
                 style={{
@@ -486,6 +494,19 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
+              <Link
+                href={`/pricing/${tier.id}`}
+                style={{
+                  display: "inline-block",
+                  marginTop: 14,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: isHighlight ? "#5eead4" : "#0d9488",
+                  textDecoration: "none",
+                }}
+              >
+                Подробнее о {tier.name} →
+              </Link>
             </div>
           );
         })}

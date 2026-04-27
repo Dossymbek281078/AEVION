@@ -132,6 +132,13 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         hintKey: "explore.card.scan.hint",
       },
       {
+        href: "/bank/contacts",
+        iconBg: "linear-gradient(135deg, #0d9488, #475569)",
+        iconChar: "✉",
+        titleKey: "explore.card.contacts.title",
+        hintKey: "explore.card.contacts.hint",
+      },
+      {
         href: "/bank/r/AEDEMO?from=Lana&tier=advocate",
         iconBg: "linear-gradient(135deg, #7c3aed, #db2777)",
         iconChar: "♥",

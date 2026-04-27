@@ -2258,6 +2258,10 @@ function AgentPanel(props: {
 }) {
   const { agent, providers, onChange, onClose, onSend, onFork, canFork, t } = props;
   const [hoveredMsg, setHoveredMsg] = useState<number | null>(null);
+
+  // @-autocomplete state
+  const AUTOCOMPLETE_TAGS = ["all", "code", "finance", "legal", "compliance", "translator", "general"];
+  const [acIndex, setAcIndex] = useState(0);
   const [input, setInput] = useState("");
   const [editingPrompt, setEditingPrompt] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState(agent.customSystemPrompt ?? "");
@@ -2865,6 +2869,7 @@ function AgentPanel(props: {
       {/* Input */}
       <div
         style={{
+          position: "relative",
           padding: "10px 10px 6px",
           display: "flex",
           gap: 8,
@@ -2873,10 +2878,119 @@ function AgentPanel(props: {
           background: "rgba(2,6,23,0.55)",
         }}
       >
+        {(() => {
+          const showAc = input.startsWith("@") && !input.slice(1).includes(" ");
+          const acTerm = showAc ? input.slice(1).toLowerCase() : "";
+          const acFiltered = showAc
+            ? AUTOCOMPLETE_TAGS.filter((s) => s.startsWith(acTerm))
+            : [];
+          if (!showAc || acFiltered.length === 0) return null;
+          const safeIdx = Math.min(acIndex, acFiltered.length - 1);
+          return (
+            <div
+              role="listbox"
+              aria-label="Mention suggestions"
+              style={{
+                position: "absolute",
+                bottom: "calc(100% - 1px)",
+                left: 10,
+                zIndex: 5,
+                minWidth: 180,
+                padding: 4,
+                borderRadius: 10,
+                border: "1px solid rgba(94,234,212,0.45)",
+                background: "rgba(2,6,23,0.95)",
+                backdropFilter: "blur(8px)",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9,
+                  color: "#64748b",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  padding: "2px 8px 4px",
+                  fontWeight: 700,
+                }}
+              >
+                ↑↓ navigate · Tab/Enter insert · Esc clear
+              </div>
+              {acFiltered.map((tag, i) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setInput(`@${tag} `);
+                    setAcIndex(0);
+                  }}
+                  onMouseEnter={() => setAcIndex(i)}
+                  style={{
+                    display: "flex",
+                    width: "100%",
+                    padding: "5px 8px",
+                    borderRadius: 6,
+                    border: "1px solid transparent",
+                    background:
+                      i === safeIdx ? "rgba(94,234,212,0.15)" : "transparent",
+                    color: i === safeIdx ? "#5eead4" : "#cbd5e1",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                    textAlign: "left",
+                  }}
+                >
+                  @{tag}
+                  {tag === "all" ? (
+                    <span style={{ marginLeft: "auto", fontSize: 9, color: "#fbbf24", fontWeight: 800 }}>
+                      BROADCAST
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
+            // @-autocomplete: only when input is "@<word-no-space>"
+            const showAc =
+              input.startsWith("@") && !input.slice(1).includes(" ");
+            const acTerm = showAc ? input.slice(1).toLowerCase() : "";
+            const acFiltered = showAc
+              ? AUTOCOMPLETE_TAGS.filter((s) => s.startsWith(acTerm))
+              : [];
+
+            if (showAc && acFiltered.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setAcIndex((i) => (i + 1) % acFiltered.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setAcIndex(
+                  (i) => (i - 1 + acFiltered.length) % acFiltered.length
+                );
+                return;
+              }
+              if (e.key === "Tab" || e.key === "Enter") {
+                e.preventDefault();
+                const idx = Math.min(acIndex, acFiltered.length - 1);
+                setInput(`@${acFiltered[idx]} `);
+                setAcIndex(0);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setInput("");
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submit();

@@ -365,8 +365,15 @@ export default function Globus3D({
       total: number;
       fromKey: string;
       toKey: string;
+      curve: THREE.QuadraticBezierCurve3;
+      label: string;
+      color: string;
     }>
   >([]);
+  /** Tooltip-DOM для дуги; обновляем напрямую в animate. */
+  const arcTooltipRef = useRef<HTMLDivElement | null>(null);
+  /** Координаты курсора в координатах globe-контейнера (pointer move). */
+  const cursorXYRef = useRef<{ x: number; y: number } | null>(null);
   /** DOM-overlay подписи над focus/award маркерами; обновляются прямо через style в animate. */
   const sparseLabelsRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -1078,14 +1085,19 @@ export default function Globus3D({
     pulseMeshByKeyRef.current = pulseMeshByKey;
 
     // Connection arcs — пайплайн между ключевыми нодами.
-    const arcConnections: Array<{ from: string; to: string; color: number }> = [
-      { from: "auth", to: "qright", color: 0x5eead4 },
-      { from: "qright", to: "qsign", color: 0x5eead4 },
-      { from: "qsign", to: "aevion-ip-bureau", color: 0x5eead4 },
-      { from: "aevion-ip-bureau", to: "aevion-bank", color: 0x5eead4 },
-      { from: "planet", to: "aevion-awards-music", color: 0xe879f9 },
-      { from: "planet", to: "aevion-awards-film", color: 0xe879f9 },
-      { from: "qcoreai", to: "multichat-engine", color: 0x7dd3fc },
+    const arcConnections: Array<{
+      from: string;
+      to: string;
+      color: number;
+      label: string;
+    }> = [
+      { from: "auth", to: "qright", color: 0x5eead4, label: "Identity → IP" },
+      { from: "qright", to: "qsign", color: 0x5eead4, label: "Sign record" },
+      { from: "qsign", to: "aevion-ip-bureau", color: 0x5eead4, label: "Certify" },
+      { from: "aevion-ip-bureau", to: "aevion-bank", color: 0x5eead4, label: "Earn royalties" },
+      { from: "planet", to: "aevion-awards-music", color: 0xe879f9, label: "Submit · Vote" },
+      { from: "planet", to: "aevion-awards-film", color: 0xe879f9, label: "Submit · Vote" },
+      { from: "qcoreai", to: "multichat-engine", color: 0x7dd3fc, label: "AI → Chat" },
     ];
 
     const markerByProjectId = new Map<string, Marker>();
@@ -1139,6 +1151,9 @@ export default function Globus3D({
         total: points.length,
         fromKey: a.key,
         toKey: b.key,
+        curve,
+        label: link.label,
+        color: `#${link.color.toString(16).padStart(6, "0")}`,
       });
 
       // Частицы вдоль дуги — поток данных.
@@ -1290,6 +1305,11 @@ export default function Globus3D({
       }
 
       if (!dragging) {
+        const rect = el.getBoundingClientRect();
+        cursorXYRef.current = {
+          x: ev.clientX - rect.left,
+          y: ev.clientY - rect.top,
+        };
         updateHover(ev.clientX, ev.clientY);
         return;
       }
@@ -1344,6 +1364,7 @@ export default function Globus3D({
       if (!dragging) {
         setLabel(null);
         isHovering = false;
+        cursorXYRef.current = null;
       }
     };
 
@@ -1492,6 +1513,65 @@ export default function Globus3D({
           const cur = item.group.scale.x;
           const next = cur + (target - cur) * 0.18;
           item.group.scale.setScalar(next);
+        }
+      }
+
+      // Arc tooltip — если курсор близко к проекции середины видимой дуги.
+      {
+        const tipEl = arcTooltipRef.current;
+        if (tipEl) {
+          const cur = cursorXYRef.current;
+          const labelExists = !!labelRef.current;
+          if (!cur || labelExists || dragging) {
+            if (tipEl.style.display !== "none") tipEl.style.display = "none";
+          } else {
+            const cw = canvas.clientWidth;
+            const ch = canvas.clientHeight;
+            const camDir = camera.position.clone().normalize();
+            let bestDist = 999;
+            let bestArc: typeof arcs[number] | null = null;
+            let bestSx = 0;
+            let bestSy = 0;
+            const tmp = new THREE.Vector3();
+            const tmpDir = new THREE.Vector3();
+            for (const a of arcs) {
+              if (!a.line.visible) continue;
+              tmp.copy(a.curve.getPointAt(0.5));
+              tmpDir.copy(tmp).normalize();
+              if (tmpDir.dot(camDir) < 0.05) continue;
+              tmp.project(camera);
+              const sx = (tmp.x * 0.5 + 0.5) * cw;
+              const sy = (-tmp.y * 0.5 + 0.5) * ch;
+              const dist = Math.hypot(sx - cur.x, sy - cur.y);
+              if (dist < 36 && dist < bestDist) {
+                bestDist = dist;
+                bestArc = a;
+                bestSx = sx;
+                bestSy = sy;
+              }
+            }
+            if (bestArc) {
+              const fromMarker = markerMeshesRef.current.find(
+                (x) => x.marker.key === bestArc!.fromKey,
+              )?.marker;
+              const toMarker = markerMeshesRef.current.find(
+                (x) => x.marker.key === bestArc!.toKey,
+              )?.marker;
+              const arrow = `${fromMarker?.label ?? "?"} → ${toMarker?.label ?? "?"}`;
+              tipEl.style.display = "block";
+              tipEl.style.left = `${bestSx}px`;
+              tipEl.style.top = `${bestSy}px`;
+              tipEl.style.borderColor = `${bestArc.color}aa`;
+              tipEl.style.boxShadow = `0 8px 22px rgba(0,0,0,0.45), 0 0 14px ${bestArc.color}55`;
+              tipEl.querySelector(".aev-arc-arrow")!.textContent = arrow;
+              tipEl.querySelector(".aev-arc-label")!.textContent =
+                bestArc.label;
+              (tipEl.querySelector(".aev-arc-arrow") as HTMLElement).style.color =
+                bestArc.color;
+            } else {
+              if (tipEl.style.display !== "none") tipEl.style.display = "none";
+            }
+          }
         }
       }
 
@@ -2705,6 +2785,47 @@ export default function Globus3D({
           </button>
         </div>
       ) : null}
+
+      {/* Arc-tooltip — при ховере на дугу (single DOM, обновляется в animate). */}
+      <div
+        ref={arcTooltipRef}
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          transform: "translate(-50%, calc(-100% - 10px))",
+          pointerEvents: "none",
+          background: "rgba(8,12,24,0.92)",
+          border: "1px solid rgba(120,160,220,0.4)",
+          borderRadius: 10,
+          padding: "6px 10px",
+          backdropFilter: "blur(8px)",
+          display: "none",
+          zIndex: 5,
+          whiteSpace: "nowrap",
+          minWidth: 110,
+        }}
+      >
+        <div
+          className="aev-arc-arrow"
+          style={{
+            fontSize: 10,
+            fontWeight: 900,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        />
+        <div
+          className="aev-arc-label"
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#cbd5e1",
+            marginTop: 2,
+          }}
+        />
+      </div>
 
       {/* Keyboard-focused marker outline — single overlay, передвигаемый в animate. */}
       <div

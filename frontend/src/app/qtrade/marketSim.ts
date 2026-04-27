@@ -329,6 +329,42 @@ export function buildOrderBook(p: Pair, levels = 8): OrderBook {
   return { bids, asks, spread: asks[0].price - bids[0].price };
 }
 
+// ─── Multi-timeframe aggregation ──────────────────────────────────
+// Базовое хранилище — 30s candles в Pair.candles. Высшие таймфреймы
+// агрегируем on-the-fly: floor(ts / TF) → bucket, MAX(h), MIN(l), first o,
+// last c, sum vol. С 40 base candles это покрывает: 1m=20 свечей, 5m=4,
+// 15m=2-3, 1h=1. Для производственного UX на 1h нужен больший buffer,
+// но для демо — нормально.
+export type TimeframeMs = 30_000 | 60_000 | 300_000 | 900_000 | 3_600_000;
+
+export const TIMEFRAMES: { ms: TimeframeMs; label: string }[] = [
+  { ms: 30_000,    label: "30s" },
+  { ms: 60_000,    label: "1m"  },
+  { ms: 300_000,   label: "5m"  },
+  { ms: 900_000,   label: "15m" },
+  { ms: 3_600_000, label: "1h"  },
+];
+
+export function aggregateCandles(base: Candle[], tfMs: TimeframeMs): Candle[] {
+  if (tfMs === 30_000) return base;
+  const buckets = new Map<number, Candle>();
+  const order: number[] = [];
+  for (const c of base) {
+    const bucketTs = Math.floor(c.ts / tfMs) * tfMs;
+    const existing = buckets.get(bucketTs);
+    if (!existing) {
+      buckets.set(bucketTs, { ts: bucketTs, o: c.o, h: c.h, l: c.l, c: c.c, vol: c.vol });
+      order.push(bucketTs);
+    } else {
+      existing.h = Math.max(existing.h, c.h);
+      existing.l = Math.min(existing.l, c.l);
+      existing.c = c.c;
+      existing.vol += c.vol;
+    }
+  }
+  return order.map((ts) => buckets.get(ts)!);
+}
+
 // Build a tiny SVG sparkline path string (path d="...") from a price history.
 export function sparklinePath(history: number[], width = 100, height = 30): string {
   if (history.length < 2) return "";

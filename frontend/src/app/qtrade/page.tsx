@@ -11,7 +11,9 @@ import {
   ldAlerts, svAlerts, checkAlertHits,
   tickPair, catchupPair, unrealizedPnl, unrealizedPct,
   fmtUsd, fmtPct, sparklinePath,
+  aggregateCandles, TIMEFRAMES,
   type Pair, type Position, type PairId, type LimitOrder, type ClosedPosition, type PriceAlert,
+  type TimeframeMs,
 } from "./marketSim";
 import { ldWallet, svWallet, sellAev, buyAev, recordPlay, type AEVWallet } from "../aev/aevToken";
 
@@ -1529,10 +1531,42 @@ function EquityCurve({ points }: { points: { ts: number; equity: number }[] }) {
 }
 
 // ─── OHLC Candlestick chart ────────────────────────────────────────
-// Pure-SVG, no external deps. 30s candles × 40 = 20 minutes of history.
+// Pure-SVG, no external deps. Base = 30s candles × 40 (20m of base history),
+// higher timeframes агрегируются on-the-fly через aggregateCandles().
+const TF_KEY = "aevion_qtrade_chart_tf_v1";
+
+function loadTf(): TimeframeMs {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(TF_KEY) : null;
+    if (!s) return 30_000;
+    const n = Number(s);
+    if (TIMEFRAMES.some((t) => t.ms === n)) return n as TimeframeMs;
+  } catch {}
+  return 30_000;
+}
+
 function CandleChart({ pair }: { pair: Pair }) {
-  const candles = pair.candles || [];
-  if (candles.length < 2) return null;
+  const [tf, setTf] = useState<TimeframeMs>(30_000);
+  // Lazy hydrate from localStorage post-mount (SSR-safe)
+  useEffect(() => { setTf(loadTf()) }, []);
+  useEffect(() => { try { localStorage.setItem(TF_KEY, String(tf)) } catch {} }, [tf]);
+
+  const baseCandles = pair.candles || [];
+  const candles = useMemo(() => aggregateCandles(baseCandles, tf), [baseCandles, tf]);
+  const tfLabel = TIMEFRAMES.find((t) => t.ms === tf)?.label ?? "30s";
+  if (candles.length < 2) {
+    // Fallback: на высоких TF может быть меньше 2 buckets — показать инфо
+    return (
+      <div style={{
+        padding: 12, borderRadius: 10,
+        background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.1)",
+        marginBottom: 10, color: "#94a3b8", fontSize: 12, textAlign: "center" as const,
+      }}>
+        <TfPicker tf={tf} onChange={setTf} />
+        <div style={{ marginTop: 8 }}>На таймфрейме {tfLabel} пока недостаточно истории · открой 30s или 1m</div>
+      </div>
+    );
+  }
   const W = 100;        // viewBox width — scales via SVG
   const H = 36;         // viewBox height for chart area
   const VOL_H = 8;      // height of volume bars below
@@ -1549,6 +1583,8 @@ function CandleChart({ pair }: { pair: Pair }) {
   const lastC = candles[candles.length - 1];
   const change = lastC.c - candles[0].o;
   const changePct = (change / candles[0].o) * 100;
+  // Total span covered (in minutes) — base × 30s × n / 60
+  const spanMin = Math.round((baseCandles.length * 30) / 60);
   return (
     <div style={{
       padding: 12, borderRadius: 10,
@@ -1556,12 +1592,13 @@ function CandleChart({ pair }: { pair: Pair }) {
       marginBottom: 10,
     }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap" as const, gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const }}>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" as const, color: "#94a3b8" }}>
-            📈 {pair.symbol} · 30s × {candles.length} ({Math.round(candles.length * 30 / 60)}m)
+            📈 {pair.symbol} · {tfLabel} × {candles.length} ({spanMin}m base)
           </span>
+          <TfPicker tf={tf} onChange={setTf} />
         </div>
-        <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#cbd5e1", fontFamily: "ui-monospace, monospace" }}>
+        <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#cbd5e1", fontFamily: "ui-monospace, monospace", flexWrap: "wrap" as const }}>
           <span>O <strong style={{ color: "#fff" }}>{candles[0].o.toFixed(decimals)}</strong></span>
           <span>H <strong style={{ color: "#86efac" }}>{Math.max(...candles.map(c => c.h)).toFixed(decimals)}</strong></span>
           <span>L <strong style={{ color: "#fca5a5" }}>{Math.min(...candles.map(c => c.l)).toFixed(decimals)}</strong></span>
@@ -1604,6 +1641,35 @@ function CandleChart({ pair }: { pair: Pair }) {
         {/* Last price line */}
         <line x1={0} x2={W} y1={yOf(lastC.c)} y2={yOf(lastC.c)} stroke="#22d3ee" strokeWidth={0.12} strokeDasharray="0.6 0.4" opacity={0.8} />
       </svg>
+    </div>
+  );
+}
+
+// ─── Timeframe picker (used in CandleChart) ──────────────────────────
+function TfPicker({ tf, onChange }: { tf: TimeframeMs; onChange: (t: TimeframeMs) => void }) {
+  return (
+    <div style={{
+      display: "inline-flex", gap: 0,
+      padding: 2, borderRadius: 6,
+      background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+    }}>
+      {TIMEFRAMES.map((t) => {
+        const active = t.ms === tf;
+        return (
+          <button key={t.ms} onClick={() => onChange(t.ms)}
+            style={{
+              padding: "3px 9px", borderRadius: 4, border: "none",
+              background: active ? "rgba(34,211,238,0.25)" : "transparent",
+              color: active ? "#67e8f9" : "#94a3b8",
+              fontSize: 10, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase" as const,
+              cursor: active ? "default" : "pointer",
+              fontFamily: "ui-monospace, monospace",
+              transition: "all 0.15s",
+            }}>
+            {t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

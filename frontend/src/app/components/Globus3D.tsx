@@ -322,7 +322,12 @@ export default function Globus3D({
     return () => mq.removeEventListener("change", apply);
   }, []);
   const markerMeshesRef = useRef<
-    Array<{ mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; marker: Marker }>
+    Array<{
+      mesh: THREE.Mesh;
+      group: THREE.Group;
+      mat: THREE.MeshBasicMaterial;
+      marker: Marker;
+    }>
   >([]);
   const pulseMeshByKeyRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const arcsRef = useRef<
@@ -507,7 +512,7 @@ export default function Globus3D({
   useEffect(() => {
     const k = isNarrow ? 1.35 : 1;
     for (const item of markerMeshesRef.current) {
-      item.mesh.scale.setScalar(k);
+      item.group.scale.setScalar(k);
     }
   }, [isNarrow, markers]);
 
@@ -529,9 +534,12 @@ export default function Globus3D({
     const visibleByKey = new Map<string, boolean>();
     for (const item of markerMeshesRef.current) {
       const v = matches(item.marker);
+      item.group.visible = v;
+      // Также на head — иначе raycaster найдёт скрытый маркер (он проверяет only-self).
       item.mesh.visible = v;
       visibleByKey.set(item.marker.key, v);
     }
+    // Pulse уже внутри group → автоматически скрыт; просто синхронизируем.
     for (const [key, pulseMesh] of pulseMeshByKeyRef.current) {
       pulseMesh.visible = visibleByKey.get(key) === true;
     }
@@ -976,6 +984,7 @@ export default function Globus3D({
     const mouse = new THREE.Vector2();
     const markerMeshes: Array<{
       mesh: THREE.Mesh;
+      group: THREE.Group;
       mat: THREE.MeshBasicMaterial;
       marker: Marker;
     }> = [];
@@ -990,21 +999,41 @@ export default function Globus3D({
 
     let focusIndex = 0;
     for (const m of markers) {
-      const p = geoFromLatLon(m.lat, m.lon, radius + 1.2);
-      const markerGeo = new THREE.SphereGeometry(m.size, 16, 16);
+      const surface = geoFromLatLon(m.lat, m.lon, radius);
+      const normal = new THREE.Vector3(surface.x, surface.y, surface.z).normalize();
+      const pinHeight = m.size * 2.0;
+      const groupPos = new THREE.Vector3(surface.x, surface.y, surface.z).add(
+        normal.clone().multiplyScalar(pinHeight * 0.5),
+      );
+
+      const group = new THREE.Group();
+      group.position.copy(groupPos);
+      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+      earthGroup.add(group);
+
       const markerMat = new THREE.MeshBasicMaterial({
         color: m.color,
         transparent: true,
         opacity: 1,
       });
-      const mesh = new THREE.Mesh(markerGeo, markerMat);
-      mesh.position.set(p.x, p.y, p.z);
-      mesh.userData = { key: m.key };
-      earthGroup.add(mesh);
-      markerMeshes.push({ mesh, mat: markerMat, marker: m });
+
+      // Конус — стержень pin (smaller end вверху, к head).
+      const coneGeo = new THREE.CylinderGeometry(0, m.size * 0.5, pinHeight * 0.85, 16);
+      const cone = new THREE.Mesh(coneGeo, markerMat);
+      cone.position.y = -pinHeight * 0.075;
+      group.add(cone);
+
+      // Head — сфера на верхушке (raycast target).
+      const headGeo = new THREE.SphereGeometry(m.size * 0.85, 18, 18);
+      const head = new THREE.Mesh(headGeo, markerMat);
+      head.position.y = pinHeight * 0.4;
+      head.userData = { key: m.key };
+      group.add(head);
+
+      markerMeshes.push({ mesh: head, group, mat: markerMat, marker: m });
 
       if (m.category === "focus" || m.category === "award") {
-        const pulseGeo = new THREE.SphereGeometry(m.size, 18, 18);
+        const pulseGeo = new THREE.SphereGeometry(m.size * 1.05, 18, 18);
         const pulseMat = new THREE.MeshBasicMaterial({
           color: m.color,
           transparent: true,
@@ -1012,8 +1041,8 @@ export default function Globus3D({
           depthWrite: false,
         });
         const pulse = new THREE.Mesh(pulseGeo, pulseMat);
-        pulse.position.set(p.x, p.y, p.z);
-        earthGroup.add(pulse);
+        pulse.position.y = pinHeight * 0.4; // у головки
+        group.add(pulse);
         pulseMeshes.push({
           mesh: pulse,
           mat: pulseMat,
@@ -1355,7 +1384,7 @@ export default function Globus3D({
             const item = markerMeshesRef.current.find(
               (x) => x.marker.key === sel,
             );
-            if (!item || !item.mesh.visible) {
+            if (!item || !item.group.visible) {
               if (outlineEl.style.display !== "none")
                 outlineEl.style.display = "none";
             } else {
@@ -1408,7 +1437,7 @@ export default function Globus3D({
           }
           const el = sparseLabelsRef.current.get(item.marker.key);
           if (!el) continue;
-          if (!item.mesh.visible) {
+          if (!item.group.visible) {
             if (el.style.display !== "none") el.style.display = "none";
             continue;
           }
@@ -1579,7 +1608,7 @@ export default function Globus3D({
           break;
         case "Tab": {
           const visible = markerMeshesRef.current.filter(
-            (x) => x.mesh.visible,
+            (x) => x.group.visible,
           );
           if (visible.length === 0) {
             handled = false;

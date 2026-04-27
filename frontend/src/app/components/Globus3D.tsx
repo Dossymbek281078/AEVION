@@ -1097,6 +1097,14 @@ export default function Globus3D({
     }
 
     const arcs: typeof arcsRef.current = [];
+    const arcParticles: Array<{
+      mesh: THREE.Mesh;
+      mat: THREE.MeshBasicMaterial;
+      curve: THREE.QuadraticBezierCurve3;
+      offset: number;
+      arcIdx: number;
+    }> = [];
+    const PARTICLES_PER_ARC = 3;
     for (const link of arcConnections) {
       const a = markerByProjectId.get(link.from);
       const b = markerByProjectId.get(link.to);
@@ -1124,6 +1132,7 @@ export default function Globus3D({
       const line = new THREE.Line(geo, mat);
       earthGroup.add(line);
 
+      const arcIdx = arcs.length;
       arcs.push({
         line,
         geo,
@@ -1131,6 +1140,26 @@ export default function Globus3D({
         fromKey: a.key,
         toKey: b.key,
       });
+
+      // Частицы вдоль дуги — поток данных.
+      for (let i = 0; i < PARTICLES_PER_ARC; i++) {
+        const pGeo = new THREE.SphereGeometry(0.65, 10, 10);
+        const pMat = new THREE.MeshBasicMaterial({
+          color: link.color,
+          transparent: true,
+          opacity: 0.9,
+          depthWrite: false,
+        });
+        const pMesh = new THREE.Mesh(pGeo, pMat);
+        earthGroup.add(pMesh);
+        arcParticles.push({
+          mesh: pMesh,
+          mat: pMat,
+          curve,
+          offset: i / PARTICLES_PER_ARC,
+          arcIdx,
+        });
+      }
     }
     arcsRef.current = arcs;
     const arcStartTime = performance.now();
@@ -1376,6 +1405,25 @@ export default function Globus3D({
           for (const a of arcs) {
             a.geo.setDrawRange(0, Math.floor(a.total * eased));
           }
+        }
+      }
+
+      // Поток частиц вдоль дуг — оживляет связи.
+      if (arcParticles.length > 0) {
+        const arcElapsed = (t - arcStartTime) / ARC_DRAW_MS;
+        const startedFlow = arcElapsed >= 0.5;
+        for (const p of arcParticles) {
+          const arc = arcs[p.arcIdx];
+          if (!arc || !arc.line.visible || !startedFlow) {
+            p.mesh.visible = false;
+            continue;
+          }
+          p.mesh.visible = true;
+          const phase = ((t * 0.0006 + p.offset) % 1 + 1) % 1;
+          const pos = p.curve.getPointAt(phase);
+          p.mesh.position.copy(pos);
+          // sin envelope: 0 на концах, 1 в середине — частицы появляются из start, исчезают в end.
+          p.mat.opacity = 0.92 * Math.sin(phase * Math.PI);
         }
       }
 

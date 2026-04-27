@@ -351,6 +351,31 @@ export default function Globus3D({
     return [...projectMarkers, ...objectMarkers];
   }, [projects, qrightObjects, focusProjectIds]);
 
+  const counts = useMemo(() => {
+    let live = 0;
+    let api = 0;
+    let awards = 0;
+    let infra = 0;
+    for (const p of projects) {
+      if (p.id === "aevion-awards-music" || p.id === "aevion-awards-film") {
+        awards++;
+        continue;
+      }
+      if (p.kind === "infra") infra++;
+      const tier = p.runtime?.tier;
+      if (tier === "mvp_live") live++;
+      else if (tier === "platform_api") api++;
+    }
+    return {
+      nodes: projects.length,
+      live,
+      api,
+      awards,
+      infra,
+      qright: qrightObjects.length,
+    };
+  }, [projects, qrightObjects]);
+
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
@@ -948,6 +973,138 @@ export default function Globus3D({
           userSelect: "none",
         }}
       />
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 14,
+            left: 14,
+            zIndex: 4,
+            background: "rgba(12,18,32,0.7)",
+            border: "1px solid rgba(120,160,220,0.22)",
+            borderRadius: 12,
+            padding: "10px 12px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.35)",
+            pointerEvents: "none",
+            minWidth: 144,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "#7a8fb0",
+              marginBottom: 6,
+            }}
+          >
+            Legend
+          </div>
+          {[
+            { c: "#7dd3fc", icon: "🚀", label: "Product" },
+            { c: "#fbbf24", icon: "★", label: "Focus" },
+            { c: "#e879f9", icon: "🏆", label: "Award" },
+            { c: "#34d399", icon: "💎", label: "QRight" },
+          ].map((row) => (
+            <div
+              key={row.label}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                marginTop: 3,
+                fontSize: 12,
+                color: "#cbd5e1",
+              }}
+            >
+              <span
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: row.c,
+                  boxShadow: `0 0 8px ${row.c}aa`,
+                }}
+              />
+              <span style={{ fontSize: 11, opacity: 0.75 }}>{row.icon}</span>
+              <span style={{ fontWeight: 700 }}>{row.label}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 14,
+            right: 14,
+            zIndex: 4,
+            background: "rgba(12,18,32,0.7)",
+            border: "1px solid rgba(120,160,220,0.22)",
+            borderRadius: 12,
+            padding: "10px 12px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.35)",
+            pointerEvents: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+            minWidth: 132,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "#7a8fb0",
+              marginBottom: 3,
+            }}
+          >
+            Ecosystem
+          </div>
+          {[
+            { k: "Nodes", v: counts.nodes, color: "#f1f5ff" },
+            { k: "LIVE", v: counts.live, color: "#86efac" },
+            { k: "Awards", v: counts.awards, color: "#e879f9" },
+            { k: "QRight", v: counts.qright, color: "#5eead4" },
+          ].map((row) => (
+            <div
+              key={row.k}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: 14,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "#94a3b8",
+                  fontWeight: 700,
+                }}
+              >
+                {row.k}
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  color: row.color,
+                  fontWeight: 900,
+                }}
+              >
+                {row.v}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {!initError ? (
         <div

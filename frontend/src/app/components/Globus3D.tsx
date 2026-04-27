@@ -542,6 +542,45 @@ export default function Globus3D({
     }
   }, [query, filter, markers]);
 
+  /** Auto-focus при единственном совпадении поиска. */
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (!q && filter === "all") return;
+    // Считаем матчи и собираем единственный.
+    const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
+    let count = 0;
+    let single: Marker | null = null;
+    for (const m of markers) {
+      if (filter !== "all" && m.category !== filter) continue;
+      if (q) {
+        if (
+          !(
+            inField(m.title) ||
+            inField(m.label) ||
+            inField(m.country) ||
+            inField(m.city) ||
+            (m.tags?.some((t) => inField(t)) ?? false)
+          )
+        ) {
+          continue;
+        }
+      }
+      count++;
+      if (count > 1) {
+        single = null;
+        break;
+      }
+      single = m;
+    }
+    if (count !== 1 || !single) return;
+    if (focusedRef.current?.key === single.key) return;
+    const target = single;
+    const tm = window.setTimeout(() => {
+      focusMarkerRef.current(target);
+    }, 700);
+    return () => window.clearTimeout(tm);
+  }, [query, filter, markers]);
+
   const visibleMatchCount = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (filter === "all" && !q) return markers.length;

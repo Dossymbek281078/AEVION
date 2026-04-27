@@ -17,7 +17,7 @@ import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
-import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, type VariantId, type ArmySlot } from "./variants";
+import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, type VariantId, type ArmySlot } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
 
 const FILES = "abcdefgh";
@@ -480,6 +480,11 @@ export default function CyberChessPage(){
   const[dropPickerOpen,sDropPickerOpen]=useState(false);
   const[selectedDropPiece,sSelectedDropPiece]=useState<"p"|"n"|"b"|"r"|"q"|null>(null);
   const lastCaptureBkRef=useRef(-1);
+  // Manual Asymmetric Army Builder
+  const[showArmyBuilder,sShowArmyBuilder]=useState(false);
+  const[builderWhite,sBuilderWhite]=useState<("Q"|"R"|"B"|"N")[]>(["R","R","B","B","N","N","Q"]);
+  const[builderBlack,sBuilderBlack]=useState<("Q"|"R"|"B"|"N")[]>(["R","R","B","B","N","N","Q"]);
+  const[manualArmyFen,sManualArmyFen]=useState<string>("");
   // Daily Brilliancy Hunt (killer #10)
   const[showBrilliancy,sShowBrilliancy]=useState(false);
   const[brilliancyHunt,sBrilliancyHunt]=useState<BrilliancyHunt|null>(null);
@@ -1671,7 +1676,15 @@ export default function CyberChessPage(){
     let startFen="";
     let armies:{white:ArmySlot[];black:ArmySlot[]}|null=null;
     if(variant==="fischer960"){startFen=fischer960Fen()}
-    else if(variant==="asymmetric"){const r=asymmetricFen();startFen=r.fen;armies={white:r.whiteArmy,black:r.blackArmy}}
+    else if(variant==="asymmetric"){
+      if(manualArmyFen){
+        const built=buildArmyFen(builderWhite,builderBlack);
+        if(built){startFen=built.fen;armies={white:built.whiteArmy,black:built.blackArmy}}
+        else{const r=asymmetricFen();startFen=r.fen;armies={white:r.whiteArmy,black:r.blackArmy}}
+      }else{
+        const r=asymmetricFen();startFen=r.fen;armies={white:r.whiteArmy,black:r.blackArmy};
+      }
+    }
     else if(variant==="twinkings"){startFen=twinKingsFen()}
     else if(variant==="atomic"){startFen=atomicFen()}
     else if(variant==="kingofthehill"){startFen=kothFen()}
@@ -4711,6 +4724,105 @@ export default function CyberChessPage(){
       })()}
     </Modal>
 
+    {/* ═══ Manual Asymmetric Army Builder ═══ */}
+    <Modal open={showArmyBuilder} onClose={()=>sShowArmyBuilder(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>⚔ Army Builder <Badge tone="info" size="sm">бюджет 39pt × 2</Badge></span>}>
+      {(()=>{
+        const PV:Record<string,number>={Q:9,R:5,B:3,N:3};
+        const wBudget=builderWhite.reduce((a,p)=>a+PV[p],0);
+        const bBudget=builderBlack.reduce((a,p)=>a+PV[p],0);
+        const renderArmy=(slots:("Q"|"R"|"B"|"N")[],setSlots:(s:("Q"|"R"|"B"|"N")[])=>void,label:string,budget:number,color:string)=>{
+          const isOk=budget===39&&slots.length===7;
+          return <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.surface1,border:`2px solid ${isOk?CC.brand:CC.danger}`}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:SPACE[2]}}>
+              <div style={{fontSize:14,fontWeight:900,color}}>{label}</div>
+              <div style={{fontSize:13,fontWeight:900,color:isOk?CC.brand:CC.danger}}>
+                {budget}/39pt {isOk?"✓":""}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",minHeight:50,padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface2,border:`1px dashed ${CC.border}`,marginBottom:SPACE[2]}}>
+              {slots.length===0?<span style={{fontSize:11,color:CC.textDim,fontStyle:"italic"}}>Нажимай фигуры ↓ чтобы добавить (нужно ровно 7 слотов)</span>:slots.map((p,i)=><button key={i} onClick={()=>setSlots(slots.filter((_,j)=>j!==i))}
+                style={{padding:"4px 10px",borderRadius:RADIUS.full,background:color===CC.text?"#1f2937":"#fff",color:color===CC.text?"#fff":"#1f2937",border:`1px solid ${CC.border}`,cursor:"pointer",fontSize:14,fontWeight:900}}>
+                {p} ({PV[p]})
+              </button>)}
+            </div>
+            <div style={{display:"flex",gap:SPACE[1]}}>
+              {(["Q","R","B","N"] as const).map(p=>{
+                const tooMany=slots.length>=7;
+                const tooExpensive=budget+PV[p]>39;
+                const dis=tooMany||tooExpensive;
+                return <button key={p} onClick={()=>setSlots([...slots,p])} disabled={dis}
+                  style={{flex:1,padding:"8px 4px",borderRadius:RADIUS.sm,
+                    background:dis?CC.surface3:CC.surface1,border:`1px solid ${CC.border}`,
+                    cursor:dis?"not-allowed":"pointer",opacity:dis?0.4:1,
+                    fontSize:13,fontWeight:900,color:CC.text}}>
+                  +{p} <span style={{fontSize:10,color:CC.textDim}}>({PV[p]})</span>
+                </button>;
+              })}
+              <button onClick={()=>setSlots([])}
+                style={{padding:"8px 12px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,cursor:"pointer",fontSize:11,color:CC.danger}}>
+                ✕
+              </button>
+            </div>
+          </div>;
+        };
+        const builtOk=wBudget===39&&bBudget===39&&builderWhite.length===7&&builderBlack.length===7;
+        return <div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#ecfeff,#cffafe)",border:"1px solid #67e8f9",marginBottom:SPACE[3],fontSize:13,color:"#155e75",lineHeight:1.5}}>
+            <b>Сконструируй обе армии вручную.</b> Каждая ровно 7 фигур (король+пешки фиксированы), бюджет 39 очков (Q=9, R=5, B=N=3). Создай асимметрию — например 3 ферзя vs 6 ладей.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2],marginBottom:SPACE[3]}}>
+            {renderArmy(builderWhite,sBuilderWhite,"⚪ Белые",wBudget,CC.text)}
+            {renderArmy(builderBlack,sBuilderBlack,"⚫ Чёрные",bBudget,CC.text)}
+          </div>
+          <SectionHeader title="ПРЕСЕТЫ"/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:SPACE[1],marginTop:SPACE[2],marginBottom:SPACE[3]}}>
+            {ARMY_PRESETS.map((p,i)=><div key={i} style={{display:"flex",flexDirection:"column",gap:4,padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:18}}>{p.emoji}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:900,color:CC.text}}>{p.name}</div>
+                  <div style={{fontSize:10,color:CC.textDim}}>{p.desc}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:4}}>
+                <button onClick={()=>sBuilderWhite([...p.slots])}
+                  style={{flex:1,padding:"3px 6px",borderRadius:RADIUS.sm,background:CC.surface2,border:`1px solid ${CC.border}`,cursor:"pointer",fontSize:10,color:CC.text}}>← W</button>
+                <button onClick={()=>sBuilderBlack([...p.slots])}
+                  style={{flex:1,padding:"3px 6px",borderRadius:RADIUS.sm,background:CC.surface2,border:`1px solid ${CC.border}`,cursor:"pointer",fontSize:10,color:CC.text}}>B →</button>
+              </div>
+            </div>)}
+          </div>
+          <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
+            <Btn variant="ghost" size="md" onClick={()=>{
+              sBuilderWhite([]);sBuilderBlack([]);sManualArmyFen("");
+            }}>Сбросить</Btn>
+            <Btn variant="ghost" size="md" onClick={()=>{
+              // Random both
+              const w=["R","R","B","B","N","N","Q"] as ("Q"|"R"|"B"|"N")[];
+              for(let i=w.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[w[i],w[j]]=[w[j],w[i]]}
+              sBuilderWhite(w);
+              const b=["R","R","B","B","N","N","Q"] as ("Q"|"R"|"B"|"N")[];
+              for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}
+              sBuilderBlack(b);
+            }}>🎲 Рандом</Btn>
+            <Btn variant="primary" size="md" full disabled={!builtOk} onClick={()=>{
+              const built=buildArmyFen(builderWhite,builderBlack);
+              if(!built){showToast("Армии должны иметь ровно 7 фигур по 39pt каждая","error");return}
+              sManualArmyFen(built.fen);
+              sVariant("asymmetric");
+              sShowArmyBuilder(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+              setTimeout(()=>newG(),50);
+              showToast(`⚔ Партия запущена с твоей асимметрией`,"success");
+            }}>▶ Запустить с этими армиями</Btn>
+          </div>
+          {!builtOk&&<div style={{marginTop:SPACE[2],fontSize:11,color:CC.danger,textAlign:"center"}}>
+            Каждая армия должна быть ровно 7 фигур и 39 очков. Сейчас: ⚪ {builderWhite.length} фигур / {wBudget}pt, ⚫ {builderBlack.length} фигур / {bBudget}pt.
+          </div>}
+        </div>;
+      })()}
+    </Modal>
+
     {/* ═══ Chess Variants (Fischer 960 · Asymmetric · Twin Kings · Diceblade · Reinforcement) ═══ */}
     <Modal open={showVariants} onClose={()=>sShowVariants(false)} size="lg"
       title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🎲 Chess Variants <Badge tone="gold" size="sm">{VARIANTS.length} режимов</Badge></span>}>
@@ -4748,15 +4860,27 @@ export default function CyberChessPage(){
             </button>;
           })}
         </div>
+        {variant==="asymmetric"&&<div style={{marginTop:SPACE[3],padding:SPACE[2],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#ecfeff,#cffafe)",border:"1px solid #67e8f9"}}>
+          <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+            <span style={{fontSize:18}}>🛠</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:900,color:"#155e75"}}>Хочешь сам собрать армии?</div>
+              <div style={{fontSize:11,color:CC.textDim}}>Manual Builder — выбираешь обе стороны</div>
+            </div>
+            <Btn variant="primary" size="sm" onClick={()=>{sShowVariants(false);setTimeout(()=>sShowArmyBuilder(true),100)}}>Открыть</Btn>
+          </div>
+        </div>}
         <div style={{marginTop:SPACE[3],display:"flex",gap:SPACE[2]}}>
           <Btn variant="secondary" size="md" full onClick={()=>sShowVariants(false)}>Закрыть</Btn>
           <Btn variant="primary" size="md" full onClick={()=>{
             sShowVariants(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+            // Reset manual armies — random will be generated unless builder used
+            if(variant==="asymmetric")sManualArmyFen("");
             setTimeout(()=>newG(),50);
           }}>▶ Сыграть в этом режиме</Btn>
         </div>
         <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center",lineHeight:1.5}}>
-          Variants работают с любым AI level и любым timing. Турнирная сетка пока на стандартных правилах.
+          Variants работают с любым AI level и любым timing.
         </div>
       </div>
     </Modal>

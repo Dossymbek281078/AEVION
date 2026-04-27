@@ -269,6 +269,48 @@ export function asymmetricFen(): { fen: string; whiteArmy: ArmySlot[]; blackArmy
   return { fen, whiteArmy: w.pieces, blackArmy: b.pieces };
 }
 
+// Manual army builder: given user-picked piece counts (must sum to 39 points
+// across exactly 7 slots), build the FEN.
+export function buildArmyFen(whiteSlots: ("Q"|"R"|"B"|"N")[], blackSlots: ("Q"|"R"|"B"|"N")[]): { fen: string; whiteArmy: ArmySlot[]; blackArmy: ArmySlot[] } | null {
+  if (whiteSlots.length !== 7 || blackSlots.length !== 7) return null;
+  // Validate budget
+  const wBudget = whiteSlots.reduce((a, p) => a + (PIECE_VAL[p] || 0), 0);
+  const bBudget = blackSlots.reduce((a, p) => a + (PIECE_VAL[p] || 0), 0);
+  if (wBudget !== 39 || bBudget !== 39) return null;
+  // Place: heavy pieces toward center (sorted by value, alternated outside-in)
+  const place = (slots: string[]) => {
+    const sorted = [...slots].sort((a, b) => (PIECE_VAL[b] || 0) - (PIECE_VAL[a] || 0));
+    const filesOrder = [3, 5, 2, 6, 1, 7, 0]; // center-out
+    const out: string[] = ["", "", "", "", "K", "", "", ""];
+    for (let i = 0; i < 7; i++) out[filesOrder[i]] = sorted[i];
+    return out;
+  };
+  const wRank = place(whiteSlots).join("");
+  const bRank = place(blackSlots).join("").toLowerCase();
+  const counts = (slots: string[]): ArmySlot[] => {
+    const m: Record<string, number> = {};
+    for (const p of slots) m[p] = (m[p] || 0) + 1;
+    return Object.entries(m).map(([p, c]) => ({ piece: p as any, count: c }));
+  };
+  return {
+    fen: `${bRank}/pppppppp/8/8/8/8/PPPPPPPP/${wRank} w - - 0 1`,
+    whiteArmy: counts(whiteSlots),
+    blackArmy: counts(blackSlots),
+  };
+}
+
+// Preset armies — curated combinations to spark ideas
+export const ARMY_PRESETS: { name: string; emoji: string; slots: ("Q"|"R"|"B"|"N")[]; desc: string }[] = [
+  { name: "FIDE Standard", emoji: "♟", slots: ["R","R","B","B","N","N","Q"], desc: "Классика" },
+  { name: "Triple Queen", emoji: "👑", slots: ["Q","Q","Q","B","B","N","N"], desc: "3 ферзя — мать тактики" },
+  { name: "Cavalry", emoji: "🐎", slots: ["N","N","N","N","N","N","R"], desc: "6 коней + ладья" },
+  { name: "Rook Fortress", emoji: "🏰", slots: ["R","R","R","R","R","R","Q"], desc: "6 ладей + ферзь" },
+  { name: "Bishop Storm", emoji: "🌪", slots: ["B","B","B","B","B","B","R"], desc: "6 слонов + ладья" },
+  { name: "Quad Queen", emoji: "👑👑", slots: ["Q","Q","Q","Q","N","N","B"], desc: "4 ферзя — апокалипсис" },
+  { name: "Tactical", emoji: "⚔", slots: ["N","N","N","B","B","B","Q"], desc: "3N+3B+Q — лёгкая армия" },
+  { name: "Heavy Steel", emoji: "💪", slots: ["Q","R","R","R","R","B","B"], desc: "тяжёлый материал" },
+];
+
 // ── Twin Kings ───────────────────────────────────────────
 // Standard FEN, but the queen is treated as "royal" — losing it = loss.
 // We just return standard FEN; the page.tsx will check queen capture.

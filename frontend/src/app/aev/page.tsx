@@ -7,6 +7,7 @@ import {
   ldWallet, svWallet,
   recordPlay, recordCompute,
   stake, unstake, claimDividend, pendingDividend, totalStaked,
+  recordDailyVisit, previewStreakReward,
   setMode,
   fmtAev, fmtSupplyPct,
   RATE_CARD,
@@ -40,7 +41,21 @@ const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: s
 export default function AEVPage() {
   // Lazy-init avoids SSR hydration mismatch.
   const [wallet, setWallet] = useState<AEVWallet | null>(null);
-  useEffect(() => { setWallet(ldWallet()) }, []);
+  const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
+  useEffect(() => {
+    const w = ldWallet();
+    // Auto-claim daily streak on mount if eligible
+    const updated = recordDailyVisit(w);
+    if (updated) {
+      const day = updated.streak?.current ?? 0;
+      const amount = updated.balance - w.balance;
+      setWallet(updated);
+      setStreakClaimed({ amount, day });
+      setTimeout(() => setStreakClaimed(null), 6000);
+    } else {
+      setWallet(w);
+    }
+  }, []);
 
   // Persist on every change
   useEffect(() => { if (wallet) svWallet(wallet) }, [wallet]);
@@ -241,6 +256,9 @@ export default function AEVPage() {
           })}
         </div>
 
+        {/* ═══ STREAK — Proof-of-Streak (engine F, voted live) ═════ */}
+        <StreakCard wallet={wallet} claimed={streakClaimed} />
+
         {/* ═══ A. PROOF-OF-PLAY ════════════════════════════════════ */}
         {wallet.modes.play && (
           <section style={{ padding: 16, borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff", marginBottom: 14 }}>
@@ -434,6 +452,107 @@ export default function AEVPage() {
   );
 }
 
+// ─── Streak card (engine F · live) ─────────────────────────────────
+function StreakCard({ wallet, claimed }: { wallet: AEVWallet; claimed: { amount: number; day: number } | null }) {
+  const streak = wallet.streak ?? { current: 0, longest: 0, lastDayKey: "", totalClaims: 0 };
+  const next = previewStreakReward(wallet);
+  const day = streak.current;
+  const longest = streak.longest;
+  const milestones = [
+    { at: 7, label: "🔥 неделя", bonus: RATE_CARD.streak.week7Bonus },
+    { at: 30, label: "🚀 месяц", bonus: RATE_CARD.streak.month30Bonus },
+    { at: 100, label: "👑 век", bonus: RATE_CARD.streak.century100Bonus },
+  ];
+  // Time-until-tomorrow for countdown
+  const tomorrow = new Date();
+  tomorrow.setHours(24, 0, 0, 0);
+  const msToTomorrow = tomorrow.getTime() - Date.now();
+  const h = Math.floor(msToTomorrow / 3600000);
+  const m = Math.floor((msToTomorrow % 3600000) / 60000);
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: day > 0
+        ? "linear-gradient(135deg, #f97316 0%, #ea580c 50%, #c2410c 100%)"
+        : "linear-gradient(135deg, #475569, #334155)",
+      color: "#fff", marginBottom: 14,
+      boxShadow: day > 0 ? "0 6px 18px rgba(234,88,12,0.25)" : "none",
+      position: "relative" as const, overflow: "hidden" as const,
+    }}>
+      {claimed && (
+        <div style={{
+          position: "absolute" as const, top: 8, right: 8,
+          padding: "6px 12px", borderRadius: 999,
+          background: "rgba(255,255,255,0.95)", color: "#c2410c",
+          fontWeight: 900, fontSize: 12,
+          animation: "qt-pulse 1.4s ease-in-out infinite",
+          boxShadow: "0 4px 14px rgba(255,255,255,0.4)",
+        }}>
+          ✓ Day {claimed.day} · +{claimed.amount.toFixed(4)} AEV
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 16, alignItems: "center" as const }}>
+        <div style={{ textAlign: "center" as const }}>
+          <div style={{ fontSize: 48, fontWeight: 900, lineHeight: 1, fontFamily: "ui-monospace, monospace" }}>
+            🔥 {day}
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, opacity: 0.8, textTransform: "uppercase" as const, marginTop: 2 }}>
+            {day === 0 ? "Старт streak'а" : day === 1 ? "день" : day < 5 ? "дня подряд" : "дней подряд"}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const, marginBottom: 4 }}>
+            F · Proof-of-Streak — engine live
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.5, opacity: 0.92 }}>
+            Каждый день, когда ты заходишь на /aev, начисляется AEV.
+            Множитель растёт +5% каждые 7 дней (cap ×{RATE_CARD.streak.maxMultiplier}).
+            Пропустил день — streak сбрасывается на 1.
+            {longest > day && longest > 0 && (
+              <> · Лучший streak: <strong>{longest}</strong> {longest === 1 ? "день" : "дней"}</>
+            )}
+          </div>
+          {/* Milestone progress bar */}
+          <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+            {milestones.map((m) => {
+              const pct = Math.min(100, (day / m.at) * 100);
+              const reached = day >= m.at;
+              return (
+                <div key={m.at} style={{ flex: 1, padding: "4px 8px", borderRadius: 6, background: reached ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.12)", border: `1px solid ${reached ? "#86efac" : "rgba(255,255,255,0.2)"}` }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5 }}>
+                    {m.label} <span style={{ opacity: 0.7 }}>{day}/{m.at}</span>
+                    {reached && <span style={{ marginLeft: 4, color: "#86efac" }}>✓</span>}
+                  </div>
+                  <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.2)", overflow: "hidden" as const }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: reached ? "#86efac" : "#fff" }} />
+                  </div>
+                  <div style={{ fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, monospace", opacity: 0.85 }}>
+                    +{m.bonus} AEV bonus
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" as const, minWidth: 120 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.8, textTransform: "uppercase" as const, marginBottom: 2 }}>
+            Завтра
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", lineHeight: 1 }}>
+            +{next.toFixed(3)}
+          </div>
+          <div style={{ fontSize: 10, opacity: 0.75, fontFamily: "ui-monospace, monospace" }}>через {h}h {m}m</div>
+          <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>
+            Всего claims: <strong>{streak.totalClaims}</strong>
+          </div>
+        </div>
+      </div>
+      <style>{`@keyframes qt-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(0.96)}}`}</style>
+    </section>
+  );
+}
+
 // ─── Future emission engines — proposals + voting ─────────────────
 type Proposal = {
   id: string;
@@ -467,8 +586,8 @@ const BUILTIN_PROPOSALS: Proposal[] = [
     letter: "F",
     emoji: "🔥",
     name: "Proof-of-Streak",
-    tagline: "lock-in через ежедневное возвращение",
-    desc: "Каждый поддержанный day-streak в любом модуле AEVION = малый AEV. 7d streak — bonus, 30d streak — milestone-bonus. Нативная анти-инфляция: пропустил день, multiplier reset.",
+    tagline: "✅ LIVE — engine выпущен 27.04",
+    desc: "Каждый день захода на /aev = AEV (auto-claim). Multiplier ×1 → ×2 за 20 недель, milestone-bonuses на 7/30/100 дней. Скрин-карта вверху страницы. Победил голосование.",
   },
   {
     id: "network",
@@ -582,15 +701,23 @@ function FutureEngines() {
                   <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", lineHeight: 1.25 }}>{p.name}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end" as const, gap: 4 }}>
-                  <button onClick={() => upvote(p.id)} disabled={did}
-                    style={{
-                      padding: "5px 11px", borderRadius: 5, border: "none",
-                      background: did ? "#86efac" : "linear-gradient(135deg, #2563eb, #3b82f6)",
-                      color: "#fff", fontSize: 11, fontWeight: 800, cursor: did ? "default" : "pointer",
-                      whiteSpace: "nowrap" as const,
-                    }}>
-                    {did ? "✓ Голос за" : "🗳 Vote"}
-                  </button>
+                  {p.id === "streak" ? (
+                    <span style={{
+                      padding: "5px 11px", borderRadius: 5,
+                      background: "linear-gradient(135deg, #f97316, #ea580c)",
+                      color: "#fff", fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+                    }}>✓ LIVE</span>
+                  ) : (
+                    <button onClick={() => upvote(p.id)} disabled={did}
+                      style={{
+                        padding: "5px 11px", borderRadius: 5, border: "none",
+                        background: did ? "#86efac" : "linear-gradient(135deg, #2563eb, #3b82f6)",
+                        color: "#fff", fontSize: 11, fontWeight: 800, cursor: did ? "default" : "pointer",
+                        whiteSpace: "nowrap" as const,
+                      }}>
+                      {did ? "✓ Голос за" : "🗳 Vote"}
+                    </button>
+                  )}
                   <span style={{ fontSize: 13, fontWeight: 900, color: "#0f172a", fontFamily: "ui-monospace, monospace" }}>{v}</span>
                 </div>
               </div>

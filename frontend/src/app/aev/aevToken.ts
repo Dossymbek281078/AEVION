@@ -49,6 +49,13 @@ export type StakeEntry = {
   lastDividendTs: number;
 };
 
+export type StreakState = {
+  current: number;        // текущий streak (дней)
+  longest: number;        // лучший за всю историю
+  lastDayKey: string;     // YYYY-MM-DD когда был последний claim
+  totalClaims: number;
+};
+
 export type AEVWallet = {
   v: 1;
   balance: number;
@@ -60,6 +67,7 @@ export type AEVWallet = {
   recent: MiningEvent[];           // last 80 ивентов
   startTs: number;
   dividendsClaimed: number;
+  streak?: StreakState;            // optional для backward-compat со старыми кошельками
 };
 
 const DEFAULT_WALLET: AEVWallet = {
@@ -103,6 +111,14 @@ export const RATE_CARD = {
     apyAnnual: 0.072,      // 7.2% APY при стейкинге
     epochSeconds: 300,     // эмиссия dividend раз в 5 минут (для ощутимого pulse'а в UI)
     minStake: 1,
+  },
+  streak: {
+    base: 0.1,             // AEV за обычный день
+    week7Bonus: 1.0,       // дополнительный бонус на 7-дневный milestone
+    month30Bonus: 5.0,     // на 30-дневный
+    century100Bonus: 25.0, // на 100-дневный
+    multiplierPerWeek: 0.05, // +5% за каждую завершённую неделю streak'а
+    maxMultiplier: 2.0,    // capped 2x чтобы не разносило
   },
   // Хард-кап как у BTC — психологически удобно
   totalSupplyCap: 21_000_000,
@@ -269,6 +285,75 @@ export function claimDividend(w: AEVWallet, now = Date.now()): AEVWallet {
 // ─── Mode toggles ─────────────────────────────────────────────────
 export function setMode(w: AEVWallet, mode: EmissionMode, on: boolean): AEVWallet {
   return { ...w, modes: { ...w.modes, [mode]: on } };
+}
+
+// ─── F. Proof-of-Streak ───────────────────────────────────────────
+function dayKey(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function daysBetween(a: string, b: string): number {
+  // Both keys are YYYY-MM-DD; produce day-difference accounting for tz-naive midnight.
+  const da = new Date(a + "T00:00:00").getTime();
+  const db = new Date(b + "T00:00:00").getTime();
+  return Math.round((db - da) / 86400000);
+}
+
+// Returns null if user has already claimed today (no-op). Otherwise returns the
+// updated wallet with bumped streak + minted reward + event in feed.
+export function recordDailyVisit(w: AEVWallet, now = new Date()): AEVWallet | null {
+  const today = dayKey(now);
+  const cur = w.streak ?? { current: 0, longest: 0, lastDayKey: "", totalClaims: 0 };
+  if (cur.lastDayKey === today) return null; // уже клеймили сегодня
+  const gap = cur.lastDayKey ? daysBetween(cur.lastDayKey, today) : 1;
+  const newCurrent = gap === 1 ? cur.current + 1 : 1; // если пропустил день+ — reset на 1
+  const longest = Math.max(cur.longest, newCurrent);
+  // Reward = base × (1 + multiplierPerWeek × completedWeeks), clamped
+  const completedWeeks = Math.floor(newCurrent / 7);
+  const mult = Math.min(
+    RATE_CARD.streak.maxMultiplier,
+    1 + RATE_CARD.streak.multiplierPerWeek * completedWeeks,
+  );
+  let reward = RATE_CARD.streak.base * mult;
+  // Milestone bonuses (additive)
+  let milestone = "";
+  if (newCurrent === 7) { reward += RATE_CARD.streak.week7Bonus; milestone = "🔥 неделя без пропусков" }
+  else if (newCurrent === 30) { reward += RATE_CARD.streak.month30Bonus; milestone = "🚀 30 дней — milestone" }
+  else if (newCurrent === 100) { reward += RATE_CARD.streak.century100Bonus; milestone = "👑 100 дней — век" }
+  const reason = milestone
+    ? `${milestone} · day ${newCurrent}`
+    : `Streak day ${newCurrent} · ×${mult.toFixed(2)}`;
+  const updated: AEVWallet = {
+    ...w,
+    streak: {
+      current: newCurrent,
+      longest,
+      lastDayKey: today,
+      totalClaims: cur.totalClaims + 1,
+    },
+  };
+  return mint(updated, reward, { kind: "play", module: "qtrade", action: "streak" }, reason);
+}
+
+export function previewStreakReward(w: AEVWallet): number {
+  const today = dayKey();
+  const cur = w.streak ?? { current: 0, longest: 0, lastDayKey: "", totalClaims: 0 };
+  if (cur.lastDayKey === today) return 0;
+  const gap = cur.lastDayKey ? daysBetween(cur.lastDayKey, today) : 1;
+  const newCurrent = gap === 1 ? cur.current + 1 : 1;
+  const completedWeeks = Math.floor(newCurrent / 7);
+  const mult = Math.min(
+    RATE_CARD.streak.maxMultiplier,
+    1 + RATE_CARD.streak.multiplierPerWeek * completedWeeks,
+  );
+  let reward = RATE_CARD.streak.base * mult;
+  if (newCurrent === 7) reward += RATE_CARD.streak.week7Bonus;
+  else if (newCurrent === 30) reward += RATE_CARD.streak.month30Bonus;
+  else if (newCurrent === 100) reward += RATE_CARD.streak.century100Bonus;
+  return reward;
 }
 
 // ─── QTrade integration helpers ───────────────────────────────────

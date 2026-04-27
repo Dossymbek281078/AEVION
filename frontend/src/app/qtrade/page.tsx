@@ -4,6 +4,12 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import {
+  ldPairs, svPairs, ldPositions, svPositions,
+  tickPair, catchupPair, unrealizedPnl, unrealizedPct,
+  fmtUsd, fmtPct, sparklinePath,
+  type Pair, type Position, type PairId,
+} from "./marketSim";
 
 type Account = {
   id: string;
@@ -52,6 +58,84 @@ export default function QTradePage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("0");
+
+  // ─── Live Markets ────────────────────────────────────────────────
+  // Lazy-load from localStorage post-mount to avoid SSR hydration mismatch.
+  const [pairs, setPairs] = useState<Pair[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [marketsReady, setMarketsReady] = useState(false);
+  const [activePair, setActivePair] = useState<PairId | null>(null);
+  const [orderQty, setOrderQty] = useState("1");
+  const [tradeMsg, setTradeMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPairs(ldPairs().map((p) => catchupPair(p)));
+    setPositions(ldPositions());
+    setMarketsReady(true);
+  }, []);
+
+  // Tick price every 1000ms after markets are ready
+  useEffect(() => {
+    if (!marketsReady) return;
+    const id = setInterval(() => {
+      setPairs((prev) => {
+        if (prev.length === 0) return prev;
+        const next = prev.map(tickPair);
+        svPairs(next);
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [marketsReady]);
+
+  // Persist positions when they change
+  useEffect(() => {
+    if (!marketsReady) return;
+    svPositions(positions);
+  }, [positions, marketsReady]);
+
+  const pairById = useMemo(() => {
+    const m = new Map<PairId, Pair>();
+    for (const p of pairs) m.set(p.id, p);
+    return m;
+  }, [pairs]);
+
+  const totalUnrealized = useMemo(() => {
+    let sum = 0;
+    for (const pos of positions) {
+      const cur = pairById.get(pos.pair);
+      if (cur) sum += unrealizedPnl(pos, cur.price);
+    }
+    return sum;
+  }, [positions, pairById]);
+
+  const openPosition = (pid: PairId, side: "long" | "short") => {
+    const cur = pairById.get(pid);
+    if (!cur) return;
+    const q = Number(orderQty);
+    if (!Number.isFinite(q) || q <= 0) {
+      setTradeMsg("Введи положительное количество");
+      return;
+    }
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const pos: Position = { id, pair: pid, side, qty: q, entryPrice: cur.price, entryTs: Date.now() };
+    setPositions((prev) => [pos, ...prev]);
+    setTradeMsg(`✓ ${side === "long" ? "Long" : "Short"} ${q} ${cur.symbol} @ ${fmtUsd(cur.price)}`);
+    setTimeout(() => setTradeMsg(null), 2400);
+  };
+
+  const closePosition = (posId: string) => {
+    setPositions((prev) => {
+      const target = prev.find((p) => p.id === posId);
+      if (!target) return prev;
+      const cur = pairById.get(target.pair);
+      const pnl = cur ? unrealizedPnl(target, cur.price) : 0;
+      setTradeMsg(`✓ Закрыто · P&L ${pnl >= 0 ? "+" : ""}${fmtUsd(pnl)}`);
+      setTimeout(() => setTradeMsg(null), 2400);
+      return prev.filter((p) => p.id !== posId);
+    });
+  };
+  // ─────────────────────────────────────────────────────────────────
 
   const accountLabel = useMemo(() => {
     const m = new Map<string, string>();
@@ -196,11 +280,219 @@ export default function QTradePage() {
       <Wave1Nav />
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>QTrade</h1>
       <div style={{ color: "#666", marginBottom: 16 }}>
-        Accounts, top-ups and transfers (MVP). Data saved to backend disk (
-        <code style={{ fontSize: 13 }}>.aevion-data/qtrade.json</code>
-        , или каталог <code style={{ fontSize: 13 }}>AEVION_DATA_DIR</code>
-        ).
+        Live Markets с симулированной ценой и торговый ledger. Данные ledger'а — backend disk (
+        <code style={{ fontSize: 13 }}>.aevion-data/qtrade.json</code>); цены и позиции
+        — клиентский localStorage.
       </div>
+
+      {/* ═══ LIVE MARKETS ══════════════════════════════════════════ */}
+      <section
+        style={{
+          marginBottom: 24,
+          padding: 16,
+          borderRadius: 12,
+          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
+          color: "#fff",
+          boxShadow: "0 8px 24px rgba(15,23,42,0.18)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: "#22d3ee" }}>📊 Live Markets</span>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "2px 8px", borderRadius: 999,
+              background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.45)",
+              fontSize: 10, fontWeight: 800, color: "#86efac",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: 3, background: "#22c55e", animation: "qt-pulse 1.4s ease-in-out infinite" }} />
+              SIMULATED · 1s tick
+            </span>
+          </div>
+          <div style={{ fontSize: 13, color: "#cbd5e1" }}>
+            Открытые позиции: <strong style={{ color: "#fff" }}>{positions.length}</strong>
+            <span style={{ margin: "0 8px", color: "#475569" }}>·</span>
+            Unrealized P&L: <strong style={{ color: totalUnrealized > 0 ? "#22c55e" : totalUnrealized < 0 ? "#f87171" : "#cbd5e1" }}>
+              {totalUnrealized >= 0 ? "+" : ""}{fmtUsd(totalUnrealized)}
+            </strong>
+          </div>
+        </div>
+
+        {/* Pair cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 14 }}>
+          {pairs.map((p) => {
+            const change24 = ((p.price - p.open24h) / p.open24h) * 100;
+            const tickUp = p.price >= p.prevPrice;
+            const isActive = activePair === p.id;
+            const sparkColor = change24 >= 0 ? "#22c55e" : "#f87171";
+            return (
+              <button
+                key={p.id}
+                onClick={() => setActivePair((cur) => (cur === p.id ? null : p.id))}
+                style={{
+                  textAlign: "left",
+                  background: isActive ? "rgba(34,211,238,0.12)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${isActive ? "#22d3ee" : "rgba(255,255,255,0.1)"}`,
+                  borderRadius: 10,
+                  padding: 12,
+                  cursor: "pointer",
+                  color: "#fff",
+                  transition: "background 0.2s, border 0.2s",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: 0.4 }}>{p.symbol}</span>
+                  <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>{p.name}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                  <span style={{
+                    fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                    fontWeight: 900,
+                    fontSize: 19,
+                    color: tickUp ? "#86efac" : "#fca5a5",
+                    transition: "color 0.4s",
+                  }}>
+                    {fmtUsd(p.price)}
+                  </span>
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: change24 >= 0 ? "#22c55e" : "#f87171",
+                  }}>
+                    {fmtPct(change24)}
+                  </span>
+                </div>
+                <svg viewBox="0 0 100 30" preserveAspectRatio="none" style={{ width: "100%", height: 30, display: "block" }}>
+                  <path d={sparklinePath(p.history, 100, 30)} stroke={sparkColor} strokeWidth={1.4} fill="none" opacity={0.85} />
+                </svg>
+                <div style={{ fontSize: 10, color: "#64748b", letterSpacing: 0.4, fontWeight: 700 }}>
+                  {isActive ? "▼ свернуть" : "▶ торговать"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Trade panel */}
+        {activePair && (() => {
+          const p = pairById.get(activePair);
+          if (!p) return null;
+          const change24 = ((p.price - p.open24h) / p.open24h) * 100;
+          return (
+            <div style={{ padding: 12, borderRadius: 10, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 16, fontWeight: 900 }}>{p.symbol}</span>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: 800, fontSize: 18 }}>{fmtUsd(p.price)}</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: change24 >= 0 ? "#86efac" : "#fca5a5" }}>{fmtPct(change24)}</span>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>· 24h vol {p.vol >= 0.004 ? "high" : p.vol >= 0.003 ? "med" : "low"}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ fontSize: 12, color: "#cbd5e1", fontWeight: 700 }}>Qty</label>
+                <input
+                  value={orderQty}
+                  onChange={(e) => setOrderQty(e.target.value)}
+                  type="number"
+                  min={0}
+                  step="any"
+                  style={{
+                    width: 110, padding: "6px 10px", borderRadius: 6,
+                    border: "1px solid #334155", background: "#0f172a", color: "#fff",
+                    fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13,
+                  }}
+                />
+                <button
+                  onClick={() => openPosition(p.id, "long")}
+                  style={{
+                    padding: "8px 16px", borderRadius: 6, border: "none",
+                    background: "linear-gradient(135deg, #16a34a, #22c55e)", color: "#fff",
+                    fontWeight: 800, fontSize: 13, cursor: "pointer",
+                    boxShadow: "0 2px 8px rgba(34,197,94,0.25)",
+                  }}
+                >
+                  ▲ LONG @ market
+                </button>
+                <button
+                  onClick={() => openPosition(p.id, "short")}
+                  style={{
+                    padding: "8px 16px", borderRadius: 6, border: "none",
+                    background: "linear-gradient(135deg, #dc2626, #ef4444)", color: "#fff",
+                    fontWeight: 800, fontSize: 13, cursor: "pointer",
+                    boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
+                  }}
+                >
+                  ▼ SHORT @ market
+                </button>
+                {tradeMsg && (
+                  <span style={{ fontSize: 12, color: "#86efac", fontWeight: 700 }}>{tradeMsg}</span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Open positions */}
+        {positions.length > 0 && (
+          <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: "#cbd5e1", marginBottom: 8 }}>Открытые позиции</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {positions.map((pos) => {
+                const cur = pairById.get(pos.pair);
+                const price = cur?.price ?? pos.entryPrice;
+                const pnl = cur ? unrealizedPnl(pos, price) : 0;
+                const pct = cur ? unrealizedPct(pos, price) : 0;
+                const ageMin = Math.max(0, Math.round((Date.now() - pos.entryTs) / 60000));
+                return (
+                  <div
+                    key={pos.id}
+                    style={{
+                      padding: "8px 12px", borderRadius: 8,
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto auto",
+                      gap: 12, alignItems: "center", fontSize: 13,
+                    }}
+                  >
+                    <span style={{
+                      padding: "2px 8px", borderRadius: 4,
+                      background: pos.side === "long" ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)",
+                      color: pos.side === "long" ? "#86efac" : "#fca5a5",
+                      fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase",
+                    }}>
+                      {pos.side === "long" ? "▲ Long" : "▼ Short"} {pos.pair.split("/")[0]}
+                    </span>
+                    <span style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>
+                      {pos.qty} @ {fmtUsd(pos.entryPrice)} → {fmtUsd(price)}
+                      <span style={{ marginLeft: 8, color: "#64748b", fontSize: 11 }}>({ageMin}m ago)</span>
+                    </span>
+                    <span style={{
+                      fontFamily: "ui-monospace, monospace",
+                      fontWeight: 900,
+                      color: pnl > 0 ? "#22c55e" : pnl < 0 ? "#f87171" : "#cbd5e1",
+                    }}>
+                      {pnl >= 0 ? "+" : ""}{fmtUsd(pnl)} ({fmtPct(pct)})
+                    </span>
+                    <button
+                      onClick={() => closePosition(pos.id)}
+                      style={{
+                        padding: "5px 11px", borderRadius: 5,
+                        background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
+                        color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+      <style>{`@keyframes qt-pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
 
       <div style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
         {[

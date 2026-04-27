@@ -1,9 +1,49 @@
 ﻿"use client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 type Props = {
   hidePlanet?: boolean;
   variant?: "light" | "dark";
 };
+
+// Lightweight AEV balance pill — reads localStorage every 4s, no react-context needed
+// (each page that uses Wave1Nav gets its own subscription, but the read is cheap).
+function AevPill({ variant }: { variant: "light" | "dark" }) {
+  const [balance, setBalance] = useState<number | null>(null);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const s = localStorage.getItem("aevion_aev_wallet_v1");
+        if (!s) { setBalance(0); return; }
+        const r = JSON.parse(s);
+        const b = typeof r?.balance === "number" ? r.balance : 0;
+        setBalance(b);
+      } catch { setBalance(0); }
+    };
+    read();
+    const id = setInterval(read, 4000);
+    const onStorage = (e: StorageEvent) => { if (e.key === "aevion_aev_wallet_v1") read(); };
+    window.addEventListener("storage", onStorage);
+    return () => { clearInterval(id); window.removeEventListener("storage", onStorage); };
+  }, []);
+  if (balance === null) return null;
+  const dark = variant === "dark";
+  return (
+    <Link href="/aev" style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "2px 9px", borderRadius: 999,
+      background: dark ? "rgba(34,211,238,0.15)" : "rgba(34,211,238,0.12)",
+      border: dark ? "1px solid rgba(34,211,238,0.45)" : "1px solid #67e8f9",
+      color: dark ? "#67e8f9" : "#0e7490",
+      fontWeight: 800, fontSize: 12, textDecoration: "none",
+      fontFamily: "ui-monospace, SFMono-Regular, monospace",
+    }} title="AEV кошелёк">
+      <span style={{ fontSize: 11 }}>◆</span>
+      <span>{balance.toFixed(2)} AEV</span>
+    </Link>
+  );
+}
+
 export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
   const sep = variant === "dark" ? "rgba(148,163,184,0.5)" : "#cbd5e1";
   const link = variant === "dark" ? "#e2e8f0" : "#334155";
@@ -27,6 +67,9 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/awards/film" style={{ color: link, fontWeight: 600 }}>Film Awards</Link>
       <Link href="/bank" style={{ color: link, fontWeight: 600 }}>Bank</Link>
       <Link href="/cyberchess" style={{ color: link, fontWeight: 600 }}>Chess</Link>
+      <Link href="/qtrade" style={{ color: link, fontWeight: 600 }}>QTrade</Link>
+      <span style={{ color: sep }} aria-hidden>|</span>
+      <AevPill variant={variant} />
       {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
     </nav>
   );

@@ -441,30 +441,51 @@ export default function PricingPage() {
                   </div>
                 )}
               </div>
-              <button
-                style={{
-                  width: "100%",
-                  padding: "10px 16px",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  borderRadius: 10,
-                  border: "none",
-                  cursor: "pointer",
-                  background: isHighlight
-                    ? "linear-gradient(135deg, #0d9488, #0ea5e9)"
-                    : tier.id === "enterprise"
-                      ? "#0f172a"
+              {tier.id === "enterprise" ? (
+                <Link
+                  href="/pricing/contact?tier=enterprise"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "10px 16px",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    cursor: "pointer",
+                    background: "#0f172a",
+                    color: "#fff",
+                    marginBottom: 20,
+                    textAlign: "center",
+                    textDecoration: "none",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  {tier.ctaLabel}
+                </Link>
+              ) : (
+                <button
+                  style={{
+                    width: "100%",
+                    padding: "10px 16px",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    border: "none",
+                    cursor: "pointer",
+                    background: isHighlight
+                      ? "linear-gradient(135deg, #0d9488, #0ea5e9)"
                       : "#f1f5f9",
-                  color: isHighlight || tier.id === "enterprise" ? "#fff" : "#0f172a",
-                  marginBottom: 20,
-                }}
-                onClick={() => {
-                  setCalcTier(tier.id);
-                  document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                {tier.ctaLabel}
-              </button>
+                    color: isHighlight ? "#fff" : "#0f172a",
+                    marginBottom: 20,
+                  }}
+                  onClick={() => {
+                    setCalcTier(tier.id);
+                    document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                >
+                  {tier.ctaLabel}
+                </button>
+              )}
               <ul
                 style={{
                   margin: 0,

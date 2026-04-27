@@ -129,6 +129,12 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/quote": {
         post: { summary: "Build a price quote: tier + modules + seats + period" },
       },
+      "/api/pricing/lead": {
+        post: { summary: "Submit a sales lead (Enterprise / industry contact form)" },
+      },
+      "/api/pricing/leads/count": {
+        get: { summary: "Total leads count (no content exposed)" },
+      },
     },
   });
 });

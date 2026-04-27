@@ -431,24 +431,40 @@ export default function TierDetailPage() {
           </select>
         </div>
         <div style={{ marginTop: 24 }}>
-          <button
-            onClick={() => router.push(`/pricing#calculator`)}
-            style={{
-              padding: "12px 28px",
-              fontSize: 14,
-              fontWeight: 800,
-              borderRadius: 10,
-              border: "none",
-              cursor: "pointer",
-              background:
-                tier.id === "enterprise"
-                  ? "#0f172a"
-                  : "linear-gradient(135deg, #0d9488, #0ea5e9)",
-              color: "#fff",
-            }}
-          >
-            {tier.ctaLabel}
-          </button>
+          {tier.id === "enterprise" ? (
+            <Link
+              href="/pricing/contact?tier=enterprise"
+              style={{
+                display: "inline-block",
+                padding: "12px 28px",
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 10,
+                cursor: "pointer",
+                background: "#0f172a",
+                color: "#fff",
+                textDecoration: "none",
+              }}
+            >
+              {tier.ctaLabel}
+            </Link>
+          ) : (
+            <button
+              onClick={() => router.push(`/pricing#calculator`)}
+              style={{
+                padding: "12px 28px",
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 10,
+                border: "none",
+                cursor: "pointer",
+                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                color: "#fff",
+              }}
+            >
+              {tier.ctaLabel}
+            </button>
+          )}
         </div>
       </section>
 
@@ -638,24 +654,38 @@ export default function TierDetailPage() {
               : "Подписка отменяется в любой момент. Возврат за неиспользованное."}
         </p>
         <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-          <button
-            onClick={() => router.push("/pricing#calculator")}
-            style={{
-              padding: "12px 24px",
-              fontSize: 14,
-              fontWeight: 800,
-              borderRadius: 10,
-              border: "none",
-              cursor: "pointer",
-              background:
-                tier.id === "enterprise"
-                  ? "#0f172a"
-                  : "linear-gradient(135deg, #0d9488, #0ea5e9)",
-              color: "#fff",
-            }}
-          >
-            {tier.ctaLabel}
-          </button>
+          {tier.id === "enterprise" ? (
+            <Link
+              href="/pricing/contact?tier=enterprise"
+              style={{
+                padding: "12px 24px",
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 10,
+                background: "#0f172a",
+                color: "#fff",
+                textDecoration: "none",
+              }}
+            >
+              {tier.ctaLabel}
+            </Link>
+          ) : (
+            <button
+              onClick={() => router.push("/pricing#calculator")}
+              style={{
+                padding: "12px 24px",
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 10,
+                border: "none",
+                cursor: "pointer",
+                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                color: "#fff",
+              }}
+            >
+              {tier.ctaLabel}
+            </button>
+          )}
           <Link
             href="/pricing"
             style={{

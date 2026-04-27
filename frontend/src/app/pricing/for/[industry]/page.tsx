@@ -490,7 +490,7 @@ export default function IndustryLandingPage() {
         )}
         <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
           <Link
-            href={`/pricing/${industry.recommendedTier}`}
+            href={`/pricing/contact?tier=${industry.recommendedTier}&industry=${encodeURIComponent(industry.name)}`}
             style={{
               padding: "12px 28px",
               fontSize: 14,
@@ -501,10 +501,10 @@ export default function IndustryLandingPage() {
               textDecoration: "none",
             }}
           >
-            Подробнее о тарифе
+            Связаться с продажами
           </Link>
           <Link
-            href="/pricing#calculator"
+            href={`/pricing/${industry.recommendedTier}`}
             style={{
               padding: "12px 28px",
               fontSize: 14,
@@ -515,7 +515,7 @@ export default function IndustryLandingPage() {
               textDecoration: "none",
             }}
           >
-            Открыть калькулятор
+            Подробнее о тарифе
           </Link>
         </div>
       </section>

@@ -305,6 +305,17 @@ export default function Globus3D({
               ? "⚙"
               : "🚀";
 
+      const color =
+        category === "focus"
+          ? 0xfbbf24
+          : category === "award"
+            ? 0xe879f9
+            : category === "infra"
+              ? 0x94a3b8
+              : 0x7dd3fc;
+      const size =
+        category === "focus" ? 5 : category === "award" ? 4.5 : category === "infra" ? 3 : 4;
+
       return {
         key: `project:${p.id}`,
         type: "project",
@@ -321,8 +332,8 @@ export default function Globus3D({
         city: g.city,
         lat: g.lat,
         lon: g.lon,
-        color: isFocus ? 0xffcc66 : isAwardPin ? 0xff44cc : 0x66c2ff,
-        size: isFocus ? 6 : isAwardPin ? 5 : 4,
+        color,
+        size,
       };
     });
 
@@ -343,8 +354,8 @@ export default function Globus3D({
         city: g.city,
         lat: g.lat,
         lon: g.lon,
-        color: 0x44ff99,
-        size: 4,
+        color: 0x34d399,
+        size: 3.5,
       };
     });
 
@@ -676,7 +687,14 @@ export default function Globus3D({
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     const markerMeshes: Array<{ mesh: THREE.Mesh; marker: Marker }> = [];
+    const pulseMeshes: Array<{
+      mesh: THREE.Mesh;
+      mat: THREE.MeshBasicMaterial;
+      baseSize: number;
+      offset: number;
+    }> = [];
 
+    let focusIndex = 0;
     for (const m of markers) {
       const p = geoFromLatLon(m.lat, m.lon, radius + 1.2);
       const markerGeo = new THREE.SphereGeometry(m.size, 16, 16);
@@ -686,6 +704,26 @@ export default function Globus3D({
       mesh.userData = { key: m.key };
       earthGroup.add(mesh);
       markerMeshes.push({ mesh, marker: m });
+
+      if (m.category === "focus" || m.category === "award") {
+        const pulseGeo = new THREE.SphereGeometry(m.size, 18, 18);
+        const pulseMat = new THREE.MeshBasicMaterial({
+          color: m.color,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false,
+        });
+        const pulse = new THREE.Mesh(pulseGeo, pulseMat);
+        pulse.position.set(p.x, p.y, p.z);
+        earthGroup.add(pulse);
+        pulseMeshes.push({
+          mesh: pulse,
+          mat: pulseMat,
+          baseSize: m.size,
+          offset: focusIndex * 0.35,
+        });
+        focusIndex++;
+      }
     }
 
     const hemi = new THREE.HemisphereLight(0x9eb6ff, 0x080810, 0.55);
@@ -885,6 +923,18 @@ export default function Globus3D({
 
       // Облака чуть-чуть бегут всегда — оживляет сцену.
       cloudMesh.rotation.y += dt * 0.00004;
+
+      // Pulse-кольца на focus/award — растущая полупрозрачная сфера, зацикленная.
+      if (pulseMeshes.length > 0) {
+        const PERIOD = 1700; // мс
+        for (const p of pulseMeshes) {
+          const phase = ((t + p.offset * PERIOD) % PERIOD) / PERIOD; // 0..1
+          const scale = 1 + phase * 2.4; // 1 → 3.4
+          p.mesh.scale.setScalar(scale);
+          p.mat.opacity = 0.55 * (1 - phase) * (1 - phase);
+        }
+      }
+
       updateCamera();
       renderer.render(scene, camera);
     };

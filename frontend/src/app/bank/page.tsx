@@ -53,6 +53,7 @@ import { VoiceCommand } from "./_components/VoiceCommand";
 import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
 import { GoalTemplates } from "./_components/GoalTemplates";
+import { InvestmentPie } from "./_components/InvestmentPie";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { NetWorthTracker } from "./_components/NetWorthTracker";
 import { NotificationsCenter } from "./_components/NotificationsCenter";
@@ -469,6 +470,11 @@ function BankContent() {
             <div id="bank-anchor-vault" style={{ scrollMarginTop: 20 }}>
               <AecVault account={account} topup={handleTopup} notify={notify} />
             </div>
+            <InvestmentPie
+              myAccountId={account.id}
+              operations={operations}
+              notify={notify}
+            />
             <SalaryAdvance
               account={account}
               operations={operations}

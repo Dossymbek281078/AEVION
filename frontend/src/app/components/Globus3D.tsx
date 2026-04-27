@@ -232,6 +232,27 @@ function readSavedView(): SavedView | null {
   }
 }
 
+/** URL-сериализация ракурса: ?view=yaw,pitch,distance&filter=... */
+function readViewFromUrl(): SavedView | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const v = sp.get("view");
+    const f = sp.get("filter");
+    const out: SavedView = {};
+    if (v) {
+      const [y, p, d] = v.split(",").map((s) => parseFloat(s));
+      if (!Number.isNaN(y)) out.yaw = y;
+      if (!Number.isNaN(p)) out.pitch = p;
+      if (!Number.isNaN(d)) out.distance = d;
+    }
+    if (f) out.filter = f;
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Globus3D({
   projects,
   qrightObjects,
@@ -250,6 +271,7 @@ export default function Globus3D({
   const [autoRotate, setAutoRotate] = useState<boolean>(
     () => readSavedView()?.autoRotate ?? true,
   );
+  /** Если в URL переданы view-параметры — auto-rotate отключаем (юзер пришёл по ссылке). */
   const autoRotateRef = useRef(autoRotate);
   useEffect(() => {
     autoRotateRef.current = autoRotate;
@@ -262,7 +284,9 @@ export default function Globus3D({
   const viewLoadedRef = useRef(false);
   if (!viewLoadedRef.current) {
     viewLoadedRef.current = true;
-    const saved = readSavedView();
+    // URL имеет приоритет над localStorage — пользователь пришёл по shared link.
+    const fromUrl = readViewFromUrl();
+    const saved = fromUrl ?? readSavedView();
     if (saved) {
       if (typeof saved.yaw === "number") yawRef.current = saved.yaw;
       if (typeof saved.pitch === "number") {
@@ -300,7 +324,7 @@ export default function Globus3D({
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | MarkerCategory>(() => {
-    const v = readSavedView()?.filter;
+    const v = readViewFromUrl()?.filter ?? readSavedView()?.filter;
     if (v === "all" || v === "product" || v === "award" || v === "qright" || v === "infra" || v === "focus") {
       return v;
     }
@@ -1695,6 +1719,27 @@ export default function Globus3D({
     );
   };
 
+  const [shareToast, setShareToast] = useState<"copied" | "failed" | null>(null);
+  const shareView = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set(
+        "view",
+        `${yawRef.current.toFixed(3)},${pitchRef.current.toFixed(3)},${distanceRef.current.toFixed(1)}`,
+      );
+      if (filter !== "all") sp.set("filter", filter);
+      else sp.delete("filter");
+      const url = `${window.location.origin}${window.location.pathname}?${sp.toString()}`;
+      await navigator.clipboard.writeText(url);
+      setShareToast("copied");
+      window.setTimeout(() => setShareToast(null), 1800);
+    } catch {
+      setShareToast("failed");
+      window.setTimeout(() => setShareToast(null), 2200);
+    }
+  };
+
   return (
     <div
       role="region"
@@ -2052,6 +2097,42 @@ export default function Globus3D({
           >
             ⌂
           </button>
+          <button
+            type="button"
+            title="Copy share link"
+            aria-label="Copy share link"
+            onClick={shareView}
+            style={ctrlBtn}
+          >
+            ⤴
+          </button>
+        </div>
+      ) : null}
+
+      {shareToast ? (
+        <div
+          role="status"
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: ctrlSize * 5 + 14 + 14,
+            zIndex: 8,
+            padding: "8px 12px",
+            borderRadius: 10,
+            background:
+              shareToast === "copied"
+                ? "rgba(13,148,136,0.92)"
+                : "rgba(220,38,38,0.92)",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: 12,
+            letterSpacing: "0.02em",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+            backdropFilter: "blur(6px)",
+            pointerEvents: "none",
+          }}
+        >
+          {shareToast === "copied" ? "Link copied ✓" : "Copy failed"}
         </div>
       ) : null}
 

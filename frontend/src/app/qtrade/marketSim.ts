@@ -4,6 +4,7 @@
 
 const POSITIONS_KEY = "aevion_qtrade_positions_v1";
 const PAIRS_KEY = "aevion_qtrade_pairs_v1";
+const LIMITS_KEY = "aevion_qtrade_limits_v1";
 
 export type PairId = "AEV/USD" | "BTC/USD" | "ETH/USD" | "SOL/USD";
 
@@ -147,6 +148,63 @@ export function fmtPct(n: number): string {
   if (!Number.isFinite(n)) return "—";
   const sign = n > 0 ? "+" : "";
   return `${sign}${n.toFixed(2)}%`;
+}
+
+// ─── Limit orders ─────────────────────────────────────────────────
+// Stop / Limit orders that auto-fill when the simulated price crosses the trigger.
+export type LimitOrder = {
+  id: string;
+  pair: PairId;
+  side: "long" | "short";
+  qty: number;
+  triggerPrice: number;  // execute at-or-better
+  createdTs: number;
+};
+
+export function ldLimits(): LimitOrder[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(LIMITS_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as LimitOrder[] : [];
+  } catch { return [] }
+}
+
+export function svLimits(ls: LimitOrder[]) {
+  try { localStorage.setItem(LIMITS_KEY, JSON.stringify(ls)) } catch {}
+}
+
+// Returns IDs of orders that should fill at given pair price.
+// Fill semantics:
+// - LONG limit: fill when price <= triggerPrice (you wanted to buy cheaper)
+// - SHORT limit: fill when price >= triggerPrice (you wanted to sell higher)
+export function checkLimitFills(orders: LimitOrder[], pair: Pair): string[] {
+  const filled: string[] = [];
+  for (const o of orders) {
+    if (o.pair !== pair.id) continue;
+    if (o.side === "long" && pair.price <= o.triggerPrice) filled.push(o.id);
+    else if (o.side === "short" && pair.price >= o.triggerPrice) filled.push(o.id);
+  }
+  return filled;
+}
+
+// ─── Order book mock ──────────────────────────────────────────────
+// Generate a synthetic 10-level order book around the current price.
+// Spread ~0.04% × volatility multiplier; size decreases linearly with depth.
+export type OrderBookLevel = { price: number; size: number };
+export type OrderBook = { bids: OrderBookLevel[]; asks: OrderBookLevel[]; spread: number };
+
+export function buildOrderBook(p: Pair, levels = 8): OrderBook {
+  const baseSpread = p.price * (p.vol * 0.5 + 0.0002);
+  const bids: OrderBookLevel[] = [];
+  const asks: OrderBookLevel[] = [];
+  for (let i = 1; i <= levels; i++) {
+    const offset = baseSpread * i + p.price * 0.00005 * i * i;
+    const size = Math.max(0.01, (levels - i + 1) * (1 + (p.id === "BTC/USD" ? 0.05 : p.id === "ETH/USD" ? 0.3 : 5)) + Math.random() * 2);
+    bids.push({ price: p.price - offset, size: Math.round(size * 100) / 100 });
+    asks.push({ price: p.price + offset, size: Math.round(size * 100) / 100 });
+  }
+  return { bids, asks, spread: asks[0].price - bids[0].price };
 }
 
 // Build a tiny SVG sparkline path string (path d="...") from a price history.

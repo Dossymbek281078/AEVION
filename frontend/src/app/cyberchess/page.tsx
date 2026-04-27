@@ -15,6 +15,7 @@ import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, r
 import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
+import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -453,6 +454,12 @@ export default function CyberChessPage(){
   const[showGhost,sShowGhost]=useState(false);
   const[activeGhost,sActiveGhost]=useState<Ghost|null>(null);
   const[ghostMode,sGhostMode]=useState(false);
+  // Daily Brilliancy Hunt (killer #10)
+  const[showBrilliancy,sShowBrilliancy]=useState(false);
+  const[brilliancyHunt,sBrilliancyHunt]=useState<BrilliancyHunt|null>(null);
+  const[brilliancyState,sBrilliancyState]=useState<BrilliancyState|null>(null);
+  const[brilliancyInput,sBrilliancyInput]=useState("");
+  const[brilliancyResult,sBrilliancyResult]=useState<{correct:boolean;reward:number}|null>(null);
   // Auto-Reels Generator (killer #8)
   const[showReel,sShowReel]=useState(false);
   const[reelMeta,sReelMeta]=useState<{white:string;black:string;result:string}>({white:"White",black:"Black",result:"*"});
@@ -2036,6 +2043,17 @@ export default function CyberChessPage(){
                   <span style={{fontSize:11,color:"#9ca3af",fontWeight:600}}>
                     {ghostMode&&activeGhost?`vs ${activeGhost.name}`:"Magnus · Tal · Fischer · Kasparov"}
                   </span>
+                </div>
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>{
+                const{hunt,state}=todayHunt();
+                sBrilliancyHunt(hunt);sBrilliancyState(state);sBrilliancyInput("");sBrilliancyResult(null);
+                sShowBrilliancy(true);
+              }} style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
+                border:"1px solid #fcd34d",color:"#92400e"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>💎 Brilliancy Hunt <Badge tone="gold" size="xs">daily</Badge></span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>найди гениальный ход</span>
                 </div>
               </Btn>
               {/* AI Rival — only visible once unlocked via shop */}
@@ -4211,6 +4229,119 @@ export default function CyberChessPage(){
               }
             }}>↻ Новый турнир</Btn>
             <Btn variant="secondary" size="md" full onClick={()=>sShowTournament(false)}>Закрыть</Btn>
+          </div>
+        </div>;
+      })()}
+    </Modal>
+
+    {/* ═══ Daily Brilliancy Hunt (killer #10) ═══ */}
+    <Modal open={showBrilliancy} onClose={()=>sShowBrilliancy(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>💎 Daily Brilliancy Hunt <Badge tone="gold" size="sm">{new Date().toLocaleDateString("ru-RU")}</Badge></span>}>
+      {brilliancyHunt&&brilliancyState&&(()=>{
+        const lb=simulatedLeaderboard(brilliancyState.idx);
+        const renderMiniBoard=()=>{
+          try{
+            const ch=new Chess(brilliancyHunt.fen);
+            const board=ch.board();
+            const flip=brilliancyHunt.side==="b";
+            const rows=flip?[...board].reverse().map(r=>[...r].reverse()):board;
+            return <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",width:"100%",maxWidth:360,aspectRatio:"1/1",border:`2px solid ${CC.text}`,borderRadius:RADIUS.sm,overflow:"hidden",margin:"0 auto"}}>
+              {rows.flatMap((row,r)=>row.map((p,c)=>{
+                const isLight=(r+c)%2===0;
+                return <div key={`${r}-${c}`} style={{
+                  background:isLight?"#f0d9b5":"#b58863",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:"calc(min(5vw, 28px))",lineHeight:1,
+                  color:p?.color==="w"?"#fff":"#000",
+                  textShadow:p?.color==="w"?"0 0 1px #000, 0 1px 2px rgba(0,0,0,0.5)":"0 0 1px #fff",
+                }}>{p?PM[`${p.color}${p.type}`]||"":""}</div>;
+              }))}
+            </div>;
+          }catch{return <div style={{padding:SPACE[3],color:CC.danger}}>Не могу отрисовать позицию</div>}
+        };
+        return <div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d",marginBottom:SPACE[3]}}>
+            <div style={{fontSize:14,fontWeight:900,color:"#78350f"}}>{brilliancyHunt.title}</div>
+            <div style={{fontSize:12,color:"#92400e",marginTop:4,lineHeight:1.5}}>{brilliancyHunt.story}</div>
+            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[2],flexWrap:"wrap"}}>
+              <Badge tone="gold" size="xs">★ {brilliancyHunt.difficulty}/5</Badge>
+              {brilliancyHunt.year&&<Badge tone="info" size="xs">{brilliancyHunt.year}</Badge>}
+              <Badge tone={brilliancyHunt.side==="w"?"gold":"info"} size="xs">{brilliancyHunt.side==="w"?"⚪ ход белых":"⚫ ход чёрных"}</Badge>
+            </div>
+          </div>
+          {renderMiniBoard()}
+          {!brilliancyState.solved&&!brilliancyState.givenUp&&<>
+            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
+              <input type="text" value={brilliancyInput} onChange={e=>{sBrilliancyInput(e.target.value);sBrilliancyResult(null)}}
+                placeholder="Введи ход (напр. Be7, Nxc3, O-O, e5)"
+                style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:14,fontFamily:"ui-monospace, monospace",background:CC.surface1}}
+                onKeyDown={e=>{
+                  if(e.key==="Enter"&&brilliancyInput.trim()){
+                    const{state:newState,correct,reward}=applyGuess(brilliancyHunt,brilliancyState,brilliancyInput.trim());
+                    sBrilliancyState(newState);sBrilliancyResult({correct,reward});
+                    if(correct&&reward>0)addChessy(reward,`💎 brilliancy "${brilliancyHunt.title.slice(0,30)}"`);
+                  }
+                }}/>
+              <Btn variant="primary" size="md" disabled={!brilliancyInput.trim()} onClick={()=>{
+                const{state:newState,correct,reward}=applyGuess(brilliancyHunt,brilliancyState,brilliancyInput.trim());
+                sBrilliancyState(newState);sBrilliancyResult({correct,reward});
+                if(correct&&reward>0)addChessy(reward,`💎 brilliancy "${brilliancyHunt.title.slice(0,30)}"`);
+              }}>Проверить</Btn>
+            </div>
+            {brilliancyResult&&!brilliancyResult.correct&&<div style={{marginTop:SPACE[2],padding:SPACE[2],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`,fontSize:12,color:"#991b1b"}}>
+              ✗ Не тот ход. Попыток: {brilliancyState.attempts}. Это «{brilliancyInput}» — попробуй ещё. Думай о геометрии, а не очевидном взятии.
+            </div>}
+            {brilliancyState.hintShown&&<div style={{marginTop:SPACE[2],padding:SPACE[2],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,fontSize:12,color:"#065f46"}}>
+              💡 <b>Подсказка:</b> {hintFor(brilliancyHunt)}
+            </div>}
+            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
+              <Btn variant="ghost" size="sm" disabled={brilliancyState.hintShown} onClick={()=>{sBrilliancyState(showHint(brilliancyHunt,brilliancyState))}}>💡 Подсказка (-40% reward)</Btn>
+              <Btn variant="ghost" size="sm" onClick={()=>{
+                if(confirm("Сдаёшься? Streak обнулится."))sBrilliancyState(giveUp(brilliancyHunt,brilliancyState))
+              }}>🏳 Сдаюсь</Btn>
+            </div>
+          </>}
+          {brilliancyState.solved&&<div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#ecfdf5,#a7f3d0)",border:`2px solid ${CC.brand}`,textAlign:"center"}}>
+            <div style={{fontSize:48,lineHeight:1}}>💎</div>
+            <div style={{fontSize:18,fontWeight:900,color:"#065f46",marginTop:SPACE[2]}}>BRILLIANCY!</div>
+            <div style={{fontSize:13,color:"#065f46",marginTop:4}}>Ход <b>{brilliancyHunt.solutionSan}</b> · с {brilliancyState.attempts} попытк{brilliancyState.attempts===1?"и":"и"}</div>
+            <div style={{fontSize:14,color:"#065f46",marginTop:SPACE[2]}}>+{brilliancyResult?.reward||0} Chessy · streak <b>{brilliancyState.streak}</b> дн.</div>
+          </div>}
+          {brilliancyState.givenUp&&<div style={{marginTop:SPACE[3],padding:SPACE[3],borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`,textAlign:"center"}}>
+            <div style={{fontSize:36,lineHeight:1}}>🏳</div>
+            <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:SPACE[2]}}>Решение: <b>{brilliancyHunt.solutionSan}</b></div>
+            <div style={{fontSize:12,color:CC.textDim,marginTop:4}}>Streak обнулён. Возвращайся завтра.</div>
+          </div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[2],marginTop:SPACE[3]}}>
+            <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`,textAlign:"center"}}>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Streak 🔥</div>
+              <div style={{fontSize:18,fontWeight:900,color:CC.danger}}>{brilliancyState.streak}</div>
+            </div>
+            <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`,textAlign:"center"}}>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Лучший</div>
+              <div style={{fontSize:18,fontWeight:900,color:CC.gold}}>{brilliancyState.bestStreak}</div>
+            </div>
+            <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`,textAlign:"center"}}>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Решили</div>
+              <div style={{fontSize:18,fontWeight:900,color:CC.brand}}>{lb.solved}</div>
+              <div style={{fontSize:9,color:CC.textDim}}>из {lb.players}</div>
+            </div>
+            <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:CC.surface1,border:`1px solid ${CC.border}`,textAlign:"center"}}>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800}}>Avg попыт.</div>
+              <div style={{fontSize:18,fontWeight:900,color:CC.text}}>{lb.avgAttempts}</div>
+            </div>
+          </div>
+          {brilliancyState.history.length>0&&<div style={{marginTop:SPACE[3]}}>
+            <SectionHeader title="ИСТОРИЯ"/>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:SPACE[2]}}>
+              {brilliancyState.history.slice(0,14).map((h,i)=><div key={i} title={`${h.date}: ${h.solved?`✓ ${h.attempts} попыт.`:"✗"}`}
+                style={{width:24,height:24,borderRadius:6,background:h.solved?CC.brand:CC.danger,opacity:h.solved?1:0.6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff"}}>
+                {h.solved?"✓":"✗"}
+              </div>)}
+            </div>
+          </div>}
+          <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center",lineHeight:1.5}}>
+            Завтра в 00:00 — новая партия из коллекции {BRILLIANCIES.length} брилл-ходов.
           </div>
         </div>;
       })()}

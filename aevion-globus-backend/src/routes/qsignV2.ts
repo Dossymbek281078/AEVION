@@ -828,6 +828,225 @@ qsignV2Router.post("/keys/rotate", rotateLimiter, async (req, res) => {
   }
 });
 
+/* ───────── GET /:id/pdf (signed-document PDF stamp) ─────────
+ * Renders the signature row as a self-contained PDF: status banner, payload preview,
+ * algo + kid + truncated signatures, issuer, geo, QR code linking to the public verify
+ * page. Intended for B2B distribution and investor demos — recipient can scan QR to
+ * verify on-chain-style without trusting the sender. No secrets are leaked.
+ *
+ * QR target host order: ?host= query → QSIGN_PUBLIC_VERIFY_BASE_URL env →
+ * X-Forwarded-Proto + X-Forwarded-Host headers → req.protocol + req.get('host'). The
+ * QR encodes `<base>/qsign/verify/<id>` so a Vercel-served frontend renders the SSR page.
+ */
+
+qsignV2Router.get("/:id/pdf", async (req, res) => {
+  try {
+    await ensureQSignV2Tables(pool);
+    const id = req.params.id;
+    const reserved = new Set([
+      "health",
+      "verify",
+      "keys",
+      "revoke",
+      "sign",
+      "stats",
+      "recent",
+    ]);
+    if (reserved.has(id)) {
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const row = await loadSignatureRow(id);
+    if (!row) return res.status(404).json({ error: "signature not found" });
+
+    const hmacRow = await resolveHmac(row.hmacKid);
+    const expectedHmac = signHmac(hmacRow.secret, row.payloadCanonical);
+    const hmacValid = constantTimeEqHex(expectedHmac, row.signatureHmac);
+
+    let edValid: boolean | null = null;
+    let edPublicKey: string | null = null;
+    if (row.ed25519Kid && row.signatureEd25519) {
+      const edKey = await getKeyByKid(row.ed25519Kid);
+      if (edKey && edKey.publicKey) {
+        edPublicKey = edKey.publicKey;
+        edValid = verifyEd25519Hex(edKey.publicKey, row.payloadCanonical, row.signatureEd25519);
+      } else {
+        edValid = false;
+      }
+    }
+
+    const revocation = await loadRevocation(row.id);
+    const revokedAtSrc = row.revokedAt || revocation?.revokedAt || null;
+    const revoked = !!revokedAtSrc;
+    const cryptoOk = hmacValid && (edValid === null ? true : edValid);
+    const status: "valid" | "revoked" | "tampered" = revoked
+      ? "revoked"
+      : cryptoOk
+        ? "valid"
+        : "tampered";
+
+    const fwdProto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0];
+    const fwdHost = (req.headers["x-forwarded-host"] as string)?.split(",")[0];
+    const queryHost = typeof req.query.host === "string" ? req.query.host : null;
+    const envBase = process.env.QSIGN_PUBLIC_VERIFY_BASE_URL?.replace(/\/+$/, "") || null;
+    const verifyBase =
+      queryHost?.replace(/\/+$/, "") ||
+      envBase ||
+      `${fwdProto || req.protocol}://${fwdHost || req.get("host")}`;
+    const verifyUrl = `${verifyBase}/qsign/verify/${row.id}`;
+
+    const PDFDocument = require("pdfkit");
+    const QRCode = require("qrcode");
+    const qrPng: Buffer = await QRCode.toBuffer(verifyUrl, {
+      errorCorrectionLevel: "M",
+      width: 280,
+      margin: 1,
+    });
+
+    const doc = new PDFDocument({ size: "A4", margin: 48, info: {
+      Title: `QSign v2 — Signature ${row.id.slice(0, 8)}`,
+      Author: "AEVION QSign v2",
+      Subject: "Verifiable digital signature",
+      Keywords: "qsign,aevion,hmac,ed25519,rfc8785",
+    }});
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="qsign-${row.id.slice(0, 8)}.pdf"`,
+    );
+    doc.pipe(res);
+
+    const COLOR_VALID = "#0a7d2c";
+    const COLOR_REVOKED = "#a40000";
+    const COLOR_TAMPERED = "#a64100";
+    const COLOR_TEXT = "#11151c";
+    const COLOR_MUTED = "#5b6573";
+    const COLOR_LINE = "#cdd3dc";
+
+    const statusLabel = status === "valid" ? "VALID" : status === "revoked" ? "REVOKED" : "TAMPERED";
+    const statusColor =
+      status === "valid" ? COLOR_VALID : status === "revoked" ? COLOR_REVOKED : COLOR_TAMPERED;
+
+    doc.fillColor(COLOR_TEXT).font("Helvetica-Bold").fontSize(20).text("AEVION QSign v2");
+    doc.moveDown(0.15);
+    doc.font("Helvetica").fontSize(10).fillColor(COLOR_MUTED).text(
+      "Verifiable digital signature  ·  RFC 8785 (JCS) canonicalization  ·  HMAC-SHA256 + Ed25519",
+    );
+
+    doc.moveDown(0.8);
+    const bannerY = doc.y;
+    doc.roundedRect(48, bannerY, doc.page.width - 96, 38, 6).fillAndStroke(statusColor, statusColor);
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(16).text(statusLabel, 64, bannerY + 10);
+    if (status === "revoked" && revocation?.reason) {
+      doc.font("Helvetica").fontSize(9).text(
+        `revoked: ${revocation.reason}`,
+        160,
+        bannerY + 14,
+        { width: doc.page.width - 96 - 120 },
+      );
+    }
+    doc.y = bannerY + 38;
+    doc.moveDown(0.8);
+
+    const labelValue = (label: string, value: string) => {
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(COLOR_MUTED).text(label.toUpperCase(), { continued: false });
+      doc.font("Helvetica").fontSize(11).fillColor(COLOR_TEXT).text(value);
+      doc.moveDown(0.3);
+    };
+
+    labelValue("Signature ID", row.id);
+    labelValue(
+      "Created",
+      row.createdAt ? new Date(row.createdAt).toISOString() : "—",
+    );
+    labelValue(
+      "Issuer",
+      row.issuerEmail || row.issuerUserId || "anonymous",
+    );
+    if (row.geoSource || row.geoCountry || row.geoCity) {
+      const geoParts = [row.geoCountry, row.geoCity].filter(Boolean).join(" · ");
+      labelValue(
+        "Geo",
+        `${geoParts || "—"}  (source: ${row.geoSource || "—"})`,
+      );
+    }
+
+    doc.moveDown(0.4);
+    doc.strokeColor(COLOR_LINE).lineWidth(0.5).moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).stroke();
+    doc.moveDown(0.6);
+
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(COLOR_TEXT).text("Signed payload (canonical)");
+    doc.moveDown(0.3);
+    const payloadPretty = (() => {
+      try {
+        return JSON.stringify(JSON.parse(row.payloadCanonical), null, 2);
+      } catch {
+        return row.payloadCanonical;
+      }
+    })();
+    const payloadShown = payloadPretty.length > 1500 ? payloadPretty.slice(0, 1500) + "\n…" : payloadPretty;
+    doc.font("Courier").fontSize(8.5).fillColor(COLOR_TEXT).text(payloadShown, {
+      width: doc.page.width - 96,
+    });
+    doc.moveDown(0.4);
+    doc.font("Helvetica").fontSize(9).fillColor(COLOR_MUTED).text(
+      `payloadHash (sha256): ${row.payloadHash}`,
+    );
+
+    doc.moveDown(0.8);
+    doc.strokeColor(COLOR_LINE).lineWidth(0.5).moveTo(48, doc.y).lineTo(doc.page.width - 48, doc.y).stroke();
+    doc.moveDown(0.6);
+
+    const truncate = (s: string | null | undefined, n = 40): string =>
+      !s ? "—" : s.length <= n ? s : `${s.slice(0, n)}…`;
+
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(COLOR_TEXT).text("Signatures");
+    doc.moveDown(0.3);
+
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(COLOR_MUTED).text("HMAC-SHA256");
+    doc.font("Courier").fontSize(8.5).fillColor(COLOR_TEXT).text(
+      `kid: ${row.hmacKid}\nsignature: ${truncate(row.signatureHmac, 80)}\nverify: ${hmacValid ? "✓" : "✗"}`,
+    );
+    doc.moveDown(0.4);
+
+    if (row.ed25519Kid) {
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(COLOR_MUTED).text("Ed25519");
+      doc.font("Courier").fontSize(8.5).fillColor(COLOR_TEXT).text(
+        `kid: ${row.ed25519Kid}\npublicKey: ${truncate(edPublicKey, 80)}\nsignature: ${truncate(row.signatureEd25519, 80)}\nverify: ${edValid === null ? "—" : edValid ? "✓" : "✗"}`,
+      );
+      doc.moveDown(0.4);
+    }
+
+    const qrSize = 130;
+    const qrX = doc.page.width - 48 - qrSize;
+    const qrY = doc.page.height - 48 - qrSize - 30;
+    doc.image(qrPng, qrX, qrY, { width: qrSize, height: qrSize });
+    doc.font("Helvetica").fontSize(8).fillColor(COLOR_MUTED).text(
+      "Scan to verify online",
+      qrX,
+      qrY + qrSize + 4,
+      { width: qrSize, align: "center" },
+    );
+
+    doc.font("Helvetica").fontSize(8).fillColor(COLOR_MUTED).text(
+      verifyUrl,
+      48,
+      doc.page.height - 36,
+      { width: qrX - 48 - 12, ellipsis: true },
+    );
+
+    doc.end();
+  } catch (e: any) {
+    console.error("[qsign v2] :id/pdf error", e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "pdf_render_failed", details: e?.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
 /* ───────── GET /:id/public (shareable, no secrets) ─────────
  * Intended for SSR consumption by /qsign/verify/[id] page. Exposes:
  *   - payload (decoded), payloadHash, canonicalization spec

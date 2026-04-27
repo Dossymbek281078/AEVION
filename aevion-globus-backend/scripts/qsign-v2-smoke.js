@@ -214,6 +214,24 @@ async function main() {
     pass("recent", `includes signed id, no leaked fields`);
   }
 
+  // 9d — PDF stamp render
+  {
+    try {
+      const r = await fetch(`${BASE}/api/qsign/v2/${signed.id}/pdf`);
+      if (!r.ok) return fail("pdf stamp", `HTTP ${r.status}`);
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.startsWith("application/pdf"))
+        return fail("pdf stamp", `unexpected content-type ${ct}`);
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 1000) return fail("pdf stamp", `payload too small: ${buf.length} bytes`);
+      const head = buf.slice(0, 5).toString("utf8");
+      if (head !== "%PDF-") return fail("pdf stamp", `bad magic header: ${JSON.stringify(head)}`);
+      pass("pdf stamp", `${buf.length} bytes, magic OK`);
+    } catch (e) {
+      return fail("pdf stamp", e?.message || String(e));
+    }
+  }
+
   // 10 — revoke (unless skipped)
   if (!SKIP_REVOKE) {
     const r = await jsonFetch("POST", `/api/qsign/v2/revoke/${signed.id}`, {

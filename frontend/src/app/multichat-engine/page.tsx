@@ -375,8 +375,16 @@ type UserContext = {
   qrightCount?: number;
 };
 
+type Workspace = {
+  name: string;
+  savedAt: string; // ISO timestamp
+  agents: Agent[];
+};
+
 const STORAGE_KEY = "aevion_multichat_v1";
 const DEMO_FLAG = "aevion_multichat_demo_seeded_v1";
+const WORKSPACES_KEY = "aevion_multichat_workspaces_v1";
+const MAX_WORKSPACES = 10;
 const MAX_AGENTS = 6;
 const MAX_MESSAGES_KEPT = 50;
 
@@ -948,6 +956,77 @@ export default function MultichatEnginePage() {
     }
     setAgents([makeAgent()]);
   }, [t]);
+
+  /* Saved workspaces — named bundles in localStorage */
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [loadMenuOpen, setLoadMenuOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(WORKSPACES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setWorkspaces(parsed as Workspace[]);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistWorkspaces = useCallback((next: Workspace[]) => {
+    try {
+      localStorage.setItem(WORKSPACES_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const saveWorkspace = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.prompt("Name this workspace:");
+    const name = raw?.trim();
+    if (!name) return;
+    const cur = agentsRef.current;
+    const ws: Workspace = {
+      name,
+      savedAt: new Date().toISOString(),
+      agents: cur.map((a) => ({ ...a, busy: false })),
+    };
+    setWorkspaces((prev) => {
+      const filtered = prev.filter((w) => w.name !== ws.name);
+      const next = [...filtered, ws].slice(-MAX_WORKSPACES);
+      persistWorkspaces(next);
+      return next;
+    });
+  }, [persistWorkspaces]);
+
+  const loadWorkspace = useCallback(
+    (ws: Workspace) => {
+      if (typeof window === "undefined") return;
+      const cur = agentsRef.current;
+      const hasHistory = cur.some((a) => a.messages.length > 0);
+      if (hasHistory) {
+        const ok = window.confirm(
+          `Replace current panels with workspace "${ws.name}"?`
+        );
+        if (!ok) return;
+      }
+      setAgents(ws.agents.map((a) => ({ ...a, busy: false })));
+      setLoadMenuOpen(false);
+    },
+    []
+  );
+
+  const deleteWorkspace = useCallback(
+    (name: string) => {
+      setWorkspaces((prev) => {
+        const next = prev.filter((w) => w.name !== name);
+        persistWorkspaces(next);
+        return next;
+      });
+    },
+    [persistWorkspaces]
+  );
 
   /* Fork an agent's conversation: clone with messages[0..upTo] kept */
   const forkAgent = useCallback((src: Agent, upToIndex: number) => {
@@ -1791,6 +1870,123 @@ export default function MultichatEnginePage() {
               >
                 {t("mc.live.clearAll")}
               </button>
+              <button
+                type="button"
+                onClick={saveWorkspace}
+                title="Save current panels as a named workspace"
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(148,163,184,0.35)",
+                  background: "rgba(15,23,42,0.65)",
+                  color: "#cbd5e1",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                💾 Save
+              </button>
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={() => setLoadMenuOpen((v) => !v)}
+                  disabled={workspaces.length === 0}
+                  title={workspaces.length === 0 ? "No saved workspaces yet" : "Load a saved workspace"}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(148,163,184,0.35)",
+                    background: "rgba(15,23,42,0.65)",
+                    color: workspaces.length === 0 ? "#475569" : "#cbd5e1",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: workspaces.length === 0 ? "not-allowed" : "pointer",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  📂 Load{workspaces.length > 0 ? ` (${workspaces.length})` : ""}
+                </button>
+                {loadMenuOpen && workspaces.length > 0 ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 10,
+                      minWidth: 240,
+                      maxHeight: 320,
+                      overflowY: "auto",
+                      padding: 6,
+                      borderRadius: 12,
+                      border: "1px solid rgba(148,163,184,0.3)",
+                      background: "rgba(2,6,23,0.95)",
+                      backdropFilter: "blur(10px)",
+                      boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    {[...workspaces].reverse().map((ws) => (
+                      <div
+                        key={ws.name}
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          alignItems: "stretch",
+                          padding: 4,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => loadWorkspace(ws)}
+                          style={{
+                            flex: 1,
+                            textAlign: "left",
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            border: "1px solid transparent",
+                            background: "transparent",
+                            color: "#e2e8f0",
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "rgba(94,234,212,0.08)";
+                            e.currentTarget.style.borderColor = "rgba(94,234,212,0.3)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "transparent";
+                            e.currentTarget.style.borderColor = "transparent";
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>{ws.name}</div>
+                          <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+                            {ws.agents.length} agent{ws.agents.length === 1 ? "" : "s"} ·{" "}
+                            {new Date(ws.savedAt).toLocaleDateString()}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteWorkspace(ws.name)}
+                          title={`Delete "${ws.name}"`}
+                          style={{
+                            padding: "0 10px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(248,113,113,0.3)",
+                            background: "rgba(248,113,113,0.06)",
+                            color: "#fca5a5",
+                            cursor: "pointer",
+                            fontWeight: 700,
+                            fontSize: 14,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 

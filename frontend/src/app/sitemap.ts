@@ -16,6 +16,7 @@ const ROUTES: Array<{ path: string; priority: number; changeFrequency: MetadataR
   { path: "/bank",              priority: 0.9, changeFrequency: "weekly" },
   { path: "/bank/about",        priority: 0.85, changeFrequency: "monthly" },
   { path: "/bank/trust",        priority: 0.85, changeFrequency: "monthly" },
+  { path: "/bank/card",         priority: 0.8, changeFrequency: "monthly" },
   { path: "/bank/api",          priority: 0.7, changeFrequency: "monthly" },
   { path: "/bank/badge",        priority: 0.7, changeFrequency: "monthly" },
   { path: "/bank/explore",      priority: 0.85, changeFrequency: "weekly" },

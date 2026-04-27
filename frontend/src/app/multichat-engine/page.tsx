@@ -895,6 +895,121 @@ export default function MultichatEnginePage() {
       const trimmed = text.trim();
       if (!trimmed) return;
 
+      /* ── Broadcast branch: @all fans the message out to every other panel ── */
+      const broadcastMatch = trimmed.match(/^@all\s+([\s\S]+)$/i);
+      if (broadcastMatch) {
+        const body = broadcastMatch[1].trim();
+        const cur = agentsRef.current;
+        const sourceAgent = cur.find((a) => a.id === agentId);
+        if (!sourceAgent) return;
+        const others = cur.filter((a) => a.id !== agentId);
+
+        if (others.length === 0) {
+          setAgents((curS) =>
+            curS.map((a) => {
+              if (a.id !== agentId) return a;
+              const next: ChatMsg[] = [
+                ...a.messages,
+                { role: "user" as const, content: trimmed },
+                {
+                  role: "assistant" as const,
+                  content:
+                    "@all needs at least one other agent. Spawn another panel and try again.",
+                },
+              ].slice(-MAX_MESSAGES_KEPT);
+              return {
+                ...a,
+                messages: next,
+                title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
+                busy: false,
+              };
+            })
+          );
+          return;
+        }
+
+        const sourceTag = ROLE_TAG[sourceAgent.role];
+        const inboundMsg = `↪ broadcast from @${sourceTag}: ${body}`;
+
+        // 1) Append user msg in source + mark every panel busy
+        setAgents((curS) =>
+          curS.map((a) => {
+            if (a.id === agentId) {
+              const next: ChatMsg[] = [
+                ...a.messages,
+                { role: "user" as const, content: trimmed },
+              ].slice(-MAX_MESSAGES_KEPT);
+              return {
+                ...a,
+                messages: next,
+                title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
+                busy: true,
+              };
+            }
+            if (others.some((o) => o.id === a.id)) {
+              const next: ChatMsg[] = [
+                ...a.messages,
+                { role: "user" as const, content: inboundMsg },
+              ].slice(-MAX_MESSAGES_KEPT);
+              return {
+                ...a,
+                messages: next,
+                title: a.messages.length === 0 ? titleFromMessage(a.role, body) : a.title,
+                busy: true,
+              };
+            }
+            return a;
+          })
+        );
+
+        // 2) Fan out in parallel
+        const results = await Promise.all(
+          others.map(async (target) => {
+            const targetHistory: ChatMsg[] = [
+              ...target.messages,
+              { role: "user" as const, content: inboundMsg },
+            ];
+            const { reply } = await callChat(
+              target.role,
+              buildSystemPrompt(target),
+              target.provider,
+              target.model,
+              targetHistory
+            );
+            return { target, reply };
+          })
+        );
+
+        // 3) Settle each target panel with its own reply
+        setAgents((curS) =>
+          curS.map((a) => {
+            const r = results.find((x) => x.target.id === a.id);
+            if (!r) return a;
+            const next: ChatMsg[] = [
+              ...a.messages,
+              { role: "assistant" as const, content: r.reply },
+            ].slice(-MAX_MESSAGES_KEPT);
+            return { ...a, messages: next, busy: false };
+          })
+        );
+
+        // 4) Settle source with one combined assistant msg listing every reply
+        const summary = results
+          .map(({ target, reply }) => `↪ via @${ROLE_TAG[target.role]}\n${reply}`)
+          .join("\n\n———\n\n");
+        setAgents((curS) =>
+          curS.map((a) => {
+            if (a.id !== agentId) return a;
+            const next: ChatMsg[] = [
+              ...a.messages,
+              { role: "assistant" as const, content: summary },
+            ].slice(-MAX_MESSAGES_KEPT);
+            return { ...a, messages: next, busy: false };
+          })
+        );
+        return;
+      }
+
       const { role: mentionRole, body: mentionBody } = parseMention(trimmed);
       const cur = agentsRef.current;
       const sourceAgent = cur.find((a) => a.id === agentId);
@@ -2011,7 +2126,7 @@ function AgentPanel(props: {
           visibleMessages.map((mm, i) => {
             // Detect handoff messages — they carry "↪ via @x\n..." or "↪ from @x: ..."
             const handoffOut = mm.content.match(/^↪ via @(\w+)\n([\s\S]*)$/);
-            const handoffIn = mm.content.match(/^↪ from @(\w+): ([\s\S]*)$/);
+            const handoffIn = mm.content.match(/^↪(?:\s+broadcast)?\s+from\s+@(\w+):\s+([\s\S]*)$/);
             const userMention = mm.role === "user"
               ? mm.content.match(/^@(\w+)\s+([\s\S]+)$/)
               : null;
@@ -2184,7 +2299,7 @@ function AgentPanel(props: {
         }}
       >
         <span style={{ fontWeight: 700, color: "#94a3b8" }}>{t("mc.panel.relay")}</span>
-        {(["code", "finance", "legal", "compliance", "translator", "general"] as const).map((tag) => (
+        {(["all", "code", "finance", "legal", "compliance", "translator", "general"] as const).map((tag) => (
           <span
             key={tag}
             style={{

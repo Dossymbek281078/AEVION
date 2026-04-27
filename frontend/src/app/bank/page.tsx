@@ -52,6 +52,7 @@ import { SnapshotExport } from "./_components/SnapshotExport";
 import { ThemeStyles, ThemeToggle } from "./_components/ThemeToggle";
 import { TierProgression } from "./_components/TierProgression";
 import { TimeTravel } from "./_components/TimeTravel";
+import { TripTracker } from "./_components/TripTracker";
 import { VoiceCommand } from "./_components/VoiceCommand";
 import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
@@ -409,6 +410,14 @@ function BankContent() {
             </div>
 
             <SubscriptionScanner notify={notify} />
+
+            <div id="bank-anchor-trip" style={{ scrollMarginTop: 20 }}>
+              <TripTracker
+                myAccountId={account.id}
+                operations={operations}
+                notify={notify}
+              />
+            </div>
 
             <BillingCalendar />
 

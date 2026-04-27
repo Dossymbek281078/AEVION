@@ -1838,8 +1838,14 @@ function ApiQuickstart({
     {
       name: "Protect a work",
       verb: "POST",
-      desc: "Issue a new certificate. authorName + objectId required; contentHash optional (computed from metadata if omitted).",
-      cmd: `curl -X POST '${apiBase}/pipeline/protect' \\n  -H 'content-type: application/json' \\n  -d '{"objectId":"my-song-001","title":"My Song","kind":"music","authorName":"Ada Lovelace"}'`,
+      desc: "Issue a new certificate. title + description required; contentHash optional (computed from metadata if omitted).",
+      cmd: `curl -X POST '${apiBase}/pipeline/protect' \\n  -H 'content-type: application/json' \\n  -d '{"title":"My Song","description":"Album track 4","kind":"music","authorName":"Ada Lovelace"}'`,
+    },
+    {
+      name: "Protect many works (batch)",
+      verb: "POST",
+      desc: "Same crypto as /protect but loops items[] (max 25). Returns 207 Multi-Status if any item fails — others still ship.",
+      cmd: `curl -X POST '${apiBase}/pipeline/protect-batch' \\n  -H 'content-type: application/json' \\n  -d '{"items":[\n    {"title":"Track 1","description":"Album 1","kind":"music","authorName":"Ada"},\n    {"title":"Track 2","description":"Album 1","kind":"music","authorName":"Ada"}\n  ]}'`,
     },
   ];
 

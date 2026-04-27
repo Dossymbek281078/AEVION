@@ -68,6 +68,10 @@ const EARTH_TEXTURE_CANDIDATES = {
     "https://threejs.org/examples/textures/planets/earth_clouds_1024.png",
     "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_clouds_1024.png",
   ],
+  night: [
+    "https://threejs.org/examples/textures/planets/earth_lights_2048.png",
+    "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_lights_2048.png",
+  ],
 } as const;
 
 function loadTextureChain(
@@ -374,8 +378,8 @@ export default function Globus3D({
     tourRef.current = tour;
   }, [tour]);
 
-  /** Texture loading progress — albedo / normal / specular / clouds. */
-  const TEX_TOTAL = 4;
+  /** Texture loading progress — albedo / normal / specular / clouds / night. */
+  const TEX_TOTAL = 5;
   const [texLoaded, setTexLoaded] = useState(0);
 
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
@@ -799,6 +803,7 @@ export default function Globus3D({
     let albedoTex: THREE.Texture | null = null;
     let normalTex: THREE.Texture | null = null;
     let specTex: THREE.Texture | null = null;
+    let nightTex: THREE.Texture | null = null;
 
     setTexLoaded(0);
     let loadedCount = 0;
@@ -807,6 +812,9 @@ export default function Globus3D({
       setTexLoaded(loadedCount);
     };
 
+    /** Sun direction в world space — глобус в (0,0,0), sun в фиксированной позиции. */
+    const sunWorldDir = new THREE.Vector3(260, 80, 180).normalize();
+
     const applyEarthMaterial = () => {
       if (!albedoTex) return;
       albedoTex.colorSpace = THREE.SRGBColorSpace;
@@ -814,6 +822,65 @@ export default function Globus3D({
       if (normalTex) {
         normalTex.colorSpace = THREE.NoColorSpace;
       }
+
+      // Если есть night-карта — собираем кастомный shader с day/night миксом.
+      if (nightTex) {
+        nightTex.colorSpace = THREE.SRGBColorSpace;
+        nightTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+
+        const shaderMat = new THREE.ShaderMaterial({
+          uniforms: {
+            dayMap: { value: albedoTex },
+            nightMap: { value: nightTex },
+            normalMap: { value: normalTex },
+            useNormalMap: { value: normalTex ? 1 : 0 },
+            sunDir: { value: sunWorldDir.clone() },
+          },
+          vertexShader: [
+            "varying vec2 vUv;",
+            "varying vec3 vWorldNormal;",
+            "void main() {",
+            "  vUv = uv;",
+            "  vWorldNormal = normalize(mat3(modelMatrix) * normal);",
+            "  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);",
+            "}",
+          ].join("\n"),
+          fragmentShader: [
+            "uniform sampler2D dayMap;",
+            "uniform sampler2D nightMap;",
+            "uniform sampler2D normalMap;",
+            "uniform float useNormalMap;",
+            "uniform vec3 sunDir;",
+            "varying vec2 vUv;",
+            "varying vec3 vWorldNormal;",
+            "void main() {",
+            "  vec3 day = texture2D(dayMap, vUv).rgb;",
+            "  vec3 night = texture2D(nightMap, vUv).rgb;",
+            "  // Лёгкий perturbation нормали по normalMap (если есть).",
+            "  vec3 N = normalize(vWorldNormal);",
+            "  if (useNormalMap > 0.5) {",
+            "    vec3 nm = texture2D(normalMap, vUv).rgb * 2.0 - 1.0;",
+            "    N = normalize(N + nm * 0.18);",
+            "  }",
+            "  float dotNL = dot(N, sunDir);",
+            "  // Smooth terminator: -0.12 (полная ночь) → 0.22 (полный день).",
+            "  float t = smoothstep(-0.12, 0.22, dotNL);",
+            "  // Ambient + diffuse на дневной стороне.",
+            "  vec3 dayLit = day * (0.18 + 0.92 * max(dotNL, 0.0));",
+            "  // Ночные огни — ярче в темноте, гасятся к терминатору.",
+            "  vec3 nightLit = night * (1.5 - t * 1.4);",
+            "  // Лёгкий синий тон ночной поверхности (без огней).",
+            "  vec3 nightDark = day * 0.04 + vec3(0.012, 0.018, 0.045);",
+            "  vec3 col = mix(nightDark + nightLit, dayLit, t);",
+            "  gl_FragColor = vec4(col, 1.0);",
+            "}",
+          ].join("\n"),
+        });
+        globe.material = shaderMat;
+        return;
+      }
+
+      // Fallback — обычный Phong (если night текстура не подгрузилась).
       const mat = new THREE.MeshPhongMaterial({
         map: albedoTex,
         specular: new THREE.Color(0x111122),
@@ -903,6 +970,21 @@ export default function Globus3D({
       },
       () => {
         cloudMesh.visible = false;
+        oneTexDone();
+      },
+    );
+
+    loadTextureChain(
+      loader,
+      EARTH_TEXTURE_CANDIDATES.night,
+      (t) => {
+        nightTex = t;
+        bumpApply();
+        oneTexDone();
+      },
+      () => {
+        nightTex = null;
+        bumpApply();
         oneTexDone();
       },
     );
@@ -1237,16 +1319,16 @@ export default function Globus3D({
     const arcStartTime = performance.now();
     const ARC_DRAW_MS = 1400;
 
-    // Освещение настроено для day/night эффекта без external night-texture:
-    // ambient очень мягкий → ночная сторона глубоко тёмная (terminator-эффект).
-    const hemi = new THREE.HemisphereLight(0x6e8ed0, 0x040612, 0.32);
+    // Освещение для облаков и halo (globe — shader-based, не зависит от scene lights).
+    // hemi пониже — иначе облака на ночной стороне светятся, разрушая terminator.
+    const hemi = new THREE.HemisphereLight(0x6e8ed0, 0x040612, 0.18);
     scene.add(hemi);
 
     const sun = new THREE.DirectionalLight(0xffffff, 1.55);
     sun.position.set(260, 80, 180);
     scene.add(sun);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.05);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.04);
     scene.add(ambient);
 
     let raf = 0;

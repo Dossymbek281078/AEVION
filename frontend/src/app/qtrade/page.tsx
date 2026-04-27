@@ -11,6 +11,7 @@ import {
   fmtUsd, fmtPct, sparklinePath,
   type Pair, type Position, type PairId, type LimitOrder,
 } from "./marketSim";
+import { ldWallet, svWallet, sellAev, buyAev, type AEVWallet } from "../aev/aevToken";
 
 type Account = {
   id: string;
@@ -71,6 +72,12 @@ export default function QTradePage() {
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [limitPrice, setLimitPrice] = useState("");
   const [tradeMsg, setTradeMsg] = useState<string | null>(null);
+
+  // AEV wallet (for AEV/USD spot conversion)
+  const [aevWallet, setAevWallet] = useState<AEVWallet | null>(null);
+  const [aevSpotQty, setAevSpotQty] = useState("");
+  useEffect(() => { setAevWallet(ldWallet()) }, []);
+  useEffect(() => { if (aevWallet) svWallet(aevWallet) }, [aevWallet]);
 
   useEffect(() => {
     setPairs(ldPairs().map((p) => catchupPair(p)));
@@ -462,6 +469,81 @@ export default function QTradePage() {
                   <span style={{ fontSize: 12, fontWeight: 800, color: change24 >= 0 ? "#86efac" : "#fca5a5" }}>{fmtPct(change24)}</span>
                   <span style={{ fontSize: 11, color: "#94a3b8" }}>· vol {p.vol >= 0.004 ? "high" : p.vol >= 0.003 ? "med" : "low"}</span>
                 </div>
+                {/* ──── AEV/USD SPOT — конвертация из/в кошелёк /aev ──── */}
+                {p.id === "AEV/USD" && aevWallet && (
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 8, marginBottom: 10,
+                    background: "rgba(34,211,238,0.10)", border: "1px solid rgba(34,211,238,0.35)",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, color: "#67e8f9", textTransform: "uppercase" as const }}>
+                        ◆ Spot · из/в кошелёк AEV
+                      </span>
+                      <a href="/aev" style={{ fontSize: 11, color: "#22d3ee", textDecoration: "none", fontWeight: 700 }}>
+                        В кошельке: <strong>{aevWallet.balance.toFixed(4)} AEV</strong> →
+                      </a>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        value={aevSpotQty}
+                        onChange={(e) => setAevSpotQty(e.target.value)}
+                        type="number"
+                        min={0}
+                        step="any"
+                        placeholder="qty AEV"
+                        style={{
+                          width: 130, padding: "6px 10px", borderRadius: 6,
+                          border: "1px solid #334155", background: "#0f172a", color: "#fff",
+                          fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13,
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          const q = Number(aevSpotQty);
+                          if (!Number.isFinite(q) || q <= 0) { setTradeMsg("Введи qty"); return; }
+                          if (!aevWallet || aevWallet.balance < q) { setTradeMsg("Недостаточно AEV в кошельке"); return; }
+                          const next = sellAev(aevWallet, q, p.price);
+                          if (next) {
+                            setAevWallet(next); setAevSpotQty("");
+                            setTradeMsg(`✓ Продано ${q} AEV @ ${fmtUsd(p.price)} ≈ ${fmtUsd(q * p.price)}`);
+                            setTimeout(() => setTradeMsg(null), 2400);
+                          }
+                        }}
+                        style={{
+                          padding: "7px 14px", borderRadius: 6, border: "none",
+                          background: "linear-gradient(135deg, #b45309, #d97706)", color: "#fff",
+                          fontWeight: 800, fontSize: 12, cursor: "pointer",
+                        }}
+                      >
+                        💵 Sell spot
+                      </button>
+                      <button
+                        onClick={() => {
+                          const q = Number(aevSpotQty);
+                          if (!Number.isFinite(q) || q <= 0) { setTradeMsg("Введи qty"); return; }
+                          if (!aevWallet) return;
+                          const next = buyAev(aevWallet, q, p.price);
+                          setAevWallet(next); setAevSpotQty("");
+                          setTradeMsg(`✓ Куплено ${q} AEV @ ${fmtUsd(p.price)} ≈ ${fmtUsd(q * p.price)}`);
+                          setTimeout(() => setTradeMsg(null), 2400);
+                        }}
+                        style={{
+                          padding: "7px 14px", borderRadius: 6, border: "none",
+                          background: "linear-gradient(135deg, #166534, #16a34a)", color: "#fff",
+                          fontWeight: 800, fontSize: 12, cursor: "pointer",
+                        }}
+                      >
+                        🛒 Buy spot
+                      </button>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                        ≈ {Number(aevSpotQty) > 0 ? fmtUsd(Number(aevSpotQty) * p.price) : "—"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>
+                      Spot касается твоего AEV-кошелька. Long/Short ниже — это derivatives, не трогают баланс.
+                    </div>
+                  </div>
+                )}
                 {/* Order type toggle */}
                 <div style={{ display: "inline-flex", marginBottom: 10, borderRadius: 6, overflow: "hidden", border: "1px solid #334155" }}>
                   {(["market", "limit"] as const).map((t) => (

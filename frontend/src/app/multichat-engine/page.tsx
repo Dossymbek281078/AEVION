@@ -358,6 +358,8 @@ type Agent = {
   busy: boolean;
   /** When set, replaces ROLE_SYSTEM_PROMPT[role] for this agent only. */
   customSystemPrompt?: string;
+  /** Snapshot of messages before a summarise; lets the user undo. */
+  preSummary?: ChatMsg[];
 };
 
 type ProviderInfo = {
@@ -1167,6 +1169,20 @@ export default function MultichatEnginePage() {
     [persistWorkspaces]
   );
 
+  const undoSummary = useCallback((target: Agent) => {
+    if (!target.preSummary) return;
+    setAgents((curS) =>
+      curS.map((a) => {
+        if (a.id !== target.id) return a;
+        return {
+          ...a,
+          messages: a.preSummary ?? a.messages,
+          preSummary: undefined,
+        };
+      })
+    );
+  }, []);
+
   /* Fork an agent's conversation: clone with messages[0..upTo] kept */
   const forkAgent = useCallback((src: Agent, upToIndex: number) => {
     let createdId: string | null = null;
@@ -1263,6 +1279,48 @@ export default function MultichatEnginePage() {
       }
     },
     []
+  );
+
+  /* Summarise an agent's history into a single assistant bubble.
+   * Keeps the original messages in preSummary so the user can undo. */
+  const summariseAgent = useCallback(
+    async (target: Agent) => {
+      if (target.messages.length < 4 || target.busy) return;
+      const original = target.messages;
+      setAgents((curS) =>
+        curS.map((a) => (a.id === target.id ? { ...a, busy: true } : a))
+      );
+      const summaryRequest =
+        "Summarise the conversation above in two short paragraphs (≤ 120 words total). Keep the most important facts, decisions, and open questions. Do not add new information.";
+      const history: ChatMsg[] = [
+        ...original,
+        { role: "user", content: summaryRequest },
+      ];
+      const { reply } = await callChat(
+        target.role,
+        buildSystemPrompt(target),
+        target.provider,
+        target.model,
+        history
+      );
+      setAgents((curS) =>
+        curS.map((a) => {
+          if (a.id !== target.id) return a;
+          return {
+            ...a,
+            preSummary: original,
+            messages: [
+              {
+                role: "assistant",
+                content: `📝 Summary of ${original.length} prior messages\n\n${reply}`,
+              },
+            ],
+            busy: false,
+          };
+        })
+      );
+    },
+    [callChat, buildSystemPrompt]
   );
 
   /* Send message for a specific agent — supports @mention handoff */
@@ -2181,6 +2239,8 @@ export default function MultichatEnginePage() {
                 onSend={(text) => sendMessage(a.id, text)}
                 onFork={(idx) => forkAgent(a, idx)}
                 canFork={agents.length < MAX_AGENTS}
+                onSummarise={() => summariseAgent(a)}
+                onUndoSummary={() => undoSummary(a)}
                 t={t}
               />
             ))}
@@ -2302,9 +2362,11 @@ function AgentPanel(props: {
   onSend: (text: string) => void;
   onFork: (messageIndex: number) => void;
   canFork: boolean;
+  onSummarise: () => void;
+  onUndoSummary: () => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
-  const { agent, providers, onChange, onClose, onSend, onFork, canFork, t } = props;
+  const { agent, providers, onChange, onClose, onSend, onFork, canFork, onSummarise, onUndoSummary, t } = props;
   const [hoveredMsg, setHoveredMsg] = useState<number | null>(null);
 
   // @-autocomplete state
@@ -2602,6 +2664,44 @@ function AgentPanel(props: {
         >
           {t("mc.panel.export.json")}
         </button>
+        {agent.preSummary ? (
+          <button
+            type="button"
+            onClick={onUndoSummary}
+            title="Restore the original conversation"
+            style={{
+              padding: "3px 8px",
+              borderRadius: 6,
+              border: "1px solid rgba(196,181,253,0.45)",
+              background: "rgba(196,181,253,0.12)",
+              color: "#c4b5fd",
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: 11,
+            }}
+          >
+            ↺ Undo summary
+          </button>
+        ) : agent.messages.length >= 6 ? (
+          <button
+            type="button"
+            onClick={onSummarise}
+            disabled={agent.busy}
+            title="Compress conversation to a 2-paragraph summary (with undo)"
+            style={{
+              padding: "3px 8px",
+              borderRadius: 6,
+              border: "1px solid rgba(94,234,212,0.45)",
+              background: "rgba(13,148,136,0.18)",
+              color: agent.busy ? "#475569" : "#5eead4",
+              cursor: agent.busy ? "not-allowed" : "pointer",
+              fontWeight: 700,
+              fontSize: 11,
+            }}
+          >
+            🎯 Summarise
+          </button>
+        ) : null}
         <span
           title="Approximate token count (chars/4 heuristic). Real tokenisation varies by provider."
           style={{

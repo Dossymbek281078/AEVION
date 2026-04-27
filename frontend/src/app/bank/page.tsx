@@ -45,6 +45,7 @@ import { RoundUpStash } from "./_components/RoundUpStash";
 import { SubscriptionScanner } from "./_components/SubscriptionScanner";
 import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
 import { SnapshotExport } from "./_components/SnapshotExport";
+import { ThemeStyles, ThemeToggle } from "./_components/ThemeToggle";
 import { TierProgression } from "./_components/TierProgression";
 import { TimeTravel } from "./_components/TimeTravel";
 import { VoiceCommand } from "./_components/VoiceCommand";
@@ -145,6 +146,8 @@ function BankContent() {
   return (
     <div className="aevion-bank-root">
       <A11yStyles />
+      <ThemeStyles />
+      <ThemeToggle />
       <BackendStatus />
       <CommandPalette
         accountId={account?.id ?? null}

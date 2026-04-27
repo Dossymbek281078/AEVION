@@ -59,6 +59,7 @@ import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { SalaryAdvance } from "./_components/SalaryAdvance";
 import { SavingsGoals } from "./_components/SavingsGoals";
 import { SocialCircles } from "./_components/SocialCircles";
+import { SpendForecast } from "./_components/SpendForecast";
 import { SpendingChallenges } from "./_components/SpendingChallenges";
 import { SpendingInsights } from "./_components/SpendingInsights";
 import { SplitBills } from "./_components/SplitBills";
@@ -348,6 +349,7 @@ function BankContent() {
               operations={operations}
               notify={notify}
             />
+            <SpendForecast myAccountId={account.id} operations={operations} />
             <div id="bank-anchor-statement" style={{ scrollMarginTop: 20 }}>
               <AutopilotStatement accountId={account.id} notify={notify} />
             </div>

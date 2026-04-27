@@ -554,7 +554,8 @@ qsignV2Router.post("/revoke/:id", revokeLimiter, async (req, res) => {
   try {
     await ensureQSignV2Tables(pool);
 
-    const row = await loadSignatureRow(req.params.id);
+    const sigId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const row = await loadSignatureRow(sigId);
     if (!row) return res.status(404).json({ error: "signature not found" });
 
     const isIssuer = row.issuerUserId && row.issuerUserId === auth.sub;

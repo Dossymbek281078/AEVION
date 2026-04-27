@@ -67,7 +67,7 @@ export function StatCard({
       <div style={{ fontSize: 22, fontWeight: 900, color: accent || "#0f172a", letterSpacing: "-0.02em" }}>
         {value}
       </div>
-      {hint ? <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{hint}</div> : null}
+      {hint ? <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{hint}</div> : null}
     </div>
   );
 }

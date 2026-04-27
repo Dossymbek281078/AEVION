@@ -275,7 +275,7 @@ export function ReferralsPanel({
               >
                 {stats.invited}
               </div>
-              <div style={{ fontSize: 10, color: "#94a3b8" }}>{t("ref.stat.invited.unit")}</div>
+              <div style={{ fontSize: 10, color: "#64748b" }}>{t("ref.stat.invited.unit")}</div>
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
@@ -292,7 +292,7 @@ export function ReferralsPanel({
               >
                 <Money aec={stats.earnedAec} decimals={0} />
               </div>
-              <div style={{ fontSize: 10, color: "#94a3b8" }}>
+              <div style={{ fontSize: 10, color: "#64748b" }}>
                 {formatCurrency(stats.earnedAec, code, { decimals: 0 })}
               </div>
             </div>
@@ -350,7 +350,7 @@ export function ReferralsPanel({
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 6,
             }}
           >
@@ -399,7 +399,7 @@ export function ReferralsPanel({
                 </span>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
                   {r.nickname}
-                  <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 6 }}>
+                  <span style={{ fontSize: 10, color: "#64748b", marginLeft: 6 }}>
                     {t("ref.recent.joined", { when: formatRelative(r.joinedAt) })}
                   </span>
                 </div>
@@ -425,7 +425,7 @@ export function ReferralsPanel({
         </div>
       )}
 
-      <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 10, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {TIER_DESCRIPTION[stats.tier]}{t("ref.footer.suffix")}
       </div>
     </section>

@@ -50,7 +50,7 @@ export function WalletSummary({
       <div style={{ flex: "1 1 280px", display: "flex", gap: 12, alignItems: "flex-end" }}>
         <CoinTower balance={account.balance} height={140} coinWidth={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>
             {t("wallet.trend.title")}
           </div>
           <Sparkline data={sparkline} width={220} height={50} />

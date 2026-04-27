@@ -75,7 +75,7 @@ export function AuditPanel({
             >
               {t("audit.title")}
             </h2>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
               {t("audit.subtitle")}
             </div>
           </div>
@@ -175,7 +175,7 @@ export function AuditPanel({
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
           }}
@@ -204,7 +204,7 @@ export function AuditPanel({
           style={{
             marginTop: 8,
             fontSize: 11,
-            color: "#94a3b8",
+            color: "#64748b",
             textAlign: "center" as const,
           }}
         >
@@ -276,7 +276,7 @@ function SignatureRow({
           >
             {sig.id}
           </div>
-          <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 1 }}>
+          <div style={{ fontSize: 10, color: "#64748b", marginTop: 1 }}>
             {sig.kind} · {sig.algo} · {t("audit.row.signed", { when: formatRelative(sig.signedAt) })}{sig.verifiedAt ? t("audit.row.checked", { when: formatRelative(sig.verifiedAt) }) : ""}
           </div>
         </div>
@@ -291,7 +291,7 @@ function SignatureRow({
         >
           {t(STATE_LABEL_KEY[sig.verified])}
         </span>
-        <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{expanded ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{expanded ? "▲" : "▼"}</span>
       </button>
       {expanded ? (
         <div

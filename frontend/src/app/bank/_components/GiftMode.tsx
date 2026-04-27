@@ -205,7 +205,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
           <h2 id="gift-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
             {t("gift.heading")}
           </h2>
-          <div style={{ fontSize: 11, color: "#94a3b8" }}>
+          <div style={{ fontSize: 11, color: "#64748b" }}>
             {t("gift.subtitle")}
           </div>
         </div>
@@ -262,7 +262,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
                 fontFamily: "inherit",
               }}
             />
-            <span style={{ fontSize: 10, color: "#94a3b8", textAlign: "right" as const }}>
+            <span style={{ fontSize: 10, color: "#64748b", textAlign: "right" as const }}>
               {message.length}/200
             </span>
           </label>
@@ -308,7 +308,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
           </div>
           <label style={{ display: "grid", gap: 4 }}>
             <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
-              {t("gift.field.unlock")} <span style={{ color: "#94a3b8", fontWeight: 600 }}>{t("gift.field.unlock.optional")}</span>
+              {t("gift.field.unlock")} <span style={{ color: "#64748b", fontWeight: 600 }}>{t("gift.field.unlock.optional")}</span>
             </span>
             <input
               value={unlockDate}
@@ -316,7 +316,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               type="datetime-local"
               style={inputStyle}
             />
-            <span style={{ fontSize: 10, color: "#94a3b8" }}>
+            <span style={{ fontSize: 10, color: "#64748b" }}>
               {t("gift.field.unlock.hint")}
             </span>
           </label>
@@ -398,7 +398,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >

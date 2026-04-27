@@ -109,7 +109,7 @@ export function SpendingInsights({
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
           }}
@@ -148,7 +148,7 @@ export function SpendingInsights({
                     pointerEvents: "none" as const,
                   }}
                 >
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.06em" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em" }}>
                     {t("si.donut.label")}
                   </div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", lineHeight: 1.1 }}>
@@ -201,7 +201,7 @@ export function SpendingInsights({
                       <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
                         {t(CATEGORY_LABEL_KEY[b.category])}
                       </span>
-                      <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
+                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
                         {b.count}×
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
@@ -300,7 +300,7 @@ export function SpendingInsights({
         </>
       )}
 
-      <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 14, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {t("si.footer")}
       </div>
     </section>
@@ -341,7 +341,7 @@ function InsightCard({
       >
         {value}
       </div>
-      {hint ? <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{hint}</div> : null}
+      {hint ? <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{hint}</div> : null}
     </div>
   );
 }

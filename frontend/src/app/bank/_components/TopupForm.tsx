@@ -75,7 +75,7 @@ export function TopupForm({
           {busy ? t("topup.adding") : t("topup.cta")}
         </button>
       </div>
-      <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
+      <div style={{ marginTop: 10, fontSize: 11, color: "#64748b" }}>
         {t("topup.note")}
       </div>
     </section>

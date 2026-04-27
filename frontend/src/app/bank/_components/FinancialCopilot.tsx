@@ -808,7 +808,7 @@ export function FinancialCopilot({
             >
               {t("copilot.empty.main")}
               <br />
-              <span style={{ fontSize: 10, color: "#94a3b8" }}>
+              <span style={{ fontSize: 10, color: "#64748b" }}>
                 {t("copilot.empty.hint")}
               </span>
             </div>
@@ -920,7 +920,7 @@ export function FinancialCopilot({
                 justifyContent: "space-between",
                 padding: "8px 8px 4px",
                 fontSize: 10,
-                color: "#94a3b8",
+                color: "#64748b",
                 fontWeight: 700,
               }}
             >
@@ -954,7 +954,7 @@ export function FinancialCopilot({
                 gap: 8,
               }}
             >
-              <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.35 }}>
+              <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.35 }}>
                 {t("copilot.freeze.footer")}
               </div>
               <button
@@ -1247,7 +1247,7 @@ function AutopilotPanel({
             step={1}
             onChange={(v) => onUpdate("timelockGuardHr", v)}
           />
-          <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.45, marginTop: 4 }}>
+          <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.45, marginTop: 4 }}>
             {t("copilot.ap.summary")}
           </div>
 
@@ -1325,7 +1325,7 @@ function AutopilotPanel({
               >
                 {a.note}
               </span>
-              <span style={{ color: "#94a3b8", fontWeight: 700 }}>
+              <span style={{ color: "#64748b", fontWeight: 700 }}>
                 {formatRelativeShort(a.at)}
               </span>
             </li>
@@ -1373,7 +1373,7 @@ function SimulationPreview({
         <span>
           {anyAction ? t("copilot.sim.preview.would") : t("copilot.sim.preview.skip")}
         </span>
-        <span style={{ color: "#94a3b8", fontWeight: 700 }}>
+        <span style={{ color: "#64748b", fontWeight: 700 }}>
           {new Date(preview.at).toLocaleTimeString()}
         </span>
       </div>
@@ -1402,7 +1402,7 @@ function SimulationPreview({
           </span>
         )}
       </div>
-      <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.4 }}>
+      <div style={{ fontSize: 9, color: "#64748b", lineHeight: 1.4 }}>
         {t("copilot.sim.note")}
       </div>
     </div>
@@ -1459,7 +1459,7 @@ function ToggleRow({
           />
         </button>
       </div>
-      <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.35 }}>{hint}</div>
+      <div style={{ fontSize: 9, color: "#64748b", lineHeight: 1.35 }}>{hint}</div>
     </div>
   );
 }
@@ -1501,7 +1501,7 @@ function SettingRow({
         aria-label={label}
         style={{ width: "100%" }}
       />
-      <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.3 }}>{hint}</div>
+      <div style={{ fontSize: 9, color: "#64748b", lineHeight: 1.3 }}>{hint}</div>
     </div>
   );
 }

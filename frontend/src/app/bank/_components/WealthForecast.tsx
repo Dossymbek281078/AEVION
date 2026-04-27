@@ -100,7 +100,7 @@ export function WealthForecast({ account }: { account: Account }) {
             >
               {t("wf.title")}
             </h2>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
               {t("wf.subtitle")}
             </div>
           </div>
@@ -278,7 +278,7 @@ export function WealthForecast({ account }: { account: Account }) {
                     textAlign: "center" as const,
                   }}
                 >
-                  <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>
+                  <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
                     {t(HORIZON_LABEL_KEY[h])}
                   </div>
                   <div
@@ -312,7 +312,7 @@ export function WealthForecast({ account }: { account: Account }) {
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >
@@ -323,7 +323,7 @@ export function WealthForecast({ account }: { account: Account }) {
               style={{
                 padding: 14,
                 fontSize: 12,
-                color: "#94a3b8",
+                color: "#64748b",
                 border: "1px dashed rgba(15,23,42,0.1)",
                 borderRadius: 10,
               }}
@@ -399,7 +399,7 @@ export function WealthForecast({ account }: { account: Account }) {
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >
@@ -410,7 +410,7 @@ export function WealthForecast({ account }: { account: Account }) {
               style={{
                 padding: 14,
                 fontSize: 12,
-                color: "#94a3b8",
+                color: "#64748b",
                 border: "1px dashed rgba(15,23,42,0.1)",
                 borderRadius: 10,
               }}
@@ -451,7 +451,7 @@ export function WealthForecast({ account }: { account: Account }) {
                       <span style={{ fontWeight: 800, color: "#0f172a" }}>
                         <Money aec={row.amount} decimals={0} />
                       </span>
-                      <span style={{ color: "#94a3b8", fontWeight: 700, minWidth: 36, textAlign: "right" as const }}>
+                      <span style={{ color: "#64748b", fontWeight: 700, minWidth: 36, textAlign: "right" as const }}>
                         {(row.share * 100).toFixed(0)}%
                       </span>
                     </div>
@@ -485,7 +485,7 @@ export function WealthForecast({ account }: { account: Account }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 12, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 12, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {t("wf.footer")}
       </div>
     </section>
@@ -526,7 +526,7 @@ function StatTile({
       >
         {value}
       </div>
-      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{hint}</div>
+      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{hint}</div>
     </div>
   );
 }

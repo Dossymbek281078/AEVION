@@ -264,7 +264,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
               </label>
             </div>
             {contacts.length === 0 ? (
-              <div style={{ fontSize: 12, color: "#94a3b8" }}>
+              <div style={{ fontSize: 12, color: "#64748b" }}>
                 {t("split.contacts.empty")}
               </div>
             ) : (
@@ -399,7 +399,7 @@ export function SplitBills({ myAccountId, notify }: Props) {
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
           }}
@@ -519,7 +519,7 @@ function BillRow({
             />
           </div>
         </div>
-        <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{open ? "▲" : "▼"}</div>
+        <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{open ? "▲" : "▼"}</div>
       </button>
       {open ? (
         <div
@@ -565,7 +565,7 @@ function BillRow({
                 <div
                   style={{
                     fontSize: 10,
-                    color: "#94a3b8",
+                    color: "#64748b",
                     fontFamily: "ui-monospace, monospace",
                   }}
                 >
@@ -594,7 +594,7 @@ function BillRow({
               {s.paid ? (
                 <span style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>{t("split.row.statusPaid")}</span>
               ) : (
-                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>{t("split.row.statusPending")}</span>
+                <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>{t("split.row.statusPending")}</span>
               )}
             </div>
           ))}

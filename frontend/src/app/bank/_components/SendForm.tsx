@@ -297,7 +297,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
                       style={{
                         background: "transparent",
                         border: "none",
-                        color: "#94a3b8",
+                        color: "#64748b",
                         cursor: "pointer",
                         fontSize: 14,
                         padding: 4,
@@ -410,7 +410,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
           </div>
         ) : null}
       </div>
-      <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
+      <div style={{ marginTop: 10, fontSize: 11, color: "#64748b" }}>
         {t("send.footer.fee", { balance: balance.toFixed(2) })}
         {bioSettings ? t("send.footer.biom", { threshold: bioSettings.threshold }) : null}
         {guardEnabled && timelockReserve > 0 ? (

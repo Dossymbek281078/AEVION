@@ -81,7 +81,7 @@ function ResultRow({ r }: { r: TournamentResult }) {
         >
           {r.name}
         </div>
-        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+        <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
           {t("cw.result.subtitle", { format: t(FORMAT_LABEL_KEY[r.format]), time: t(FORMAT_TIME_KEY[r.format]), players: r.totalPlayers, when: formatRelative(r.finishedAt) })}
         </div>
       </div>
@@ -233,7 +233,7 @@ export function ChessWinnings() {
           <div style={{ fontSize: 20, fontWeight: 900, color: "#d97706", letterSpacing: "-0.02em" }}>
             {formatCurrency(data.totalWon, code, { decimals: 0 })}
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t("cw.tile.totalWon.hint")}</div>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{t("cw.tile.totalWon.hint")}</div>
         </div>
         <div
           style={{
@@ -247,9 +247,9 @@ export function ChessWinnings() {
             {t("cw.tile.wins")}
           </div>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
-            {data.wins} <span style={{ fontSize: 11, color: "#94a3b8" }}>/ {data.tournamentsPlayed}</span>
+            {data.wins} <span style={{ fontSize: 11, color: "#64748b" }}>/ {data.tournamentsPlayed}</span>
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t("cw.tile.wins.hint", { n: winRate })}</div>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{t("cw.tile.wins.hint", { n: winRate })}</div>
         </div>
         <div
           style={{
@@ -265,7 +265,7 @@ export function ChessWinnings() {
           <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
             {data.topThreeFinishes}
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t("cw.tile.top3.hint", { n: top3Rate })}</div>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{t("cw.tile.top3.hint", { n: top3Rate })}</div>
         </div>
         <div
           style={{
@@ -279,7 +279,7 @@ export function ChessWinnings() {
             {t("cw.tile.trend")}
           </div>
           <Sparkline data={data.ratingSeries} width={140} height={28} color="#d97706" />
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
             {t("cw.tile.trend.hint", { n: data.ratingSeries.length })}{peakPos >= 0 ? t("cw.tile.trend.peak", { n: peakPos + 1 }) : ""}
           </div>
         </div>
@@ -299,14 +299,14 @@ export function ChessWinnings() {
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >
             {t("cw.recent")}
           </div>
           {data.results.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>{t("cw.recent.empty")}</div>
+            <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>{t("cw.recent.empty")}</div>
           ) : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
               {data.results.slice(0, 5).map((r) => (
@@ -323,7 +323,7 @@ export function ChessWinnings() {
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >
@@ -393,7 +393,7 @@ export function ChessWinnings() {
           justifyContent: "space-between",
         }}
       >
-        <div style={{ fontSize: 11, color: "#94a3b8" }}>
+        <div style={{ fontSize: 11, color: "#64748b" }}>
           {t("cw.footer")}
         </div>
         <Link

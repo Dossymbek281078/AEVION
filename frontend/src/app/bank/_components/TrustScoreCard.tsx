@@ -156,7 +156,7 @@ export function TrustScoreCard({
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >
@@ -304,7 +304,7 @@ function FactorGroup({
           fontWeight: 800,
           letterSpacing: "0.06em",
           textTransform: "uppercase" as const,
-          color: "#94a3b8",
+          color: "#64748b",
           marginBottom: 4,
           marginTop: 4,
         }}
@@ -332,7 +332,7 @@ function FactorGroup({
                 }}
               >
                 <span style={{ fontWeight: 700, color: "#0f172a", fontSize: 11 }}>{f.label}</span>
-                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>
+                <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
                   {f.points}
                 </span>
               </div>

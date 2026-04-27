@@ -83,7 +83,7 @@ export function DeviceManagement({
       </div>
 
       {devices.length === 0 ? (
-        <div style={{ fontSize: 13, color: "#94a3b8", padding: 12 }}>
+        <div style={{ fontSize: 13, color: "#64748b", padding: 12 }}>
           {t("dev.loading")}
         </div>
       ) : (
@@ -114,7 +114,7 @@ export function DeviceManagement({
         </ul>
       )}
 
-      <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 14, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {t("dev.footer")}
       </div>
     </section>
@@ -188,7 +188,7 @@ function DeviceRow({ d, onRevoke }: { d: Device; onRevoke: () => void }) {
         <div style={{ fontSize: 11, color: "#64748b" }}>
           {d.location} · {d.screen} · {d.language} · {d.timezone}
         </div>
-        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+        <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
           {t("dev.row.firstSeen", { first: formatRelative(d.firstSeenAt), last: formatRelative(d.lastActiveAt) })}
         </div>
       </div>

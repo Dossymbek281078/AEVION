@@ -159,7 +159,7 @@ export function TotalEarningsDashboard() {
                 textAlign: "center" as const,
               }}
             >
-              <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.06em" }}>
+              <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, letterSpacing: "0.06em" }}>
                 {t("te.donut.total", { period: t(PERIOD_LABEL_KEY[period]) })}
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", lineHeight: 1.1 }}>
@@ -224,7 +224,7 @@ export function TotalEarningsDashboard() {
                 <div style={{ marginTop: 4 }}>
                   <Sparkline data={spark} width={140} height={24} color={SOURCE_COLOR[src]} />
                 </div>
-                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+                <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
                   {t(SOURCE_DESCRIPTION_KEY[src])}
                 </div>
               </div>
@@ -240,7 +240,7 @@ export function TotalEarningsDashboard() {
             fontWeight: 800,
             letterSpacing: "0.08em",
             textTransform: "uppercase" as const,
-            color: "#94a3b8",
+            color: "#64748b",
             marginBottom: 6,
           }}
         >
@@ -256,14 +256,14 @@ export function TotalEarningsDashboard() {
             fontWeight: 800,
             letterSpacing: "0.08em",
             textTransform: "uppercase" as const,
-            color: "#94a3b8",
+            color: "#64748b",
             marginBottom: 8,
           }}
         >
           {t("te.recent")}
         </div>
         {summary.recent.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#94a3b8", padding: "10px 0" }}>
+          <div style={{ fontSize: 12, color: "#64748b", padding: "10px 0" }}>
             {t("te.recent.empty")}
           </div>
         ) : (
@@ -312,7 +312,7 @@ export function TotalEarningsDashboard() {
                   >
                     {ev.title}
                   </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
                     {t(SOURCE_LABEL_KEY[ev.source])} · {formatRelative(ev.timestamp)}
                     {ev.meta ? ` · ${ev.meta}` : ""}
                   </div>
@@ -326,7 +326,7 @@ export function TotalEarningsDashboard() {
         )}
       </div>
 
-      <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 14, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {t("te.footer")}
       </div>
     </section>

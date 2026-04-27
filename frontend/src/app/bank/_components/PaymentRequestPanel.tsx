@@ -95,7 +95,7 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
         {showQR ? (
           <div style={{ flexShrink: 0 }}>
             <QRCodeView value={url} size={160} />
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "center" as const }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, textAlign: "center" as const }}>
               {t("preq.qr.scanHint")}
             </div>
           </div>
@@ -189,7 +189,7 @@ export function PaymentRequestPanel({ accountId, onCopy }: Props) {
               {t("preq.btn.share")}
             </button>
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
             {t("preq.footer")}
           </div>
         </div>

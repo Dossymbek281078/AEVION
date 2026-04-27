@@ -318,7 +318,7 @@ export function CommandPalette({
           <span
             style={{
               fontSize: 10,
-              color: "#94a3b8",
+              color: "#64748b",
               fontWeight: 700,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
@@ -346,7 +346,7 @@ export function CommandPalette({
                 padding: "24px 16px",
                 textAlign: "center",
                 fontSize: 13,
-                color: "#94a3b8",
+                color: "#64748b",
               }}
             >
               {t("palette.empty", { q: query })}

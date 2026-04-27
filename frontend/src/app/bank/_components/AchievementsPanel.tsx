@@ -140,7 +140,7 @@ export function AchievementsPanel({
             <h2 id="achievements-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
               {t("ach.title")}
             </h2>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
               {t("ach.subtitle", { earned: stats.earned, total: stats.total, pct: stats.pct.toFixed(0) })}
             </div>
           </div>
@@ -369,7 +369,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
             display: "flex",
             justifyContent: "space-between",
             fontSize: 10,
-            color: "#94a3b8",
+            color: "#64748b",
             marginTop: 3,
           }}
         >

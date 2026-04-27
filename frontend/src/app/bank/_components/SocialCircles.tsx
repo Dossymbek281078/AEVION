@@ -161,7 +161,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
               {t("circles.members.label", { count: selectedIds.size })}
             </div>
             {contacts.length === 0 ? (
-              <div style={{ fontSize: 12, color: "#94a3b8" }}>
+              <div style={{ fontSize: 12, color: "#64748b" }}>
                 {t("circles.members.empty")}
               </div>
             ) : (
@@ -225,7 +225,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
           }}
@@ -270,7 +270,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
                     >
                       {c.name}
                     </div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
                       {t("circles.list.meta", { members: c.members.length, messages: c.messages.length })}
                     </div>
                   </button>
@@ -302,7 +302,7 @@ export function SocialCircles({ myAccountId, myNickname, balance, send, notify }
                   padding: 24,
                   textAlign: "center" as const,
                   fontSize: 13,
-                  color: "#94a3b8",
+                  color: "#64748b",
                   border: "1px dashed rgba(15,23,42,0.1)",
                   borderRadius: 10,
                 }}
@@ -430,7 +430,7 @@ function CircleDetail({
       >
         <div>
           <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{circle.name}</div>
-          <div style={{ fontSize: 11, color: "#94a3b8" }}>
+          <div style={{ fontSize: 11, color: "#64748b" }}>
             {circle.members.map((m) => m.nickname).join(" · ")}
           </div>
         </div>
@@ -469,7 +469,7 @@ function CircleDetail({
         }}
       >
         {circle.messages.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0", textAlign: "center" as const }}>
+          <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0", textAlign: "center" as const }}>
             {t("circles.detail.empty")}
           </div>
         ) : (
@@ -613,7 +613,7 @@ function Bubble({
           alignItems: "center",
           flexWrap: "wrap",
           fontSize: 10,
-          color: "#94a3b8",
+          color: "#64748b",
           marginBottom: 2,
         }}
       >

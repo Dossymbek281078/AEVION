@@ -274,7 +274,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
               {t("rec.save")}
             </button>
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8" }}>
+          <div style={{ fontSize: 11, color: "#64748b" }}>
             {t("rec.balance.label")} <Money aec={balance} /> · {t("rec.balance.hint")}
           </div>
         </div>
@@ -286,7 +286,7 @@ export function RecurringPayments({ myAccountId, balance, send, notify }: Props)
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
           }}

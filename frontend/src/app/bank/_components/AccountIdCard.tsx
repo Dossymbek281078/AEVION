@@ -55,7 +55,7 @@ export function AccountIdCard({
         {showQR ? (
           <div style={{ flexShrink: 0 }}>
             <QRCodeView value={accountId} size={160} />
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "center" as const }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, textAlign: "center" as const }}>
               {t("accid.qr.scanHint")}
             </div>
           </div>
@@ -95,7 +95,7 @@ export function AccountIdCard({
               {t("accid.btn.copy")}
             </button>
           </div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>
+          <div style={{ marginTop: 10, fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
             {t("accid.footer")}
           </div>
         </div>

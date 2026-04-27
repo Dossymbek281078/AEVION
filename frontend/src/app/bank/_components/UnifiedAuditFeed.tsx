@@ -256,7 +256,7 @@ export function UnifiedAuditFeed({
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
             fontSize: 12,
-            color: "#94a3b8",
+            color: "#64748b",
           }}
         >
           {t("uaudit.empty")}
@@ -338,7 +338,7 @@ export function UnifiedAuditFeed({
               <span
                 style={{
                   fontSize: 10,
-                  color: "#94a3b8",
+                  color: "#64748b",
                   fontWeight: 700,
                   whiteSpace: "nowrap",
                 }}
@@ -350,7 +350,7 @@ export function UnifiedAuditFeed({
         </ul>
       )}
 
-      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 10, lineHeight: 1.45 }}>
+      <div style={{ fontSize: 10, color: "#64748b", marginTop: 10, lineHeight: 1.45 }}>
         {t("uaudit.footer", { filtered: filtered.length, total: entries.length })}
       </div>
     </section>

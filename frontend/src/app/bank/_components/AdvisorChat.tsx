@@ -172,7 +172,7 @@ export function AdvisorChat({
             <h2 id="advisor-heading" style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>
               {t("advisor.heading")}
             </h2>
-            <div style={{ fontSize: 11, color: "#94a3b8" }}>
+            <div style={{ fontSize: 11, color: "#64748b" }}>
               {t("advisor.subtitle")}
               {provider ? t("advisor.via", { provider }) : ""}
             </div>
@@ -308,7 +308,7 @@ export function AdvisorChat({
         </button>
       </div>
 
-      <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 10, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {t("advisor.footer")}
       </div>
     </section>

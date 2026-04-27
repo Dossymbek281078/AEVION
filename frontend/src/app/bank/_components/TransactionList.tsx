@@ -167,7 +167,7 @@ export function TransactionList({
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
           }}
         >
           {sorted.length === 0 ? t("tx.empty.none") : t("tx.empty.search")}
@@ -227,7 +227,7 @@ export function TransactionList({
                     >
                       {cpNick ? `${d.label} · ${cpNick}` : d.description}
                     </div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
                       {d.label} · {formatRelative(op.createdAt)}
                     </div>
                   </div>
@@ -281,7 +281,7 @@ export function TransactionList({
           style={{
             marginTop: 10,
             fontSize: 11,
-            color: "#94a3b8",
+            color: "#64748b",
             textAlign: "center" as const,
           }}
         >
@@ -307,7 +307,7 @@ function KV({
 }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      <div style={{ color: "#94a3b8", fontWeight: 600, minWidth: 100, fontSize: 11 }}>{label}</div>
+      <div style={{ color: "#64748b", fontWeight: 600, minWidth: 100, fontSize: 11 }}>{label}</div>
       <code
         style={{
           flex: 1,

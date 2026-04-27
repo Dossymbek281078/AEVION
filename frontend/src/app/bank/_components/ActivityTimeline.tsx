@@ -143,7 +143,7 @@ export function ActivityTimeline({
             </span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: "#94a3b8" }}>
+        <div style={{ fontSize: 11, color: "#64748b" }}>
           {t("activity.lastEvents", { n: entries.length })}
         </div>
       </div>
@@ -154,7 +154,7 @@ export function ActivityTimeline({
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
           }}
@@ -185,7 +185,7 @@ export function ActivityTimeline({
                   {g.label}
                 </span>
                 <div style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.08)" }} />
-                <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
+                <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
                   {g.entries.length === 1 ? t("activity.day.events.one") : t("activity.day.events.many", { n: g.entries.length })}{g.flagged ? t("activity.day.flagged", { n: g.flagged }) : ""}
                 </span>
               </div>
@@ -199,7 +199,7 @@ export function ActivityTimeline({
         </div>
       )}
 
-      <div style={{ marginTop: 14, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 14, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {t("activity.footer")}
       </div>
     </section>

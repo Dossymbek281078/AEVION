@@ -450,7 +450,7 @@ export function AutopilotStatement({
         </button>
       </div>
 
-      <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 8, lineHeight: 1.45 }}>
+      <div style={{ fontSize: 9, color: "#64748b", marginTop: 8, lineHeight: 1.45 }}>
         {t("ap.security.line", { manual: stats.manualFreezes, ms: stats.manualFreezes === 1 ? "" : "s", anomaly: stats.anomalyFreezes, as: stats.anomalyFreezes === 1 ? "" : "s", unfreezes: stats.unfreezes, us: stats.unfreezes === 1 ? "" : "s" })}
       </div>
     </section>

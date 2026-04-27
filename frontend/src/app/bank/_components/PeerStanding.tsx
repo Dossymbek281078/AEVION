@@ -151,7 +151,7 @@ export function PeerStanding({
         style={{
           marginTop: 10,
           fontSize: 11,
-          color: "#94a3b8",
+          color: "#64748b",
           lineHeight: 1.45,
         }}
       >
@@ -206,7 +206,7 @@ function RankRow({ r }: { r: PeerRank }) {
           >
             {t(r.labelKey)}
           </div>
-          <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>
+          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
             {t("peer.row.youMedian", {
               you: r.userValueLabelKey ? t(r.userValueLabelKey, r.userValueLabelVars) : r.userValueLabel,
               median: r.peerMedianLabelKey ? t(r.peerMedianLabelKey, r.peerMedianLabelVars) : r.peerMedianLabel,

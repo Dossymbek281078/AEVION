@@ -240,7 +240,7 @@ export function SavingsGoals({ accountId, notify }: Props) {
             padding: 20,
             textAlign: "center" as const,
             fontSize: 13,
-            color: "#94a3b8",
+            color: "#64748b",
             border: "1px dashed rgba(15,23,42,0.1)",
             borderRadius: 10,
           }}
@@ -440,7 +440,7 @@ function GoalCard({
             style={{
               background: "transparent",
               border: "none",
-              color: "#94a3b8",
+              color: "#64748b",
               fontSize: 16,
               cursor: "pointer",
               padding: 4,
@@ -473,7 +473,7 @@ function GoalCard({
         >
           <span style={{ fontWeight: 700, color: "#0f172a" }}>
             <Money aec={g.currentAec} />
-            <span style={{ color: "#94a3b8" }}> / <Money aec={g.targetAec} decimals={0} /></span>
+            <span style={{ color: "#64748b" }}> / <Money aec={g.targetAec} decimals={0} /></span>
           </span>
           <span style={{ fontWeight: 800, color }}>{forecast.progressPct.toFixed(0)}%</span>
         </div>
@@ -731,7 +731,7 @@ function GoalShareModal({
             style={{
               background: "transparent",
               border: "none",
-              color: "#94a3b8",
+              color: "#64748b",
               fontSize: 18,
               cursor: "pointer",
               padding: 4,
@@ -799,7 +799,7 @@ function GoalShareModal({
           </button>
         </div>
 
-        <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.45 }}>
+        <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.45 }}>
           {t("savings.share.footer")}
         </div>
       </div>

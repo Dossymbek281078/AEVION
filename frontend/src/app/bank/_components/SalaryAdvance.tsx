@@ -107,7 +107,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
             >
               {t("advance.title")}
             </h2>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
               <InfoTooltip text={t("tip.trustTier")} side="bottom">
                 <span>
                   {t("advance.tier.label")} <strong style={{ color }}>{t(tierLabelKey[trust.tier])}</strong>{t("advance.tier.score", { n: trust.score })}
@@ -182,7 +182,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
               );
             })}
           </div>
-          <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
+          <div style={{ marginTop: 10, fontSize: 11, color: "#64748b" }}>
             {t("advance.cta.note")}
           </div>
         </>
@@ -230,7 +230,7 @@ export function SalaryAdvance({ account, operations, topup, notify }: Props) {
                 }}
               />
             </div>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
               {t("advance.progress.percent", { n: progress.toFixed(1) })}
               {advance.outstanding > 0
                 ? t("advance.progress.active").trim()

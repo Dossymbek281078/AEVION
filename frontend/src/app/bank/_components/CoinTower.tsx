@@ -168,7 +168,7 @@ export function CoinTower({
           fontSize: 9,
           fontWeight: 800,
           letterSpacing: "0.06em",
-          color: "#94a3b8",
+          color: "#64748b",
           textTransform: "uppercase" as const,
         }}
       >

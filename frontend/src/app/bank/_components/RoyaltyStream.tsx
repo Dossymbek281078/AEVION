@@ -91,7 +91,7 @@ function EventRow({ ev, highlight }: { ev: RoyaltyEvent; highlight?: boolean }) 
         >
           {ev.workTitle}
         </div>
-        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+        <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
           {t("rs.event.subtitle", { kind: t(KIND_LABEL_KEY[ev.workKind]), verifier: ev.verifier, when: formatRelative(ev.timestamp) })}
         </div>
       </div>
@@ -265,7 +265,7 @@ export function RoyaltyStream() {
           <div style={{ fontSize: 18, fontWeight: 900, color: "#4c1d95", letterSpacing: "-0.02em" }}>
             {formatCurrency(totalRoyalties, code)}
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
             {t("rs.tile.total.hint", { verifications: totalVerifications, works: data.works.length })}
           </div>
         </div>
@@ -283,7 +283,7 @@ export function RoyaltyStream() {
           <div style={{ fontSize: 18, fontWeight: 900, color: "#047857", letterSpacing: "-0.02em" }}>
             {formatCurrency(data.avgPerDay7d, code)}
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
             {t("rs.tile.avg.hint", { amt: formatCurrency(data.avgPerDay30d, code) })}
           </div>
         </div>
@@ -301,7 +301,7 @@ export function RoyaltyStream() {
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0369a1", letterSpacing: "-0.02em" }}>
             ~{formatCurrency(data.estimated30d, code)}
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
             {t("rs.tile.next.hint")}
           </div>
         </div>
@@ -321,7 +321,7 @@ export function RoyaltyStream() {
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >
@@ -333,7 +333,7 @@ export function RoyaltyStream() {
             style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}
           >
             {feed.length === 0 ? (
-              <li style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>
+              <li style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>
                 {t("rs.recent.empty")}
               </li>
             ) : (
@@ -351,7 +351,7 @@ export function RoyaltyStream() {
               fontWeight: 800,
               letterSpacing: "0.08em",
               textTransform: "uppercase" as const,
-              color: "#94a3b8",
+              color: "#64748b",
               marginBottom: 8,
             }}
           >
@@ -402,7 +402,7 @@ export function RoyaltyStream() {
                     >
                       #{i + 1} {w.title}
                     </span>
-                    <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, color: "#64748b", flexShrink: 0 }}>
                       {w.verifications}×
                     </span>
                     <span style={{ fontWeight: 900, fontSize: 12, color, flexShrink: 0 }}>
@@ -448,7 +448,7 @@ export function RoyaltyStream() {
           justifyContent: "space-between",
         }}
       >
-        <div style={{ fontSize: 11, color: "#94a3b8" }}>
+        <div style={{ fontSize: 11, color: "#64748b" }}>
           {t("rs.footer")}
         </div>
         <Link

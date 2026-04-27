@@ -277,7 +277,7 @@ export function Legend({ items }: { items: Array<{ label: string; color: string;
             }}
           />
           <span style={{ fontWeight: 700, color: "#334155" }}>{it.label}</span>
-          {it.hint ? <span style={{ color: "#94a3b8" }}>· {it.hint}</span> : null}
+          {it.hint ? <span style={{ color: "#64748b" }}>· {it.hint}</span> : null}
         </div>
       ))}
     </div>

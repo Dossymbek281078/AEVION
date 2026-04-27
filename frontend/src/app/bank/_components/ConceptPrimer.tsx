@@ -148,7 +148,7 @@ export function ConceptPrimer() {
           right: 10,
           border: "none",
           background: "transparent",
-          color: "#94a3b8",
+          color: "#64748b",
           fontSize: 16,
           fontWeight: 900,
           cursor: "pointer",
@@ -454,7 +454,7 @@ function FlowDiagram({ activeAudience, accent }: { activeAudience: Audience; acc
       <div
         style={{
           fontSize: 10,
-          color: "#94a3b8",
+          color: "#64748b",
           textAlign: "center",
           marginTop: 4,
         }}

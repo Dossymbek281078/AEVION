@@ -16,7 +16,7 @@ export function Field({
       <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{label}</span>
       {children}
       {hint ? (
-        <span style={{ fontSize: 10, color: "#94a3b8" }}>{hint}</span>
+        <span style={{ fontSize: 10, color: "#64748b" }}>{hint}</span>
       ) : null}
     </label>
   );

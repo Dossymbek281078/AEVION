@@ -120,8 +120,8 @@ export function buildSnapshotSVG(data: SnapshotData): string {
   <text x="700" y="395" fill="#475569" font-size="15" font-weight="700">${data.achievementsEarned} of ${data.achievementsTotal} unlocked</text>
   ${categoryChips}
 
-  <text x="60" y="${height - 50}" fill="#94a3b8" font-size="13" font-weight="600">Unique balance · Trust · Network-rank snapshot across AEVION's creator / banking / chess / planet stack</text>
-  <text x="${width - 60}" y="${height - 50}" fill="#94a3b8" font-size="13" font-weight="700" text-anchor="end">aevion.bank</text>
+  <text x="60" y="${height - 50}" fill="#64748b" font-size="13" font-weight="600">Unique balance · Trust · Network-rank snapshot across AEVION's creator / banking / chess / planet stack</text>
+  <text x="${width - 60}" y="${height - 50}" fill="#64748b" font-size="13" font-weight="700" text-anchor="end">aevion.bank</text>
 </svg>`;
 }
 

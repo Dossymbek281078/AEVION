@@ -342,6 +342,19 @@ export default function QCoreMultiAgentPage() {
   const [whBusy, setWhBusy] = useState(false);
   // Sessions sidebar state — only honored on mobile via CSS, always-open on desktop.
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Run search across all of the user's history.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{
+    runId: string;
+    sessionId: string;
+    sessionTitle: string;
+    snippet: string;
+    status: string;
+    strategy: string | null;
+    totalCostUsd: number | null;
+    startedAt: string;
+  }> | null>(null);
+  const [searchBusy, setSearchBusy] = useState(false);
   // Mid-run guidance input value.
   const [guidanceText, setGuidanceText] = useState("");
   // QRight objects available to attach as context (lazy-loaded on first config-open).
@@ -573,6 +586,35 @@ export default function QCoreMultiAgentPage() {
   const deletePreset = useCallback((id: string) => {
     persistPresets(presets.filter((p) => p.id !== id));
   }, [presets, persistPresets]);
+
+  /* ── Debounced run search ── */
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults(null);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      setSearchBusy(true);
+      try {
+        const res = await fetch(
+          apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(q)}`),
+          { headers: bearerHeader() }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSearchResults([]);
+          return;
+        }
+        setSearchResults(Array.isArray(data?.hits) ? data.hits : []);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchBusy(false);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
 
   /* ── Auto-scroll on new chunks (only if user is at the bottom) ── */
   useEffect(() => {
@@ -1921,6 +1963,96 @@ export default function QCoreMultiAgentPage() {
             >
               + New session
             </button>
+
+            {/* Search input — debounced, scoped to the user's runs. */}
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="🔎 Search runs…"
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  fontSize: 12,
+                  background: "#f8fafc",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  style={{
+                    position: "absolute",
+                    right: 6,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    border: "none",
+                    background: "transparent",
+                    color: "#94a3b8",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    padding: "0 4px",
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {searchResults && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 6px" }}>
+                  Search · {searchBusy ? "…" : `${searchResults.length} hits`}
+                </div>
+                {searchResults.length === 0 && !searchBusy && (
+                  <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px 6px" }}>
+                    No matches.
+                  </div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {searchResults.map((h) => (
+                    <button
+                      key={h.runId}
+                      onClick={() => loadSession(h.sessionId)}
+                      title={`Open session: ${h.sessionTitle}`}
+                      style={{
+                        textAlign: "left",
+                        padding: "6px 8px",
+                        borderRadius: 8,
+                        border: "1px solid #e2e8f0",
+                        background: "#fff",
+                        color: "#0f172a",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {h.sessionTitle || "(untitled)"}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2, display: "flex", gap: 6 }}>
+                        <span>{h.strategy || "sequential"}</span>
+                        <span>·</span>
+                        <span>{h.status}</span>
+                        {h.totalCostUsd != null && h.totalCostUsd > 0 && (
+                          <>
+                            <span>·</span>
+                            <span>{formatMoney(h.totalCostUsd)}</span>
+                          </>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                        …{h.snippet}…
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "8px 6px 4px" }}>
               Sessions
             </div>

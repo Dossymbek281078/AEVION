@@ -45,6 +45,7 @@ import {
   listSessions,
   renameSession,
   renameSessionIfDefault,
+  searchRuns,
   shareRun,
   touchSession,
   unshareRun,
@@ -213,6 +214,31 @@ qcoreaiRouter.delete("/me/webhook", async (req, res) => {
     return res.json({ ok: removed });
   } catch (err: any) {
     return res.status(500).json({ error: "delete failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run search
+
+   ILIKE-based scan across the auth-scope of the caller (their own runs,
+   or the anonymous pool). Returns runs whose userInput or finalContent
+   matches the query, with a short snippet and the parent session title.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/search", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const q = typeof req.query?.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+  if (!q) return res.json({ q: "", hits: [] });
+  let limit = 20;
+  if (typeof req.query?.limit === "string") {
+    const n = parseInt(req.query.limit, 10);
+    if (Number.isFinite(n) && n > 0) limit = Math.min(50, n);
+  }
+  try {
+    const hits = await searchRuns(q, auth?.sub ?? null, limit);
+    return res.json({ q, hits });
+  } catch (err: any) {
+    return res.status(500).json({ error: "search failed", details: err?.message });
   }
 });
 

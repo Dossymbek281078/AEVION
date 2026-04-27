@@ -175,6 +175,109 @@ export async function renameSessionIfDefault(sessionId: string, seed: string): P
   );
 }
 
+/**
+ * Search past runs across the user's sessions. Matches a simple ILIKE %q% on
+ * userInput / finalContent — sufficient for navigating a personal history of
+ * dozens to hundreds of runs without a full-text index. For larger volumes,
+ * swap for `to_tsvector` + GIN.
+ */
+export type SearchRunHit = {
+  runId: string;
+  sessionId: string;
+  sessionTitle: string;
+  status: string;
+  strategy: string | null;
+  totalCostUsd: number | null;
+  startedAt: string;
+  /** First match snippet (~120 chars) — userInput preferred, then finalContent. */
+  snippet: string;
+};
+
+export async function searchRuns(
+  q: string,
+  userId: string | null,
+  limit = 20
+): Promise<SearchRunHit[]> {
+  await ensureQCoreTables(pool);
+  const trimmed = q.trim();
+  if (!trimmed) return [];
+  const lim = Math.max(1, Math.min(50, limit));
+
+  if (!isDbReady()) {
+    const ql = trimmed.toLowerCase();
+    const hits: SearchRunHit[] = [];
+    for (const r of memRuns.values()) {
+      const sess = memSessions.get(r.sessionId);
+      if (!sess) continue;
+      if (userId ? sess.userId !== userId : sess.userId != null) continue;
+      const inUser = (r.userInput || "").toLowerCase().includes(ql);
+      const inFinal = (r.finalContent || "").toLowerCase().includes(ql);
+      if (!inUser && !inFinal) continue;
+      const src = inUser ? r.userInput : (r.finalContent || "");
+      const idx = src.toLowerCase().indexOf(ql);
+      const start = Math.max(0, idx - 30);
+      const snippet = src.slice(start, start + 120).replace(/\s+/g, " ").trim();
+      hits.push({
+        runId: r.id,
+        sessionId: r.sessionId,
+        sessionTitle: sess.title,
+        status: r.status,
+        strategy: r.strategy,
+        totalCostUsd: r.totalCostUsd,
+        startedAt: r.startedAt,
+        snippet,
+      });
+    }
+    hits.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return hits.slice(0, lim);
+  }
+
+  const sql = userId
+    ? `SELECT r."id" AS "runId", r."sessionId", s."title" AS "sessionTitle",
+              r."status", r."strategy", r."totalCostUsd", r."startedAt",
+              COALESCE(r."userInput", '') AS u,
+              COALESCE(r."finalContent", '') AS f
+         FROM "QCoreRun" r
+         JOIN "QCoreSession" s ON s."id" = r."sessionId"
+        WHERE s."userId" = $1
+          AND (r."userInput" ILIKE $2 OR r."finalContent" ILIKE $2)
+        ORDER BY r."startedAt" DESC
+        LIMIT $3`
+    : `SELECT r."id" AS "runId", r."sessionId", s."title" AS "sessionTitle",
+              r."status", r."strategy", r."totalCostUsd", r."startedAt",
+              COALESCE(r."userInput", '') AS u,
+              COALESCE(r."finalContent", '') AS f
+         FROM "QCoreRun" r
+         JOIN "QCoreSession" s ON s."id" = r."sessionId"
+        WHERE s."userId" IS NULL
+          AND (r."userInput" ILIKE $1 OR r."finalContent" ILIKE $1)
+        ORDER BY r."startedAt" DESC
+        LIMIT $2`;
+  const params = userId ? [userId, `%${trimmed}%`, lim] : [`%${trimmed}%`, lim];
+
+  const result = await pool.query(sql, params);
+  const ql = trimmed.toLowerCase();
+  return (result.rows as Array<Record<string, unknown>>).map((row) => {
+    const u = String(row.u || "");
+    const f = String(row.f || "");
+    const inUser = u.toLowerCase().includes(ql);
+    const src = inUser ? u : f;
+    const idx = src.toLowerCase().indexOf(ql);
+    const start = Math.max(0, idx - 30);
+    const snippet = src.slice(start, start + 120).replace(/\s+/g, " ").trim();
+    return {
+      runId: String(row.runId),
+      sessionId: String(row.sessionId),
+      sessionTitle: typeof row.sessionTitle === "string" ? row.sessionTitle : "",
+      status: typeof row.status === "string" ? row.status : "",
+      strategy: typeof row.strategy === "string" ? row.strategy : null,
+      totalCostUsd: typeof row.totalCostUsd === "number" ? row.totalCostUsd : null,
+      startedAt: row.startedAt instanceof Date ? row.startedAt.toISOString() : String(row.startedAt || ""),
+      snippet,
+    };
+  });
+}
+
 export async function listSessions(userId: string | null, limit = 50): Promise<SessionRow[]> {
   await ensureQCoreTables(pool);
   const lim = Math.max(1, Math.min(200, limit));

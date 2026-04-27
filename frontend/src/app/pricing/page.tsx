@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { usePricingT } from "@/lib/pricingI18n";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -161,6 +162,7 @@ function availabilityBadge(a: ModulePrice["availability"]) {
 }
 
 export default function PricingPage() {
+  const tp = usePricingT();
   const [data, setData] = useState<PricingPayload | null>(null);
   const [activePromos, setActivePromos] = useState<
     Array<{ code: string; description: string; kind: string; amount: number }>
@@ -338,7 +340,7 @@ export default function PricingPage() {
     return (
       <ProductPageShell>
         <div style={{ padding: 60, textAlign: "center", color: "#64748b" }}>
-          Загружаем прайс...
+          {tp("loading.pricing")}
         </div>
       </ProductPageShell>
     );
@@ -356,12 +358,12 @@ export default function PricingPage() {
             color: "#991b1b",
           }}
         >
-          <h2 style={{ margin: 0, marginBottom: 8 }}>Прайс недоступен</h2>
+          <h2 style={{ margin: 0, marginBottom: 8 }}>{tp("error.unavailable")}</h2>
           <p style={{ margin: 0 }}>
-            Не удалось загрузить /api/pricing. {error ? `Ошибка: ${error}` : ""}
+            /api/pricing. {error ? `${error}` : ""}
           </p>
           <p style={{ margin: 0, marginTop: 8, fontSize: 13 }}>
-            Проверь, что бэкенд запущен (npm run dev в aevion-globus-backend).
+            {tp("error.checkBackend")}
           </p>
         </div>
       </ProductPageShell>
@@ -385,7 +387,7 @@ export default function PricingPage() {
             marginBottom: 16,
           }}
         >
-          AEVION GTM · ПРАЙС-ЛИСТ
+          {tp("hero.badge")}
         </div>
         <h1
           style={{
@@ -397,7 +399,7 @@ export default function PricingPage() {
             color: "#0f172a",
           }}
         >
-          Цены AEVION
+          {tp("hero.title")}
         </h1>
         <p
           style={{
@@ -408,8 +410,7 @@ export default function PricingPage() {
             lineHeight: 1.5,
           }}
         >
-          Единая платформа: цифровая собственность, AI, финтех, потребительские продукты — 27
-          модулей под одним аккаунтом.
+          {tp("hero.subtitle")}
         </p>
       </section>
 
@@ -483,7 +484,7 @@ export default function PricingPage() {
               marginRight: 4,
             }}
           >
-            АКТИВНЫЕ ПРОМО:
+            {tp("promo.activeBanner")}
           </div>
           {activePromos.map((p) => (
             <button
@@ -508,7 +509,7 @@ export default function PricingPage() {
                 color: copiedPromo === p.code ? "#fff" : "#0d9488",
               }}
             >
-              {copiedPromo === p.code ? "✓ Скопировано" : p.code} ·{" "}
+              {copiedPromo === p.code ? tp("promo.copied") : p.code} ·{" "}
               <span style={{ opacity: 0.7 }}>
                 {p.kind === "percent" ? `−${p.amount}%` : `−$${p.amount}`}
               </span>
@@ -552,7 +553,7 @@ export default function PricingPage() {
                 boxShadow: period === p ? "0 2px 6px rgba(15,23,42,0.08)" : "none",
               }}
             >
-              {p === "monthly" ? "Месяц" : "Год (-16%)"}
+              {p === "monthly" ? tp("period.monthly") : tp("period.annual")}
             </button>
           ))}
         </div>
@@ -621,7 +622,7 @@ export default function PricingPage() {
                     borderRadius: 999,
                   }}
                 >
-                  ПОПУЛЯРНЫЙ
+                  {tp("tier.popular")}
                 </div>
               )}
               <h3
@@ -666,12 +667,12 @@ export default function PricingPage() {
                       marginLeft: 4,
                     }}
                   >
-                    /мес
+                    {tp("tier.perMonth")}
                   </span>
                 )}
                 {period === "annual" && tier.priceAnnualTotal !== null && tier.priceAnnualTotal > 0 && (
                   <div style={{ fontSize: 11, color: isHighlight ? "#94a3b8" : "#64748b", marginTop: 4 }}>
-                    {displayPrice(tier.priceAnnualTotal)} в год
+                    {displayPrice(tier.priceAnnualTotal)} {tp("tier.perYear")}
                   </div>
                 )}
               </div>
@@ -744,7 +745,7 @@ export default function PricingPage() {
                       startCheckout({ tierId: tier.id, period, seats: 1, trial: true })
                     }
                   >
-                    Попробовать 14 дней бесплатно
+                    {tp("tier.tryTrial")}
                   </button>
                   <button
                     style={{
@@ -764,7 +765,7 @@ export default function PricingPage() {
                       document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
                     }}
                   >
-                    Открыть калькулятор →
+                    {tp("tier.openCalc")}
                   </button>
                 </>
               )}
@@ -808,7 +809,7 @@ export default function PricingPage() {
                   textDecoration: "none",
                 }}
               >
-                Подробнее о {tier.name} →
+                {tp("tier.detailsLink", { name: tier.name })}
               </Link>
             </div>
           );
@@ -826,10 +827,10 @@ export default function PricingPage() {
             letterSpacing: "-0.02em",
           }}
         >
-          Готовые сборки
+          {tp("bundles.title")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
-          Несколько модулей со скидкой — берите целевой контур одной кнопкой.
+          {tp("bundles.subtitle")}
         </p>
         <div
           style={{
@@ -920,10 +921,10 @@ export default function PricingPage() {
               letterSpacing: "-0.02em",
             }}
           >
-            Что говорят клиенты
+            {tp("testimonials.title")}
           </h2>
           <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
-            Реальные команды на AEVION. Все цитаты с разрешением авторов.
+            {tp("testimonials.subtitle")}
           </p>
           <div
             style={{
@@ -1010,10 +1011,10 @@ export default function PricingPage() {
             letterSpacing: "-0.02em",
           }}
         >
-          Все модули
+          {tp("modules.title")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
-          27 продуктов AEVION. Покупаются отдельно или входят в тарифы.
+          {tp("modules.subtitle")}
         </p>
         <div
           style={{
@@ -1029,19 +1030,19 @@ export default function PricingPage() {
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 800, color: "#475569" }}>
-                    Модуль
+                    {tp("modules.colModule")}
                   </th>
                   <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 800, color: "#475569" }}>
-                    Описание
+                    {tp("modules.colDescription")}
                   </th>
                   <th style={{ padding: "10px 14px", textAlign: "center", fontWeight: 800, color: "#475569" }}>
-                    Статус
+                    {tp("modules.colStatus")}
                   </th>
                   <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 800, color: "#475569" }}>
-                    Add-on / мес
+                    {tp("modules.colAddon")}
                   </th>
                   <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 800, color: "#475569" }}>
-                    Включено в
+                    {tp("modules.colIncluded")}
                   </th>
                 </tr>
               </thead>
@@ -1126,10 +1127,10 @@ export default function PricingPage() {
             letterSpacing: "-0.02em",
           }}
         >
-          Калькулятор
+          {tp("calc.title")}
         </h2>
         <p style={{ color: "#94a3b8", margin: 0, marginBottom: 24 }}>
-          Соберите свою конфигурацию — смета пересчитывается на лету.
+          {tp("calc.subtitle")}
         </p>
         <div
           style={{
@@ -1151,7 +1152,7 @@ export default function PricingPage() {
                   marginBottom: 6,
                 }}
               >
-                ТАРИФ
+                {tp("calc.tier")}
               </label>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {data.tiers.map((t) => (
@@ -1185,7 +1186,7 @@ export default function PricingPage() {
                   marginBottom: 6,
                 }}
               >
-                ПОЛЬЗОВАТЕЛИ (SEATS)
+                {tp("calc.seats")}
               </label>
               <input
                 type="number"
@@ -1216,7 +1217,7 @@ export default function PricingPage() {
                   marginBottom: 6,
                 }}
               >
-                ПРОМО-КОД
+                {tp("calc.promo")}
               </label>
               <input
                 value={calcPromo}
@@ -1260,7 +1261,7 @@ export default function PricingPage() {
                   marginBottom: 6,
                 }}
               >
-                ДОПОЛНИТЕЛЬНЫЕ МОДУЛИ
+                {tp("calc.modules")}
               </label>
               <div
                 style={{
@@ -1321,14 +1322,14 @@ export default function PricingPage() {
                 marginBottom: 12,
               }}
             >
-              СМЕТА {quoting && "· пересчёт..."}
+              {tp("calc.estimate")} {quoting && `· ${tp("calc.recalc")}`}
             </div>
             {quote ? (
               <>
                 <div style={{ marginBottom: 16 }}>
                   {quote.lines.length === 0 ? (
                     <div style={{ color: "#94a3b8", fontSize: 13 }}>
-                      Бесплатный тариф — оплата не требуется.
+                      {tp("calc.freeBilling")}
                     </div>
                   ) : (
                     quote.lines.map((l, i) => (
@@ -1361,7 +1362,7 @@ export default function PricingPage() {
                       paddingBottom: 8,
                     }}
                   >
-                    <span>Годовая скидка</span>
+                    <span>{tp("calc.annualDiscount")}</span>
                     <span>
                       −{symbol}
                       {quote.discount.toLocaleString("ru-RU")}
@@ -1379,7 +1380,7 @@ export default function PricingPage() {
                   }}
                 >
                   <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>
-                    ИТОГО {period === "annual" ? "/ год" : "/ месяц"}
+                    {period === "annual" ? tp("calc.totalYear") : tp("calc.totalMonth")}
                   </span>
                   <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em" }}>
                     {symbol}
@@ -1413,8 +1414,8 @@ export default function PricingPage() {
                     }}
                   >
                     {checkingOut === calcTier
-                      ? "Открываем оплату..."
-                      : `Оплатить смету · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
+                      ? tp("calc.opening")
+                      : `${tp("calc.payQuote")} · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
                   </button>
                 )}
                 {calcTier === "enterprise" && (
@@ -1435,7 +1436,7 @@ export default function PricingPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                    Связаться с продажами →
+                    {tp("calc.contactSales")}
                   </Link>
                 )}
                 {quote.notes.length > 0 && (
@@ -1457,7 +1458,7 @@ export default function PricingPage() {
                 )}
               </>
             ) : (
-              <div style={{ color: "#94a3b8", fontSize: 13 }}>Выбери параметры слева...</div>
+              <div style={{ color: "#94a3b8", fontSize: 13 }}>{tp("calc.empty")}</div>
             )}
           </div>
         </div>
@@ -1474,10 +1475,10 @@ export default function PricingPage() {
             letterSpacing: "-0.02em",
           }}
         >
-          Для вашей индустрии
+          {tp("industries.title")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
-          Кейсы и рекомендованный стек для вашей вертикали.
+          {tp("industries.subtitle")}
         </p>
         <div
           style={{
@@ -1487,11 +1488,11 @@ export default function PricingPage() {
           }}
         >
           {[
-            { id: "banks", name: "Банки и финтех", grad: "linear-gradient(135deg, #1e3a8a, #3b82f6)" },
-            { id: "startups", name: "Стартапы", grad: "linear-gradient(135deg, #7c3aed, #a78bfa)" },
-            { id: "government", name: "Госсектор", grad: "linear-gradient(135deg, #065f46, #10b981)" },
-            { id: "creators", name: "Создатели контента", grad: "linear-gradient(135deg, #be185d, #ec4899)" },
-            { id: "law-firms", name: "Юр. фирмы", grad: "linear-gradient(135deg, #92400e, #f59e0b)" },
+            { id: "banks", name: tp("industries.banks"), grad: "linear-gradient(135deg, #1e3a8a, #3b82f6)" },
+            { id: "startups", name: tp("industries.startups"), grad: "linear-gradient(135deg, #7c3aed, #a78bfa)" },
+            { id: "government", name: tp("industries.government"), grad: "linear-gradient(135deg, #065f46, #10b981)" },
+            { id: "creators", name: tp("industries.creators"), grad: "linear-gradient(135deg, #be185d, #ec4899)" },
+            { id: "law-firms", name: tp("industries.lawFirms"), grad: "linear-gradient(135deg, #92400e, #f59e0b)" },
           ].map((ind) => (
             <Link
               key={ind.id}
@@ -1528,10 +1529,10 @@ export default function PricingPage() {
             letterSpacing: "-0.02em",
           }}
         >
-          AEVION vs альтернативы
+          {tp("compare.title")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
-          Что обычно собирают по кускам — у нас под одним аккаунтом и одной подпиской.
+          {tp("compare.subtitle")}
         </p>
         <div
           style={{
@@ -1643,10 +1644,10 @@ export default function PricingPage() {
             letterSpacing: "-0.02em",
           }}
         >
-          Вопросы и ответы
+          {tp("faq.title")}
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
-          Самое частое — здесь. Если нет ответа, напишите{" "}
+          {tp("faq.subtitle")}{" "}
           <a href="mailto:hello@aevion.io" style={{ color: "#0d9488", fontWeight: 700 }}>
             hello@aevion.io
           </a>
@@ -1729,7 +1730,7 @@ export default function PricingPage() {
       {trust && trust.badges.length > 0 && (
         <section style={{ marginBottom: 40 }}>
           <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, marginBottom: 12, color: "#475569" }}>
-            Compliance & технологии
+            {tp("compliance.title")}
           </h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {trust.badges.map((b) => {
@@ -1780,10 +1781,10 @@ export default function PricingPage() {
         }}
       >
         <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 6, letterSpacing: "-0.02em" }}>
-          Не готовы покупать сейчас?
+          {tp("newsletter.title")}
         </h3>
         <p style={{ color: "#94a3b8", margin: 0, marginBottom: 20, fontSize: 14 }}>
-          Подпишитесь на email-апдейты — раз в 2 недели: новые модули, кейсы клиентов, промо-коды.
+          {tp("newsletter.subtitle")}
         </p>
         {newsletterStatus === "ok" ? (
           <div
@@ -1798,7 +1799,7 @@ export default function PricingPage() {
               fontSize: 14,
             }}
           >
-            ✓ Подписка подтверждена. Спасибо!
+            {tp("newsletter.success")}
           </div>
         ) : (
           <form
@@ -1814,7 +1815,7 @@ export default function PricingPage() {
             <input
               type="email"
               required
-              placeholder="your@email.com"
+              placeholder={tp("newsletter.placeholder")}
               value={newsletterEmail}
               onChange={(e) => setNewsletterEmail(e.target.value)}
               disabled={newsletterStatus === "submitting"}
@@ -1845,7 +1846,7 @@ export default function PricingPage() {
                 color: "#fff",
               }}
             >
-              {newsletterStatus === "submitting" ? "Подписываемся..." : "Подписаться"}
+              {newsletterStatus === "submitting" ? tp("newsletter.submitting") : tp("newsletter.submit")}
             </button>
           </form>
         )}
@@ -1857,14 +1858,14 @@ export default function PricingPage() {
               color: "#fca5a5",
             }}
           >
-            Ошибка: {newsletterError}
+            {tp("newsletter.error")} {newsletterError}
           </div>
         )}
       </section>
 
       {/* Notes / FAQ light */}
       <section style={{ marginBottom: 40 }}>
-        <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, marginBottom: 12 }}>Условия</h3>
+        <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, marginBottom: 12 }}>{tp("notes.title")}</h3>
         <ul
           style={{
             margin: 0,
@@ -1879,11 +1880,11 @@ export default function PricingPage() {
           ))}
         </ul>
         <div style={{ marginTop: 16, fontSize: 13, color: "#64748b" }}>
-          Документация API:{" "}
+          {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json
           </Link>
-          . Прайс-эндпоинт:{" "}
+          . {tp("notes.endpoint")}{" "}
           <code
             style={{
               background: "#f1f5f9",

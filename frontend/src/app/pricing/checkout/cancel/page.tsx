@@ -5,8 +5,10 @@ import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
+import { usePricingT } from "@/lib/pricingI18n";
 
 function CancelInner() {
+  const tp = usePricingT();
   const sp = useSearchParams();
   const tier = sp.get("tier");
 
@@ -22,7 +24,7 @@ function CancelInner() {
     <ProductPageShell maxWidth={680}>
       <div style={{ marginBottom: 16 }}>
         <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-          ← Все тарифы
+          {tp("back.allTiers")}
         </Link>
       </div>
 
@@ -38,11 +40,10 @@ function CancelInner() {
       >
         <div style={{ fontSize: 48, marginBottom: 16 }}>↩</div>
         <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em", color: "#0f172a" }}>
-          Оплата отменена
+          {tp("checkout.cancel.title")}
         </h1>
         <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, margin: 0, marginBottom: 24, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
-          Никаких списаний не было. Если что-то не понравилось в чекауте или возникли вопросы по
-          тарифу — напишите нам, разберёмся.
+          {tp("checkout.cancel.body")}
         </p>
 
         <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
@@ -59,7 +60,7 @@ function CancelInner() {
                 fontSize: 14,
               }}
             >
-              Вернуться к {tier.charAt(0).toUpperCase() + tier.slice(1)}
+              {tp("checkout.cancel.return")} {tier.charAt(0).toUpperCase() + tier.slice(1)}
             </Link>
           )}
           <Link
@@ -74,7 +75,7 @@ function CancelInner() {
               fontSize: 14,
             }}
           >
-            Связаться с продажами
+            {tp("checkout.cancel.contact")}
           </Link>
           <Link
             href="/pricing"
@@ -88,7 +89,7 @@ function CancelInner() {
               fontSize: 14,
             }}
           >
-            Все тарифы
+            {tp("checkout.cancel.allTiers")}
           </Link>
         </div>
       </div>

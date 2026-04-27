@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { usePricingT } from "@/lib/pricingI18n";
 
 type TierId = "free" | "pro" | "business" | "enterprise";
 
@@ -32,6 +33,7 @@ const INITIAL: LeadForm = {
 const INDUSTRIES = ["Банки и финтех", "Стартапы", "Госсектор", "Создатели контента", "Юр. фирмы", "Другое"];
 
 function ContactInner() {
+  const tp = usePricingT();
   const sp = useSearchParams();
   const [form, setForm] = useState<LeadForm>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
@@ -97,7 +99,7 @@ function ContactInner() {
       <ProductPageShell maxWidth={680}>
         <div style={{ marginBottom: 16 }}>
           <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-            ← Все тарифы
+            {tp("back.allTiers")}
           </Link>
         </div>
         <div
@@ -112,14 +114,13 @@ function ContactInner() {
         >
           <div style={{ fontSize: 60, marginBottom: 16 }}>✓</div>
           <h1 style={{ fontSize: 32, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
-            Заявка принята
+            {tp("contact.success.title")}
           </h1>
           <p style={{ fontSize: 15, lineHeight: 1.6, margin: 0, marginBottom: 20, opacity: 0.92 }}>
-            Customer Success менеджер свяжется с вами в течение 24 часов на{" "}
-            <strong>{form.email}</strong>.
+            {tp("contact.success.body")} <strong>{form.email}</strong>.
           </p>
           <p style={{ fontSize: 12, opacity: 0.7, margin: 0, marginBottom: 24 }}>
-            ID заявки: <code>{success}</code>
+            {tp("contact.success.id")} <code>{success}</code>
           </p>
           <Link
             href="/pricing"
@@ -134,7 +135,7 @@ function ContactInner() {
               fontSize: 14,
             }}
           >
-            Вернуться к прайсу
+            {tp("contact.success.back")}
           </Link>
         </div>
       </ProductPageShell>
@@ -163,7 +164,7 @@ function ContactInner() {
             marginBottom: 16,
           }}
         >
-          ENTERPRISE / SALES
+          {tp("contact.badge")}
         </div>
         <h1
           style={{
@@ -175,11 +176,10 @@ function ContactInner() {
             color: "#0f172a",
           }}
         >
-          Связаться с продажами
+          {tp("contact.title")}
         </h1>
         <p style={{ fontSize: 14, color: "#475569", maxWidth: 520, margin: "0 auto" }}>
-          Расскажите о задаче — Customer Success свяжется в течение 24 часов с предложением,
-          demo и customer-stories под вашу индустрию.
+          {tp("contact.subtitle")}
         </p>
       </section>
 
@@ -194,43 +194,43 @@ function ContactInner() {
         }}
       >
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-          <Field label="Ваше имя *" required>
+          <Field label={tp("contact.field.name")} required>
             <input
               required
               value={form.name}
               onChange={(e) => update("name", e.target.value)}
-              placeholder="Айдар Ахметов"
+              placeholder={tp("contact.placeholder.name")}
               style={inputStyle}
             />
           </Field>
-          <Field label="Email *" required>
+          <Field label={tp("contact.field.email")} required>
             <input
               required
               type="email"
               value={form.email}
               onChange={(e) => update("email", e.target.value)}
-              placeholder="aydar@company.com"
+              placeholder={tp("contact.placeholder.email")}
               style={inputStyle}
             />
           </Field>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-          <Field label="Компания">
+          <Field label={tp("contact.field.company")}>
             <input
               value={form.company}
               onChange={(e) => update("company", e.target.value)}
-              placeholder="Acme Inc"
+              placeholder={tp("contact.placeholder.company")}
               style={inputStyle}
             />
           </Field>
-          <Field label="Индустрия">
+          <Field label={tp("contact.field.industry")}>
             <select
               value={form.industry}
               onChange={(e) => update("industry", e.target.value)}
               style={inputStyle}
             >
-              <option value="">— выбрать —</option>
+              <option value="">{tp("contact.placeholder.industry")}</option>
               {INDUSTRIES.map((i) => (
                 <option key={i} value={i}>
                   {i}
@@ -241,19 +241,19 @@ function ContactInner() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, marginBottom: 14 }}>
-          <Field label="Интересующий тариф">
+          <Field label={tp("contact.field.tier")}>
             <select
               value={form.tier}
               onChange={(e) => update("tier", e.target.value as TierId | "")}
               style={inputStyle}
             >
-              <option value="">— не уверен —</option>
+              <option value="">{tp("contact.placeholder.tier")}</option>
               <option value="pro">Pro</option>
               <option value="business">Business</option>
               <option value="enterprise">Enterprise</option>
             </select>
           </Field>
-          <Field label="Кол-во пользователей">
+          <Field label={tp("contact.field.seats")}>
             <input
               type="number"
               min={1}
@@ -265,11 +265,11 @@ function ContactInner() {
           </Field>
         </div>
 
-        <Field label="Что нужно решить?">
+        <Field label={tp("contact.field.message")}>
           <textarea
             value={form.message}
             onChange={(e) => update("message", e.target.value)}
-            placeholder="Например: нужна цифровая подпись + аудит для 50 юристов, on-prem развёртывание в KZ"
+            placeholder={tp("contact.placeholder.message")}
             rows={5}
             style={{
               ...inputStyle,
@@ -311,10 +311,10 @@ function ContactInner() {
               color: "#fff",
             }}
           >
-            {submitting ? "Отправляем..." : "Отправить заявку"}
+            {submitting ? tp("contact.submitting") : tp("contact.submit")}
           </button>
           <span style={{ fontSize: 12, color: "#64748b" }}>
-            Никакого спама. Только Customer Success → одно письмо.
+            {tp("contact.noSpam")}
           </span>
         </div>
       </form>

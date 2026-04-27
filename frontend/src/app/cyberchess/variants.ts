@@ -299,6 +299,68 @@ export function buildArmyFen(whiteSlots: ("Q"|"R"|"B"|"N")[], blackSlots: ("Q"|"
   };
 }
 
+// Daily variant — deterministic per day, picks from non-standard variants
+export function dailyVariant(): VariantId {
+  const days = Math.floor(Date.now() / 86400000);
+  let h = days * 2654435761; h = (h ^ (h >>> 16)) >>> 0;
+  // Skip "standard" — daily challenge should always be non-standard
+  const pool = VARIANTS.filter(v => v.id !== "standard").map(v => v.id);
+  return pool[h % pool.length];
+}
+
+// Random variant from non-standard pool
+export function randomVariant(): VariantId {
+  const pool = VARIANTS.filter(v => v.id !== "standard").map(v => v.id);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Per-variant stats
+export type VariantStats = Record<VariantId, { w: number; l: number; d: number }>;
+const VS_KEY = "aevion_variant_stats_v1";
+
+export function ldVariantStats(): VariantStats {
+  try { const s = localStorage.getItem(VS_KEY); if (!s) return makeEmptyStats(); const r = JSON.parse(s); return { ...makeEmptyStats(), ...r } } catch { return makeEmptyStats() }
+}
+export function svVariantStats(s: VariantStats) {
+  try { localStorage.setItem(VS_KEY, JSON.stringify(s)) } catch {}
+}
+function makeEmptyStats(): VariantStats {
+  const out: any = {};
+  for (const v of VARIANTS) out[v.id] = { w: 0, l: 0, d: 0 };
+  return out;
+}
+export function recordVariantResult(stats: VariantStats, variant: VariantId, result: "w" | "l" | "d"): VariantStats {
+  return { ...stats, [variant]: { ...stats[variant], [result]: stats[variant][result] + 1 } };
+}
+
+// Daily variant state — track if today's daily was won (for x2 Chessy bonus once per day)
+type DailyVariantState = { v: 1; date: string; variant: VariantId; played: boolean; won: boolean };
+const DV_KEY = "aevion_daily_variant_v1";
+
+export function ldDailyVariantState(): DailyVariantState | null {
+  try { const s = localStorage.getItem(DV_KEY); if (!s) return null; const r = JSON.parse(s); return r?.v === 1 ? r : null } catch { return null }
+}
+export function svDailyVariantState(s: DailyVariantState) {
+  try { localStorage.setItem(DV_KEY, JSON.stringify(s)) } catch {}
+}
+function todayKey() {
+  const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+export function getDailyVariantState(): DailyVariantState {
+  const today = todayKey();
+  const prev = ldDailyVariantState();
+  if (prev && prev.date === today) return prev;
+  const fresh: DailyVariantState = { v: 1, date: today, variant: dailyVariant(), played: false, won: false };
+  svDailyVariantState(fresh);
+  return fresh;
+}
+export function markDailyVariantPlayed(won: boolean): DailyVariantState {
+  const cur = getDailyVariantState();
+  const next = { ...cur, played: true, won: cur.won || won };
+  svDailyVariantState(next);
+  return next;
+}
+
 // Preset armies — curated combinations to spark ideas
 export const ARMY_PRESETS: { name: string; emoji: string; slots: ("Q"|"R"|"B"|"N")[]; desc: string }[] = [
   { name: "FIDE Standard", emoji: "♟", slots: ["R","R","B","B","N","N","Q"], desc: "Классика" },

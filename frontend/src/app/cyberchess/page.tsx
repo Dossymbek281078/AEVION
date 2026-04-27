@@ -17,7 +17,7 @@ import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
-import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, type VariantId, type ArmySlot } from "./variants";
+import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
 
 const FILES = "abcdefgh";
@@ -485,6 +485,11 @@ export default function CyberChessPage(){
   const[builderWhite,sBuilderWhite]=useState<("Q"|"R"|"B"|"N")[]>(["R","R","B","B","N","N","Q"]);
   const[builderBlack,sBuilderBlack]=useState<("Q"|"R"|"B"|"N")[]>(["R","R","B","B","N","N","Q"]);
   const[manualArmyFen,sManualArmyFen]=useState<string>("");
+  // Daily Variant Challenge + per-variant stats
+  const[variantStats,sVariantStats]=useState<VariantStats>(()=>(typeof window!=="undefined"?ldVariantStats():{} as VariantStats));
+  useEffect(()=>{svVariantStats(variantStats)},[variantStats]);
+  const[dailyVariantInfo,sDailyVariantInfo]=useState(()=>(typeof window!=="undefined"?getDailyVariantState():null));
+  const variantResultLearnedRef=useRef<string|null>(null);
   // Daily Brilliancy Hunt (killer #10)
   const[showBrilliancy,sShowBrilliancy]=useState(false);
   const[brilliancyHunt,sBrilliancyHunt]=useState<BrilliancyHunt|null>(null);
@@ -1263,6 +1268,29 @@ export default function CyberChessPage(){
       addChessy(8,`🤝 ничья с призраком ${activeGhost.name}`);
     }
   },[over,ghostMode,activeGhost,fenHist.length,addChessy]);
+
+  /* ── Per-variant stats + Daily Variant Challenge bonus ── */
+  useEffect(()=>{
+    if(!over||hotseat)return;
+    const key=`${variant}-${fenHist.length}-${over}`;
+    if(variantResultLearnedRef.current===key)return;
+    variantResultLearnedRef.current=key;
+    let res:"w"|"l"|"d";
+    if(over.includes("You win")||over.includes("timed out")||over.includes("победа")||over.includes("ВЗОШЁЛ")||over.includes("взошёл"))res="w";
+    else if(over.includes("AI wins")||over.includes("Checkmate — AI")||over.includes("поражение")||over.includes("resigned"))res="l";
+    else res="d";
+    sVariantStats(s=>recordVariantResult(s,variant,res));
+    // Daily Variant Challenge: if today's daily matches current variant, award bonus
+    const today=getDailyVariantState();
+    if(today.variant===variant&&!today.played){
+      const updated=markDailyVariantPlayed(res==="w");
+      sDailyVariantInfo(updated);
+      if(res==="w"){
+        const meta=VARIANTS.find(v=>v.id===variant);
+        setTimeout(()=>addChessy(50,`☀ Daily Challenge: ${meta?.name||variant}`),700);
+      }
+    }
+  },[over,variant,fenHist.length,hotseat,addChessy]);
 
   /* ── Tournament: process result on game over, advance bracket ── */
   useEffect(()=>{
@@ -2385,10 +2413,23 @@ export default function CyberChessPage(){
                 style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
                   border:"1px solid #fb923c",color:"#9a3412"}}>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>🎲 Variants <Badge tone="gold" size="xs">new</Badge></span>
+                  <span>🎲 Variants <Badge tone="gold" size="xs">{VARIANTS.length}</Badge></span>
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
                     {variant==="standard"?"Fischer 960 · Asymmetric · Diceblade":VARIANTS.find(v=>v.id===variant)?.name||variant}
                   </span>
+                </div>
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>{
+                const r=randomVariant();
+                sVariant(r);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+                if(r==="asymmetric")sManualArmyFen("");
+                setTimeout(()=>newG(),50);
+                showToast(`🎰 Surprise Me: ${VARIANTS.find(v=>v.id===r)?.name}`,"success");
+              }} style={{flex:"1 1 160px",background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
+                border:"1px solid #c4b5fd",color:CC.accent}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>🎰 Surprise Me</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>случайный режим</span>
                 </div>
               </Btn>
               {/* AI Rival — only visible once unlocked via shop */}
@@ -2408,6 +2449,33 @@ export default function CyberChessPage(){
               </Btn>}
             </div>
           </Card>
+
+          {/* ─── Daily Variant Challenge (full-width) ─── */}
+          {dailyVariantInfo&&(()=>{
+            const dv=dailyVariantInfo;
+            const meta=VARIANTS.find(v=>v.id===dv.variant);
+            if(!meta)return null;
+            const done=dv.played&&dv.won;
+            return <button onClick={()=>{
+              sVariant(dv.variant);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+              if(dv.variant==="asymmetric")sManualArmyFen("");
+              setTimeout(()=>newG(),50);
+              showToast(`☀ Daily Challenge: ${meta.name}`,"info");
+            }} className="cc-focus-ring"
+              style={{padding:SPACE[4],borderRadius:RADIUS.lg,
+                border:done?"1px solid #a7f3d0":"1px solid #c4b5fd",
+                background:done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",
+                cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3],
+                boxShadow:SHADOW.sm,transition:`all ${MOTION.base} ${MOTION.ease}`}}>
+              <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>{done?"✅":meta.emoji}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10,fontWeight:900,color:done?"#065f46":"#5b21b6",letterSpacing:1,textTransform:"uppercase" as const}}>{done?"Daily Challenge выполнен":"Daily Variant Challenge"}</div>
+                <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:2}}>{meta.name} · <span style={{color:CC.accent}}>{meta.shortDesc}</span></div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{done?"Возвращайся завтра":`+50 Chessy за победу · ещё ${24-new Date().getHours()} ч`}</div>
+              </div>
+              {!done&&<Badge tone="accent" size="md">▶ Принять</Badge>}
+            </button>;
+          })()}
 
           {/* ─── Daily puzzle (full-width) ─── */}
           {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
@@ -4834,6 +4902,7 @@ export default function CyberChessPage(){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2]}}>
           {VARIANTS.map(v=>{
             const isActive=variant===v.id;
+            const isDaily=dailyVariantInfo?.variant===v.id&&!dailyVariantInfo.played;
             const tagColor=v.tag==="Theory-free"?CC.brand:v.tag==="Asymmetric"?CC.accent:v.tag==="Chaos"?CC.danger:CC.textDim;
             return <button key={v.id} onClick={()=>{
               sVariant(v.id);sShowVariants(false);
@@ -4847,7 +4916,10 @@ export default function CyberChessPage(){
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[1]}}>
                 <div style={{fontSize:28}}>{v.emoji}</div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:900}}>{v.name}</div>
+                  <div style={{fontSize:15,fontWeight:900,display:"flex",alignItems:"center",gap:6}}>
+                    {v.name}
+                    {isDaily&&<span title="Daily Challenge — +50 Chessy за победу" style={{fontSize:10,fontWeight:900,color:"#fff",background:"linear-gradient(90deg,#7c3aed,#a78bfa)",padding:"1px 6px",borderRadius:RADIUS.full}}>⭐ DAILY +50</span>}
+                  </div>
                   <div style={{fontSize:11,color:CC.textDim}}>{v.shortDesc}</div>
                 </div>
                 {isActive&&<Badge tone="gold" size="xs">active</Badge>}
@@ -4857,6 +4929,18 @@ export default function CyberChessPage(){
                 <span style={{fontSize:10,fontWeight:800,color:tagColor,background:`${tagColor}1a`,padding:"2px 6px",borderRadius:RADIUS.full}}>{v.tag}</span>
                 {v.notes?.map((n,i)=><span key={i} style={{fontSize:10,color:CC.textDim,fontStyle:"italic"}}>· {n}</span>)}
               </div>
+              {(()=>{
+                const vs=variantStats[v.id]||{w:0,l:0,d:0};
+                const total=vs.w+vs.l+vs.d;
+                if(total===0)return null;
+                const wr=Math.round(vs.w/total*100);
+                return <div style={{marginTop:SPACE[2],display:"flex",gap:8,fontSize:10,color:CC.textDim,alignItems:"center"}}>
+                  <span><b style={{color:CC.brand}}>{vs.w}W</b></span>
+                  <span><b style={{color:CC.danger}}>{vs.l}L</b></span>
+                  <span>{vs.d}D</span>
+                  <span style={{color:wr>=50?CC.brand:CC.danger,fontWeight:700}}>· {wr}% WR</span>
+                </div>;
+              })()}
             </button>;
           })}
         </div>

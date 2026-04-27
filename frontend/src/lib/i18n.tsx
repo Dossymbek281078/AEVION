@@ -1741,6 +1741,17 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "heatmap.legendIn": "in",
   "heatmap.legendOut": "out",
   "heatmap.topDay": "Top day: {date} · {amount}",
+
+  "voice.startHint": "Tap to speak — try \"balance\", \"open Earn\", \"forecast\"",
+  "voice.stopHint": "Listening… tap to stop",
+  "voice.listening": "I'm listening",
+  "voice.unsupported": "Voice control isn't supported in this browser",
+  "voice.balanceReply": "Your balance is {amount}.",
+  "voice.tabReply": "Opened {tab}.",
+  "voice.scrollReply": "Scrolling there.",
+  "voice.notFound": "Couldn't find that section.",
+  "voice.unknownReply": "Heard \"{heard}\" — not a known command.",
+  "voice.errorReply": "Voice error: {kind}.",
 };
 
 const BANK_EXTRA_RU: Record<string, string> = {
@@ -3155,6 +3166,17 @@ const BANK_EXTRA_RU: Record<string, string> = {
   "heatmap.legendIn": "\u043f\u0440\u0438\u0445\u043e\u0434",
   "heatmap.legendOut": "\u0440\u0430\u0441\u0445\u043e\u0434",
   "heatmap.topDay": "\u0422\u043e\u043f-\u0434\u0435\u043d\u044c: {date} \u00b7 {amount}",
+
+  "voice.startHint": "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0438 \u0433\u043e\u0432\u043e\u0440\u0438\u0442\u0435 \u2014 \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u00ab\u0431\u0430\u043b\u0430\u043d\u0441\u00bb, \u00ab\u043e\u0442\u043a\u0440\u043e\u0439 Earn\u00bb, \u00ab\u043f\u0440\u043e\u0433\u043d\u043e\u0437\u00bb",
+  "voice.stopHint": "\u0421\u043b\u0443\u0448\u0430\u044e\u2026 \u043d\u0430\u0436\u043c\u0438\u0442\u0435, \u0447\u0442\u043e\u0431\u044b \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c",
+  "voice.listening": "\u0421\u043b\u0443\u0448\u0430\u044e",
+  "voice.unsupported": "\u0413\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0439 \u0432\u0432\u043e\u0434 \u043d\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0432 \u044d\u0442\u043e\u043c \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435",
+  "voice.balanceReply": "\u0412\u0430\u0448 \u0431\u0430\u043b\u0430\u043d\u0441 \u2014 {amount}.",
+  "voice.tabReply": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: {tab}.",
+  "voice.scrollReply": "\u041f\u0440\u043e\u043a\u0440\u0443\u0447\u0438\u0432\u0430\u044e.",
+  "voice.notFound": "\u041d\u0435 \u043d\u0430\u0448\u0451\u043b \u0442\u0430\u043a\u043e\u0439 \u0441\u0435\u043a\u0446\u0438\u0438.",
+  "voice.unknownReply": "\u0423\u0441\u043b\u044b\u0448\u0430\u043b \u00ab{heard}\u00bb \u2014 \u043d\u0435 \u0437\u043d\u0430\u044e \u0442\u0430\u043a\u043e\u0439 \u043a\u043e\u043c\u0430\u043d\u0434\u044b.",
+  "voice.errorReply": "\u041e\u0448\u0438\u0431\u043a\u0430 \u0433\u043e\u043b\u043e\u0441\u0430: {kind}.",
 };
 
 const BANK_EXTRA_KK: Record<string, string> = {
@@ -4569,6 +4591,17 @@ const BANK_EXTRA_KK: Record<string, string> = {
   "heatmap.legendIn": "\u043a\u0456\u0440\u0456\u0441",
   "heatmap.legendOut": "\u0448\u044b\u0493\u044b\u0441",
   "heatmap.topDay": "\u0422\u043e\u043f \u043a\u04af\u043d: {date} \u00b7 {amount}",
+
+  "voice.startHint": "\u0421\u04e9\u0439\u043b\u0435\u0443 \u04af\u0448\u0456\u043d \u0431\u0430\u0441\u044b\u04a3\u044b\u0437 \u2014 \u00ab\u0431\u0430\u043b\u0430\u043d\u0441\u00bb, \u00abEarn \u0430\u0448\u0443\u00bb, \u00ab\u0431\u043e\u043b\u0436\u0430\u043c\u00bb \u0441\u04e9\u0437\u0434\u0435\u0440\u0456\u043d \u043a\u04e9\u0440\u0456\u04a3\u0456\u0437",
+  "voice.stopHint": "\u0422\u044b\u04a3\u0434\u0430\u0443\u0434\u0430\u043c\u044b\u043d\u2026 \u0442\u043e\u049b\u0442\u0430\u0442\u0443 \u04af\u0448\u0456\u043d \u0431\u0430\u0441\u044b\u04a3\u044b\u0437",
+  "voice.listening": "\u0422\u044b\u04a3\u0434\u0430\u0443\u0434\u0430\u043c\u044b\u043d",
+  "voice.unsupported": "\u0411\u04b1\u043b \u0431\u0440\u0430\u0443\u0437\u0435\u0440 \u0434\u0430\u0443\u044b\u0441\u0442\u044b\u049b \u0431\u0430\u0441\u049b\u0430\u0440\u0443\u0434\u044b \u049b\u043e\u043b\u0434\u0430\u043c\u0430\u0439\u0434\u044b",
+  "voice.balanceReply": "\u0411\u0430\u043b\u0430\u043d\u0441\u044b\u04a3\u044b\u0437 \u2014 {amount}.",
+  "voice.tabReply": "\u0410\u0448\u044b\u043b\u0434\u044b: {tab}.",
+  "voice.scrollReply": "\u0410\u0439\u043d\u0430\u043b\u0434\u044b\u0440\u0430\u043c\u044b\u043d.",
+  "voice.notFound": "\u0411\u04b1\u043b \u0431\u04e9\u043b\u0456\u043c\u0434\u0456 \u0442\u0430\u043f\u043f\u0430\u0434\u044b\u043c.",
+  "voice.unknownReply": "\u00ab{heard}\u00bb \u0435\u0441\u0442\u0456\u0434\u0456\u043c \u2014 \u0431\u04b1\u043b \u0431\u0435\u043b\u0433\u0456\u043b\u0456 \u043a\u043e\u043c\u0430\u043d\u0434\u0430 \u0435\u043c\u0435\u0441.",
+  "voice.errorReply": "\u0414\u0430\u0443\u044b\u0441 \u049b\u0430\u0442\u0435\u0441\u0456: {kind}.",
 };
 
 Object.assign(translations.en, BANK_EXTRA_EN);

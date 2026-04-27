@@ -43,6 +43,7 @@ import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { TierProgression } from "./_components/TierProgression";
 import { TimeTravel } from "./_components/TimeTravel";
+import { VoiceCommand } from "./_components/VoiceCommand";
 import { GiftMode } from "./_components/GiftMode";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
@@ -444,6 +445,11 @@ function BankContent() {
           <AdvisorChat account={account} me={me} operations={operations} notify={notify} />
           <FinancialCopilot account={account} operations={operations} notify={notify} />
           <HelpMenu accountId={account.id} notify={notify} />
+          <VoiceCommand
+            account={account}
+            setActiveTab={setActiveTab}
+            notify={notify}
+          />
           <MobileTabBar />
         </EcosystemDataProvider>
       ) : null}

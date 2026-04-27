@@ -1021,7 +1021,7 @@ export default function BureauPage() {
           </div>
 
           {/* filter bar */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, marginBottom: 8 }}>
             <div style={{ position: "relative" }}>
               <input
                 ref={searchRef}
@@ -1061,6 +1061,42 @@ export default function BureauPage() {
               <option value="popular">Most verified</option>
               <option value="az">A → Z</option>
             </select>
+          </div>
+
+          {/* Suggested queries — teach users what works in the search box. */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 14, fontSize: 11, color: "#64748b" }}>
+            <span>Try:</span>
+            {(
+              [
+                { label: "music", q: "", k: "music" as KindKey, hint: "Filter by type" },
+                { label: "code", q: "", k: "code" as KindKey, hint: "Filter by type" },
+                { label: "Kazakhstan", q: "Kazakhstan", k: "" as KindKey, hint: "Search by country" },
+                { label: "popular", q: "", k: "" as KindKey, s: "popular" as SortMode, hint: "Sort by verifies" },
+              ] as Array<{ label: string; q: string; k: KindKey; s?: SortMode; hint: string }>
+            ).map((sug) => (
+              <button
+                key={sug.label}
+                type="button"
+                onClick={() => {
+                  setQ(sug.q);
+                  setKind(sug.k);
+                  if (sug.s) setSort(sug.s);
+                }}
+                title={sug.hint}
+                style={{ padding: "3px 9px", borderRadius: 999, border: "1px solid rgba(15,23,42,0.1)", background: "#f8fafc", color: "#334155", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+              >
+                {sug.label}
+              </button>
+            ))}
+            {(q || kind || sort !== "recent") && (
+              <button
+                type="button"
+                onClick={() => { setQ(""); setKind(""); setSort("recent"); }}
+                style={{ padding: "3px 9px", borderRadius: 999, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", color: "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+              >
+                Reset
+              </button>
+            )}
           </div>
 
           {/* cards */}

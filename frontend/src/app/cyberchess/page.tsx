@@ -16,6 +16,7 @@ import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
+import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -2402,6 +2403,13 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:6,marginTop:SPACE[2],flexWrap:"wrap"}}>
             <Btn size="sm" variant="secondary" icon={<Icon.Flip width={14} height={14}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
             <Btn size="sm" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
+            <Btn size="sm" variant="secondary" onClick={async()=>{
+              try{
+                const text=await whisperAndSpeak(game.fen(),evalCp,evalMate);
+                showToast(`🔊 ${text}`,"info");
+              }catch{showToast("Голос недоступен","error")}
+            }} title="Chessy объяснит позицию голосом"
+              style={{background:"linear-gradient(135deg,#f0fdfa,#ccfbf1)",color:"#115e59",borderColor:"#5eead4"}}>🔊 Whisper</Btn>
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}

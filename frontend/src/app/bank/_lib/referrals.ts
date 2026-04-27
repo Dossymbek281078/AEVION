@@ -110,7 +110,9 @@ export function computeReferralStats(accountId: string, origin: string): Referra
   const next = nextTier(tier);
   const nextThreshold = next ? TIER_THRESHOLDS[TIERS.indexOf(next)] : null;
   const invitesToNextTier = nextThreshold ? Math.max(0, nextThreshold - invited) : 0;
-  const shareUrl = `${origin.replace(/\/$/, "")}/auth?ref=${code}`;
+  // Prefer the marketing landing /bank/r/[code] over /auth?ref= — it tells
+  // the invitee what AEVION is *before* they hit the auth wall.
+  const shareUrl = `${origin.replace(/\/$/, "")}/bank/r/${code}?tier=${tier}`;
   return {
     code,
     shareUrl,

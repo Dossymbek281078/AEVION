@@ -3,7 +3,7 @@
 // (twin kings = «royal queen», diceblade = move filter, reinforcement)
 // проверяются в page.tsx как лёгкие хуки поверх стандартного движка.
 
-export type VariantId = "standard" | "fischer960" | "asymmetric" | "twinkings" | "diceblade" | "reinforcement" | "atomic" | "kingofthehill" | "threecheck" | "knightriders" | "pawnapocalypse";
+export type VariantId = "standard" | "fischer960" | "asymmetric" | "twinkings" | "diceblade" | "reinforcement" | "atomic" | "kingofthehill" | "threecheck" | "knightriders" | "pawnapocalypse" | "powerdrop";
 
 export type Variant = {
   id: VariantId;
@@ -115,6 +115,15 @@ export const VARIANTS: Variant[] = [
     longDesc: "Только король + ферзь + 2 ладьи + ДВА ряда пешек (горизонтали 2-3 для белых, 6-7 для чёрных). Никаких коней или слонов. Эндшпиль с первого хода — пешечная война.",
     tag: "Theory-free",
     notes: ["Прорывы пешками — вся стратегия", "Превращения часты"],
+  },
+  {
+    id: "powerdrop",
+    name: "Power Drop",
+    emoji: "⚡",
+    shortDesc: "Дроп фигур из пула каждые 5 ходов",
+    longDesc: "Каждое взятие пополняет твой пул. Раз в 5 полуходов можешь дропнуть фигуру из пула на пустую клетку (вместо обычного хода). Король не дропается. Пешка не на 1/8. Ресурсный менеджмент Crazyhouse в стратегическом темпе.",
+    tag: "Chaos",
+    notes: ["Drop каждые 5 ходов", "Захваченные ферзи — самый ценный ресурс"],
   },
 ];
 

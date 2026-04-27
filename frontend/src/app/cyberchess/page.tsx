@@ -18,6 +18,7 @@ import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } f
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, type VariantId, type ArmySlot } from "./variants";
+import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -472,6 +473,11 @@ export default function CyberChessPage(){
   const[checksByWhite,sChecksByWhite]=useState(0);
   const[checksByBlack,sChecksByBlack]=useState(0);
   const lastCheckBkRef=useRef(-1);
+  // Power Drop pool
+  const[dropPool,sDropPool]=useState<DropPool>(EMPTY_POOL);
+  const[dropPickerOpen,sDropPickerOpen]=useState(false);
+  const[selectedDropPiece,sSelectedDropPiece]=useState<"p"|"n"|"b"|"r"|"q"|null>(null);
+  const lastCaptureBkRef=useRef(-1);
   // Daily Brilliancy Hunt (killer #10)
   const[showBrilliancy,sShowBrilliancy]=useState(false);
   const[brilliancyHunt,sBrilliancyHunt]=useState<BrilliancyHunt|null>(null);
@@ -1180,6 +1186,20 @@ export default function CyberChessPage(){
     }catch{}
   },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast]);
 
+  /* ── Variant: Power Drop — capture goes to pool ── */
+  useEffect(()=>{
+    if(variant!=="powerdrop"||hist.length===0)return;
+    if(lastCaptureBkRef.current===bk)return;
+    lastCaptureBkRef.current=bk;
+    try{
+      const verbose=game.history({verbose:true});
+      const last=verbose[verbose.length-1];
+      if(!last||!last.captured)return;
+      const capturer=last.color as "w"|"b";
+      sDropPool(p=>addToPool(p,last.captured!,capturer));
+    }catch{}
+  },[bk,variant,hist.length,game]);
+
   /* ── Variant: Reinforcement — spawn captured piece every 10 plies ── */
   useEffect(()=>{
     if(variant!=="reinforcement"||over||!on)return;
@@ -1551,6 +1571,25 @@ export default function CyberChessPage(){
       return;
     }
 
+    // ── POWER DROP: drop picker active → click on empty square = drop ──
+    if(variant==="powerdrop"&&dropPickerOpen&&selectedDropPiece&&game.turn()===pCol){
+      if(!isDropLegal(dropPool,selectedDropPiece,pCol,sq,game.fen())){
+        showToast("Нельзя дропать сюда","error");return;
+      }
+      const newFen=applyDrop(game.fen(),selectedDropPiece,pCol,sq);
+      try{
+        const ng=new Chess(newFen);setGame(ng);sBk(k=>k+1);
+        sFenHist(h=>[...h,newFen]);
+        sHist(h=>[...h,`@${selectedDropPiece.toUpperCase()}${sq}`]);
+        sDropPool(p=>removeFromPool(p,selectedDropPiece,pCol));
+        sDropPickerOpen(false);sSelectedDropPiece(null);
+        sLm(null);sSel(null);sVm(new Set());
+        snd("move");
+        showToast(`⚡ Drop: ${POOL_GLYPH[pCol==="w"?selectedDropPiece.toUpperCase():selectedDropPiece]} → ${sq}`,"success");
+      }catch{showToast("Drop failed","error")}
+      return;
+    }
+
     // ── NORMAL MODE (your turn) ──
     if(think)return;
     const p=game.get(sq);
@@ -1588,6 +1627,7 @@ export default function CyberChessPage(){
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
     reinfLastMoveRef.current=0;
     sChecksByWhite(0);sChecksByBlack(0);lastCheckBkRef.current=-1;
+    sDropPool(EMPTY_POOL);sDropPickerOpen(false);sSelectedDropPiece(null);lastCaptureBkRef.current=-1;
     // Roll initial die for diceblade
     if(variant==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
     const variantLabel=variant==="standard"?"":` · ${VARIANTS.find(v=>v.id===variant)?.name||""}`;
@@ -2918,7 +2958,53 @@ export default function CyberChessPage(){
                 <div style={{flex:1}}/>
                 <span style={{fontSize:11}}>💀 пешечная война</span>
               </>}
+              {variant==="powerdrop"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11}}>след. дроп через <b>{5-(hist.length%5)}</b> ходов</span>
+              </>}
             </div>
+            {variant==="powerdrop"&&(()=>{
+              const myPool=dropPool[pCol];
+              const oppPool=dropPool[pCol==="w"?"b":"w"];
+              const canDrop=isDropAvailable(hist.length)&&game.turn()===pCol&&!over&&poolSize(dropPool,pCol)>0;
+              return <div style={{marginTop:6,paddingTop:6,borderTop:`1px solid #fb923c`}}>
+                <div style={{display:"flex",gap:SPACE[2],alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,fontWeight:900,color:"#9a3412",letterSpacing:0.5}}>ТВОЙ ПУЛ:</span>
+                  {(["q","r","b","n","p"] as const).map(t=>{
+                    const cnt=myPool[t];
+                    if(cnt===0)return null;
+                    const sym=pCol==="w"?t.toUpperCase():t;
+                    const isSel=selectedDropPiece===t&&dropPickerOpen;
+                    return <button key={t} onClick={()=>{
+                      if(!canDrop){showToast(`Drop доступен через ${5-(hist.length%5)} ходов`,"info");return}
+                      sSelectedDropPiece(t);sDropPickerOpen(true);
+                      showToast(`Кликни на пустую клетку чтобы дропнуть ${POOL_GLYPH[sym]}`,"info");
+                    }} style={{
+                      display:"inline-flex",alignItems:"center",gap:3,
+                      padding:"3px 8px",borderRadius:RADIUS.sm,
+                      background:isSel?CC.gold:canDrop?CC.surface1:CC.surface2,
+                      border:isSel?`2px solid ${CC.text}`:`1px solid ${CC.border}`,
+                      cursor:canDrop?"pointer":"not-allowed",
+                      opacity:canDrop?1:0.5,
+                      fontSize:14,fontWeight:900,
+                    }}>
+                      <span>{POOL_GLYPH[sym]}</span>
+                      <span style={{fontSize:11}}>×{cnt}</span>
+                    </button>;
+                  })}
+                  {poolSize(dropPool,pCol)===0&&<span style={{fontSize:11,color:CC.textDim,fontStyle:"italic"}}>пуст — захвати фигуру</span>}
+                  {dropPickerOpen&&<Btn size="xs" variant="ghost" onClick={()=>{sDropPickerOpen(false);sSelectedDropPiece(null)}}>✕ отмена</Btn>}
+                </div>
+                {poolSize(dropPool,pCol==="w"?"b":"w")>0&&<div style={{display:"flex",gap:SPACE[1],alignItems:"center",marginTop:4,opacity:0.7}}>
+                  <span style={{fontSize:10,color:"#9a3412"}}>пул соперника:</span>
+                  {(["q","r","b","n","p"] as const).map(t=>{
+                    const cnt=oppPool[t];if(cnt===0)return null;
+                    const sym=pCol==="w"?t:t.toUpperCase();
+                    return <span key={t} style={{fontSize:13}}>{POOL_GLYPH[sym]}×{cnt}</span>;
+                  })}
+                </div>}
+              </div>;
+            })()}
           </div>}
           {/* Post-game accuracy card (auto-appears once Stockfish finishes scoring each ply) */}
           {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&(()=>{

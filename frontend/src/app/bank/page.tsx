@@ -54,6 +54,7 @@ import { ThemeStyles, ThemeToggle } from "./_components/ThemeToggle";
 import { TierProgression } from "./_components/TierProgression";
 import { TimeTravel } from "./_components/TimeTravel";
 import { TripTracker } from "./_components/TripTracker";
+import { VirtualCards } from "./_components/VirtualCards";
 import { VoiceCommand } from "./_components/VoiceCommand";
 import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
@@ -510,6 +511,13 @@ function BankContent() {
 
           <TabPanel id="security" active={activeTab}>
             <BiometricCard email={me.email} notify={notify} />
+            <div id="bank-anchor-vcards" style={{ scrollMarginTop: 20 }}>
+              <VirtualCards
+                myAccountId={account.id}
+                operations={operations}
+                notify={notify}
+              />
+            </div>
             <ActivityTimeline myId={account.id} operations={operations} />
             <div id="bank-anchor-audit-unified" style={{ scrollMarginTop: 20 }}>
               <UnifiedAuditFeed accountId={account.id} operations={operations} notify={notify} />

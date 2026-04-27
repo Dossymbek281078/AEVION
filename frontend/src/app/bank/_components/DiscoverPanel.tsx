@@ -58,6 +58,7 @@ const FEATURES: FeatureRef[] = [
   { id: "referrals", cluster: "grow", emoji: "🤝" },
 
   { id: "biometric", cluster: "security", emoji: "🔐" },
+  { id: "vcards", cluster: "security", anchor: "bank-anchor-vcards", emoji: "💳", fresh: true },
   { id: "activity", cluster: "security", emoji: "📋" },
   { id: "audit", cluster: "security", anchor: "bank-anchor-audit-unified", emoji: "✓" },
   { id: "devices", cluster: "security", emoji: "💻" },

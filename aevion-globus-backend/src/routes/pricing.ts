@@ -17,6 +17,7 @@ import {
 } from "../data/pricing";
 import { projects } from "../data/projects";
 import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
+import { ROADMAP, PHASE_META } from "../data/roadmap";
 
 export const pricingRouter = Router();
 
@@ -367,6 +368,31 @@ pricingRouter.get("/leads", (req, res) => {
     console.error("[pricing/leads] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
+});
+
+/**
+ * GET /api/pricing/roadmap
+ * Публичный roadmap по 27 модулям: timeline, фазы, прогресс.
+ * Обогащает каждую запись данными из projects.ts (name, code, description).
+ */
+pricingRouter.get("/roadmap", (_req, res) => {
+  const items = ROADMAP.map((r) => {
+    const p = projects.find((x) => x.id === r.id);
+    return {
+      ...r,
+      name: p?.name ?? r.id,
+      code: p?.code ?? r.id.toUpperCase(),
+      description: p?.description ?? "",
+      tags: p?.tags ?? [],
+    };
+  }).sort((a, b) => a.targetSortKey - b.targetSortKey);
+
+  res.json({
+    items,
+    total: items.length,
+    phases: PHASE_META,
+    generatedAt: new Date().toISOString(),
+  });
 });
 
 /**

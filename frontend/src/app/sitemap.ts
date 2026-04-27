@@ -18,6 +18,7 @@ const STATIC_ROUTES = [
   "/planet",
   "/pricing",
   "/pricing/contact",
+  "/pricing/roadmap",
   "/privacy",
   "/qcoreai",
   "/qright",

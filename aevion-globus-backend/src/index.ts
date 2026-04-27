@@ -179,6 +179,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/checkout/subscriptions/count": {
         get: { summary: "Total provisioned subscriptions count" },
       },
+      "/api/pricing/roadmap": {
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
+      },
     },
   });
 });

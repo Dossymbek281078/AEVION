@@ -1884,6 +1884,12 @@ export default function PricingPage() {
           ))}
         </ul>
         <div style={{ marginTop: 16, fontSize: 13, color: "#64748b" }}>
+          <Link
+            href="/pricing/roadmap"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Public roadmap →
+          </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json

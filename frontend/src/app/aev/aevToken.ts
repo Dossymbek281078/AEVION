@@ -287,6 +287,101 @@ export function setMode(w: AEVWallet, mode: EmissionMode, on: boolean): AEVWalle
   return { ...w, modes: { ...w.modes, [mode]: on } };
 }
 
+// ─── D. Proof-of-Curation ─────────────────────────────────────────
+// AEV за курирование на платформе: pin своих лучших партий/пазлов/трейдов,
+// peer-review других пользователей. Anti-spam через дневной лимит pin'ов.
+
+const PINS_KEY = "aevion_aev_pins_v1";
+
+export type PinKind = "game" | "puzzle" | "trade" | "quote" | "position" | "guide";
+
+export type PinnedItem = {
+  id: string;
+  kind: PinKind;
+  title: string;
+  note?: string;
+  link?: string;
+  ts: number;
+  upvotes: number;       // peer-review (mock — увеличивается со временем)
+};
+
+export const CURATION = {
+  perPinAev: 0.5,          // базовая награда за pin
+  upvoteBonusAev: 0.05,    // бонус когда твой pin получает upvote (от другого юзера)
+  dailyPinLimit: 5,        // anti-spam: максимум 5 pin'ов в день
+  maxPins: 50,             // total cap
+} as const;
+
+export function ldPins(): PinnedItem[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(PINS_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as PinnedItem[] : [];
+  } catch { return [] }
+}
+
+export function svPins(p: PinnedItem[]) {
+  try { localStorage.setItem(PINS_KEY, JSON.stringify(p.slice(0, CURATION.maxPins))) } catch {}
+}
+
+export function pinsToday(pins: PinnedItem[]): number {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  return pins.filter((p) => p.ts >= start.getTime()).length;
+}
+
+// Add a curation pin. Returns null if daily limit hit. Mints +CURATION.perPinAev.
+export function recordPin(
+  w: AEVWallet,
+  pins: PinnedItem[],
+  draft: { kind: PinKind; title: string; note?: string; link?: string },
+): { wallet: AEVWallet; pins: PinnedItem[] } | { error: string } {
+  if (pinsToday(pins) >= CURATION.dailyPinLimit) {
+    return { error: `Дневной лимит ${CURATION.dailyPinLimit} pin'ов исчерпан · возвращайся завтра` };
+  }
+  if (!draft.title.trim()) return { error: "Title обязателен" };
+  const item: PinnedItem = {
+    id: `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+    kind: draft.kind,
+    title: draft.title.trim().slice(0, 120),
+    note: draft.note?.trim().slice(0, 240),
+    link: draft.link?.trim().slice(0, 200),
+    ts: Date.now(),
+    upvotes: 0,
+  };
+  const newPins = [item, ...pins].slice(0, CURATION.maxPins);
+  const newWallet = mint(
+    w,
+    CURATION.perPinAev,
+    { kind: "play", module: "qcoreai", action: "curation_pin" },
+    `🧭 Curation: ${draft.kind} · ${item.title.slice(0, 40)}`,
+  );
+  return { wallet: newWallet, pins: newPins };
+}
+
+export function removePin(pins: PinnedItem[], id: string): PinnedItem[] {
+  return pins.filter((p) => p.id !== id);
+}
+
+// Симуляция peer-review: время от времени pin получает upvote, и автору капает бонус.
+// В продакшне будет реальный upvote от другого юзера через API.
+export function simulateUpvote(
+  w: AEVWallet,
+  pins: PinnedItem[],
+  pinId: string,
+): { wallet: AEVWallet; pins: PinnedItem[] } {
+  const target = pins.find((p) => p.id === pinId);
+  if (!target) return { wallet: w, pins };
+  const newPins = pins.map((p) => p.id === pinId ? { ...p, upvotes: p.upvotes + 1 } : p);
+  const newWallet = mint(
+    w,
+    CURATION.upvoteBonusAev,
+    { kind: "play", module: "qcoreai", action: "curation_upvote" },
+    `👍 Upvote получен · ${target.title.slice(0, 40)}`,
+  );
+  return { wallet: newWallet, pins: newPins };
+}
+
 // ─── F. Proof-of-Streak ───────────────────────────────────────────
 function dayKey(d = new Date()): string {
   const y = d.getFullYear();

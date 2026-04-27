@@ -9,9 +9,12 @@ import {
   stake, unstake, claimDividend, pendingDividend, totalStaked,
   recordDailyVisit, previewStreakReward,
   setMode,
-  fmtAev, fmtSupplyPct,
+  fmtSupplyPct,
   RATE_CARD,
+  ldPins, svPins, pinsToday, recordPin, removePin, simulateUpvote,
+  CURATION,
   type AEVWallet, type EmissionMode, type PlayAction, type PlayModule, type MiningEvent,
+  type PinnedItem, type PinKind,
 } from "./aevToken";
 
 const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: string; color: string; desc: string }> = {
@@ -41,9 +44,11 @@ const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: s
 export default function AEVPage() {
   // Lazy-init avoids SSR hydration mismatch.
   const [wallet, setWallet] = useState<AEVWallet | null>(null);
+  const [pins, setPins] = useState<PinnedItem[] | null>(null);
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
+    setPins(ldPins());
     // Auto-claim daily streak on mount if eligible
     const updated = recordDailyVisit(w);
     if (updated) {
@@ -59,6 +64,7 @@ export default function AEVPage() {
 
   // Persist on every change
   useEffect(() => { if (wallet) svWallet(wallet) }, [wallet]);
+  useEffect(() => { if (pins) svPins(pins) }, [pins]);
 
   // Live tick: refresh pending dividend display every second
   const [, setTick] = useState(0);
@@ -437,6 +443,9 @@ export default function AEVPage() {
           )}
         </section>
 
+        {/* ═══ D. PROOF-OF-CURATION (engine D · live) ══════════════ */}
+        <CurationWall wallet={wallet} setWallet={setWallet} pins={pins ?? []} setPins={setPins} />
+
         {/* ═══ FUTURE ENGINES — proposals + voting ═════════════════ */}
         <FutureEngines />
 
@@ -689,8 +698,8 @@ const BUILTIN_PROPOSALS: Proposal[] = [
     letter: "D",
     emoji: "🧭",
     name: "Proof-of-Curation",
-    tagline: "за качественный curating",
-    desc: "AEV за pin партии в публичный leaderboard, одобрение contribution, выделение позиции-классики, теги дебютов. Anti-sybil через peer-review.",
+    tagline: "✅ LIVE — engine выпущен 27.04",
+    desc: "Pin своих лучших партий / пазлов / трейдов / гайдов в Curation Wall (+0.5 AEV каждый pin). Peer-review через upvotes (+0.05 AEV за каждый голос). Anti-spam: 5 pin'ов в день, cap 50 total. Выпущен сразу после голосования.",
   },
   {
     id: "mentorship",
@@ -820,10 +829,12 @@ function FutureEngines() {
                   <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", lineHeight: 1.25 }}>{p.name}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end" as const, gap: 4 }}>
-                  {p.id === "streak" ? (
+                  {p.id === "streak" || p.id === "curation" ? (
                     <span style={{
                       padding: "5px 11px", borderRadius: 5,
-                      background: "linear-gradient(135deg, #f97316, #ea580c)",
+                      background: p.id === "curation"
+                        ? "linear-gradient(135deg, #7c3aed, #a855f7)"
+                        : "linear-gradient(135deg, #f97316, #ea580c)",
                       color: "#fff", fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
                     }}>✓ LIVE</span>
                   ) : (
@@ -877,6 +888,217 @@ function FutureEngines() {
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ─── D. Curation Wall (engine D · live) ────────────────────────────
+const PIN_KIND_META: Record<PinKind, { emoji: string; label: string; color: string }> = {
+  game:     { emoji: "♟", label: "CyberChess партия",  color: "#0ea5e9" },
+  puzzle:   { emoji: "🧩", label: "Пазл / Endgame",    color: "#22c55e" },
+  trade:    { emoji: "💵", label: "QTrade сделка",      color: "#f59e0b" },
+  position: { emoji: "📐", label: "Позиция-классика",   color: "#8b5cf6" },
+  quote:    { emoji: "💬", label: "Цитата / инсайт",   color: "#ec4899" },
+  guide:    { emoji: "📘", label: "Гайд / разбор",     color: "#6366f1" },
+};
+
+function CurationWall({ wallet, setWallet, pins, setPins }: {
+  wallet: AEVWallet;
+  setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
+  pins: PinnedItem[];
+  setPins: React.Dispatch<React.SetStateAction<PinnedItem[] | null>>;
+}) {
+  const [draftKind, setDraftKind] = useState<PinKind>("game");
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftNote, setDraftNote] = useState("");
+  const [draftLink, setDraftLink] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const today = pinsToday(pins);
+  const remaining = Math.max(0, CURATION.dailyPinLimit - today);
+  const totalUpvotes = pins.reduce((s, p) => s + p.upvotes, 0);
+  const earned = pins.length * CURATION.perPinAev + totalUpvotes * CURATION.upvoteBonusAev;
+
+  const submit = () => {
+    setError(null);
+    const result = recordPin(wallet, pins, {
+      kind: draftKind,
+      title: draftTitle,
+      note: draftNote || undefined,
+      link: draftLink || undefined,
+    });
+    if ("error" in result) {
+      setError(result.error);
+      setTimeout(() => setError(null), 4500);
+      return;
+    }
+    setWallet(result.wallet);
+    setPins(result.pins);
+    setDraftTitle(""); setDraftNote(""); setDraftLink("");
+  };
+
+  const upvotePin = (id: string) => {
+    const result = simulateUpvote(wallet, pins, id);
+    setWallet(result.wallet);
+    setPins(result.pins);
+  };
+
+  const deletePin = (id: string) => {
+    setPins(removePin(pins, id));
+  };
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: "linear-gradient(135deg, #faf5ff 0%, #fff 60%)",
+      border: "1px solid #d8b4fe", marginBottom: 14,
+      boxShadow: "0 6px 18px rgba(124,58,237,0.10)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12, flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: 18 }}>🧭</span>
+        <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#0f172a" }}>Curation Wall</h2>
+        <span style={{
+          padding: "2px 9px", borderRadius: 5,
+          background: "linear-gradient(135deg, #7c3aed, #a855f7)",
+          color: "#fff", fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+        }}>D · LIVE</span>
+        <span style={{ fontSize: 11, color: "#64748b" }}>
+          +{CURATION.perPinAev} AEV за pin · +{CURATION.upvoteBonusAev} AEV за upvote · cap {CURATION.maxPins}
+        </span>
+      </div>
+
+      {/* ─── Stats row ────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: 10, borderRadius: 8, background: "#faf5ff", border: "1px solid #e9d5ff" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#6b21a8", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Сегодня pin'ов</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#581c87" }}>
+            {today} / {CURATION.dailyPinLimit}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "#f0f9ff", border: "1px solid #bae6fd" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#0369a1", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Всего pin'ов</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#0c4a6e" }}>
+            {pins.length} / {CURATION.maxPins}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "#ecfdf5", border: "1px solid #86efac" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#14532d", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Upvotes собрано</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#15803d" }}>
+            {totalUpvotes}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "#fff7ed", border: "1px solid #fed7aa" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#9a3412", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Заработано curating</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#7c2d12" }}>
+            {earned.toFixed(3)} AEV
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Pin form ────────────────────────────────────────── */}
+      <div style={{ padding: 12, borderRadius: 8, background: "#fff", border: "1px solid #e9d5ff", marginBottom: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" as const }}>
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#475569", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Тип</label>
+            <select value={draftKind} onChange={(e) => setDraftKind(e.target.value as PinKind)}
+              style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }}>
+              {(Object.keys(PIN_KIND_META) as PinKind[]).map((k) => (
+                <option key={k} value={k}>{PIN_KIND_META[k].emoji} {PIN_KIND_META[k].label}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11, color: "#64748b" }}>{remaining > 0 ? `Осталось ${remaining} в лимите дня` : "Дневной лимит исчерпан"}</span>
+          </div>
+          <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} maxLength={120}
+            placeholder="Заголовок (например: «победа над Master в 24 хода»)"
+            style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13 }} />
+          <textarea value={draftNote} onChange={(e) => setDraftNote(e.target.value)} maxLength={240}
+            rows={2}
+            placeholder="Заметка / разбор / контекст (optional, до 240 char)"
+            style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical" as const, fontFamily: "inherit" }} />
+          <input value={draftLink} onChange={(e) => setDraftLink(e.target.value)} maxLength={200}
+            placeholder="Ссылка (optional, например /cyberchess?pgn=…)"
+            style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, fontFamily: "ui-monospace, monospace" }} />
+          <div style={{ display: "flex", gap: 8, alignItems: "center" as const, flexWrap: "wrap" as const }}>
+            <button onClick={submit}
+              disabled={!draftTitle.trim() || remaining <= 0}
+              style={{
+                padding: "8px 18px", borderRadius: 6, border: "none",
+                background: !draftTitle.trim() || remaining <= 0 ? "#cbd5e1" : "linear-gradient(135deg, #7c3aed, #a855f7)",
+                color: "#fff", fontWeight: 800, fontSize: 13,
+                cursor: !draftTitle.trim() || remaining <= 0 ? "default" : "pointer",
+                boxShadow: !draftTitle.trim() || remaining <= 0 ? "none" : "0 2px 8px rgba(124,58,237,0.3)",
+              }}>
+              📌 Pin (+{CURATION.perPinAev} AEV)
+            </button>
+            {error && (
+              <span style={{
+                padding: "5px 10px", borderRadius: 5,
+                background: "#fef2f2", border: "1px solid #fca5a5",
+                color: "#b91c1c", fontSize: 12, fontWeight: 700,
+              }}>⚠ {error}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Pins list ────────────────────────────────────────── */}
+      {pins.length === 0 ? (
+        <div style={{ padding: 18, textAlign: "center" as const, color: "#94a3b8", fontSize: 13, background: "#f8fafc", borderRadius: 8 }}>
+          Пока ничего не запиннено. Pin свою лучшую партию или гайд — получишь первые AEV за curating.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, maxHeight: 360, overflowY: "auto" as const }}>
+          {pins.map((p) => {
+            const meta = PIN_KIND_META[p.kind];
+            const ago = (() => {
+              const dt = (Date.now() - p.ts) / 1000;
+              if (dt < 60) return `${Math.round(dt)}s назад`;
+              if (dt < 3600) return `${Math.round(dt / 60)}m назад`;
+              if (dt < 86400) return `${Math.round(dt / 3600)}h назад`;
+              return `${Math.round(dt / 86400)}d назад`;
+            })();
+            return (
+              <div key={p.id} style={{
+                padding: "10px 12px", borderRadius: 8,
+                background: "#fff", border: `1px solid ${meta.color}33`,
+                borderLeft: `3px solid ${meta.color}`,
+                display: "grid", gridTemplateColumns: "auto 1fr auto auto auto", gap: 10, alignItems: "center" as const,
+              }}>
+                <span style={{ fontSize: 18 }}>{meta.emoji}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", lineHeight: 1.3 }}>{p.title}</div>
+                  {p.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 2, lineHeight: 1.4 }}>{p.note}</div>}
+                  <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+                    <span>{meta.label}</span>
+                    <span>· {ago}</span>
+                    {p.link && <a href={p.link} style={{ color: meta.color, textDecoration: "underline", fontFamily: "ui-monospace, monospace" }}>↗ ссылка</a>}
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" as const, minWidth: 36 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#15803d", lineHeight: 1 }}>
+                    {p.upvotes}
+                  </div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.4, textTransform: "uppercase" as const }}>upvotes</div>
+                </div>
+                <button onClick={() => upvotePin(p.id)} title="Симулировать peer-review upvote (+0.05 AEV)"
+                  style={{
+                    padding: "5px 9px", borderRadius: 5, border: "1px solid #86efac", background: "#fff",
+                    color: "#16a34a", fontSize: 11, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" as const,
+                  }}>
+                  👍 +{CURATION.upvoteBonusAev}
+                </button>
+                <button onClick={() => deletePin(p.id)} title="Удалить pin"
+                  style={{
+                    padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff",
+                    color: "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                  }}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

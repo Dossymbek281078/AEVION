@@ -352,10 +352,10 @@ export default function QRightPage() {
   };
 
   const PROCESSING_STEPS = [
-    { label: "Registering in QRight...", icon: "📋" },
-    { label: "Signing with HMAC-SHA256...", icon: "🔏" },
-    { label: "Creating Quantum Shield...", icon: "🛡️" },
-    { label: "Protection complete!", icon: "✅" },
+    { label: "Hashing canonical content (SHA-256)...", icon: "📋" },
+    { label: "Co-signing with AEVION + your browser key...", icon: "🔏" },
+    { label: "Splitting key, anchoring to Bitcoin...", icon: "🛡️" },
+    { label: "Forever-verifiable certificate ready", icon: "✅" },
   ];
 
   return (
@@ -370,11 +370,11 @@ export default function QRightPage() {
               <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>🛡️</div>
               <div>
                 <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>Protect Your Work</h1>
-                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>QRight · QSign · Quantum Shield — all in one click</p>
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>One click. Four cryptographic layers. Forever-verifiable.</p>
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.75, lineHeight: 1.6, maxWidth: 600 }}>
-              Register your intellectual property, sign it cryptographically, and protect it with military-grade Quantum Shield — automatically.
+              Register your work and walk away with a self-contained proof bundle — verifiable against Bitcoin and Ed25519 even if AEVION disappears tomorrow.
             </p>
           </div>
         </div>
@@ -384,10 +384,10 @@ export default function QRightPage() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
               {[
-                { n: "1", title: "Describe", desc: "Tell us about your work", color: "#0d9488", tip: null },
-                { n: "2", title: "Register", desc: "SHA-256 hash in QRight", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },
-                { n: "3", title: "Sign", desc: "HMAC-SHA256 signature", color: "#8b5cf6", tip: { name: "HMAC-SHA256", text: "A tamper-detection signature using AEVION's secret key. Anyone verifying later re-derives it from the certificate fields and confirms nothing was changed." } },
-                { n: "4", title: "Shield", desc: "Ed25519 + Shamir SSS", color: "#f59e0b", tip: { name: "Ed25519 + Shamir", text: "We sign with Ed25519 (a public-key signature anyone can verify) and split the private key into 3 Shamir shards. Any 2 of 3 reconstruct it; AEVION never holds 2." } },
+                { n: "1", title: "Describe", desc: "Title and details", color: "#0d9488", tip: null },
+                { n: "2", title: "Fingerprint", desc: "Tamper-evident SHA-256", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },
+                { n: "3", title: "Co-sign", desc: "AEVION + your browser key", color: "#8b5cf6", tip: { name: "Hybrid signing", text: "AEVION signs with HMAC-SHA256 (server-side) and your browser adds a second Ed25519 signature with a key only you hold. Even total platform compromise cannot forge a certificate in your name." } },
+                { n: "4", title: "Anchor", desc: "Distributed key + Bitcoin", color: "#f59e0b", tip: { name: "Quantum Shield + OTS", text: "The Ed25519 private key is split into 3 Shamir shards across independent locations (any 2 reconstruct, AEVION never holds 2). The content hash is also submitted to OpenTimestamps and confirmed in a Bitcoin block — a trust anchor we don't control." } },
               ].map((s) => (
                 <div key={s.n} style={{ textAlign: "center", padding: "14px 8px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                   <div style={{ width: 32, height: 32, borderRadius: "50%", background: s.color, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, marginBottom: 6 }} aria-label={`Step ${s.n}`}>{s.n}</div>
@@ -598,8 +598,12 @@ export default function QRightPage() {
           <div>
             <div style={{ textAlign: "center", padding: "32px 20px", marginBottom: 24, borderRadius: 16, background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(13,148,136,0.06))", border: "1px solid rgba(16,185,129,0.2)" }}>
               <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>Your Work is Protected!</div>
-              <div style={{ fontSize: 14, color: "#475569" }}>{result.message}</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>Protected. Provable. Permanent.</div>
+              <div style={{ fontSize: 14, color: "#475569" }}>
+                {result.cosign?.present
+                  ? "Four cryptographic layers active — including a co-signature only you can produce."
+                  : "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519."}
+              </div>
             </div>
 
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 20 }}>
@@ -745,7 +749,7 @@ export default function QRightPage() {
                         CID: {result.witness.cid}
                       </div>
                       <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                        Anyone can fetch this shard and verify its integrity against the CID. No trust in AEVION required.
+                        Content-addressed: anyone can fetch this shard and verify the bytes match the CID. Pair it with your Author Shard to recover without AEVION.
                       </div>
                     </div>
                   )}
@@ -764,13 +768,16 @@ export default function QRightPage() {
                 <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>What to do next</div>
               </div>
               <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 8, fontSize: 12, color: "#0f172a", lineHeight: 1.6 }}>
+                <li>
+                  <b>Download the Verification Bundle</b> — a single <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code> file containing every cryptographic proof. Drop it into <a href="/verify-offline" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}>/verify-offline</a> on any machine, any year, no AEVION required. <em>This is the proof that survives us.</em>
+                </li>
                 {result.authorShard && (
                   <li>
-                    <b>Save your Author Shard</b> (orange panel above) — download the JSON and store it offline. AEVION does not keep a copy.
+                    <b>Save your Author Shard</b> (orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.
                   </li>
                 )}
                 <li>
-                  <b>Share the verify link</b> with anyone — they will see the public certificate and every integrity check.
+                  <b>Share the verify link</b> — the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.
                   <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", fontSize: 11, fontFamily: "monospace", color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <span style={{ wordBreak: "break-all" as const }}>{typeof window !== "undefined" ? `${window.location.origin}/verify/${result.certificate.id}` : `/verify/${result.certificate.id}`}</span>
                     <button
@@ -783,16 +790,13 @@ export default function QRightPage() {
                   </div>
                 </li>
                 <li>
-                  <b>Download the PDF</b> for paper records — court-ready printout with QR code linking back to the verify page.
+                  <b>Print the PDF</b> for paper records — court-ready, with a QR code back to the live verify page.
                 </li>
                 {result.witness && (
                   <li>
-                    <b>Even if AEVION goes down</b>, your Author Shard + the public Witness Shard (CID above) are enough to reconstruct the proof.
+                    <b>Pin the Witness Shard</b> — its CID is content-addressed, so anyone can independently fetch and verify it. Combined with your Author Shard, that&apos;s 2 of 3 — recovery without AEVION.
                   </li>
                 )}
-                <li>
-                  <b>Download the Verification Bundle</b> — a single <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code> with every proof needed to verify this certificate <em>without</em> AEVION. Drop it into <a href="/verify-offline" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}>/verify-offline</a> any time, on any machine, even years from now.
-                </li>
               </ol>
             </div>
 

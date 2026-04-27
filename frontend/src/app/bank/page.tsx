@@ -29,6 +29,7 @@ import { BalanceProjection } from "./_components/BalanceProjection";
 import { BillingCalendar } from "./_components/BillingCalendar";
 import { BudgetCaps } from "./_components/BudgetCaps";
 import { DemoModeBanner } from "./_components/DemoModeBanner";
+import { DiscoverPanel } from "./_components/DiscoverPanel";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
@@ -313,6 +314,7 @@ function BankContent() {
           <TabPanel id="overview" active={activeTab}>
             <PitchValueCallout moduleId="bank" variant="dark" compact={true} />
             <SmartSuggestions account={account} operations={operations} />
+            <DiscoverPanel setActiveTab={setActiveTab} />
             <BalanceProjection account={account} />
             <div id="bank-anchor-constellation" style={{ scrollMarginTop: 20 }}>
               <WealthConstellation account={account} operations={operations} />

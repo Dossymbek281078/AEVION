@@ -16,6 +16,7 @@ import {
   getActiveKey,
 } from "../lib/qsignV2/keyRegistry";
 import type { QSignVerifyResult } from "../lib/qsignV2/types";
+import { fireWebhooksFor } from "../lib/qsignV2/webhooks";
 
 /* ───────── rate limits ─────────
  * Per-IP token-bucket style windows guarding the two expensive write paths.
@@ -365,6 +366,14 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       ],
     );
 
+    fireWebhooksFor(auth.sub, "sign", {
+      id,
+      payloadHash,
+      hmacKid: hmacKey.kid,
+      ed25519Kid: edKey.kid,
+      issuerEmail: auth.email,
+    });
+
     res.status(201).json({
       id,
       algoVersion: ALGO_VERSION,
@@ -492,6 +501,15 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
             geo.city,
           ],
         );
+
+        fireWebhooksFor(auth.sub, "sign", {
+          id,
+          payloadHash,
+          hmacKid: hmacKey.kid,
+          ed25519Kid: edKey.kid,
+          issuerEmail: auth.email,
+          batchIndex: idx,
+        });
 
         results.push({ ok: true, id });
       } catch (e: any) {
@@ -727,6 +745,15 @@ qsignV2Router.post("/revoke/:id", revokeLimiter, async (req, res) => {
       throw err;
     }
 
+    // Fire webhook for the original sig issuer (not the revoker, who may be admin).
+    fireWebhooksFor(row.issuerUserId, "revoke", {
+      id: row.id,
+      reason,
+      causalSignatureId,
+      revokerUserId: auth.sub,
+      revokedAt: now.toISOString(),
+    });
+
     res.status(201).json({
       revoked: true,
       signatureId: row.id,
@@ -743,6 +770,114 @@ qsignV2Router.post("/revoke/:id", revokeLimiter, async (req, res) => {
   } catch (e: any) {
     console.error("[qsign v2] /revoke/:id error", e);
     res.status(500).json({ error: "revoke_failed", details: e?.message });
+  }
+});
+
+/* ───────── webhooks CRUD ─────────
+ * Per-user delivery of sign/revoke events. Owner-scoped only — webhooks
+ * fire for events on the owner's own signatures (no admin "all-events" mode
+ * yet). Body of POSTs gets HMAC-SHA256 signed with the per-webhook secret;
+ * receivers verify via X-QSign-Signature header.
+ */
+
+qsignV2Router.get("/webhooks", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+  try {
+    await ensureQSignV2Tables(pool);
+    const r = (await pool.query(
+      `SELECT "id","url","events","active","createdAt","lastFiredAt","lastStatus","lastError"
+       FROM "QSignWebhook" WHERE "ownerUserId" = $1 ORDER BY "createdAt" DESC`,
+      [auth.sub],
+    )) as any;
+    res.json({
+      total: r.rows.length,
+      webhooks: r.rows.map((row: any) => ({
+        id: row.id,
+        url: row.url,
+        events: row.events.split(",").map((s: string) => s.trim()),
+        active: row.active,
+        createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
+        lastFiredAt: row.lastFiredAt ? new Date(row.lastFiredAt).toISOString() : null,
+        lastStatus: row.lastStatus,
+        lastError: row.lastError,
+      })),
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /webhooks list error", e);
+    res.status(500).json({ error: "webhooks_list_failed", details: e?.message });
+  }
+});
+
+qsignV2Router.post("/webhooks", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+  try {
+    await ensureQSignV2Tables(pool);
+    const { url, events: eventsRaw } = req.body || {};
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+      return res.status(400).json({ error: "url must be http(s)://" });
+    }
+    const events = Array.isArray(eventsRaw)
+      ? eventsRaw.filter((e) => typeof e === "string")
+      : typeof eventsRaw === "string"
+        ? eventsRaw.split(",").map((s) => s.trim())
+        : ["sign", "revoke"];
+    const allowed = new Set(["sign", "revoke"]);
+    const filtered = events.filter((e) => allowed.has(e));
+    if (filtered.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "events must contain at least one of sign|revoke" });
+    }
+
+    // Existing-quota guard: 10 webhooks per user.
+    const countR = (await pool.query(
+      `SELECT COUNT(*)::int AS n FROM "QSignWebhook" WHERE "ownerUserId" = $1`,
+      [auth.sub],
+    )) as any;
+    if (countR.rows[0]?.n >= 10) {
+      return res.status(409).json({ error: "webhook_quota_exceeded", limit: 10 });
+    }
+
+    const id = crypto.randomUUID();
+    const secret = crypto.randomBytes(32).toString("hex");
+    await pool.query(
+      `INSERT INTO "QSignWebhook" ("id","ownerUserId","url","secret","events","active")
+       VALUES ($1,$2,$3,$4,$5,TRUE)`,
+      [id, auth.sub, url, secret, filtered.join(",")],
+    );
+    res.status(201).json({
+      id,
+      url,
+      events: filtered,
+      active: true,
+      secret,
+      notice:
+        "Save the secret — it is shown ONCE and used to verify X-QSign-Signature on every delivery (HMAC-SHA256 over the raw JSON body).",
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /webhooks create error", e);
+    res.status(500).json({ error: "webhook_create_failed", details: e?.message });
+  }
+});
+
+qsignV2Router.delete("/webhooks/:id", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+  try {
+    await ensureQSignV2Tables(pool);
+    const r = (await pool.query(
+      `DELETE FROM "QSignWebhook" WHERE "id" = $1 AND "ownerUserId" = $2`,
+      [req.params.id, auth.sub],
+    )) as any;
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: "webhook not found or not yours" });
+    }
+    res.json({ deleted: true, id: req.params.id });
+  } catch (e: any) {
+    console.error("[qsign v2] /webhooks delete error", e);
+    res.status(500).json({ error: "webhook_delete_failed", details: e?.message });
   }
 });
 
@@ -963,6 +1098,7 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       "sign",
       "stats",
       "recent",
+      "webhooks",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
@@ -1216,6 +1352,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
       "sign",
       "stats",
       "recent",
+      "webhooks",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });

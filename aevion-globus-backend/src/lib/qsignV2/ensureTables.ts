@@ -86,6 +86,27 @@ export async function ensureQSignV2Tables(pool: PgPoolLike): Promise<void> {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignWebhook" (
+      "id"            TEXT PRIMARY KEY,
+      "ownerUserId"   TEXT NOT NULL,
+      "url"           TEXT NOT NULL,
+      "secret"        TEXT NOT NULL,
+      "events"        TEXT NOT NULL,
+      "active"        BOOLEAN NOT NULL DEFAULT TRUE,
+      "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "lastFiredAt"   TIMESTAMPTZ,
+      "lastStatus"    INTEGER,
+      "lastError"     TEXT
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhook_ownerUserId_idx" ON "QSignWebhook" ("ownerUserId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhook_active_idx" ON "QSignWebhook" ("active");`,
+  );
+
   /* Seed default keys if absent ---------------------------------------- */
   await pool.query(
     `

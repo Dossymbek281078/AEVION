@@ -5115,8 +5115,25 @@ export default function CyberChessPage(){
         const bwMeta=bestWr?VARIANTS.find(v=>v.id===bestWr.variant):null;
         return <div>
           {total===0?(
-            <div style={{padding:SPACE[4],textAlign:"center",color:CC.textDim,fontSize:14}}>
-              Сыграй несколько партий в любом из 12 режимов — статистика появится здесь.
+            <div style={{padding:`${SPACE[5]}px ${SPACE[4]}px`,textAlign:"center"}}>
+              <div style={{fontSize:64,lineHeight:1,marginBottom:SPACE[3],animation:"pop 0.5s ease-out"}}>📊</div>
+              <div style={{fontSize:16,fontWeight:900,color:CC.text,marginBottom:SPACE[2]}}>Пока пусто</div>
+              <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[4],lineHeight:1.5,maxWidth:400,margin:"0 auto"}}>
+                Сыграй несколько партий в любом из 12 режимов — статистика появится здесь. Начни с любимого варианта!
+              </div>
+              <div style={{display:"flex",gap:SPACE[2],justifyContent:"center",flexWrap:"wrap",marginTop:SPACE[3]}}>
+                <Btn variant="primary" size="md" onClick={()=>{
+                  sShowVariantStats(false);setTimeout(()=>sShowVariants(true),100);
+                }}>🎲 Выбрать режим</Btn>
+                <Btn variant="secondary" size="md" onClick={()=>{
+                  const r=randomVariant();
+                  sVariant(r);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+                  if(r==="asymmetric")sManualArmyFen("");
+                  sShowVariantStats(false);
+                  setTimeout(()=>newG(),50);
+                  showToast(`🎰 ${VARIANTS.find(v=>v.id===r)?.name}`,"success");
+                }}>🎰 Surprise Me</Btn>
+              </div>
             </div>
           ):(<>
             {/* Top stats */}
@@ -5361,8 +5378,15 @@ export default function CyberChessPage(){
         </div>
         {clonerError&&<div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`,color:"#991b1b",fontSize:12,marginBottom:SPACE[3]}}>{clonerError}</div>}
         {clones.length===0?(
-          <div style={{padding:SPACE[4],textAlign:"center",color:CC.textDim,fontSize:14}}>
-            Пока нет клонов. Введи username и нажми «Создать клон».
+          <div style={{padding:`${SPACE[4]}px ${SPACE[3]}px`,textAlign:"center"}}>
+            <div style={{fontSize:48,lineHeight:1,marginBottom:SPACE[2],animation:"pop 0.5s ease-out"}}>🧬</div>
+            <div style={{fontSize:14,fontWeight:800,color:CC.text,marginBottom:SPACE[1]}}>Пока нет клонов</div>
+            <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5,maxWidth:340,margin:"0 auto"}}>
+              Введи Lichess username выше и нажми «Создать клон» — мы проанализируем 30 партий и создадим бот-клон.
+            </div>
+            <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,fontStyle:"italic"}}>
+              Попробуй: <button onClick={()=>sClonerUsername("DrNykterstein")} style={{background:"none",border:"none",color:CC.brand,cursor:"pointer",fontWeight:700,fontStyle:"italic",padding:0,fontSize:11}}>DrNykterstein</button> · <button onClick={()=>sClonerUsername("Hikaru")} style={{background:"none",border:"none",color:CC.brand,cursor:"pointer",fontWeight:700,fontStyle:"italic",padding:0,fontSize:11}}>Hikaru</button> · <button onClick={()=>sClonerUsername("penguingm1")} style={{background:"none",border:"none",color:CC.brand,cursor:"pointer",fontWeight:700,fontStyle:"italic",padding:0,fontSize:11}}>penguingm1</button>
+            </div>
           </div>
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>

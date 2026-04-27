@@ -4,6 +4,7 @@
 // (so schedules run even when browser is closed). For demo this is client-only.
 
 const STORAGE_KEY = "aevion_bank_recurring_v1";
+export const RECURRING_EVENT = "aevion:recurring-changed";
 
 export type RecurrencePeriod = "daily" | "weekly" | "biweekly" | "monthly";
 
@@ -79,6 +80,7 @@ export function saveRecurring(items: Recurring[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event(RECURRING_EVENT));
   } catch {
     // storage quota — best effort
   }

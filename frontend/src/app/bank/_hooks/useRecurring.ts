@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import {
   addPeriod,
   loadRecurring,
+  RECURRING_EVENT,
   saveRecurring,
   type Recurring,
   type RecurrencePeriod,
@@ -36,6 +37,7 @@ export function useRecurring(opts: Options) {
   const { items, setItems, add: pushItem, removeWhere } = useLocalList<Recurring>({
     load: loadRecurring,
     save: saveRecurring,
+    event: RECURRING_EVENT,
   });
   const itemsRef = useRef<Recurring[]>(items);
   itemsRef.current = items;

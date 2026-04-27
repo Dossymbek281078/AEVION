@@ -41,6 +41,7 @@ import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { ReferralsPanel } from "./_components/ReferralsPanel";
 import { RoundUpStash } from "./_components/RoundUpStash";
+import { SubscriptionScanner } from "./_components/SubscriptionScanner";
 import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { TierProgression } from "./_components/TierProgression";
@@ -390,6 +391,8 @@ function BankContent() {
                 onError={onError}
               />
             </div>
+
+            <SubscriptionScanner notify={notify} />
 
             <RecurringPayments
               myAccountId={account.id}

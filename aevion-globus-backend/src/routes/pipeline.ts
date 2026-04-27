@@ -203,45 +203,48 @@ async function resolveUser(req: any) {
 }
 
 /**
- * POST /api/pipeline/protect
+ * Core IP protection flow — runs steps 1-4 (QRight, QSign, Quantum Shield,
+ * IP Certificate) for a single work and returns the public response chunks.
  *
- * One-click IP protection:
- *   1. Register in QRight (SHA-256 hash)
- *   2. Sign with QSign (HMAC-SHA256)
- *   3. Create Quantum Shield (Ed25519 + Shamir SSS)
- *   4. Issue IP Certificate with legal basis
- *
- * Body: { title, description, kind, ownerName?, ownerEmail?, country?, city? }
+ * Throws Error("title and description are required") on missing inputs;
+ * caller decides whether to map to 400. Both `/protect` and `/protect-batch`
+ * call this so the cryptographic / persistence behaviour stays identical.
  */
-pipelineRouter.post("/protect", async (req, res) => {
-  try {
-    await ensureTables();
+type ProtectInput = {
+  title?: unknown;
+  description?: unknown;
+  kind?: unknown;
+  ownerName?: unknown;
+  ownerEmail?: unknown;
+  authorName?: unknown;
+  authorEmail?: unknown;
+  country?: unknown;
+  city?: unknown;
+  contentHash?: unknown;
+};
+type ResolvedUser = { userId: string | null; name: string | null; email: string | null };
 
-    const {
-      title,
-      description,
-      kind,
-      // Both aliases accepted; `authorName`/`authorEmail` is the canonical public contract,
-      // `ownerName`/`ownerEmail` retained for backwards compatibility with earlier clients.
-      ownerName,
-      ownerEmail,
-      authorName: authorNameIn,
-      authorEmail: authorEmailIn,
-      country,
-      city,
-      // Optional: caller supplies their own SHA-256 hex (e.g. hashed a file locally).
-      // Must be 64 lowercase hex chars; otherwise we compute one from {title, description, kind, country, city}.
-      contentHash: providedHash,
-    } = req.body;
+async function protectOne(input: ProtectInput, user: ResolvedUser) {
+  await ensureTables();
 
-    if (!title || !description) {
-      return res.status(400).json({ error: "title and description are required" });
-    }
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  const description = typeof input.description === "string" ? input.description.trim() : "";
+  const kind = typeof input.kind === "string" && input.kind ? input.kind : "other";
+  const ownerName = typeof input.ownerName === "string" ? input.ownerName : null;
+  const ownerEmail = typeof input.ownerEmail === "string" ? input.ownerEmail : null;
+  const authorNameIn = typeof input.authorName === "string" ? input.authorName : null;
+  const authorEmailIn = typeof input.authorEmail === "string" ? input.authorEmail : null;
+  const country = typeof input.country === "string" ? input.country : null;
+  const city = typeof input.city === "string" ? input.city : null;
+  const providedHash = typeof input.contentHash === "string" ? input.contentHash : null;
 
-    const user = await resolveUser(req);
-    const authorName = authorNameIn || ownerName || user.name || null;
-    const authorEmail = authorEmailIn || ownerEmail || user.email || null;
-    const authorUserId = user.userId || null;
+  if (!title || !description) {
+    throw new Error("title and description are required");
+  }
+
+  const authorName = authorNameIn || ownerName || user.name || null;
+  const authorEmail = authorEmailIn || ownerEmail || user.email || null;
+  const authorUserId = user.userId || null;
 
     /* ── Step 1: QRight Registration ── */
     const objectId = crypto.randomUUID();
@@ -394,17 +397,110 @@ pipelineRouter.post("/protect", async (req, res) => {
       verifyUrl: `https://aevion.vercel.app/verify/${certId}`,
     };
 
+    return {
+      qright: { id: objectId, title, contentHash, createdAt: protectedAt },
+      qsign: { signature: signatureHmac, algo: "HMAC-SHA256" as const },
+      shield: { id: shieldId, signature: signatureEd25519.slice(0, 64) + "...", publicKey: pubKeyHex.slice(0, 32) + "...", shards: totalShards, threshold },
+      certificate,
+    };
+}
+
+/**
+ * POST /api/pipeline/protect
+ *
+ * One-click IP protection:
+ *   1. Register in QRight (SHA-256 hash)
+ *   2. Sign with QSign (HMAC-SHA256)
+ *   3. Create Quantum Shield (Ed25519 + Shamir SSS)
+ *   4. Issue IP Certificate with legal basis
+ *
+ * Body: { title, description, kind, ownerName?, ownerEmail?, country?, city?, contentHash? }
+ */
+pipelineRouter.post("/protect", async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    const result = await protectOne(req.body || {}, user);
     res.status(201).json({
       success: true,
       message: "Your work is now protected with 3-layer cryptographic security and legal backing",
-      qright: { id: objectId, title, contentHash, createdAt: protectedAt },
-      qsign: { signature: signatureHmac, algo: "HMAC-SHA256" },
-      shield: { id: shieldId, signature: signatureEd25519.slice(0, 64) + "...", publicKey: pubKeyHex.slice(0, 32) + "...", shards: totalShards, threshold },
-      certificate,
+      ...result,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "pipeline failed";
+    if (msg === "title and description are required") {
+      return res.status(400).json({ error: msg });
+    }
     console.error("[Pipeline] protect error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/pipeline/protect-batch
+ *
+ * Issue many certificates in one request. Same crypto / persistence as
+ * /protect; just loops protectOne() and reports per-item ok/error.
+ *
+ * Body: { items: ProtectInput[] }   (1..25 items)
+ *
+ * Response 201 if every item succeeded, 207 if some failed, 400 on
+ * empty / oversized input.
+ */
+const MAX_BATCH_PROTECT = 25;
+
+pipelineRouter.post("/protect-batch", async (req, res) => {
+  try {
+    const items: ProtectInput[] = Array.isArray(req.body?.items)
+      ? (req.body.items as ProtectInput[])
+      : [];
+    if (items.length === 0) {
+      return res.status(400).json({ error: `items[] required (max ${MAX_BATCH_PROTECT})` });
+    }
+    if (items.length > MAX_BATCH_PROTECT) {
+      return res
+        .status(400)
+        .json({ error: `max ${MAX_BATCH_PROTECT} items per batch (got ${items.length})` });
+    }
+
+    // One auth resolution per batch — the caller can't switch identities
+    // mid-request, and avoiding N extra DB hits matters at batch=25.
+    const user = await resolveUser(req);
+
+    const results: Array<
+      | { ok: true; index: number; certificate: Awaited<ReturnType<typeof protectOne>>["certificate"] }
+      | { ok: false; index: number; error: string; input: { title: unknown; kind: unknown } }
+    > = [];
+
+    // Sequential to keep DB connection use bounded and to give the caller
+    // deterministic ordering. 25 items × ~20ms each = ~500ms p99.
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      try {
+        const r = await protectOne(it, user);
+        results.push({ ok: true, index: i, certificate: r.certificate });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "failed";
+        results.push({
+          ok: false,
+          index: i,
+          error: msg,
+          input: { title: it?.title, kind: it?.kind },
+        });
+      }
+    }
+
+    const succeeded = results.filter((r) => r.ok).length;
+    const failed = results.length - succeeded;
+    res.status(failed === 0 ? 201 : 207).json({
+      success: failed === 0,
+      total: items.length,
+      succeeded,
+      failed,
+      results,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "batch protect failed";
+    console.error("[Pipeline] protect-batch error:", msg);
     res.status(500).json({ error: msg });
   }
 });

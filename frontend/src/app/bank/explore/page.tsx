@@ -42,6 +42,13 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         titleKey: "explore.card.statement.title",
         hintKey: "explore.card.statement.hint",
       },
+      {
+        href: "/bank/notifications",
+        iconBg: "linear-gradient(135deg, #d97706, #db2777)",
+        iconChar: "✦",
+        titleKey: "explore.card.notifications.title",
+        hintKey: "explore.card.notifications.hint",
+      },
     ],
   },
   {

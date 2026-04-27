@@ -240,6 +240,13 @@ export function HelpMenu({
             onClick={importPrompt}
           />
           <MenuItemLink
+            icon="◫"
+            label={t("helpmenu.item.explore.label")}
+            hint={t("helpmenu.item.explore.hint")}
+            href="/bank/explore"
+            onNavigate={() => setOpen(false)}
+          />
+          <MenuItemLink
             icon="↗"
             label={t("helpmenu.item.portal.label")}
             hint={t("helpmenu.item.portal.hint")}

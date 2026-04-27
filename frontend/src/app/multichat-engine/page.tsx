@@ -13,7 +13,7 @@ import { launchedModules } from "@/data/pitchModel";
 
 const HERO_STATS: Array<{ label: string; value: string; hint: string }> = [
   { label: "Backend", value: "/api/qcoreai/chat", hint: "Single endpoint live" },
-  { label: "Stage", value: "Beta MVP", hint: "Parallel agents shipped" },
+  { label: "Stage", value: "Live", hint: "Parallel agents shipped" },
   { label: "Providers", value: "5", hint: "via QCoreAI router" },
   { label: "B2B angle", value: "White-label", hint: "AEVION inside SaaS line" },
 ];
@@ -194,6 +194,50 @@ function parseMention(raw: string): { role: Role | null; body: string } {
   if (!role) return { role: null, body: raw };
   return { role, body: m[2].trim() };
 }
+
+/* ─────────────────────────────────────────────────────────────────
+ * Quick-start presets — one click spawns a curated agent bundle
+ * ────────────────────────────────────────────────────────────── */
+
+type Preset = {
+  id: string;
+  name: string;
+  description: string;
+  roles: Role[];
+};
+
+const PRESETS: Preset[] = [
+  {
+    id: "investor",
+    name: "Investor pack",
+    description: "Story + financials + IP defense in one window",
+    roles: ["General", "Finance", "IP/Legal"],
+  },
+  {
+    id: "founder",
+    name: "Founder ops",
+    description: "Code, money, regulation — parallel decisions",
+    roles: ["Code", "Finance", "Compliance"],
+  },
+  {
+    id: "legal",
+    name: "Legal review",
+    description: "Contracts, compliance, multilingual clauses",
+    roles: ["IP/Legal", "Compliance", "Translator"],
+  },
+  {
+    id: "global",
+    name: "Multilingual support",
+    description: "Customer ops in any language",
+    roles: ["General", "Translator"],
+  },
+  {
+    id: "fullstack",
+    name: "Full stack",
+    description: "Every role at once — only for power users",
+    roles: ["General", "Code", "Finance", "IP/Legal", "Compliance", "Translator"],
+  },
+];
 
 const makeAgent = (overrides: Partial<Agent> = {}): Agent => ({
   id: newId(),
@@ -413,6 +457,28 @@ export default function MultichatEnginePage() {
       /* ignore */
     }
     setAgents([makeAgent()]);
+  }, []);
+
+  /* Replace the current agent set with a preset bundle */
+  const applyPreset = useCallback((preset: Preset) => {
+    if (typeof window === "undefined") return;
+    const cur = agentsRef.current;
+    const hasHistory = cur.some((a) => a.messages.length > 0);
+    if (hasHistory) {
+      const ok = window.confirm(
+        `Replace ${cur.length} agent(s) (some have conversation history) with "${preset.name}" (${preset.roles.length} agents)?`
+      );
+      if (!ok) return;
+    }
+    setAgents(
+      preset.roles
+        .slice(0, MAX_AGENTS)
+        .map((role) => makeAgent({ role, title: role }))
+    );
+    setTimeout(() => {
+      const el = document.getElementById("live");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }, []);
 
   /* Low-level: call /api/qcoreai/chat with role+model+history, get reply */
@@ -644,7 +710,7 @@ export default function MultichatEnginePage() {
               marginBottom: 16,
             }}
           >
-            Multichat Engine · beta MVP
+            Multichat Engine · Live
           </p>
           <h1
             style={{
@@ -851,6 +917,96 @@ export default function MultichatEnginePage() {
               </li>
             ))}
           </ul>
+        </section>
+
+        {/* ──────────────────────────────────────────────────────
+         *  Quick-start presets
+         * ────────────────────────────────────────────────────── */}
+        <section
+          style={{
+            marginTop: 32,
+            padding: 24,
+            borderRadius: 20,
+            border: "1px solid rgba(148,163,184,0.2)",
+            background: "rgba(15,23,42,0.55)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#fbbf24", textTransform: "uppercase", marginBottom: 4 }}>
+                Quick start
+              </div>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>
+                One click → curated agent bundle
+              </h2>
+            </div>
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>
+              Replaces current agents. Settings persist in localStorage.
+            </span>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyPreset(p)}
+                style={{
+                  textAlign: "left",
+                  padding: "14px 16px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(94,234,212,0.25)",
+                  background: "rgba(15,23,42,0.7)",
+                  color: "#e2e8f0",
+                  cursor: "pointer",
+                  transition: "transform .15s, border-color .15s",
+                  fontFamily: "inherit",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(94,234,212,0.6)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(94,234,212,0.25)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>
+                  {p.name}
+                </div>
+                <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5, marginBottom: 10 }}>
+                  {p.description}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {p.roles.map((r) => {
+                    const c = ROLE_COLORS[r];
+                    return (
+                      <span
+                        key={r}
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: "0.05em",
+                          padding: "2px 7px",
+                          borderRadius: 999,
+                          background: c.bg,
+                          color: c.fg,
+                          border: `1px solid ${c.border}`,
+                        }}
+                      >
+                        {r}
+                      </span>
+                    );
+                  })}
+                </div>
+              </button>
+            ))}
+          </div>
         </section>
 
         {/* ──────────────────────────────────────────────────────

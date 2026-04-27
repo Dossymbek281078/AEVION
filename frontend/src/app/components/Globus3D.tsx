@@ -337,6 +337,10 @@ export default function Globus3D({
 
   /** Узкий экран — компактный layout overlay'ев. */
   const [isNarrow, setIsNarrow] = useState(false);
+  const isNarrowRef = useRef(isNarrow);
+  useEffect(() => {
+    isNarrowRef.current = isNarrow;
+  }, [isNarrow]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 600px)");
@@ -531,14 +535,6 @@ export default function Globus3D({
 
     return [...projectMarkers, ...objectMarkers];
   }, [projects, qrightObjects, focusProjectIds]);
-
-  /** На тач-устройстве увеличиваем хитбоксы маркеров для удобства попадания. */
-  useEffect(() => {
-    const k = isNarrow ? 1.35 : 1;
-    for (const item of markerMeshesRef.current) {
-      item.group.scale.setScalar(k);
-    }
-  }, [isNarrow, markers]);
 
   /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
   useEffect(() => {
@@ -1433,6 +1429,21 @@ export default function Globus3D({
               }
             }
           }
+        }
+      }
+
+      // Hover scale-bump на маркерах — плавный grow на hovered, shrink на остальных.
+      {
+        const hoveredKey = labelRef.current?.marker.key ?? null;
+        const focusedKey = focusedRef.current?.key ?? null;
+        const baseK = isNarrowRef.current ? 1.35 : 1;
+        for (const item of markerMeshesRef.current) {
+          const isHover = item.marker.key === hoveredKey;
+          const isFocus = item.marker.key === focusedKey;
+          const target = isHover ? baseK * 1.22 : isFocus ? baseK * 1.12 : baseK;
+          const cur = item.group.scale.x;
+          const next = cur + (target - cur) * 0.18;
+          item.group.scale.setScalar(next);
         }
       }
 

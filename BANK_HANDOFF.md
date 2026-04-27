@@ -1,16 +1,28 @@
-# AEVION Bank — Session Handoff (last updated 2026-04-26 · overnight push)
+# AEVION Bank — Session Handoff (last updated 2026-04-27 · a11y sweep)
 
 Snapshot to pick up work on the bank track. Read this first next session, then [`CLAUDE.md`](./CLAUDE.md) for session rules.
 
 ---
 
-## Branch / repo state (overnight 2026-04-26 → 2026-04-27)
+## Branch / repo state (2026-04-27)
 
 - **Worktree:** `C:\Users\user\aevion-core\frontend-bank` (git worktree of ветка `bank-payment-layer`).
 - **Ветка:** `bank-payment-layer`.
-- **Remote:** `github.com/Dossymbek281078/AEVION` — fully pushed through tonight.
+- **Remote:** `github.com/Dossymbek281078/AEVION` — pushed through `6eec011`.
 - **PR #5:** https://github.com/Dossymbek281078/AEVION/pull/5 — open, ready to review/merge.
-- **Build:** green. `tsc --noEmit` exits 0; `next build` produces 26 routes (all key pages static, /pitch/opengraph-image dynamic-edge).
+- **Build:** green. `tsc --noEmit` exits 0; `next build` produces 23 routes (all key pages static, /pitch/opengraph-image dynamic-edge).
+
+## Session log (2026-04-27 · a11y + retention sweep)
+
+3 commits on top of `5934186` (portable backup):
+
+1. **`db3c684` feat(bank): MoneyFlowMap module + a11y contrast for empty-states** — new MoneyFlowMap component wired into Earn tab; empty-state hint text in `page.tsx` (3 spots) bumped to #64748b.
+2. **`d8fe2df` chore(bank): bump audit retention 50 → 200 signed operations** — `_lib/signatures.ts` `MAX_KEEP` raised so long demo runs don't lose history.
+3. **`6eec011` fix(bank): a11y — bump hint text contrast to AA across components** — bulk replaced `color: "#94a3b8"` with `#64748b` across 36 components + brand snapshot SVG. WealthConstellation kept its lighter shade (dark navy section).
+
+**Reduced-motion:** verified globals.css `@media (prefers-reduced-motion: reduce)` already gates `animation-duration` / `transition-duration` for the whole app. Per-component explicit guards exist in CoinTower, AnimatedMoney, QRCode, WealthConstellation, SavingsGoals confetti, RoyaltyStream, ConceptPrimer, FinancialCopilot.
+
+**Verified closed (already shipped earlier — no work needed):** HelpMenu has both Take-the-tour and Jump-to-referrals items. AuditPanel has JSON file-export. AchievementsPanel uses `SIGNATURE_EVENT` / `GOALS_EVENT` / `CIRCLES_EVENT` listeners (no polling).
 
 ## Overnight log (2026-04-26 → 2026-04-27)
 

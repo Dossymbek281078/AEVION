@@ -5,11 +5,13 @@ Continuation of [`AEVION_HANDOFF_2026-04-24.md`](./AEVION_HANDOFF_2026-04-24.md)
 ## Состояние
 
 - **Branch:** `feat/bureau-v2`, all commits pushed to `origin`.
-- **HEAD:** `d4d8553` "Bureau v2: sample-hash chips under the manual SHA-256 checker".
-- **Build:** `cd frontend ; npx tsc --noEmit` exit 0.
+- **HEAD:** `5b2ca94` "a11y: prefers-reduced-motion + :focus-visible ring + .sr-only globals".
+- **Build:** `cd frontend ; npx tsc --noEmit` exit 0; `npm run build` prerenders 23 routes.
 - **PR в `main`:** не открыт (gh CLI не установлен — открывать через web).
 
-## Что доехало в этот заход (9 коммитов)
+## Что доехало в этот заход (12 коммитов)
+
+> Дополнительно (после первой версии хэндоффа): `de5f0c0` live embed playground replaces static badge mockup; `5b2ca94` a11y globals (prefers-reduced-motion + :focus-visible + .sr-only). Описания в конце файла.
 
 1. **`31265bf` surface signature reasons + seed badge in /verify** — выполнен пункт #2 из next-steps `AEVION_HANDOFF_2026-04-24`. Verify-страница теперь показывает HMAC-SHA256 / Ed25519 valid / mismatch pill'ы и reason-чипы (`seed`, `mismatch`, `not_checked`, `error: …`); в заголовке Cryptographic Proof оранжевый «Seed» когда сертификат из in-memory store. `allChecksPass` требует HMAC + Ed25519 пройти (fail-open на undefined для совместимости).
 2. **`67392a1` download artifacts + verify-another input on /verify** — три прямые ссылки в новом блоке Download artifacts: PDF (`/api/pipeline/certificate/:id/pdf`), badge SVG (`/api/pipeline/badge/:id`), raw verify JSON. Внизу страницы — input «Verify another certificate» c роутом `/verify/<id>` через `useRouter`.

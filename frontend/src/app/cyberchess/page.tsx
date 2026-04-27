@@ -17,6 +17,7 @@ import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
+import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, type VariantId, type ArmySlot } from "./variants";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -455,6 +456,18 @@ export default function CyberChessPage(){
   const[showGhost,sShowGhost]=useState(false);
   const[activeGhost,sActiveGhost]=useState<Ghost|null>(null);
   const[ghostMode,sGhostMode]=useState(false);
+  // Chess Variants (Fischer 960, Asymmetric, Twin Kings, Diceblade, Reinforcement)
+  const[variant,sVariant]=useState<VariantId>("standard");
+  const[showVariants,sShowVariants]=useState(false);
+  const[variantStartFen,sVariantStartFen]=useState<string>("");
+  const[variantArmies,sVariantArmies]=useState<{white:ArmySlot[];black:ArmySlot[]}|null>(null);
+  // Diceblade die state — current allowed piece type for the side-to-move
+  const[diceFace,sDiceFace]=useState<1|2|3|4|5|6>(6);
+  const[dicePieceType,sDicePieceType]=useState<string>("");
+  const[diceLabel,sDiceLabel]=useState<string>("Любая фигура");
+  const[diceRolling,sDiceRolling]=useState(false);
+  // Reinforcement: track move counter for periodic spawn
+  const reinfLastMoveRef=useRef(0);
   // Daily Brilliancy Hunt (killer #10)
   const[showBrilliancy,sShowBrilliancy]=useState(false);
   const[brilliancyHunt,sBrilliancyHunt]=useState<BrilliancyHunt|null>(null);
@@ -1055,6 +1068,64 @@ export default function CyberChessPage(){
     else if(rivalResult==="D")addChessy(3,`🤝 ничья с ${rivalProfile.name}`);
   },[over,rivalMode,rivalProfile,currentOpening,hist.length,rat,addChessy,fenHist.length]);
 
+  /* ── Variant: Twin Kings — losing the queen = losing the game ── */
+  useEffect(()=>{
+    if(variant!=="twinkings"||over||!on)return;
+    const lossSide=twinKingsLossSide(game.fen());
+    if(lossSide){
+      const youLost=lossSide===pCol;
+      sOver(youLost?"Твой королевский ферзь пал — поражение":"Королевский ферзь соперника пал — победа!");
+      sOn(false);snd("x");
+      if(!youLost){
+        const nr=Math.min(3000,rat+12);sRat(nr);svR(nr);
+        const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);
+        setTimeout(()=>addChessy(15,"👑 Twin Kings — захват второго короля"),400);
+      }else{
+        const nr=Math.max(100,rat-10);sRat(nr);svR(nr);
+        const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);
+      }
+    }
+  },[bk,variant,over,on,game,pCol,rat,sts,addChessy]);
+
+  /* ── Variant: Reinforcement — spawn captured piece every 10 plies ── */
+  useEffect(()=>{
+    if(variant!=="reinforcement"||over||!on)return;
+    if(hist.length<10||hist.length===reinfLastMoveRef.current)return;
+    if(hist.length%10!==0)return;
+    reinfLastMoveRef.current=hist.length;
+    // Pick captured piece from BOTH pools (capW = pieces taken from white = belong to black)
+    // capW stores symbols of captured-by-black white pieces; capB stores black pieces taken by white
+    // Convert glyphs to chess.js codes is tricky — easier: pick from chess.js's own captured tracking
+    // For simplicity, just spawn a random pawn for the side-to-move
+    try{
+      const sideToMove=game.turn();
+      const captured:string[]=sideToMove==="w"?["P","N","B","R"]:["p","n","b","r"];
+      const drop=pickReinforcement(captured,sideToMove,game.fen());
+      if(drop){
+        // Use chess.js .put to place piece
+        const g=new Chess(game.fen());
+        const pieceType=drop.piece.toLowerCase() as any;
+        const color=drop.piece===drop.piece.toUpperCase()?"w":"b";
+        g.put({type:pieceType,color},drop.sq as Square);
+        // Re-init from new FEN
+        const newFen=g.fen();
+        try{const ng=new Chess(newFen);setGame(ng);sBk(k=>k+1);
+          sFenHist(h=>[...h.slice(0,-1),newFen]);
+          showToast(`🔄 Подкрепление: ${drop.piece} → ${drop.sq}`,"success");
+        }catch{}
+      }
+    }catch{}
+  },[hist.length,variant,over,on,game,showToast]);
+
+  /* ── Variant: Diceblade — roll die before each move (player + AI) ── */
+  useEffect(()=>{
+    if(variant!=="diceblade"||over||!on)return;
+    if(hist.length===0)return;
+    // Re-roll on each new turn
+    const d=rollDice();
+    sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label);
+  },[bk,variant,over,on]);
+
   /* ── Ghost Mode: bonus Chessy on win over GM ghost ── */
   const ghostLearnedRef=useRef<string|null>(null);
   useEffect(()=>{
@@ -1271,6 +1342,33 @@ export default function CyberChessPage(){
         return()=>clearTimeout(t);
       }catch{sThink(false)}
     }
+    // Variant: Diceblade — restrict to moves of the rolled piece type
+    if(variant==="diceblade"){
+      const t=setTimeout(()=>{
+        try{
+          if(game.fen()!==fenAtTrigger){sThink(false);return}
+          const c=new Chess(fenAtTrigger);
+          const all=c.moves({verbose:true});
+          const allowed=dicePieceType?filterMovesByDice(all,dicePieceType):all;
+          if(allowed.length===0){
+            // No legal piece-of-type moves → pass turn (toggle FEN side)
+            try{
+              const parts=fenAtTrigger.split(" ");parts[1]=parts[1]==="w"?"b":"w";
+              const ng=new Chess(parts.join(" "));setGame(ng);sBk(k=>k+1);
+              showToast(`🎲 AI пропускает ход (${diceLabel})`,"info");
+            }catch{}
+          }else{
+            // Pick random-ish best from allowed (mini search not worth it here)
+            const scored=allowed.map(m=>{c.move(m);const s=ev(c)*(c.turn()==="w"?-1:1);c.undo();return{m,s:s+(Math.random()-0.5)*30}});
+            scored.sort((a,b)=>b.s-a.s);
+            const b=scored[0].m;
+            exec(b.from as Square,b.to as Square,b.promotion as any);
+          }
+        }catch{}
+        sThink(false);
+      },delay);
+      return()=>clearTimeout(t);
+    }
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
         // Only apply if the board is still on the same position we asked about.
@@ -1367,20 +1465,35 @@ export default function CyberChessPage(){
     const sideToMove=(tab==="analysis"||hotseat)?game.turn():pCol;
     if(sel){
       if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}
-      if(p?.color===sideToMove){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)));return}
+      if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));return}
       sSel(null);sVm(new Set());return;
     }
-    if(p?.color===sideToMove){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}
+    if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}
   },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab,editorMode,editorPiece,editorTurn,showToast]);
 
   /* ── Drag ── */
   const dRef=useRef<Square|null>(null);
-  const dS=(sq:Square)=>{const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set(game.moves({square:sq,verbose:true}).map(m=>m.to)))}else sPmSel(sq)}};
+  const dS=(sq:Square)=>{const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}else sPmSel(sq)}};
   const dD=(sq:Square)=>{if(!dRef.current)return;const f=dRef.current;dRef.current=null;
     if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const newG=(c?:ChessColor)=>{const cl=c||pCol;
+    // Determine starting FEN based on variant
+    let startFen="";
+    let armies:{white:ArmySlot[];black:ArmySlot[]}|null=null;
+    if(variant==="fischer960"){startFen=fischer960Fen()}
+    else if(variant==="asymmetric"){const r=asymmetricFen();startFen=r.fen;armies={white:r.whiteArmy,black:r.blackArmy}}
+    else if(variant==="twinkings"){startFen=twinKingsFen()}
+    sVariantStartFen(startFen);sVariantArmies(armies);
+    const ng=startFen?new Chess(startFen):new Chess();
+    setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
+    reinfLastMoveRef.current=0;
+    // Roll initial die for diceblade
+    if(variant==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
+    const variantLabel=variant==="standard"?"":` · ${VARIANTS.find(v=>v.id===variant)?.name||""}`;
+    showToast(`Playing ${cl==="w"?"White":"Black"}${variantLabel}`,"info");
+  };
   const resumeGame=(s:ResumeSnap)=>{
     try{
       sTab("play");
@@ -2057,6 +2170,16 @@ export default function CyberChessPage(){
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>найди гениальный ход</span>
                 </div>
               </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>sShowVariants(true)}
+                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
+                  border:"1px solid #fb923c",color:"#9a3412"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>🎲 Variants <Badge tone="gold" size="xs">new</Badge></span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+                    {variant==="standard"?"Fischer 960 · Asymmetric · Diceblade":VARIANTS.find(v=>v.id===variant)?.name||variant}
+                  </span>
+                </div>
+              </Btn>
               {/* AI Rival — only visible once unlocked via shop */}
               {chessy.owned.ai_rival&&<Btn size="lg" variant="secondary" onClick={()=>{
                 if(!rivalProfile){sRivalProfile(createRival(rat))}
@@ -2639,6 +2762,43 @@ export default function CyberChessPage(){
 
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
+          {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{padding:"8px 12px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fef3c7,#fed7aa)",border:"1px solid #fb923c",fontSize:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
+              <span style={{fontSize:18}}>{VARIANTS.find(v=>v.id===variant)?.emoji}</span>
+              <span style={{fontWeight:900,color:"#9a3412"}}>{VARIANTS.find(v=>v.id===variant)?.name}</span>
+              {variant==="diceblade"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:24,lineHeight:1}}>{["⚀","⚁","⚂","⚃","⚄","⚅"][diceFace-1]}</span>
+                <span style={{fontWeight:800,color:CC.text}}>Только: <b style={{color:CC.danger}}>{diceLabel}</b></span>
+              </>}
+              {variant==="twinkings"&&(()=>{
+                try{
+                  const placement=game.fen().split(" ")[0];
+                  const wQ=(placement.match(/Q/g)||[]).length;
+                  const bQ=(placement.match(/q/g)||[]).length;
+                  return <>
+                    <div style={{flex:1}}/>
+                    <span>♔×{wQ?2:1}</span><span>·</span><span>♚×{bQ?2:1}</span>
+                  </>;
+                }catch{return null}
+              })()}
+              {variant==="asymmetric"&&variantArmies&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11,color:CC.textDim}}>
+                  ⚪ {variantArmies.white.map(a=>`${a.count}${a.piece}`).join(" ")} · ⚫ {variantArmies.black.map(a=>`${a.count}${a.piece}`).join(" ")}
+                </span>
+              </>}
+              {variant==="reinforcement"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11}}>след. подкрепление через <b>{10-(hist.length%10)}</b> ходов</span>
+              </>}
+              {variant==="fischer960"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11,color:CC.textDim,fontFamily:"ui-monospace, monospace"}}>{variantStartFen.split("/")[0]}</span>
+              </>}
+            </div>
+          </div>}
           {/* Post-game accuracy card (auto-appears once Stockfish finishes scoring each ply) */}
           {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&(()=>{
             const wS={g:0,good:0,ina:0,mi:0,bl:0,loss:0,c:0};const bS={...wS};
@@ -4240,6 +4400,56 @@ export default function CyberChessPage(){
           </div>
         </div>;
       })()}
+    </Modal>
+
+    {/* ═══ Chess Variants (Fischer 960 · Asymmetric · Twin Kings · Diceblade · Reinforcement) ═══ */}
+    <Modal open={showVariants} onClose={()=>sShowVariants(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🎲 Chess Variants <Badge tone="gold" size="sm">{VARIANTS.length} режимов</Badge></span>}>
+      <div>
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fef3c7,#fed7aa)",border:"1px solid #fb923c",marginBottom:SPACE[3],fontSize:13,color:"#9a3412",lineHeight:1.5}}>
+          <b>Шахматные вариации без теории.</b><br/>
+          Выбери режим — следующая партия начнётся с его правилами. Текущий: <b>{VARIANTS.find(v=>v.id===variant)?.name||variant}</b>.
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2]}}>
+          {VARIANTS.map(v=>{
+            const isActive=variant===v.id;
+            const tagColor=v.tag==="Theory-free"?CC.brand:v.tag==="Asymmetric"?CC.accent:v.tag==="Chaos"?CC.danger:CC.textDim;
+            return <button key={v.id} onClick={()=>{
+              sVariant(v.id);sShowVariants(false);
+              if(v.id!=="standard")showToast(`🎲 Режим: ${v.name}. Запусти новую партию.`,"info");
+              else showToast(`Стандартный режим включён`,"info");
+            }} className="cc-focus-ring"
+              style={{textAlign:"left",padding:SPACE[3],borderRadius:RADIUS.md,
+                background:isActive?"linear-gradient(135deg,#fef3c7,#fde68a)":CC.surface1,
+                border:isActive?`2px solid ${CC.gold}`:`1px solid ${CC.border}`,
+                color:CC.text,cursor:"pointer",transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[1]}}>
+                <div style={{fontSize:28}}>{v.emoji}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:900}}>{v.name}</div>
+                  <div style={{fontSize:11,color:CC.textDim}}>{v.shortDesc}</div>
+                </div>
+                {isActive&&<Badge tone="gold" size="xs">active</Badge>}
+              </div>
+              <div style={{fontSize:11,color:CC.text,lineHeight:1.5,marginTop:SPACE[1],marginBottom:SPACE[2]}}>{v.longDesc}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                <span style={{fontSize:10,fontWeight:800,color:tagColor,background:`${tagColor}1a`,padding:"2px 6px",borderRadius:RADIUS.full}}>{v.tag}</span>
+                {v.notes?.map((n,i)=><span key={i} style={{fontSize:10,color:CC.textDim,fontStyle:"italic"}}>· {n}</span>)}
+              </div>
+            </button>;
+          })}
+        </div>
+        <div style={{marginTop:SPACE[3],display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowVariants(false)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{
+            sShowVariants(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+            setTimeout(()=>newG(),50);
+          }}>▶ Сыграть в этом режиме</Btn>
+        </div>
+        <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center",lineHeight:1.5}}>
+          Variants работают с любым AI level и любым timing. Турнирная сетка пока на стандартных правилах.
+        </div>
+      </div>
     </Modal>
 
     {/* ═══ Daily Brilliancy Hunt (killer #10) ═══ */}

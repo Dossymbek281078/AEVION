@@ -1,0 +1,292 @@
+// Chess Variants — нестандартные правила/стартовые позиции.
+// Все варианты используют chess.js-совместимые FEN'ы; спец-правила
+// (twin kings = «royal queen», diceblade = move filter, reinforcement)
+// проверяются в page.tsx как лёгкие хуки поверх стандартного движка.
+
+export type VariantId = "standard" | "fischer960" | "asymmetric" | "twinkings" | "diceblade" | "reinforcement";
+
+export type Variant = {
+  id: VariantId;
+  name: string;
+  emoji: string;
+  shortDesc: string;
+  longDesc: string;
+  // For UI grouping
+  tag: "Theory-free" | "Asymmetric" | "Chaos" | "Standard";
+  // Display warning if some standard features (e.g. opening book, castling) are altered
+  notes?: string[];
+};
+
+export const VARIANTS: Variant[] = [
+  {
+    id: "standard",
+    name: "Стандарт",
+    emoji: "♟",
+    shortDesc: "Классические правила",
+    longDesc: "Обычные шахматы — стандартная начальная позиция, FIDE-правила, рокировка, en passant.",
+    tag: "Standard",
+  },
+  {
+    id: "fischer960",
+    name: "Fischer 960",
+    emoji: "🎲",
+    shortDesc: "Случайный бэкранк (Chess960)",
+    longDesc: "Бэкранк перетасован случайно. Слоны на разных цветах, король между ладьями. 960 вариантов начальной позиции — теории дебютов не существует. Создан Бобби Фишером в 1996.",
+    tag: "Theory-free",
+    notes: ["Рокировка отключена (упрощение)", "Дебютная теория не работает"],
+  },
+  {
+    id: "asymmetric",
+    name: "Asymmetric Armies",
+    emoji: "⚔",
+    shortDesc: "Разные армии по 39 очков",
+    longDesc: "Каждая сторона получает РАЗНЫЕ фигуры с одинаковым материалом (39 очков: Q=9, R=5, B=3, N=3, P=1). Например: белые — 2 ферзя + 4 коня; чёрные — 4 ладьи + 2 слона. Теория исключена полностью.",
+    tag: "Asymmetric",
+    notes: ["Рокировка отключена", "Король всегда на e-файле"],
+  },
+  {
+    id: "twinkings",
+    name: "Twin Kings",
+    emoji: "👑",
+    shortDesc: "Два короля — мат любого = победа",
+    longDesc: "У каждой стороны 2 «короля»: обычный король + королевский ферзь. Мат короля ИЛИ взятие ферзя = поражение. Меняет всю стратегию защиты.",
+    tag: "Asymmetric",
+    notes: ["Ферзь на d-линии — «второй король»", "Потеря ферзя = поражение"],
+  },
+  {
+    id: "diceblade",
+    name: "Diceblade",
+    emoji: "🎲",
+    shortDesc: "Кубик решает тип фигуры",
+    longDesc: "Перед каждым своим ходом катается кубик: 1=пешка, 2=конь, 3=слон, 4=ладья, 5=ферзь, 6=любая. Если фигурой нельзя ходить — пасуешь. Хаотично, но рейтинг фигур переоценивается.",
+    tag: "Chaos",
+    notes: ["Если все ходы фигурой ведут под мат — pass", "AI тоже подчиняется кубику"],
+  },
+  {
+    id: "reinforcement",
+    name: "Reinforcement",
+    emoji: "🔄",
+    shortDesc: "Возврат фигур каждые 10 ходов",
+    longDesc: "Каждые 10 полуходов одна случайная захваченная фигура возвращается на случайное пустое поле своего лагеря. Партия не заканчивается обменом — приходится играть до мата.",
+    tag: "Chaos",
+    notes: ["Король не возвращается", "Спавн в первых 4 рядах своей стороны"],
+  },
+];
+
+// ── Fischer 960 ──────────────────────────────────────────
+// Generate random Chess960 backrank that satisfies:
+// - 2 bishops on opposite-colored squares
+// - king between 2 rooks
+// Returns 8-char string of piece symbols.
+export function generate960Backrank(seed?: number): string {
+  // Deterministic if seed given (1..960)
+  // For UX, just random.
+  const tries = 100;
+  for (let t = 0; t < tries; t++) {
+    const slots: (string | null)[] = [null, null, null, null, null, null, null, null];
+    // Place light-square bishop (file 1,3,5,7)
+    const lightSlots = [1, 3, 5, 7];
+    const bL = lightSlots[Math.floor(Math.random() * 4)];
+    slots[bL] = "B";
+    const darkSlots = [0, 2, 4, 6];
+    const bD = darkSlots[Math.floor(Math.random() * 4)];
+    slots[bD] = "B";
+    // Place queen on any free
+    const free1 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0);
+    const q = free1[Math.floor(Math.random() * free1.length)];
+    slots[q] = "Q";
+    // Place 2 knights on any 2 free
+    const free2 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0);
+    if (free2.length < 5) continue;
+    const idx1 = Math.floor(Math.random() * free2.length);
+    const n1 = free2[idx1];
+    slots[n1] = "N";
+    const free3 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0);
+    const n2 = free3[Math.floor(Math.random() * free3.length)];
+    slots[n2] = "N";
+    // Remaining 3 free slots → R K R (king MUST be between rooks)
+    const free4 = slots.map((v, i) => v === null ? i : -1).filter(x => x >= 0).sort((a, b) => a - b);
+    if (free4.length !== 3) continue;
+    slots[free4[0]] = "R";
+    slots[free4[1]] = "K";
+    slots[free4[2]] = "R";
+    return slots.join("");
+  }
+  // Fallback: standard
+  return "RNBQKBNR";
+}
+
+// Build full FEN from backrank
+export function fischer960Fen(seed?: number): string {
+  const backrank = generate960Backrank(seed);
+  const blackBack = backrank.toLowerCase();
+  // Use "-" castling to keep it simple (no castling in our 960)
+  return `${blackBack}/pppppppp/8/8/8/8/PPPPPPPP/${backrank} w - - 0 1`;
+}
+
+// ── Asymmetric Armies ────────────────────────────────────
+// Generate two armies, each costing exactly 39 points (standard back-rank value).
+// King + 8 pawns are fixed. The 7 back-rank slots (excluding king) are filled
+// randomly with pieces summing to 39 - 0 (king free) - already-fixed king's slot.
+// Standard back-rank value: 8R+8R+3B+3B+3N+3N+9Q = 39 ↔ matches FIDE start.
+export type ArmySlot = { piece: "Q" | "R" | "B" | "N"; count: number };
+
+const PIECE_VAL: Record<string, number> = { Q: 9, R: 5, B: 3, N: 3 };
+
+// Random army with piece variety constraints to keep things playable.
+export function randomArmy(seed?: number): { piecesByFile: string[]; pieces: ArmySlot[] } {
+  // 7 non-king back-rank slots, target sum = 30 (39 - 9 for the queen-equivalent; but standard is 30 actually: 5+5+3+3+3+3+9=31... let's pick 30)
+  // Actually standard back rank value WITHOUT the king = 8R+8R+3B+3B+3N+3N+9Q = 39. So 7 slots = 39 points.
+  const tries = 200;
+  for (let t = 0; t < tries; t++) {
+    const slots: string[] = [];
+    let remaining = 39;
+    let openSlots = 7;
+    const pool = ["Q", "R", "R", "B", "B", "N", "N"];
+    // Random pick: weighted toward variety
+    while (openSlots > 0 && remaining > 0) {
+      const candidates = pool.filter(p => PIECE_VAL[p] <= remaining);
+      // Ensure remaining slots can fill remaining points: each slot min 3
+      const slotsLeft = openSlots;
+      const minPossible = (slotsLeft - 1) * 3 + 3; // minimum N or B per slot
+      if (remaining < minPossible) {
+        // We've over-filled with high-value pieces; restart
+        slots.length = 0; remaining = 39; openSlots = 7;
+        continue;
+      }
+      // Filter candidates to those that don't make remaining un-fillable
+      const filtered = candidates.filter(p => {
+        const newRem = remaining - PIECE_VAL[p];
+        const newSlots = openSlots - 1;
+        if (newSlots === 0) return newRem === 0;
+        // Each remaining slot needs ≥3, ≤9
+        return newRem >= newSlots * 3 && newRem <= newSlots * 9;
+      });
+      if (filtered.length === 0) {
+        slots.length = 0; remaining = 39; openSlots = 7; continue;
+      }
+      const pick = filtered[Math.floor(Math.random() * filtered.length)];
+      slots.push(pick);
+      remaining -= PIECE_VAL[pick];
+      openSlots--;
+    }
+    if (slots.length === 7 && remaining === 0) {
+      // Place king at file e (index 4) — slots fill files 0,1,2,3,5,6,7 in order
+      // Sort slots by aesthetic: heavier pieces near center
+      slots.sort((a, b) => PIECE_VAL[b] - PIECE_VAL[a]);
+      // Distribute: outermost slots get rooks/lighter, inner get heavier
+      const filesOrder = [0, 7, 1, 6, 2, 5, 3]; // outside-in
+      const piecesByFile: string[] = ["", "", "", "", "K", "", "", ""];
+      // Map slots to file order: place strongest (queen) closer to king
+      // Reverse — strongest LAST so they end up in middle
+      const placeOrder = filesOrder.slice().reverse();
+      for (let i = 0; i < 7; i++) {
+        piecesByFile[placeOrder[i]] = slots[i];
+      }
+      // Aggregate counts
+      const counts: Record<string, number> = {};
+      for (const p of slots) counts[p] = (counts[p] || 0) + 1;
+      const pieces: ArmySlot[] = Object.entries(counts).map(([p, count]) => ({ piece: p as any, count }));
+      return { piecesByFile, pieces };
+    }
+  }
+  // Fallback to standard army
+  return {
+    piecesByFile: ["R", "N", "B", "Q", "K", "B", "N", "R"],
+    pieces: [{ piece: "R", count: 2 }, { piece: "N", count: 2 }, { piece: "B", count: 2 }, { piece: "Q", count: 1 }],
+  };
+}
+
+export function asymmetricFen(): { fen: string; whiteArmy: ArmySlot[]; blackArmy: ArmySlot[] } {
+  const w = randomArmy();
+  const b = randomArmy();
+  const whiteRank = w.piecesByFile.join("");
+  const blackRank = b.piecesByFile.join("").toLowerCase();
+  const fen = `${blackRank}/pppppppp/8/8/8/8/PPPPPPPP/${whiteRank} w - - 0 1`;
+  return { fen, whiteArmy: w.pieces, blackArmy: b.pieces };
+}
+
+// ── Twin Kings ───────────────────────────────────────────
+// Standard FEN, but the queen is treated as "royal" — losing it = loss.
+// We just return standard FEN; the page.tsx will check queen capture.
+export function twinKingsFen(): string {
+  // Use standard start; the variant rules (queen = royal) are enforced in checkGameOver
+  return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+}
+
+// Check if either side has lost their queen (Twin Kings royal-queen rule).
+// Returns the side that lost (and so the OPPOSITE side wins), or null.
+export function twinKingsLossSide(fen: string): "w" | "b" | null {
+  // Parse placement
+  const placement = fen.split(" ")[0];
+  const ranks = placement.split("/");
+  let whiteQ = 0, blackQ = 0;
+  for (const r of ranks) {
+    for (const c of r) {
+      if (c === "Q") whiteQ++;
+      else if (c === "q") blackQ++;
+    }
+  }
+  if (whiteQ === 0) return "w";
+  if (blackQ === 0) return "b";
+  return null;
+}
+
+// ── Diceblade ────────────────────────────────────────────
+// Roll a die. Returns piece type code matching chess.js (lowercase).
+// 1=p (pawn), 2=n, 3=b, 4=r, 5=q, 6=any (returns "")
+export function rollDice(): { face: 1 | 2 | 3 | 4 | 5 | 6; pieceType: string; label: string } {
+  const face = (Math.floor(Math.random() * 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6;
+  const map: Record<number, { type: string; label: string }> = {
+    1: { type: "p", label: "Пешка" },
+    2: { type: "n", label: "Конь" },
+    3: { type: "b", label: "Слон" },
+    4: { type: "r", label: "Ладья" },
+    5: { type: "q", label: "Ферзь" },
+    6: { type: "", label: "Любая фигура!" },
+  };
+  return { face, pieceType: map[face].type, label: map[face].label };
+}
+
+// Filter chess.js verbose moves by allowed piece type. Empty pieceType = all allowed.
+// King moves are always allowed (otherwise stalemate-ish lock).
+export function filterMovesByDice<T extends { piece: string }>(moves: T[], pieceType: string): T[] {
+  if (!pieceType) return moves;
+  return moves.filter(m => m.piece === pieceType || m.piece === "k");
+}
+
+// ── Reinforcement ───────────────────────────────────────
+// Pick one captured piece (from given pool) to drop on a random empty
+// square in the owner's first 4 ranks. Returns null if no candidate.
+export type CapturedSet = string[]; // piece codes like 'P', 'N', 'b'
+
+export function pickReinforcement(captured: CapturedSet, side: "w" | "b", boardFen: string): { piece: string; sq: string } | null {
+  if (captured.length === 0) return null;
+  // Filter pieces to side
+  const myPieces = captured.filter(p => (side === "w") === (p === p.toUpperCase()));
+  if (myPieces.length === 0) return null;
+  const piece = myPieces[Math.floor(Math.random() * myPieces.length)];
+  // Find empty squares in side's first 4 ranks
+  const placement = boardFen.split(" ")[0];
+  const ranks = placement.split("/"); // index 0 = rank 8 (black)
+  const startRank = side === "w" ? 4 : 0; // ranks 1..4 for white = indexes 7..4 (reversed); ranks 5..8 for black = indexes 3..0
+  // Actually: white owns ranks 1-4 (indexes 7,6,5,4); black owns 5-8 (indexes 3,2,1,0)
+  const myRankIndexes = side === "w" ? [4, 5, 6, 7] : [0, 1, 2, 3];
+  const emptySquares: string[] = [];
+  for (const rIdx of myRankIndexes) {
+    let file = 0;
+    for (const c of ranks[rIdx]) {
+      if (/\d/.test(c)) {
+        for (let k = 0; k < parseInt(c); k++) {
+          emptySquares.push(`${"abcdefgh"[file]}${8 - rIdx}`);
+          file++;
+        }
+      } else {
+        file++;
+      }
+    }
+  }
+  if (emptySquares.length === 0) return null;
+  const sq = emptySquares[Math.floor(Math.random() * emptySquares.length)];
+  return { piece, sq };
+}

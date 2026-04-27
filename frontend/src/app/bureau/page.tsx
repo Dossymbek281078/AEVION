@@ -108,6 +108,66 @@ const LEGAL_FRAMEWORKS = [
   { name: "KZ Digital Signature Law", desc: "Electronic digital signatures are legally equivalent to handwritten", scope: "Kazakhstan", color: "#f59e0b", article: "No. 370-II" },
 ];
 
+/* Markdown export — render the currently-loaded certificate slice as a
+ * pipe-separated Markdown table and trigger a download. Stays
+ * client-side: no backend round-trip, perfectly mirrors what the user
+ * sees with their current filters. Pipe characters in titles are
+ * escaped so the table doesn't fracture.
+ */
+function exportMarkdown(
+  certs: Certificate[],
+  q: string,
+  kind: string,
+  sort: string,
+): void {
+  if (typeof window === "undefined" || certs.length === 0) return;
+  const escapeCell = (v: string): string => v.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  const header = "| # | Title | Type | Author | Location | Protected | Verified | Cert ID | Verify URL |";
+  const sep = "|---|-------|------|--------|----------|-----------|----------|---------|------------|";
+  const rows = certs.map((c, i) => {
+    const cells = [
+      String(i + 1),
+      escapeCell(c.title || ""),
+      escapeCell(c.kind || ""),
+      escapeCell(c.author || ""),
+      escapeCell(c.location || ""),
+      new Date(c.protectedAt).toISOString().slice(0, 10),
+      `${c.verifiedCount}×`,
+      `\`${c.id}\``,
+      c.verifyUrl ? `[verify](${c.verifyUrl})` : "—",
+    ];
+    return "| " + cells.join(" | ") + " |";
+  });
+  const filterDesc: string[] = [];
+  if (q) filterDesc.push(`q="${q}"`);
+  if (kind) filterDesc.push(`kind=${kind}`);
+  if (sort) filterDesc.push(`sort=${sort}`);
+  const md = [
+    "# AEVION Bureau — Public Certificate Registry",
+    "",
+    `Exported ${new Date().toISOString()}` +
+      (filterDesc.length ? ` · filters: ${filterDesc.join(", ")}` : "") +
+      ` · ${certs.length} certificate(s)`,
+    "",
+    "Verify any row independently at https://aevion.app/verify/<cert id> — no AEVION login required.",
+    "",
+    header,
+    sep,
+    ...rows,
+    "",
+  ].join("\n");
+
+  const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `aevion-bureau-${new Date().toISOString().slice(0, 10)}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /* Relative time helper — keeps copy concise on cards / activity feed.
  * Returns "just now", "5 min ago", "3 h ago", "yesterday", "12 d ago",
  * "8 mo ago", or "2 y ago". Falls back to a localized date string for
@@ -947,6 +1007,15 @@ export default function BureauPage() {
               >
                 📥 Export CSV
               </a>
+              <button
+                type="button"
+                onClick={() => exportMarkdown(certificates, debouncedQ, kind, sort)}
+                disabled={certificates.length === 0}
+                title="Download the current registry view as a Markdown table — paste into docs / READMEs / blog posts"
+                style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: certificates.length === 0 ? "rgba(15,23,42,0.04)" : "#fff", color: certificates.length === 0 ? "#94a3b8" : "#0f172a", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, cursor: certificates.length === 0 ? "default" : "pointer" }}
+              >
+                📝 Export Markdown
+              </button>
               <Link href="/qright" style={{ padding: "9px 16px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
             </div>
           </div>

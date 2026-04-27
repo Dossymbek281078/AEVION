@@ -19,6 +19,7 @@ import {
   type Gift,
   type GiftThemeId,
 } from "../_lib/gifts";
+import { buildGiftShareUrl } from "../_lib/giftLink";
 import { inputStyle } from "./formPrimitives";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
@@ -29,6 +30,26 @@ type Props = {
   send: (to: string, amount: number) => Promise<boolean>;
   notify: Notify;
 };
+
+async function copyShareLink(
+  g: Gift,
+  fromName: string | undefined,
+  notify: Notify,
+  t: (k: string, vars?: Record<string, string | number>) => string,
+): Promise<void> {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const url = buildGiftShareUrl(origin, g, fromName);
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      notify(t("gift.share.copied"), "success");
+      return;
+    }
+    throw new Error("Clipboard unavailable");
+  } catch {
+    notify(t("gift.share.fallback", { url }), "info");
+  }
+}
 
 export function GiftMode({ myAccountId, balance, send, notify }: Props) {
   const { t } = useI18n();
@@ -384,6 +405,7 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
                 g={g}
                 now={nowTick}
                 onCancel={() => cancelPending(g)}
+                onShare={() => void copyShareLink(g, myAccountId, notify, t)}
               />
             ))}
           </div>
@@ -415,7 +437,12 @@ export function GiftMode({ myAccountId, balance, send, notify }: Props) {
               .filter((g) => g.status !== "pending" && g.status !== "cancelled")
               .slice(0, 6)
               .map((g) => (
-                <MiniGift key={g.id} g={g} code={code} />
+                <MiniGift
+                  key={g.id}
+                  g={g}
+                  code={code}
+                  onShare={() => void copyShareLink(g, myAccountId, notify, t)}
+                />
               ))}
           </div>
         </div>
@@ -428,10 +455,12 @@ function PendingGiftRow({
   g,
   now,
   onCancel,
+  onShare,
 }: {
   g: Gift;
   now: number;
   onCancel: () => void;
+  onShare: () => void;
 }) {
   const { t } = useI18n();
   const unlockMs = g.unlockAt ? Date.parse(g.unlockAt) : 0;
@@ -448,7 +477,7 @@ function PendingGiftRow({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "36px 1fr auto auto",
+        gridTemplateColumns: "36px 1fr auto auto auto",
         gap: 10,
         alignItems: "center",
         padding: "8px 10px",
@@ -502,6 +531,24 @@ function PendingGiftRow({
       >
         {countdown}
       </span>
+      <button
+        type="button"
+        onClick={onShare}
+        title={t("gift.row.share.title")}
+        aria-label={t("gift.row.share.title")}
+        style={{
+          padding: "4px 8px",
+          borderRadius: 7,
+          border: "1px solid rgba(124,58,237,0.3)",
+          background: "rgba(124,58,237,0.08)",
+          color: "#7c3aed",
+          fontSize: 10,
+          fontWeight: 800,
+          cursor: "pointer",
+        }}
+      >
+        {t("gift.row.share")}
+      </button>
       <button
         type="button"
         onClick={onCancel}
@@ -628,10 +675,13 @@ function GiftPreview({
 function MiniGift({
   g,
   code,
+  onShare,
 }: {
   g: Gift;
   code: "AEC" | "USD" | "EUR" | "KZT";
+  onShare: () => void;
 }) {
+  const { t: tr } = useI18n();
   const t = getTheme(g.themeId);
   return (
     <div
@@ -645,8 +695,36 @@ function MiniGift({
         justifyContent: "space-between",
         gap: 6,
         minHeight: 100,
+        position: "relative",
       }}
     >
+      <button
+        type="button"
+        onClick={onShare}
+        aria-label={tr("gift.row.share.title")}
+        title={tr("gift.row.share.title")}
+        style={{
+          position: "absolute",
+          top: 6,
+          right: 6,
+          width: 26,
+          height: 26,
+          padding: 0,
+          borderRadius: 7,
+          border: "1px solid rgba(255,255,255,0.45)",
+          background: "rgba(255,255,255,0.18)",
+          color: t.textColor,
+          fontSize: 12,
+          fontWeight: 900,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backdropFilter: "blur(2px)",
+        }}
+      >
+        ⤴
+      </button>
       <div
         style={{
           fontSize: 10,

@@ -18,6 +18,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { A11yStyles } from "./_components/A11yStyles";
 import { AccountIdCard } from "./_components/AccountIdCard";
 import { AchievementsPanel } from "./_components/AchievementsPanel";
+import { AecVault } from "./_components/AecVault";
 import { ActivityHeatmap } from "./_components/ActivityHeatmap";
 import { ActivityTimeline } from "./_components/ActivityTimeline";
 import { AdvisorChat } from "./_components/AdvisorChat";
@@ -447,6 +448,7 @@ function BankContent() {
               notify={notify}
             />
             <SpendingChallenges myAccountId={account.id} operations={operations} />
+            <AecVault account={account} topup={handleTopup} notify={notify} />
             <SalaryAdvance
               account={account}
               operations={operations}

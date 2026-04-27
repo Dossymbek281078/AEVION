@@ -2345,126 +2345,152 @@ export default function CyberChessPage(){
               </div>
             </div>
 
-            {/* Actions */}
-            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4],flexWrap:"wrap"}}>
-              <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
-                style={{flex:"2 1 260px",padding:"14px 22px",borderRadius:RADIUS.lg,border:"none",
-                  background:`linear-gradient(135deg,${CC.brand},#10b981 60%,#14b8a6)`,color:"#fff",
-                  fontWeight:900,fontSize:15,cursor:"pointer",
-                  boxShadow:"0 8px 20px rgba(5,150,105,0.34), inset 0 1px 0 rgba(255,255,255,0.2)",
-                  display:"inline-flex",alignItems:"center",justifyContent:"center",gap:SPACE[2],
-                  letterSpacing:0.3,transition:`transform ${MOTION.fast} ${MOTION.ease}`}}
-                onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.98)"}}
-                onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform=""}}>
-                <Icon.Play width={18} height={18}/> QUICK START
-              </button>
-              <Btn size="lg" variant="secondary" onClick={()=>{
-                const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
-                const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
-                sAiI(capped);sHotseat(false);sRivalMode(false);
-                setTimeout(()=>newG(),50);
-              }} style={{flex:"1 1 160px"}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>⚡ Match Me</span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat} ELO</span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);sRivalMode(false);setTimeout(()=>newG(),50)}}
-                style={{flex:"1 1 160px",background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
-                  border:"1px solid #bfdbfe",color:CC.info}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>👥 Vs Человек</span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>за одним экраном</span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>sShowOpeningTrainer(true)}
-                style={{flex:"1 1 160px",background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",
-                  border:"1px solid #d8b4fe",color:CC.accent}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>🎓 Opening Trainer</span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>drill дебютов</span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>sShowTournament(true)}
-                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fef3c7,#fde68a)",
+            {/* ─── Section 1: QUICK PLAY ─── */}
+            <div style={{marginTop:SPACE[4]}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
+                <span style={{fontSize:10,fontWeight:900,color:CC.brand,letterSpacing:1.5,textTransform:"uppercase" as const}}>▸ Быстрая игра</span>
+                <div style={{flex:1,height:1,background:`linear-gradient(90deg, ${CC.brand}33, transparent)`}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:SPACE[2]}}>
+                <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
+                  style={{padding:"16px 22px",borderRadius:RADIUS.lg,border:"none",
+                    background:`linear-gradient(135deg,${CC.brand},#10b981 55%,#14b8a6)`,color:"#fff",
+                    fontWeight:900,fontSize:16,cursor:"pointer",
+                    boxShadow:"0 10px 24px rgba(5,150,105,0.38), inset 0 1px 0 rgba(255,255,255,0.25)",
+                    display:"inline-flex",alignItems:"center",justifyContent:"center",gap:SPACE[2],
+                    letterSpacing:0.4,transition:`all ${MOTION.fast} ${MOTION.ease}`}}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 14px 28px rgba(5,150,105,0.45), inset 0 1px 0 rgba(255,255,255,0.3)"}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform="";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 10px 24px rgba(5,150,105,0.38), inset 0 1px 0 rgba(255,255,255,0.25)"}}
+                  onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.98)"}}
+                  onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"}}>
+                  <Icon.Play width={18} height={18}/> QUICK START
+                </button>
+                <Btn size="lg" variant="secondary" onClick={()=>{
+                  const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
+                  const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
+                  sAiI(capped);sHotseat(false);sRivalMode(false);
+                  setTimeout(()=>newG(),50);
+                }}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>⚡ Match Me</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat}</span>
+                  </div>
+                </Btn>
+                <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);sRivalMode(false);setTimeout(()=>newG(),50)}}
+                  style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
+                    border:"1px solid #bfdbfe",color:CC.info}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>👥 Vs Человек</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>один экран</span>
+                  </div>
+                </Btn>
+              </div>
+            </div>
+
+            {/* ─── Section 2: GAME MODES ─── */}
+            <div style={{marginTop:SPACE[4]}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
+                <span style={{fontSize:10,fontWeight:900,color:"#9a3412",letterSpacing:1.5,textTransform:"uppercase" as const}}>▸ Режимы и оппоненты</span>
+                <div style={{flex:1,height:1,background:`linear-gradient(90deg, #fb923c33, transparent)`}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))",gap:SPACE[2]}}>
+                <Btn size="lg" variant="secondary" onClick={()=>sShowVariants(true)}
+                  style={{background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
+                    border:"1px solid #fb923c",color:"#9a3412"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>🎲 Variants <Badge tone="gold" size="xs">{VARIANTS.length}</Badge></span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600,maxWidth:140,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+                      {variant==="standard"?"Fischer 960 · Atomic · ...":VARIANTS.find(v=>v.id===variant)?.name||variant}
+                    </span>
+                  </div>
+                </Btn>
+                <Btn size="lg" variant="secondary" onClick={()=>{
+                  const r=randomVariant();
+                  sVariant(r);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+                  if(r==="asymmetric")sManualArmyFen("");
+                  setTimeout(()=>newG(),50);
+                  showToast(`🎰 Surprise Me: ${VARIANTS.find(v=>v.id===r)?.name}`,"success");
+                }} style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
+                  border:"1px solid #c4b5fd",color:CC.accent}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>🎰 Surprise Me</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>рандом-режим</span>
+                  </div>
+                </Btn>
+                <Btn size="lg" variant="secondary" onClick={()=>sShowTournament(true)}
+                  style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",
+                    border:"1px solid #fcd34d",color:"#92400e"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>🏆 Tournament</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+                      {tournament?(tournament.currentRound==="done"?"открой ✓":`${tournament.currentRound.toUpperCase()}`):"8 ботов knockout"}
+                    </span>
+                  </div>
+                </Btn>
+                <Btn size="lg" variant="secondary" onClick={()=>sShowGhost(true)}
+                  style={{background:"linear-gradient(135deg,#1f2937,#0f172a)",
+                    border:"1px solid #374151",color:"#fbbf24"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>👻 Ghost Mode</span>
+                    <span style={{fontSize:11,color:"#9ca3af",fontWeight:600,maxWidth:140,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+                      {ghostMode&&activeGhost?`vs ${activeGhost.name}`:"Magnus · Tal · Fischer"}
+                    </span>
+                  </div>
+                </Btn>
+                <Btn size="lg" variant="secondary" onClick={()=>sShowCloner(true)}
+                  style={{background:"linear-gradient(135deg,#ecfeff,#cffafe)",
+                    border:"1px solid #67e8f9",color:"#155e75"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>🧬 Style Cloner</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+                      {clones.length>0?`${clones.length} клон${clones.length===1?"":clones.length<5?"а":"ов"}`:"Lichess → бот"}
+                    </span>
+                  </div>
+                </Btn>
+                {chessy.owned.ai_rival&&<Btn size="lg" variant="secondary" onClick={()=>{
+                  if(!rivalProfile){sRivalProfile(createRival(rat))}
+                  sShowRivalGreet(true);
+                }} style={{
+                  background:"linear-gradient(135deg,#1e1b4b,#4c1d95,#7c3aed)",
+                  border:"1px solid #a78bfa",color:"#fff",
+                  boxShadow:"0 4px 12px rgba(124,58,237,0.35)"}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>⚔ {rivalProfile?rivalProfile.name:"AI Rival"}</span>
+                    <span style={{fontSize:11,opacity:0.85,fontWeight:600}}>
+                      {rivalProfile?`${rivalProfile.rating} ELO`:"персональный"}
+                    </span>
+                  </div>
+                </Btn>}
+              </div>
+            </div>
+
+            {/* ─── Section 3: TRAINING & DAILY ─── */}
+            <div style={{marginTop:SPACE[4]}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
+                <span style={{fontSize:10,fontWeight:900,color:CC.accent,letterSpacing:1.5,textTransform:"uppercase" as const}}>▸ Тренировка и daily</span>
+                <div style={{flex:1,height:1,background:`linear-gradient(90deg, ${CC.accent}33, transparent)`}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))",gap:SPACE[2]}}>
+                <Btn size="lg" variant="secondary" onClick={()=>sShowOpeningTrainer(true)}
+                  style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",
+                    border:"1px solid #d8b4fe",color:CC.accent}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>🎓 Opening Trainer</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>drill дебютов</span>
+                  </div>
+                </Btn>
+                <Btn size="lg" variant="secondary" onClick={()=>{
+                  const{hunt,state}=todayHunt();
+                  sBrilliancyHunt(hunt);sBrilliancyState(state);sBrilliancyInput("");sBrilliancyResult(null);
+                  sShowBrilliancy(true);
+                }} style={{background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fcd34d",color:"#92400e"}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>🏆 Tournament <Badge tone="gold" size="xs">new</Badge></span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-                    {tournament?(tournament.currentRound==="done"?"завершён · открой":`раунд ${tournament.currentRound.toUpperCase()}`):"8 ботов · knockout"}
-                  </span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>sShowCloner(true)}
-                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#ecfeff,#cffafe)",
-                  border:"1px solid #67e8f9",color:"#155e75"}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>🧬 Style Cloner <Badge tone="info" size="xs">new</Badge></span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-                    {clones.length>0?`${clones.length} клон${clones.length===1?"":clones.length<5?"а":"ов"}`:"Lichess → бот-клон"}
-                  </span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>sShowGhost(true)}
-                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#1f2937,#0f172a)",
-                  border:"1px solid #374151",color:"#fbbf24"}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>👻 Ghost Mode <Badge tone="gold" size="xs">new</Badge></span>
-                  <span style={{fontSize:11,color:"#9ca3af",fontWeight:600}}>
-                    {ghostMode&&activeGhost?`vs ${activeGhost.name}`:"Magnus · Tal · Fischer · Kasparov"}
-                  </span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>{
-                const{hunt,state}=todayHunt();
-                sBrilliancyHunt(hunt);sBrilliancyState(state);sBrilliancyInput("");sBrilliancyResult(null);
-                sShowBrilliancy(true);
-              }} style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
-                border:"1px solid #fcd34d",color:"#92400e"}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>💎 Brilliancy Hunt <Badge tone="gold" size="xs">daily</Badge></span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>найди гениальный ход</span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>sShowVariants(true)}
-                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
-                  border:"1px solid #fb923c",color:"#9a3412"}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>🎲 Variants <Badge tone="gold" size="xs">{VARIANTS.length}</Badge></span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-                    {variant==="standard"?"Fischer 960 · Asymmetric · Diceblade":VARIANTS.find(v=>v.id===variant)?.name||variant}
-                  </span>
-                </div>
-              </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>{
-                const r=randomVariant();
-                sVariant(r);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
-                if(r==="asymmetric")sManualArmyFen("");
-                setTimeout(()=>newG(),50);
-                showToast(`🎰 Surprise Me: ${VARIANTS.find(v=>v.id===r)?.name}`,"success");
-              }} style={{flex:"1 1 160px",background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
-                border:"1px solid #c4b5fd",color:CC.accent}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>🎰 Surprise Me</span>
-                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>случайный режим</span>
-                </div>
-              </Btn>
-              {/* AI Rival — only visible once unlocked via shop */}
-              {chessy.owned.ai_rival&&<Btn size="lg" variant="secondary" onClick={()=>{
-                if(!rivalProfile){sRivalProfile(createRival(rat))}
-                sShowRivalGreet(true);
-              }} style={{flex:"1 1 180px",
-                background:"linear-gradient(135deg,#1e1b4b,#4c1d95,#7c3aed)",
-                border:"1px solid #a78bfa",color:"#fff",
-                boxShadow:"0 4px 12px rgba(124,58,237,0.35)"}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  <span>⚔ {rivalProfile?rivalProfile.name:"AI Rival"}</span>
-                  <span style={{fontSize:11,opacity:0.85,fontWeight:600}}>
-                    {rivalProfile?`${rivalProfile.rating} · ${rivalProfile.encounters} партий`:"персональный соперник"}
-                  </span>
-                </div>
-              </Btn>}
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <span>💎 Brilliancy <Badge tone="gold" size="xs">daily</Badge></span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>найди гениальный ход</span>
+                  </div>
+                </Btn>
+              </div>
             </div>
           </Card>
 
@@ -3060,14 +3086,28 @@ export default function CyberChessPage(){
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
-          {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{padding:"8px 12px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fef3c7,#fed7aa)",border:"1px solid #fb923c",fontSize:12}}>
+          {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{
+            padding:"10px 14px",borderRadius:RADIUS.md,
+            background:"linear-gradient(135deg,#fef3c7 0%,#fed7aa 100%)",
+            border:"1px solid #fb923c",fontSize:12,
+            boxShadow:"0 2px 8px rgba(251,146,60,0.18), inset 0 1px 0 rgba(255,255,255,0.5)",
+            position:"relative",overflow:"hidden"}}>
+            {/* Subtle animated stripe */}
+            <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,#fb923c,#f97316,#fb923c)",opacity:0.7}}/>
             <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
-              <span style={{fontSize:18}}>{VARIANTS.find(v=>v.id===variant)?.emoji}</span>
-              <span style={{fontWeight:900,color:"#9a3412"}}>{VARIANTS.find(v=>v.id===variant)?.name}</span>
+              <span style={{fontSize:20,filter:"drop-shadow(0 1px 2px rgba(154,52,18,0.25))"}}>{VARIANTS.find(v=>v.id===variant)?.emoji}</span>
+              <span style={{fontWeight:900,color:"#9a3412",letterSpacing:0.3}}>{VARIANTS.find(v=>v.id===variant)?.name}</span>
               {variant==="diceblade"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:24,lineHeight:1}}>{["⚀","⚁","⚂","⚃","⚄","⚅"][diceFace-1]}</span>
-                <span style={{fontWeight:800,color:CC.text}}>Только: <b style={{color:CC.danger}}>{diceLabel}</b></span>
+                <span style={{
+                  fontSize:28,lineHeight:1,
+                  display:"inline-block",
+                  padding:"2px 8px",borderRadius:6,
+                  background:"#fff",
+                  boxShadow:"0 2px 6px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(0,0,0,0.08)",
+                  animation:"diceRoll 0.4s ease-out"
+                }}>{["⚀","⚁","⚂","⚃","⚄","⚅"][diceFace-1]}</span>
+                <span style={{fontWeight:800,color:CC.text}}>Только: <b style={{color:CC.danger,padding:"2px 8px",borderRadius:RADIUS.sm,background:"rgba(220,38,38,0.08)"}}>{diceLabel}</b></span>
               </>}
               {variant==="twinkings"&&(()=>{
                 try{
@@ -3096,9 +3136,27 @@ export default function CyberChessPage(){
               </>}
               {variant==="threecheck"&&<>
                 <div style={{flex:1}}/>
-                <span>⚪ {[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:14,height:14,borderRadius:"50%",margin:"0 1px",background:i<checksByWhite?CC.danger:CC.surface3,border:`1px solid ${CC.border}`}}/>)} {checksByWhite}/3</span>
-                <span>·</span>
-                <span>⚫ {[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:14,height:14,borderRadius:"50%",margin:"0 1px",background:i<checksByBlack?CC.danger:CC.surface3,border:`1px solid ${CC.border}`}}/>)} {checksByBlack}/3</span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                  <span style={{fontWeight:700}}>⚪</span>
+                  {[0,1,2].map(i=><span key={i} style={{
+                    display:"inline-block",width:16,height:16,borderRadius:"50%",
+                    background:i<checksByWhite?`radial-gradient(circle at 30% 30%, #fca5a5, ${CC.danger})`:CC.surface3,
+                    border:`1px solid ${i<checksByWhite?CC.danger:CC.border}`,
+                    boxShadow:i<checksByWhite?"0 0 8px rgba(220,38,38,0.5)":"none",
+                    animation:i===checksByWhite-1?"pop 0.5s ease-out":""
+                  }}/>)}
+                </span>
+                <span style={{color:CC.textDim,fontSize:11}}>·</span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                  <span style={{fontWeight:700}}>⚫</span>
+                  {[0,1,2].map(i=><span key={i} style={{
+                    display:"inline-block",width:16,height:16,borderRadius:"50%",
+                    background:i<checksByBlack?`radial-gradient(circle at 30% 30%, #fca5a5, ${CC.danger})`:CC.surface3,
+                    border:`1px solid ${i<checksByBlack?CC.danger:CC.border}`,
+                    boxShadow:i<checksByBlack?"0 0 8px rgba(220,38,38,0.5)":"none",
+                    animation:i===checksByBlack-1?"pop 0.5s ease-out":""
+                  }}/>)}
+                </span>
               </>}
               {variant==="kingofthehill"&&<>
                 <div style={{flex:1}}/>
@@ -4105,7 +4163,7 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:8}}>{(["q","r","b","n"] as const).map(pt=><button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} style={{padding:"8px 12px",borderRadius:10,border:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",width:60,height:60}}><Piece type={pt} color={pCol}/></button>)}</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);

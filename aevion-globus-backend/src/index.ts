@@ -176,6 +176,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/newsletter/count": {
         get: { summary: "Total newsletter subscribers count" },
       },
+      "/api/pricing/checkout/subscriptions/count": {
+        get: { summary: "Total provisioned subscriptions count" },
+      },
     },
   });
 });

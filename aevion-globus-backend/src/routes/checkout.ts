@@ -1,6 +1,7 @@
 import { Router } from "express";
 import Stripe from "stripe";
 import { TIERS, MODULES_PRICING, getTier, getModulePrice, resolvePromoCode, type TierId, type BillingPeriod } from "../data/pricing";
+import { provisionSubscription, countSubscriptions } from "./provisioning";
 
 export const checkoutRouter = Router();
 
@@ -146,6 +147,22 @@ checkoutRouter.post("/session", async (req, res) => {
       let total = lineItems.reduce((s, l) => s + l.amountCents * l.qty, 0);
       if (promoLine) total = Math.max(0, total + promoLine.amountCents * promoLine.qty);
       const trialQs = trialDays > 0 ? `&trial=${trialDays}` : "";
+
+      // Если email указан — сразу провизим подписку (для smoke-flow без webhook'a)
+      if (body.email) {
+        provisionSubscription({
+          email: body.email,
+          tierId: tier.id,
+          period,
+          seats,
+          modules: body.modules ?? [],
+          trialDays,
+          amountUsd: total / 100,
+          promoCode: body.promoCode,
+          source: "stub_checkout",
+        }).catch((e) => console.error("[stub_provisioning] failed", e));
+      }
+
       return res.json({
         url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${total}${trialQs}`,
         mode: "stub",
@@ -246,29 +263,53 @@ checkoutRouter.post("/webhook", (req, res) => {
     return res.status(400).json({ error: "invalid_signature" });
   }
 
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object;
-      console.log(
-        "[checkout/webhook] session.completed",
-        session.id,
-        "tier=",
-        session.metadata?.tierId,
-        "amount=",
-        session.amount_total,
-      );
-      // TODO: provisioning hook — активировать тариф для customer
-      break;
+  // Webhook handler — асинхронный provisioning. Stripe ожидает 200 в течение 30s,
+  // поэтому fire-and-forget: ack сразу, провайдинг — в фоне.
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as unknown as {
+      id: string;
+      customer_email?: string | null;
+      customer_details?: { email?: string | null };
+      amount_total?: number | null;
+      metadata?: Record<string, string>;
+    };
+    const email = session.customer_email || session.customer_details?.email;
+    const m = session.metadata ?? {};
+    if (email && m.tierId) {
+      provisionSubscription({
+        email,
+        tierId: m.tierId as TierId,
+        period: (m.period as BillingPeriod) || "monthly",
+        seats: m.seats ? parseInt(m.seats, 10) : 1,
+        modules: m.modules ? m.modules.split(",").filter(Boolean) : [],
+        trialDays: m.trialDays ? parseInt(m.trialDays, 10) : 0,
+        amountUsd: session.amount_total ? session.amount_total / 100 : undefined,
+        promoCode: m.promoCode || undefined,
+        stripeSessionId: session.id,
+        source: "stripe_webhook",
+      })
+        .then((r) => {
+          console.log(
+            `[provisioning] subscription=${r.subscription.id} tier=${r.subscription.tierId} email_${r.emailMode}=${r.emailSent}${r.emailError ? " err=" + r.emailError : ""}`,
+          );
+        })
+        .catch((e) => console.error("[provisioning] failed", e));
+    } else {
+      console.warn("[checkout/webhook] session.completed without email or tier", session.id);
     }
-    case "checkout.session.expired":
-      console.log("[checkout/webhook] session.expired", event.data.object.id);
-      break;
-    default:
-      // Игнорируем прочие события — просто 200
-      break;
+  } else if (event.type === "checkout.session.expired") {
+    console.log("[checkout/webhook] session.expired", event.data.object.id);
   }
 
   res.json({ received: true });
+});
+
+/**
+ * GET /api/pricing/checkout/subscriptions/count
+ * Счётчик активированных подписок — открыто (не PII).
+ */
+checkoutRouter.get("/subscriptions/count", (_req, res) => {
+  res.json({ total: countSubscriptions() });
 });
 
 /**

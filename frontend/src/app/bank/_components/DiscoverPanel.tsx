@@ -55,6 +55,7 @@ const FEATURES: FeatureRef[] = [
   { id: "vault", cluster: "grow", anchor: "bank-anchor-vault", emoji: "🏦", fresh: true },
   { id: "pie", cluster: "grow", emoji: "🥧", fresh: true },
   { id: "loyalty", cluster: "grow", anchor: "bank-anchor-loyalty", emoji: "🎫", fresh: true },
+  { id: "wishlist", cluster: "grow", anchor: "bank-anchor-wishlist", emoji: "🎁", fresh: true },
   { id: "advance", cluster: "grow", emoji: "💸" },
   { id: "referrals", cluster: "grow", emoji: "🤝" },
 

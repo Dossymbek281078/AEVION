@@ -61,6 +61,7 @@ import { GiftMode } from "./_components/GiftMode";
 import { GoalTemplates } from "./_components/GoalTemplates";
 import { InvestmentPie } from "./_components/InvestmentPie";
 import { LoyaltyVaultPanel } from "./_components/LoyaltyVaultPanel";
+import { Wishlist } from "./_components/Wishlist";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { NetWorthTracker } from "./_components/NetWorthTracker";
 import { NotificationsCenter } from "./_components/NotificationsCenter";
@@ -503,6 +504,9 @@ function BankContent() {
             />
             <div id="bank-anchor-loyalty" style={{ scrollMarginTop: 20 }}>
               <LoyaltyVaultPanel notify={notify} />
+            </div>
+            <div id="bank-anchor-wishlist" style={{ scrollMarginTop: 20 }}>
+              <Wishlist notify={notify} />
             </div>
             <SalaryAdvance
               account={account}

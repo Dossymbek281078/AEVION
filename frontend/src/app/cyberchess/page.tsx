@@ -11,6 +11,7 @@ import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, 
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
+import { ldGhostDuelStats, svGhostDuelStats, makeDuelConfig, getGhostMoveAt, checkDivergence, compareEvals, formatPastDate, ghostSummary, recordDuelResult, type GhostDuelConfig, type GhostDuelStats, type DuelMode, type EvalSample } from "./ghostDuel";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -427,6 +428,15 @@ export default function CyberChessPage(){
   useEffect(()=>{if(rivalProfile)svRival(rivalProfile)},[rivalProfile]);
   const[rivalMode,sRivalMode]=useState(false);
   const[showRivalGreet,sShowRivalGreet]=useState(false);
+  // Ghost Duel — дуэль с прошлым собой (killer feature #6)
+  const[ghostDuelConfig,sGhostDuelConfig]=useState<GhostDuelConfig|null>(null);
+  const[ghostDuelDiverged,sGhostDuelDiverged]=useState<number|null>(null);
+  const[ghostDuelStats,sGhostDuelStats]=useState<GhostDuelStats>(()=>ldGhostDuelStats());
+  const[showGhostDuel,sShowGhostDuel]=useState(false);
+  const[ghostDuelEndModal,sGhostDuelEndModal]=useState<null|{betterCp:number;samples:number;divergedAtPly:number|null;result:string;summary:string;reward:number}>(null);
+  const[ghostPastEval,sGhostPastEval]=useState<EvalSample[]>([]);
+  const[ghostCurrentEval,sGhostCurrentEval]=useState<EvalSample[]>([]);
+  const ghostLearnedRef=useRef<string|null>(null);
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -980,6 +990,60 @@ export default function CyberChessPage(){
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel,hist.length,fenHist,browseIdx]);
 
+  /* ── Ghost Duel: detect divergence ── */
+  useEffect(()=>{
+    if(!ghostDuelConfig||ghostDuelDiverged!==null||hist.length===0)return;
+    const div=checkDivergence(ghostDuelConfig,hist);
+    if(div!==null&&div<hist.length){
+      sGhostDuelDiverged(div);
+      const moveNum=Math.floor(div/2)+1;
+      showToast(`◈ Развилка на ${moveNum}-м ходу — путь разошёлся с прошлой партией`,"info");
+    }
+  },[hist.length,ghostDuelConfig,ghostDuelDiverged,showToast]);
+
+  /* ── Ghost Duel: sample current eval per-ply ── */
+  useEffect(()=>{
+    if(!ghostDuelConfig||hist.length===0)return;
+    const ply=hist.length-1;
+    sGhostCurrentEval(prev=>{
+      if(prev.find(s=>s.ply===ply))return prev;
+      return [...prev,{ply,cp:evalCp}];
+    });
+  },[bk,ghostDuelConfig,hist.length,evalCp]);
+
+  /* ── Ghost Duel: end-of-game summary ── */
+  useEffect(()=>{
+    if(!ghostDuelConfig||!over)return;
+    const gameKey=`${ghostDuelConfig.pastGameId}-${hist.length}`;
+    if(ghostLearnedRef.current===gameKey)return;
+    ghostLearnedRef.current=gameKey;
+    const isWin=over.includes("You win");
+    const isDraw=over.includes("Stalemate")||over.includes("draw")||over.includes("repetition")||over.includes("Insufficient");
+    const pastWasWin=ghostDuelConfig.pastResult.includes("You win");
+    const pastWasLoss=ghostDuelConfig.pastResult.includes("AI wins")||ghostDuelConfig.pastResult.includes("resigned")||ghostDuelConfig.pastResult.includes("Time out");
+    // Bonus structure:
+    // - Win where past you lost: huge (+30)
+    // - Win where past you won: solid (+15)
+    // - Win after divergence: +5
+    // - Draw: 5
+    // - Loss: 1
+    let reward=0;
+    if(isWin){
+      reward=pastWasLoss?30:pastWasWin?15:20;
+      if(ghostDuelDiverged!==null)reward+=5;
+    }else if(isDraw){
+      reward=pastWasLoss?12:5;
+    }else{
+      reward=1;
+    }
+    const cmp=compareEvals(ghostCurrentEval,ghostPastEval,ghostDuelConfig.userPlaysAs);
+    const summary=ghostSummary(ghostDuelConfig,ghostDuelDiverged,cmp,over);
+    sGhostDuelEndModal({betterCp:cmp.betterCp,samples:cmp.samples,divergedAtPly:ghostDuelDiverged,result:over,summary,reward});
+    setTimeout(()=>addChessy(reward,`👻 Ghost Duel`),900);
+    const newStats=recordDuelResult(ghostDuelStats,isWin,isDraw,cmp.betterCp);
+    sGhostDuelStats(newStats);svGhostDuelStats(newStats);
+  },[over,ghostDuelConfig,ghostDuelDiverged,ghostCurrentEval,ghostPastEval,ghostDuelStats,addChessy,hist.length]);
+
   /* ── Rival learning — after each encounter, adapt profile and save ── */
   const rivalLearnedRef=useRef<string|null>(null);
   useEffect(()=>{
@@ -1098,8 +1162,25 @@ export default function CyberChessPage(){
     if(openingDrill)return; // Opening Trainer plays bot moves from script
     if(game.turn()===pCol)return;
     sThink(true);
-    const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     const fenAtTrigger=game.fen();
+    // Ghost Duel: replay scripted move from past game when path is still aligned
+    if(ghostDuelConfig&&ghostDuelDiverged===null){
+      const ghostSan=getGhostMoveAt(ghostDuelConfig,hist.length);
+      if(ghostSan){
+        const t=setTimeout(()=>{
+          try{
+            if(game.fen()!==fenAtTrigger){sThink(false);return}
+            const c=new Chess(fenAtTrigger);
+            const mv=c.move(ghostSan);
+            if(mv){exec(mv.from as Square,mv.to as Square,mv.promotion as any)}
+          }catch{}
+          sThink(false);
+        },700+Math.random()*400);
+        return()=>clearTimeout(t);
+      }
+      // Past game ended — fall through to normal AI from here on
+    }
+    const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
         // Only apply if the board is still on the same position we asked about.
@@ -1116,7 +1197,7 @@ export default function CyberChessPage(){
       sThink(false);
     },delay);
     return()=>clearTimeout(t);
-  },[bk,over,on,tab]);
+  },[bk,over,on,tab,ghostDuelConfig,ghostDuelDiverged]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
@@ -1209,7 +1290,31 @@ export default function CyberChessPage(){
     if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
     if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
 
-  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  const newG=(c?:ChessColor)=>{const cl=c||pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();sGhostDuelConfig(null);sGhostDuelDiverged(null);sGhostCurrentEval([]);sGhostPastEval([]);ghostLearnedRef.current=null;sRivalMode(false);showToast(`Playing ${cl==="w"?"White":"Black"}`,"info")};
+  /* ── Ghost Duel: launch a duel from a saved game ── */
+  const startGhostDuel=useCallback((src:typeof savedGames[number],mode:DuelMode)=>{
+    const cfg=makeDuelConfig(src,mode);
+    if(cfg.pastMoves.length<4){showToast("Слишком короткая партия для дуэли","error");return}
+    // Reset board, configure player side, kick off duel
+    const fresh=new Chess();
+    setGame(fresh);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);
+    sHist([]);sFenHist([fresh.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);
+    sPms([]);sPmSel(null);sPCol(cfg.userPlaysAs);sFlip(cfg.userPlaysAs==="b");
+    sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);
+    sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");
+    sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
+    sRivalMode(false);sHotseat(false);sOpeningDrill(null);sCurrentEndgame(null);
+    // Configure ghost duel
+    sGhostDuelConfig(cfg);sGhostDuelDiverged(null);sGhostCurrentEval([]);sGhostPastEval([]);
+    ghostLearnedRef.current=null;
+    sShowGhostDuel(false);sTab("play");
+    showToast(`👻 ${mode==="rematch"?"Реванш":"Смена ролей"} · партия от ${formatPastDate(cfg.pastDate)}`,"info");
+  },[pT,aT,showToast]);
+  const exitGhostDuel=useCallback(()=>{
+    sGhostDuelConfig(null);sGhostDuelDiverged(null);sGhostCurrentEval([]);sGhostPastEval([]);
+    ghostLearnedRef.current=null;
+    showToast("Ghost Duel завершён","info");
+  },[showToast]);
   const resumeGame=(s:ResumeSnap)=>{
     try{
       sTab("play");
@@ -1844,6 +1949,19 @@ export default function CyberChessPage(){
                   </span>
                 </div>
               </Btn>}
+              {/* Ghost Duel — дуэль с прошлым собой (killer #6) */}
+              {savedGames.length>0&&<Btn size="lg" variant="secondary" onClick={()=>sShowGhostDuel(true)}
+                style={{flex:"1 1 180px",
+                  background:"linear-gradient(135deg,#0f172a,#1e293b,#334155)",
+                  border:"1px solid #64748b",color:"#fff",
+                  boxShadow:"0 4px 12px rgba(15,23,42,0.4)"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>👻 Ghost Duel</span>
+                  <span style={{fontSize:11,opacity:0.85,fontWeight:600}}>
+                    {ghostDuelStats.total>0?`${ghostDuelStats.total} дуэлей · ${ghostDuelStats.wins}W ${ghostDuelStats.losses}L`:"дуэль с прошлым собой"}
+                  </span>
+                </div>
+              </Btn>}
             </div>
           </Card>
 
@@ -2398,6 +2516,41 @@ export default function CyberChessPage(){
 
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {/* Ghost Duel — active progress indicator */}
+          {ghostDuelConfig&&tab==="play"&&!over&&(()=>{
+            const onTrack=ghostDuelDiverged===null;
+            const totalPly=ghostDuelConfig.pastMoves.length;
+            const curPly=Math.min(hist.length,totalPly);
+            const pct=Math.min(100,Math.round((curPly/totalPly)*100));
+            return <div style={{padding:"10px 14px",borderRadius:10,
+              background:onTrack?"linear-gradient(135deg,#0f172a,#1e293b)":"linear-gradient(135deg,#7f1d1d,#991b1b)",
+              border:`1px solid ${onTrack?"#475569":"#dc2626"}`,color:"#fff",
+              boxShadow:"0 2px 8px rgba(15,23,42,0.25)"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:900}}>
+                  <span style={{fontSize:16}}>👻</span>
+                  <span>Ghost Duel · {ghostDuelConfig.mode==="rematch"?"Реванш":"Смена ролей"}</span>
+                </div>
+                <button onClick={exitGhostDuel}
+                  style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:6,
+                    background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.25)",
+                    color:"#fff",cursor:"pointer"}}>Выйти</button>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontSize:11,opacity:0.92,marginBottom:6}}>
+                <span>Партия от {formatPastDate(ghostDuelConfig.pastDate)} · {ghostDuelConfig.pastResult}</span>
+                <span style={{fontFamily:"ui-monospace, monospace"}}>{curPly}/{totalPly}</span>
+              </div>
+              {onTrack ? (
+                <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.15)",overflow:"hidden"}}>
+                  <div style={{width:`${pct}%`,height:"100%",background:"linear-gradient(90deg,#22d3ee,#3b82f6)",transition:"width 250ms ease"}}/>
+                </div>
+              ) : (
+                <div style={{fontSize:11,fontWeight:800,letterSpacing:0.5}}>
+                  ◈ DIVERGED на ходу {Math.floor(ghostDuelDiverged!/2)+1} — призрак больше не ведёт по скрипту
+                </div>
+              )}
+            </div>;
+          })()}
           {/* Post-game accuracy card (auto-appears once Stockfish finishes scoring each ply) */}
           {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&(()=>{
             const wS={g:0,good:0,ina:0,mi:0,bl:0,loss:0,c:0};const bS={...wS};
@@ -4016,6 +4169,109 @@ export default function CyberChessPage(){
           }}>⚡ Ещё раз</Btn>
         </div>
       </div>}
+    </Modal>
+
+    {/* ─── Ghost Duel — выбор партии и режима ─── */}
+    <Modal open={showGhostDuel} onClose={()=>sShowGhostDuel(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>👻 Ghost Duel <Badge tone="neutral" size="sm">дуэль с прошлым собой</Badge></span>}>
+      <div style={{fontSize:13,color:CC.text,lineHeight:1.5,marginBottom:SPACE[3]}}>
+        Призрак автоматически воспроизводит ходы той партии, а ты играешь живьём. Сможешь ли обыграть себя — нынешний против прошлого?
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:SPACE[2],marginBottom:SPACE[3]}}>
+        <Card padding={SPACE[3]} tone="surface2">
+          <div style={{fontSize:10,fontWeight:800,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const}}>Дуэлей</div>
+          <div style={{fontSize:24,fontWeight:900,color:CC.text,lineHeight:1.1,marginTop:2}}>{ghostDuelStats.total}</div>
+          <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{ghostDuelStats.wins}W {ghostDuelStats.losses}L {ghostDuelStats.draws}D</div>
+        </Card>
+        <Card padding={SPACE[3]} tone="surface2">
+          <div style={{fontSize:10,fontWeight:800,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const}}>Лучший Δ</div>
+          <div style={{fontSize:24,fontWeight:900,color:ghostDuelStats.bestBetterCp>0?CC.brand:CC.textDim,lineHeight:1.1,marginTop:2}}>{ghostDuelStats.bestBetterCp>0?`+${Math.round(ghostDuelStats.bestBetterCp)}`:"—"}</div>
+          <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>centipawns vs прошлый ты</div>
+        </Card>
+      </div>
+      {savedGames.length===0?<div style={{padding:SPACE[6],textAlign:"center",color:CC.textDim,fontSize:14}}>
+        <div style={{fontSize:40,marginBottom:SPACE[3]}}>👻</div>
+        <div style={{fontWeight:800,marginBottom:SPACE[2]}}>Партий ещё нет</div>
+        <div>Сыграй пару партий — потом сможешь сразиться с призраком.</div>
+      </div>:<div>
+        <div style={{fontSize:11,fontWeight:800,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>Выбери партию для дуэли</div>
+        <div style={{maxHeight:380,overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1}}>
+          {(()=>{const list=savedGames.slice(0,30).filter(g=>g.moves.length>=4);
+            if(list.length===0)return <div style={{padding:SPACE[5],textAlign:"center" as const,color:CC.textDim,fontSize:13}}>Все партии слишком коротки — сыграй полную игру</div>;
+            return list.map((g,i)=>{
+            const isWin=g.result.includes("You win");
+            const isLoss=g.result.includes("AI wins")||g.result.includes("resigned")||g.result.includes("Time out");
+            const tone=isWin?"brand":isLoss?"danger":"neutral";
+            return <div key={g.id} style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,
+              borderBottom:i<list.length-1?`1px solid ${CC.border}`:"none",
+              display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 200px",minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                  <Badge tone={tone as any} size="xs">{isWin?"W":isLoss?"L":"D"}</Badge>
+                  <span style={{fontSize:13,fontWeight:800,color:CC.text}}>{g.opening||"—"}</span>
+                  <span style={{fontSize:11,color:CC.textDim}}>· {g.playerColor==="w"?"⚪":"⚫"} vs {g.aiLevel}</span>
+                </div>
+                <div style={{fontSize:11,color:CC.textDim,fontFamily:"ui-monospace, monospace"}}>
+                  {formatPastDate(g.date)} · {g.moves.length} полуходов · {g.tc} {g.category}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:SPACE[1]}}>
+                <button onClick={()=>startGhostDuel(g,"rematch")}
+                  className="cc-focus-ring"
+                  title="Играй той же стороной — победи лучше прошлого себя"
+                  style={{padding:"6px 10px",fontSize:11,fontWeight:800,borderRadius:RADIUS.sm,
+                    background:"linear-gradient(135deg,#0f172a,#334155)",color:"#fff",
+                    border:"1px solid #475569",cursor:"pointer"}}>↻ Реванш</button>
+                <button onClick={()=>startGhostDuel(g,"swap")}
+                  className="cc-focus-ring"
+                  title="Меняемся ролями — призрак повторяет твои ходы, ты играй за противника"
+                  style={{padding:"6px 10px",fontSize:11,fontWeight:800,borderRadius:RADIUS.sm,
+                    background:"linear-gradient(135deg,#7c2d12,#9a3412)",color:"#fff",
+                    border:"1px solid #c2410c",cursor:"pointer"}}>⇄ Смена</button>
+              </div>
+            </div>;
+          })})()}
+        </div>
+        <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[2],lineHeight:1.5}}>
+          <b>Реванш</b> — играешь тем же цветом, призрак воспроизводит ходы соперника той партии.<br/>
+          <b>Смена</b> — играешь за противника, призрак повторяет твои собственные ходы.<br/>
+          Если отклонишься от исходной линии, появится <b>◈ DIVERGED</b> — дальше призрак играет через Stockfish.
+        </div>
+      </div>}
+    </Modal>
+
+    {/* ─── Ghost Duel — итоговый экран ─── */}
+    <Modal open={!!ghostDuelEndModal} onClose={()=>{sGhostDuelEndModal(null);exitGhostDuel()}} size="sm"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>👻 Дуэль завершена</span>}>
+      {ghostDuelEndModal&&ghostDuelConfig&&(()=>{
+        const m=ghostDuelEndModal;
+        const isWin=m.result.includes("You win");
+        const accent=isWin?CC.brand:m.result.includes("AI wins")?CC.danger:CC.textDim;
+        return <div>
+          <div style={{padding:SPACE[4],borderRadius:RADIUS.lg,background:isWin?"linear-gradient(135deg,#ecfdf5,#d1fae5)":"linear-gradient(135deg,#f1f5f9,#e2e8f0)",border:`1px solid ${isWin?"#a7f3d0":CC.border}`,marginBottom:SPACE[3]}}>
+            <div style={{fontSize:11,fontWeight:800,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>Результат сейчас</div>
+            <div style={{fontSize:18,fontWeight:900,color:accent,lineHeight:1.2}}>{m.result}</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[1]}}>Тогда было: {ghostDuelConfig.pastResult}</div>
+          </div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`,fontSize:13,color:CC.text,lineHeight:1.5,marginBottom:SPACE[3]}}>
+            {m.summary}
+          </div>
+          {m.divergedAtPly!==null&&<div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:"#fef3c7",border:"1px solid #fcd34d",fontSize:12,color:"#78350f",marginBottom:SPACE[3]}}>
+            ◈ Развилка на {Math.floor(m.divergedAtPly/2)+1}-м ходу — ты выбрал свой путь
+          </div>}
+          {m.samples>1&&<div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:Math.abs(m.betterCp)<40?CC.surface2:m.betterCp>0?"#ecfdf5":"#fef2f2",border:`1px solid ${Math.abs(m.betterCp)<40?CC.border:m.betterCp>0?"#a7f3d0":"#fecaca"}`,fontSize:12,color:CC.text,marginBottom:SPACE[3]}}>
+            <div style={{fontWeight:800,marginBottom:2}}>Δ {m.betterCp>0?"+":""}{Math.round(m.betterCp)} centipawns на ход</div>
+            <div style={{color:CC.textDim}}>{m.samples} измерений · среднее преимущество относительно прошлой партии</div>
+          </div>}
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fbbf24",fontSize:14,fontWeight:900,color:"#78350f",textAlign:"center" as const,marginBottom:SPACE[3]}}>
+            +{m.reward} Chessy за дуэль
+          </div>
+          <div style={{display:"flex",gap:SPACE[2]}}>
+            <Btn variant="secondary" size="md" full onClick={()=>{sGhostDuelEndModal(null);exitGhostDuel()}}>Закрыть</Btn>
+            <Btn variant="accent" size="md" full onClick={()=>{sGhostDuelEndModal(null);exitGhostDuel();sShowGhostDuel(true)}}>👻 Ещё дуэль</Btn>
+          </div>
+        </div>;
+      })()}
     </Modal>
 
     </ProductPageShell></main>);

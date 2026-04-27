@@ -25,7 +25,7 @@ export default function TermsPage() {
           <p>You must register to access certain features. You are responsible for maintaining the security of your account credentials. You must provide accurate information during registration.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>4. Intellectual Property</h2>
-          <p>Content you register through QRight remains your intellectual property. AEVION provides certification and verification services but does not claim ownership of your content. The AEVION platform, including its design, code, and brand, is the property of AEVION.</p>
+          <p>Content you register through QRight remains your intellectual property. AEVION provides cryptographic registration and verification services and does not claim any ownership of, or licence to, your content. Each certificate gives you a self-contained Verification Bundle (.json) that anyone can verify offline — even if AEVION is no longer operating, your proof of authorship survives via Ed25519 and the Bitcoin-anchored OpenTimestamps proof. The AEVION platform itself, including its design, code, and brand, remains the property of AEVION.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>5. Planet Compliance</h2>
           <p>Artifacts submitted to Planet undergo automated compliance checks. Certification does not constitute legal copyright registration. AEVION provides evidence trails and verification, not legal advice.</p>

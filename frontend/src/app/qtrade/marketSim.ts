@@ -6,6 +6,7 @@ const POSITIONS_KEY = "aevion_qtrade_positions_v1";
 const PAIRS_KEY = "aevion_qtrade_pairs_v1";
 const LIMITS_KEY = "aevion_qtrade_limits_v1";
 const CLOSED_KEY = "aevion_qtrade_closed_v1";
+const ALERTS_KEY = "aevion_qtrade_alerts_v1";
 
 export type PairId = "AEV/USD" | "BTC/USD" | "ETH/USD" | "SOL/USD";
 
@@ -273,6 +274,40 @@ export function checkLimitFills(orders: LimitOrder[], pair: Pair): string[] {
     else if (o.side === "short" && pair.price >= o.triggerPrice) filled.push(o.id);
   }
   return filled;
+}
+
+// ─── Price alerts ─────────────────────────────────────────────────
+export type PriceAlert = {
+  id: string;
+  pair: PairId;
+  direction: "above" | "below";
+  price: number;
+  createdTs: number;
+  note?: string;
+};
+
+export function ldAlerts(): PriceAlert[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(ALERTS_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as PriceAlert[] : [];
+  } catch { return [] }
+}
+
+export function svAlerts(as: PriceAlert[]) {
+  try { localStorage.setItem(ALERTS_KEY, JSON.stringify(as)) } catch {}
+}
+
+// Returns alert IDs that should fire at the given pair price.
+export function checkAlertHits(alerts: PriceAlert[], pair: Pair, prevPrice: number): string[] {
+  const fired: string[] = [];
+  for (const a of alerts) {
+    if (a.pair !== pair.id) continue;
+    if (a.direction === "above" && prevPrice < a.price && pair.price >= a.price) fired.push(a.id);
+    else if (a.direction === "below" && prevPrice > a.price && pair.price <= a.price) fired.push(a.id);
+  }
+  return fired;
 }
 
 // ─── Order book mock ──────────────────────────────────────────────

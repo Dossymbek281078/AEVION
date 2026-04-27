@@ -8,9 +8,10 @@ import {
   ldPairs, svPairs, ldPositions, svPositions,
   ldLimits, svLimits, checkLimitFills, buildOrderBook,
   ldClosed, svClosed, buildClosed, checkBracketHit,
+  ldAlerts, svAlerts, checkAlertHits,
   tickPair, catchupPair, unrealizedPnl, unrealizedPct,
   fmtUsd, fmtPct, sparklinePath,
-  type Pair, type Position, type PairId, type LimitOrder, type ClosedPosition,
+  type Pair, type Position, type PairId, type LimitOrder, type ClosedPosition, type PriceAlert,
 } from "./marketSim";
 import { ldWallet, svWallet, sellAev, buyAev, recordPlay, type AEVWallet } from "../aev/aevToken";
 
@@ -68,7 +69,12 @@ export default function QTradePage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [limits, setLimits] = useState<LimitOrder[]>([]);
   const [closedPositions, setClosedPositions] = useState<ClosedPosition[]>([]);
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [marketsReady, setMarketsReady] = useState(false);
+  const [alertNote, setAlertNote] = useState("");
+  const [alertPrice, setAlertPrice] = useState("");
+  const [alertDir, setAlertDir] = useState<"above" | "below">("above");
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>("default");
   const [activePair, setActivePair] = useState<PairId | null>(null);
   const [orderQty, setOrderQty] = useState("1");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -89,6 +95,8 @@ export default function QTradePage() {
     setPositions(ldPositions());
     setLimits(ldLimits());
     setClosedPositions(ldClosed());
+    setAlerts(ldAlerts());
+    if (typeof Notification !== "undefined") setNotifPerm(Notification.permission);
     setMarketsReady(true);
   }, []);
 
@@ -100,6 +108,33 @@ export default function QTradePage() {
         if (prev.length === 0) return prev;
         const next = prev.map(tickPair);
         svPairs(next);
+        // Check price alerts (compare prev vs new for crossing)
+        setAlerts((prevAlerts) => {
+          if (prevAlerts.length === 0) return prevAlerts;
+          const fired: string[] = [];
+          for (const np of next) {
+            const op = prev.find((x) => x.id === np.id);
+            if (!op) continue;
+            for (const id of checkAlertHits(prevAlerts, np, op.price)) fired.push(id);
+          }
+          if (fired.length === 0) return prevAlerts;
+          for (const id of fired) {
+            const a = prevAlerts.find((x) => x.id === id);
+            if (!a) continue;
+            const np = next.find((x) => x.id === a.pair);
+            if (!np) continue;
+            const msg = `${a.pair} ${a.direction === "above" ? "↑" : "↓"} ${fmtUsd(a.price)} · сейчас ${fmtUsd(np.price)}`;
+            // Browser notification (if granted)
+            try {
+              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+                new Notification("⚡ AEVION QTrade · price alert", { body: msg + (a.note ? ` — ${a.note}` : "") });
+              }
+            } catch {}
+            setTradeMsg(`🔔 ${msg}`);
+            setTimeout(() => setTradeMsg(null), 4000);
+          }
+          return prevAlerts.filter((a) => !fired.includes(a.id));
+        });
         // After tick, check whether any limit orders have crossed.
         setLimits((prevLimits) => {
           if (prevLimits.length === 0) return prevLimits;
@@ -171,10 +206,11 @@ export default function QTradePage() {
     return () => clearInterval(id);
   }, [marketsReady]);
 
-  // Persist positions/limits/closed when they change
+  // Persist positions/limits/closed/alerts when they change
   useEffect(() => { if (marketsReady) svPositions(positions); }, [positions, marketsReady]);
   useEffect(() => { if (marketsReady) svLimits(limits); }, [limits, marketsReady]);
   useEffect(() => { if (marketsReady) svClosed(closedPositions); }, [closedPositions, marketsReady]);
+  useEffect(() => { if (marketsReady) svAlerts(alerts); }, [alerts, marketsReady]);
 
   const pairById = useMemo(() => {
     const m = new Map<PairId, Pair>();
@@ -270,6 +306,37 @@ export default function QTradePage() {
   const clearBrackets = (posId: string) => {
     setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, stopLoss: undefined, takeProfit: undefined } : p));
     setBracketEditId(null);
+  };
+
+  const requestNotifPerm = async () => {
+    try {
+      if (typeof Notification === "undefined") return;
+      const res = await Notification.requestPermission();
+      setNotifPerm(res);
+    } catch {}
+  };
+
+  const addAlert = (pid: PairId) => {
+    const cur = pairById.get(pid);
+    if (!cur) return;
+    const px = Number(alertPrice);
+    if (!Number.isFinite(px) || px <= 0) { setTradeMsg("Введи цену"); return; }
+    const a: PriceAlert = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      pair: pid,
+      direction: alertDir,
+      price: px,
+      createdTs: Date.now(),
+      note: alertNote.trim() || undefined,
+    };
+    setAlerts((prev) => [a, ...prev]);
+    setAlertPrice(""); setAlertNote("");
+    setTradeMsg(`🔔 Alert ${alertDir === "above" ? "↑" : "↓"} ${fmtUsd(px)}`);
+    setTimeout(() => setTradeMsg(null), 2400);
+  };
+
+  const removeAlert = (id: string) => {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
   };
 
   const closePosition = (posId: string) => {
@@ -714,6 +781,68 @@ export default function QTradePage() {
                 {tradeMsg && (
                   <div style={{ marginTop: 10, fontSize: 12, color: "#86efac", fontWeight: 700 }}>{tradeMsg}</div>
                 )}
+                {/* Price alerts */}
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed rgba(255,255,255,0.1)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap" as const, gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: "#94a3b8", textTransform: "uppercase" as const }}>
+                      🔔 Price alerts
+                    </span>
+                    {notifPerm !== "granted" && (
+                      <button onClick={requestNotifPerm}
+                        style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(34,211,238,0.4)", background: "transparent", color: "#67e8f9", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                        {notifPerm === "denied" ? "🚫 Уведомления запрещены" : "✓ Включить уведомления"}
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, alignItems: "center" }}>
+                    <select value={alertDir} onChange={(e) => setAlertDir(e.target.value as "above" | "below")}
+                      style={{ padding: "5px 8px", borderRadius: 4, border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      <option value="above">↑ Above</option>
+                      <option value="below">↓ Below</option>
+                    </select>
+                    <input value={alertPrice} onChange={(e) => setAlertPrice(e.target.value)} type="number" min={0} step="any"
+                      placeholder={p.price.toFixed(p.price > 100 ? 2 : 4)}
+                      style={{ width: 110, padding: "5px 8px", borderRadius: 4, border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: 11, fontFamily: "ui-monospace, monospace" }} />
+                    <input value={alertNote} onChange={(e) => setAlertNote(e.target.value)} maxLength={40}
+                      placeholder="заметка (optional)"
+                      style={{ flex: "1 1 120px", minWidth: 0, padding: "5px 8px", borderRadius: 4, border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: 11 }} />
+                    <button onClick={() => addAlert(p.id)}
+                      disabled={!alertPrice || Number(alertPrice) <= 0}
+                      style={{
+                        padding: "5px 12px", borderRadius: 4, border: "none",
+                        background: !alertPrice || Number(alertPrice) <= 0 ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #0891b2, #06b6d4)",
+                        color: "#fff", fontSize: 11, fontWeight: 800,
+                        cursor: !alertPrice || Number(alertPrice) <= 0 ? "default" : "pointer",
+                      }}>
+                      + Set
+                    </button>
+                  </div>
+                  {/* Active alerts on this pair */}
+                  {(() => {
+                    const myAlerts = alerts.filter((a) => a.pair === p.id);
+                    if (myAlerts.length === 0) return null;
+                    return (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" as const, marginTop: 6 }}>
+                        {myAlerts.map((a) => (
+                          <span key={a.id} style={{
+                            display: "inline-flex", alignItems: "center" as const, gap: 5,
+                            padding: "3px 8px", borderRadius: 4,
+                            background: "rgba(34,211,238,0.12)", border: "1px solid rgba(34,211,238,0.35)",
+                            fontSize: 10, fontWeight: 700, color: "#67e8f9",
+                            fontFamily: "ui-monospace, monospace",
+                          }} title={a.note}>
+                            {a.direction === "above" ? "↑" : "↓"} {fmtUsd(a.price)}
+                            {a.note && <span style={{ opacity: 0.7 }}>· {a.note.slice(0, 20)}</span>}
+                            <button onClick={() => removeAlert(a.id)}
+                              style={{ background: "transparent", border: "none", color: "#67e8f9", cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1, marginLeft: 2 }}>
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
               {/* RIGHT: order book */}
               <div>

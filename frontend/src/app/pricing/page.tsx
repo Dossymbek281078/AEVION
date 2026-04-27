@@ -973,6 +973,60 @@ export default function PricingPage() {
         </div>
       </section>
 
+      {/* Industries */}
+      <section style={{ marginBottom: 56 }}>
+        <h2
+          style={{
+            fontSize: 28,
+            fontWeight: 900,
+            margin: 0,
+            marginBottom: 8,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Для вашей индустрии
+        </h2>
+        <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
+          Кейсы и рекомендованный стек для вашей вертикали.
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {[
+            { id: "banks", name: "Банки и финтех", grad: "linear-gradient(135deg, #1e3a8a, #3b82f6)" },
+            { id: "startups", name: "Стартапы", grad: "linear-gradient(135deg, #7c3aed, #a78bfa)" },
+            { id: "government", name: "Госсектор", grad: "linear-gradient(135deg, #065f46, #10b981)" },
+            { id: "creators", name: "Создатели контента", grad: "linear-gradient(135deg, #be185d, #ec4899)" },
+            { id: "law-firms", name: "Юр. фирмы", grad: "linear-gradient(135deg, #92400e, #f59e0b)" },
+          ].map((ind) => (
+            <Link
+              key={ind.id}
+              href={`/pricing/for/${ind.id}`}
+              style={{
+                padding: "20px 18px",
+                background: ind.grad,
+                color: "#fff",
+                borderRadius: 12,
+                textDecoration: "none",
+                fontSize: 15,
+                fontWeight: 800,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                boxShadow: "0 4px 14px rgba(15,23,42,0.1)",
+              }}
+            >
+              <span>{ind.name}</span>
+              <span style={{ fontSize: 18, opacity: 0.7 }}>→</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       {/* Comparison */}
       <section style={{ marginBottom: 56 }}>
         <h2

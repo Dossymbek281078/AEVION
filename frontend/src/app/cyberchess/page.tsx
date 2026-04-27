@@ -17,7 +17,7 @@ import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
-import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, type VariantId, type ArmySlot, type VariantStats } from "./variants";
+import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
 
 const FILES = "abcdefgh";
@@ -490,6 +490,7 @@ export default function CyberChessPage(){
   useEffect(()=>{svVariantStats(variantStats)},[variantStats]);
   const[dailyVariantInfo,sDailyVariantInfo]=useState(()=>(typeof window!=="undefined"?getDailyVariantState():null));
   const variantResultLearnedRef=useRef<string|null>(null);
+  const[showVariantStats,sShowVariantStats]=useState(false);
   // Daily Brilliancy Hunt (killer #10)
   const[showBrilliancy,sShowBrilliancy]=useState(false);
   const[brilliancyHunt,sBrilliancyHunt]=useState<BrilliancyHunt|null>(null);
@@ -1279,7 +1280,17 @@ export default function CyberChessPage(){
     if(over.includes("You win")||over.includes("timed out")||over.includes("победа")||over.includes("ВЗОШЁЛ")||over.includes("взошёл"))res="w";
     else if(over.includes("AI wins")||over.includes("Checkmate — AI")||over.includes("поражение")||over.includes("resigned"))res="l";
     else res="d";
-    sVariantStats(s=>recordVariantResult(s,variant,res));
+    sVariantStats(s=>{
+      const next=recordVariantResult(s,variant,res);
+      // Variant achievements: trigger on first / 5 / 25 wins per variant
+      if(res==="w"&&variant!=="standard"){
+        const newWins=next[variant].w;
+        if(newWins===1)setTimeout(()=>unlockAch(variantAchKey(variant,"first"),VARIANT_ACH_REWARDS.firstWin,variantAchLabel(variant,"first")),900);
+        else if(newWins===5)setTimeout(()=>unlockAch(variantAchKey(variant,"five"),VARIANT_ACH_REWARDS.fiveWins,variantAchLabel(variant,"five")),900);
+        else if(newWins===25)setTimeout(()=>unlockAch(variantAchKey(variant,"twentyfive"),VARIANT_ACH_REWARDS.twentyFiveWins,variantAchLabel(variant,"twentyfive")),900);
+      }
+      return next;
+    });
     // Daily Variant Challenge: if today's daily matches current variant, award bonus
     const today=getDailyVariantState();
     if(today.variant===variant&&!today.played){
@@ -1729,6 +1740,13 @@ export default function CyberChessPage(){
     if(variant==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
     const variantLabel=variant==="standard"?"":` · ${VARIANTS.find(v=>v.id===variant)?.name||""}`;
     showToast(`Playing ${cl==="w"?"White":"Black"}${variantLabel}`,"info");
+    // Tutorial tip for non-standard variants — only show first 3 plays per variant
+    const tip=VARIANT_TUTORIAL[variant];
+    if(tip){
+      const stats=variantStats[variant]||{w:0,l:0,d:0};
+      const totalPlays=stats.w+stats.l+stats.d;
+      if(totalPlays<3)setTimeout(()=>showToast(tip,"info"),1500);
+    }
   };
   const resumeGame=(s:ResumeSnap)=>{
     try{
@@ -4955,18 +4973,79 @@ export default function CyberChessPage(){
           </div>
         </div>}
         <div style={{marginTop:SPACE[3],display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" onClick={()=>{sShowVariants(false);setTimeout(()=>sShowVariantStats(true),100)}}>📊 Статы</Btn>
           <Btn variant="secondary" size="md" full onClick={()=>sShowVariants(false)}>Закрыть</Btn>
           <Btn variant="primary" size="md" full onClick={()=>{
             sShowVariants(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
-            // Reset manual armies — random will be generated unless builder used
             if(variant==="asymmetric")sManualArmyFen("");
             setTimeout(()=>newG(),50);
-          }}>▶ Сыграть в этом режиме</Btn>
+          }}>▶ Сыграть</Btn>
         </div>
         <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center",lineHeight:1.5}}>
           Variants работают с любым AI level и любым timing.
         </div>
       </div>
+    </Modal>
+
+    {/* ═══ Variant Stats Dashboard ═══ */}
+    <Modal open={showVariantStats} onClose={()=>sShowVariantStats(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>📊 Variant Stats <Badge tone="info" size="sm">{totalVariantGames(variantStats)} партий</Badge></span>}>
+      {(()=>{
+        const total=totalVariantGames(variantStats);
+        const fav=favoriteVariant(variantStats);
+        const bestWr=bestWinrateVariant(variantStats);
+        const favMeta=fav?VARIANTS.find(v=>v.id===fav):null;
+        const bwMeta=bestWr?VARIANTS.find(v=>v.id===bestWr.variant):null;
+        return <div>
+          {total===0?(
+            <div style={{padding:SPACE[4],textAlign:"center",color:CC.textDim,fontSize:14}}>
+              Сыграй несколько партий в любом из 12 режимов — статистика появится здесь.
+            </div>
+          ):(<>
+            {/* Top stats */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[2],marginBottom:SPACE[3]}}>
+              <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,textAlign:"center"}}>
+                <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Всего партий</div>
+                <div style={{fontSize:32,fontWeight:900,color:CC.brand,lineHeight:1.1,marginTop:2}}>{total}</div>
+              </div>
+              {favMeta&&<div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.goldSoft,border:"1px solid #fcd34d",textAlign:"center"}}>
+                <div style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Любимый режим</div>
+                <div style={{fontSize:24,fontWeight:900,color:"#78350f",marginTop:2}}>{favMeta.emoji}</div>
+                <div style={{fontSize:12,fontWeight:800,color:"#78350f"}}>{favMeta.name}</div>
+              </div>}
+              {bwMeta&&bestWr&&<div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.accentSoft,border:`1px solid ${CC.accent}`,textAlign:"center"}}>
+                <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Сильнейший</div>
+                <div style={{fontSize:24,fontWeight:900,color:CC.accent,marginTop:2}}>{bwMeta.emoji}</div>
+                <div style={{fontSize:12,fontWeight:800,color:CC.accent}}>{bwMeta.name}</div>
+                <div style={{fontSize:11,color:CC.textDim}}>{Math.round(bestWr.wr*100)}% winrate</div>
+              </div>}
+            </div>
+            {/* Per-variant table */}
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {VARIANTS.filter(v=>v.id!=="standard").map(v=>{
+                const s=variantStats[v.id]||{w:0,l:0,d:0};
+                const t=s.w+s.l+s.d;
+                const wr=t>0?Math.round(s.w/t*100):0;
+                return <div key={v.id} style={{display:"flex",alignItems:"center",gap:SPACE[2],padding:"8px 12px",borderRadius:RADIUS.sm,background:t>0?CC.surface1:CC.surface2,border:`1px solid ${CC.border}`}}>
+                  <span style={{fontSize:20,minWidth:26}}>{v.emoji}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{v.name}</div>
+                    {t>0?<div style={{display:"flex",height:6,borderRadius:RADIUS.full,overflow:"hidden",marginTop:4,background:CC.surface3}}>
+                      <div style={{width:`${s.w/t*100}%`,background:CC.brand}}/>
+                      <div style={{width:`${s.d/t*100}%`,background:"#9ca3af"}}/>
+                      <div style={{width:`${s.l/t*100}%`,background:CC.danger}}/>
+                    </div>:<div style={{fontSize:11,color:CC.textDim,fontStyle:"italic"}}>не играл</div>}
+                  </div>
+                  {t>0&&<div style={{fontSize:12,color:CC.textDim,minWidth:90,textAlign:"right",fontFamily:"ui-monospace, monospace"}}>
+                    <b style={{color:CC.brand}}>{s.w}</b>/<b style={{color:CC.danger}}>{s.l}</b>/{s.d} · <b style={{color:wr>=50?CC.brand:CC.danger}}>{wr}%</b>
+                  </div>}
+                </div>;
+              })}
+            </div>
+          </>)}
+          <Btn variant="secondary" size="md" full style={{marginTop:SPACE[4]}} onClick={()=>sShowVariantStats(false)}>Закрыть</Btn>
+        </div>;
+      })()}
     </Modal>
 
     {/* ═══ Daily Brilliancy Hunt (killer #10) ═══ */}

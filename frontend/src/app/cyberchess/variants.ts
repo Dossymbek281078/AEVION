@@ -299,6 +299,73 @@ export function buildArmyFen(whiteSlots: ("Q"|"R"|"B"|"N")[], blackSlots: ("Q"|"
   };
 }
 
+// Tutorial tip per variant — shown on newG. Short, actionable.
+export const VARIANT_TUTORIAL: Record<VariantId, string> = {
+  standard: "",
+  fischer960: "🎲 Бэкранк рандомный — никаких заученных дебютов. Развивай по-старому: фигуры в центр, король в безопасность.",
+  asymmetric: "⚔ Армии разные! Посмотри на свою и сопернеческую сверху — что у тебя сильное, что у него.",
+  twinkings: "👑 Внимание: ферзь = «второй король». Потеряешь ферзя = поражение. Береги его как короля.",
+  diceblade: "🎲 Кубик ограничивает фигуры. Если выпало «пешка» — ходи только пешкой. Король всегда можно.",
+  reinforcement: "🔄 Каждые 10 ходов на доске спавнится твоя пешка/конь. Не убирай поле под спавн!",
+  atomic: "💥 Каждое взятие — взрыв 3×3. Не подставляй своего короля под взрыв! Шах не нужен — взорви короля.",
+  kingofthehill: "⛰ Ключевые поля: d4, d5, e4, e5. Поставь короля на любое = победа. Защищай свой центр!",
+  threecheck: "⚡ Дай 3 шаха = победа. Жертвуй материал ради чек-комбинаций — это окупится.",
+  knightriders: "🐎 Только кони и пешки. Никаких диагоналей и линий — всё через прыжки. Кони сильны в центре.",
+  pawnapocalypse: "💀 Двойной ряд пешек, нет коней/слонов. Прорывай пешками — превращения = свежий ферзь.",
+  powerdrop: "⚡ Захваченные фигуры идут в твой пул. Раз в 5 ходов можешь дропнуть на пустую клетку.",
+  crazyhouse: "🏚 Полный Crazyhouse: дроп каждый ход. Жертвовать материал стало бесплатно — потом дропнешь обратно.",
+};
+
+// Achievements per variant — first-win + 5-wins + 25-wins
+export const VARIANT_ACH_REWARDS = {
+  firstWin: 25,
+  fiveWins: 75,
+  twentyFiveWins: 200,
+};
+export function variantAchKey(variantId: VariantId, type: "first" | "five" | "twentyfive"): string {
+  return `variant_${variantId}_${type}`;
+}
+export function variantAchLabel(variantId: VariantId, type: "first" | "five" | "twentyfive"): string {
+  const meta = VARIANTS.find(v => v.id === variantId);
+  const name = meta?.name || variantId;
+  const emoji = meta?.emoji || "🏆";
+  if (type === "first") return `${emoji} Первая победа в ${name}`;
+  if (type === "five") return `${emoji} 5 побед в ${name}`;
+  return `${emoji} 25 побед в ${name}`;
+}
+
+// Aggregate stats helpers
+export function totalVariantGames(stats: VariantStats): number {
+  let total = 0;
+  for (const v of VARIANTS) {
+    const s = stats[v.id]; if (!s) continue;
+    total += s.w + s.l + s.d;
+  }
+  return total;
+}
+export function favoriteVariant(stats: VariantStats): VariantId | null {
+  let best: VariantId | null = null; let bestCount = 0;
+  for (const v of VARIANTS) {
+    if (v.id === "standard") continue;
+    const s = stats[v.id]; if (!s) continue;
+    const total = s.w + s.l + s.d;
+    if (total > bestCount) { bestCount = total; best = v.id }
+  }
+  return best;
+}
+export function bestWinrateVariant(stats: VariantStats): { variant: VariantId; wr: number } | null {
+  let best: VariantId | null = null; let bestWr = -1;
+  for (const v of VARIANTS) {
+    if (v.id === "standard") continue;
+    const s = stats[v.id]; if (!s) continue;
+    const total = s.w + s.l + s.d;
+    if (total < 3) continue; // need at least 3 games
+    const wr = s.w / total;
+    if (wr > bestWr) { bestWr = wr; best = v.id }
+  }
+  return best ? { variant: best, wr: bestWr } : null;
+}
+
 // Daily variant — deterministic per day, picks from non-standard variants
 export function dailyVariant(): VariantId {
   const days = Math.floor(Date.now() / 86400000);

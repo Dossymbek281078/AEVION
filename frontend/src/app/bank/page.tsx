@@ -25,6 +25,7 @@ import { AuditPanel } from "./_components/AuditPanel";
 import { AutopilotStatement } from "./_components/AutopilotStatement";
 import { BackendStatus } from "./_components/BackendStatus";
 import { BalanceProjection } from "./_components/BalanceProjection";
+import { BudgetCaps } from "./_components/BudgetCaps";
 import { DemoModeBanner } from "./_components/DemoModeBanner";
 import { BankHero } from "./_components/BankHero";
 import { BiometricCard } from "./_components/BiometricCard";
@@ -334,6 +335,11 @@ function BankContent() {
             <RoyaltyStream />
             <ChessWinnings />
             <SpendingInsights accountId={account.id} operations={operations} />
+            <BudgetCaps
+              myAccountId={account.id}
+              operations={operations}
+              notify={notify}
+            />
             <div id="bank-anchor-statement" style={{ scrollMarginTop: 20 }}>
               <AutopilotStatement accountId={account.id} notify={notify} />
             </div>

@@ -1237,6 +1237,14 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "api.ep.planetStats.summary": "Aggregated artifact + verification stats from Planet.",
   "api.ep.operationsCsv.summary": "Export the user's full ledger as CSV (Excel-friendly).",
 
+  // Share / public profile /bank/share/[handle]
+  "share.backToBank": "Back to AEVION Bank",
+  "share.scoreLabel": "Trust",
+  "share.cta.send": "Send AEC to {name}",
+  "share.cta.viewBadge": "View embeddable badge",
+  "share.cta.about": "About AEVION",
+  "share.disclaimer": "Public profile — score and tier are signed snapshots from the linker. To verify, hop to /bank.",
+
   "gift.notify.pickRecipient": "Pick a recipient",
   "gift.notify.cannotGiftSelf": "You can't gift yourself",
   "gift.notify.invalidAmount": "Invalid amount",
@@ -2977,6 +2985,14 @@ const BANK_EXTRA_RU: Record<string, string> = {
   "api.ep.planetStats.summary": "\u0410\u0433\u0440\u0435\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0430\u044f \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430 \u0430\u0440\u0442\u0435\u0444\u0430\u043a\u0442\u043e\u0432 \u0438\u0437 Planet.",
   "api.ep.operationsCsv.summary": "\u0412\u044b\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0440\u0435\u0435\u0441\u0442\u0440 \u0432 CSV (\u0434\u043b\u044f Excel).",
 
+  // Share / public profile /bank/share/[handle]
+  "share.backToBank": "\u041d\u0430\u0437\u0430\u0434 \u0432 AEVION Bank",
+  "share.scoreLabel": "Trust",
+  "share.cta.send": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c AEC \u0434\u043b\u044f {name}",
+  "share.cta.viewBadge": "\u041f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c embed-\u0431\u0435\u0439\u0434\u0436",
+  "share.cta.about": "\u0427\u0442\u043e \u0442\u0430\u043a\u043e\u0435 AEVION",
+  "share.disclaimer": "\u041f\u0443\u0431\u043b\u0438\u0447\u043d\u044b\u0439 \u043f\u0440\u043e\u0444\u0438\u043b\u044c \u2014 \u0441\u043a\u043e\u0440 \u0438 tier \u043f\u0440\u0438\u0445\u043e\u0434\u044f\u0442 \u043a\u0430\u043a \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u043d\u044b\u0439 snapshot. \u0414\u043b\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u043e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 /bank.",
+
   "gift.notify.pickRecipient": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f",
   "gift.notify.cannotGiftSelf": "\u041d\u0435\u043b\u044c\u0437\u044f \u0434\u0430\u0440\u0438\u0442\u044c \u0441\u0430\u043c\u043e\u043c\u0443 \u0441\u0435\u0431\u0435",
   "gift.notify.invalidAmount": "\u041d\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u0441\u0443\u043c\u043c\u0430",
@@ -4566,6 +4582,14 @@ const BANK_EXTRA_KK: Record<string, string> = {
   "api.ep.verify.summary": "\u0410\u0432\u0442\u043e\u0440\u0438\u0437\u0430\u0446\u0438\u044f\u0441\u044b\u0437 payload + signature \u0442\u0435\u043a\u0441\u0435\u0440\u0443.",
   "api.ep.planetStats.summary": "Planet \u0430\u0440\u0442\u0435\u0444\u0430\u043a\u0442 \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430\u0441\u044b.",
   "api.ep.operationsCsv.summary": "\u0420\u0435\u0435\u0441\u0442\u0440\u0434\u0456 CSV-\u0433\u0435 \u044d\u043a\u0441\u043f\u043e\u0440\u0442 (Excel \u04af\u0448\u0456\u043d).",
+
+  // Share / public profile /bank/share/[handle]
+  "share.backToBank": "AEVION Bank-\u049b\u0430 \u049b\u0430\u0439\u0442\u0443",
+  "share.scoreLabel": "Trust",
+  "share.cta.send": "{name}-\u0433\u0435 AEC \u0436\u0456\u0431\u0435\u0440\u0443",
+  "share.cta.viewBadge": "Embed-\u0431\u0435\u0439\u0434\u0436\u0434\u0456 \u043a\u04e9\u0440\u0443",
+  "share.cta.about": "AEVION \u0442\u0443\u0440\u0430\u043b\u044b",
+  "share.disclaimer": "\u0410\u0448\u044b\u049b \u043f\u0440\u043e\u0444\u0438\u043b\u044c \u2014 \u0441\u043a\u043e\u0440 \u043c\u0435\u043d \u0434\u0435\u04a3\u0433\u0435\u0439 \u0441\u0456\u043b\u0442\u0435\u043c\u0435 \u0430\u0440\u049b\u044b\u043b\u044b \u043a\u0435\u043b\u0433\u0435\u043d \u049b\u043e\u043b \u049b\u043e\u0439\u044b\u043b\u0493\u0430\u043d snapshot. \u0422\u0435\u043a\u0441\u0435\u0440\u0443 \u04af\u0448\u0456\u043d /bank-\u049b\u0430 \u04e9\u0442\u0456\u04a3\u0456\u0437.",
 
   "gift.notify.pickRecipient": "\u0410\u043b\u0443\u0448\u044b\u043d\u044b \u0442\u0430\u04a3\u0434\u0430\u04a3\u044b\u0437",
   "gift.notify.cannotGiftSelf": "\u04e8\u0437\u0456\u04a3\u0456\u0437\u0433\u0435 \u0441\u044b\u0439\u043b\u044b\u049b \u0431\u0435\u0440\u0435 \u0430\u043b\u043c\u0430\u0439\u0441\u044b\u0437",

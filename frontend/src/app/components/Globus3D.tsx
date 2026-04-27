@@ -237,6 +237,16 @@ export default function Globus3D({
   const yawRef = useRef(DEFAULT_YAW);
   const pitchRef = useRef(DEFAULT_PITCH);
   const distanceRef = useRef(DEFAULT_DIST);
+  /** Целевая позиция при click-to-focus; tween идёт в animate. */
+  const targetYawRef = useRef<number | null>(null);
+  const targetPitchRef = useRef<number | null>(null);
+  const targetDistRef = useRef<number | null>(null);
+
+  const [focused, setFocused] = useState<Marker | null>(null);
+  const focusedRef = useRef<Marker | null>(null);
+  useEffect(() => {
+    focusedRef.current = focused;
+  }, [focused]);
 
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
   const [query, setQuery] = useState("");
@@ -263,6 +273,9 @@ export default function Globus3D({
     onNavigateRef.current = onNavigate;
     onSelectLocationRef.current = onSelectLocation;
   }, [onNavigate, onSelectLocation]);
+
+  /** Прокси для onPointerUp — функция определена ниже, но обёртка стабильна. */
+  const focusMarkerRef = useRef<(m: Marker) => void>(() => {});
 
   const markers = useMemo<Marker[]>(() => {
     const projectMarkers: Marker[] = projects.map((p) => {
@@ -948,11 +961,11 @@ export default function Globus3D({
         el.releasePointerCapture(ev.pointerId);
       } catch {}
 
-      // Если перемещения не было — это клик; запускаем navigate.
+      // Если перемещения не было — это клик: focus-режим вместо моментальной навигации.
       if (!didDrag) {
         const cur = labelRef.current;
-        if (cur && cur.marker.href) {
-          onNavigateRef.current(cur.marker.href);
+        if (cur) {
+          focusMarkerRef.current(cur.marker);
           onSelectLocationRef.current({
             country: cur.marker.country,
             city: cur.marker.city,
@@ -979,14 +992,39 @@ export default function Globus3D({
       const dt = t - lastTime;
       lastTime = t;
 
-      // Inertia после drag
-      if (!dragging) {
+      // Click-to-focus tween — приоритетнее inertia/auto-rotate.
+      const tY = targetYawRef.current;
+      const tP = targetPitchRef.current;
+      const tD = targetDistRef.current;
+      const focusing =
+        !dragging && (tY !== null || tP !== null || tD !== null);
+
+      if (focusing) {
+        const k = 0.085;
+        if (tY !== null) {
+          const d = tY - yawRef.current;
+          yawRef.current += d * k;
+          if (Math.abs(d) < 0.001) targetYawRef.current = null;
+        }
+        if (tP !== null) {
+          const d = tP - pitchRef.current;
+          pitchRef.current = clampPitch(pitchRef.current + d * k);
+          if (Math.abs(d) < 0.001) targetPitchRef.current = null;
+        }
+        if (tD !== null) {
+          const d = tD - distanceRef.current;
+          distanceRef.current = clampDist(distanceRef.current + d * k);
+          if (Math.abs(d) < 0.05) targetDistRef.current = null;
+        }
+        yawVel = 0;
+        pitchVel = 0;
+      } else if (!dragging) {
         if (Math.abs(yawVel) > 0.0005 || Math.abs(pitchVel) > 0.0005) {
           yawRef.current += yawVel;
           pitchRef.current = clampPitch(pitchRef.current + pitchVel);
           yawVel *= 0.92;
           pitchVel *= 0.92;
-        } else if (autoRotateRef.current && !isHovering) {
+        } else if (autoRotateRef.current && !isHovering && !focusedRef.current) {
           yawRef.current += dt * 0.00018;
         }
       }
@@ -1063,10 +1101,52 @@ export default function Globus3D({
   };
 
   const resetView = () => {
+    targetYawRef.current = null;
+    targetPitchRef.current = null;
+    targetDistRef.current = null;
     yawRef.current = DEFAULT_YAW;
     pitchRef.current = DEFAULT_PITCH;
     distanceRef.current = DEFAULT_DIST;
+    setFocused(null);
   };
+
+  const focusOnMarker = (m: Marker) => {
+    const phi = ((90 - m.lat) * Math.PI) / 180;
+    const theta = ((m.lon + 180) * Math.PI) / 180;
+    const x = -Math.sin(phi) * Math.cos(theta);
+    const y = Math.cos(phi);
+    const z = Math.sin(phi) * Math.sin(theta);
+    let tYaw = Math.atan2(x, z);
+    const tPitch = Math.atan2(y, Math.sqrt(x * x + z * z));
+    // Wrap к ближайшему представителю — короткая дуга lerp.
+    let dy = tYaw - yawRef.current;
+    while (dy > Math.PI) dy -= 2 * Math.PI;
+    while (dy < -Math.PI) dy += 2 * Math.PI;
+    tYaw = yawRef.current + dy;
+    targetYawRef.current = tYaw;
+    targetPitchRef.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, tPitch));
+    targetDistRef.current = 195;
+    setAutoRotate(false);
+    setFocused(m);
+  };
+  useEffect(() => {
+    focusMarkerRef.current = focusOnMarker;
+  });
+
+  /** ESC закрывает focus-режим. */
+  useEffect(() => {
+    if (!focused) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        targetYawRef.current = null;
+        targetPitchRef.current = null;
+        targetDistRef.current = null;
+        setFocused(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focused]);
   const zoom = (factor: number) => {
     distanceRef.current = Math.max(
       MIN_DIST,
@@ -1450,7 +1530,7 @@ export default function Globus3D({
         </div>
       ) : null}
 
-      {label ? (() => {
+      {label && (!focused || label.marker.key !== focused.key) ? (() => {
         const m = label.marker;
         const accent =
           m.category === "focus"
@@ -1652,7 +1732,7 @@ export default function Globus3D({
                     letterSpacing: "0.02em",
                   }}
                 >
-                  Click to open →
+                  Click to focus →
                 </div>
               ) : null}
             </div>
@@ -1668,6 +1748,255 @@ export default function Globus3D({
                 margin: "-1px auto 0",
               }}
             />
+          </div>
+        );
+      })() : null}
+
+      {focused ? (() => {
+        const m = focused;
+        const accent =
+          m.category === "focus"
+            ? "#fbbf24"
+            : m.category === "award"
+              ? "#e879f9"
+              : m.category === "qright"
+                ? "#34d399"
+                : m.category === "infra"
+                  ? "#94a3b8"
+                  : "#7dd3fc";
+        const statusBg =
+          m.statusLabel === "LIVE"
+            ? "rgba(34,197,94,0.18)"
+            : m.statusLabel === "API"
+              ? "rgba(59,130,246,0.18)"
+              : m.statusLabel === "REGISTERED"
+                ? "rgba(20,184,166,0.18)"
+                : "rgba(148,163,184,0.18)";
+        const statusFg =
+          m.statusLabel === "LIVE"
+            ? "#86efac"
+            : m.statusLabel === "API"
+              ? "#93c5fd"
+              : m.statusLabel === "REGISTERED"
+                ? "#5eead4"
+                : "#cbd5e1";
+        const location =
+          m.city && m.country
+            ? `${m.city}, ${m.country}`
+            : m.country || m.city || "";
+
+        return (
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              bottom: 14,
+              transform: "translateX(-50%)",
+              width: "calc(100% - 100px)",
+              maxWidth: 360,
+              zIndex: 7,
+            }}
+          >
+            <div
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(8,12,24,0.96) 100%)",
+                border: `1px solid ${accent}66`,
+                borderRadius: 16,
+                padding: "14px 16px",
+                boxShadow: `0 18px 48px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 32px ${accent}33`,
+                backdropFilter: "blur(14px)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                    background: `${accent}22`,
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <span style={{ fontSize: 11 }}>{m.icon}</span>
+                  {m.categoryLabel}
+                </span>
+                {m.statusLabel ? (
+                  <span
+                    style={{
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      background: statusBg,
+                      color: statusFg,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {m.statusLabel}
+                  </span>
+                ) : null}
+                <span style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  title="Close (Esc)"
+                  aria-label="Close"
+                  onClick={() => {
+                    targetYawRef.current = null;
+                    targetPitchRef.current = null;
+                    targetDistRef.current = null;
+                    setFocused(null);
+                  }}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: "50%",
+                    background: "rgba(148,163,184,0.18)",
+                    border: "none",
+                    color: "#cbd5e1",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 18,
+                  color: "#f1f5ff",
+                  letterSpacing: "-0.01em",
+                  lineHeight: 1.2,
+                }}
+              >
+                {m.title}
+              </div>
+              {location ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: "#a8b8d8",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <span style={{ opacity: 0.7 }}>📍</span>
+                  {location}
+                </div>
+              ) : null}
+
+              {m.description ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 13,
+                    color: "#cbd5e1",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {m.description}
+                </div>
+              ) : null}
+
+              {m.tags && m.tags.length > 0 ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 4,
+                  }}
+                >
+                  {m.tags.slice(0, 6).map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: 6,
+                        background: "rgba(148,163,184,0.14)",
+                        color: "#cbd5e1",
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  gap: 8,
+                }}
+              >
+                {m.href ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (m.href) onNavigateRef.current(m.href);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "10px 14px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: accent,
+                      color: "#0b1020",
+                      fontWeight: 900,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      letterSpacing: "0.01em",
+                      boxShadow: `0 8px 22px ${accent}55`,
+                    }}
+                  >
+                    Open {m.label || m.title} →
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    targetYawRef.current = null;
+                    targetPitchRef.current = null;
+                    targetDistRef.current = null;
+                    setFocused(null);
+                  }}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(148,163,184,0.3)",
+                    background: "transparent",
+                    color: "#cbd5e1",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         );
       })() : null}

@@ -293,6 +293,10 @@ export default function Globus3D({
     tourRef.current = tour;
   }, [tour]);
 
+  /** Texture loading progress — albedo / normal / specular / clouds. */
+  const TEX_TOTAL = 4;
+  const [texLoaded, setTexLoaded] = useState(0);
+
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | MarkerCategory>(() => {
@@ -662,6 +666,13 @@ export default function Globus3D({
     let normalTex: THREE.Texture | null = null;
     let specTex: THREE.Texture | null = null;
 
+    setTexLoaded(0);
+    let loadedCount = 0;
+    const oneTexDone = () => {
+      loadedCount++;
+      setTexLoaded(loadedCount);
+    };
+
     const applyEarthMaterial = () => {
       if (!albedoTex) return;
       albedoTex.colorSpace = THREE.SRGBColorSpace;
@@ -694,8 +705,12 @@ export default function Globus3D({
       (t) => {
         albedoTex = t;
         bumpApply();
+        oneTexDone();
       },
-      () => bumpApply()
+      () => {
+        bumpApply();
+        oneTexDone();
+      },
     );
     loadTextureChain(
       loader,
@@ -703,11 +718,13 @@ export default function Globus3D({
       (t) => {
         normalTex = t;
         bumpApply();
+        oneTexDone();
       },
       () => {
         normalTex = null;
         bumpApply();
-      }
+        oneTexDone();
+      },
     );
     loadTextureChain(
       loader,
@@ -715,11 +732,13 @@ export default function Globus3D({
       (t) => {
         specTex = t;
         bumpApply();
+        oneTexDone();
       },
       () => {
         specTex = null;
         bumpApply();
-      }
+        oneTexDone();
+      },
     );
 
     // Clouds (slightly larger, transparent; rotate with Earth).
@@ -746,10 +765,12 @@ export default function Globus3D({
           specular: new THREE.Color(0x000000),
           shininess: 0,
         });
+        oneTexDone();
       },
       () => {
         cloudMesh.visible = false;
-      }
+        oneTexDone();
+      },
     );
 
     // Fresnel-атмосфера: яркий ободок по краям планеты (космический look).
@@ -1969,9 +1990,83 @@ export default function Globus3D({
             letterSpacing: "0.02em",
           }}
         >
-          drag · scroll to zoom
+          drag · scroll · arrows · Tab
         </div>
       ) : null}
+
+      {!initError && texLoaded < TEX_TOTAL ? (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            bottom: 50,
+            transform: "translateX(-50%)",
+            zIndex: 5,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "rgba(8,12,24,0.85)",
+            border: "1px solid rgba(120,160,220,0.28)",
+            borderRadius: 999,
+            padding: "6px 14px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+            pointerEvents: "none",
+          }}
+          aria-live="polite"
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: "#7dd3fc",
+              boxShadow: "0 0 10px #7dd3fcaa",
+              animation: "aev-globus-pulse 1.2s ease-in-out infinite",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#cbd5e1",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Loading textures
+          </span>
+          <div
+            style={{
+              width: 60,
+              height: 4,
+              borderRadius: 2,
+              background: "rgba(255,255,255,0.1)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${(texLoaded / TEX_TOTAL) * 100}%`,
+                height: "100%",
+                background: "#7dd3fc",
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: "#bae6fd",
+              minWidth: 26,
+              textAlign: "right",
+            }}
+          >
+            {texLoaded}/{TEX_TOTAL}
+          </span>
+        </div>
+      ) : null}
+      <style>{`@keyframes aev-globus-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }`}</style>
 
       {initError ? (
         <div

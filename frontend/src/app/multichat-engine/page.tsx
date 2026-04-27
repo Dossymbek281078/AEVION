@@ -385,6 +385,7 @@ const STORAGE_KEY = "aevion_multichat_v1";
 const DEMO_FLAG = "aevion_multichat_demo_seeded_v1";
 const WORKSPACES_KEY = "aevion_multichat_workspaces_v1";
 const MAX_WORKSPACES = 10;
+const COMPACT_KEY = "aevion_multichat_compact_v1";
 const MAX_AGENTS = 6;
 const MAX_MESSAGES_KEPT = 50;
 
@@ -1050,6 +1051,28 @@ export default function MultichatEnginePage() {
     }
     setAgents([makeAgent()]);
   }, [t]);
+
+  /* Compact mode — collapses hero/vision/preset/killer/footer to
+   * give the agent grid full real estate. Persisted in localStorage. */
+  const [compactMode, setCompactMode] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(COMPACT_KEY) === "1") setCompactMode(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const toggleCompact = useCallback(() => {
+    setCompactMode((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(COMPACT_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   /* Saved workspaces — named bundles in localStorage */
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -1777,38 +1800,41 @@ export default function MultichatEnginePage() {
       </section>
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px 80px" }}>
-        <PitchValueCallout moduleId="multichat-engine" variant="dark" />
+        {!compactMode ? <PitchValueCallout moduleId="multichat-engine" variant="dark" /> : null}
 
-        <section
-          style={{
-            marginTop: 24,
-            padding: 28,
-            borderRadius: 20,
-            border: "1px solid rgba(148,163,184,0.2)",
-            background: "linear-gradient(165deg, rgba(15,23,42,0.9), rgba(15,118,110,0.15))",
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#5eead4", marginBottom: 10, textTransform: "uppercase" }}>
-            {t("mc.vision.eyebrow")}
-          </div>
-          <h2 style={{ fontSize: 26, fontWeight: 900, margin: "0 0 14px", color: "#fff", letterSpacing: "-0.02em" }}>
-            {t("mc.vision.title")}
-          </h2>
-          <p style={{ fontSize: 16, lineHeight: 1.7, color: "#cbd5e1", margin: "0 0 20px" }}>
-            {m?.problem ?? t("mc.vision.body.fallback")}
-          </p>
-          <ul style={{ margin: 0, paddingLeft: 22, color: "#e2e8f0", lineHeight: 1.75, fontSize: 15 }}>
-            {VISION_BULLET_KEYS.map((k) => (
-              <li key={k} style={{ marginBottom: 10 }}>
-                {t(k)}
-              </li>
-            ))}
-          </ul>
-        </section>
+        {!compactMode ? (
+          <section
+            style={{
+              marginTop: 24,
+              padding: 28,
+              borderRadius: 20,
+              border: "1px solid rgba(148,163,184,0.2)",
+              background: "linear-gradient(165deg, rgba(15,23,42,0.9), rgba(15,118,110,0.15))",
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#5eead4", marginBottom: 10, textTransform: "uppercase" }}>
+              {t("mc.vision.eyebrow")}
+            </div>
+            <h2 style={{ fontSize: 26, fontWeight: 900, margin: "0 0 14px", color: "#fff", letterSpacing: "-0.02em" }}>
+              {t("mc.vision.title")}
+            </h2>
+            <p style={{ fontSize: 16, lineHeight: 1.7, color: "#cbd5e1", margin: "0 0 20px" }}>
+              {m?.problem ?? t("mc.vision.body.fallback")}
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 22, color: "#e2e8f0", lineHeight: 1.75, fontSize: 15 }}>
+              {VISION_BULLET_KEYS.map((k) => (
+                <li key={k} style={{ marginBottom: 10 }}>
+                  {t(k)}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {/* ──────────────────────────────────────────────────────
          *  Quick-start presets
          * ────────────────────────────────────────────────────── */}
+        {!compactMode ? (
         <section
           style={{
             marginTop: 32,
@@ -1895,6 +1921,7 @@ export default function MultichatEnginePage() {
             ))}
           </div>
         </section>
+        ) : null}
 
         {/* ──────────────────────────────────────────────────────
          *  LIVE: parallel agent grid
@@ -2022,6 +2049,25 @@ export default function MultichatEnginePage() {
               >
                 🔗 Share
               </button>
+              <button
+                type="button"
+                onClick={toggleCompact}
+                title={compactMode ? "Show hero / vision / presets / footer" : "Hide hero / vision / presets / footer for max grid space"}
+                aria-pressed={compactMode}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: `1px solid ${compactMode ? "rgba(251,191,36,0.55)" : "rgba(148,163,184,0.35)"}`,
+                  background: compactMode ? "rgba(251,191,36,0.16)" : "rgba(15,23,42,0.65)",
+                  color: compactMode ? "#fbbf24" : "#cbd5e1",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                📐 {compactMode ? "Full" : "Compact"}
+              </button>
               <div style={{ position: "relative" }}>
                 <button
                   type="button"
@@ -2141,7 +2187,7 @@ export default function MultichatEnginePage() {
           </div>
         </section>
 
-        {m ? (
+        {m && !compactMode ? (
           <section
             style={{
               marginTop: 40,
@@ -2162,6 +2208,7 @@ export default function MultichatEnginePage() {
           </section>
         ) : null}
 
+        {!compactMode ? (
         <footer
           style={{
             marginTop: 56,
@@ -2224,6 +2271,7 @@ export default function MultichatEnginePage() {
             </Link>
           </div>
         </footer>
+        ) : null}
       </div>
 
       {/* Inline keyframes + responsive grid (no global CSS edits) */}

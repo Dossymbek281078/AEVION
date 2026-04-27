@@ -658,6 +658,31 @@ export default function BureauPage() {
                 </button>
                 <button onClick={handleClearChecker} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Clear</button>
               </div>
+              {/* Sample hashes — pulled from the live registry's first cert
+                  (real, will hit "found") and a deterministic dummy that
+                  will hit "missing". Lets first-time visitors see both
+                  outcomes without needing their own file. */}
+              {stats?.latest && stats.latest.length > 0 ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: "#64748b" }}>
+                  <span>No file handy?</span>
+                  <button
+                    type="button"
+                    onClick={() => setHashInput(stats.latest[0].contentHash)}
+                    title={`Real cert hash from "${stats.latest[0].title}" — will be FOUND`}
+                    style={{ padding: "3px 9px", borderRadius: 999, border: "1px solid rgba(15,118,110,0.3)", background: "rgba(15,118,110,0.06)", color: "#0f766e", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Try a real hash
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHashInput("0".repeat(64))}
+                    title="64 zeros — guaranteed not in registry, will be MISSING"
+                    style={{ padding: "3px 9px", borderRadius: 999, border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.06)", color: "#92400e", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Try a missing hash
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
 

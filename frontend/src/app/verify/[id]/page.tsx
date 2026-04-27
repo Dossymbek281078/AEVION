@@ -30,6 +30,11 @@ type VerifyData = {
     quantumShieldStatus: string;
     shards: number;
     threshold: number;
+    signatureHmacValid?: boolean;
+    signatureHmacReason?: "OK" | "mismatch" | "seed" | "not_checked" | string;
+    signatureEd25519Valid?: boolean;
+    signatureEd25519Reason?: "OK" | "mismatch" | "seed" | string;
+    seed?: boolean;
   };
   legalBasis: {
     framework: string;
@@ -152,7 +157,15 @@ export default function VerifyPage() {
   const cert = data.certificate;
   const integrity = data.integrity;
   const legal = data.legalBasis;
-  const allChecksPass = integrity.contentHashValid && integrity.quantumShieldStatus === "active";
+  // A signature counts as passing if either it explicitly verified OK, or
+  // the field is undefined (older backend) — never fail-closed on missing data.
+  const hmacOk = integrity.signatureHmacValid !== false;
+  const edOk = integrity.signatureEd25519Valid !== false;
+  const allChecksPass =
+    integrity.contentHashValid &&
+    integrity.quantumShieldStatus === "active" &&
+    hmacOk &&
+    edOk;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
@@ -241,15 +254,25 @@ export default function VerifyPage() {
             )}
 
             {/* Cryptographic details */}
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>Cryptographic Proof</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              Cryptographic Proof
+              {integrity.seed ? (
+                <span
+                  title="Seed certificate from in-memory bootstrap store; signatures are valid as seed."
+                  style={{ padding: "2px 8px", borderRadius: 999, background: "rgba(217,119,6,0.12)", color: "#b45309", fontSize: 10, fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase" }}
+                >
+                  Seed
+                </span>
+              ) : null}
+            </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-              {[
+              {([
                 { label: "Content Hash (SHA-256)", value: cert.contentHash, valid: integrity.contentHashValid },
-                { label: "HMAC-SHA256 Signature", value: cert.signatureHmac },
-                { label: "Ed25519 Signature", value: cert.signatureEd25519 || "N/A" },
+                { label: "HMAC-SHA256 Signature", value: cert.signatureHmac, valid: integrity.signatureHmacValid, reason: integrity.signatureHmacReason },
+                { label: "Ed25519 Signature", value: cert.signatureEd25519 || "N/A", valid: integrity.signatureEd25519Valid, reason: integrity.signatureEd25519Reason },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },
-              ].map((item) => (
+              ] as Array<{ label: string; value: string; valid?: boolean; reason?: string }>).map((item) => (
                 <div key={item.label} style={{
                   padding: "10px 12px",
                   borderRadius: 10,
@@ -261,13 +284,21 @@ export default function VerifyPage() {
                   gap: 8,
                 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                       {item.label}
-                      {"valid" in item && (
+                      {item.valid !== undefined && (
                         <span style={{ color: item.valid ? "#059669" : "#dc2626", fontSize: 10 }}>
                           {item.valid ? " ✓ valid" : " ✗ mismatch"}
                         </span>
                       )}
+                      {item.reason && item.reason !== "OK" ? (
+                        <span
+                          title={`Verification reason: ${item.reason}`}
+                          style={{ color: "#64748b", fontSize: 9, padding: "1px 6px", borderRadius: 999, background: "rgba(15,23,42,0.05)", textTransform: "none", letterSpacing: 0, fontWeight: 700 }}
+                        >
+                          {item.reason}
+                        </span>
+                      ) : null}
                     </div>
                     <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{item.value}</div>
                   </div>

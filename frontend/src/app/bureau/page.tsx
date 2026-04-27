@@ -198,6 +198,7 @@ export default function BureauPage() {
   const [checkerError, setCheckerError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [batch, setBatch] = useState<Array<{ name: string; size: number; hash?: string; status: "hashing" | "checking" | "found" | "missing" | "error"; cert?: { id: string; title: string; author: string; protectedAt: string; verifiedCount: number }; error?: string }>>([]);
+  const [helpOpen, setHelpOpen] = useState<boolean>(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   /* Load stats */
@@ -291,15 +292,28 @@ export default function BureauPage() {
     })();
   }, [activityTick]);
 
-  /* Keyboard shortcuts: / focuses search, r refreshes, n opens /qright */
+  /* Keyboard shortcuts: / focuses search, r refreshes, n opens /qright, ? opens help */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
       const inField = !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      // Esc always closes the help overlay regardless of focus.
+      if (e.key === "Escape" && helpOpen) {
+        e.preventDefault();
+        setHelpOpen(false);
+        return;
+      }
       if (e.key === "/" && !inField) {
         e.preventDefault();
         searchRef.current?.focus();
         searchRef.current?.select();
+        return;
+      }
+      // ? is shift + / on US layouts; capture both forms so it works on
+      // layouts where shift+/ doesn't produce ?.
+      if ((e.key === "?" || (e.key === "/" && e.shiftKey)) && !inField) {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
         return;
       }
       if (!inField && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -309,7 +323,7 @@ export default function BureauPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [helpOpen]);
 
   /* Hash checker: send to backend */
   async function runLookup(hashHex: string) {
@@ -702,12 +716,15 @@ export default function BureauPage() {
             )}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span
-              title={"Keyboard shortcuts\n/  focus search\nr  refresh data\nn  new certificate"}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.1)", background: "#f8fafc", color: "#64748b", fontSize: 10, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace", cursor: "help" }}
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              title="Keyboard shortcuts (press ?)"
+              aria-label="Show keyboard shortcuts"
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.1)", background: "#f8fafc", color: "#64748b", fontSize: 10, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace", cursor: "pointer" }}
             >
-              /   r   n
-            </span>
+              ?   /   r   n
+            </button>
             <button
               onClick={handleRefresh}
               disabled={loadingStats || loadingList}
@@ -1274,7 +1291,65 @@ export default function BureauPage() {
       {previewCert && (
         <CertificatePreviewModal cert={previewCert} onClose={() => setPreviewCert(null)} onCopy={copy} />
       )}
+
+      {helpOpen && <ShortcutHelpOverlay onClose={() => setHelpOpen(false)} />}
     </main>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Keyboard shortcut help overlay
+   ────────────────────────────────────────────────────────────── */
+function ShortcutHelpOverlay({ onClose }: { onClose: () => void }) {
+  const shortcuts: Array<{ keys: string[]; label: string }> = [
+    { keys: ["?"], label: "Toggle this help" },
+    { keys: ["/"], label: "Focus the registry search" },
+    { keys: ["r"], label: "Refresh stats + registry" },
+    { keys: ["n"], label: "Open QRight to register a new certificate" },
+    { keys: ["Esc"], label: "Close any open modal or overlay" },
+  ];
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 90 }}
+    >
+      <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, padding: 22, boxShadow: "0 24px 48px rgba(15,23,42,0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>Keyboard shortcuts</div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>Quick keys for the AEVION Bureau registry.</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: 4 }}
+          >
+            ×
+          </button>
+        </div>
+        <div style={{ display: "grid", gap: 6 }}>
+          {shortcuts.map((s) => (
+            <div key={s.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
+              <span style={{ fontSize: 12, color: "#334155" }}>{s.label}</span>
+              <span style={{ display: "flex", gap: 4 }}>
+                {s.keys.map((k) => (
+                  <kbd
+                    key={k}
+                    style={{ minWidth: 24, padding: "2px 8px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, fontWeight: 800, color: "#0f172a", textAlign: "center" }}
+                  >
+                    {k}
+                  </kbd>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

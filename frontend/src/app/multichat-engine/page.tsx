@@ -376,6 +376,7 @@ type UserContext = {
 };
 
 const STORAGE_KEY = "aevion_multichat_v1";
+const DEMO_FLAG = "aevion_multichat_demo_seeded_v1";
 const MAX_AGENTS = 6;
 const MAX_MESSAGES_KEPT = 50;
 
@@ -560,6 +561,76 @@ function exportConversation(agent: Agent, format: "md" | "json") {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * ?demo=1 seed — Investor pack with hand-crafted Q/A so the page
+ * shows real-looking parallel reasoning before any LLM call.
+ * ────────────────────────────────────────────────────────────── */
+
+function buildDemoAgents(): Agent[] {
+  const baseId = Date.now();
+  const idFor = (i: number) => `demo_${baseId}_${i}`;
+  return [
+    {
+      id: idFor(1),
+      role: "General",
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
+      title: "General · TAM for AEVION",
+      busy: false,
+      messages: [
+        {
+          role: "user",
+          content: "How big is the AEVION TAM realistically?",
+        },
+        {
+          role: "assistant",
+          content:
+            "AEVION targets two adjacent stacks. Creator-IP infrastructure (registry + signature + royalties) is a $14B/yr fragmentation play across collecting societies, DRM and content-ID vendors. Banking-for-creators (where royalties land and Trust Score unlocks credit) is another $40B+ slice of the long-tail SMB neobank market. The compounding insight is that we don't have to pick one — every IP filing creates a recurring royalty deposit, every royalty deposit grows Trust, every Trust tier unlocks an advance. So our TAM is best read as 'creators who need both at once', and that segment is structurally underserved.",
+        },
+      ],
+    },
+    {
+      id: idFor(2),
+      role: "Finance",
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
+      title: "Finance · Bull-case Year 3 ARR",
+      busy: false,
+      messages: [
+        {
+          role: "user",
+          content: "What does a bull-case Year 3 ARR scenario look like?",
+        },
+        {
+          role: "assistant",
+          content:
+            "Bull case anchors on three streams: (1) SaaS — 240k creators × $24/mo Pro + 4k Enterprise seats × $99/mo = $73M ARR. (2) Royalty take-rate — 6% on $410M/yr in flowed AEC royalties = $25M ARR. (3) Bank float + advance interchange — $12M ARR on a $300M average wallet float. Total $110M ARR by EoY3, ~58% gross margin (model spend is the biggest variable cost — that's why Multichat Engine matters: centralised QCoreAI routing turns LLM cost from line-item per product into a shared platform OPEX).",
+        },
+      ],
+    },
+    {
+      id: idFor(3),
+      role: "IP/Legal",
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
+      title: "IP/Legal · Cross-border enforcement",
+      busy: false,
+      messages: [
+        {
+          role: "user",
+          content:
+            "How do we defend an AEVION-registered work across jurisdictions if someone strips the metadata and re-uploads?",
+        },
+        {
+          role: "assistant",
+          content:
+            "Three layers, in order of speed. (1) QSign HMAC + Ed25519 ledger gives you a notarised pre-publication timestamp — admissible as evidence in EU/US/JP courts under their respective electronic-records statutes. (2) Bureau v2 lets the holder file a takedown packet with one click; we auto-generate the DMCA / EUCD-mandated counter-evidence bundle (registry hash, signature chain, prior-art search). (3) For repeat infringers, Trust Graph downgrades reputation across all 27 modules — and yes, that is contractually defensible because every party has accepted the AEVION Terms at registration. The weak spot is jurisdictions with no electronic-records statute (a few sub-Saharan markets); for those we recommend escrowing a dated paper copy via the Bureau's notary partner network.",
+        },
+      ],
+    },
+  ];
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -751,6 +822,7 @@ export default function MultichatEnginePage() {
   /* Agents — restore from localStorage on mount */
   const [agents, setAgents] = useState<Agent[]>([makeAgent()]);
   const [hydrated, setHydrated] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   /* Always-current ref for cross-agent handoff lookup */
   const agentsRef = useRef<Agent[]>(agents);
@@ -759,6 +831,39 @@ export default function MultichatEnginePage() {
   }, [agents]);
 
   useEffect(() => {
+    let wantDemo = false;
+    if (typeof window !== "undefined") {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        wantDemo = params.get("demo") === "1";
+      } catch {
+        /* ignore */
+      }
+    }
+
+    let alreadySeeded = false;
+    try {
+      alreadySeeded = localStorage.getItem(DEMO_FLAG) === "1";
+    } catch {
+      /* ignore */
+    }
+
+    if (wantDemo && !alreadySeeded) {
+      const seeded = buildDemoAgents();
+      setAgents(seeded);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+        localStorage.setItem(DEMO_FLAG, "1");
+      } catch {
+        /* ignore */
+      }
+      setDemoMode(true);
+      setHydrated(true);
+      return;
+    }
+
+    if (wantDemo && alreadySeeded) setDemoMode(true);
+
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -774,6 +879,22 @@ export default function MultichatEnginePage() {
       /* ignore corrupted state */
     }
     setHydrated(true);
+  }, []);
+
+  const resetDemo = useCallback(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(DEMO_FLAG);
+    } catch {
+      /* ignore */
+    }
+    setAgents([makeAgent()]);
+    setDemoMode(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("demo");
+      window.history.replaceState(null, "", url.toString());
+    }
   }, []);
 
   useEffect(() => {
@@ -1191,6 +1312,46 @@ export default function MultichatEnginePage() {
         <div className="demo-aurora" aria-hidden />
         <div style={{ position: "relative", zIndex: 1, maxWidth: 1100, margin: "0 auto", width: "100%" }}>
           <Wave1Nav variant="dark" />
+          {demoMode ? (
+            <div
+              role="status"
+              style={{
+                marginBottom: 18,
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(251,191,36,0.4)",
+                background: "rgba(251,191,36,0.12)",
+                color: "#fde68a",
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                flexWrap: "wrap",
+                fontSize: 13,
+              }}
+            >
+              <span style={{ fontWeight: 800, letterSpacing: "0.05em" }}>DEMO</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                3 agents pre-loaded with hand-crafted answers — perfect for screenshots and live pitches.
+              </span>
+              <button
+                type="button"
+                onClick={resetDemo}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(251,191,36,0.5)",
+                  background: "rgba(251,191,36,0.2)",
+                  color: "#fef3c7",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Reset
+              </button>
+            </div>
+          ) : null}
           <p
             style={{
               fontSize: 12,

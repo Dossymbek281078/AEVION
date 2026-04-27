@@ -14,6 +14,7 @@ import { qcoreaiRouter } from "./routes/qcoreai";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { coachRouter } from "./routes/coach";
+import { pricingRouter } from "./routes/pricing";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -119,6 +120,15 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
       "/api/qtrade/topup": { post: { summary: "Top up balance" } },
       "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
+      "/api/pricing": { get: { summary: "Full pricing payload (tiers + modules + bundles)" } },
+      "/api/pricing/tiers": { get: { summary: "List pricing tiers" } },
+      "/api/pricing/tiers/{id}": { get: { summary: "Single tier detail" } },
+      "/api/pricing/modules": { get: { summary: "Per-module add-on prices" } },
+      "/api/pricing/modules/{id}": { get: { summary: "Single module pricing" } },
+      "/api/pricing/bundles": { get: { summary: "Bundled module suites" } },
+      "/api/pricing/quote": {
+        post: { summary: "Build a price quote: tier + modules + seats + period" },
+      },
     },
   });
 });
@@ -138,6 +148,11 @@ app.use("/api/qsign", qsignRouter);
 app.use("/api/quantum-shield", quantumShieldRouter);
 app.use("/api/pipeline", pipelineRouter);
 app.use("/api/coach", coachRouter);
+
+// ==========================
+// Pricing / GTM
+// ==========================
+app.use("/api/pricing", pricingRouter);
 // ==========================
 // Auth
 // ==========================

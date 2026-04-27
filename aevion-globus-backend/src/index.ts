@@ -15,6 +15,7 @@ import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
+import { checkoutRouter } from "./routes/checkout";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -135,6 +136,15 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/leads/count": {
         get: { summary: "Total leads count (no content exposed)" },
       },
+      "/api/pricing/checkout/session": {
+        post: { summary: "Create Stripe Checkout session (or stub if no STRIPE_SECRET_KEY)" },
+      },
+      "/api/pricing/checkout/webhook": {
+        post: { summary: "Stripe webhook receiver (verifies stripe-signature in real mode)" },
+      },
+      "/api/pricing/checkout/healthz": {
+        get: { summary: "Checkout mode probe: real/stub + webhook readiness" },
+      },
     },
   });
 });
@@ -159,6 +169,7 @@ app.use("/api/coach", coachRouter);
 // Pricing / GTM
 // ==========================
 app.use("/api/pricing", pricingRouter);
+app.use("/api/pricing/checkout", checkoutRouter);
 // ==========================
 // Auth
 // ==========================

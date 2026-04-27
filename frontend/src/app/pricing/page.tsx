@@ -133,6 +133,35 @@ export default function PricingPage() {
   const [calcSeats, setCalcSeats] = useState(1);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoting, setQuoting] = useState(false);
+  const [checkingOut, setCheckingOut] = useState<string | null>(null);
+
+  async function startCheckout(opts: {
+    tierId: TierId;
+    modules?: string[];
+    seats?: number;
+    period?: BillingPeriod;
+  }) {
+    setCheckingOut(opts.tierId);
+    try {
+      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(opts),
+      });
+      const j = await r.json();
+      if (j.url) {
+        window.location.href = j.url;
+      } else {
+        console.error("[checkout] no url returned", j);
+        alert("Ошибка чекаута. Попробуйте ещё раз или свяжитесь с продажами.");
+        setCheckingOut(null);
+      }
+    } catch (e) {
+      console.error("[checkout] failed", e);
+      alert("Не удалось открыть оплату. Проверьте соединение.");
+      setCheckingOut(null);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -464,6 +493,7 @@ export default function PricingPage() {
                 </Link>
               ) : (
                 <button
+                  disabled={checkingOut === tier.id}
                   style={{
                     width: "100%",
                     padding: "10px 16px",
@@ -471,19 +501,43 @@ export default function PricingPage() {
                     fontWeight: 800,
                     borderRadius: 10,
                     border: "none",
-                    cursor: "pointer",
+                    cursor: checkingOut === tier.id ? "wait" : "pointer",
                     background: isHighlight
                       ? "linear-gradient(135deg, #0d9488, #0ea5e9)"
-                      : "#f1f5f9",
-                    color: isHighlight ? "#fff" : "#0f172a",
-                    marginBottom: 20,
+                      : tier.id === "free"
+                        ? "#f1f5f9"
+                        : "#0d9488",
+                    color: isHighlight || tier.id !== "free" ? "#fff" : "#0f172a",
+                    marginBottom: 8,
+                    opacity: checkingOut === tier.id ? 0.7 : 1,
+                  }}
+                  onClick={() =>
+                    startCheckout({ tierId: tier.id, period, seats: 1 })
+                  }
+                >
+                  {checkingOut === tier.id ? "Открываем оплату..." : tier.ctaLabel}
+                </button>
+              )}
+              {tier.id !== "enterprise" && tier.id !== "free" && (
+                <button
+                  style={{
+                    width: "100%",
+                    padding: "6px 16px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    borderRadius: 8,
+                    border: "none",
+                    cursor: "pointer",
+                    background: "transparent",
+                    color: isHighlight ? "#94a3b8" : "#64748b",
+                    marginBottom: 12,
                   }}
                   onClick={() => {
                     setCalcTier(tier.id);
                     document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
                   }}
                 >
-                  {tier.ctaLabel}
+                  Открыть калькулятор →
                 </button>
               )}
               <ul
@@ -969,6 +1023,57 @@ export default function PricingPage() {
                     {quote.total.toLocaleString("ru-RU")}
                   </span>
                 </div>
+                {calcTier !== "free" && calcTier !== "enterprise" && (
+                  <button
+                    disabled={checkingOut === calcTier}
+                    onClick={() =>
+                      startCheckout({
+                        tierId: calcTier,
+                        modules: calcModules,
+                        seats: calcSeats,
+                        period,
+                      })
+                    }
+                    style={{
+                      width: "100%",
+                      marginTop: 16,
+                      padding: "12px 16px",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      borderRadius: 10,
+                      border: "none",
+                      cursor: checkingOut === calcTier ? "wait" : "pointer",
+                      background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                      color: "#fff",
+                      opacity: checkingOut === calcTier ? 0.7 : 1,
+                    }}
+                  >
+                    {checkingOut === calcTier
+                      ? "Открываем оплату..."
+                      : `Оплатить смету · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
+                  </button>
+                )}
+                {calcTier === "enterprise" && (
+                  <Link
+                    href="/pricing/contact?tier=enterprise"
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginTop: 16,
+                      padding: "12px 16px",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      borderRadius: 10,
+                      background: "#0f172a",
+                      color: "#fff",
+                      textAlign: "center",
+                      textDecoration: "none",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    Связаться с продажами →
+                  </Link>
+                )}
                 {quote.notes.length > 0 && (
                   <div
                     style={{

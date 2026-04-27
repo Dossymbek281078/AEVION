@@ -181,27 +181,84 @@ function objectGeo(obj: QRightObject) {
   return { lat, lon, country, city };
 }
 
-function buildStarField(count: number) {
+function randomSpherePositions(count: number, rMin: number, rMax: number) {
   const positions = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    const r = 420 + Math.random() * 180;
+    const r = rMin + Math.random() * (rMax - rMin);
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
     positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
     positions[i * 3 + 2] = r * Math.cos(phi);
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const mat = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.55,
-    transparent: true,
-    opacity: 0.9,
-    sizeAttenuation: true,
-    depthWrite: false,
-  });
-  return new THREE.Points(geo, mat);
+  return positions;
+}
+
+function buildStarField() {
+  const group = new THREE.Group();
+
+  // Dim — основное полотно (1800).
+  {
+    const pos = randomSpherePositions(1800, 420, 600);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.4,
+      transparent: true,
+      opacity: 0.65,
+      sizeAttenuation: true,
+      depthWrite: false,
+    });
+    group.add(new THREE.Points(geo, mat));
+  }
+
+  // Medium — слегка голубоватые (350).
+  {
+    const pos = randomSpherePositions(350, 430, 580);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xc4d8ff,
+      size: 0.7,
+      transparent: true,
+      opacity: 0.85,
+      sizeAttenuation: true,
+      depthWrite: false,
+    });
+    group.add(new THREE.Points(geo, mat));
+  }
+
+  // Bright — крупные с per-vertex hue (from cool blue до warm yellow).
+  {
+    const N = 70;
+    const pos = randomSpherePositions(N, 440, 560);
+    const colors = new Float32Array(N * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < N; i++) {
+      const h = (40 + Math.random() * 200) / 360;
+      const s = 0.18 + Math.random() * 0.18;
+      const l = 0.78 + Math.random() * 0.14;
+      c.setHSL(h, s, l);
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 1.4,
+      transparent: true,
+      opacity: 1,
+      sizeAttenuation: true,
+      depthWrite: false,
+      vertexColors: true,
+    });
+    group.add(new THREE.Points(geo, mat));
+  }
+
+  return group;
 }
 
 const MIN_DIST = 130;
@@ -720,7 +777,7 @@ export default function Globus3D({
     };
     updateCamera();
 
-    const stars = buildStarField(2200);
+    const stars = buildStarField();
     scene.add(stars);
 
     const earthGroup = new THREE.Group();

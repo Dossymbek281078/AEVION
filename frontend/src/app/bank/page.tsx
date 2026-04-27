@@ -41,6 +41,7 @@ import { HelpMenu } from "./_components/HelpMenu";
 import { MobileTabBar } from "./_components/MobileTabBar";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
+import { QuickActionsFloater } from "./_components/QuickActionsFloater";
 import { ReferralsPanel } from "./_components/ReferralsPanel";
 import { RoundUpStash } from "./_components/RoundUpStash";
 import { SubscriptionScanner } from "./_components/SubscriptionScanner";
@@ -507,6 +508,13 @@ function BankContent() {
             notify={notify}
           />
           <NotificationsCenter account={account} operations={operations} />
+          <QuickActionsFloater
+            account={account}
+            send={send}
+            topup={handleTopup}
+            setActiveTab={setActiveTab}
+            notify={notify}
+          />
           <MobileTabBar />
         </EcosystemDataProvider>
       ) : null}

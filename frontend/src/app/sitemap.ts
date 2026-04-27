@@ -23,6 +23,7 @@ const ROUTES: Array<{ path: string; priority: number; changeFrequency: MetadataR
   { path: "/bank/circles",      priority: 0.75, changeFrequency: "weekly" },
   { path: "/bank/glossary",     priority: 0.75, changeFrequency: "monthly" },
   { path: "/bank/onboarding",   priority: 0.85, changeFrequency: "monthly" },
+  { path: "/bank/insights",     priority: 0.8, changeFrequency: "weekly" },
   { path: "/bank/api",          priority: 0.7, changeFrequency: "monthly" },
   { path: "/bank/badge",        priority: 0.7, changeFrequency: "monthly" },
   { path: "/bank/explore",      priority: 0.85, changeFrequency: "weekly" },

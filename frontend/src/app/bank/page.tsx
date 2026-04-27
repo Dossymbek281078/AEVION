@@ -57,6 +57,7 @@ import { RoyaltyStream } from "./_components/RoyaltyStream";
 import { SalaryAdvance } from "./_components/SalaryAdvance";
 import { SavingsGoals } from "./_components/SavingsGoals";
 import { SocialCircles } from "./_components/SocialCircles";
+import { SpendingChallenges } from "./_components/SpendingChallenges";
 import { SpendingInsights } from "./_components/SpendingInsights";
 import { SplitBills } from "./_components/SplitBills";
 import { QuickActions, RoyaltiesExplainer, SecurityRoadmap } from "./_components/StaticSections";
@@ -445,6 +446,7 @@ function BankContent() {
               operations={operations}
               notify={notify}
             />
+            <SpendingChallenges myAccountId={account.id} operations={operations} />
             <SalaryAdvance
               account={account}
               operations={operations}

@@ -123,9 +123,18 @@ function seedCertificates(): MemCertificate[] {
   });
 }
 
+export type MemVerifyEvent = {
+  id: string;
+  certId: string;
+  ipHash: string | null;
+  userAgent: string | null;
+  at: string;
+};
+
 const state = {
   certificates: seedCertificates(),
   shields: [] as MemShield[],
+  verifyEvents: [] as MemVerifyEvent[],
   seeded: true,
 };
 
@@ -151,6 +160,21 @@ export function memIncrementVerify(id: string) {
   const c = state.certificates.find((x) => x.id === id);
   if (c) { c.verifiedCount++; c.lastVerifiedAt = new Date().toISOString(); }
   return c;
+}
+
+// Verify event log — capped at 5000 across all certs in memory mode so the
+// process doesn't grow unbounded over a long demo.
+const VERIFY_LOG_CAP = 5000;
+
+export function memAppendVerifyEvent(ev: MemVerifyEvent) {
+  state.verifyEvents.unshift(ev);
+  if (state.verifyEvents.length > VERIFY_LOG_CAP) {
+    state.verifyEvents.length = VERIFY_LOG_CAP;
+  }
+}
+
+export function memListVerifyEvents(certId: string, limit = 100): MemVerifyEvent[] {
+  return state.verifyEvents.filter((e) => e.certId === certId).slice(0, Math.max(1, Math.min(500, limit)));
 }
 
 export function memListCertificates(opts: { q?: string; kind?: string; sort?: string; limit?: number }) {

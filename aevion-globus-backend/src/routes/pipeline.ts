@@ -12,6 +12,8 @@ import {
   memIncrementVerify,
   memListCertificates,
   memStats,
+  memAppendVerifyEvent,
+  memListVerifyEvents,
   type MemCertificate,
 } from "../lib/pipelineMemoryStore";
 
@@ -76,6 +78,17 @@ async function ensureTables() {
       "status" TEXT NOT NULL DEFAULT 'active',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "VerifyEvent" (
+      "id" TEXT PRIMARY KEY,
+      "certId" TEXT NOT NULL,
+      "ipHash" TEXT,
+      "userAgent" TEXT,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS "VerifyEvent_certId_at_idx" ON "VerifyEvent" ("certId", "at" DESC);
   `);
 
   await pool.query(`
@@ -544,6 +557,28 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       }
     }
 
+    /* ── Audit log: record this verify event (PII-safe) ──
+     * Hash the IP with the QSIGN_SECRET so the log lets us count unique
+     * verifiers without storing raw IPs. UA capped at 200 chars. Best-effort
+     * — failures don't break the verify response. */
+    try {
+      const xff = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
+      const rawIp = xff || (req as any).ip || (req.socket && (req.socket as any).remoteAddress) || null;
+      const ipHash = rawIp ? crypto.createHmac("sha256", SIGN_SECRET).update(String(rawIp)).digest("hex").slice(0, 24) : null;
+      const ua = typeof req.headers["user-agent"] === "string" ? (req.headers["user-agent"] as string).slice(0, 200) : null;
+      const eventId = "ve-" + crypto.randomBytes(8).toString("hex");
+      if (useDb) {
+        await pool.query(
+          `INSERT INTO "VerifyEvent" ("id","certId","ipHash","userAgent","at") VALUES ($1,$2,$3,$4,NOW())`,
+          [eventId, certId, ipHash, ua]
+        ).catch(() => { /* ignore — log is best-effort */ });
+      } else {
+        memAppendVerifyEvent({ id: eventId, certId, ipHash, userAgent: ua, at: new Date().toISOString() });
+      }
+    } catch {
+      // never let logging failures affect the verify outcome
+    }
+
     /* ── Integrity checks ──
      * 1. contentHash shape check (valid 64-char hex). The hash's cryptographic
      *    binding to the certificate is proven by the HMAC + Ed25519 checks
@@ -643,6 +678,56 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     const msg = err instanceof Error ? err.message : "verify failed";
     console.error("[Pipeline] verify error:", msg);
     res.status(500).json({ valid: false, error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/verify/:certId/log
+ *
+ * Recent verify events for one certificate. Each row has a hashed IP
+ * (HMAC-SHA256(ip, QSIGN_SECRET)[:24]) so the log lets the cert owner
+ * count unique verifiers without storing raw IPs. UA truncated to 200
+ * chars. Newest first, capped at 100 rows by default (max 500).
+ */
+pipelineRouter.get("/verify/:certId/log", async (req, res) => {
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+    const { certId } = req.params;
+    const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+
+    let rows: Array<{ id: string; certId: string; ipHash: string | null; userAgent: string | null; at: string }>;
+    if (useDb) {
+      const r = await pool.query(
+        `SELECT "id","certId","ipHash","userAgent","at" FROM "VerifyEvent" WHERE "certId" = $1 ORDER BY "at" DESC LIMIT $2`,
+        [certId, limit]
+      );
+      rows = r.rows.map((x: any) => ({
+        id: x.id,
+        certId: x.certId,
+        ipHash: x.ipHash,
+        userAgent: x.userAgent,
+        at: x.at instanceof Date ? x.at.toISOString() : String(x.at),
+      }));
+    } else {
+      rows = memListVerifyEvents(certId, limit);
+    }
+
+    // Aggregate quick stats so dashboards don't have to recompute.
+    const uniqueVerifiers = new Set(rows.map((r) => r.ipHash || "").filter(Boolean)).size;
+    const last24h = rows.filter((r) => Date.parse(r.at) >= Date.now() - 86_400_000).length;
+
+    res.setHeader("Cache-Control", "public, max-age=10, s-maxage=30");
+    res.json({
+      certId,
+      count: rows.length,
+      stats: { uniqueVerifiers, last24h },
+      events: rows,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "verify log failed";
+    console.error("[Pipeline] verify log error:", msg);
+    res.status(500).json({ error: msg });
   }
 });
 

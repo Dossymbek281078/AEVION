@@ -5,6 +5,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 
 type TierId = "free" | "pro" | "business" | "enterprise";
 
@@ -76,6 +77,13 @@ function ContactInner() {
       if (!r.ok) {
         throw new Error(j.error ?? `HTTP ${r.status}`);
       }
+      track({
+        type: "lead_submit",
+        tier: form.tier || undefined,
+        industry: form.industry || undefined,
+        source: "pricing/contact",
+        meta: { hasCompany: !!form.company, hasMessage: !!form.message, seats: form.seats },
+      });
       setSuccess(j.id);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));

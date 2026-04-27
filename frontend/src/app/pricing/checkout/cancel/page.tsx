@@ -1,13 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { track } from "@/lib/track";
 
 function CancelInner() {
   const sp = useSearchParams();
   const tier = sp.get("tier");
+
+  useEffect(() => {
+    track({
+      type: "checkout_cancel",
+      tier: tier ?? undefined,
+      source: "pricing",
+    });
+  }, [tier]);
 
   return (
     <ProductPageShell maxWidth={680}>

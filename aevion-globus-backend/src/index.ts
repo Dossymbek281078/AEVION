@@ -16,6 +16,7 @@ import { pipelineRouter } from "./routes/pipeline";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -145,6 +146,18 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/checkout/healthz": {
         get: { summary: "Checkout mode probe: real/stub + webhook readiness" },
       },
+      "/api/pricing/events": {
+        post: { summary: "Ingest analytics event (page_view, cta_click, etc)" },
+      },
+      "/api/pricing/events/summary": {
+        get: { summary: "Aggregated metrics — admin token required" },
+      },
+      "/api/pricing/events/recent": {
+        get: { summary: "Last N events — admin token required" },
+      },
+      "/api/pricing/leads": {
+        get: { summary: "List recent leads — admin token required" },
+      },
     },
   });
 });
@@ -170,6 +183,7 @@ app.use("/api/coach", coachRouter);
 // ==========================
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
+app.use("/api/pricing/events", eventsRouter);
 // ==========================
 // Auth
 // ==========================

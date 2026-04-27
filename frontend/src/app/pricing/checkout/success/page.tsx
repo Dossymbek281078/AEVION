@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { track } from "@/lib/track";
 
 function SuccessInner() {
   const sp = useSearchParams();
@@ -14,6 +15,16 @@ function SuccessInner() {
   const totalCents = sp.get("total");
 
   const totalUsd = totalCents ? Math.round(parseInt(totalCents, 10) / 100) : null;
+
+  useEffect(() => {
+    track({
+      type: "checkout_success",
+      tier: tier ?? undefined,
+      source: "pricing",
+      value: totalUsd ?? undefined,
+      meta: { stub, period: period ?? null, sessionId: sessionId ?? null },
+    });
+  }, [sessionId, stub, tier, period, totalUsd]);
 
   return (
     <ProductPageShell maxWidth={680}>

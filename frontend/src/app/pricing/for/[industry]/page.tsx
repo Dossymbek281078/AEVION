@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 
 type IndustryId = "banks" | "startups" | "government" | "creators" | "law-firms";
 
@@ -209,6 +210,16 @@ export default function IndustryLandingPage() {
       .then(setData)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (industry) {
+      track({
+        type: "industry_view",
+        industry: industry.id,
+        source: "pricing/for/[industry]",
+      });
+    }
+  }, [industry]);
 
   if (!industry) {
     return (

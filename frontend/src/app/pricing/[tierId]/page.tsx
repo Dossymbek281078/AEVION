@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -223,6 +224,12 @@ export default function TierDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<BillingPeriod>("annual");
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
+
+  useEffect(() => {
+    if (tierId) {
+      track({ type: "tier_view", tier: tierId, source: "pricing/[tierId]" });
+    }
+  }, [tierId]);
 
   useEffect(() => {
     let cancelled = false;

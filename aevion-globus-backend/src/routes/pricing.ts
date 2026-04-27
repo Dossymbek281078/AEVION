@@ -277,6 +277,45 @@ pricingRouter.get("/leads/count", (_req, res) => {
 });
 
 /**
+ * GET /api/pricing/leads
+ * Список последних лидов. Защищён ADMIN_TOKEN (header X-Admin-Token).
+ * Если ADMIN_TOKEN не задан — endpoint полностью недоступен (401).
+ *
+ * ?limit=N — последние N (макс 500), по умолчанию 100
+ */
+pricingRouter.get("/leads", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    return res.status(401).json({ error: "admin_token_not_configured" });
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+
+  try {
+    if (!existsSync(LEADS_FILE)) return res.json({ items: [], total: 0 });
+    const content = readFileSync(LEADS_FILE, "utf8");
+    const lines = content.split("\n").filter((l) => l.trim().length > 0);
+    const tail = lines.slice(-limit).reverse();
+    const items: PricingLead[] = [];
+    for (const line of tail) {
+      try {
+        items.push(JSON.parse(line) as PricingLead);
+      } catch {
+        // skip malformed
+      }
+    }
+    res.json({ items, total: lines.length });
+  } catch (e) {
+    console.error("[pricing/leads] read failed", e);
+    res.status(500).json({ error: "read_error" });
+  }
+});
+
+/**
  * GET /api/pricing/healthz
  * Sanity-check для CI/мониторинга.
  */

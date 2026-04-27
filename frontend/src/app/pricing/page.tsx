@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -142,6 +143,12 @@ export default function PricingPage() {
     period?: BillingPeriod;
   }) {
     setCheckingOut(opts.tierId);
+    track({
+      type: "checkout_start",
+      tier: opts.tierId,
+      source: "pricing",
+      meta: { period: opts.period ?? "monthly", seats: opts.seats ?? 1, modules: (opts.modules ?? []).length },
+    });
     try {
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
         method: "POST",
@@ -182,6 +189,7 @@ export default function PricingPage() {
       }
     }
     load();
+    track({ type: "page_view", source: "pricing" });
     return () => {
       cancelled = true;
     };

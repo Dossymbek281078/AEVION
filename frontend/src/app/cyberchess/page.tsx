@@ -405,6 +405,10 @@ export default function CyberChessPage(){
   // Replay Director — cinematic auto-replay (killer feature #9)
   const[cinematic,sCinematic]=useState(false);
   const[cinematicMoment,sCinematicMoment]=useState<{label:string;color:string;sub?:string}|null>(null);
+  // AI Story Mode — narrative voiced summary of the finished game (killer feature #10)
+  const[showStory,sShowStory]=useState(false);
+  const[storyText,sStoryText]=useState<string>("");
+  const[storyPlaying,sStoryPlaying]=useState(false);
   type Arrow={from:Square;to:Square;c:string};
   type SqHL={sq:Square;c:string};
   const[arrows,sArrows]=useState<Arrow[]>([]);
@@ -1071,6 +1075,57 @@ export default function CyberChessPage(){
       snd("capture");
     }
   },[visionPuzzle,visionAnswer,visionStreak,visionBest,addChessy,showToast]);
+
+  /* ── AI Story Mode: generate + voice-narrate the finished game ── */
+  const generateStory=useCallback(():string=>{
+    const userIsWhite=pCol==="w";
+    const lines:string[]=[];
+    if(currentOpening?.name)lines.push(`Партия началась как ${currentOpening.name}.`);
+    else lines.push(`Это была партия из ${hist.length} полуходов.`);
+    // Pivotal moments by severity
+    const moments:{ply:number;type:string;sev:number}[]=[];
+    for(let i=0;i<analysis.length;i++){
+      const a=analysis[i];const isUserMove=userIsWhite?i%2===0:i%2===1;
+      if(a.quality==="blunder")moments.push({ply:i,type:isUserMove?"user_blunder":"ai_blunder",sev:3});
+      else if(a.quality==="mistake")moments.push({ply:i,type:isUserMove?"user_mistake":"ai_mistake",sev:2});
+      else if(a.quality==="great")moments.push({ply:i,type:isUserMove?"user_great":"ai_great",sev:2});
+      if(a.mate!==0&&Math.abs(a.mate)<=3)moments.push({ply:i,type:"mate_threat",sev:3});
+    }
+    const top=moments.sort((a,b)=>b.sev-a.sev).slice(0,3).sort((a,b)=>a.ply-b.ply);
+    const ai=lv.name;
+    for(const m of top){
+      const num=Math.floor(m.ply/2)+1;const dot=m.ply%2===0?"":"…";
+      if(m.type==="user_blunder")lines.push(`На ${num}${dot}-м ходу ты допустил серьёзную ошибку — это могло стоить партии.`);
+      else if(m.type==="user_mistake")lines.push(`Неточность на ${num}${dot}-м ходу слегка осложнила твою позицию.`);
+      else if(m.type==="user_great")lines.push(`На ${num}-м ходу ты нашёл сильный ход — позиция получила импульс.`);
+      else if(m.type==="ai_blunder")lines.push(`${ai} допустил блундер на ${num}-м — это был твой шанс.`);
+      else if(m.type==="ai_great")lines.push(`${ai} ответил сильным ходом на ${num}-м.`);
+      else if(m.type==="mate_threat")lines.push(`К ${num}-му ходу на доске возникла матовая угроза.`);
+    }
+    if(over){
+      if(over.includes("You win"))lines.push(`В итоге ты одержал победу. Хорошая работа.`);
+      else if(over.includes("AI wins")||over.includes("resigned"))lines.push(`К сожалению, на этот раз победа осталась за соперником.`);
+      else if(over.includes("Stalemate")||over.includes("draw")||over.includes("Insufficient")||over.includes("repetition"))lines.push(`Партия завершилась вничью.`);
+      else if(over.toLowerCase().includes("time"))lines.push(`Время сыграло свою роль — флаг упал.`);
+    }
+    return lines.join(" ");
+  },[pCol,hist.length,currentOpening,analysis,lv.name,over]);
+  const speakStory=useCallback((text:string)=>{
+    if(typeof window==="undefined"||!window.speechSynthesis||!text)return;
+    try{
+      window.speechSynthesis.cancel();
+      const utt=new SpeechSynthesisUtterance(text);
+      utt.lang="ru-RU";utt.rate=1.0;utt.volume=0.95;utt.pitch=1.0;
+      utt.onend=()=>sStoryPlaying(false);
+      utt.onerror=()=>sStoryPlaying(false);
+      window.speechSynthesis.speak(utt);
+      sStoryPlaying(true);
+    }catch{sStoryPlaying(false)}
+  },[]);
+  const stopStory=useCallback(()=>{
+    try{if(typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel()}catch{}
+    sStoryPlaying(false);
+  },[]);
 
   /* ── Multiverse: launch + animation tick ── */
   const startMultiverse=useCallback(()=>{
@@ -2753,24 +2808,38 @@ export default function CyberChessPage(){
             </div>;
           })()}
           {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
-          {/* Replay Director — кинематографический автореплей (killer #9) */}
-          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&!cinematic&&<button
-            onClick={()=>{
-              try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}catch{}
-              sCinematic(true);sReplaying(true);
-              sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:`${hist.length} ходов · режиссёр AEVION`});
-              setTimeout(()=>sCinematicMoment(null),1800);
-            }}
-            className="cc-focus-ring"
-            style={{marginTop:8,width:"100%",padding:"12px 16px",borderRadius:10,
-              border:"none",background:"linear-gradient(90deg,#0c0a09,#1e1b4b,#831843,#1e1b4b,#0c0a09)",
-              backgroundSize:"200% 100%",
-              color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.5,cursor:"pointer",
-              boxShadow:"0 4px 16px rgba(15,23,42,0.4)",
-              display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
-            <span style={{fontSize:18}}>🎬</span>
-            <span>CINEMATIC REPLAY · ключевые моменты под спотлайтом</span>
-          </button>}
+          {/* Replay Director + AI Story (killer #9 + #10) */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&!cinematic&&<div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap"}}>
+            <button
+              onClick={()=>{
+                try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}catch{}
+                sCinematic(true);sReplaying(true);
+                sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:`${hist.length} ходов · режиссёр AEVION`});
+                setTimeout(()=>sCinematicMoment(null),1800);
+              }}
+              className="cc-focus-ring"
+              style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
+                border:"none",background:"linear-gradient(90deg,#0c0a09,#1e1b4b,#831843,#1e1b4b,#0c0a09)",
+                backgroundSize:"200% 100%",
+                color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.5,cursor:"pointer",
+                boxShadow:"0 4px 16px rgba(15,23,42,0.4)",
+                display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
+              <span style={{fontSize:18}}>🎬</span>
+              <span>CINEMATIC REPLAY</span>
+            </button>
+            <button
+              onClick={()=>{const txt=generateStory();sStoryText(txt);sShowStory(true);setTimeout(()=>speakStory(txt),300)}}
+              className="cc-focus-ring"
+              style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
+                border:"none",background:"linear-gradient(90deg,#7c2d12,#c2410c,#f59e0b,#c2410c,#7c2d12)",
+                backgroundSize:"200% 100%",
+                color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.5,cursor:"pointer",
+                boxShadow:"0 4px 16px rgba(194,65,12,0.35)",
+                display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
+              <span style={{fontSize:18}}>📖</span>
+              <span>STORY · озвучка партии</span>
+            </button>
+          </div>}
           {cinematic&&<div style={{marginTop:8,padding:"10px 16px",borderRadius:10,
             background:"linear-gradient(135deg,#0c0a09,#1e1b4b)",color:"#fff",
             display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
@@ -4369,6 +4438,35 @@ export default function CyberChessPage(){
           }}>⚡ Ещё раз</Btn>
         </div>
       </div>}
+    </Modal>
+
+    {/* ─── AI Story Mode — сюжетная озвучка партии ─── */}
+    <Modal open={showStory} onClose={()=>{stopStory();sShowStory(false)}} size="md"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>📖 История партии <Badge tone="gold" size="sm">AI Coach</Badge></span>}>
+      <div style={{padding:SPACE[4],borderRadius:RADIUS.lg,
+        background:"linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)",
+        border:"1px solid #fcd34d",
+        fontSize:15,lineHeight:1.65,color:"#451a03",fontStyle:"italic" as const,
+        marginBottom:SPACE[3],minHeight:120,
+        boxShadow:"inset 0 1px 0 rgba(255,255,255,0.6)"}}>
+        <div style={{fontSize:11,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:"#92400e",marginBottom:SPACE[2],fontStyle:"normal" as const}}>
+          🎙 Coach рассказывает
+          {storyPlaying&&<span style={{marginLeft:SPACE[2],display:"inline-block",
+            width:8,height:8,borderRadius:"50%",background:"#dc2626",
+            animation:"pulse 1.2s ease-in-out infinite"}}/>}
+        </div>
+        «{storyText||"Партия ещё не сыграна — историю расскажу после неё."}»
+      </div>
+      <div style={{display:"flex",gap:SPACE[2]}}>
+        {!storyPlaying?<Btn variant="primary" size="md" full onClick={()=>speakStory(storyText)}>
+          ▶ Озвучить ещё раз
+        </Btn>:<Btn variant="danger" size="md" full onClick={stopStory}>
+          ⏸ Стоп
+        </Btn>}
+        <Btn variant="secondary" size="md" full onClick={()=>{stopStory();sShowStory(false)}}>
+          Закрыть
+        </Btn>
+      </div>
     </Modal>
 
     {/* ─── Chess Vision — blindfold-style flash-trainer ─── */}

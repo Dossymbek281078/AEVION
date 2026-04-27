@@ -572,6 +572,62 @@ function exportConversation(agent: Agent, format: "md" | "json") {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+ * Shareable workspace links — base64(JSON) of a slim agent dump in
+ * the ?ws= query param. Round-trips through clipboard.
+ * ────────────────────────────────────────────────────────────── */
+
+function encodeWorkspaceUrlParam(agents: Agent[]): string {
+  const slim = agents.map((a) => ({
+    role: a.role,
+    provider: a.provider,
+    model: a.model,
+    title: a.title,
+    messages: a.messages,
+    customSystemPrompt: a.customSystemPrompt,
+  }));
+  const json = JSON.stringify(slim);
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const b64 = btoa(bin);
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeWorkspaceUrlParam(encoded: string): Agent[] | null {
+  try {
+    const padded =
+      encoded.replace(/-/g, "+").replace(/_/g, "/") +
+      "=".repeat((4 - (encoded.length % 4)) % 4);
+    const bin = atob(padded);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const json = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) return null;
+    const valid = parsed.every(
+      (a) =>
+        a &&
+        typeof a.role === "string" &&
+        typeof a.provider === "string" &&
+        typeof a.model === "string"
+    );
+    if (!valid) return null;
+    return parsed.slice(0, MAX_AGENTS).map((a) => ({
+      id: newId(),
+      role: a.role as Role,
+      provider: a.provider,
+      model: a.model,
+      title: typeof a.title === "string" ? a.title : a.role,
+      messages: Array.isArray(a.messages) ? a.messages : [],
+      busy: false,
+      customSystemPrompt: a.customSystemPrompt,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
  * ?demo=1 seed — Investor pack with hand-crafted Q/A so the page
  * shows real-looking parallel reasoning before any LLM call.
  * ────────────────────────────────────────────────────────────── */
@@ -840,10 +896,48 @@ export default function MultichatEnginePage() {
 
   useEffect(() => {
     let wantDemo = false;
+    let sharedAgents: Agent[] | null = null;
     if (typeof window !== "undefined") {
       try {
         const params = new URLSearchParams(window.location.search);
         wantDemo = params.get("demo") === "1";
+        const wsParam = params.get("ws");
+        if (wsParam) {
+          const decoded = decodeWorkspaceUrlParam(wsParam);
+          if (decoded && decoded.length > 0) sharedAgents = decoded;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (sharedAgents) {
+      const ok = window.confirm(
+        `Load shared workspace (${sharedAgents.length} agent${sharedAgents.length === 1 ? "" : "s"})? Your current panels will be replaced.`
+      );
+      if (ok) {
+        setAgents(sharedAgents);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(sharedAgents));
+        } catch {
+          /* ignore */
+        }
+        // Drop ?ws= from the URL so a refresh doesn't re-prompt
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("ws");
+          window.history.replaceState(null, "", url.toString());
+        } catch {
+          /* ignore */
+        }
+        setHydrated(true);
+        return;
+      }
+      // User declined — fall through to normal hydration, but strip ?ws=
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("ws");
+        window.history.replaceState(null, "", url.toString());
       } catch {
         /* ignore */
       }
@@ -1016,6 +1110,28 @@ export default function MultichatEnginePage() {
     },
     []
   );
+
+  const shareWorkspace = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const cur = agentsRef.current;
+    const encoded = encodeWorkspaceUrlParam(cur);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("demo");
+    url.searchParams.set("ws", encoded);
+    const link = url.toString();
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(link);
+      copied = true;
+    } catch {
+      /* clipboard API unavailable — fall through */
+    }
+    if (copied) {
+      window.alert(`Share link copied to clipboard (${(link.length / 1024).toFixed(1)} KB).`);
+    } else {
+      window.prompt("Copy this share link:", link);
+    }
+  }, []);
 
   const deleteWorkspace = useCallback(
     (name: string) => {
@@ -1887,6 +2003,24 @@ export default function MultichatEnginePage() {
                 }}
               >
                 💾 Save
+              </button>
+              <button
+                type="button"
+                onClick={shareWorkspace}
+                title="Copy a shareable link to current panels"
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(94,234,212,0.45)",
+                  background: "rgba(13,148,136,0.18)",
+                  color: "#5eead4",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                🔗 Share
               </button>
               <div style={{ position: "relative" }}>
                 <button

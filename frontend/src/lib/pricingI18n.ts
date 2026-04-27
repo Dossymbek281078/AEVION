@@ -59,6 +59,7 @@ const dict: Record<Lang, Record<string, string>> = {
     /* Testimonials */
     "testimonials.title": "Что говорят клиенты",
     "testimonials.subtitle": "Реальные команды на AEVION. Все цитаты с разрешением авторов.",
+    "logos.label": "ИСПОЛЬЗУЮТ КОМАНДЫ ИЗ 30+ СТРАН",
 
     /* Modules matrix */
     "modules.title": "Все модули",
@@ -195,6 +196,7 @@ const dict: Record<Lang, Record<string, string>> = {
 
     "testimonials.title": "What customers say",
     "testimonials.subtitle": "Real teams on AEVION. All quotes published with author permission.",
+    "logos.label": "TRUSTED BY TEAMS ACROSS 30+ COUNTRIES",
 
     "modules.title": "All modules",
     "modules.subtitle": "27 AEVION products. Buy individually or get them in tiers.",

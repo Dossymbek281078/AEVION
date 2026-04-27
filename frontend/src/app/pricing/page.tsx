@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
@@ -908,6 +909,9 @@ export default function PricingPage() {
           ))}
         </div>
       </section>
+
+      {/* Customer logos row */}
+      <CustomerLogosRow label={tp("logos.label")} />
 
       {/* Testimonials */}
       {testimonials.length > 0 && (

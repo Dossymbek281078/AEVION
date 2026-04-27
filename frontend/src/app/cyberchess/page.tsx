@@ -14,6 +14,7 @@ import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rival
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
 import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
+import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -448,6 +449,10 @@ export default function CyberChessPage(){
   const[activeCloneId,sActiveCloneId]=useState<number|null>(null);
   const[cloneMode,sCloneMode]=useState(false);
   const activeClone=activeCloneId!==null?clones[activeCloneId]:null;
+  // Ghost Mode (killer #9)
+  const[showGhost,sShowGhost]=useState(false);
+  const[activeGhost,sActiveGhost]=useState<Ghost|null>(null);
+  const[ghostMode,sGhostMode]=useState(false);
   // Auto-Reels Generator (killer #8)
   const[showReel,sShowReel]=useState(false);
   const[reelMeta,sReelMeta]=useState<{white:string;black:string;result:string}>({white:"White",black:"Black",result:"*"});
@@ -1042,6 +1047,20 @@ export default function CyberChessPage(){
     else if(rivalResult==="D")addChessy(3,`🤝 ничья с ${rivalProfile.name}`);
   },[over,rivalMode,rivalProfile,currentOpening,hist.length,rat,addChessy,fenHist.length]);
 
+  /* ── Ghost Mode: bonus Chessy on win over GM ghost ── */
+  const ghostLearnedRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!ghostMode||!activeGhost||!over)return;
+    const key=`${activeGhost.id}-${fenHist.length}-${over}`;
+    if(ghostLearnedRef.current===key)return;
+    ghostLearnedRef.current=key;
+    if(over.includes("You win")||over.includes("timed out")){
+      addChessy(25,`👻 победа над призраком ${activeGhost.name}`);
+    }else if(over.includes("Stalemate")||over.includes("draw")||over.includes("repetition")||over.includes("Insufficient")||over.includes("50-move")){
+      addChessy(8,`🤝 ничья с призраком ${activeGhost.name}`);
+    }
+  },[over,ghostMode,activeGhost,fenHist.length,addChessy]);
+
   /* ── Tournament: process result on game over, advance bracket ── */
   useEffect(()=>{
     if(!tournament||!tournamentOpponent||!over)return;
@@ -1201,6 +1220,48 @@ export default function CyberChessPage(){
         },Math.max(500,delay*0.6));
         return()=>clearTimeout(t);
       }
+    }
+    // Ghost Mode: book lookup → exact GM move; otherwise style-weighted pick
+    if(ghostMode&&activeGhost){
+      try{
+        const ck=new Chess(fenAtTrigger);
+        const bookSan=ghostBookMove(activeGhost,ck);
+        if(bookSan){
+          const t=setTimeout(()=>{
+            try{
+              if(game.fen()!==fenAtTrigger){sThink(false);return}
+              const c=new Chess(fenAtTrigger);
+              const mv=c.move(bookSan);
+              if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+            }catch{}
+            sThink(false);
+          },Math.max(700,delay*0.7));
+          return()=>clearTimeout(t);
+        }
+        // Out of book: style-weighted pick from minimax candidates (top 5 by depth-3 eval)
+        const t=setTimeout(()=>{
+          try{
+            if(game.fen()!==fenAtTrigger){sThink(false);return}
+            const c=new Chess(fenAtTrigger);
+            const all=c.moves({verbose:true});
+            if(!all.length){sThink(false);return}
+            // Quick depth-3 eval per move, take top 5, then style-weight
+            const evals=all.map(m=>{
+              c.move(m);
+              const s=mm(c,2,-Infinity,Infinity,c.turn()==="w");
+              c.undo();
+              return{m,s:c.turn()==="w"?-s:s};
+            });
+            evals.sort((a,b)=>b.s-a.s);
+            const top=evals.slice(0,Math.min(5,evals.length)).map(e=>e.m);
+            const ck2=new Chess(fenAtTrigger);
+            const pick=pickGhostStyleMove(activeGhost,ck2,top);
+            if(pick)exec(pick.from as Square,pick.to as Square,pick.promotion as any);
+          }catch{}
+          sThink(false);
+        },delay);
+        return()=>clearTimeout(t);
+      }catch{sThink(false)}
     }
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
@@ -1964,6 +2025,16 @@ export default function CyberChessPage(){
                   <span>🧬 Style Cloner <Badge tone="info" size="xs">new</Badge></span>
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
                     {clones.length>0?`${clones.length} клон${clones.length===1?"":clones.length<5?"а":"ов"}`:"Lichess → бот-клон"}
+                  </span>
+                </div>
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>sShowGhost(true)}
+                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#1f2937,#0f172a)",
+                  border:"1px solid #374151",color:"#fbbf24"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>👻 Ghost Mode <Badge tone="gold" size="xs">new</Badge></span>
+                  <span style={{fontSize:11,color:"#9ca3af",fontWeight:600}}>
+                    {ghostMode&&activeGhost?`vs ${activeGhost.name}`:"Magnus · Tal · Fischer · Kasparov"}
                   </span>
                 </div>
               </Btn>
@@ -4143,6 +4214,60 @@ export default function CyberChessPage(){
           </div>
         </div>;
       })()}
+    </Modal>
+
+    {/* ═══ Ghost Mode (killer #9) ═══ */}
+    <Modal open={showGhost} onClose={()=>sShowGhost(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>👻 Ghost Mode <Badge tone="gold" size="sm">GM спарринг</Badge></span>}>
+      <div>
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#1f2937,#0f172a)",color:"#fbbf24",marginBottom:SPACE[3],fontSize:13,lineHeight:1.5}}>
+          <b>Играй против призрака гроссмейстера.</b><br/>
+          Каждый бот использует мини-книгу дебютов реального игрока + стилевые предпочтения (Tal жертвует, Petrosian защищается, Magnus давит эндшпиль). Это не точный клон — это эмуляция стиля.
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2]}}>
+          {GHOSTS.map(g=>{
+            const isActive=ghostMode&&activeGhost?.id===g.id;
+            return <button key={g.id} onClick={()=>{
+              sActiveGhost(g);sGhostMode(true);sShowGhost(false);sTab("play");sHotseat(false);sRivalMode(false);sCloneMode(false);
+              const lvl=chessy.owned.master_ai?g.aiLevel:Math.min(4,g.aiLevel);
+              sAiI(lvl);
+              setTimeout(()=>newG(),50);
+              showToast(`👻 Призрак ${g.name} принимает вызов...`,"info");
+              setTimeout(()=>showToast(`«${g.motto}»`,"info"),1500);
+            }} className="cc-focus-ring"
+              style={{textAlign:"left",padding:SPACE[3],borderRadius:RADIUS.md,
+                background:isActive?"linear-gradient(135deg,#fef3c7,#fde68a)":"linear-gradient(135deg,#1f2937,#374151)",
+                border:isActive?`2px solid ${CC.gold}`:"1px solid #4b5563",
+                color:isActive?CC.text:"#fff",cursor:"pointer",
+                transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
+                <div style={{fontSize:32}}>{g.flag}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:16,fontWeight:900}}>{g.name}</div>
+                  <div style={{fontSize:11,opacity:0.85}}>{g.era} · {g.rating}</div>
+                </div>
+                {isActive&&<Badge tone="gold" size="xs">active</Badge>}
+              </div>
+              <div style={{fontSize:12,fontStyle:"italic",opacity:0.9,marginBottom:SPACE[1]}}>«{g.motto}»</div>
+              <div style={{fontSize:11,opacity:0.7}}>{g.signatureGames}</div>
+              <div style={{display:"flex",gap:6,marginTop:SPACE[2],flexWrap:"wrap"}}>
+                {g.style.aggression>0.6&&<Badge tone="danger" size="xs">атакёр</Badge>}
+                {g.style.sacrifice>0.5&&<Badge tone="gold" size="xs">жертвенник</Badge>}
+                {g.style.positional>0.7&&<Badge tone="info" size="xs">позиционный</Badge>}
+                {g.style.endgameAffinity>0.85&&<Badge tone="accent" size="xs">эндшпиль</Badge>}
+                {g.style.aggression<0&&<Badge tone="info" size="xs">защитник</Badge>}
+              </div>
+            </button>;
+          })}
+        </div>
+        {ghostMode&&activeGhost&&<div style={{marginTop:SPACE[3],padding:SPACE[2],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,fontSize:12,color:"#065f46",textAlign:"center"}}>
+          Активный призрак: <b>{activeGhost.name}</b>.
+          <Btn variant="ghost" size="sm" style={{marginLeft:SPACE[2]}} onClick={()=>{sGhostMode(false);sActiveGhost(null);showToast("Ghost-режим выключен","info")}}>Выкл</Btn>
+        </div>}
+        <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,lineHeight:1.5,textAlign:"center"}}>
+          Победа над призраком — <b>+25 Chessy</b>. Эти боты сильнее обычных AI того же уровня за счёт книги дебютов.
+        </div>
+      </div>
     </Modal>
 
     {/* ═══ Style Cloner (killer #7) ═══ */}

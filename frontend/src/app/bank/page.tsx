@@ -42,6 +42,7 @@ import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { TierProgression } from "./_components/TierProgression";
 import { GiftMode } from "./_components/GiftMode";
+import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
@@ -148,7 +149,7 @@ function BankContent() {
       </div>
 
       {!authChecked ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+        <div style={{ padding: 40, textAlign: "center", color: "#64748b", fontSize: 14 }}>
           {t("loading.session")}
         </div>
       ) : null}
@@ -233,7 +234,7 @@ function BankContent() {
       ) : null}
 
       {me && loading && !account ? (
-        <div style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+        <div style={{ padding: 32, textAlign: "center", color: "#64748b", fontSize: 14 }}>
           {t("loading.wallet")}
         </div>
       ) : null}
@@ -297,6 +298,9 @@ function BankContent() {
             </div>
             <div id="bank-anchor-ecosystem" style={{ scrollMarginTop: 20 }}>
               <EcosystemPulse accountId={account.id} operations={operations} />
+            </div>
+            <div id="bank-anchor-flow" style={{ scrollMarginTop: 20 }}>
+              <MoneyFlowMap accountId={account.id} operations={operations} />
             </div>
             <AccountIdCard
               accountId={account.id}
@@ -450,7 +454,7 @@ export default function AevionBankPage() {
         <Wave1Nav />
         <Suspense
           fallback={
-            <div style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+            <div style={{ padding: 40, textAlign: "center", color: "#64748b", fontSize: 14 }}>
               Loading bank…
             </div>
           }

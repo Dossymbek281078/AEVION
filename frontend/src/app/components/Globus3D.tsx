@@ -2050,7 +2050,7 @@ export default function Globus3D({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
+            placeholder={isNarrow ? "Search" : "Try qright, awards…"}
             aria-label="Search projects"
             style={{
               width: isNarrow ? 90 : 130,
@@ -2149,11 +2149,40 @@ export default function Globus3D({
         </div>
       ) : null}
 
+      {!initError &&
+      !isNarrow &&
+      query.trim() === "" &&
+      filter === "all" &&
+      !focused &&
+      !tour ? (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 53,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 4,
+            fontSize: 10,
+            color: "rgba(168,184,216,0.55)",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            pointerEvents: "none",
+            background: "rgba(12,18,32,0.45)",
+            padding: "2px 8px",
+            borderRadius: 999,
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          drag · ↑↓←→ · Tab · Enter to focus · Esc
+        </div>
+      ) : null}
+
       {!initError && !isNarrow ? (
         <div
           style={{
             position: "absolute",
-            top: 64,
+            top: 84,
             left: 14,
             zIndex: 4,
             background: "rgba(12,18,32,0.7)",
@@ -2215,7 +2244,7 @@ export default function Globus3D({
         <div
           style={{
             position: "absolute",
-            top: 64,
+            top: 84,
             right: 14,
             zIndex: 4,
             background: "rgba(12,18,32,0.7)",

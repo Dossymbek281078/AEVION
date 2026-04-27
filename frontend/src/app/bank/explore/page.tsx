@@ -91,6 +91,13 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         badgeKey: "explore.badge.demo",
       },
       {
+        href: "/bank/qr-scan",
+        iconBg: "linear-gradient(135deg, #0f172a, #0d9488)",
+        iconChar: "⬚",
+        titleKey: "explore.card.scan.title",
+        hintKey: "explore.card.scan.hint",
+      },
+      {
         href: "/bank/r/AEDEMO?from=Lana&tier=advocate",
         iconBg: "linear-gradient(135deg, #7c3aed, #db2777)",
         iconChar: "♥",

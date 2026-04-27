@@ -189,6 +189,14 @@ function buildStarField(count: number) {
   return new THREE.Points(geo, mat);
 }
 
+const MIN_DIST = 130;
+const MAX_DIST = 360;
+const MIN_PITCH = -1.1;
+const MAX_PITCH = 1.1;
+const DEFAULT_YAW = 0;
+const DEFAULT_PITCH = 0.22;
+const DEFAULT_DIST = 248;
+
 export default function Globus3D({
   projects,
   qrightObjects,
@@ -204,6 +212,17 @@ export default function Globus3D({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
+  const [autoRotate, setAutoRotate] = useState(true);
+  const autoRotateRef = useRef(autoRotate);
+  useEffect(() => {
+    autoRotateRef.current = autoRotate;
+  }, [autoRotate]);
+
+  /** Внешний "пульт" камеры — кнопки UI меняют ref, animate подхватит на след. кадре. */
+  const yawRef = useRef(DEFAULT_YAW);
+  const pitchRef = useRef(DEFAULT_PITCH);
+  const distanceRef = useRef(DEFAULT_DIST);
+
   const [label, setLabel] = useState<{
     text: string;
     sub?: string;
@@ -327,7 +346,21 @@ export default function Globus3D({
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 2000);
-    camera.position.set(0, 0, 248);
+
+    /** Орбита: угол вокруг Y (yaw), угол подъёма (pitch), радиус (distance). */
+    const updateCamera = () => {
+      const yaw = yawRef.current;
+      const pitch = pitchRef.current;
+      const d = distanceRef.current;
+      const cp = Math.cos(pitch);
+      camera.position.set(
+        d * Math.sin(yaw) * cp,
+        d * Math.sin(pitch),
+        d * Math.cos(yaw) * cp,
+      );
+      camera.lookAt(0, 0, 0);
+    };
+    updateCamera();
 
     const stars = buildStarField(2200);
     scene.add(stars);
@@ -600,6 +633,22 @@ export default function Globus3D({
     let isHovering = false;
     let lastTime = 0;
 
+    /** Drag/inertia. */
+    let dragging = false;
+    let didDrag = false;
+    let lastPx = 0;
+    let lastPy = 0;
+    let yawVel = 0;
+    let pitchVel = 0;
+    /** Pinch-zoom (для двух пальцев). */
+    let pinchDist = 0;
+    const activePointers = new Map<number, { x: number; y: number }>();
+
+    const clampPitch = (p: number) =>
+      Math.max(MIN_PITCH, Math.min(MAX_PITCH, p));
+    const clampDist = (d: number) =>
+      Math.max(MIN_DIST, Math.min(MAX_DIST, d));
+
     const resize = () => {
       const m = measure();
       renderer.setSize(m.width, m.height);
@@ -613,10 +662,11 @@ export default function Globus3D({
         : null;
     ro?.observe(el);
 
-    const onMouseMove = (ev: MouseEvent) => {
+    /** Подсветка маркера и pop-up — отдельно от drag. */
+    const updateHover = (clientX: number, clientY: number) => {
       const rect = el.getBoundingClientRect();
-      mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -(((ev.clientY - rect.top) / rect.height) * 2 - 1);
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
 
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(
@@ -627,6 +677,7 @@ export default function Globus3D({
       if (!intersects.length) {
         setLabel(null);
         isHovering = false;
+        canvas.style.cursor = dragging ? "grabbing" : "grab";
         return;
       }
 
@@ -650,17 +701,102 @@ export default function Globus3D({
       labelRef.current = nextLabel;
       setLabel(nextLabel);
       isHovering = true;
+      canvas.style.cursor = dragging ? "grabbing" : "pointer";
     };
 
-    const onClick = () => {
-      const cur = labelRef.current;
-      if (!cur) return;
-      if (!cur.marker.href) return;
-      onNavigateRef.current(cur.marker.href);
-      onSelectLocationRef.current({
-        country: cur.marker.country,
-        city: cur.marker.city,
-      });
+    const onPointerDown = (ev: PointerEvent) => {
+      activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (activePointers.size === 1) {
+        dragging = true;
+        didDrag = false;
+        lastPx = ev.clientX;
+        lastPy = ev.clientY;
+        yawVel = 0;
+        pitchVel = 0;
+        canvas.style.cursor = "grabbing";
+      } else if (activePointers.size === 2) {
+        const pts = Array.from(activePointers.values());
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        pinchDist = Math.hypot(dx, dy);
+      }
+      try {
+        el.setPointerCapture(ev.pointerId);
+      } catch {}
+    };
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (activePointers.has(ev.pointerId)) {
+        activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      }
+
+      if (activePointers.size === 2) {
+        const pts = Array.from(activePointers.values());
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        const dist = Math.hypot(dx, dy);
+        if (pinchDist > 0) {
+          const factor = pinchDist / dist;
+          distanceRef.current = clampDist(distanceRef.current * factor);
+        }
+        pinchDist = dist;
+        return;
+      }
+
+      if (!dragging) {
+        updateHover(ev.clientX, ev.clientY);
+        return;
+      }
+
+      const dx = ev.clientX - lastPx;
+      const dy = ev.clientY - lastPy;
+      lastPx = ev.clientX;
+      lastPy = ev.clientY;
+
+      if (Math.hypot(dx, dy) > 1) didDrag = true;
+
+      const speed = 0.005;
+      yawRef.current -= dx * speed;
+      pitchRef.current = clampPitch(pitchRef.current + dy * speed);
+      yawVel = -dx * speed * 0.9;
+      pitchVel = dy * speed * 0.9;
+    };
+
+    const onPointerUp = (ev: PointerEvent) => {
+      activePointers.delete(ev.pointerId);
+      if (activePointers.size === 0) {
+        dragging = false;
+        canvas.style.cursor = isHovering ? "pointer" : "grab";
+      }
+      if (activePointers.size < 2) pinchDist = 0;
+      try {
+        el.releasePointerCapture(ev.pointerId);
+      } catch {}
+
+      // Если перемещения не было — это клик; запускаем navigate.
+      if (!didDrag) {
+        const cur = labelRef.current;
+        if (cur && cur.marker.href) {
+          onNavigateRef.current(cur.marker.href);
+          onSelectLocationRef.current({
+            country: cur.marker.country,
+            city: cur.marker.city,
+          });
+        }
+      }
+    };
+
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const factor = Math.exp(ev.deltaY * 0.0015);
+      distanceRef.current = clampDist(distanceRef.current * factor);
+    };
+
+    const onPointerLeave = () => {
+      if (!dragging) {
+        setLabel(null);
+        isHovering = false;
+      }
     };
 
     const animate = (t: number) => {
@@ -668,16 +804,33 @@ export default function Globus3D({
       const dt = t - lastTime;
       lastTime = t;
 
-      if (!isHovering) {
-        earthGroup.rotation.y += dt * 0.000028 * 60;
+      // Inertia после drag
+      if (!dragging) {
+        if (Math.abs(yawVel) > 0.0005 || Math.abs(pitchVel) > 0.0005) {
+          yawRef.current += yawVel;
+          pitchRef.current = clampPitch(pitchRef.current + pitchVel);
+          yawVel *= 0.92;
+          pitchVel *= 0.92;
+        } else if (autoRotateRef.current && !isHovering) {
+          yawRef.current += dt * 0.00018;
+        }
       }
 
+      // Облака чуть-чуть бегут всегда — оживляет сцену.
+      cloudMesh.rotation.y += dt * 0.00004;
+      updateCamera();
       renderer.render(scene, camera);
     };
 
+    canvas.style.cursor = "grab";
+
     window.addEventListener("resize", resize);
-    el.addEventListener("mousemove", onMouseMove);
-    el.addEventListener("click", onClick);
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
+    el.addEventListener("pointerleave", onPointerLeave);
+    el.addEventListener("wheel", onWheel, { passive: false });
 
     requestAnimationFrame(() => resize());
 
@@ -686,8 +839,12 @@ export default function Globus3D({
     return () => {
       ro?.disconnect();
       window.removeEventListener("resize", resize);
-      el.removeEventListener("mousemove", onMouseMove);
-      el.removeEventListener("click", onClick);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
+      el.removeEventListener("pointerleave", onPointerLeave);
+      el.removeEventListener("wheel", onWheel);
       cancelAnimationFrame(raf);
       renderer.dispose();
       while (el.firstChild) el.removeChild(el.firstChild);
@@ -699,6 +856,36 @@ export default function Globus3D({
       return () => {};
     }
   }, [markers]);
+
+  const ctrlBtn: CSSProperties = {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    border: "1px solid rgba(120,160,220,0.35)",
+    background: "rgba(12,18,32,0.78)",
+    color: "#e8eefc",
+    fontSize: 16,
+    fontWeight: 800,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+    backdropFilter: "blur(6px)",
+    transition: "transform 0.12s ease, background 0.15s ease",
+  };
+
+  const resetView = () => {
+    yawRef.current = DEFAULT_YAW;
+    pitchRef.current = DEFAULT_PITCH;
+    distanceRef.current = DEFAULT_DIST;
+  };
+  const zoom = (factor: number) => {
+    distanceRef.current = Math.max(
+      MIN_DIST,
+      Math.min(MAX_DIST, distanceRef.current * factor),
+    );
+  };
 
   return (
     <div style={{ position: "relative", width: "100%", minHeight: 520, height: 520 }}>
@@ -715,8 +902,87 @@ export default function Globus3D({
             "radial-gradient(ellipse 120% 100% at 50% 35%, #0c1528 0%, #02040a 55%, #000005 100%)",
           boxShadow:
             "inset 0 0 80px rgba(60,100,180,0.12), 0 24px 48px rgba(0,0,0,0.35)",
+          touchAction: "none",
+          userSelect: "none",
         }}
       />
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: 14,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            zIndex: 5,
+          }}
+        >
+          <button
+            type="button"
+            title="Zoom in"
+            aria-label="Zoom in"
+            onClick={() => zoom(0.85)}
+            style={ctrlBtn}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            title="Zoom out"
+            aria-label="Zoom out"
+            onClick={() => zoom(1 / 0.85)}
+            style={ctrlBtn}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            title={autoRotate ? "Pause rotation" : "Auto-rotate"}
+            aria-label={autoRotate ? "Pause rotation" : "Auto-rotate"}
+            onClick={() => setAutoRotate((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: autoRotate ? "rgba(13,148,136,0.85)" : ctrlBtn.background,
+              borderColor: autoRotate ? "rgba(94,234,212,0.6)" : ctrlBtn.border as string,
+            }}
+          >
+            {autoRotate ? "❚❚" : "▶"}
+          </button>
+          <button
+            type="button"
+            title="Reset view"
+            aria-label="Reset view"
+            onClick={resetView}
+            style={ctrlBtn}
+          >
+            ⌂
+          </button>
+        </div>
+      ) : null}
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: 14,
+            zIndex: 4,
+            fontSize: 11,
+            color: "rgba(168,184,216,0.72)",
+            background: "rgba(12,18,32,0.55)",
+            border: "1px solid rgba(120,160,220,0.18)",
+            borderRadius: 8,
+            padding: "5px 9px",
+            backdropFilter: "blur(4px)",
+            pointerEvents: "none",
+            letterSpacing: "0.02em",
+          }}
+        >
+          drag · scroll to zoom
+        </div>
+      ) : null}
 
       {initError ? (
         <div

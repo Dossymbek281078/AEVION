@@ -1237,14 +1237,16 @@ export default function Globus3D({
     const arcStartTime = performance.now();
     const ARC_DRAW_MS = 1400;
 
-    const hemi = new THREE.HemisphereLight(0x9eb6ff, 0x080810, 0.55);
+    // Освещение настроено для day/night эффекта без external night-texture:
+    // ambient очень мягкий → ночная сторона глубоко тёмная (terminator-эффект).
+    const hemi = new THREE.HemisphereLight(0x6e8ed0, 0x040612, 0.32);
     scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.55);
     sun.position.set(260, 80, 180);
     scene.add(sun);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.12);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.05);
     scene.add(ambient);
 
     let raf = 0;
@@ -1766,6 +1768,9 @@ export default function Globus3D({
     distanceRef.current = DEFAULT_DIST;
     setFocused(null);
     setTour(false);
+    setQuery("");
+    setFilter("all");
+    setKbSelectedKey(null);
   };
 
   const focusOnMarker = (m: Marker) => {
@@ -3310,6 +3315,20 @@ export default function Globus3D({
                 >
                   Close
                 </button>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 10,
+                  color: "rgba(148,163,184,0.55)",
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                  textAlign: "center",
+                  textTransform: "uppercase",
+                }}
+              >
+                Esc to close
               </div>
             </div>
           </div>

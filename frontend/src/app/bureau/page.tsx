@@ -1385,29 +1385,12 @@ export default function BureauPage() {
           </div>
         </section>
 
-        {/* ── Embeddable badge CTA ── */}
-        <section style={{ marginBottom: 28, padding: "18px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", display: "grid", gridTemplateColumns: "1fr auto", gap: 14, alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", marginBottom: 4 }}>Embed the “Protected by AEVION” badge</div>
-            <div style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.55 }}>
-              Every issued certificate produces a live SVG badge you can paste on any website, GitHub README, or portfolio — links straight to the public verification page.
-            </div>
-            <div style={{ marginTop: 10, fontSize: 11, fontFamily: "ui-monospace, Menlo, monospace", color: "#334155", background: "#f8fafc", padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.06)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              &lt;img src=&quot;.../api/pipeline/badge/&lt;cert-id&gt;&quot; /&gt;
-            </div>
-          </div>
-          <div style={{ flexShrink: 0 }}>
-            <div style={{ width: 280, height: 58, borderRadius: 10, background: "linear-gradient(135deg, #0f172a, #1e1b4b)", position: "relative", overflow: "hidden", padding: "8px 12px", color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#0f172a" }}>✓</div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 9, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.06em" }}>PROTECTED BY AEVION</div>
-                <div style={{ fontSize: 12, fontWeight: 800 }}>Your Work Title</div>
-                <div style={{ fontSize: 9, color: "#5eead4", fontFamily: "ui-monospace, Menlo, monospace" }}>a1b2c3d4… · 0 verifications</div>
-              </div>
-              <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 4, background: "linear-gradient(90deg, #0d9488, #06b6d4)" }} />
-            </div>
-          </div>
-        </section>
+        {/* ── Live embed playground ── */}
+        <EmbedPlayground
+          stats={stats}
+          certificates={certificates}
+          onCopy={copy}
+        />
 
         {/* ── Technology stack ── */}
         <section style={{ padding: "18px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)", marginBottom: 28 }}>
@@ -1696,5 +1679,110 @@ ${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Live embed playground — pick a real cert, see the actual badge,
+   copy ready-to-paste HTML / Markdown / Iframe snippets.
+   Replaces the static mockup that lived in the same slot before.
+   ────────────────────────────────────────────────────────────── */
+function EmbedPlayground({
+  stats,
+  certificates,
+  onCopy,
+}: {
+  stats: BureauStats | null;
+  certificates: Certificate[];
+  onCopy: (text: string, label: string) => void;
+}) {
+  // Pool: live activity (richest metadata) ∪ registry slice. Dedupe by id
+  // so the dropdown stays clean if a cert appears in both.
+  const pool = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: Array<{ id: string; title: string; author: string }> = [];
+    for (const l of stats?.latest ?? []) {
+      if (!seen.has(l.id)) { seen.add(l.id); merged.push({ id: l.id, title: l.title, author: l.author }); }
+    }
+    for (const c of certificates) {
+      if (!seen.has(c.id)) { seen.add(c.id); merged.push({ id: c.id, title: c.title, author: c.author }); }
+    }
+    return merged.slice(0, 30);
+  }, [stats, certificates]);
+
+  const [selected, setSelected] = useState<string>("");
+  useEffect(() => {
+    if (!selected && pool.length > 0) setSelected(pool[0].id);
+  }, [pool, selected]);
+
+  const cert = pool.find((p) => p.id === selected) ?? null;
+  const verifyAbsolute = typeof window !== "undefined" && cert ? `${window.location.origin}/verify/${cert.id}` : (cert ? `/verify/${cert.id}` : "");
+  const badgeAbsolute = typeof window !== "undefined" && cert ? `${window.location.origin}${apiUrl(`/api/pipeline/badge/${cert.id}`)}` : (cert ? apiUrl(`/api/pipeline/badge/${cert.id}`) : "");
+  const htmlSnippet = cert ? `<a href="${verifyAbsolute}"><img src="${badgeAbsolute}" alt="Protected by AEVION" /></a>` : "";
+  const mdSnippet = cert ? `[![Protected by AEVION](${badgeAbsolute})](${verifyAbsolute})` : "";
+  const iframeSnippet = cert ? `<iframe src="${verifyAbsolute}" width="100%" height="600" frameborder="0" loading="lazy"></iframe>` : "";
+
+  return (
+    <section style={{ marginBottom: 28, padding: "18px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>Embed playground</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2, lineHeight: 1.55 }}>
+            Pick any real certificate, copy the snippet, paste into your README, blog, portfolio, or product. The badge auto-updates as the verify count grows.
+          </div>
+        </div>
+        {pool.length > 0 ? (
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            aria-label="Select a certificate to preview"
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 12, color: "#0f172a", fontWeight: 700, cursor: "pointer", maxWidth: 320 }}
+          >
+            {pool.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title.length > 40 ? `${p.title.slice(0, 39)}…` : p.title} · {p.author}
+              </option>
+            ))}
+          </select>
+        ) : null}
+      </div>
+
+      {!cert ? (
+        <div style={{ padding: 18, textAlign: "center", color: "#94a3b8", fontSize: 12, border: "1px dashed rgba(15,23,42,0.1)", borderRadius: 10 }}>
+          Loading registry — pick a certificate when the list arrives.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          {/* Live badge preview — actual <img> hitting the backend */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Live preview</span>
+            {/* eslint-disable-next-line @next/next/no-img-element -- backend SVG, not a Next-optimized image */}
+            <a href={verifyAbsolute} target="_blank" rel="noopener noreferrer">
+              <img src={apiUrl(`/api/pipeline/badge/${cert.id}`)} alt={`Protected by AEVION — ${cert.title}`} style={{ height: 64, display: "block" }} />
+            </a>
+            <span style={{ fontSize: 11, color: "#64748b", fontFamily: "ui-monospace, Menlo, monospace" }}>{cert.id}</span>
+          </div>
+
+          {/* Three snippet rows — HTML, Markdown, IFRAME */}
+          {([
+            { label: "HTML", value: htmlSnippet },
+            { label: "Markdown", value: mdSnippet },
+            { label: "IFRAME", value: iframeSnippet },
+          ] as const).map((s) => (
+            <div key={s.label} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10, background: "#0f172a", color: "#e2e8f0", border: "1px solid rgba(15,23,42,0.05)" }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: "#5eead4", letterSpacing: "0.05em", padding: "2px 8px", borderRadius: 999, background: "rgba(94,234,212,0.1)" }}>{s.label}</span>
+              <code style={{ fontSize: 11, fontFamily: "ui-monospace, Menlo, monospace", color: "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.value}</code>
+              <button
+                type="button"
+                onClick={() => onCopy(s.value, `${s.label} snippet`)}
+                style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(94,234,212,0.35)", background: "transparent", color: "#5eead4", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+              >
+                Copy
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

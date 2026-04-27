@@ -380,7 +380,7 @@ export default function HomePage() {
           {[
             {
               t: "QRight",
-              d: "IP registry with content hash, author binding, and geolocation tracking.",
+              d: "Forever-verifiable IP. SHA-256, Ed25519, distributed Shamir shards, Bitcoin-anchored timestamps — works offline if AEVION goes dark.",
               href: "/qright",
             },
             {
@@ -445,7 +445,7 @@ export default function HomePage() {
           <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 20px", letterSpacing: "-0.02em" }}>From idea to monetization in 4 steps</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {[
-              { step: "1", title: "Register", desc: "Upload your work to QRight — get a SHA-256 hash and timestamp proof of existence.", icon: "📝", color: "#0d9488" },
+              { step: "1", title: "Register", desc: "Describe your work in QRight — walk away with a SHA-256 fingerprint, Ed25519 signature, and Bitcoin-anchored timestamp.", icon: "📝", color: "#0d9488" },
               { step: "2", title: "Sign", desc: "QSign creates an HMAC-SHA256 signature — cryptographic proof that your data hasn't been tampered with.", icon: "🔐", color: "#2563eb" },
               { step: "3", title: "Certify", desc: "IP Bureau generates a certificate-ready document. Planet validators verify and community votes.", icon: "📜", color: "#7c3aed" },
               { step: "4", title: "Earn", desc: "AEVION Bank distributes royalties automatically when someone uses your content. Instant, transparent.", icon: "💰", color: "#059669" },

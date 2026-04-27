@@ -1237,6 +1237,16 @@ pipelineRouter.get("/badge/:certId", async (req, res) => {
     const hashShort = escapeXml((cert.contentHash || "").slice(0, 12));
     const verifiedCount = Number(cert.verifiedCount || 0);
 
+    // Badge SVG payload only changes when title or verify count moves —
+    // ETag from those two fields lets popular embeds (README badges)
+    // bypass the SVG generation cost on every page view.
+    const etag = `"badge-${certId}-${verifiedCount}-${(cert.contentHash || "").slice(0, 8)}"`;
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      return res.status(304).end();
+    }
+    res.setHeader("ETag", etag);
+
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="58" viewBox="0 0 280 58">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">

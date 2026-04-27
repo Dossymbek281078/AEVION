@@ -2,6 +2,9 @@
 // Игрок проходит 3 раунда (QF → SF → Final). Параллельные матчи симулируются
 // детерминированным расчётом по ELO (модель Elo P=1/(1+10^((b-a)/400))).
 // Хранение в localStorage как один live-турнир + лента трофеев.
+// Поддерживает variant: standard / fischer960 / asymmetric / atomic / etc.
+
+import type { VariantId } from "./variants";
 
 const TKEY = "aevion_tournament_v1";
 const TROPHY_KEY = "aevion_tournament_trophies_v1";
@@ -62,6 +65,8 @@ export type Tournament = {
   currentRound: "qf" | "sf" | "final" | "done";
   // Cache: persona id → Persona for this tournament
   field: Persona[];
+  // Variant for this tournament (default standard for backward compatibility)
+  variant?: VariantId;
 };
 
 export type Trophy = {
@@ -71,6 +76,7 @@ export type Trophy = {
   finalScore?: string;
   defeated: string[];        // persona names beaten by player
   reward: number;
+  variant?: VariantId;
 };
 
 export function ldTournament(): Tournament | null {
@@ -88,7 +94,7 @@ export function svTrophies(list: Trophy[]) {
 
 // Pick 7 random personas + player → 8-player field. Bracket pairing standard:
 // 1v8, 4v5, 3v6, 2v7 by seed order; player seeded by their elo.
-export function createTournament(playerElo: number): Tournament {
+export function createTournament(playerElo: number, variant: VariantId = "standard"): Tournament {
   const pool = [...PERSONAS].sort(() => Math.random() - 0.5).slice(0, 7);
   const player: Persona = {
     id: "you", name: "Ты", flag: "🇰🇿", elo: playerElo, style: "Universal",
@@ -113,6 +119,7 @@ export function createTournament(playerElo: number): Tournament {
     field,
     bracket: { qf, sf: [{ ...empty }, { ...empty }], final: { ...empty } },
     currentRound: "qf",
+    variant,
   };
 }
 

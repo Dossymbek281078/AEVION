@@ -443,6 +443,8 @@ export default function CyberChessPage(){
   const[showTournament,sShowTournament]=useState(false);
   const[tournamentOpponent,sTournamentOpponent]=useState<Persona|null>(null);
   const tournamentLearnedRef=useRef<string|null>(null);
+  // Selected variant for next tournament (only matters at "create" time)
+  const[tournamentVariantPick,sTournamentVariantPick]=useState<VariantId>("standard");
   // Style Cloner (killer #7)
   const[clones,sClones]=useState<CloneProfile[]>(()=>(typeof window!=="undefined"?ldClones():[]));
   useEffect(()=>{svClones(clones)},[clones]);
@@ -1284,7 +1286,7 @@ export default function CyberChessPage(){
         if(place){
           const reward2=placeReward(place);
           const def=defeatedByPlayer(t);
-          const trophy:Trophy={v:1,ts:Date.now(),place,defeated:def,reward:reward2};
+          const trophy:Trophy={v:1,ts:Date.now(),place,defeated:def,reward:reward2,variant:t.variant};
           sTrophies(list=>[trophy,...list].slice(0,50));
           setTimeout(()=>{
             addChessy(reward2,place===1?"🏆 1-е место в турнире":place===2?"🥈 2-е место":place===4?"🥉 финал-4":"турнир: 1/4 финала");
@@ -1655,8 +1657,10 @@ export default function CyberChessPage(){
   const discardResume=()=>{clearResume();sResumeOffer(null)};
   // Tournament: start the next match (player vs current opponent)
   const startTournamentMatch=useCallback((opp:Persona)=>{
-    sTab("play");sShowTournament(false);sHotseat(false);sRivalMode(false);
+    sTab("play");sShowTournament(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);
     sTournamentOpponent(opp);
+    // Switch to tournament's variant
+    if(tournament?.variant){sVariant(tournament.variant)}
     // Map persona aiLevel directly (clamp to unlocked range)
     const lvl=chessy.owned.master_ai?Math.min(5,opp.aiLevel):Math.min(4,opp.aiLevel);
     sAiI(lvl);
@@ -1667,7 +1671,8 @@ export default function CyberChessPage(){
     const color:ChessColor=round==="qf"?"w":round==="sf"?"b":(Math.random()<0.5?"w":"b");
     sPCol(color);
     setTimeout(()=>newG(color),50);
-    showToast(`⚔ ${opp.name} (${opp.elo}) — ${opp.style}. ${opp.motto}`,"info");
+    const variantLabel=tournament?.variant&&tournament.variant!=="standard"?` · ${VARIANTS.find(v=>v.id===tournament.variant)?.name||""}`:"";
+    showToast(`⚔ ${opp.name} (${opp.elo}) — ${opp.style}${variantLabel}. ${opp.motto}`,"info");
   },[chessy.owned.master_ai,tournament,newG,showToast]);
   const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
   const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
@@ -4514,19 +4519,48 @@ export default function CyberChessPage(){
             {trophies.length>0&&<div style={{marginBottom:SPACE[3]}}>
               <SectionHeader title="ТРОФЕИ"/>
               <div style={{display:"flex",gap:SPACE[2],overflowX:"auto",paddingBottom:4,marginTop:SPACE[2]}}>
-                {trophies.slice(0,10).map((tr,i)=><div key={i} style={{minWidth:120,padding:SPACE[2],borderRadius:RADIUS.md,background:tr.place===1?"linear-gradient(135deg,#fef3c7,#fde68a)":CC.surface1,border:`1px solid ${tr.place===1?"#fcd34d":CC.border}`}}>
-                  <div style={{fontSize:24,textAlign:"center"}}>{tr.place===1?"🏆":tr.place===2?"🥈":tr.place===4?"🥉":"⚔"}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:CC.text,textAlign:"center"}}>{tr.place===1?"Чемпион":tr.place===2?"Финалист":tr.place===4?"Полуфинал":"1/4"}</div>
-                  <div style={{fontSize:10,color:CC.textDim,textAlign:"center",marginTop:2}}>{new Date(tr.ts).toLocaleDateString("ru-RU")}</div>
-                </div>)}
+                {trophies.slice(0,10).map((tr,i)=>{
+                  const vMeta=tr.variant?VARIANTS.find(v=>v.id===tr.variant):null;
+                  return <div key={i} style={{minWidth:120,padding:SPACE[2],borderRadius:RADIUS.md,background:tr.place===1?"linear-gradient(135deg,#fef3c7,#fde68a)":CC.surface1,border:`1px solid ${tr.place===1?"#fcd34d":CC.border}`}}>
+                    <div style={{fontSize:24,textAlign:"center"}}>{tr.place===1?"🏆":tr.place===2?"🥈":tr.place===4?"🥉":"⚔"}</div>
+                    <div style={{fontSize:11,fontWeight:800,color:CC.text,textAlign:"center"}}>{tr.place===1?"Чемпион":tr.place===2?"Финалист":tr.place===4?"Полуфинал":"1/4"}</div>
+                    {vMeta&&vMeta.id!=="standard"&&<div style={{fontSize:10,fontWeight:700,color:"#9a3412",textAlign:"center",marginTop:2}}>{vMeta.emoji} {vMeta.name}</div>}
+                    <div style={{fontSize:10,color:CC.textDim,textAlign:"center",marginTop:2}}>{new Date(tr.ts).toLocaleDateString("ru-RU")}</div>
+                  </div>;
+                })}
               </div>
             </div>}
+            {/* Variant selector for tournament format */}
+            <div style={{marginBottom:SPACE[3]}}>
+              <SectionHeader title="ФОРМАТ ТУРНИРА"/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:SPACE[2],marginTop:SPACE[2]}}>
+                {VARIANTS.map(v=>{
+                  const sel=tournamentVariantPick===v.id;
+                  return <button key={v.id} onClick={()=>sTournamentVariantPick(v.id)} className="cc-focus-ring"
+                    style={{padding:SPACE[2],borderRadius:RADIUS.md,
+                      background:sel?"linear-gradient(135deg,#fef3c7,#fde68a)":CC.surface1,
+                      border:sel?`2px solid ${CC.gold}`:`1px solid ${CC.border}`,
+                      cursor:"pointer",textAlign:"left",
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                      <span style={{fontSize:18}}>{v.emoji}</span>
+                      <span style={{fontSize:12,fontWeight:900,color:CC.text}}>{v.name}</span>
+                    </div>
+                    <div style={{fontSize:10,color:CC.textDim,lineHeight:1.3}}>{v.shortDesc}</div>
+                  </button>;
+                })}
+              </div>
+              <div style={{marginTop:SPACE[2],fontSize:11,color:CC.textDim,fontStyle:"italic"}}>
+                Все 7 партий турнира пройдут в выбранном режиме.
+              </div>
+            </div>
             <Btn variant="primary" size="lg" full onClick={()=>{
-              const fresh=createTournament(rat);
+              const fresh=createTournament(rat,tournamentVariantPick);
               const resolved=resolveBotMatches(fresh);
               sTournament(resolved);
-              showToast("🎉 Турнир запущен! Тебе светит первый матч.","success");
-            }}>🚀 Старт турнира</Btn>
+              const formatLabel=tournamentVariantPick==="standard"?"":` (${VARIANTS.find(v=>v.id===tournamentVariantPick)?.name})`;
+              showToast(`🎉 Турнир запущен${formatLabel}! Тебе светит первый матч.`,"success");
+            }}>🚀 Старт турнира {tournamentVariantPick!=="standard"&&<Badge tone="gold" size="xs">{VARIANTS.find(v=>v.id===tournamentVariantPick)?.name}</Badge>}</Btn>
           </div>;
         }
         const fieldById=new Map(t.field.map(p=>[p.id,p]));
@@ -4565,6 +4599,11 @@ export default function CyberChessPage(){
         const nextMatch=nextPlayerMatch(t);
         const nextOpp=nextMatch?(nextMatch.a==="you"?fieldById.get(nextMatch.b):fieldById.get(nextMatch.a)):null;
         return <div>
+          {/* Active variant badge */}
+          {t.variant&&t.variant!=="standard"&&<div style={{padding:"6px 10px",borderRadius:RADIUS.sm,background:"linear-gradient(135deg,#fef3c7,#fed7aa)",border:"1px solid #fb923c",fontSize:12,color:"#9a3412",marginBottom:SPACE[2],display:"inline-flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:16}}>{VARIANTS.find(v=>v.id===t.variant)?.emoji}</span>
+            <span style={{fontWeight:900}}>Формат: {VARIANTS.find(v=>v.id===t.variant)?.name}</span>
+          </div>}
           {place&&<div style={{padding:SPACE[4],borderRadius:RADIUS.md,background:place===1?"linear-gradient(135deg,#fef3c7,#fde68a,#fcd34d)":CC.brandSoft,border:`2px solid ${place===1?"#f59e0b":CC.brand}`,marginBottom:SPACE[3],textAlign:"center"}}>
             <div style={{fontSize:54,lineHeight:1}}>{place===1?"🏆":place===2?"🥈":place===4?"🥉":"⚔"}</div>
             <div style={{fontSize:22,fontWeight:900,color:place===1?"#78350f":CC.text,marginTop:SPACE[2]}}>{place===1?"ЧЕМПИОН!":place===2?"Финалист":place===4?"3-4 место":"1/4 финала"}</div>

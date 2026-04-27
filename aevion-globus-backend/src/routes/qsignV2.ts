@@ -910,10 +910,11 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       Keywords: "qsign,aevion,hmac,ed25519,rfc8785",
     }});
 
+    const isDownload = req.query.download === "1" || req.query.download === "true";
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `inline; filename="qsign-${row.id.slice(0, 8)}.pdf"`,
+      `${isDownload ? "attachment" : "inline"}; filename="qsign-${row.id.slice(0, 8)}.pdf"`,
     );
     doc.pipe(res);
 

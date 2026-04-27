@@ -974,6 +974,43 @@ export default function QSignPage() {
                     Open public verify page →
                   </Link>
                   <button
+                    onClick={() => {
+                      const verifyAbs =
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/qsign/verify/${signed.id}`
+                          : signed.publicUrl;
+                      copy(verifyAbs, "Verify link");
+                    }}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Copy link
+                  </button>
+                  <a
+                    href={apiUrl(`/api/qsign/v2/${signed.id}/pdf?download=1`)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                      color: "#0f172a",
+                    }}
+                  >
+                    Download PDF
+                  </a>
+                  <button
                     onClick={() => copy(JSON.stringify(signed, null, 2), "Full response")}
                     style={{
                       padding: "8px 12px",

@@ -4,7 +4,7 @@
 // against /api/qsign/verify and detect tampering.
 
 const STORAGE_KEY = "aevion_bank_signatures_v1";
-const MAX_KEEP = 50;
+const MAX_KEEP = 200;
 export const SIGNATURE_EVENT = "aevion:signatures-changed";
 
 export type VerifyState = "unknown" | "valid" | "invalid" | "error";

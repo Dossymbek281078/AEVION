@@ -532,6 +532,13 @@ export default function QTradePage() {
           })}
         </div>
 
+        {/* OHLC candle chart for active pair */}
+        {activePair && (() => {
+          const p = pairById.get(activePair);
+          if (!p || !p.candles || p.candles.length < 2) return null;
+          return <CandleChart pair={p} />;
+        })()}
+
         {/* Trade panel + Order book (responsive 2-column) */}
         {activePair && (() => {
           const p = pairById.get(activePair);
@@ -1322,5 +1329,85 @@ export default function QTradePage() {
       )}
       </ProductPageShell>
     </main>
+  );
+}
+
+// ─── OHLC Candlestick chart ────────────────────────────────────────
+// Pure-SVG, no external deps. 30s candles × 40 = 20 minutes of history.
+function CandleChart({ pair }: { pair: Pair }) {
+  const candles = pair.candles || [];
+  if (candles.length < 2) return null;
+  const W = 100;        // viewBox width — scales via SVG
+  const H = 36;         // viewBox height for chart area
+  const VOL_H = 8;      // height of volume bars below
+  const PADDING = 1;
+  const minP = Math.min(...candles.map((c) => c.l));
+  const maxP = Math.max(...candles.map((c) => c.h));
+  const range = (maxP - minP) || 1;
+  const maxVol = Math.max(...candles.map((c) => c.vol), 1);
+  const candleW = (W - PADDING * 2) / candles.length;
+  const bodyW = Math.max(0.4, candleW * 0.62);
+  const yOf = (p: number) => H - ((p - minP) / range) * H;
+  const decimals = pair.price > 100 ? 2 : pair.price > 1 ? 4 : 5;
+  // Last candle
+  const lastC = candles[candles.length - 1];
+  const change = lastC.c - candles[0].o;
+  const changePct = (change / candles[0].o) * 100;
+  return (
+    <div style={{
+      padding: 12, borderRadius: 10,
+      background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.1)",
+      marginBottom: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap" as const, gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" as const, color: "#94a3b8" }}>
+            📈 {pair.symbol} · 30s × {candles.length} ({Math.round(candles.length * 30 / 60)}m)
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#cbd5e1", fontFamily: "ui-monospace, monospace" }}>
+          <span>O <strong style={{ color: "#fff" }}>{candles[0].o.toFixed(decimals)}</strong></span>
+          <span>H <strong style={{ color: "#86efac" }}>{Math.max(...candles.map(c => c.h)).toFixed(decimals)}</strong></span>
+          <span>L <strong style={{ color: "#fca5a5" }}>{Math.min(...candles.map(c => c.l)).toFixed(decimals)}</strong></span>
+          <span>C <strong style={{ color: "#fff" }}>{lastC.c.toFixed(decimals)}</strong></span>
+          <span style={{ color: change >= 0 ? "#22c55e" : "#f87171", fontWeight: 800 }}>
+            {change >= 0 ? "+" : ""}{change.toFixed(decimals)} ({changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%)
+          </span>
+        </div>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H + VOL_H + 1}`}
+        preserveAspectRatio="none"
+        style={{ width: "100%", height: 160, display: "block" }}
+      >
+        {/* Grid: 4 horizontal lines at 25/50/75% */}
+        {[0.25, 0.5, 0.75].map((p) => (
+          <line key={p} x1={0} x2={W} y1={H * p} y2={H * p} stroke="rgba(255,255,255,0.06)" strokeWidth={0.1} />
+        ))}
+        {/* Candles + volume */}
+        {candles.map((c, i) => {
+          const x = PADDING + i * candleW + (candleW - bodyW) / 2;
+          const isUp = c.c >= c.o;
+          const fill = isUp ? "#22c55e" : "#ef4444";
+          const wickX = PADDING + i * candleW + candleW / 2;
+          const bodyTop = yOf(Math.max(c.o, c.c));
+          const bodyBot = yOf(Math.min(c.o, c.c));
+          const bodyH = Math.max(0.3, bodyBot - bodyTop);
+          const volH = (c.vol / maxVol) * VOL_H;
+          return (
+            <g key={i}>
+              {/* Wick */}
+              <line x1={wickX} x2={wickX} y1={yOf(c.h)} y2={yOf(c.l)} stroke={fill} strokeWidth={0.18} />
+              {/* Body */}
+              <rect x={x} y={bodyTop} width={bodyW} height={bodyH} fill={fill} opacity={isUp ? 0.95 : 0.95} />
+              {/* Volume bar */}
+              <rect x={x} y={H + 1 + (VOL_H - volH)} width={bodyW} height={volH} fill={fill} opacity={0.4} />
+            </g>
+          );
+        })}
+        {/* Last price line */}
+        <line x1={0} x2={W} y1={yOf(lastC.c)} y2={yOf(lastC.c)} stroke="#22d3ee" strokeWidth={0.12} strokeDasharray="0.6 0.4" opacity={0.8} />
+      </svg>
+    </div>
   );
 }

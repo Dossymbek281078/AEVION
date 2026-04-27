@@ -9,6 +9,8 @@ const CLOSED_KEY = "aevion_qtrade_closed_v1";
 
 export type PairId = "AEV/USD" | "BTC/USD" | "ETH/USD" | "SOL/USD";
 
+export type Candle = { ts: number; o: number; h: number; l: number; c: number; vol: number };
+
 export type Pair = {
   id: PairId;
   symbol: string;
@@ -22,7 +24,12 @@ export type Pair = {
   lastTs: number;
   vol: number;           // annualized-ish volatility (per-tick stdev)
   drift: number;         // long-term drift per tick
+  candles?: Candle[];    // optional для backward-compat — 30-second timeframe, last 40
 };
+
+// 30-секундный candle timeframe — 40 свечей = 20 минут истории
+export const CANDLE_TIMEFRAME_MS = 30_000;
+export const CANDLE_BUFFER = 40;
 
 export type Position = {
   id: string;
@@ -160,7 +167,28 @@ export function tickPair(p: Pair): Pair {
     open24h = next;
     open24hTs = now;
   }
-  return { ...p, prevPrice: p.price, price: next, history, lastTs: now, open24h, open24hTs };
+  // Roll 30s candles
+  const prevCandles = p.candles || [];
+  const bucketTs = Math.floor(now / CANDLE_TIMEFRAME_MS) * CANDLE_TIMEFRAME_MS;
+  const last = prevCandles[prevCandles.length - 1];
+  let candles: Candle[];
+  if (!last || last.ts < bucketTs) {
+    // Open new candle
+    candles = [...prevCandles, { ts: bucketTs, o: next, h: next, l: next, c: next, vol: 1 }];
+    if (candles.length > CANDLE_BUFFER) candles = candles.slice(-CANDLE_BUFFER);
+  } else {
+    // Update current candle: extend H/L, set C, bump vol
+    const updated: Candle = {
+      ts: last.ts,
+      o: last.o,
+      h: Math.max(last.h, next),
+      l: Math.min(last.l, next),
+      c: next,
+      vol: last.vol + 1,
+    };
+    candles = [...prevCandles.slice(0, -1), updated];
+  }
+  return { ...p, prevPrice: p.price, price: next, history, lastTs: now, open24h, open24hTs, candles };
 }
 
 // Backfill: if many ticks have passed (e.g. tab was closed), fast-simulate

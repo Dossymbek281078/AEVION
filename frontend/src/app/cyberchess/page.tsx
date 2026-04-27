@@ -2095,6 +2095,21 @@ export default function CyberChessPage(){
           </div>
         </div>
 
+        {/* Active variant indicator (sticky, visible always) */}
+        {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} className="cc-focus-ring"
+          style={{
+            display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",
+            background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
+            border:"1px solid #fb923c",borderRadius:RADIUS.full,
+            cursor:"pointer",fontSize:12,fontWeight:800,color:"#9a3412",
+            boxShadow:"0 2px 6px rgba(251,146,60,0.2)",
+            transition:`all ${MOTION.fast} ${MOTION.ease}`
+          }}
+          title="Активный режим — клик чтобы сменить">
+          <span style={{fontSize:14}}>{VARIANTS.find(v=>v.id===variant)?.emoji}</span>
+          <span>{VARIANTS.find(v=>v.id===variant)?.name}</span>
+        </button>}
+
         <div style={{flex:1}}/>
 
         {/* Rating badge */}
@@ -2158,6 +2173,15 @@ export default function CyberChessPage(){
         </div>
 
         {/* Icon buttons */}
+        <Btn
+          variant="secondary"
+          size="sm"
+          icon={<span style={{fontSize:14}}>📊</span>}
+          onClick={()=>sShowVariantStats(true)}
+          title="Статистика по 12 режимам"
+          ariaLabel="Variant stats"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
         <Btn
           variant={streamerMode?"accent":"secondary"}
           size="sm"
@@ -2870,6 +2894,7 @@ export default function CyberChessPage(){
                   if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
                   if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
                 }} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
+                  className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                   {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)"}}/>}
                   {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined}}><Piece type={p.type} color={p.color}/></div>}
@@ -4875,7 +4900,7 @@ export default function CyberChessPage(){
               <Btn variant="gold" size="md" onClick={()=>startTournamentMatch(nextOpp)}>▶ Играть</Btn>
             </div>
           </div>}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[3]}}>
+          <div className="cc-no-scrollbar" style={{display:"grid",gridTemplateColumns:"minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr)",gap:SPACE[3],overflowX:"auto",paddingBottom:4}}>
             <div>
               <div style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2]}}>1/4 ФИНАЛА</div>
               {t.bracket.qf.map(renderMatch)}

@@ -343,6 +343,33 @@ code {
 .cc-no-scrollbar::-webkit-scrollbar { display: none; }
 .cc-no-scrollbar { scrollbar-width: none; }
 
+/* Board cell hover — subtle ring for desktop */
+@media (hover: hover) {
+  .cc-board-cell:hover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+}
+
+/* Selected square ring overlay */
+.cc-board-cell-selected::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 3px rgba(5, 150, 105, 0.85);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Last-move highlight subtle pulse on appearance */
+.cc-board-cell-lastmove {
+  animation: cc-fade-in 200ms var(--cc-ease-out);
+}
+
 .cc-backdrop {
   position: fixed;
   inset: 0;
@@ -405,6 +432,17 @@ code {
   [role="tablist"] button {
     flex-shrink: 0;
   }
+}
+
+/* Mobile: variant HUD should never overflow horizontally */
+@media (max-width: 480px) {
+  /* DAILY hub becomes single-column on small screens */
+  [role="dialog"] [style*="gridTemplateColumns: \"1fr 1fr\""],
+  [role="dialog"] [style*="gridTemplateColumns:\"1fr 1fr\""] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Modal padding tight on phones */
+  .cc-modal-shell { max-width: calc(100vw - 16px) !important; }
 }
 
 /* Safe-area insets for iOS / notched devices */

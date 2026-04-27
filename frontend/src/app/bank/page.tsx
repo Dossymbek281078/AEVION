@@ -41,6 +41,7 @@ import { ReferralsPanel } from "./_components/ReferralsPanel";
 import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { TierProgression } from "./_components/TierProgression";
+import { TimeTravel } from "./_components/TimeTravel";
 import { GiftMode } from "./_components/GiftMode";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
@@ -314,6 +315,9 @@ function BankContent() {
 
           <TabPanel id="earn" active={activeTab}>
             <TotalEarningsDashboard />
+            <div id="bank-anchor-timetravel" style={{ scrollMarginTop: 20 }}>
+              <TimeTravel account={account} operations={operations} />
+            </div>
             <div id="bank-anchor-forecast" style={{ scrollMarginTop: 20 }}>
               <WealthForecast account={account} />
             </div>

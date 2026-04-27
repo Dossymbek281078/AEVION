@@ -499,6 +499,142 @@ export function removeInvited(n: NetworkState, id: string): NetworkState {
   return { ...n, invited: n.invited.filter((u) => u.id !== id) };
 }
 
+// ─── E. Proof-of-Mentorship ───────────────────────────────────────
+// Ты — mentor; у тебя есть students. Каждый student имеет рейтинг,
+// который тикает со временем (биас к upward). Когда student пересекает
+// rating-milestone (каждые 100 пунктов от 1300), mentor получает AEV.
+// Чем больше students прогрессируют — тем больше AEV mentor'у.
+
+const MENTOR_KEY = "aevion_aev_mentorship_v1";
+
+export type Student = {
+  id: string;
+  name: string;
+  startRating: number;
+  rating: number;
+  startTs: number;
+  lastTickTs: number;
+  passedMilestones: number[];   // массив милестоунов которые student уже прошёл
+  earnedFromMe: number;         // сколько AEV mentor получил с этого студента
+};
+
+export type MentorshipState = {
+  v: 1;
+  students: Student[];
+  totalEarned: number;
+};
+
+export const MENTORSHIP = {
+  perMilestoneAev: 0.5,         // AEV mentor'у когда student пересекает milestone
+  milestoneStep: 100,           // каждые +100 рейтинга = milestone (1300, 1400, ...)
+  startMilestone: 1300,         // первый milestone
+  maxStudents: 30,
+  ratingTickMs: 18_000,         // каждые 18s rating студента ticks
+  ratingDriftPerTick: 6,        // средний прогресс +6 рейтинга за tick
+  ratingNoise: 14,              // случайность ±
+  defaultStartRating: 1200,
+  // Имена для генерации
+  firstNames: ["Бахытжан", "Айдана", "Ермек", "Сабина", "Канат", "Жанна", "Айбек", "Мадина", "Тимур", "Лейла", "Ринат", "Карина"],
+} as const;
+
+export function ldMentorship(): MentorshipState {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(MENTOR_KEY) : null;
+    if (!s) return { v: 1, students: [], totalEarned: 0 };
+    const r = JSON.parse(s);
+    if (!r || r.v !== 1) return { v: 1, students: [], totalEarned: 0 };
+    return {
+      v: 1,
+      students: Array.isArray(r.students) ? r.students.map((s: Student) => ({
+        ...s,
+        passedMilestones: Array.isArray(s.passedMilestones) ? s.passedMilestones : [],
+      })) : [],
+      totalEarned: typeof r.totalEarned === "number" ? r.totalEarned : 0,
+    };
+  } catch { return { v: 1, students: [], totalEarned: 0 } }
+}
+
+export function svMentorship(m: MentorshipState) {
+  try { localStorage.setItem(MENTOR_KEY, JSON.stringify(m)) } catch {}
+}
+
+export function addStudent(m: MentorshipState, name?: string, startRating?: number): MentorshipState {
+  if (m.students.length >= MENTORSHIP.maxStudents) return m;
+  const fname = name?.trim() || MENTORSHIP.firstNames[Math.floor(Math.random() * MENTORSHIP.firstNames.length)];
+  const id = `stu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+  const r = startRating ?? MENTORSHIP.defaultStartRating;
+  const student: Student = {
+    id,
+    name: fname,
+    startRating: r,
+    rating: r,
+    startTs: Date.now(),
+    lastTickTs: Date.now(),
+    passedMilestones: [],
+    earnedFromMe: 0,
+  };
+  return { ...m, students: [student, ...m.students] };
+}
+
+export function removeStudent(m: MentorshipState, id: string): MentorshipState {
+  return { ...m, students: m.students.filter((s) => s.id !== id) };
+}
+
+// Tick all students: progress rating, mint AEV per milestone crossed.
+// Return new wallet + new mentorship state. Ticks each student independently
+// based on elapsed time since lastTickTs (no missed ticks even if tab closed).
+export function tickStudents(w: AEVWallet, m: MentorshipState): { wallet: AEVWallet; mentorship: MentorshipState } {
+  if (m.students.length === 0) return { wallet: w, mentorship: m };
+  const now = Date.now();
+  let curWallet = w;
+  let totalNewEarned = 0;
+  const newStudents = m.students.map((s) => {
+    const elapsed = now - s.lastTickTs;
+    if (elapsed < MENTORSHIP.ratingTickMs) return s;
+    const ticks = Math.floor(elapsed / MENTORSHIP.ratingTickMs);
+    let rating = s.rating;
+    for (let i = 0; i < ticks; i++) {
+      const change = MENTORSHIP.ratingDriftPerTick + (Math.random() - 0.5) * MENTORSHIP.ratingNoise * 2;
+      rating = Math.max(800, Math.min(2800, rating + change));
+    }
+    rating = Math.round(rating);
+    // Detect new milestones crossed
+    const milestones: number[] = [];
+    for (let mm = MENTORSHIP.startMilestone; mm <= 2500; mm += MENTORSHIP.milestoneStep) {
+      if (rating >= mm && !s.passedMilestones.includes(mm)) milestones.push(mm);
+    }
+    let earned = 0;
+    if (milestones.length > 0) {
+      for (const mm of milestones) {
+        const reward = MENTORSHIP.perMilestoneAev;
+        curWallet = mint(
+          curWallet,
+          reward,
+          { kind: "play", module: "qcoreai", action: "mentorship_milestone" },
+          `🎓 ${s.name} достиг рейтинга ${mm}`,
+        );
+        earned += reward;
+      }
+      totalNewEarned += earned;
+    }
+    return {
+      ...s,
+      rating,
+      lastTickTs: s.lastTickTs + ticks * MENTORSHIP.ratingTickMs,
+      passedMilestones: [...s.passedMilestones, ...milestones],
+      earnedFromMe: s.earnedFromMe + earned,
+    };
+  });
+  return {
+    wallet: curWallet,
+    mentorship: {
+      ...m,
+      students: newStudents,
+      totalEarned: m.totalEarned + totalNewEarned,
+    },
+  };
+}
+
 // ─── F. Proof-of-Streak ───────────────────────────────────────────
 function dayKey(d = new Date()): string {
   const y = d.getFullYear();

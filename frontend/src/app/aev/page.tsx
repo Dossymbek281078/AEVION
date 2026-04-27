@@ -15,9 +15,12 @@ import {
   CURATION,
   ldNetwork, svNetwork, simulateInviteJoin, simulateNetworkTick, removeInvited,
   NETWORK,
+  ldMentorship, svMentorship, addStudent, removeStudent, tickStudents,
+  MENTORSHIP,
   type AEVWallet, type EmissionMode, type PlayAction, type PlayModule, type MiningEvent,
   type PinnedItem, type PinKind,
   type NetworkState,
+  type MentorshipState,
 } from "./aevToken";
 
 const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: string; color: string; desc: string }> = {
@@ -49,11 +52,13 @@ export default function AEVPage() {
   const [wallet, setWallet] = useState<AEVWallet | null>(null);
   const [pins, setPins] = useState<PinnedItem[] | null>(null);
   const [network, setNetwork] = useState<NetworkState | null>(null);
+  const [mentorship, setMentorship] = useState<MentorshipState | null>(null);
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
     setPins(ldPins());
     setNetwork(ldNetwork());
+    setMentorship(ldMentorship());
     // Auto-claim daily streak on mount if eligible
     const updated = recordDailyVisit(w);
     if (updated) {
@@ -71,12 +76,15 @@ export default function AEVPage() {
   useEffect(() => { if (wallet) svWallet(wallet) }, [wallet]);
   useEffect(() => { if (pins) svPins(pins) }, [pins]);
   useEffect(() => { if (network) svNetwork(network) }, [network]);
+  useEffect(() => { if (mentorship) svMentorship(mentorship) }, [mentorship]);
 
-  // Refs для cross-state autotick (network → wallet) без race conditions
+  // Refs для cross-state autotick без race conditions
   const walletRef = useRef<AEVWallet | null>(null);
   const networkRef = useRef<NetworkState | null>(null);
+  const mentorshipRef = useRef<MentorshipState | null>(null);
   useEffect(() => { walletRef.current = wallet }, [wallet]);
   useEffect(() => { networkRef.current = network }, [network]);
+  useEffect(() => { mentorshipRef.current = mentorship }, [mentorship]);
 
   // Network auto-tick: каждые 18-32s случайный приглашённый совершает quality
   // action, тебе капает royalty в wallet.
@@ -99,6 +107,25 @@ export default function AEVPage() {
     timer = setTimeout(tick, 18000 + Math.random() * 14000);
     return () => { cancelled = true; if (timer) clearTimeout(timer) };
   }, [networkInviteCount]);
+
+  // Mentorship auto-tick: ratings студентов прогрессируют, AEV mint'ится за
+  // каждый пересеченный milestone. Запускаем каждые 10s и tickStudents сам
+  // решает кто из студентов готов к ratingTickMs (18s).
+  const mentorshipCount = mentorship?.students.length ?? 0;
+  useEffect(() => {
+    if (mentorshipCount === 0) return;
+    const id = setInterval(() => {
+      const w = walletRef.current;
+      const m = mentorshipRef.current;
+      if (!w || !m || m.students.length === 0) return;
+      const r = tickStudents(w, m);
+      // Skip update if nothing changed (no new milestones, no rating ticks ready)
+      if (r.wallet === w && r.mentorship === m) return;
+      setWallet(r.wallet);
+      setMentorship(r.mentorship);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [mentorshipCount]);
 
   // Live tick: refresh pending dividend display every second
   const [, setTick] = useState(0);
@@ -482,6 +509,11 @@ export default function AEVPage() {
           <NetworkPanel wallet={wallet} setWallet={setWallet} network={network} setNetwork={setNetwork} />
         )}
 
+        {/* ═══ E. PROOF-OF-MENTORSHIP (engine E · live) ════════════ */}
+        {mentorship && (
+          <MentorshipPanel mentorship={mentorship} setMentorship={setMentorship} />
+        )}
+
         {/* ═══ D. PROOF-OF-CURATION (engine D · live) ══════════════ */}
         <CurationWall wallet={wallet} setWallet={setWallet} pins={pins ?? []} setPins={setPins} />
 
@@ -745,8 +777,8 @@ const BUILTIN_PROPOSALS: Proposal[] = [
     letter: "E",
     emoji: "🎓",
     name: "Proof-of-Mentorship",
-    tagline: "ученик прогрессирует — учитель майнит",
-    desc: "Mentor получает AEV когда его ученик повышает рейтинг или решает пазл из mentor-list'а. Sybil-резистентно, потому что mentor подписывает связь через QSign.",
+    tagline: "✅ LIVE — engine выпущен 27.04",
+    desc: "Каждые 18s рейтинг твоих студентов прогрессирует на основе random-walk с upward drift'ом. Каждый пересеченный milestone (+100 рейтинга от 1300) = +0.5 AEV mentor'у. Cap 30 студентов. Выпущен сразу после голосования.",
   },
   {
     id: "streak",
@@ -868,13 +900,15 @@ function FutureEngines() {
                   <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", lineHeight: 1.25 }}>{p.name}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end" as const, gap: 4 }}>
-                  {p.id === "streak" || p.id === "curation" || p.id === "network" ? (
+                  {p.id === "streak" || p.id === "curation" || p.id === "network" || p.id === "mentorship" ? (
                     <span style={{
                       padding: "5px 11px", borderRadius: 5,
                       background: p.id === "curation"
                         ? "linear-gradient(135deg, #7c3aed, #a855f7)"
                         : p.id === "network"
                         ? "linear-gradient(135deg, #0891b2, #06b6d4)"
+                        : p.id === "mentorship"
+                        ? "linear-gradient(135deg, #16a34a, #22c55e)"
                         : "linear-gradient(135deg, #f97316, #ea580c)",
                       color: "#fff", fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
                     }}>✓ LIVE</span>
@@ -929,6 +963,176 @@ function FutureEngines() {
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ─── E. Mentorship panel (engine E · live) ─────────────────────────
+function MentorshipPanel({ mentorship, setMentorship }: {
+  mentorship: MentorshipState;
+  setMentorship: React.Dispatch<React.SetStateAction<MentorshipState | null>>;
+}) {
+  const [draftName, setDraftName] = useState("");
+  const [draftRating, setDraftRating] = useState("");
+
+  const addOne = () => {
+    const r = Number(draftRating);
+    setMentorship((m) => (m ? addStudent(m, draftName || undefined, Number.isFinite(r) && r >= 800 ? r : undefined) : m));
+    setDraftName(""); setDraftRating("");
+  };
+
+  const removeOne = (id: string) => {
+    setMentorship((m) => (m ? removeStudent(m, id) : m));
+  };
+
+  const totalMilestones = mentorship.students.reduce((s, st) => s + st.passedMilestones.length, 0);
+  const avgGain = mentorship.students.length > 0
+    ? mentorship.students.reduce((s, st) => s + (st.rating - st.startRating), 0) / mentorship.students.length
+    : 0;
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: "linear-gradient(135deg, #064e3b 0%, #047857 60%, #10b981 100%)",
+      color: "#fff", marginBottom: 14,
+      boxShadow: "0 6px 18px rgba(6,78,59,0.30)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12, flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: 18 }}>🎓</span>
+        <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>Proof-of-Mentorship · students progress</h2>
+        <span style={{
+          padding: "2px 9px", borderRadius: 5,
+          background: "linear-gradient(135deg, #fff, #d1fae5)",
+          color: "#065f46", fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+        }}>E · LIVE</span>
+        <span style={{ fontSize: 11, opacity: 0.85 }}>
+          +{MENTORSHIP.perMilestoneAev} AEV каждые {MENTORSHIP.milestoneStep} рейтинга · cap {MENTORSHIP.maxStudents} студентов
+        </span>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Студентов</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>
+            {mentorship.students.length} / {MENTORSHIP.maxStudents}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Milestones пройдено</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>{totalMilestones}</div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Заработано</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fde68a" }}>
+            {mentorship.totalEarned.toFixed(4)}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Avg gain</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: avgGain >= 0 ? "#86efac" : "#fca5a5" }}>
+            {avgGain >= 0 ? "+" : ""}{avgGain.toFixed(0)}
+          </div>
+        </div>
+      </div>
+
+      {/* Add student form */}
+      <div style={{
+        padding: 10, borderRadius: 8,
+        background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
+        marginBottom: 10,
+        display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" as const,
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>
+          Принять под крыло
+        </span>
+        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={40}
+          placeholder="Имя (или auto)"
+          style={{
+            padding: "6px 10px", borderRadius: 5,
+            border: "1px solid rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.25)",
+            color: "#fff", fontSize: 12, flex: "1 1 180px", minWidth: 0,
+          }} />
+        <input type="number" value={draftRating} onChange={(e) => setDraftRating(e.target.value)}
+          placeholder={`Старт-рейтинг (${MENTORSHIP.defaultStartRating})`}
+          min={800} max={2500}
+          style={{
+            padding: "6px 10px", borderRadius: 5,
+            border: "1px solid rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.25)",
+            color: "#fff", fontSize: 12, width: 130, fontFamily: "ui-monospace, monospace",
+          }} />
+        <button onClick={addOne}
+          disabled={mentorship.students.length >= MENTORSHIP.maxStudents}
+          style={{
+            padding: "7px 14px", borderRadius: 5, border: "none",
+            background: mentorship.students.length >= MENTORSHIP.maxStudents
+              ? "rgba(255,255,255,0.15)"
+              : "linear-gradient(135deg, #fff, #d1fae5)",
+            color: mentorship.students.length >= MENTORSHIP.maxStudents ? "#94a3b8" : "#065f46",
+            fontSize: 12, fontWeight: 800,
+            cursor: mentorship.students.length >= MENTORSHIP.maxStudents ? "default" : "pointer",
+          }}>
+          ➕ Принять
+        </button>
+        <span style={{ fontSize: 10, opacity: 0.7 }}>
+          rating + ~{MENTORSHIP.ratingDriftPerTick} ± {MENTORSHIP.ratingNoise} каждые {MENTORSHIP.ratingTickMs / 1000}s
+        </span>
+      </div>
+
+      {/* Students list */}
+      {mentorship.students.length === 0 ? (
+        <div style={{
+          padding: 18, textAlign: "center" as const, fontSize: 12, opacity: 0.85,
+          background: "rgba(0,0,0,0.18)", borderRadius: 8,
+        }}>
+          Пока нет учеников. Прими первого — рейтинг будет тикать каждые 18s, и за каждые +100 рейтинга от 1300 капает 0.5 AEV.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: 4, maxHeight: 320, overflowY: "auto" as const }}>
+          {mentorship.students.map((s) => {
+            const gain = s.rating - s.startRating;
+            const nextMilestone = (() => {
+              for (let mm = MENTORSHIP.startMilestone; mm <= 2500; mm += MENTORSHIP.milestoneStep) {
+                if (!s.passedMilestones.includes(mm) && mm > s.rating) return mm;
+              }
+              return null;
+            })();
+            const toNext = nextMilestone ? nextMilestone - s.rating : 0;
+            const ageH = Math.max(0, Math.floor((Date.now() - s.startTs) / 3600000));
+            const ageM = Math.max(0, Math.floor(((Date.now() - s.startTs) % 3600000) / 60000));
+            return (
+              <div key={s.id} style={{
+                padding: "8px 12px", borderRadius: 7,
+                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                display: "grid", gridTemplateColumns: "auto 1fr auto auto auto auto", gap: 10, alignItems: "center" as const, fontSize: 12,
+              }}>
+                <span style={{ fontSize: 16 }}>🎓</span>
+                <span>
+                  <strong style={{ fontSize: 13 }}>{s.name}</strong>
+                  <span style={{ opacity: 0.7, fontSize: 11 }}> · {ageH > 0 ? `${ageH}h` : `${ageM}m`} под крылом</span>
+                </span>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 13, fontWeight: 800, color: "#fff" }}>
+                  {s.rating}
+                </span>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: gain >= 0 ? "#86efac" : "#fca5a5", whiteSpace: "nowrap" as const }}>
+                  {gain >= 0 ? "+" : ""}{gain}
+                </span>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#fde68a", whiteSpace: "nowrap" as const }}>
+                  {nextMilestone ? `→ ${nextMilestone} (${toNext})` : "max"}
+                </span>
+                <button onClick={() => removeOne(s.id)} title="Убрать студента"
+                  style={{
+                    padding: "4px 8px", borderRadius: 4,
+                    border: "1px solid rgba(252,165,165,0.5)", background: "rgba(252,165,165,0.10)",
+                    color: "#fca5a5", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                  }}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

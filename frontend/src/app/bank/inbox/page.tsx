@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { InstallBanner } from "../_components/InstallBanner";
+import { SubrouteFooter } from "../_components/SubrouteFooter";
 import { listAccounts, listOperations } from "../_lib/api";
 import { loadAdvance } from "../_lib/advance";
 import { formatCurrency, loadCurrency, type CurrencyCode } from "../_lib/currency";
@@ -275,6 +276,8 @@ export default function BankInboxPage() {
           ))}
         </ul>
       )}
+
+      <SubrouteFooter active="/bank/inbox" />
     </main>
   );
 }

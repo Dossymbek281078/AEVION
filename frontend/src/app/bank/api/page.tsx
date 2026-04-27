@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { SubrouteFooter } from "../_components/SubrouteFooter";
 
 // Investor / developer-facing snapshot of the AEVION Bank API surface.
 // This is a hand-curated docs view — the source of truth for live shapes
@@ -310,6 +311,8 @@ export default function BankApiDocsPage() {
       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 12, lineHeight: 1.55 }}>
         {t("api.disclaimer")}
       </div>
+
+      <SubrouteFooter active="/bank/api" />
     </main>
   );
 }

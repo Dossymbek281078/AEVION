@@ -1332,6 +1332,14 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "explore.card.scan.title": "Scan a pay QR",
   "explore.card.scan.hint": "Camera scanner for /bank/pay links. BarcodeDetector API · paste fallback.",
 
+  // Subroute mini-nav footer
+  "subnav.aria": "Bank sub-routes",
+  "subnav.bank": "Wallet",
+  "subnav.inbox": "Inbox",
+  "subnav.notifications": "Feed",
+  "subnav.leaderboard": "Top",
+  "subnav.explore": "Explore",
+
   "gift.notify.pickRecipient": "Pick a recipient",
   "gift.notify.cannotGiftSelf": "You can't gift yourself",
   "gift.notify.invalidAmount": "Invalid amount",
@@ -3274,6 +3282,14 @@ const BANK_EXTRA_RU: Record<string, string> = {
   "explore.card.scan.title": "\u0421\u043a\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u0442\u044c pay-QR",
   "explore.card.scan.hint": "\u041a\u0430\u043c\u0435\u0440\u0430-\u0441\u043a\u0430\u043d\u0435\u0440 /bank/pay \u0441\u0441\u044b\u043b\u043e\u043a. BarcodeDetector API \u00b7 paste fallback.",
 
+  // Subroute mini-nav footer
+  "subnav.aria": "\u041f\u043e\u0434\u0440\u0430\u0437\u0434\u0435\u043b\u044b Bank",
+  "subnav.bank": "\u041a\u043e\u0448\u0435\u043b\u0451\u043a",
+  "subnav.inbox": "\u0412\u0445\u043e\u0434\u044f\u0449\u0438\u0435",
+  "subnav.notifications": "\u041b\u0435\u043d\u0442\u0430",
+  "subnav.leaderboard": "\u0422\u043e\u043f",
+  "subnav.explore": "\u041e\u0431\u0437\u043e\u0440",
+
   "gift.notify.pickRecipient": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f",
   "gift.notify.cannotGiftSelf": "\u041d\u0435\u043b\u044c\u0437\u044f \u0434\u0430\u0440\u0438\u0442\u044c \u0441\u0430\u043c\u043e\u043c\u0443 \u0441\u0435\u0431\u0435",
   "gift.notify.invalidAmount": "\u041d\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u0441\u0443\u043c\u043c\u0430",
@@ -5064,6 +5080,14 @@ const BANK_EXTRA_KK: Record<string, string> = {
   "scan.hint": "\u041a\u0430\u043c\u0435\u0440\u0430 \u043a\u0430\u0434\u0440\u043b\u0430\u0440\u044b \u049b\u04b1\u0440\u044b\u043b\u0493\u044b\u0434\u0430 \u049b\u0430\u043b\u0430\u0434\u044b \u2014 \u0435\u0448 \u0436\u0435\u0440\u0433\u0435 \u0436\u0456\u0431\u0435\u0440\u0456\u043b\u043c\u0435\u0439\u0434\u0456.",
   "explore.card.scan.title": "Pay-QR \u0441\u043a\u0430\u043d\u0435\u0440\u043b\u0435\u0443",
   "explore.card.scan.hint": "/bank/pay \u0441\u0456\u043b\u0442\u0435\u043c\u0435\u043b\u0435\u0440\u0456\u043d \u043a\u0430\u043c\u0435\u0440\u0430\u0434\u0430\u043d \u043e\u049b\u0443. BarcodeDetector API \u00b7 paste fallback.",
+
+  // Subroute mini-nav footer
+  "subnav.aria": "Bank \u0456\u0448\u043a\u0456 \u0431\u0435\u0442\u0442\u0435\u0440\u0456",
+  "subnav.bank": "\u04d8\u043c\u0438\u044f\u043d",
+  "subnav.inbox": "\u041a\u0456\u0440\u0456\u0441",
+  "subnav.notifications": "\u041b\u0435\u043d\u0442\u0430",
+  "subnav.leaderboard": "\u0422\u043e\u043f",
+  "subnav.explore": "\u0428\u043e\u043b\u0443",
 
   "gift.notify.pickRecipient": "\u0410\u043b\u0443\u0448\u044b\u043d\u044b \u0442\u0430\u04a3\u0434\u0430\u04a3\u044b\u0437",
   "gift.notify.cannotGiftSelf": "\u04e8\u0437\u0456\u04a3\u0456\u0437\u0433\u0435 \u0441\u044b\u0439\u043b\u044b\u049b \u0431\u0435\u0440\u0435 \u0430\u043b\u043c\u0430\u0439\u0441\u044b\u0437",

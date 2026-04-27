@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { InstallBanner } from "../_components/InstallBanner";
+import { SubrouteFooter } from "../_components/SubrouteFooter";
 import {
   achievementStats,
   evaluateAchievements,
@@ -314,6 +315,8 @@ export default function NotificationsPage() {
           ))}
         </ol>
       )}
+
+      <SubrouteFooter active="/bank/notifications" />
     </main>
   );
 }

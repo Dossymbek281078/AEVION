@@ -9,6 +9,7 @@ import { loadGoals } from "../_lib/savings";
 import { loadRecurring } from "../_lib/recurring";
 import { loadSignatures } from "../_lib/signatures";
 import type { Account, Me, Operation } from "../_lib/types";
+import { SubrouteFooter } from "../_components/SubrouteFooter";
 
 type Period = "30d" | "90d" | "ytd" | "all";
 
@@ -292,6 +293,8 @@ export default function BankStatementPage() {
       <footer style={{ marginTop: 28, borderTop: "1px solid #e2e8f0", paddingTop: 12, fontSize: 10, color: "#94a3b8" }}>
         {t("statement.footer")}
       </footer>
+
+      <SubrouteFooter active="/bank/statement" />
     </main>
   );
 }

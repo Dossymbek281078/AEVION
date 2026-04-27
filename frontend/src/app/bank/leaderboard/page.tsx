@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { InstallBanner } from "../_components/InstallBanner";
+import { SubrouteFooter } from "../_components/SubrouteFooter";
 import { formatCurrency, loadCurrency, type CurrencyCode } from "../_lib/currency";
 import { pick, seeded } from "../_lib/random";
 import { TIER_COLOR, TIER_LABEL, type ReferralTier } from "../_lib/referrals";
@@ -174,6 +175,8 @@ export default function LeaderboardPage() {
       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 12, lineHeight: 1.55 }}>
         {t("leaderboard.disclaimer")}
       </div>
+
+      <SubrouteFooter active="/bank/leaderboard" />
     </main>
   );
 }

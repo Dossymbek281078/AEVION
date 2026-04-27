@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
 import { InstallBanner } from "../_components/InstallBanner";
+import { SubrouteFooter } from "../_components/SubrouteFooter";
 
 // Catalog hub for all the bank routes shipped this push. Solves the
 // discoverability problem (most sub-routes are noindex and live in deep
@@ -205,6 +206,8 @@ export default function ExplorePage() {
       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 12, lineHeight: 1.55 }}>
         {t("explore.disclaimer")}
       </div>
+
+      <SubrouteFooter active="/bank/explore" />
     </main>
   );
 }

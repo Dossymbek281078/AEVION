@@ -352,7 +352,7 @@ export default function VerifyPage() {
               Cryptographic Proof
               <InfoTip
                 label="Cryptographic Proof"
-                text="Five tamper-evident fields. Each one independently links the certificate to the protected work — change any byte and at least one of these will stop matching."
+                text="Three derived proofs (SHA-256 content hash, HMAC signature, Ed25519 signature) plus the algorithm and certificate ID for context. Tamper with any registered field and at least one of the three derived values stops matching."
               />
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>

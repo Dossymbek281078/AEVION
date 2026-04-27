@@ -1877,7 +1877,47 @@ export default function Globus3D({
     );
   };
 
-  const [shareToast, setShareToast] = useState<"copied" | "failed" | null>(null);
+  const [shareToast, setShareToast] = useState<"copied" | "failed" | "locating" | "located" | "geo-failed" | null>(null);
+
+  const flyToLatLon = (lat: number, lon: number, dist = 220) => {
+    const phi = ((90 - lat) * Math.PI) / 180;
+    const theta = ((lon + 180) * Math.PI) / 180;
+    const x = -Math.sin(phi) * Math.cos(theta);
+    const y = Math.cos(phi);
+    const z = Math.sin(phi) * Math.sin(theta);
+    let tYaw = Math.atan2(x, z);
+    const tPitch = Math.atan2(y, Math.sqrt(x * x + z * z));
+    let dy = tYaw - yawRef.current;
+    while (dy > Math.PI) dy -= 2 * Math.PI;
+    while (dy < -Math.PI) dy += 2 * Math.PI;
+    tYaw = yawRef.current + dy;
+    targetYawRef.current = tYaw;
+    targetPitchRef.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, tPitch));
+    targetDistRef.current = dist;
+    setAutoRotate(false);
+    persistViewDebounced();
+  };
+
+  const locateMe = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setShareToast("geo-failed");
+      window.setTimeout(() => setShareToast(null), 2200);
+      return;
+    }
+    setShareToast("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        flyToLatLon(pos.coords.latitude, pos.coords.longitude, 215);
+        setShareToast("located");
+        window.setTimeout(() => setShareToast(null), 1600);
+      },
+      () => {
+        setShareToast("geo-failed");
+        window.setTimeout(() => setShareToast(null), 2200);
+      },
+      { timeout: 6000, maximumAge: 5 * 60 * 1000 },
+    );
+  };
   const shareView = async () => {
     if (typeof window === "undefined") return;
     try {
@@ -2264,6 +2304,15 @@ export default function Globus3D({
           >
             ⤴
           </button>
+          <button
+            type="button"
+            title="Locate me"
+            aria-label="Locate me"
+            onClick={locateMe}
+            style={ctrlBtn}
+          >
+            ⌖
+          </button>
         </div>
       ) : null}
 
@@ -2273,14 +2322,16 @@ export default function Globus3D({
           style={{
             position: "absolute",
             right: 14,
-            bottom: ctrlSize * 5 + 14 + 14,
+            bottom: ctrlSize * 6 + 14 + 14,
             zIndex: 8,
             padding: "8px 12px",
             borderRadius: 10,
             background:
-              shareToast === "copied"
+              shareToast === "copied" || shareToast === "located"
                 ? "rgba(13,148,136,0.92)"
-                : "rgba(220,38,38,0.92)",
+                : shareToast === "locating"
+                  ? "rgba(56,128,236,0.92)"
+                  : "rgba(220,38,38,0.92)",
             color: "#fff",
             fontWeight: 800,
             fontSize: 12,
@@ -2290,7 +2341,15 @@ export default function Globus3D({
             pointerEvents: "none",
           }}
         >
-          {shareToast === "copied" ? "Link copied ✓" : "Copy failed"}
+          {shareToast === "copied"
+            ? "Link copied ✓"
+            : shareToast === "located"
+              ? "Located you ✓"
+              : shareToast === "locating"
+                ? "Locating…"
+                : shareToast === "geo-failed"
+                  ? "Location unavailable"
+                  : "Copy failed"}
         </div>
       ) : null}
 

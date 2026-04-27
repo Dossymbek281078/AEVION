@@ -13,6 +13,7 @@ import { computeGameDNA, type GameDNA } from "./gameDna";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
 import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
+import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -447,6 +448,12 @@ export default function CyberChessPage(){
   const[activeCloneId,sActiveCloneId]=useState<number|null>(null);
   const[cloneMode,sCloneMode]=useState(false);
   const activeClone=activeCloneId!==null?clones[activeCloneId]:null;
+  // Auto-Reels Generator (killer #8)
+  const[showReel,sShowReel]=useState(false);
+  const[reelMeta,sReelMeta]=useState<{white:string;black:string;result:string}>({white:"White",black:"Black",result:"*"});
+  const[reelGenerating,sReelGenerating]=useState(false);
+  const[reelBlobUrl,sReelBlobUrl]=useState<string>("");
+  const[reelSpeed,sReelSpeed]=useState(350); // ms per move
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -2467,6 +2474,12 @@ export default function CyberChessPage(){
               const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
               try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
             } } style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Share PGN</Btn>
+            <Btn size="sm" variant="secondary" onClick={()=>{
+              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+              const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
+              sReelMeta({white,black,result});sShowReel(true);
+            }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Auto-Reel</Btn>
           </div>}
         </div>
 
@@ -4225,6 +4238,63 @@ export default function CyberChessPage(){
         <div style={{marginTop:SPACE[4],fontSize:11,color:CC.textDim,lineHeight:1.5}}>
           Lichess API публичный, без auth. Иногда блокируется по CORS — тогда работает только импорт через PGN. Анализ локальный, профиль не уходит на сервер.
         </div>
+      </div>
+    </Modal>
+
+    {/* ═══ Auto-Reels Generator (killer #8) ═══ */}
+    <Modal open={showReel} onClose={()=>{sShowReel(false);if(reelBlobUrl){URL.revokeObjectURL(reelBlobUrl);sReelBlobUrl("")}}} size="md"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🎬 Auto-Reel Generator <Badge tone="gold" size="sm">vertical 9:16</Badge></span>}>
+      <div>
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",border:"1px solid #f9a8d4",marginBottom:SPACE[3],fontSize:13,color:"#9d174d",lineHeight:1.5}}>
+          <b>Из этой партии — вертикальное видео 1080×1920 для TikTok / Reels / Shorts.</b><br/>
+          Интро → ускоренная партия → 3 ключевых хода с подсветкой → финальная позиция. Длительность ~{Math.round(estimateReelSeconds(hist.length,{msPerMove:reelSpeed}))} сек.
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2],marginBottom:SPACE[3]}}>
+          <div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.surface1,border:`1px solid ${CC.border}`}}>
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Партия</div>
+            <div style={{fontSize:13,fontWeight:700,color:CC.text,marginTop:2}}>⚪ {reelMeta.white}</div>
+            <div style={{fontSize:13,fontWeight:700,color:CC.text}}>⚫ {reelMeta.black}</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:4}}>{hist.length} ходов · {reelMeta.result}</div>
+          </div>
+          <div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.surface1,border:`1px solid ${CC.border}`}}>
+            <label style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const,display:"block"}}>Скорость хода</label>
+            <input type="range" min={150} max={800} step={50} value={reelSpeed} onChange={e=>sReelSpeed(+e.target.value)}
+              style={{width:"100%",accentColor:CC.brand}}/>
+            <div style={{fontSize:12,color:CC.text,marginTop:2}}>{reelSpeed} мс / ход</div>
+            <div style={{fontSize:10,color:CC.textDim}}>{reelSpeed<300?"быстро":reelSpeed<500?"средне":"медленно"}</div>
+          </div>
+        </div>
+        {reelBlobUrl?(
+          <div>
+            <video src={reelBlobUrl} controls autoPlay muted loop style={{width:"100%",maxHeight:480,borderRadius:RADIUS.md,background:"#000"}}/>
+            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3]}}>
+              <a href={reelBlobUrl} download={`aevion-chess-${Date.now()}.webm`} style={{flex:1,textDecoration:"none"}}>
+                <Btn variant="primary" size="md" full>⬇ Скачать WebM</Btn>
+              </a>
+              <Btn variant="secondary" size="md" onClick={()=>{URL.revokeObjectURL(reelBlobUrl);sReelBlobUrl("")}}>↻ Перегенерировать</Btn>
+            </div>
+            <div style={{marginTop:SPACE[2],fontSize:11,color:CC.textDim,lineHeight:1.5}}>
+              💡 WebM поддерживается TikTok, YouTube Shorts. Для Instagram Reels конвертируй в MP4 онлайн (cloudconvert.com).
+            </div>
+          </div>
+        ):(
+          <Btn variant="primary" size="lg" full disabled={reelGenerating||hist.length<2} onClick={async()=>{
+            sReelGenerating(true);
+            try{
+              const{highlights,captions}=pickHighlights(hist);
+              const blob=await generateReel(hist,{
+                white:reelMeta.white,black:reelMeta.black,result:reelMeta.result,
+                msPerMove:reelSpeed,highlightMoves:highlights,captions,
+              });
+              const url=URL.createObjectURL(blob);
+              sReelBlobUrl(url);
+              addChessy(8,"reel сгенерирован");
+            }catch(e:any){
+              showToast(`Ошибка: ${e?.message||"не удалось"}. Safari не поддерживает MediaRecorder WebM — используй Chrome/Firefox/Edge.`,"error");
+            }
+            sReelGenerating(false);
+          }}>{reelGenerating?<><Spinner/> Рендерю кадры…</>:"🎬 Создать Reel"}</Btn>
+        )}
       </div>
     </Modal>
 

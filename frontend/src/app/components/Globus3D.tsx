@@ -266,6 +266,15 @@ export default function Globus3D({
     Array<{ mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; marker: Marker }>
   >([]);
   const pulseMeshByKeyRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const arcsRef = useRef<
+    Array<{
+      line: THREE.Line;
+      geo: THREE.BufferGeometry;
+      total: number;
+      fromKey: string;
+      toKey: string;
+    }>
+  >([]);
 
   const [label, setLabel] = useState<{
     screenX: number;
@@ -417,12 +426,19 @@ export default function Globus3D({
         (m.tags?.some((t) => inField(t)) ?? false)
       );
     };
+    const visibleByKey = new Map<string, boolean>();
     for (const item of markerMeshesRef.current) {
-      item.mesh.visible = matches(item.marker);
+      const v = matches(item.marker);
+      item.mesh.visible = v;
+      visibleByKey.set(item.marker.key, v);
     }
     for (const [key, pulseMesh] of pulseMeshByKeyRef.current) {
-      const item = markerMeshesRef.current.find((x) => x.marker.key === key);
-      pulseMesh.visible = !!item && item.mesh.visible;
+      pulseMesh.visible = visibleByKey.get(key) === true;
+    }
+    for (const a of arcsRef.current) {
+      a.line.visible =
+        visibleByKey.get(a.fromKey) === true &&
+        visibleByKey.get(a.toKey) === true;
     }
   }, [query, filter, markers]);
 
@@ -828,6 +844,65 @@ export default function Globus3D({
     markerMeshesRef.current = markerMeshes;
     pulseMeshByKeyRef.current = pulseMeshByKey;
 
+    // Connection arcs — пайплайн между ключевыми нодами.
+    const arcConnections: Array<{ from: string; to: string; color: number }> = [
+      { from: "auth", to: "qright", color: 0x5eead4 },
+      { from: "qright", to: "qsign", color: 0x5eead4 },
+      { from: "qsign", to: "aevion-ip-bureau", color: 0x5eead4 },
+      { from: "aevion-ip-bureau", to: "aevion-bank", color: 0x5eead4 },
+      { from: "planet", to: "aevion-awards-music", color: 0xe879f9 },
+      { from: "planet", to: "aevion-awards-film", color: 0xe879f9 },
+      { from: "qcoreai", to: "multichat-engine", color: 0x7dd3fc },
+    ];
+
+    const markerByProjectId = new Map<string, Marker>();
+    for (const m of markers) {
+      if (m.type === "project") {
+        const id = m.key.replace(/^project:/, "");
+        markerByProjectId.set(id, m);
+      }
+    }
+
+    const arcs: typeof arcsRef.current = [];
+    for (const link of arcConnections) {
+      const a = markerByProjectId.get(link.from);
+      const b = markerByProjectId.get(link.to);
+      if (!a || !b) continue;
+
+      const pa = geoFromLatLon(a.lat, a.lon, radius + 1.5);
+      const pb = geoFromLatLon(b.lat, b.lon, radius + 1.5);
+      const start = new THREE.Vector3(pa.x, pa.y, pa.z);
+      const end = new THREE.Vector3(pb.x, pb.y, pb.z);
+      const midDir = start
+        .clone()
+        .add(end)
+        .normalize();
+      const lift = 1.18 + Math.min(0.4, start.distanceTo(end) / (radius * 4));
+      const control = midDir.multiplyScalar(radius * lift);
+      const curve = new THREE.QuadraticBezierCurve3(start, control, end);
+      const points = curve.getPoints(64);
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      geo.setDrawRange(0, 0);
+      const mat = new THREE.LineBasicMaterial({
+        color: link.color,
+        transparent: true,
+        opacity: 0.78,
+      });
+      const line = new THREE.Line(geo, mat);
+      earthGroup.add(line);
+
+      arcs.push({
+        line,
+        geo,
+        total: points.length,
+        fromKey: a.key,
+        toKey: b.key,
+      });
+    }
+    arcsRef.current = arcs;
+    const arcStartTime = performance.now();
+    const ARC_DRAW_MS = 1400;
+
     const hemi = new THREE.HemisphereLight(0x9eb6ff, 0x080810, 0.55);
     scene.add(hemi);
 
@@ -1050,6 +1125,22 @@ export default function Globus3D({
 
       // Облака чуть-чуть бегут всегда — оживляет сцену.
       cloudMesh.rotation.y += dt * 0.00004;
+
+      // Прорисовка дуг от 0 до total за ARC_DRAW_MS (только при первом рендере).
+      if (arcs.length > 0) {
+        const arcElapsed = (t - arcStartTime) / ARC_DRAW_MS;
+        if (arcElapsed < 1) {
+          const eased =
+            arcElapsed <= 0
+              ? 0
+              : arcElapsed >= 1
+                ? 1
+                : 1 - Math.pow(1 - arcElapsed, 3); // ease-out cubic
+          for (const a of arcs) {
+            a.geo.setDrawRange(0, Math.floor(a.total * eased));
+          }
+        }
+      }
 
       // Pulse-кольца на focus/award — растущая полупрозрачная сфера, зацикленная.
       if (pulseMeshes.length > 0) {

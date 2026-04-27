@@ -12,6 +12,7 @@ import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
+import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -436,6 +437,16 @@ export default function CyberChessPage(){
   const[showTournament,sShowTournament]=useState(false);
   const[tournamentOpponent,sTournamentOpponent]=useState<Persona|null>(null);
   const tournamentLearnedRef=useRef<string|null>(null);
+  // Style Cloner (killer #7)
+  const[clones,sClones]=useState<CloneProfile[]>(()=>(typeof window!=="undefined"?ldClones():[]));
+  useEffect(()=>{svClones(clones)},[clones]);
+  const[showCloner,sShowCloner]=useState(false);
+  const[clonerUsername,sClonerUsername]=useState("");
+  const[clonerLoading,sClonerLoading]=useState(false);
+  const[clonerError,sClonerError]=useState("");
+  const[activeCloneId,sActiveCloneId]=useState<number|null>(null);
+  const[cloneMode,sCloneMode]=useState(false);
+  const activeClone=activeCloneId!==null?clones[activeCloneId]:null;
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -522,6 +533,21 @@ export default function CyberChessPage(){
     if(typeof window==="undefined")return;
     try{
       const params=new URLSearchParams(window.location.search);
+      // Style Cloner share-link: ?clone=base64(profile)
+      const cloneCode=params.get("clone");
+      if(cloneCode){
+        const profile=shareCodeToProfile(cloneCode);
+        if(profile){
+          sClones(list=>{
+            const exists=list.some(c=>c.username===profile.username&&c.rating===profile.rating);
+            return exists?list:[profile,...list].slice(0,20);
+          });
+          setTimeout(()=>{
+            sShowCloner(true);
+            showToast(`🧬 Получен клон: ${profile.username} (${profile.rating} · ${profile.style})`,"success");
+          },800);
+        }
+      }
       const pgn=params.get("pgn");
       if(!pgn)return;
       const sans=parsePGN(decodeURIComponent(pgn));
@@ -1153,6 +1179,22 @@ export default function CyberChessPage(){
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     const fenAtTrigger=game.fen();
+    // Style Cloner: force preferred opening move for first 8 plies
+    if(cloneMode&&activeClone){
+      const preferred=clonePreferredMove(activeClone,hist);
+      if(preferred){
+        const t=setTimeout(()=>{
+          try{
+            if(game.fen()!==fenAtTrigger){sThink(false);return}
+            const c=new Chess(fenAtTrigger);
+            const mv=c.move(preferred);
+            if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+          }catch{}
+          sThink(false);
+        },Math.max(500,delay*0.6));
+        return()=>clearTimeout(t);
+      }
+    }
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
         // Only apply if the board is still on the same position we asked about.
@@ -1905,6 +1947,16 @@ export default function CyberChessPage(){
                   <span>🏆 Tournament <Badge tone="gold" size="xs">new</Badge></span>
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
                     {tournament?(tournament.currentRound==="done"?"завершён · открой":`раунд ${tournament.currentRound.toUpperCase()}`):"8 ботов · knockout"}
+                  </span>
+                </div>
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>sShowCloner(true)}
+                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#ecfeff,#cffafe)",
+                  border:"1px solid #67e8f9",color:"#155e75"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>🧬 Style Cloner <Badge tone="info" size="xs">new</Badge></span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+                    {clones.length>0?`${clones.length} клон${clones.length===1?"":clones.length<5?"а":"ов"}`:"Lichess → бот-клон"}
                   </span>
                 </div>
               </Btn>
@@ -4078,6 +4130,102 @@ export default function CyberChessPage(){
           </div>
         </div>;
       })()}
+    </Modal>
+
+    {/* ═══ Style Cloner (killer #7) ═══ */}
+    <Modal open={showCloner} onClose={()=>sShowCloner(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🧬 Style Cloner <Badge tone="info" size="sm">Lichess</Badge></span>}>
+      <div>
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"#ecfeff",border:"1px solid #67e8f9",marginBottom:SPACE[3],fontSize:13,color:"#155e75",lineHeight:1.5}}>
+          <b>Импортируй до 50 партий с Lichess</b> — мы проанализируем дебюты, тактику, агрессию, размены — и создадим <b>бота-клона</b> с твоим стилем. Поделись ссылкой — друг сыграет «против тебя».
+        </div>
+        <div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[3]}}>
+          <input type="text" value={clonerUsername} onChange={e=>sClonerUsername(e.target.value.trim())}
+            placeholder="Lichess username (например, DrNykterstein)"
+            style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:14,background:CC.surface1}}/>
+          <Btn variant="primary" size="md" disabled={!clonerUsername||clonerLoading} onClick={async()=>{
+            sClonerError("");sClonerLoading(true);
+            try{
+              const games=await fetchLichessGames(clonerUsername,30);
+              if(games.length===0){sClonerError("Партий не найдено. Проверь username.");sClonerLoading(false);return}
+              const profile=analyzeGames(games,clonerUsername);
+              if(profile.gamesAnalyzed===0){sClonerError("Не удалось разобрать ни одной партии.");sClonerLoading(false);return}
+              sClones(list=>[profile,...list].slice(0,20));
+              addChessy(15,`клон ${clonerUsername} создан`);
+              sClonerLoading(false);
+            }catch(e:any){
+              sClonerError(`Ошибка: ${e?.message||"не удалось получить партии"}. Lichess может блокировать CORS — попробуй другой username.`);
+              sClonerLoading(false);
+            }
+          }}>{clonerLoading?<Spinner/>:"⚡ Создать клон"}</Btn>
+        </div>
+        {clonerError&&<div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`,color:"#991b1b",fontSize:12,marginBottom:SPACE[3]}}>{clonerError}</div>}
+        {clones.length===0?(
+          <div style={{padding:SPACE[4],textAlign:"center",color:CC.textDim,fontSize:14}}>
+            Пока нет клонов. Введи username и нажми «Создать клон».
+          </div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+            {clones.map((cl,i)=><div key={i} style={{
+              padding:SPACE[3],borderRadius:RADIUS.md,
+              background:activeCloneId===i?"linear-gradient(135deg,#ecfeff,#cffafe)":CC.surface1,
+              border:activeCloneId===i?`2px solid #06b6d4`:`1px solid ${CC.border}`
+            }}>
+              <div style={{display:"flex",alignItems:"start",gap:SPACE[2]}}>
+                <div style={{fontSize:34,lineHeight:1}}>🧬</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
+                    <div style={{fontSize:16,fontWeight:900,color:CC.text}}>{cl.username}</div>
+                    <Badge tone="gold" size="sm">{cl.rating}</Badge>
+                    <Badge tone={cl.style==="Aggressive"||cl.style==="Wild"?"danger":cl.style==="Tactical"?"info":"accent"} size="sm">{cl.style}</Badge>
+                  </div>
+                  <div style={{fontSize:12,color:CC.textDim,marginTop:4,lineHeight:1.5}}>
+                    {cl.gamesAnalyzed} партий · {cl.avgMoves} ходов в среднем · W/B winrate {Math.round(cl.whiteWinRate*100)}/{Math.round(cl.blackWinRate*100)}%
+                  </div>
+                  <div style={{fontSize:12,color:CC.text,marginTop:4,fontStyle:"italic"}}>{styleVerdict(cl)}</div>
+                  {cl.topOpenings.length>0&&<div style={{fontSize:11,color:CC.textDim,marginTop:4}}>
+                    Любимые: {cl.topOpenings.slice(0,3).map(o=>o.line).join(" · ")}
+                  </div>}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1],marginTop:SPACE[2]}}>
+                    <div style={{fontSize:10}}><span style={{color:CC.textDim}}>Ранний ферзь</span><br/><b>{Math.round(cl.earlyQueenRate*100)}%</b></div>
+                    <div style={{fontSize:10}}><span style={{color:CC.textDim}}>Рокировка</span><br/><b>{Math.round(cl.castleRate*100)}%</b></div>
+                    <div style={{fontSize:10}}><span style={{color:CC.textDim}}>Размены</span><br/><b>{Math.round(cl.captureRate*100)}%</b></div>
+                    <div style={{fontSize:10}}><span style={{color:CC.textDim}}>Жертвы</span><br/><b>{Math.round(cl.sacrificeRate*100)}%</b></div>
+                  </div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[3],flexWrap:"wrap"}}>
+                <Btn variant="primary" size="sm" onClick={()=>{
+                  sActiveCloneId(i);sCloneMode(true);sShowCloner(false);sTab("play");sHotseat(false);sRivalMode(false);
+                  // Set AI level to clone's rating-matched level
+                  const lvl=chessy.owned.master_ai?cl.aiLevel:Math.min(4,cl.aiLevel);
+                  sAiI(lvl);
+                  setTimeout(()=>newG(),50);
+                  showToast(`▶ Играешь vs клон ${cl.username} (${cl.rating} · ${cl.style})`,"success");
+                }}>▶ Играть</Btn>
+                <Btn variant="secondary" size="sm" onClick={()=>{
+                  const code=profileToShareCode(cl);
+                  const url=`${window.location.origin}${window.location.pathname}?clone=${code}`;
+                  try{navigator.clipboard.writeText(url).then(()=>showToast("✓ Ссылка на клон скопирована","success")).catch(()=>showToast("Clipboard недоступен","error"))}catch{showToast("Clipboard недоступен","error")}
+                }}>🔗 Share-link</Btn>
+                <Btn variant="ghost" size="sm" onClick={()=>{
+                  if(confirm(`Удалить клон ${cl.username}?`)){
+                    sClones(list=>list.filter((_,j)=>j!==i));
+                    if(activeCloneId===i){sActiveCloneId(null);sCloneMode(false)}
+                  }
+                }}>🗑</Btn>
+              </div>
+            </div>)}
+          </div>
+        )}
+        {cloneMode&&activeClone&&<div style={{marginTop:SPACE[3],padding:SPACE[2],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,fontSize:12,color:"#065f46",textAlign:"center"}}>
+          <b>Активный клон: {activeClone.username}</b> — следующая партия пройдёт против него.
+          <Btn variant="ghost" size="sm" style={{marginLeft:SPACE[2]}} onClick={()=>{sCloneMode(false);sActiveCloneId(null);showToast("Clone-режим выключен","info")}}>Выкл</Btn>
+        </div>}
+        <div style={{marginTop:SPACE[4],fontSize:11,color:CC.textDim,lineHeight:1.5}}>
+          Lichess API публичный, без auth. Иногда блокируется по CORS — тогда работает только импорт через PGN. Анализ локальный, профиль не уходит на сервер.
+        </div>
+      </div>
     </Modal>
 
     {/* Chessy Explainer */}

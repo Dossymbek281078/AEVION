@@ -1392,6 +1392,9 @@ export default function BureauPage() {
           onCopy={copy}
         />
 
+        {/* ── API quickstart — copyable curl examples for B2B / dev audience ── */}
+        <ApiQuickstart certs={certificates} latest={stats?.latest ?? []} onCopy={copy} />
+
         {/* ── Technology stack ── */}
         <section style={{ padding: "18px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)", marginBottom: 28 }}>
           <div style={{ fontWeight: 900, fontSize: 14, color: "#0f172a", marginBottom: 10 }}>Technology Stack</div>
@@ -1783,6 +1786,95 @@ function EmbedPlayground({
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   API quickstart — copyable curl recipes against the live backend.
+   Designed for the dev / B2B audience that lands on /bureau and
+   asks "can I integrate this?". Picks the first available cert /
+   hash so the examples produce real responses on click.
+   ────────────────────────────────────────────────────────────── */
+function ApiQuickstart({
+  certs,
+  latest,
+  onCopy,
+}: {
+  certs: Certificate[];
+  latest: BureauStats["latest"];
+  onCopy: (text: string, label: string) => void;
+}) {
+  const sample = latest?.[0] ?? certs[0] ?? null;
+  const sampleId = sample ? sample.id : "<cert-id>";
+  const sampleHash = sample ? sample.contentHash : "<sha256-hex>";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
+  const apiBase = `${origin}${apiUrl("/api")}`;
+
+  const recipes: Array<{ name: string; verb: string; desc: string; cmd: string }> = [
+    {
+      name: "List certificates",
+      verb: "GET",
+      desc: "Search + filter the public registry. Same query params the /bureau search bar uses.",
+      cmd: `curl '${apiBase}/pipeline/certificates?q=music&limit=10'`,
+    },
+    {
+      name: "Verify a certificate",
+      verb: "GET",
+      desc: "Re-runs HMAC + Ed25519 against stored signatures. Returns valid / reason / Merkle proof URL.",
+      cmd: `curl '${apiBase}/pipeline/verify/${sampleId}'`,
+    },
+    {
+      name: "Look up a hash",
+      verb: "GET",
+      desc: "Check if a SHA-256 content hash is already in the registry without revealing the file.",
+      cmd: `curl '${apiBase}/pipeline/lookup/${sampleHash}'`,
+    },
+    {
+      name: "Protect a work",
+      verb: "POST",
+      desc: "Issue a new certificate. authorName + objectId required; contentHash optional (computed from metadata if omitted).",
+      cmd: `curl -X POST '${apiBase}/pipeline/protect' \\n  -H 'content-type: application/json' \\n  -d '{"objectId":"my-song-001","title":"My Song","kind":"music","authorName":"Ada Lovelace"}'`,
+    },
+  ];
+
+  return (
+    <section style={{ marginBottom: 28, padding: "18px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>API quickstart</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2, lineHeight: 1.55 }}>
+            Every endpoint that powers this page is public and CORS-friendly. Copy a recipe and paste it in your terminal.
+          </div>
+        </div>
+        <a href={apiUrl("/api/openapi.json")} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", textDecoration: "none", fontSize: 11, fontWeight: 800 }}>
+          Full OpenAPI →
+        </a>
+      </div>
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {recipes.map((r) => (
+          <div key={r.name} style={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", overflow: "hidden", background: "#fff" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <span style={{ padding: "2px 8px", borderRadius: 6, background: r.verb === "GET" ? "rgba(13,148,136,0.12)" : "rgba(217,119,6,0.12)", color: r.verb === "GET" ? "#0d9488" : "#92400e", fontSize: 10, fontWeight: 900, letterSpacing: "0.05em" }}>{r.verb}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{r.name}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onCopy(r.cmd, `${r.name} curl`)}
+                style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+              >
+                Copy
+              </button>
+            </div>
+            <div style={{ padding: "8px 14px", fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>{r.desc}</div>
+            <pre style={{ margin: 0, padding: "12px 14px", background: "#0f172a", color: "#e2e8f0", fontSize: 11.5, fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              {r.cmd}
+            </pre>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

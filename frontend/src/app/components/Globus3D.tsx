@@ -337,6 +337,9 @@ export default function Globus3D({
   /** DOM-overlay подписи над focus/award маркерами; обновляются прямо через style в animate. */
   const sparseLabelsRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
+  /** Mini-map: камера-индикатор (cx/cy обновляется в animate). */
+  const miniCamDotRef = useRef<SVGCircleElement | null>(null);
+
   const [label, setLabel] = useState<{
     screenX: number;
     screenY: number;
@@ -1341,6 +1344,18 @@ export default function Globus3D({
         }
       }
 
+      // Mini-map camera dot — обновляем cx/cy без React re-render.
+      if (miniCamDotRef.current) {
+        let camLon = (yawRef.current * 180) / Math.PI - 90;
+        while (camLon > 180) camLon -= 360;
+        while (camLon < -180) camLon += 360;
+        const camLat = (pitchRef.current * 180) / Math.PI;
+        const cx = ((camLon + 180) / 360) * 120;
+        const cy = ((90 - camLat) / 180) * 60;
+        miniCamDotRef.current.setAttribute("cx", String(cx));
+        miniCamDotRef.current.setAttribute("cy", String(cy));
+      }
+
       // Sparse-метки над focus/award маркерами — backside cull + screen project.
       if (sparseLabelsRef.current.size > 0) {
         const cw = canvas.clientWidth;
@@ -1972,12 +1987,115 @@ export default function Globus3D({
         </div>
       ) : null}
 
-      {!initError ? (
+      {!initError && !isNarrow ? (
         <div
           style={{
             position: "absolute",
             left: 14,
             bottom: 14,
+            zIndex: 4,
+            background: "rgba(8,12,24,0.78)",
+            border: "1px solid rgba(120,160,220,0.25)",
+            borderRadius: 8,
+            padding: 4,
+            pointerEvents: "none",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          <svg
+            width={120}
+            height={60}
+            viewBox="0 0 120 60"
+            aria-hidden
+            style={{ display: "block" }}
+          >
+            <defs>
+              <linearGradient id="aev-mini-bg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#0c1524" />
+                <stop offset="1" stopColor="#04070f" />
+              </linearGradient>
+            </defs>
+            <rect
+              x={0}
+              y={0}
+              width={120}
+              height={60}
+              fill="url(#aev-mini-bg)"
+              rx={4}
+            />
+            {/* экватор + меридиан */}
+            <line x1={0} x2={120} y1={30} y2={30} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} strokeDasharray="2 2" />
+            <line x1={60} x2={60} y1={0} y2={60} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} strokeDasharray="2 2" />
+            {markers.map((m) => {
+              const cx = ((m.lon + 180) / 360) * 120;
+              const cy = ((90 - m.lat) / 180) * 60;
+              const color =
+                m.category === "focus"
+                  ? "#fbbf24"
+                  : m.category === "award"
+                    ? "#e879f9"
+                    : m.category === "qright"
+                      ? "#34d399"
+                      : m.category === "infra"
+                        ? "#94a3b8"
+                        : "#7dd3fc";
+              const r = m.category === "focus" || m.category === "award" ? 1.8 : 1.3;
+              return (
+                <circle
+                  key={`mini:${m.key}`}
+                  cx={cx}
+                  cy={cy}
+                  r={r}
+                  fill={color}
+                  opacity={0.95}
+                />
+              );
+            })}
+            {/* Camera-индикатор: обновляется в animate. */}
+            <circle
+              ref={miniCamDotRef}
+              cx={30}
+              cy={30}
+              r={4}
+              fill="none"
+              stroke="#f1f5ff"
+              strokeWidth={1.4}
+              opacity={0.9}
+            />
+            <circle
+              ref={(el) => {
+                // Дублирующая внутренняя точка, обновляется реактивно через cam-dot.
+                // Не используется, оставлена пустой для эстетики.
+                void el;
+              }}
+              r={1}
+              fill="#f1f5ff"
+              style={{ display: "none" }}
+            />
+          </svg>
+          <div
+            style={{
+              fontSize: 9,
+              color: "rgba(168,184,216,0.55)",
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textAlign: "center",
+              marginTop: 2,
+              textTransform: "uppercase",
+            }}
+          >
+            World map
+          </div>
+        </div>
+      ) : null}
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: isNarrow ? 14 : 96,
             zIndex: 4,
             fontSize: 11,
             color: "rgba(168,184,216,0.72)",
@@ -1990,7 +2108,7 @@ export default function Globus3D({
             letterSpacing: "0.02em",
           }}
         >
-          drag · scroll · arrows · Tab
+          {isNarrow ? "drag · pinch" : "drag · scroll · arrows · Tab"}
         </div>
       ) : null}
 

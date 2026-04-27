@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -416,6 +416,9 @@ export default function AEVPage() {
           )}
         </section>
 
+        {/* ═══ FUTURE ENGINES — proposals + voting ═════════════════ */}
+        <FutureEngines />
+
         {/* ═══ FOOTER LINKS ════════════════════════════════════════ */}
         <div style={{
           padding: 14, borderRadius: 10,
@@ -428,6 +431,207 @@ export default function AEVPage() {
         </div>
       </ProductPageShell>
     </main>
+  );
+}
+
+// ─── Future emission engines — proposals + voting ─────────────────
+type Proposal = {
+  id: string;
+  letter: string;
+  emoji: string;
+  name: string;
+  tagline: string;
+  desc: string;
+  builtin?: boolean;
+};
+
+const BUILTIN_PROPOSALS: Proposal[] = [
+  {
+    id: "curation",
+    letter: "D",
+    emoji: "🧭",
+    name: "Proof-of-Curation",
+    tagline: "за качественный curating",
+    desc: "AEV за pin партии в публичный leaderboard, одобрение contribution, выделение позиции-классики, теги дебютов. Anti-sybil через peer-review.",
+  },
+  {
+    id: "mentorship",
+    letter: "E",
+    emoji: "🎓",
+    name: "Proof-of-Mentorship",
+    tagline: "ученик прогрессирует — учитель майнит",
+    desc: "Mentor получает AEV когда его ученик повышает рейтинг или решает пазл из mentor-list'а. Sybil-резистентно, потому что mentor подписывает связь через QSign.",
+  },
+  {
+    id: "streak",
+    letter: "F",
+    emoji: "🔥",
+    name: "Proof-of-Streak",
+    tagline: "lock-in через ежедневное возвращение",
+    desc: "Каждый поддержанный day-streak в любом модуле AEVION = малый AEV. 7d streak — bonus, 30d streak — milestone-bonus. Нативная анти-инфляция: пропустил день, multiplier reset.",
+  },
+  {
+    id: "network",
+    letter: "G",
+    emoji: "🌐",
+    name: "Proof-of-Network",
+    tagline: "приглашение активного user'а",
+    desc: "AEV за invited user, который совершил N quality-actions (т.е. реально пользуется). Anti-spam через delay + KYC через QCoreAI verification.",
+  },
+  {
+    id: "insight",
+    letter: "H",
+    emoji: "💡",
+    name: "Proof-of-Insight",
+    tagline: "вопрос Coach'у помог другим",
+    desc: "Когда твой query к AI Coach (CyberChess) кэшируется и помогает другому юзеру при cache-hit — ты получаешь AEV. Награда за уникальный качественный вопрос.",
+  },
+];
+
+const VOTES_KEY = "aevion_aev_proposal_votes_v1";
+const CUSTOM_PROPS_KEY = "aevion_aev_custom_proposals_v1";
+
+function FutureEngines() {
+  const [votes, setVotes] = useState<Record<string, number>>({});
+  const [voted, setVoted] = useState<Record<string, boolean>>({});
+  const [custom, setCustom] = useState<Proposal[]>([]);
+  const [draftName, setDraftName] = useState("");
+  const [draftDesc, setDraftDesc] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(VOTES_KEY);
+      if (raw) {
+        const r = JSON.parse(raw);
+        if (r.votes) setVotes(r.votes);
+        if (r.voted) setVoted(r.voted);
+      }
+      const c = localStorage.getItem(CUSTOM_PROPS_KEY);
+      if (c) {
+        const r = JSON.parse(c);
+        if (Array.isArray(r)) setCustom(r as Proposal[]);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem(VOTES_KEY, JSON.stringify({ votes, voted })) } catch {}
+  }, [votes, voted]);
+  useEffect(() => {
+    try { localStorage.setItem(CUSTOM_PROPS_KEY, JSON.stringify(custom)) } catch {}
+  }, [custom]);
+
+  const all: Proposal[] = [...BUILTIN_PROPOSALS, ...custom];
+  const sorted = [...all].sort((a, b) => (votes[b.id] || 0) - (votes[a.id] || 0));
+
+  const upvote = (id: string) => {
+    if (voted[id]) return;
+    setVoted((v) => ({ ...v, [id]: true }));
+    setVotes((v) => ({ ...v, [id]: (v[id] || 0) + 1 }));
+  };
+
+  const submitCustom = () => {
+    const name = draftName.trim();
+    const desc = draftDesc.trim();
+    if (!name || !desc) return;
+    const id = `custom-${Date.now().toString(36)}`;
+    const next: Proposal = {
+      id, letter: "?", emoji: "✨", name: name.slice(0, 60),
+      tagline: "пользовательская идея",
+      desc: desc.slice(0, 280),
+    };
+    setCustom((c) => [next, ...c].slice(0, 10));
+    setVotes((v) => ({ ...v, [id]: 1 }));
+    setVoted((v) => ({ ...v, [id]: true }));
+    setDraftName(""); setDraftDesc("");
+  };
+
+  const removeCustom = (id: string) => {
+    setCustom((c) => c.filter((p) => p.id !== id));
+    setVotes((v) => { const next = { ...v }; delete next[id]; return next });
+    setVoted((v) => { const next = { ...v }; delete next[id]; return next });
+  };
+
+  return (
+    <section style={{ padding: 16, borderRadius: 12, border: "1px dashed #cbd5e1", background: "linear-gradient(135deg, #f8fafc, #fff 60%)", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12, flexWrap: "wrap" as const }}>
+        <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#0f172a" }}>🌱 Будущие движки эмиссии</h2>
+        <span style={{ fontSize: 11, color: "#64748b" }}>
+          голосуй за то, что включить в next release. Победители уезжают в roadmap.
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8, marginBottom: 12 }}>
+        {sorted.map((p) => {
+          const v = votes[p.id] || 0;
+          const did = voted[p.id];
+          const isCustom = !BUILTIN_PROPOSALS.find((b) => b.id === p.id);
+          return (
+            <div key={p.id} style={{
+              padding: 12, borderRadius: 10,
+              background: "#fff", border: did ? "1px solid #86efac" : "1px solid #e2e8f0",
+              boxShadow: did ? "0 4px 12px rgba(34,197,94,0.18)" : "0 1px 2px rgba(15,23,42,0.04)",
+              display: "flex", flexDirection: "column" as const, gap: 6,
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 18 }}>{p.emoji}</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+                    {p.letter} · {p.tagline}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", lineHeight: 1.25 }}>{p.name}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end" as const, gap: 4 }}>
+                  <button onClick={() => upvote(p.id)} disabled={did}
+                    style={{
+                      padding: "5px 11px", borderRadius: 5, border: "none",
+                      background: did ? "#86efac" : "linear-gradient(135deg, #2563eb, #3b82f6)",
+                      color: "#fff", fontSize: 11, fontWeight: 800, cursor: did ? "default" : "pointer",
+                      whiteSpace: "nowrap" as const,
+                    }}>
+                    {did ? "✓ Голос за" : "🗳 Vote"}
+                  </button>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: "#0f172a", fontFamily: "ui-monospace, monospace" }}>{v}</span>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>{p.desc}</div>
+              {isCustom && (
+                <button onClick={() => removeCustom(p.id)}
+                  style={{ alignSelf: "flex-start", marginTop: 4, padding: "3px 9px", borderRadius: 4, border: "1px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                  убрать
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Custom proposal form */}
+      <div style={{ padding: 12, borderRadius: 8, background: "#f1f5f9", border: "1px solid #e2e8f0" }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#475569", letterSpacing: 0.5, textTransform: "uppercase" as const, marginBottom: 6 }}>
+          ✨ Своя идея
+        </div>
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: 6 }}>
+          <input value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={60}
+            placeholder="Название (например: Proof-of-Stewardship-of-Strangers)"
+            style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13 }} />
+          <textarea value={draftDesc} onChange={(e) => setDraftDesc(e.target.value)} maxLength={280}
+            rows={2}
+            placeholder="Что значит и как майнится. 1-3 предложения."
+            style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical" as const, fontFamily: "inherit" }} />
+          <button onClick={submitCustom}
+            disabled={!draftName.trim() || !draftDesc.trim()}
+            style={{
+              alignSelf: "flex-start" as const, padding: "7px 16px", borderRadius: 5, border: "none",
+              background: !draftName.trim() || !draftDesc.trim() ? "#cbd5e1" : "linear-gradient(135deg, #16a34a, #22c55e)",
+              color: "#fff", fontSize: 12, fontWeight: 800,
+              cursor: !draftName.trim() || !draftDesc.trim() ? "default" : "pointer",
+            }}>
+            + Добавить идею (auto-vote)
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -11,6 +11,7 @@ import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, 
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
+import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -427,6 +428,14 @@ export default function CyberChessPage(){
   useEffect(()=>{if(rivalProfile)svRival(rivalProfile)},[rivalProfile]);
   const[rivalMode,sRivalMode]=useState(false);
   const[showRivalGreet,sShowRivalGreet]=useState(false);
+  // Tournament Mode (killer #6)
+  const[tournament,sTournament]=useState<Tournament|null>(()=>(typeof window!=="undefined"?ldTournament():null));
+  useEffect(()=>{svTournament(tournament)},[tournament]);
+  const[trophies,sTrophies]=useState<Trophy[]>(()=>(typeof window!=="undefined"?ldTrophies():[]));
+  useEffect(()=>{svTrophies(trophies)},[trophies]);
+  const[showTournament,sShowTournament]=useState(false);
+  const[tournamentOpponent,sTournamentOpponent]=useState<Persona|null>(null);
+  const tournamentLearnedRef=useRef<string|null>(null);
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -1000,6 +1009,50 @@ export default function CyberChessPage(){
     else if(rivalResult==="D")addChessy(3,`🤝 ничья с ${rivalProfile.name}`);
   },[over,rivalMode,rivalProfile,currentOpening,hist.length,rat,addChessy,fenHist.length]);
 
+  /* ── Tournament: process result on game over, advance bracket ── */
+  useEffect(()=>{
+    if(!tournament||!tournamentOpponent||!over)return;
+    const gameKey=`${tournament.id}-${tournament.currentRound}-${fenHist.length}-${over}`;
+    if(tournamentLearnedRef.current===gameKey)return;
+    tournamentLearnedRef.current=gameKey;
+    let res:"win"|"lose"|"draw";
+    if(over.includes("You win")||over.includes("timed out"))res="win";
+    else if(over.includes("AI wins")||over.includes("Checkmate — AI"))res="lose";
+    else res="draw";
+    const reward=res==="win"?15:res==="draw"?5:0;
+    if(reward>0)addChessy(reward,`турнир: ${res==="win"?"победа":"ничья"} с ${tournamentOpponent.name}`);
+    sTournament(prev=>{
+      if(!prev)return prev;
+      let t=applyPlayerResult(prev,res);
+      // Resolve all bot vs bot matches in this round
+      t=resolveBotMatches(t);
+      // Advance to next round if all winners known
+      t=advanceBracket(t);
+      // If still in same round and there's another player match, no-op (loop ends)
+      // If currentRound advanced, also resolve bot matches in new round
+      if(t.currentRound!==prev.currentRound){
+        t=resolveBotMatches(t);
+        t=advanceBracket(t);
+      }
+      // Tournament finished?
+      if(t.currentRound==="done"){
+        const place=finalPlace(t);
+        if(place){
+          const reward2=placeReward(place);
+          const def=defeatedByPlayer(t);
+          const trophy:Trophy={v:1,ts:Date.now(),place,defeated:def,reward:reward2};
+          sTrophies(list=>[trophy,...list].slice(0,50));
+          setTimeout(()=>{
+            addChessy(reward2,place===1?"🏆 1-е место в турнире":place===2?"🥈 2-е место":place===4?"🥉 финал-4":"турнир: 1/4 финала");
+            sShowTournament(true);
+          },800);
+        }
+      }
+      return t;
+    });
+    sTournamentOpponent(null);
+  },[over,tournament,tournamentOpponent,fenHist.length,addChessy]);
+
   /* ── Autosave in-progress game ── */
   useEffect(()=>{
     if(tab!=="play"||!on||over||setup||hist.length===0)return;
@@ -1230,6 +1283,22 @@ export default function CyberChessPage(){
     }catch{showToast("Не удалось восстановить партию","error");clearResume();sResumeOffer(null)}
   };
   const discardResume=()=>{clearResume();sResumeOffer(null)};
+  // Tournament: start the next match (player vs current opponent)
+  const startTournamentMatch=useCallback((opp:Persona)=>{
+    sTab("play");sShowTournament(false);sHotseat(false);sRivalMode(false);
+    sTournamentOpponent(opp);
+    // Map persona aiLevel directly (clamp to unlocked range)
+    const lvl=chessy.owned.master_ai?Math.min(5,opp.aiLevel):Math.min(4,opp.aiLevel);
+    sAiI(lvl);
+    // 5+0 default for tournaments — short-format excitement
+    sUseCustom(false);sTcI(9);
+    // Color: alternate based on bracket — give player white in QF, alternate after
+    const round=tournament?.currentRound;
+    const color:ChessColor=round==="qf"?"w":round==="sf"?"b":(Math.random()<0.5?"w":"b");
+    sPCol(color);
+    setTimeout(()=>newG(color),50);
+    showToast(`⚔ ${opp.name} (${opp.elo}) — ${opp.style}. ${opp.motto}`,"info");
+  },[chessy.owned.master_ai,tournament,newG,showToast]);
   const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
   const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
   const loadEndgame=(eg:Endgame)=>{
@@ -1827,6 +1896,16 @@ export default function CyberChessPage(){
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                   <span>🎓 Opening Trainer</span>
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>drill дебютов</span>
+                </div>
+              </Btn>
+              <Btn size="lg" variant="secondary" onClick={()=>sShowTournament(true)}
+                style={{flex:"1 1 180px",background:"linear-gradient(135deg,#fef3c7,#fde68a)",
+                  border:"1px solid #fcd34d",color:"#92400e"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>🏆 Tournament <Badge tone="gold" size="xs">new</Badge></span>
+                  <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+                    {tournament?(tournament.currentRound==="done"?"завершён · открой":`раунд ${tournament.currentRound.toUpperCase()}`):"8 ботов · knockout"}
+                  </span>
                 </div>
               </Btn>
               {/* AI Rival — only visible once unlocked via shop */}
@@ -3878,6 +3957,127 @@ export default function CyberChessPage(){
           }}>📋 Копировать команду</Btn>
         </div>
       </div>
+    </Modal>
+
+    {/* ═══ Tournament Mode (killer #6) ═══ */}
+    <Modal open={showTournament} onClose={()=>sShowTournament(false)} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🏆 Tournament Mode <Badge tone="gold" size="sm">knockout</Badge></span>}>
+      {(()=>{
+        const t=tournament;
+        if(!t){
+          return <div>
+            <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`,marginBottom:SPACE[3],fontSize:13,color:"#065f46",lineHeight:1.5}}>
+              <b>8 ИИ-соперников · 3 раунда · бесконечная драматургия.</b><br/>
+              Knockout: 1/4 финала → полуфинал → финал. Параллельные матчи симулируются по Elo. Каждый бот — со своим стилем и репликой. Победитель получает <b>200 Chessy</b> + диплом. {trophies.length>0&&<>В копилке: <b>{trophies.length} трофеев</b>.</>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:SPACE[2],marginBottom:SPACE[4]}}>
+              {[
+                {p:1,r:200,c:CC.gold,t:"🏆 Чемпион"},
+                {p:2,r:100,c:"#9ca3af",t:"🥈 Финал"},
+                {p:4,r:50,c:"#fbbf24",t:"🥉 Полуфинал"},
+                {p:8,r:20,c:CC.textDim,t:"⚔ 1/4 финала"},
+              ].map((x,i)=><div key={i} style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.surface1,border:`1px solid ${CC.border}`,textAlign:"center"}}>
+                <div style={{fontSize:14,fontWeight:900,color:x.c}}>{x.t}</div>
+                <div style={{fontSize:18,fontWeight:900,color:CC.text,marginTop:2}}>{x.r}</div>
+                <div style={{fontSize:10,color:CC.textDim}}>Chessy</div>
+              </div>)}
+            </div>
+            {trophies.length>0&&<div style={{marginBottom:SPACE[3]}}>
+              <SectionHeader title="ТРОФЕИ"/>
+              <div style={{display:"flex",gap:SPACE[2],overflowX:"auto",paddingBottom:4,marginTop:SPACE[2]}}>
+                {trophies.slice(0,10).map((tr,i)=><div key={i} style={{minWidth:120,padding:SPACE[2],borderRadius:RADIUS.md,background:tr.place===1?"linear-gradient(135deg,#fef3c7,#fde68a)":CC.surface1,border:`1px solid ${tr.place===1?"#fcd34d":CC.border}`}}>
+                  <div style={{fontSize:24,textAlign:"center"}}>{tr.place===1?"🏆":tr.place===2?"🥈":tr.place===4?"🥉":"⚔"}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:CC.text,textAlign:"center"}}>{tr.place===1?"Чемпион":tr.place===2?"Финалист":tr.place===4?"Полуфинал":"1/4"}</div>
+                  <div style={{fontSize:10,color:CC.textDim,textAlign:"center",marginTop:2}}>{new Date(tr.ts).toLocaleDateString("ru-RU")}</div>
+                </div>)}
+              </div>
+            </div>}
+            <Btn variant="primary" size="lg" full onClick={()=>{
+              const fresh=createTournament(rat);
+              const resolved=resolveBotMatches(fresh);
+              sTournament(resolved);
+              showToast("🎉 Турнир запущен! Тебе светит первый матч.","success");
+            }}>🚀 Старт турнира</Btn>
+          </div>;
+        }
+        const fieldById=new Map(t.field.map(p=>[p.id,p]));
+        const nm=(id:string)=>id==="?"?"?":id==="you"?"Ты":(fieldById.get(id)?.name||id);
+        const flag=(id:string)=>id==="?"?"":id==="you"?"🇰🇿":(fieldById.get(id)?.flag||"");
+        const elo=(id:string)=>id==="?"?0:id==="you"?t.playerElo:(fieldById.get(id)?.elo||0);
+        const renderMatch=(m:typeof t.bracket.qf[0],idx:number)=>{
+          const isPlayerMatch=m.needsPlayer;
+          const winner=m.winner;
+          const isLoss=winner&&winner!=="you"&&isPlayerMatch;
+          return <div key={idx} style={{
+            padding:SPACE[2],borderRadius:RADIUS.md,
+            background:isPlayerMatch?(winner?(winner==="you"?"#ecfdf5":"#fef2f2"):"linear-gradient(135deg,#fef3c7,#fde68a)"):CC.surface1,
+            border:isPlayerMatch?(winner?(winner==="you"?`1px solid ${CC.brand}`:"1px solid #fca5a5"):"2px solid #fcd34d"):`1px solid ${CC.border}`,
+            fontSize:12,marginBottom:6
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontWeight:winner==="you"||(winner&&winner===m.a)?900:600,color:winner&&winner===m.a?CC.text:winner?CC.textDim:CC.text,textDecoration:winner&&winner!==m.a&&!isLoss?"line-through":"none"}}>
+              <span style={{fontSize:14,minWidth:18}}>{flag(m.a)}</span>
+              <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nm(m.a)}</span>
+              <span style={{fontSize:10,color:CC.textDim}}>{elo(m.a)||""}</span>
+              {winner===m.a&&<span style={{color:CC.brand,fontWeight:900,fontSize:11}}>1</span>}
+              {winner&&winner===m.b&&<span style={{color:CC.textDim,fontWeight:600,fontSize:11}}>0</span>}
+            </div>
+            <div style={{fontSize:10,color:CC.textDim,textAlign:"center",margin:"2px 0"}}>vs</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontWeight:winner&&winner===m.b?900:600,color:winner&&winner===m.b?CC.text:winner?CC.textDim:CC.text,textDecoration:winner&&winner!==m.b&&winner!=="?"?"line-through":"none"}}>
+              <span style={{fontSize:14,minWidth:18}}>{flag(m.b)}</span>
+              <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nm(m.b)}</span>
+              <span style={{fontSize:10,color:CC.textDim}}>{elo(m.b)||""}</span>
+              {winner===m.b&&<span style={{color:CC.brand,fontWeight:900,fontSize:11}}>1</span>}
+              {winner&&winner===m.a&&<span style={{color:CC.textDim,fontWeight:600,fontSize:11}}>0</span>}
+            </div>
+            {isPlayerMatch&&!winner&&<div style={{textAlign:"center",fontSize:10,fontWeight:900,color:"#92400e",marginTop:4,letterSpacing:1}}>ТВОЙ МАТЧ →</div>}
+          </div>;
+        };
+        const place=t.currentRound==="done"?finalPlace(t):null;
+        const nextMatch=nextPlayerMatch(t);
+        const nextOpp=nextMatch?(nextMatch.a==="you"?fieldById.get(nextMatch.b):fieldById.get(nextMatch.a)):null;
+        return <div>
+          {place&&<div style={{padding:SPACE[4],borderRadius:RADIUS.md,background:place===1?"linear-gradient(135deg,#fef3c7,#fde68a,#fcd34d)":CC.brandSoft,border:`2px solid ${place===1?"#f59e0b":CC.brand}`,marginBottom:SPACE[3],textAlign:"center"}}>
+            <div style={{fontSize:54,lineHeight:1}}>{place===1?"🏆":place===2?"🥈":place===4?"🥉":"⚔"}</div>
+            <div style={{fontSize:22,fontWeight:900,color:place===1?"#78350f":CC.text,marginTop:SPACE[2]}}>{place===1?"ЧЕМПИОН!":place===2?"Финалист":place===4?"3-4 место":"1/4 финала"}</div>
+            <div style={{fontSize:12,color:CC.textDim,marginTop:4}}>+{placeReward(place)} Chessy {defeatedByPlayer(t).length>0&&`· обыграл ${defeatedByPlayer(t).join(", ")}`}</div>
+          </div>}
+          {nextOpp&&<div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#1e1b4b,#4c1d95)",color:"#fff",marginBottom:SPACE[3]}}>
+            <div style={{fontSize:11,fontWeight:800,opacity:0.85,letterSpacing:1,textTransform:"uppercase" as const}}>Следующий матч · {t.currentRound==="qf"?"1/4 финала":t.currentRound==="sf"?"полуфинал":"ФИНАЛ"}</div>
+            <div style={{display:"flex",alignItems:"center",gap:SPACE[3],marginTop:SPACE[2]}}>
+              <div style={{fontSize:34}}>{nextOpp.flag}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:18,fontWeight:900}}>{nextOpp.name}</div>
+                <div style={{fontSize:12,opacity:0.85}}>{nextOpp.elo} · {nextOpp.style}</div>
+                <div style={{fontSize:11,opacity:0.7,fontStyle:"italic",marginTop:2}}>"{nextOpp.motto}"</div>
+              </div>
+              <Btn variant="gold" size="md" onClick={()=>startTournamentMatch(nextOpp)}>▶ Играть</Btn>
+            </div>
+          </div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[3]}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2]}}>1/4 ФИНАЛА</div>
+              {t.bracket.qf.map(renderMatch)}
+            </div>
+            <div>
+              <div style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2]}}>ПОЛУФИНАЛ</div>
+              <div style={{paddingTop:34}}>{t.bracket.sf.map(renderMatch)}</div>
+            </div>
+            <div>
+              <div style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2]}}>ФИНАЛ</div>
+              <div style={{paddingTop:80}}>{renderMatch(t.bracket.final,0)}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4]}}>
+            <Btn variant="ghost" size="md" onClick={()=>{
+              if(confirm("Сбросить текущий турнир и начать новый?")){
+                sTournament(null);tournamentLearnedRef.current=null;
+                showToast("Турнир сброшен","info");
+              }
+            }}>↻ Новый турнир</Btn>
+            <Btn variant="secondary" size="md" full onClick={()=>sShowTournament(false)}>Закрыть</Btn>
+          </div>
+        </div>;
+      })()}
     </Modal>
 
     {/* Chessy Explainer */}

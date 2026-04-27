@@ -417,6 +417,9 @@ export default function AEVPage() {
           </section>
         )}
 
+        {/* ═══ GLOBAL MINING FEED ═════════════════════════════════ */}
+        <GlobalMiningFeed />
+
         {/* ═══ ACTIVITY FEED ═══════════════════════════════════════ */}
         <section style={{ padding: 16, borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff", marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" as const, marginBottom: 10 }}>
@@ -449,6 +452,122 @@ export default function AEVPage() {
         </div>
       </ProductPageShell>
     </main>
+  );
+}
+
+// ─── Global mining feed (simulated network) ───────────────────────
+// Имитация общей mining-активности на платформе — даёт ощущение
+// «не один в сети». Все ивенты client-side, но дают визуальный pulse.
+const GLOBAL_NAMES = [
+  "Алина из Алматы", "Дмитрий из Астаны", "Мария из Шымкента",
+  "Виктор из Караганды", "Айгуль из Актобе", "Рустам из Атырау",
+  "Никита из Семея", "Светлана из Павлодара", "Алмаз из Тараза",
+  "Олег из Кокшетау", "Нурлан из Костаная", "Айдос из Усть-Каменогорска",
+  "Зарина из Туркестана", "Михаил из Актау", "Ержан из Уральска",
+];
+const GLOBAL_TEMPLATES: { tpl: string; emoji: string; range: [number, number] }[] = [
+  { tpl: "победил Master в CyberChess", emoji: "🏆", range: [3, 6] },
+  { tpl: "решил Puzzle Rush 25 в ряд", emoji: "🧩", range: [1, 3] },
+  { tpl: "подписал документ в QSign", emoji: "✍", range: [1, 2] },
+  { tpl: "зарегистрировал право в QRight", emoji: "📜", range: [2, 3] },
+  { tpl: "верифицировал бизнес в Bureau", emoji: "🏢", range: [0.8, 1.2] },
+  { tpl: "закрыл прибыльную позицию в QTrade", emoji: "💵", range: [0.4, 0.7] },
+  { tpl: "достиг 30-дневного streak", emoji: "🔥", range: [5, 5] },
+  { tpl: "нашёл brilliant в партии", emoji: "✨", range: [1, 2] },
+  { tpl: "завершил compute job (100 units)", emoji: "🧠", range: [4, 6] },
+  { tpl: "получил dividend от stewardship", emoji: "🛡", range: [0.05, 0.2] },
+  { tpl: "переиграл блундер из своей партии", emoji: "🎯", range: [0.6, 1.0] },
+];
+type GlobalEvent = { id: number; name: string; tpl: string; emoji: string; amount: number; ts: number };
+
+function GlobalMiningFeed() {
+  const [events, setEvents] = useState<GlobalEvent[]>([]);
+  const seqRef = useRef(0);
+  useEffect(() => {
+    // Initial backlog of 5 events with synthesized timestamps in the past
+    const initial: GlobalEvent[] = [];
+    for (let i = 0; i < 6; i++) {
+      const name = GLOBAL_NAMES[Math.floor(Math.random() * GLOBAL_NAMES.length)];
+      const tpl = GLOBAL_TEMPLATES[Math.floor(Math.random() * GLOBAL_TEMPLATES.length)];
+      const amount = +(tpl.range[0] + Math.random() * (tpl.range[1] - tpl.range[0])).toFixed(2);
+      initial.push({ id: ++seqRef.current, name, tpl: tpl.tpl, emoji: tpl.emoji, amount, ts: Date.now() - i * 18000 - Math.random() * 12000 });
+    }
+    setEvents(initial);
+    // Stream new events every 6-14s
+    const schedule = () => {
+      const delay = 6000 + Math.random() * 8000;
+      return setTimeout(() => {
+        const name = GLOBAL_NAMES[Math.floor(Math.random() * GLOBAL_NAMES.length)];
+        const tpl = GLOBAL_TEMPLATES[Math.floor(Math.random() * GLOBAL_TEMPLATES.length)];
+        const amount = +(tpl.range[0] + Math.random() * (tpl.range[1] - tpl.range[0])).toFixed(2);
+        const ev: GlobalEvent = { id: ++seqRef.current, name, tpl: tpl.tpl, emoji: tpl.emoji, amount, ts: Date.now() };
+        setEvents((prev) => [ev, ...prev].slice(0, 12));
+        timeoutRef.current = schedule();
+      }, delay);
+    };
+    const timeoutRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
+    timeoutRef.current = schedule();
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) };
+  }, []);
+
+  // Aggregate totals (rough live network minted)
+  const totalMinted = events.reduce((s, e) => s + e.amount, 0);
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%)",
+      color: "#fff", marginBottom: 14,
+      boxShadow: "0 6px 18px rgba(30,27,75,0.25)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap" as const, gap: 8, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 900, letterSpacing: 0.5, color: "#a5b4fc", textTransform: "uppercase" as const }}>
+            🌍 Global mining feed
+          </span>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "2px 8px", borderRadius: 999,
+            background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.4)",
+            fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#86efac", textTransform: "uppercase" as const,
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: 3, background: "#22c55e", animation: "qt-pulse 1.4s ease-in-out infinite" }} />
+            simulated network
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: "#cbd5e1", fontFamily: "ui-monospace, monospace" }}>
+          ≈ {totalMinted.toFixed(2)} AEV в feed'е · 12 событий
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column" as const, gap: 4, maxHeight: 240, overflowY: "auto" as const }}>
+        {events.map((ev, i) => {
+          const ago = (() => {
+            const dt = (Date.now() - ev.ts) / 1000;
+            if (dt < 60) return `${Math.round(dt)}s`;
+            if (dt < 3600) return `${Math.round(dt / 60)}m`;
+            return `${Math.round(dt / 3600)}h`;
+          })();
+          return (
+            <div key={ev.id} style={{
+              padding: "6px 10px", borderRadius: 6,
+              background: i === 0 ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.04)",
+              border: i === 0 ? "1px solid rgba(167,139,250,0.45)" : "1px solid rgba(255,255,255,0.06)",
+              display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 10, alignItems: "center" as const, fontSize: 12,
+              transition: "background 250ms ease",
+            }}>
+              <span style={{ fontSize: 16 }}>{ev.emoji}</span>
+              <span style={{ color: "#e2e8f0" }}>
+                <strong style={{ color: "#fff" }}>{ev.name}</strong> {ev.tpl}
+              </span>
+              <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: 800, color: "#86efac" }}>
+                +{ev.amount.toFixed(2)} AEV
+              </span>
+              <span style={{ fontSize: 10, color: "#94a3b8" }}>{ago}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

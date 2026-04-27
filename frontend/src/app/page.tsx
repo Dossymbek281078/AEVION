@@ -459,7 +459,7 @@ export default function HomePage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {[
               { step: "1", title: "Register", desc: "Describe your work in QRight — walk away with a SHA-256 fingerprint, Ed25519 signature, and Bitcoin-anchored timestamp.", icon: "📝", color: "#0d9488" },
-              { step: "2", title: "Sign", desc: "AEVION + your browser key co-sign the work; the private key is Shamir-split across 3 locations so we never hold enough to forge it.", icon: "🔐", color: "#2563eb" },
+              { step: "2", title: "Sign", desc: "QSign creates an HMAC-SHA256 signature — cryptographic proof that your data hasn't been tampered with.", icon: "🔐", color: "#2563eb" },
               { step: "3", title: "Certify", desc: "IP Bureau generates a certificate-ready document. Planet validators verify and community votes.", icon: "📜", color: "#7c3aed" },
               { step: "4", title: "Earn", desc: "AEVION Bank distributes royalties automatically when someone uses your content. Instant, transparent.", icon: "💰", color: "#059669" },
             ].map((s) => (

@@ -970,7 +970,7 @@ pipelineRouter.get("/lookup/:hash", async (req, res) => {
  *
  * Tree: sorted contentHashes as leaves → pairwise sha256 concat → root.
  */
-pipelineRouter.get("/bureau/anchor", async (_req, res) => {
+pipelineRouter.get("/bureau/anchor", async (req, res) => {
   try {
     await ensureTables();
     const useDb = await dbReady();
@@ -1007,6 +1007,16 @@ pipelineRouter.get("/bureau/anchor", async (_req, res) => {
 
     const root = computeRoot(sorted.map((l) => l.contentHash));
 
+    // Same root + leaf count → same ETag, regardless of publishedAt.
+    // 304s on no-change save the JSON encoding cost on every poll.
+    const etag = `"anchor-${root.slice(0, 16)}-${sorted.length}"`;
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
+      return res.status(304).end();
+    }
+
+    res.setHeader("ETag", etag);
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
     res.json({
       version: "aevion-merkle-v1",
@@ -1111,7 +1121,7 @@ pipelineRouter.get("/bureau/proof/:certId", async (req, res) => {
  * the current Merkle anchor. Use for external verification, legal
  * evidence packages, or offline archival.
  */
-pipelineRouter.get("/bureau/snapshot.json", async (_req, res) => {
+pipelineRouter.get("/bureau/snapshot.json", async (req, res) => {
   try {
     await ensureTables();
     const useDb = await dbReady();
@@ -1144,8 +1154,19 @@ pipelineRouter.get("/bureau/snapshot.json", async (_req, res) => {
     }
     const root = layer[0].toString("hex");
 
+    // ETag from the merkle root + leaf count: same registry contents
+    // → same ETag, regardless of generatedAt timestamp. Lets polling
+    // clients get a 304 with no body when nothing changed.
+    const etag = `"snap-${root.slice(0, 16)}-${rows.length}"`;
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+      return res.status(304).end();
+    }
+
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.setHeader("ETag", etag);
     res.setHeader("Content-Disposition", `inline; filename="aevion-registry-snapshot-${new Date().toISOString().slice(0,10)}.json"`);
     res.status(200).send(JSON.stringify({
       version: "aevion-snapshot-v1",

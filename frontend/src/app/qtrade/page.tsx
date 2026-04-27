@@ -7,11 +7,12 @@ import { apiUrl } from "@/lib/apiBase";
 import {
   ldPairs, svPairs, ldPositions, svPositions,
   ldLimits, svLimits, checkLimitFills, buildOrderBook,
+  ldClosed, svClosed, buildClosed,
   tickPair, catchupPair, unrealizedPnl, unrealizedPct,
   fmtUsd, fmtPct, sparklinePath,
-  type Pair, type Position, type PairId, type LimitOrder,
+  type Pair, type Position, type PairId, type LimitOrder, type ClosedPosition,
 } from "./marketSim";
-import { ldWallet, svWallet, sellAev, buyAev, type AEVWallet } from "../aev/aevToken";
+import { ldWallet, svWallet, sellAev, buyAev, recordPlay, type AEVWallet } from "../aev/aevToken";
 
 type Account = {
   id: string;
@@ -66,6 +67,7 @@ export default function QTradePage() {
   const [pairs, setPairs] = useState<Pair[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [limits, setLimits] = useState<LimitOrder[]>([]);
+  const [closedPositions, setClosedPositions] = useState<ClosedPosition[]>([]);
   const [marketsReady, setMarketsReady] = useState(false);
   const [activePair, setActivePair] = useState<PairId | null>(null);
   const [orderQty, setOrderQty] = useState("1");
@@ -83,6 +85,7 @@ export default function QTradePage() {
     setPairs(ldPairs().map((p) => catchupPair(p)));
     setPositions(ldPositions());
     setLimits(ldLimits());
+    setClosedPositions(ldClosed());
     setMarketsReady(true);
   }, []);
 
@@ -130,9 +133,10 @@ export default function QTradePage() {
     return () => clearInterval(id);
   }, [marketsReady]);
 
-  // Persist positions/limits when they change
+  // Persist positions/limits/closed when they change
   useEffect(() => { if (marketsReady) svPositions(positions); }, [positions, marketsReady]);
   useEffect(() => { if (marketsReady) svLimits(limits); }, [limits, marketsReady]);
+  useEffect(() => { if (marketsReady) svClosed(closedPositions); }, [closedPositions, marketsReady]);
 
   const pairById = useMemo(() => {
     const m = new Map<PairId, Pair>();
@@ -200,9 +204,17 @@ export default function QTradePage() {
       const target = prev.find((p) => p.id === posId);
       if (!target) return prev;
       const cur = pairById.get(target.pair);
-      const pnl = cur ? unrealizedPnl(target, cur.price) : 0;
-      setTradeMsg(`✓ Закрыто · P&L ${pnl >= 0 ? "+" : ""}${fmtUsd(pnl)}`);
-      setTimeout(() => setTradeMsg(null), 2400);
+      if (!cur) return prev;
+      const closed = buildClosed(target, cur.price);
+      setClosedPositions((cs) => [closed, ...cs].slice(0, 200));
+      // Auto-mint AEV via Proof-of-Play when the trade was profitable.
+      if (closed.realizedPnl > 0) {
+        setAevWallet((w) => (w ? recordPlay(w, "qtrade_close_winning", "qtrade") : w));
+      }
+      const pnl = closed.realizedPnl;
+      const aevHint = pnl > 0 ? " · +AEV в кошелёк" : "";
+      setTradeMsg(`✓ Закрыто · P&L ${pnl >= 0 ? "+" : ""}${fmtUsd(pnl)} (${fmtPct(closed.realizedPct)})${aevHint}`);
+      setTimeout(() => setTradeMsg(null), 3000);
       return prev.filter((p) => p.id !== posId);
     });
   };
@@ -775,6 +787,91 @@ export default function QTradePage() {
             </div>
           </div>
         )}
+
+        {/* Trade history + performance */}
+        {closedPositions.length > 0 && (() => {
+          const wins = closedPositions.filter((c) => c.realizedPnl > 0).length;
+          const losses = closedPositions.filter((c) => c.realizedPnl < 0).length;
+          const total = closedPositions.length;
+          const realizedSum = closedPositions.reduce((s, c) => s + c.realizedPnl, 0);
+          const winrate = total > 0 ? (wins / total) * 100 : 0;
+          const best = closedPositions.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl > b.realizedPnl ? c : b), null);
+          const worst = closedPositions.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl < b.realizedPnl ? c : b), null);
+          return (
+            <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" as const, color: "#cbd5e1" }}>
+                  📊 История сделок · performance
+                </div>
+                <div style={{ display: "flex", gap: 14, fontSize: 12, color: "#cbd5e1", flexWrap: "wrap" }}>
+                  <span>Closed: <strong style={{ color: "#fff" }}>{total}</strong></span>
+                  <span>Winrate: <strong style={{ color: winrate >= 55 ? "#22c55e" : winrate >= 40 ? "#fbbf24" : "#f87171" }}>{winrate.toFixed(1)}%</strong> ({wins}W {losses}L)</span>
+                  <span>Realized P&L: <strong style={{ color: realizedSum > 0 ? "#22c55e" : realizedSum < 0 ? "#f87171" : "#cbd5e1" }}>{realizedSum >= 0 ? "+" : ""}{fmtUsd(realizedSum)}</strong></span>
+                  {best && best.realizedPnl > 0 && <span style={{ color: "#86efac" }}>Best <strong>+{fmtUsd(best.realizedPnl)}</strong></span>}
+                  {worst && worst.realizedPnl < 0 && <span style={{ color: "#fca5a5" }}>Worst <strong>{fmtUsd(worst.realizedPnl)}</strong></span>}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflowY: "auto" as const }}>
+                {closedPositions.slice(0, 30).map((c) => {
+                  const dur = (() => {
+                    const ms = c.exitTs - c.entryTs;
+                    if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+                    if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
+                    if (ms < 86400000) return `${Math.round(ms / 3600000)}h`;
+                    return `${Math.round(ms / 86400000)}d`;
+                  })();
+                  return (
+                    <div key={c.id} style={{
+                      padding: "6px 12px", borderRadius: 6,
+                      background: c.realizedPnl >= 0 ? "rgba(34,197,94,0.07)" : "rgba(220,38,38,0.07)",
+                      border: `1px solid ${c.realizedPnl >= 0 ? "rgba(34,197,94,0.18)" : "rgba(220,38,38,0.18)"}`,
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto auto",
+                      gap: 12, alignItems: "center" as const, fontSize: 12,
+                    }}>
+                      <span style={{
+                        padding: "2px 7px", borderRadius: 4,
+                        background: c.side === "long" ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)",
+                        color: c.side === "long" ? "#86efac" : "#fca5a5",
+                        fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+                      }}>
+                        {c.side === "long" ? "▲L" : "▼S"} {c.pair.split("/")[0]}
+                      </span>
+                      <span style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>
+                        {c.qty} @ {fmtUsd(c.entryPrice)} → {fmtUsd(c.exitPrice)}
+                        <span style={{ marginLeft: 8, color: "#64748b", fontSize: 11 }}>· {dur}</span>
+                      </span>
+                      <span style={{
+                        fontFamily: "ui-monospace, monospace", fontWeight: 900,
+                        color: c.realizedPnl > 0 ? "#22c55e" : c.realizedPnl < 0 ? "#f87171" : "#cbd5e1",
+                      }}>
+                        {c.realizedPnl >= 0 ? "+" : ""}{fmtUsd(c.realizedPnl)}
+                      </span>
+                      <span style={{
+                        fontFamily: "ui-monospace, monospace", fontSize: 11,
+                        color: c.realizedPct >= 0 ? "#86efac" : "#fca5a5",
+                      }}>
+                        {fmtPct(c.realizedPct)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {closedPositions.length > 0 && (
+                <button
+                  onClick={() => { if (confirm("Очистить всю историю сделок?")) setClosedPositions([]) }}
+                  style={{
+                    marginTop: 8, padding: "5px 12px", borderRadius: 5,
+                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+                    color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  Очистить историю
+                </button>
+              )}
+            </div>
+          );
+        })()}
       </section>
       <style>{`@keyframes qt-pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
 

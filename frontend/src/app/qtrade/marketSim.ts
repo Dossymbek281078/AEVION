@@ -5,6 +5,7 @@
 const POSITIONS_KEY = "aevion_qtrade_positions_v1";
 const PAIRS_KEY = "aevion_qtrade_pairs_v1";
 const LIMITS_KEY = "aevion_qtrade_limits_v1";
+const CLOSED_KEY = "aevion_qtrade_closed_v1";
 
 export type PairId = "AEV/USD" | "BTC/USD" | "ETH/USD" | "SOL/USD";
 
@@ -41,6 +42,50 @@ export type Trade = {
   ts: number;
   realizedPnl?: number;  // populated when closing
 };
+
+export type ClosedPosition = {
+  id: string;
+  pair: PairId;
+  side: "long" | "short";
+  qty: number;
+  entryPrice: number;
+  entryTs: number;
+  exitPrice: number;
+  exitTs: number;
+  realizedPnl: number;     // USD
+  realizedPct: number;     // %
+};
+
+export function ldClosed(): ClosedPosition[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(CLOSED_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as ClosedPosition[] : [];
+  } catch { return [] }
+}
+
+export function svClosed(cs: ClosedPosition[]) {
+  try { localStorage.setItem(CLOSED_KEY, JSON.stringify(cs.slice(0, 200))) } catch {}
+}
+
+export function buildClosed(p: Position, exitPrice: number): ClosedPosition {
+  const direction = p.side === "long" ? 1 : -1;
+  const realizedPnl = (exitPrice - p.entryPrice) * p.qty * direction;
+  const realizedPct = ((exitPrice - p.entryPrice) / p.entryPrice) * 100 * direction;
+  return {
+    id: p.id,
+    pair: p.pair,
+    side: p.side,
+    qty: p.qty,
+    entryPrice: p.entryPrice,
+    entryTs: p.entryTs,
+    exitPrice,
+    exitTs: Date.now(),
+    realizedPnl,
+    realizedPct,
+  };
+}
 
 const PAIR_DEFAULTS: Record<PairId, Pick<Pair, "id" | "symbol" | "name" | "basePrice" | "vol" | "drift">> = {
   "AEV/USD": { id: "AEV/USD", symbol: "AEV", name: "AEVION", basePrice: 1.42, vol: 0.0042, drift: 0.00008 },

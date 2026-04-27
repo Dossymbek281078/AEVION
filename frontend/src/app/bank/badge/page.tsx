@@ -63,14 +63,14 @@ export default function BadgeConfiguratorPage() {
   const displayName = name || account?.id || "demo-acc";
   const accountId = account?.id || "demo";
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
   const badgeUrl = useMemo(() => {
-    const u = new URL(`${origin}/bank/badge/${encodeURIComponent(accountId)}`);
-    u.searchParams.set("score", score.toFixed(3));
-    u.searchParams.set("tier", tier);
-    if (name) u.searchParams.set("name", name);
-    u.searchParams.set("theme", theme);
-    return u.toString();
+    const params = new URLSearchParams();
+    params.set("score", score.toFixed(3));
+    params.set("tier", tier);
+    if (name) params.set("name", name);
+    params.set("theme", theme);
+    return `${origin}/bank/badge/${encodeURIComponent(accountId)}?${params.toString()}`;
   }, [origin, accountId, score, tier, name, theme]);
 
   const htmlSnippet = `<a href="${origin}/bank">\n  <img src="${badgeUrl}" alt="AEVION Trust Badge" width="360" height="96" />\n</a>`;

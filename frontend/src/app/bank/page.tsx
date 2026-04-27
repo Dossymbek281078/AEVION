@@ -39,6 +39,7 @@ import { MobileTabBar } from "./_components/MobileTabBar";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { ReferralsPanel } from "./_components/ReferralsPanel";
+import { RoundUpStash } from "./_components/RoundUpStash";
 import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { TierProgression } from "./_components/TierProgression";
@@ -426,6 +427,11 @@ function BankContent() {
               <AchievementsPanel account={account} operations={operations} />
             </div>
             <SavingsGoals accountId={account.id} notify={notify} />
+            <RoundUpStash
+              myAccountId={account.id}
+              operations={operations}
+              notify={notify}
+            />
             <SalaryAdvance
               account={account}
               operations={operations}

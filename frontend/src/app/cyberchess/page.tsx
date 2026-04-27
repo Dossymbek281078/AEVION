@@ -445,6 +445,18 @@ export default function CyberChessPage(){
   const[multiverseTick,sMultiverseTick]=useState(0);
   const[multiversePaused,sMultiversePaused]=useState(false);
   const[multiverseSpeed,sMultiverseSpeed]=useState(850);
+  // Chess Vision — blindfold-style тренажёр визуализации (killer feature #8)
+  const[showVision,sShowVision]=useState(false);
+  const[visionPuzzle,sVisionPuzzle]=useState<Puzzle|null>(null);
+  const[visionPhase,sVisionPhase]=useState<"countdown"|"show"|"hidden"|"answered">("countdown");
+  const[visionShowMs,sVisionShowMs]=useState(()=>{try{return parseInt(localStorage.getItem("aevion_vision_showms_v1")||"1500")||1500}catch{return 1500}});
+  useEffect(()=>{try{localStorage.setItem("aevion_vision_showms_v1",String(visionShowMs))}catch{}},[visionShowMs]);
+  const[visionAnswer,sVisionAnswer]=useState("");
+  const[visionResult,sVisionResult]=useState<"idle"|"correct"|"wrong">("idle");
+  const[visionStreak,sVisionStreak]=useState(0);
+  const[visionBest,sVisionBest]=useState(()=>{try{return parseInt(localStorage.getItem("aevion_vision_best_v1")||"0")||0}catch{return 0}});
+  const[visionScore,sVisionScore]=useState({right:0,total:0});
+  const[visionCountdown,sVisionCountdown]=useState(3);
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -997,6 +1009,65 @@ export default function CyberChessPage(){
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel,hist.length,fenHist,browseIdx]);
+
+  /* ── Chess Vision: трекет фаз ── */
+  const startVisionRound=useCallback(()=>{
+    if(PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
+    // Pick random puzzle from filtered list (use easier ones for vision: rating <= 1500)
+    const candidates=PUZZLES.filter(p=>p.r<=1500&&p.sol.length>=1);
+    const pool=candidates.length>0?candidates:PUZZLES;
+    const pz=pool[Math.floor(Math.random()*pool.length)];
+    sVisionPuzzle(pz);sVisionAnswer("");sVisionResult("idle");
+    sVisionPhase("countdown");sVisionCountdown(3);
+  },[PUZZLES,showToast]);
+  // Countdown 3..2..1 → show
+  useEffect(()=>{
+    if(!showVision||visionPhase!=="countdown")return;
+    if(visionCountdown<=0){sVisionPhase("show");return}
+    const t=setTimeout(()=>sVisionCountdown(c=>c-1),700);
+    return()=>clearTimeout(t);
+  },[showVision,visionPhase,visionCountdown]);
+  // Show → hidden after visionShowMs
+  useEffect(()=>{
+    if(!showVision||visionPhase!=="show")return;
+    const t=setTimeout(()=>sVisionPhase("hidden"),visionShowMs);
+    return()=>clearTimeout(t);
+  },[showVision,visionPhase,visionShowMs]);
+  const submitVisionAnswer=useCallback(()=>{
+    if(!visionPuzzle)return;
+    const expectedUci=visionPuzzle.sol[0]||"";
+    const ans=visionAnswer.trim();
+    if(!ans){showToast("Введи ход","error");return}
+    // Try matching as SAN first, then UCI
+    let isCorrect=false;
+    try{
+      const c=new Chess(visionPuzzle.fen);
+      const m=c.move(ans);
+      if(m){
+        const playedUci=`${m.from}${m.to}${m.promotion||""}`;
+        isCorrect=playedUci===expectedUci||playedUci.slice(0,4)===expectedUci.slice(0,4);
+      }
+    }catch{}
+    if(!isCorrect){
+      // Try as UCI directly
+      const compact=ans.replace(/\s+/g,"").toLowerCase();
+      if(compact===expectedUci||compact.slice(0,4)===expectedUci.slice(0,4))isCorrect=true;
+    }
+    sVisionResult(isCorrect?"correct":"wrong");
+    sVisionPhase("answered");
+    sVisionScore(s=>({right:s.right+(isCorrect?1:0),total:s.total+1}));
+    if(isCorrect){
+      const newStreak=visionStreak+1;
+      sVisionStreak(newStreak);
+      if(newStreak>visionBest){sVisionBest(newStreak);try{localStorage.setItem("aevion_vision_best_v1",String(newStreak))}catch{}}
+      const reward=Math.min(15,2+Math.floor(newStreak/3));
+      addChessy(reward,`🧠 Vision · streak ${newStreak}`);
+      snd("check");
+    }else{
+      sVisionStreak(0);
+      snd("capture");
+    }
+  },[visionPuzzle,visionAnswer,visionStreak,visionBest,addChessy,showToast]);
 
   /* ── Multiverse: launch + animation tick ── */
   const startMultiverse=useCallback(()=>{
@@ -2006,6 +2077,19 @@ export default function CyberChessPage(){
                   </span>
                 </div>
               </Btn>}
+              {/* Chess Vision — blindfold-style тренажёр (killer #8) */}
+              <Btn size="lg" variant="secondary" onClick={()=>{startVisionRound();sShowVision(true)}}
+                style={{flex:"1 1 180px",
+                  background:"linear-gradient(135deg,#831843,#be185d,#ec4899)",
+                  border:"1px solid #f9a8d4",color:"#fff",
+                  boxShadow:"0 4px 12px rgba(190,24,93,0.35)"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>🧠 Chess Vision</span>
+                  <span style={{fontSize:11,opacity:0.85,fontWeight:600}}>
+                    {visionBest>0?`лучший streak ${visionBest}`:"видеть позиции мгновенно"}
+                  </span>
+                </div>
+              </Btn>
             </div>
           </Card>
 
@@ -4217,6 +4301,107 @@ export default function CyberChessPage(){
           }}>⚡ Ещё раз</Btn>
         </div>
       </div>}
+    </Modal>
+
+    {/* ─── Chess Vision — blindfold-style flash-trainer ─── */}
+    <Modal open={showVision} onClose={()=>{sShowVision(false);sVisionPuzzle(null)}} size="md"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🧠 Chess Vision <Badge tone="neutral" size="sm">визуализация</Badge></span>}>
+      <div style={{fontSize:12,color:CC.textDim,lineHeight:1.5,marginBottom:SPACE[3]}}>
+        Позиция мелькнёт на {visionShowMs}ms. Запомни её и введи лучший ход — SAN или UCI ({visionPuzzle?(visionPuzzle.side==="w"?"⚪ ход белых":"⚫ ход чёрных"):"…"}).
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[3],flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:CC.textDim,fontWeight:700}}>Длительность вспышки</span>
+        {[800,1500,3000].map(ms=><button key={ms} onClick={()=>sVisionShowMs(ms)}
+          style={{padding:"4px 10px",borderRadius:RADIUS.sm,
+            border:visionShowMs===ms?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+            background:visionShowMs===ms?CC.brandSoft:CC.surface1,
+            color:visionShowMs===ms?CC.brand:CC.textDim,fontSize:11,fontWeight:800,cursor:"pointer"}}>
+          {ms===800?"⚡":ms===1500?"⏱":"🐢"} {ms}ms
+        </button>)}
+        <div style={{flex:1}}/>
+        <Badge tone="brand" size="sm">streak {visionStreak}</Badge>
+        <Badge tone="gold" size="sm">best {visionBest}</Badge>
+        {visionScore.total>0&&<Badge tone="info" size="sm">{Math.round(visionScore.right/visionScore.total*100)}% · {visionScore.right}/{visionScore.total}</Badge>}
+      </div>
+      {/* The board area */}
+      {visionPuzzle&&(()=>{
+        const showBoard=visionPhase==="show"||visionPhase==="answered";
+        let boardObj:any=null;
+        try{boardObj=new Chess(visionPuzzle.fen).board()}catch{boardObj=null}
+        const fx=visionPuzzle.side==="b";
+        const rows=fx?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
+        const cols=fx?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
+        return <div style={{position:"relative" as const,marginBottom:SPACE[3]}}>
+          {visionPhase==="countdown"&&<div style={{aspectRatio:"1/1",borderRadius:RADIUS.lg,
+            background:"linear-gradient(135deg,#831843,#4c1d95,#0c0a09)",color:"#fff",
+            display:"flex",alignItems:"center",justifyContent:"center" as const,
+            fontSize:120,fontWeight:900,fontFamily:"ui-monospace, monospace",
+            boxShadow:"0 8px 32px rgba(131,24,67,0.4)"}}>
+            {visionCountdown>0?visionCountdown:"GO"}
+          </div>}
+          {visionPhase!=="countdown"&&<div style={{aspectRatio:"1/1",display:"grid",
+            gridTemplateColumns:"repeat(8,1fr)",gridTemplateRows:"repeat(8,1fr)",
+            border:`2px solid ${CC.text}`,borderRadius:RADIUS.lg,overflow:"hidden",
+            transition:`background 250ms ease`,
+            background:CC.text}}>
+            {boardObj&&rows.map(r=>cols.map(c=>{
+              const sq=boardObj[r][c];
+              const isLight=(r+c)%2===0;
+              const isCorrectAnswerSquare=visionPhase==="answered"&&visionResult==="correct"&&visionPuzzle.sol[0]&&(`${"abcdefgh"[c]}${8-r}`===visionPuzzle.sol[0].slice(0,2)||`${"abcdefgh"[c]}${8-r}`===visionPuzzle.sol[0].slice(2,4));
+              return <div key={`${r}-${c}`} style={{
+                background:isCorrectAnswerSquare?"rgba(34,197,94,0.5)":isLight?"#f0d9b5":"#b58863",
+                display:"flex",alignItems:"center",justifyContent:"center" as const,
+                opacity:showBoard?1:0,
+                transition:`opacity 200ms ease`
+              }}>
+                {showBoard&&sq&&<div style={{width:"82%",height:"82%"}}>
+                  <Piece type={sq.type as any} color={sq.color as any} size="100%"/>
+                </div>}
+              </div>;
+            }))}
+          </div>}
+          {visionPhase==="hidden"&&<div style={{position:"absolute",inset:0,
+            display:"flex",alignItems:"center",justifyContent:"center" as const,
+            color:CC.textDim,fontSize:14,fontWeight:800,letterSpacing:1,
+            background:"rgba(15,23,42,0.78)",borderRadius:RADIUS.lg,
+            backdropFilter:"blur(2px)" as any}}>
+            ▢ ВИЗУАЛИЗИРУЙ В УМЕ
+          </div>}
+        </div>;
+      })()}
+      {/* Input + actions */}
+      {visionPuzzle&&visionPhase==="hidden"&&<div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[2]}}>
+        <input
+          autoFocus
+          value={visionAnswer}
+          onChange={e=>sVisionAnswer(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")submitVisionAnswer()}}
+          placeholder="Лучший ход — Nf3, Nxe5, e4, e2e4…"
+          className="cc-focus-ring"
+          style={{flex:1,padding:"10px 14px",borderRadius:RADIUS.md,
+            border:`1px solid ${CC.border}`,fontSize:15,fontFamily:"ui-monospace, monospace",
+            fontWeight:800}}
+        />
+        <Btn variant="primary" size="md" onClick={submitVisionAnswer}>Ответить</Btn>
+      </div>}
+      {visionPuzzle&&visionPhase==="answered"&&<div style={{padding:SPACE[3],borderRadius:RADIUS.md,
+        background:visionResult==="correct"?"linear-gradient(135deg,#ecfdf5,#d1fae5)":"linear-gradient(135deg,#fef2f2,#fee2e2)",
+        border:`1px solid ${visionResult==="correct"?"#a7f3d0":"#fecaca"}`,
+        marginBottom:SPACE[2]}}>
+        <div style={{fontSize:15,fontWeight:900,color:visionResult==="correct"?CC.brand:CC.danger,marginBottom:SPACE[1]}}>
+          {visionResult==="correct"?"✓ Точно!":"✗ Не угадал"}
+        </div>
+        <div style={{fontSize:13,color:CC.text}}>
+          Лучший ход: <span style={{fontFamily:"ui-monospace, monospace",fontWeight:900,padding:"2px 6px",borderRadius:4,background:CC.surface3}}>{visionPuzzle.sol[0]}</span>
+          {visionPuzzle.theme&&<span style={{marginLeft:SPACE[2],fontSize:11,color:CC.textDim}}>· {visionPuzzle.theme}</span>}
+        </div>
+      </div>}
+      <div style={{display:"flex",gap:SPACE[2]}}>
+        <Btn variant="secondary" size="md" full onClick={()=>{sShowVision(false);sVisionPuzzle(null)}}>Закрыть</Btn>
+        {(visionPhase==="answered"||visionPhase==="hidden")&&<Btn variant={visionPhase==="answered"?"accent":"ghost"} size="md" full onClick={startVisionRound}>
+          {visionPhase==="answered"?"▶ Следующая":"⏭ Пропустить"}
+        </Btn>}
+      </div>
     </Modal>
 
     {/* ─── Multiverse — параллельные вселенные top-3 ходов ─── */}

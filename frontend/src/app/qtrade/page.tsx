@@ -941,6 +941,17 @@ export default function QTradePage() {
           const winrate = total > 0 ? (wins / total) * 100 : 0;
           const best = closedPositions.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl > b.realizedPnl ? c : b), null);
           const worst = closedPositions.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl < b.realizedPnl ? c : b), null);
+          // Build equity curve by chronological close order. Cumulative P&L points.
+          const chrono = [...closedPositions].sort((a, b) => a.exitTs - b.exitTs);
+          let cum = 0;
+          const equityPoints = chrono.map((c) => { cum += c.realizedPnl; return { ts: c.exitTs, equity: cum } });
+          // Compute peak and drawdown
+          let peak = 0, maxDD = 0;
+          for (const pt of equityPoints) {
+            if (pt.equity > peak) peak = pt.equity;
+            const dd = peak - pt.equity;
+            if (dd > maxDD) maxDD = dd;
+          }
           return (
             <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
@@ -951,10 +962,13 @@ export default function QTradePage() {
                   <span>Closed: <strong style={{ color: "#fff" }}>{total}</strong></span>
                   <span>Winrate: <strong style={{ color: winrate >= 55 ? "#22c55e" : winrate >= 40 ? "#fbbf24" : "#f87171" }}>{winrate.toFixed(1)}%</strong> ({wins}W {losses}L)</span>
                   <span>Realized P&L: <strong style={{ color: realizedSum > 0 ? "#22c55e" : realizedSum < 0 ? "#f87171" : "#cbd5e1" }}>{realizedSum >= 0 ? "+" : ""}{fmtUsd(realizedSum)}</strong></span>
+                  <span>Peak: <strong style={{ color: "#86efac" }}>{peak >= 0 ? "+" : ""}{fmtUsd(peak)}</strong></span>
+                  <span>Max DD: <strong style={{ color: maxDD > 0 ? "#fca5a5" : "#cbd5e1" }}>{fmtUsd(-maxDD)}</strong></span>
                   {best && best.realizedPnl > 0 && <span style={{ color: "#86efac" }}>Best <strong>+{fmtUsd(best.realizedPnl)}</strong></span>}
                   {worst && worst.realizedPnl < 0 && <span style={{ color: "#fca5a5" }}>Worst <strong>{fmtUsd(worst.realizedPnl)}</strong></span>}
                 </div>
               </div>
+              {equityPoints.length >= 2 && <EquityCurve points={equityPoints} />}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflowY: "auto" as const }}>
                 {closedPositions.slice(0, 30).map((c) => {
                   const dur = (() => {
@@ -1329,6 +1343,59 @@ export default function QTradePage() {
       )}
       </ProductPageShell>
     </main>
+  );
+}
+
+// ─── Equity curve ──────────────────────────────────────────────────
+// Cumulative realized P&L over time, with running max (peak) overlay
+// and drawdown shaded area. Pure SVG.
+function EquityCurve({ points }: { points: { ts: number; equity: number }[] }) {
+  if (points.length < 2) return null;
+  const W = 100;
+  const H = 22;
+  const minEq = Math.min(0, ...points.map((p) => p.equity));
+  const maxEq = Math.max(0, ...points.map((p) => p.equity));
+  const range = (maxEq - minEq) || 1;
+  // Build running peak
+  let runningPeak = -Infinity;
+  const peaks = points.map((p) => { runningPeak = Math.max(runningPeak, p.equity); return runningPeak });
+  const yOf = (v: number) => H - ((v - minEq) / range) * H;
+  const xOf = (i: number) => (i / (points.length - 1)) * W;
+  const eqPath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xOf(i).toFixed(2)} ${yOf(p.equity).toFixed(2)}`).join(" ");
+  const peakPath = peaks.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i).toFixed(2)} ${yOf(v).toFixed(2)}`).join(" ");
+  // Shaded drawdown area between peak and equity (only where below peak)
+  const ddArea = (() => {
+    const top = peaks.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i).toFixed(2)} ${yOf(v).toFixed(2)}`).join(" ");
+    const bot = points.map((p, i) => `L ${xOf(points.length - 1 - i).toFixed(2)} ${yOf(points[points.length - 1 - i].equity).toFixed(2)}`).join(" ");
+    return `${top} ${bot} Z`;
+  })();
+  // Zero line
+  const zeroY = yOf(0);
+  const lastEq = points[points.length - 1].equity;
+  const lastColor = lastEq >= 0 ? "#22c55e" : "#ef4444";
+  return (
+    <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" as const, color: "#94a3b8" }}>
+          📈 Equity curve · кумулятивный P&L
+        </span>
+        <span style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", fontWeight: 800, color: lastColor }}>
+          {lastEq >= 0 ? "+" : ""}{lastEq.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 70, display: "block" }}>
+        {/* Zero line */}
+        {zeroY >= 0 && zeroY <= H && (
+          <line x1={0} x2={W} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.18)" strokeWidth={0.12} strokeDasharray="0.6 0.4" />
+        )}
+        {/* Drawdown shaded */}
+        <path d={ddArea} fill="rgba(220,38,38,0.18)" />
+        {/* Running peak */}
+        <path d={peakPath} stroke="rgba(34,197,94,0.45)" strokeWidth={0.16} fill="none" strokeDasharray="0.5 0.3" />
+        {/* Equity */}
+        <path d={eqPath} stroke={lastColor} strokeWidth={0.28} fill="none" />
+      </svg>
+    </div>
   );
 }
 

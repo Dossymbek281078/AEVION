@@ -52,6 +52,7 @@ import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { NetWorthTracker } from "./_components/NetWorthTracker";
+import { NotificationsCenter } from "./_components/NotificationsCenter";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
@@ -396,12 +397,14 @@ function BankContent() {
 
             <SubscriptionScanner notify={notify} />
 
-            <RecurringPayments
-              myAccountId={account.id}
-              balance={account.balance}
-              send={send}
-              notify={notify}
-            />
+            <div id="bank-anchor-recurring" style={{ scrollMarginTop: 20 }}>
+              <RecurringPayments
+                myAccountId={account.id}
+                balance={account.balance}
+                send={send}
+                notify={notify}
+              />
+            </div>
 
             <SplitBills myAccountId={account.id} notify={notify} />
 
@@ -447,8 +450,12 @@ function BankContent() {
               operations={operations}
               notify={notify}
             />
-            <SpendingChallenges myAccountId={account.id} operations={operations} />
-            <AecVault account={account} topup={handleTopup} notify={notify} />
+            <div id="bank-anchor-challenges" style={{ scrollMarginTop: 20 }}>
+              <SpendingChallenges myAccountId={account.id} operations={operations} />
+            </div>
+            <div id="bank-anchor-vault" style={{ scrollMarginTop: 20 }}>
+              <AecVault account={account} topup={handleTopup} notify={notify} />
+            </div>
             <SalaryAdvance
               account={account}
               operations={operations}
@@ -477,6 +484,7 @@ function BankContent() {
             setActiveTab={setActiveTab}
             notify={notify}
           />
+          <NotificationsCenter account={account} operations={operations} />
           <MobileTabBar />
         </EcosystemDataProvider>
       ) : null}

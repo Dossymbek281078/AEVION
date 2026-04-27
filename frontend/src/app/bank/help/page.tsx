@@ -45,6 +45,28 @@ export default function BankHelpPage() {
   const total = SECTIONS.reduce((s, x) => s + x.qCount, 0);
   const visible = filteredSections.reduce((s, x) => s + x.indices.length, 0);
 
+  // FAQPage JSON-LD — surfaces all 25 Q/As to search engines so Google can
+  // render them as a rich result on the SERP. Localised via the same t()
+  // call that drives the visible UI, so the structured data tracks the
+  // current language.
+  const faqJsonLd = useMemo(() => {
+    const mainEntity = SECTIONS.flatMap((s) =>
+      Array.from({ length: s.qCount }, (_, i) => ({
+        "@type": "Question",
+        name: t(`help.${s.id}.q${i + 1}`),
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: t(`help.${s.id}.a${i + 1}`),
+        },
+      })),
+    );
+    return {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity,
+    };
+  }, [t]);
+
   return (
     <main
       style={{
@@ -55,6 +77,11 @@ export default function BankHelpPage() {
         padding: "32px 16px 56px",
       }}
     >
+      <script
+        type="application/ld+json"
+        // Schema.org JSON-LD — safe insert with JSON.stringify; no user input.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <div style={{ maxWidth: 880, margin: "0 auto" }}>
         <Link
           href="/bank"

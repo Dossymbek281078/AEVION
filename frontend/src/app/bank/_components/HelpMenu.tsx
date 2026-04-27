@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { downloadBackup, importBackupFromFile } from "../_lib/bankBackup";
 import { clearDemoSeed, hasDemoSeed, seedDemo } from "../_lib/demoSeed";
 import { resetTour } from "../_lib/onboarding";
 
@@ -19,6 +20,7 @@ export function HelpMenu({
   const [open, setOpen] = useState<boolean>(false);
   const [demoActive, setDemoActive] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isMac =
     typeof navigator !== "undefined" &&
     /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent || "");
@@ -71,6 +73,41 @@ export function HelpMenu({
     window.location.replace(url.toString());
   };
 
+  const exportData = () => {
+    setOpen(false);
+    try {
+      const result = downloadBackup(accountId || null);
+      const kb = Math.max(1, Math.round(result.size / 1024));
+      notify(t("helpmenu.toast.exportOk", { kb }), "success");
+    } catch {
+      notify(t("helpmenu.toast.exportFail"), "error");
+    }
+  };
+
+  const importPrompt = () => {
+    setOpen(false);
+    fileInputRef.current?.click();
+  };
+
+  const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-importing same file
+    if (!file) return;
+    try {
+      const summary = await importBackupFromFile(file);
+      notify(
+        t("helpmenu.toast.importOk", {
+          n: summary.restoredKeys,
+          skipped: summary.skippedKeys,
+        }),
+        "success",
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t("helpmenu.toast.importFail");
+      notify(msg, "error");
+    }
+  };
+
   return (
     <div
       ref={menuRef}
@@ -86,6 +123,15 @@ export function HelpMenu({
         gap: 10,
       }}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={onFileChosen}
+        style={{ display: "none" }}
+        aria-hidden="true"
+        tabIndex={-1}
+      />
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? t("helpmenu.aria.close") : t("helpmenu.aria.open")}
@@ -181,6 +227,18 @@ export function HelpMenu({
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
           />
+          <MenuItem
+            icon="⬇"
+            label={t("helpmenu.item.export.label")}
+            hint={t("helpmenu.item.export.hint")}
+            onClick={exportData}
+          />
+          <MenuItem
+            icon="⬆"
+            label={t("helpmenu.item.import.label")}
+            hint={t("helpmenu.item.import.hint")}
+            onClick={importPrompt}
+          />
           <MenuItemLink
             icon="↗"
             label={t("helpmenu.item.portal.label")}
@@ -192,7 +250,7 @@ export function HelpMenu({
             style={{
               padding: "8px 14px",
               fontSize: 10,
-              color: "#94a3b8",
+              color: "#64748b",
               borderTop: "1px solid rgba(15,23,42,0.06)",
               lineHeight: 1.45,
             }}

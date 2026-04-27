@@ -26,6 +26,7 @@ import { AuditPanel } from "./_components/AuditPanel";
 import { AutopilotStatement } from "./_components/AutopilotStatement";
 import { BackendStatus } from "./_components/BackendStatus";
 import { BalanceProjection } from "./_components/BalanceProjection";
+import { BillingCalendar } from "./_components/BillingCalendar";
 import { BudgetCaps } from "./_components/BudgetCaps";
 import { DemoModeBanner } from "./_components/DemoModeBanner";
 import { BankHero } from "./_components/BankHero";
@@ -405,6 +406,8 @@ function BankContent() {
             </div>
 
             <SubscriptionScanner notify={notify} />
+
+            <BillingCalendar />
 
             <div id="bank-anchor-recurring" style={{ scrollMarginTop: 20 }}>
               <RecurringPayments

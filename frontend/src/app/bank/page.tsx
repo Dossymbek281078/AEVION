@@ -60,6 +60,7 @@ import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
 import { GoalTemplates } from "./_components/GoalTemplates";
 import { InvestmentPie } from "./_components/InvestmentPie";
+import { LoyaltyVaultPanel } from "./_components/LoyaltyVaultPanel";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { NetWorthTracker } from "./_components/NetWorthTracker";
 import { NotificationsCenter } from "./_components/NotificationsCenter";
@@ -500,6 +501,9 @@ function BankContent() {
               operations={operations}
               notify={notify}
             />
+            <div id="bank-anchor-loyalty" style={{ scrollMarginTop: 20 }}>
+              <LoyaltyVaultPanel notify={notify} />
+            </div>
             <SalaryAdvance
               account={account}
               operations={operations}

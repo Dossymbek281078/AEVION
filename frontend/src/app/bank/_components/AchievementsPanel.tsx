@@ -254,6 +254,21 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
   const tierColor = TIER_COLOR[achievement.tier];
   const catColor = CATEGORY_COLOR[achievement.category];
   const pct = Math.round(achievement.progress * 100);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const onShare = async () => {
+    if (!earned || typeof navigator === "undefined" || !navigator.clipboard) return;
+    const label = t(achievement.labelKey);
+    const tier = achievement.tier;
+    const text = `🏆 Just earned the "${label}" badge (${tier}) on AEVION Bank — protect your work, earn from your art, save with purpose. https://aevion.app/bank`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Clipboard blocked — silent; user can long-press the badge text instead.
+    }
+  };
 
   return (
     <li
@@ -318,24 +333,32 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
           </div>
         </div>
         {earned ? (
-          <span
-            aria-label={t("ach.card.unlocked.aria")}
+          <button
+            type="button"
+            onClick={onShare}
+            aria-label={copied ? "Share text copied to clipboard" : `Share "${t(achievement.labelKey)}" achievement`}
+            title={copied ? "Copied!" : "Share to clipboard"}
             style={{
-              width: 24,
+              minWidth: 24,
               height: 24,
-              borderRadius: "50%",
-              background: "#059669",
+              padding: copied ? "0 8px" : 0,
+              borderRadius: copied ? 12 : "50%",
+              background: copied ? "#0d9488" : "#059669",
               color: "#fff",
+              border: "none",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 12,
+              fontSize: copied ? 10 : 12,
               fontWeight: 900,
               flexShrink: 0,
+              cursor: "pointer",
+              transition: "background 200ms ease, padding 200ms ease, border-radius 200ms ease",
+              letterSpacing: copied ? "0.04em" : 0,
             }}
           >
-            ✓
-          </span>
+            {copied ? "Copied" : "✓"}
+          </button>
         ) : null}
       </div>
       <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.45 }}>

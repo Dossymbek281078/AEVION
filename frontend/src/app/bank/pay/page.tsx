@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { QRCodeView } from "../_components/QRCode";
 import { formatCurrency, loadCurrency, type CurrencyCode } from "../_lib/currency";
@@ -19,6 +19,14 @@ import { formatCurrency, loadCurrency, type CurrencyCode } from "../_lib/currenc
 //   ?label=Lana%20K    optional friendly name to display
 
 export default function BankPayPage() {
+  return (
+    <Suspense fallback={null}>
+      <BankPayInner />
+    </Suspense>
+  );
+}
+
+function BankPayInner() {
   const { t } = useI18n();
   const search = useSearchParams();
   const [code] = useState<CurrencyCode>(() =>

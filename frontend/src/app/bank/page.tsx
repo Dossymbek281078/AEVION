@@ -49,6 +49,7 @@ import { VoiceCommand } from "./_components/VoiceCommand";
 import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
+import { NetWorthTracker } from "./_components/NetWorthTracker";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
 import { RecurringPayments } from "./_components/RecurringPayments";
 import { RoyaltyStream } from "./_components/RoyaltyStream";
@@ -307,6 +308,9 @@ function BankContent() {
             </div>
             <div id="bank-anchor-flow" style={{ scrollMarginTop: 20 }}>
               <MoneyFlowMap accountId={account.id} operations={operations} />
+            </div>
+            <div id="bank-anchor-networth" style={{ scrollMarginTop: 20 }}>
+              <NetWorthTracker account={account} operations={operations} />
             </div>
             <AccountIdCard
               accountId={account.id}

@@ -1735,6 +1735,19 @@ function AgentPanel(props: {
     setDraftPrompt(agent.customSystemPrompt ?? "");
   }, [agent.customSystemPrompt]);
 
+  // Click on a handoff badge → scroll-into-view + flash the target panel
+  const focusPanelByTag = useCallback((tag: string) => {
+    if (typeof document === "undefined") return;
+    const target = document.querySelector<HTMLElement>(`[data-mc-role="${tag}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    const prev = target.style.boxShadow;
+    target.style.boxShadow = "0 0 0 3px #fbbf24, 0 8px 32px rgba(251,191,36,0.35)";
+    setTimeout(() => {
+      target.style.boxShadow = prev;
+    }, 1200);
+  }, []);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
@@ -1773,6 +1786,7 @@ function AgentPanel(props: {
 
   return (
     <article
+      data-mc-role={ROLE_TAG[agent.role]}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -1781,6 +1795,7 @@ function AgentPanel(props: {
         background: "rgba(15,23,42,0.85)",
         minHeight: 480,
         overflow: "hidden",
+        transition: "box-shadow 220ms ease-out",
       }}
     >
       {/* Header */}
@@ -2168,14 +2183,26 @@ function AgentPanel(props: {
                   }}
                 >
                   {accent && handoffTag ? (
-                    <div
+                    <button
+                      type="button"
+                      onClick={() => focusPanelByTag(handoffTag)}
+                      title="Jump to that agent's panel"
                       style={{
+                        display: "inline-block",
+                        padding: 0,
                         fontSize: 10,
                         fontWeight: 800,
                         color: accent,
                         letterSpacing: "0.08em",
                         textTransform: "uppercase",
                         marginBottom: 4,
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        textUnderlineOffset: 3,
+                        textDecorationColor: "rgba(251,191,36,0.35)",
+                        fontFamily: "inherit",
                       }}
                     >
                       {isHandoffOut
@@ -2183,7 +2210,7 @@ function AgentPanel(props: {
                         : isHandoffIn
                         ? `↪ from @${handoffTag}`
                         : `→ @${handoffTag}`}
-                    </div>
+                    </button>
                   ) : null}
                   {renderBody}
                 </div>

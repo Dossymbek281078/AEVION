@@ -973,6 +973,214 @@ export default function PricingPage() {
         </div>
       </section>
 
+      {/* Comparison */}
+      <section style={{ marginBottom: 56 }}>
+        <h2
+          style={{
+            fontSize: 28,
+            fontWeight: 900,
+            margin: 0,
+            marginBottom: 8,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          AEVION vs альтернативы
+        </h2>
+        <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
+          Что обычно собирают по кускам — у нас под одним аккаунтом и одной подпиской.
+        </p>
+        <div
+          style={{
+            background: "#fff",
+            border: BORDER,
+            borderRadius: 14,
+            overflow: "hidden",
+            boxShadow: CARD,
+          }}
+        >
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ padding: "12px 14px", textAlign: "left", fontWeight: 800, color: "#475569", width: "26%" }}>
+                    Что нужно
+                  </th>
+                  <th style={{ padding: "12px 14px", textAlign: "center", fontWeight: 800, color: "#0d9488" }}>
+                    AEVION
+                  </th>
+                  <th style={{ padding: "12px 14px", textAlign: "center", fontWeight: 800, color: "#475569" }}>
+                    DocuSign
+                  </th>
+                  <th style={{ padding: "12px 14px", textAlign: "center", fontWeight: 800, color: "#475569" }}>
+                    Stripe
+                  </th>
+                  <th style={{ padding: "12px 14px", textAlign: "center", fontWeight: 800, color: "#475569" }}>
+                    OpenAI
+                  </th>
+                  <th style={{ padding: "12px 14px", textAlign: "center", fontWeight: 800, color: "#475569" }}>
+                    Patently
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Регистрация цифровой собственности", "✓", "—", "—", "—", "✓"],
+                  ["Цифровая подпись и проверка целостности", "✓", "✓", "—", "—", "—"],
+                  ["AI-движок (LLM, агенты)", "✓", "—", "—", "✓", "—"],
+                  ["Платёжное ядро / off-line сделки", "✓", "—", "✓", "—", "—"],
+                  ["Электронное патентное бюро", "✓", "—", "—", "—", "✓"],
+                  ["Карта мира и реестр объектов", "✓", "—", "—", "—", "—"],
+                  ["Единая подписка на всё", "✓", "—", "—", "—", "—"],
+                  ["Открытое API + OpenAPI", "✓", "✓", "✓", "✓", "—"],
+                  [
+                    "Сравнимая цена (Pro)",
+                    "$19/мес",
+                    "$25/мес",
+                    "%/транз",
+                    "$20/мес",
+                    "$59/мес",
+                  ],
+                ].map((row, i) => (
+                  <tr
+                    key={i}
+                    style={{
+                      borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)",
+                    }}
+                  >
+                    <td style={{ padding: "10px 14px", fontWeight: 700 }}>{row[0]}</td>
+                    {row.slice(1).map((cell, j) => (
+                      <td
+                        key={j}
+                        style={{
+                          padding: "10px 14px",
+                          textAlign: "center",
+                          fontWeight: cell === "✓" ? 800 : 600,
+                          color:
+                            j === 0 && cell === "✓"
+                              ? "#0d9488"
+                              : cell === "✓"
+                                ? "#475569"
+                                : cell === "—"
+                                  ? "#cbd5e1"
+                                  : "#0f172a",
+                          fontSize: cell === "✓" || cell === "—" ? 16 : 12,
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div
+            style={{
+              padding: "10px 14px",
+              fontSize: 11,
+              color: "#94a3b8",
+              borderTop: "1px solid rgba(15,23,42,0.05)",
+              background: "#f8fafc",
+            }}
+          >
+            Цены конкурентов — публичные тарифы базовой подписки на момент публикации; могут отличаться в вашем регионе.
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section style={{ marginBottom: 56 }}>
+        <h2
+          style={{
+            fontSize: 28,
+            fontWeight: 900,
+            margin: 0,
+            marginBottom: 8,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Вопросы и ответы
+        </h2>
+        <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
+          Самое частое — здесь. Если нет ответа, напишите{" "}
+          <a href="mailto:hello@aevion.io" style={{ color: "#0d9488", fontWeight: 700 }}>
+            hello@aevion.io
+          </a>
+          .
+        </p>
+        <div>
+          {[
+            {
+              q: "Как считается биллинг при смене тарифа?",
+              a: "Пропорционально дням. При апгрейде — кредит за неиспользованное на старом тарифе автоматически зачитывается. При даунгрейде — кредит остаётся на счёте до следующего цикла.",
+            },
+            {
+              q: "Можно ли купить только один модуль без тарифа?",
+              a: "Любой add-on модуль покупается поверх Free тарифа. Получаете нужный модуль без переплаты за все остальные.",
+            },
+            {
+              q: "Что если хочется AI Suite + IP Suite вместе?",
+              a: "Берите Business — там оба контура включены без отдельных бандлов. Сэкономите ~$20/мес против покупки бандлов поверх Pro.",
+            },
+            {
+              q: "Поддерживается ли on-premise установка?",
+              a: "Только для Enterprise. Включает Docker / Kubernetes артефакты, runbook, аудит. Минимальный контракт — 12 мес.",
+            },
+            {
+              q: "Где хранятся данные?",
+              a: "По умолчанию — EU (Frankfurt) + RU/KZ зеркала для локализации. Для Enterprise — выбор региона или ваш VPC.",
+            },
+            {
+              q: "Есть ли образовательный тариф?",
+              a: "Free покрывает 95% студенческих сценариев. Для университетов и хакатонов — связывайтесь, делаем sponsorship-аккаунты.",
+            },
+            {
+              q: "Можно ли отменить и забрать данные?",
+              a: "Да. Экспорт всех ваших QRight-объектов и QSign-подписей в JSON/PDF — кнопка в личном кабинете. После отмены — 30 дней grace period, затем soft-delete с возможностью восстановления ещё 60 дней.",
+            },
+            {
+              q: "Чем AEVION лучше связки DocuSign + OpenAI + Stripe?",
+              a: "Единый аккаунт, единый биллинг, единый аудит. Одна подпись = одна запись в реестре, одна оплата — связана. Модули знают друг про друга: AI-агент видит подпись, подпись видит платёж, реестр видит всё.",
+            },
+          ].map((f, i) => (
+            <details
+              key={i}
+              style={{
+                background: "#fff",
+                border: BORDER,
+                borderRadius: 10,
+                marginBottom: 8,
+                padding: "14px 18px",
+                cursor: "pointer",
+              }}
+            >
+              <summary
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                {f.q}
+              </summary>
+              <p
+                style={{
+                  margin: 0,
+                  marginTop: 10,
+                  fontSize: 13,
+                  color: "#475569",
+                  lineHeight: 1.6,
+                }}
+              >
+                {f.a}
+              </p>
+            </details>
+          ))}
+        </div>
+      </section>
+
       {/* Notes / FAQ light */}
       <section style={{ marginBottom: 40 }}>
         <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, marginBottom: 12 }}>Условия</h3>

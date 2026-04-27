@@ -1431,13 +1431,51 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res) => {
     }
   }
 });
-/* GET /api/pipeline/health */
-pipelineRouter.get("/health", (_req, res) => {
-  res.json({
+/* GET /api/pipeline/health
+ *
+ * Operational signal for status pages and uptime monitors. ok=true only
+ * when storage round-trips. crypto.usingDefaultSecret flags the dev
+ * QSIGN_SECRET so prod environments can wire a paging rule on it.
+ */
+const HEALTH_BOOT_TS = Date.now();
+
+pipelineRouter.get("/health", async (_req, res) => {
+  let storageOk = true;
+  let certificateCount: number | null = null;
+  let lastProtectedAt: string | null = null;
+  let mode: "postgres" | "memory" = "memory";
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+    mode = useDb ? "postgres" : "memory";
+    if (useDb) {
+      const r = await pool.query(
+        `SELECT COUNT(*)::int AS c, MAX("protectedAt") AS last FROM "IPCertificate" WHERE "status" = 'active'`
+      );
+      certificateCount = Number(r.rows?.[0]?.c ?? 0);
+      const last = r.rows?.[0]?.last;
+      lastProtectedAt = last ? new Date(last).toISOString() : null;
+    } else {
+      const list = memListCertificates({ limit: 5000, sort: "recent" });
+      certificateCount = list.length;
+      lastProtectedAt = list[0]?.protectedAt ?? null;
+    }
+  } catch (err: unknown) {
+    storageOk = false;
+    console.error("[Pipeline] /health storage check failed:", err instanceof Error ? err.message : err);
+  }
+
+  res.status(storageOk ? 200 : 503).json({
     service: "AEVION IP Pipeline",
-    ok: true,
+    ok: storageOk,
+    storage: { mode, ok: storageOk, certificateCount, lastProtectedAt },
+    crypto: {
+      usingDefaultSecret: SIGN_SECRET === "dev-qsign-secret",
+      algorithms: ["SHA-256", "HMAC-SHA256", "Ed25519", "Shamir's Secret Sharing 2-of-3"],
+    },
     steps: ["qright-registration", "qsign-hmac", "quantum-shield-ed25519-sss", "certificate-issuance"],
     legalFrameworks: ["Berne Convention", "WIPO Copyright Treaty", "TRIPS Agreement", "eIDAS", "ESIGN Act", "KZ Digital Signature Law"],
+    uptimeSeconds: Math.round((Date.now() - HEALTH_BOOT_TS) / 1000),
     at: new Date().toISOString(),
   });
 });

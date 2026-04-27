@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { InstallBanner } from "../_components/InstallBanner";
 import {
   achievementStats,
   evaluateAchievements,
@@ -275,6 +276,8 @@ export default function NotificationsPage() {
             : t("notifications.subtitleEmpty")}
         </div>
       </header>
+
+      <InstallBanner />
 
       {items.length === 0 ? (
         <div

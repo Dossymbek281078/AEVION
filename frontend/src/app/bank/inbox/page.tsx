@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { InstallBanner } from "../_components/InstallBanner";
 import { listAccounts, listOperations } from "../_lib/api";
 import { loadAdvance } from "../_lib/advance";
 import { formatCurrency, loadCurrency, type CurrencyCode } from "../_lib/currency";
@@ -252,6 +253,8 @@ export default function BankInboxPage() {
               : t("inbox.subtitle", { n: items.length })}
         </div>
       </header>
+
+      <InstallBanner />
 
       {items.length === 0 ? (
         <EmptyState t={t} />

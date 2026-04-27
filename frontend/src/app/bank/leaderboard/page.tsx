@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { InstallBanner } from "../_components/InstallBanner";
 import { formatCurrency, loadCurrency, type CurrencyCode } from "../_lib/currency";
 import { pick, seeded } from "../_lib/random";
 import { TIER_COLOR, TIER_LABEL, type ReferralTier } from "../_lib/referrals";
@@ -73,6 +74,8 @@ export default function LeaderboardPage() {
           {t("leaderboard.subtitle")}
         </div>
       </header>
+
+      <InstallBanner />
 
       <div role="tablist" aria-label="Leaderboard category" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {TABS.map((tt) => (

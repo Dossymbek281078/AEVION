@@ -2544,6 +2544,7 @@ export default function Globus3D({
               pointerEvents: "none",
               width: 280,
               zIndex: 6,
+              animation: "aev-hover-card-in 160ms ease-out",
             }}
           >
             <div
@@ -2848,7 +2849,17 @@ export default function Globus3D({
           animation: "aev-globus-spin 5s linear infinite",
         }}
       />
-      <style>{`@keyframes aev-globus-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes aev-globus-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes aev-focus-card-in {
+          from { opacity: 0; transform: translateX(-50%) translateY(14px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes aev-hover-card-in {
+          from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)); }
+          to   { opacity: 1; transform: translate(-50%, calc(-100% - 14px)); }
+        }
+      `}</style>
 
       {/* Sparse marker labels — постоянные подписи над focus/award (без ховера). */}
       {!initError
@@ -2934,6 +2945,7 @@ export default function Globus3D({
               width: "calc(100% - 100px)",
               maxWidth: 360,
               zIndex: 7,
+              animation: "aev-focus-card-in 240ms ease-out",
             }}
           >
             <div

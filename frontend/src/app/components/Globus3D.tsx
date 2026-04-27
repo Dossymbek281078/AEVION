@@ -248,6 +248,12 @@ export default function Globus3D({
     focusedRef.current = focused;
   }, [focused]);
 
+  const [tour, setTour] = useState(false);
+  const tourRef = useRef(tour);
+  useEffect(() => {
+    tourRef.current = tour;
+  }, [tour]);
+
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | MarkerCategory>("all");
@@ -1017,6 +1023,8 @@ export default function Globus3D({
     };
 
     const onPointerDown = (ev: PointerEvent) => {
+      // Юзер взял управление — отключаем тур.
+      if (tourRef.current) setTour(false);
       activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       if (activePointers.size === 1) {
         dragging = true;
@@ -1287,6 +1295,7 @@ export default function Globus3D({
     pitchRef.current = DEFAULT_PITCH;
     distanceRef.current = DEFAULT_DIST;
     setFocused(null);
+    setTour(false);
   };
 
   const focusOnMarker = (m: Marker) => {
@@ -1312,20 +1321,47 @@ export default function Globus3D({
     focusMarkerRef.current = focusOnMarker;
   });
 
-  /** ESC закрывает focus-режим. */
+  /** ESC закрывает focus-режим и тур. */
   useEffect(() => {
-    if (!focused) return;
+    if (!focused && !tour) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         targetYawRef.current = null;
         targetPitchRef.current = null;
         targetDistRef.current = null;
         setFocused(null);
+        setTour(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focused]);
+  }, [focused, tour]);
+
+  /** Tour mode — последовательный focus по приоритету. */
+  const tourQueue = useMemo(() => {
+    const order: Record<string, number> = {
+      focus: 0,
+      award: 1,
+      product: 2,
+      infra: 3,
+      qright: 4,
+    };
+    return [...markers]
+      .filter((m) => m.type === "project")
+      .sort((a, b) => (order[a.category] ?? 9) - (order[b.category] ?? 9));
+  }, [markers]);
+
+  useEffect(() => {
+    if (!tour) return;
+    if (tourQueue.length === 0) return;
+    let idx = 0;
+    focusMarkerRef.current(tourQueue[0]);
+    const tick = window.setInterval(() => {
+      idx = (idx + 1) % tourQueue.length;
+      focusMarkerRef.current(tourQueue[idx]);
+    }, 3200);
+    return () => window.clearInterval(tick);
+  }, [tour, tourQueue]);
   const zoom = (factor: number) => {
     distanceRef.current = Math.max(
       MIN_DIST,
@@ -1665,6 +1701,19 @@ export default function Globus3D({
             }}
           >
             {autoRotate ? "❚❚" : "▶"}
+          </button>
+          <button
+            type="button"
+            title={tour ? "Stop tour" : "Auto-tour"}
+            aria-label={tour ? "Stop tour" : "Auto-tour"}
+            onClick={() => setTour((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: tour ? "rgba(124,58,237,0.85)" : ctrlBtn.background,
+              borderColor: tour ? "rgba(196,181,253,0.6)" : ctrlBtn.border as string,
+            }}
+          >
+            {tour ? "■" : "▷"}
           </button>
           <button
             type="button"

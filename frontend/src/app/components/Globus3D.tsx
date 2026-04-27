@@ -1280,6 +1280,46 @@ export default function Globus3D({
 
       updateCamera();
 
+      // Keyboard-selected outline — следует за выбранным маркером.
+      {
+        const sel = kbSelectedKeyRef.current;
+        const outlineEl = kbOutlineRef.current;
+        if (outlineEl) {
+          if (!sel) {
+            if (outlineEl.style.display !== "none")
+              outlineEl.style.display = "none";
+          } else {
+            const item = markerMeshesRef.current.find(
+              (x) => x.marker.key === sel,
+            );
+            if (!item || !item.mesh.visible) {
+              if (outlineEl.style.display !== "none")
+                outlineEl.style.display = "none";
+            } else {
+              const cw = canvas.clientWidth;
+              const ch = canvas.clientHeight;
+              const camDir = camera.position.clone().normalize();
+              const tmp = new THREE.Vector3();
+              const tmpDir = new THREE.Vector3();
+              item.mesh.getWorldPosition(tmp);
+              tmpDir.copy(tmp).normalize();
+              const facing = tmpDir.dot(camDir);
+              if (facing < 0.05) {
+                if (outlineEl.style.display !== "none")
+                  outlineEl.style.display = "none";
+              } else {
+                tmp.project(camera);
+                const sx = (tmp.x * 0.5 + 0.5) * cw;
+                const sy = (-tmp.y * 0.5 + 0.5) * ch;
+                outlineEl.style.display = "block";
+                outlineEl.style.left = `${sx}px`;
+                outlineEl.style.top = `${sy}px`;
+              }
+            }
+          }
+        }
+      }
+
       // Sparse-метки над focus/award маркерами — backside cull + screen project.
       if (sparseLabelsRef.current.size > 0) {
         const cw = canvas.clientWidth;
@@ -1409,6 +1449,100 @@ export default function Globus3D({
     focusMarkerRef.current = focusOnMarker;
   });
 
+  /** Keyboard nav: стрелки = поворот, +/- = zoom, Tab/Shift+Tab = марк, Enter = focus. */
+  const [kbSelectedKey, setKbSelectedKey] = useState<string | null>(null);
+  const kbSelectedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    kbSelectedKeyRef.current = kbSelectedKey;
+  }, [kbSelectedKey]);
+  const kbOutlineRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          (target as HTMLElement).isContentEditable);
+      if (isEditable) return;
+
+      const kRot = 0.07;
+      let handled = true;
+      switch (e.key) {
+        case "ArrowLeft":
+          yawRef.current -= kRot;
+          break;
+        case "ArrowRight":
+          yawRef.current += kRot;
+          break;
+        case "ArrowUp":
+          pitchRef.current = Math.max(
+            MIN_PITCH,
+            Math.min(MAX_PITCH, pitchRef.current + kRot),
+          );
+          break;
+        case "ArrowDown":
+          pitchRef.current = Math.max(
+            MIN_PITCH,
+            Math.min(MAX_PITCH, pitchRef.current - kRot),
+          );
+          break;
+        case "+":
+        case "=":
+          distanceRef.current = Math.max(
+            MIN_DIST,
+            Math.min(MAX_DIST, distanceRef.current * 0.9),
+          );
+          break;
+        case "-":
+        case "_":
+          distanceRef.current = Math.max(
+            MIN_DIST,
+            Math.min(MAX_DIST, distanceRef.current / 0.9),
+          );
+          break;
+        case "Tab": {
+          const visible = markerMeshesRef.current.filter(
+            (x) => x.mesh.visible,
+          );
+          if (visible.length === 0) {
+            handled = false;
+            break;
+          }
+          const curIdx = visible.findIndex(
+            (x) => x.marker.key === kbSelectedKey,
+          );
+          const next = e.shiftKey
+            ? (curIdx <= 0 ? visible.length - 1 : curIdx - 1)
+            : (curIdx === -1 || curIdx >= visible.length - 1 ? 0 : curIdx + 1);
+          setKbSelectedKey(visible[next].marker.key);
+          break;
+        }
+        case "Enter":
+        case " ": {
+          if (!kbSelectedKey) {
+            handled = false;
+            break;
+          }
+          const item = markerMeshesRef.current.find(
+            (x) => x.marker.key === kbSelectedKey,
+          );
+          if (item) focusMarkerRef.current(item.marker);
+          break;
+        }
+        default:
+          handled = false;
+      }
+      if (handled) {
+        e.preventDefault();
+        persistViewRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [kbSelectedKey]);
+
   /** ESC закрывает focus-режим и тур. */
   useEffect(() => {
     if (!focused && !tour) return;
@@ -1460,12 +1594,14 @@ export default function Globus3D({
   return (
     <div
       role="region"
-      aria-label="AEVION ecosystem 3D globe — drag to rotate, scroll to zoom"
+      aria-label="AEVION ecosystem 3D globe — drag to rotate, scroll to zoom, arrow keys, Tab between markers, Enter to focus"
+      tabIndex={0}
       style={{
         position: "relative",
         width: "100%",
         minHeight: globeHeight,
         height: globeHeight,
+        outline: "none",
       }}
     >
       <div
@@ -2148,6 +2284,29 @@ export default function Globus3D({
           </button>
         </div>
       ) : null}
+
+      {/* Keyboard-focused marker outline — single overlay, передвигаемый в animate. */}
+      <div
+        ref={kbOutlineRef}
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 26,
+          height: 26,
+          marginLeft: -13,
+          marginTop: -13,
+          borderRadius: "50%",
+          border: "2px dashed #f1f5ff",
+          boxShadow: "0 0 0 4px rgba(241,245,255,0.18), 0 0 22px rgba(241,245,255,0.5)",
+          pointerEvents: "none",
+          display: "none",
+          zIndex: 4,
+          animation: "aev-globus-spin 5s linear infinite",
+        }}
+      />
+      <style>{`@keyframes aev-globus-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
       {/* Sparse marker labels — постоянные подписи над focus/award (без ховера). */}
       {!initError

@@ -5,13 +5,13 @@ Continuation of [`AEVION_HANDOFF_2026-04-24.md`](./AEVION_HANDOFF_2026-04-24.md)
 ## Состояние
 
 - **Branch:** `feat/bureau-v2`, all commits pushed to `origin`.
-- **HEAD:** `3bebd66` "fix API quickstart curl base + set metadataBase".
-- **Build:** `cd frontend ; npx tsc --noEmit` exit 0; `npm run build` prerenders 25 routes (added `/bureau/opengraph-image` and `/verify/[id]/opengraph-image` edge routes).
+- **HEAD:** `a00b30f` "ETag + 304 on /badge/:certId SVG".
+- **Build:** frontend `tsc --noEmit` exit 0 + `next build` prerenders 25 routes; backend `tsc --noEmit` exit 0.
 - **PR в `main`:** не открыт (gh CLI не установлен — открывать через web).
 
-## Что доехало в этот заход (18 коммитов)
+## Что доехало в этот заход (23 коммита)
 
-> Дополнительно к первоначальному списку из 9 (ниже): `de5f0c0` live embed playground; `5b2ca94` a11y globals; `aa21800` /bureau OG image edge route; `d39aa73` /verify per-cert OG image; `476e5eb` sitemap.ts + robots.ts; `1e95e60` API quickstart curl recipes; `3bebd66` apiUrl assert fix + metadataBase. Все pushed.
+> Дополнительно к первоначальному списку из 9 (ниже): `de5f0c0` live embed playground; `5b2ca94` a11y globals; `aa21800` /bureau OG image edge route; `d39aa73` /verify per-cert OG image; `476e5eb` sitemap.ts + robots.ts; `1e95e60` API quickstart curl recipes; `3bebd66` apiUrl assert fix + metadataBase; `5d5aaa1` POST /api/pipeline/protect-batch backend; `459958b` API quickstart picks up batch recipe; `000a174` ETag + 304 на /bureau/anchor + /bureau/snapshot.json; `a00b30f` ETag + 304 на /badge/:certId. Все pushed.
 
 1. **`31265bf` surface signature reasons + seed badge in /verify** — выполнен пункт #2 из next-steps `AEVION_HANDOFF_2026-04-24`. Verify-страница теперь показывает HMAC-SHA256 / Ed25519 valid / mismatch pill'ы и reason-чипы (`seed`, `mismatch`, `not_checked`, `error: …`); в заголовке Cryptographic Proof оранжевый «Seed» когда сертификат из in-memory store. `allChecksPass` требует HMAC + Ed25519 пройти (fail-open на undefined для совместимости).
 2. **`67392a1` download artifacts + verify-another input on /verify** — три прямые ссылки в новом блоке Download artifacts: PDF (`/api/pipeline/certificate/:id/pdf`), badge SVG (`/api/pipeline/badge/:id`), raw verify JSON. Внизу страницы — input «Verify another certificate» c роутом `/verify/<id>` через `useRouter`.
@@ -26,11 +26,11 @@ Continuation of [`AEVION_HANDOFF_2026-04-24.md`](./AEVION_HANDOFF_2026-04-24.md)
 ## Что ещё открыто
 
 - **Postgres smoke** — нужен живой PG + `DATABASE_URL`, не сделано in-memory. Не блокировано фронтом.
-- **OG-image PNG endpoint** для сертификатов (нужен `@vercel/og` или `sharp`) — статика fallback'ит на summary card.
-- **Batch protect UI** на `/qright` (multi-file `POST /protect` flow) — у нас batch *checker*, не batch protect.
+- ~~**OG-image PNG endpoint**~~ — DONE this session via `next/og` ImageResponse on `/bureau/opengraph-image` and `/verify/[id]/opengraph-image` (no `@vercel/og` dep needed since Next 16 ships it built-in).
+- **Batch protect UI** на `/qright` — backend (`POST /api/pipeline/protect-batch`) DONE this session (`5d5aaa1`); UI остаётся за `/qright` сессией согласно scope rules.
 - **Email/webhook notifications** на новые верификации.
-- **Inline API playground** на `/bureau`.
-- **PR в main** — открыть через web (https://github.com/Dossymbek281078/AEVION/pull/new/feat/bureau-v2). Все 9 фич + предыдущий состав задокументированы; конфликтов с `main` ожидаемо нет (за этой ветке только bureau/verify/pipeline files).
+- ~~**Inline API playground**~~ — DONE this session via copyable curl recipes on `/bureau` (`1e95e60` + `459958b` подхватил `/protect-batch`).
+- **PR в main** — открыть через web (https://github.com/Dossymbek281078/AEVION/pull/new/feat/bureau-v2). Все 23 фичи задокументированы; конфликтов с `main` ожидаемо нет (затрагивает только bureau/verify/pipeline files + sitemap/robots).
 - ~98 ESLint errors в cyberchess/awards/planet — вне Bureau scope.
 
 ## Local run reminder

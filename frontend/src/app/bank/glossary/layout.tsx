@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: "Every term, defined.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/glossary" },
 };
 
 export default function GlossaryLayout({ children }: { children: React.ReactNode }) {

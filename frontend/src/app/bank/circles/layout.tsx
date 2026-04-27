@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: "Group circles for shared payments.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/circles" },
 };
 
 export default function CirclesLayout({ children }: { children: React.ReactNode }) {

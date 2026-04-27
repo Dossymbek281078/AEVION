@@ -15,8 +15,37 @@ export const metadata: Metadata = {
     description: "Defence in depth, not paperwork.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/security" },
+};
+
+const articleJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  headline: "Defence in depth, not paperwork",
+  name: "AEVION Bank Security Model",
+  description:
+    "How AEVION Bank protects your money: biometric guards, Ed25519 signatures via QSign, on-device storage, anomaly detection, full data export.",
+  inLanguage: ["en", "ru", "kk"],
+  about: ["Security", "Ed25519", "WebAuthn", "QSign", "AEVION Bank"],
+  publisher: {
+    "@type": "Organization",
+    name: "AEVION",
+    url: "https://aevion.app",
+  },
+  mainEntityOfPage: {
+    "@type": "WebPage",
+    "@id": "https://aevion.app/bank/security",
+  },
 };
 
 export default function SecurityLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+      />
+      {children}
+    </>
+  );
 }

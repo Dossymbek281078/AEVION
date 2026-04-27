@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: "Where your money goes.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/insights" },
 };
 
 export default function InsightsLayout({ children }: { children: React.ReactNode }) {

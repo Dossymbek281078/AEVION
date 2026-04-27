@@ -15,8 +15,33 @@ export const metadata: Metadata = {
     description: "Reputation-gated credit, computed across 8 factors.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/trust" },
+};
+
+const articleJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  headline: "Reputation, computed.",
+  name: "AEVION Trust Score",
+  description:
+    "How AEVION Bank computes your Trust Score across 8 factors — banking activity, network, IP portfolio, ecosystem participation. The reputation that gates credit.",
+  inLanguage: ["en", "ru", "kk"],
+  about: ["Trust Score", "Reputation", "AEVION Bank", "Credit"],
+  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  mainEntityOfPage: {
+    "@type": "WebPage",
+    "@id": "https://aevion.app/bank/trust",
+  },
 };
 
 export default function TrustLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+      />
+      {children}
+    </>
+  );
 }

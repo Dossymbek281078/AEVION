@@ -10,6 +10,7 @@ export const metadata: Metadata = {
     siteName: "AEVION",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/card" },
 };
 
 export default function CardLayout({ children }: { children: React.ReactNode }) {

@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: "Goals · Round-Up · Vault — all in one view.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/savings" },
 };
 
 export default function SavingsLayout({ children }: { children: React.ReactNode }) {

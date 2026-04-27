@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: "Five-step setup. Sixty seconds.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/onboarding" },
 };
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {

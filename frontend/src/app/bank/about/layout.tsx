@@ -15,8 +15,39 @@ export const metadata: Metadata = {
     description: "Wallet where money composes with creative work.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/about" },
+};
+
+// Schema.org Article JSON-LD — surfaces /bank/about as a published article
+// to Google with name, description, headline, and the AEVION publisher.
+const articleJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  headline: "Wallet for the trust graph",
+  name: "About AEVION Bank",
+  description:
+    "Why AEVION Bank exists: a creator-first wallet where royalties land automatically, credit is gated by Trust Score, and every social moment can carry money.",
+  inLanguage: ["en", "ru", "kk"],
+  about: ["AEVION Bank", "Trust Score", "Creator economy"],
+  publisher: {
+    "@type": "Organization",
+    name: "AEVION",
+    url: "https://aevion.app",
+  },
+  mainEntityOfPage: {
+    "@type": "WebPage",
+    "@id": "https://aevion.app/bank/about",
+  },
 };
 
 export default function AboutLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+      />
+      {children}
+    </>
+  );
 }

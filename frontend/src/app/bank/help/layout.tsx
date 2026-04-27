@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     description: "Plain-language answers — no FAQ archaeology.",
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "/bank/help" },
 };
 
 export default function HelpLayout({ children }: { children: React.ReactNode }) {

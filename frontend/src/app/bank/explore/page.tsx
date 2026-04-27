@@ -167,6 +167,27 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         hintKey: "explore.card.circles.hint",
       },
       {
+        href: "/bank/insights",
+        iconBg: "linear-gradient(135deg, #d97706, #db2777)",
+        iconChar: "◐",
+        titleKey: "explore.card.insights.title",
+        hintKey: "explore.card.insights.hint",
+      },
+      {
+        href: "/bank/flow",
+        iconBg: "linear-gradient(135deg, #0d9488, #f472b6)",
+        iconChar: "⤳",
+        titleKey: "explore.card.flow.title",
+        hintKey: "explore.card.flow.hint",
+      },
+      {
+        href: "/bank/onboarding",
+        iconBg: "linear-gradient(135deg, #5eead4, #0ea5e9)",
+        iconChar: "▶",
+        titleKey: "explore.card.onboarding.title",
+        hintKey: "explore.card.onboarding.hint",
+      },
+      {
         href: "/bank/r/AEDEMO?from=Lana&tier=advocate",
         iconBg: "linear-gradient(135deg, #7c3aed, #db2777)",
         iconChar: "♥",

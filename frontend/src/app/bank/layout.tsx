@@ -15,5 +15,38 @@ export const metadata: Metadata = {
 };
 
 export default function BankLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      {/* Global a11y polish for every /bank/* surface. Keyboard-only focus
+        ring (visible on Tab, hidden on mouse-click) + reduced-motion respect
+        for any svg/path/animated element. Scoped via attribute selectors so
+        it doesn't leak into other modules. */}
+      <style>{`
+        @media (prefers-reduced-motion: reduce) {
+          [data-bank-route] *,
+          [data-bank-route] *::before,
+          [data-bank-route] *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+          }
+        }
+
+        /* Visible only when the focus came from a keyboard navigation. */
+        a:focus-visible,
+        button:focus-visible,
+        input:focus-visible,
+        select:focus-visible,
+        textarea:focus-visible,
+        [role="tab"]:focus-visible,
+        [role="button"]:focus-visible {
+          outline: 2px solid #0ea5e9;
+          outline-offset: 2px;
+          border-radius: 6px;
+        }
+      `}</style>
+      <div data-bank-route>{children}</div>
+    </>
+  );
 }

@@ -47,6 +47,8 @@ type Agent = {
   title: string;
   messages: ChatMsg[];
   busy: boolean;
+  /** When set, replaces ROLE_SYSTEM_PROMPT[role] for this agent only. */
+  customSystemPrompt?: string;
 };
 
 type ProviderInfo = {
@@ -193,6 +195,62 @@ function parseMention(raw: string): { role: Role | null; body: string } {
   const role = MENTION_ALIAS[key] ?? null;
   if (!role) return { role: null, body: raw };
   return { role, body: m[2].trim() };
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Export a single agent's conversation as Markdown or JSON download
+ * ────────────────────────────────────────────────────────────── */
+
+function exportConversation(agent: Agent, format: "md" | "json") {
+  if (typeof window === "undefined") return;
+  let content = "";
+  let mime = "text/plain";
+
+  if (format === "json") {
+    content = JSON.stringify(
+      {
+        role: agent.role,
+        title: agent.title,
+        provider: agent.provider,
+        model: agent.model,
+        customSystemPrompt: agent.customSystemPrompt ?? null,
+        messages: agent.messages,
+        exportedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    );
+    mime = "application/json";
+  } else {
+    const lines: string[] = [
+      `# ${agent.title}`,
+      "",
+      `- **Role:** ${agent.role}`,
+      `- **Provider:** ${agent.provider}`,
+      `- **Model:** ${agent.model}`,
+      `- **Exported:** ${new Date().toISOString()}`,
+    ];
+    if (agent.customSystemPrompt?.trim()) {
+      lines.push(`- **System prompt:** custom (overrides default)`);
+    }
+    lines.push("", "---", "");
+    for (const m of agent.messages) {
+      const author = m.role === "user" ? "**You**" : `**${agent.role}**`;
+      lines.push(author, "", m.content, "", "---", "");
+    }
+    content = lines.join("\n");
+    mime = "text/markdown";
+  }
+
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `multichat-${agent.role.toLowerCase().replace(/\W/g, "")}-${Date.now()}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -357,8 +415,8 @@ export default function MultichatEnginePage() {
 
   /* Compose role system prompt + user context block */
   const buildSystemPrompt = useCallback(
-    (role: Role): string => {
-      const base = ROLE_SYSTEM_PROMPT[role];
+    (agent: Agent): string => {
+      const base = agent.customSystemPrompt?.trim() || ROLE_SYSTEM_PROMPT[agent.role];
       if (!ctxEnabled || !userCtx) return base;
       const lines: string[] = [
         "AEVION USER CONTEXT (the human you are talking to has a real account on AEVION):",
@@ -575,7 +633,7 @@ export default function MultichatEnginePage() {
           { role: "user" as const, content: inboundMsg },
         ];
 
-        const { reply } = await callChat(target.role, buildSystemPrompt(target.role), target.provider, target.model, targetHistory);
+        const { reply } = await callChat(target.role, buildSystemPrompt(target), target.provider, target.model, targetHistory);
 
         // 3) Append assistant reply in TARGET (normal)
         setAgents((curS) =>
@@ -651,7 +709,7 @@ export default function MultichatEnginePage() {
       );
       if (!snapshot) return;
 
-      const { reply } = await callChat(snapshot.role, buildSystemPrompt(snapshot.role), snapshot.provider, snapshot.model, snapshot.messages);
+      const { reply } = await callChat(snapshot.role, buildSystemPrompt(snapshot), snapshot.provider, snapshot.model, snapshot.messages);
 
       setAgents((curS) =>
         curS.map((a) => {
@@ -1227,7 +1285,14 @@ function AgentPanel(props: {
 }) {
   const { agent, providers, onChange, onClose, onSend } = props;
   const [input, setInput] = useState("");
+  const [editingPrompt, setEditingPrompt] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState(agent.customSystemPrompt ?? "");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync local draft if the agent's stored custom prompt changes externally
+  useEffect(() => {
+    setDraftPrompt(agent.customSystemPrompt ?? "");
+  }, [agent.customSystemPrompt]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -1415,6 +1480,173 @@ function AgentPanel(props: {
           ×
         </button>
       </header>
+
+      {/* Per-panel toolbar: edit-prompt + export */}
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          padding: "6px 10px",
+          borderBottom: "1px solid rgba(51,65,85,0.4)",
+          background: "rgba(2,6,23,0.45)",
+          fontSize: 11,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setEditingPrompt((v) => !v)}
+          title="Edit this agent's system prompt"
+          style={{
+            padding: "3px 8px",
+            borderRadius: 6,
+            border: `1px solid ${agent.customSystemPrompt?.trim() ? "rgba(251,191,36,0.5)" : "rgba(148,163,184,0.25)"}`,
+            background: agent.customSystemPrompt?.trim()
+              ? "rgba(251,191,36,0.12)"
+              : "rgba(15,23,42,0.55)",
+            color: agent.customSystemPrompt?.trim() ? "#fbbf24" : "#94a3b8",
+            cursor: "pointer",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+          }}
+        >
+          ✎ Prompt{agent.customSystemPrompt?.trim() ? " · custom" : ""}
+        </button>
+        <button
+          type="button"
+          onClick={() => exportConversation(agent, "md")}
+          disabled={agent.messages.length === 0}
+          title="Export conversation as Markdown"
+          style={{
+            padding: "3px 8px",
+            borderRadius: 6,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: "rgba(15,23,42,0.55)",
+            color: agent.messages.length === 0 ? "#475569" : "#cbd5e1",
+            cursor: agent.messages.length === 0 ? "not-allowed" : "pointer",
+            fontWeight: 700,
+          }}
+        >
+          ↓ MD
+        </button>
+        <button
+          type="button"
+          onClick={() => exportConversation(agent, "json")}
+          disabled={agent.messages.length === 0}
+          title="Export conversation as JSON"
+          style={{
+            padding: "3px 8px",
+            borderRadius: 6,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: "rgba(15,23,42,0.55)",
+            color: agent.messages.length === 0 ? "#475569" : "#cbd5e1",
+            cursor: agent.messages.length === 0 ? "not-allowed" : "pointer",
+            fontWeight: 700,
+            fontFamily: "ui-monospace, SFMono-Regular, monospace",
+          }}
+        >
+          ↓ JSON
+        </button>
+        <span style={{ marginLeft: "auto", color: "#475569", fontSize: 10 }}>
+          {agent.messages.length} msg{agent.messages.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {/* Inline system-prompt editor */}
+      {editingPrompt ? (
+        <div
+          style={{
+            padding: 10,
+            borderBottom: "1px solid rgba(51,65,85,0.4)",
+            background: "rgba(2,6,23,0.55)",
+          }}
+        >
+          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 6, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            System prompt for this agent
+          </div>
+          <textarea
+            value={draftPrompt}
+            onChange={(e) => setDraftPrompt(e.target.value)}
+            placeholder={ROLE_SYSTEM_PROMPT[agent.role]}
+            rows={4}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: 8,
+              borderRadius: 8,
+              border: "1px solid rgba(148,163,184,0.25)",
+              background: "rgba(15,23,42,0.7)",
+              color: "#f8fafc",
+              fontSize: 12,
+              lineHeight: 1.4,
+              fontFamily: "inherit",
+              resize: "vertical",
+              outline: "none",
+            }}
+          />
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                onChange({ customSystemPrompt: draftPrompt.trim() || undefined });
+                setEditingPrompt(false);
+              }}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(94,234,212,0.45)",
+                background: "linear-gradient(135deg, rgba(13,148,136,0.5), rgba(14,165,233,0.45))",
+                color: "#fff",
+                cursor: "pointer",
+                fontWeight: 800,
+                fontSize: 11,
+                letterSpacing: "0.04em",
+              }}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftPrompt("");
+                onChange({ customSystemPrompt: undefined });
+                setEditingPrompt(false);
+              }}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(148,163,184,0.25)",
+                background: "rgba(15,23,42,0.55)",
+                color: "#94a3b8",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 11,
+              }}
+            >
+              Reset to default
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftPrompt(agent.customSystemPrompt ?? "");
+                setEditingPrompt(false);
+              }}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(148,163,184,0.25)",
+                background: "transparent",
+                color: "#94a3b8",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 11,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Messages */}
       <div

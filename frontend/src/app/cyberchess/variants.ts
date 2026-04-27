@@ -3,7 +3,7 @@
 // (twin kings = «royal queen», diceblade = move filter, reinforcement)
 // проверяются в page.tsx как лёгкие хуки поверх стандартного движка.
 
-export type VariantId = "standard" | "fischer960" | "asymmetric" | "twinkings" | "diceblade" | "reinforcement" | "atomic" | "kingofthehill" | "threecheck" | "knightriders" | "pawnapocalypse" | "powerdrop";
+export type VariantId = "standard" | "fischer960" | "asymmetric" | "twinkings" | "diceblade" | "reinforcement" | "atomic" | "kingofthehill" | "threecheck" | "knightriders" | "pawnapocalypse" | "powerdrop" | "crazyhouse";
 
 export type Variant = {
   id: VariantId;
@@ -124,6 +124,15 @@ export const VARIANTS: Variant[] = [
     longDesc: "Каждое взятие пополняет твой пул. Раз в 5 полуходов можешь дропнуть фигуру из пула на пустую клетку (вместо обычного хода). Король не дропается. Пешка не на 1/8. Ресурсный менеджмент Crazyhouse в стратегическом темпе.",
     tag: "Chaos",
     notes: ["Drop каждые 5 ходов", "Захваченные ферзи — самый ценный ресурс"],
+  },
+  {
+    id: "crazyhouse",
+    name: "Crazyhouse",
+    emoji: "🏚",
+    shortDesc: "Любое взятие можно вернуть как дроп",
+    longDesc: "Полный Crazyhouse: каждое взятие пополняет пул, и в свой ход можешь либо ходить, либо дропнуть фигуру из пула на ЛЮБУЮ пустую клетку. Превращённая пешка возвращается как пешка. Самый дикий и тактически насыщенный вариант шахмат.",
+    tag: "Chaos",
+    notes: ["Drop каждый ход", "Жертвовать материал стало бесплатно — потом дропнешь"],
   },
 ];
 

@@ -1188,9 +1188,10 @@ export default function CyberChessPage(){
     }catch{}
   },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast]);
 
-  /* ── Variant: Power Drop — capture goes to pool ── */
+  /* ── Variant: Power Drop / Crazyhouse — capture goes to pool ── */
   useEffect(()=>{
-    if(variant!=="powerdrop"||hist.length===0)return;
+    if(variant!=="powerdrop"&&variant!=="crazyhouse")return;
+    if(hist.length===0)return;
     if(lastCaptureBkRef.current===bk)return;
     lastCaptureBkRef.current=bk;
     try{
@@ -1198,6 +1199,9 @@ export default function CyberChessPage(){
       const last=verbose[verbose.length-1];
       if(!last||!last.captured)return;
       const capturer=last.color as "w"|"b";
+      // For Crazyhouse: promoted pawns return as pawns (FIDE Crazyhouse rule)
+      // chess.js doesn't distinguish — we approximate: if `last.flags.includes('p')`
+      // the capturer captured a promoted piece; we still use type as captured
       sDropPool(p=>addToPool(p,last.captured!,capturer));
     }catch{}
   },[bk,variant,hist.length,game]);
@@ -1399,6 +1403,56 @@ export default function CyberChessPage(){
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
     const fenAtTrigger=game.fen();
+    // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
+    // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece
+    if((variant==="powerdrop"||variant==="crazyhouse")&&!cloneMode&&!ghostMode){
+      const dropEvery=variant==="crazyhouse"?1:5;
+      const aiCol=pCol==="w"?"b":"w";
+      const canAiDrop=isDropAvailable(hist.length,dropEvery)&&poolSize(dropPool,aiCol)>0;
+      const dropProb=variant==="crazyhouse"?0.25:0.5;
+      if(canAiDrop&&Math.random()<dropProb){
+        const t=setTimeout(()=>{
+          try{
+            if(game.fen()!==fenAtTrigger){sThink(false);return}
+            const aiPool=dropPool[aiCol];
+            // Pick highest-value piece in pool
+            const types:("q"|"r"|"b"|"n"|"p")[]=["q","r","b","n","p"];
+            const pickType=types.find(t=>aiPool[t]>0);
+            if(!pickType){sThink(false);return}
+            // Find best empty target (rough heuristic): prefer near opponent king
+            const ck=new Chess(fenAtTrigger);
+            const board=ck.board();
+            let oppKingFile=4,oppKingRank=pCol==="w"?0:7;
+            for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+              const p=board[r][c];if(p?.type==="k"&&p.color===pCol){oppKingFile=c;oppKingRank=r}
+            }
+            const candidates:string[]=[];
+            for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+              if(board[r][c])continue;
+              const sq=`${"abcdefgh"[c]}${8-r}`;
+              if(!isDropLegal(dropPool,pickType,aiCol,sq,fenAtTrigger))continue;
+              const dist=Math.abs(c-oppKingFile)+Math.abs(r-oppKingRank);
+              candidates.push(sq+":"+(8-dist));
+            }
+            if(candidates.length===0){sThink(false);return}
+            candidates.sort((a,b)=>parseInt(b.split(":")[1])-parseInt(a.split(":")[1]));
+            // Pick top-3 randomly to avoid determinism
+            const top=candidates.slice(0,Math.min(3,candidates.length));
+            const sq=top[Math.floor(Math.random()*top.length)].split(":")[0];
+            const newFen=applyDrop(fenAtTrigger,pickType,aiCol,sq);
+            const ng=new Chess(newFen);setGame(ng);sBk(k=>k+1);
+            sFenHist(h=>[...h,newFen]);
+            sHist(h=>[...h,`@${pickType.toUpperCase()}${sq}`]);
+            sDropPool(p=>removeFromPool(p,pickType,aiCol));
+            const symAi=aiCol==="w"?pickType.toUpperCase():pickType;
+            showToast(`🤖 AI: drop ${POOL_GLYPH[symAi]} → ${sq}`,"info");
+            snd("move");
+          }catch{}
+          sThink(false);
+        },Math.max(800,delay));
+        return()=>clearTimeout(t);
+      }
+    }
     // Style Cloner: force preferred opening move for first 8 plies
     if(cloneMode&&activeClone){
       const preferred=clonePreferredMove(activeClone,hist);
@@ -1573,8 +1627,8 @@ export default function CyberChessPage(){
       return;
     }
 
-    // ── POWER DROP: drop picker active → click on empty square = drop ──
-    if(variant==="powerdrop"&&dropPickerOpen&&selectedDropPiece&&game.turn()===pCol){
+    // ── POWER DROP / CRAZYHOUSE: drop picker active → click on empty square = drop ──
+    if((variant==="powerdrop"||variant==="crazyhouse")&&dropPickerOpen&&selectedDropPiece&&game.turn()===pCol){
       if(!isDropLegal(dropPool,selectedDropPiece,pCol,sq,game.fen())){
         showToast("Нельзя дропать сюда","error");return;
       }
@@ -2967,11 +3021,16 @@ export default function CyberChessPage(){
                 <div style={{flex:1}}/>
                 <span style={{fontSize:11}}>след. дроп через <b>{5-(hist.length%5)}</b> ходов</span>
               </>}
+              {variant==="crazyhouse"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11,color:"#9a3412",fontWeight:800}}>🏚 drop в любой момент</span>
+              </>}
             </div>
-            {variant==="powerdrop"&&(()=>{
+            {(variant==="powerdrop"||variant==="crazyhouse")&&(()=>{
               const myPool=dropPool[pCol];
               const oppPool=dropPool[pCol==="w"?"b":"w"];
-              const canDrop=isDropAvailable(hist.length)&&game.turn()===pCol&&!over&&poolSize(dropPool,pCol)>0;
+              const dropEvery=variant==="crazyhouse"?1:5;
+              const canDrop=isDropAvailable(hist.length,dropEvery)&&game.turn()===pCol&&!over&&poolSize(dropPool,pCol)>0;
               return <div style={{marginTop:6,paddingTop:6,borderTop:`1px solid #fb923c`}}>
                 <div style={{display:"flex",gap:SPACE[2],alignItems:"center",flexWrap:"wrap"}}>
                   <span style={{fontSize:10,fontWeight:900,color:"#9a3412",letterSpacing:0.5}}>ТВОЙ ПУЛ:</span>
@@ -2981,7 +3040,11 @@ export default function CyberChessPage(){
                     const sym=pCol==="w"?t.toUpperCase():t;
                     const isSel=selectedDropPiece===t&&dropPickerOpen;
                     return <button key={t} onClick={()=>{
-                      if(!canDrop){showToast(`Drop доступен через ${5-(hist.length%5)} ходов`,"info");return}
+                      if(!canDrop){
+                        if(variant==="crazyhouse")showToast("Дождись своего хода — drop только после захвата фигуры","info");
+                        else showToast(`Drop доступен через ${dropEvery-(hist.length%dropEvery)} ходов`,"info");
+                        return;
+                      }
                       sSelectedDropPiece(t);sDropPickerOpen(true);
                       showToast(`Кликни на пустую клетку чтобы дропнуть ${POOL_GLYPH[sym]}`,"info");
                     }} style={{

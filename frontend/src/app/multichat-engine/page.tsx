@@ -57,6 +57,13 @@ type ProviderInfo = {
   configured: boolean;
 };
 
+type UserContext = {
+  email?: string;
+  accountId?: string;
+  balance?: number;
+  qrightCount?: number;
+};
+
 const STORAGE_KEY = "aevion_multichat_v1";
 const MAX_AGENTS = 6;
 const MAX_MESSAGES_KEPT = 50;
@@ -141,6 +148,53 @@ const titleFromMessage = (role: Role, content: string) => {
   return `${role} · ${snippet}`;
 };
 
+/* ─────────────────────────────────────────────────────────────────
+ * Cross-agent handoff via @mention
+ * Lets a user write "@finance forecast next quarter" inside a Code
+ * panel — message is forwarded to a Finance agent, reply comes back
+ * into the Code panel marked "↪ via @finance".
+ * ────────────────────────────────────────────────────────────── */
+
+const MENTION_ALIAS: Record<string, Role> = {
+  general: "General",
+  code: "Code",
+  dev: "Code",
+  engineer: "Code",
+  finance: "Finance",
+  cfo: "Finance",
+  money: "Finance",
+  legal: "IP/Legal",
+  ip: "IP/Legal",
+  iplegal: "IP/Legal",
+  lawyer: "IP/Legal",
+  compliance: "Compliance",
+  kyc: "Compliance",
+  aml: "Compliance",
+  translator: "Translator",
+  translate: "Translator",
+  tr: "Translator",
+};
+
+const ROLE_TAG: Record<Role, string> = {
+  General: "general",
+  Code: "code",
+  Finance: "finance",
+  "IP/Legal": "legal",
+  Compliance: "compliance",
+  Translator: "translator",
+};
+
+const MENTION_RE = /^@([a-zA-Z][a-zA-Z/]*)\s+([\s\S]+)$/;
+
+function parseMention(raw: string): { role: Role | null; body: string } {
+  const m = raw.match(MENTION_RE);
+  if (!m) return { role: null, body: raw };
+  const key = m[1].toLowerCase().replace(/\//g, "");
+  const role = MENTION_ALIAS[key] ?? null;
+  if (!role) return { role: null, body: raw };
+  return { role, body: m[2].trim() };
+}
+
 const makeAgent = (overrides: Partial<Agent> = {}): Agent => ({
   id: newId(),
   role: "General",
@@ -182,9 +236,112 @@ export default function MultichatEnginePage() {
     };
   }, []);
 
+  /* AEVION user context — injected into agent system prompts so
+   * every panel knows who the human is (balance, IP works, …). */
+  const [userCtx, setUserCtx] = useState<UserContext | null>(null);
+  const [ctxEnabled, setCtxEnabled] = useState(true);
+
+  useEffect(() => {
+    let token: string | null = null;
+    try {
+      token = localStorage.getItem("aevion_auth_token_v1");
+    } catch {
+      /* private mode — silently skip */
+    }
+    if (!token) return;
+
+    let cancelled = false;
+    (async () => {
+      const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+      const ctx: UserContext = {};
+
+      try {
+        const r = await fetch(apiUrl("/api/auth/me"), { headers });
+        if (r.ok) {
+          const me = await r.json();
+          ctx.email = me?.email || me?.user?.email;
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const r = await fetch(apiUrl("/api/qtrade/accounts"), { headers });
+        if (r.ok) {
+          const data = await r.json();
+          const list = Array.isArray(data?.accounts)
+            ? data.accounts
+            : Array.isArray(data)
+            ? data
+            : null;
+          if (list && list.length) {
+            const acc = list[0];
+            if (acc?.id) ctx.accountId = acc.id;
+            if (typeof acc?.balance === "number") ctx.balance = acc.balance;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const r = await fetch(apiUrl("/api/qright/objects"), { headers });
+        if (r.ok) {
+          const data = await r.json();
+          const objs = Array.isArray(data?.objects)
+            ? data.objects
+            : Array.isArray(data)
+            ? data
+            : null;
+          if (objs) ctx.qrightCount = objs.length;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (cancelled) return;
+      const hasAny =
+        ctx.email != null ||
+        ctx.balance != null ||
+        ctx.accountId != null ||
+        ctx.qrightCount != null;
+      if (hasAny) setUserCtx(ctx);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* Compose role system prompt + user context block */
+  const buildSystemPrompt = useCallback(
+    (role: Role): string => {
+      const base = ROLE_SYSTEM_PROMPT[role];
+      if (!ctxEnabled || !userCtx) return base;
+      const lines: string[] = [
+        "AEVION USER CONTEXT (the human you are talking to has a real account on AEVION):",
+      ];
+      if (userCtx.email) lines.push(`- Account email: ${userCtx.email}`);
+      if (userCtx.accountId) lines.push(`- Wallet ID: ${userCtx.accountId}`);
+      if (userCtx.balance != null)
+        lines.push(`- Current AEC balance: ${userCtx.balance.toLocaleString("en-US")}`);
+      if (userCtx.qrightCount != null)
+        lines.push(`- Registered IP works on QRight: ${userCtx.qrightCount}`);
+      lines.push(
+        "Use these facts when they are relevant to the user's question. Do not list them back unless asked."
+      );
+      return `${lines.join("\n")}\n\n${base}`;
+    },
+    [ctxEnabled, userCtx]
+  );
+
   /* Agents — restore from localStorage on mount */
   const [agents, setAgents] = useState<Agent[]>([makeAgent()]);
   const [hydrated, setHydrated] = useState(false);
+
+  /* Always-current ref for cross-agent handoff lookup */
+  const agentsRef = useRef<Agent[]>(agents);
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
 
   useEffect(() => {
     try {
@@ -258,16 +415,157 @@ export default function MultichatEnginePage() {
     setAgents([makeAgent()]);
   }, []);
 
-  /* Send message for a specific agent */
+  /* Low-level: call /api/qcoreai/chat with role+model+history, get reply */
+  const callChat = useCallback(
+    async (role: Role, systemPrompt: string, provider: string, model: string, history: ChatMsg[]): Promise<{ reply: string; demo: boolean }> => {
+      const apiMessages = [
+        { role: "system" as const, content: systemPrompt },
+        ...history.map((mm) => ({ role: mm.role, content: mm.content })),
+      ];
+      try {
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        try {
+          const t = localStorage.getItem("aevion_auth_token_v1");
+          if (t) headers.Authorization = `Bearer ${t}`;
+        } catch {
+          /* ignore */
+        }
+        const body: Record<string, unknown> = { messages: apiMessages };
+        if (provider) body.provider = provider;
+        if (model) body.model = model;
+        const res = await fetch(apiUrl("/api/qcoreai/chat"), {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        if (typeof data?.reply === "string") return { reply: data.reply, demo: false };
+        if (typeof data?.content === "string") return { reply: data.content, demo: false };
+        return { reply: JSON.stringify(data, null, 2), demo: false };
+      } catch {
+        return { reply: DEMO_REPLIES[role], demo: true };
+      }
+    },
+    []
+  );
+
+  /* Send message for a specific agent — supports @mention handoff */
   const sendMessage = useCallback(
     async (agentId: string, text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
-      // Optimistic append + busy
+      const { role: mentionRole, body: mentionBody } = parseMention(trimmed);
+      const cur = agentsRef.current;
+      const sourceAgent = cur.find((a) => a.id === agentId);
+      if (!sourceAgent) return;
+
+      const target = mentionRole
+        ? cur.find((a) => a.role === mentionRole && a.id !== agentId)
+        : null;
+
+      /* ── Handoff branch: forward to target, return reply to both ── */
+      if (mentionRole && target) {
+        // 1) Append the @mention prompt in source as user msg + mark busy
+        setAgents((curS) =>
+          curS.map((a) => {
+            if (a.id !== agentId) return a;
+            const next: ChatMsg[] = [
+              ...a.messages,
+              { role: "user" as const, content: trimmed },
+            ].slice(-MAX_MESSAGES_KEPT);
+            return {
+              ...a,
+              messages: next,
+              title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
+              busy: true,
+            };
+          })
+        );
+
+        // 2) Append in target (visible "↪ from @<src>" so target user knows context)
+        const sourceTag = ROLE_TAG[sourceAgent.role];
+        const inboundMsg = `↪ from @${sourceTag}: ${mentionBody}`;
+        setAgents((curS) =>
+          curS.map((a) => {
+            if (a.id !== target.id) return a;
+            const next: ChatMsg[] = [
+              ...a.messages,
+              { role: "user" as const, content: inboundMsg },
+            ].slice(-MAX_MESSAGES_KEPT);
+            return {
+              ...a,
+              messages: next,
+              title: a.messages.length === 0 ? titleFromMessage(a.role, mentionBody) : a.title,
+              busy: true,
+            };
+          })
+        );
+
+        // Build target history from current state (post-append) for the call
+        const targetHistory = [
+          ...target.messages,
+          { role: "user" as const, content: inboundMsg },
+        ];
+
+        const { reply } = await callChat(target.role, buildSystemPrompt(target.role), target.provider, target.model, targetHistory);
+
+        // 3) Append assistant reply in TARGET (normal)
+        setAgents((curS) =>
+          curS.map((a) => {
+            if (a.id !== target.id) return a;
+            const next: ChatMsg[] = [
+              ...a.messages,
+              { role: "assistant" as const, content: reply },
+            ].slice(-MAX_MESSAGES_KEPT);
+            return { ...a, messages: next, busy: false };
+          })
+        );
+
+        // 4) Append assistant reply in SOURCE with "↪ via @<target>" prefix
+        const targetTag = ROLE_TAG[target.role];
+        setAgents((curS) =>
+          curS.map((a) => {
+            if (a.id !== agentId) return a;
+            const next: ChatMsg[] = [
+              ...a.messages,
+              { role: "assistant" as const, content: `↪ via @${targetTag}\n${reply}` },
+            ].slice(-MAX_MESSAGES_KEPT);
+            return { ...a, messages: next, busy: false };
+          })
+        );
+        return;
+      }
+
+      /* ── Mention requested but no matching agent active ── */
+      if (mentionRole && !target) {
+        setAgents((curS) =>
+          curS.map((a) => {
+            if (a.id !== agentId) return a;
+            const next: ChatMsg[] = [
+              ...a.messages,
+              { role: "user" as const, content: trimmed },
+              {
+                role: "assistant" as const,
+                content: `No active @${ROLE_TAG[mentionRole]} agent in this window. Click "+ Spawn agent" and pick role "${mentionRole}" to enable handoff.`,
+              },
+            ].slice(-MAX_MESSAGES_KEPT);
+            return {
+              ...a,
+              messages: next,
+              title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
+              busy: false,
+            };
+          })
+        );
+        return;
+      }
+
+      /* ── Normal (no-mention) branch ── */
       let snapshot: Agent | undefined;
-      setAgents((cur) =>
-        cur.map((a) => {
+      setAgents((curS) =>
+        curS.map((a) => {
           if (a.id !== agentId) return a;
           const nextMessages: ChatMsg[] = [
             ...a.messages,
@@ -287,61 +585,20 @@ export default function MultichatEnginePage() {
       );
       if (!snapshot) return;
 
-      const systemPrompt = ROLE_SYSTEM_PROMPT[snapshot.role];
-      const apiMessages = [
-        { role: "system" as const, content: systemPrompt },
-        ...snapshot.messages.map((mm) => ({ role: mm.role, content: mm.content })),
-      ];
+      const { reply } = await callChat(snapshot.role, buildSystemPrompt(snapshot.role), snapshot.provider, snapshot.model, snapshot.messages);
 
-      let replyText = "";
-      let demoFallback = false;
-
-      try {
-        const headers: HeadersInit = { "Content-Type": "application/json" };
-        try {
-          const t = localStorage.getItem("aevion_auth_token_v1");
-          if (t) headers.Authorization = `Bearer ${t}`;
-        } catch {
-          /* ignore */
-        }
-
-        const body: Record<string, unknown> = { messages: apiMessages };
-        if (snapshot.provider) body.provider = snapshot.provider;
-        if (snapshot.model) body.model = snapshot.model;
-
-        const res = await fetch(apiUrl("/api/qcoreai/chat"), {
-          method: "POST",
-          headers,
-          body: JSON.stringify(body),
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-
-        if (typeof data?.reply === "string") {
-          replyText = data.reply;
-        } else if (typeof data?.content === "string") {
-          replyText = data.content;
-        } else {
-          replyText = JSON.stringify(data, null, 2);
-        }
-      } catch {
-        demoFallback = true;
-        replyText = DEMO_REPLIES[snapshot.role];
-      }
-
-      setAgents((cur) =>
-        cur.map((a) => {
+      setAgents((curS) =>
+        curS.map((a) => {
           if (a.id !== agentId) return a;
-          const finalContent = demoFallback ? replyText : replyText;
           const nextMessages: ChatMsg[] = [
             ...a.messages,
-            { role: "assistant" as const, content: finalContent },
+            { role: "assistant" as const, content: reply },
           ].slice(-MAX_MESSAGES_KEPT);
           return { ...a, messages: nextMessages, busy: false };
         })
       );
     },
-    []
+    [callChat, buildSystemPrompt]
   );
 
   /* Layout: 1 col → 1, 2-3 → auto-fit, 4+ → 2 cols (CSS handles mobile) */
@@ -503,6 +760,65 @@ export default function MultichatEnginePage() {
               QCoreAI health
             </a>
           </div>
+
+          {/* Personalisation strip — visible only when we have any AEVION context */}
+          {userCtx ? (
+            <div
+              style={{
+                marginTop: 22,
+                padding: "12px 16px",
+                borderRadius: 12,
+                border: "1px solid rgba(94,234,212,0.25)",
+                background: "rgba(15,23,42,0.55)",
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+                fontSize: 13,
+                color: "#cbd5e1",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: "0.15em",
+                  textTransform: "uppercase",
+                  color: "#5eead4",
+                }}
+              >
+                Personalised
+              </span>
+              {userCtx.email ? <span>· {userCtx.email}</span> : null}
+              {userCtx.balance != null ? (
+                <span>· {userCtx.balance.toLocaleString("en-US")} AEC</span>
+              ) : null}
+              {userCtx.qrightCount != null && userCtx.qrightCount > 0 ? (
+                <span>· {userCtx.qrightCount} IP work{userCtx.qrightCount === 1 ? "" : "s"}</span>
+              ) : null}
+              <label
+                style={{
+                  marginLeft: "auto",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                  fontSize: 12,
+                  color: ctxEnabled ? "#5eead4" : "#94a3b8",
+                  fontWeight: 700,
+                }}
+                title="Inject your real AEVION account state into agent system prompts"
+              >
+                <input
+                  type="checkbox"
+                  checked={ctxEnabled}
+                  onChange={(e) => setCtxEnabled(e.target.checked)}
+                  style={{ accentColor: "#5eead4" }}
+                />
+                Inject into agents
+              </label>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -978,39 +1294,73 @@ function AgentPanel(props: {
             </div>
           </div>
         ) : (
-          visibleMessages.map((mm, i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                justifyContent: mm.role === "user" ? "flex-end" : "flex-start",
-              }}
-            >
+          visibleMessages.map((mm, i) => {
+            // Detect handoff messages — they carry "↪ via @x\n..." or "↪ from @x: ..."
+            const handoffOut = mm.content.match(/^↪ via @(\w+)\n([\s\S]*)$/);
+            const handoffIn = mm.content.match(/^↪ from @(\w+): ([\s\S]*)$/);
+            const userMention = mm.role === "user"
+              ? mm.content.match(/^@(\w+)\s+([\s\S]+)$/)
+              : null;
+            const handoffTag = handoffOut?.[1] ?? handoffIn?.[1] ?? userMention?.[1] ?? null;
+            const isHandoffOut = !!handoffOut;
+            const isHandoffIn = !!handoffIn;
+            const isUserMention = !!userMention;
+            const renderBody =
+              handoffOut?.[2] ?? handoffIn?.[2] ?? (userMention ? `@${userMention[1]} ${userMention[2]}` : mm.content);
+            const accent = isHandoffOut || isHandoffIn || isUserMention ? "#fbbf24" : null;
+            return (
               <div
+                key={i}
                 style={{
-                  maxWidth: "88%",
-                  padding: "9px 12px",
-                  borderRadius:
-                    mm.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
-                  background:
-                    mm.role === "user"
-                      ? "linear-gradient(135deg, #0d9488, #0ea5e9)"
-                      : "rgba(30,41,59,0.85)",
-                  color: "#f8fafc",
-                  border:
-                    mm.role === "user"
-                      ? "none"
-                      : "1px solid rgba(71,85,105,0.5)",
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
+                  display: "flex",
+                  justifyContent: mm.role === "user" ? "flex-end" : "flex-start",
                 }}
               >
-                {mm.content}
+                <div
+                  style={{
+                    maxWidth: "88%",
+                    padding: "9px 12px",
+                    borderRadius:
+                      mm.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                    background:
+                      mm.role === "user"
+                        ? "linear-gradient(135deg, #0d9488, #0ea5e9)"
+                        : "rgba(30,41,59,0.85)",
+                    color: "#f8fafc",
+                    border: accent
+                      ? `1px solid ${accent}`
+                      : mm.role === "user"
+                      ? "none"
+                      : "1px solid rgba(71,85,105,0.5)",
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {accent && handoffTag ? (
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        color: accent,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {isHandoffOut
+                        ? `↪ via @${handoffTag}`
+                        : isHandoffIn
+                        ? `↪ from @${handoffTag}`
+                        : `→ @${handoffTag}`}
+                    </div>
+                  ) : null}
+                  {renderBody}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
 
         {agent.busy ? (
@@ -1048,7 +1398,7 @@ function AgentPanel(props: {
       {/* Input */}
       <div
         style={{
-          padding: 10,
+          padding: "10px 10px 6px",
           display: "flex",
           gap: 8,
           alignItems: "flex-end",
@@ -1065,7 +1415,7 @@ function AgentPanel(props: {
               submit();
             }
           }}
-          placeholder={`Message ${agent.role}...`}
+          placeholder={`Message ${agent.role}…  (try @code, @finance, @legal to relay)`}
           disabled={agent.busy}
           rows={2}
           style={{
@@ -1103,6 +1453,37 @@ function AgentPanel(props: {
         >
           {agent.busy ? "…" : "Send"}
         </button>
+      </div>
+
+      {/* Mention hint: tells user how to delegate to other agents */}
+      <div
+        style={{
+          padding: "0 10px 8px",
+          fontSize: 10,
+          color: "#64748b",
+          letterSpacing: "0.02em",
+          background: "rgba(2,6,23,0.55)",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+          alignItems: "center",
+        }}
+      >
+        <span style={{ fontWeight: 700, color: "#94a3b8" }}>Relay:</span>
+        {(["code", "finance", "legal", "compliance", "translator", "general"] as const).map((tag) => (
+          <span
+            key={tag}
+            style={{
+              padding: "1px 6px",
+              borderRadius: 6,
+              background: "rgba(71,85,105,0.35)",
+              color: "#cbd5e1",
+              fontFamily: "ui-monospace, SFMono-Regular, monospace",
+            }}
+          >
+            @{tag}
+          </span>
+        ))}
       </div>
     </article>
   );

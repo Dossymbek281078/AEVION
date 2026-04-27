@@ -477,6 +477,49 @@ export function ChessyFloat({ amount, onDone }: { amount: number; onDone: () => 
 }
 
 /* ═══════════════════════════════════════════════════════════
+   Confetti — fires when player wins. Pure CSS, no deps.
+   Self-cleans after 3s via onDone.
+   ═══════════════════════════════════════════════════════════ */
+
+export function Confetti({ onDone, count = 80 }: { onDone: () => void; count?: number }) {
+  const timer = useRef<any>(null);
+  useEffect(() => {
+    timer.current = setTimeout(onDone, 3200);
+    return () => clearTimeout(timer.current);
+  }, [onDone]);
+  // Generate pieces once on mount (stable refs prevent re-render flicker)
+  const pieces = useRef<Array<{ left: number; delay: number; color: string; rotate: number; sway: number }>>([]);
+  if (pieces.current.length === 0) {
+    const colors = ["#fbbf24", "#10b981", "#3b82f6", "#a855f7", "#ec4899", "#ef4444", "#f97316"];
+    for (let i = 0; i < count; i++) {
+      pieces.current.push({
+        left: Math.random() * 100,
+        delay: Math.random() * 600,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotate: Math.random() * 360,
+        sway: (Math.random() - 0.5) * 200,
+      });
+    }
+  }
+  return (
+    <div className="cc-confetti" aria-hidden="true">
+      {pieces.current.map((p, i) => (
+        <span
+          key={i}
+          className="cc-confetti-piece"
+          style={{
+            left: `${p.left}vw`,
+            background: p.color,
+            animationDelay: `${p.delay}ms`,
+            transform: `rotate(${p.rotate}deg) translateX(${p.sway}px)`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    Section heading
    ═══════════════════════════════════════════════════════════ */
 

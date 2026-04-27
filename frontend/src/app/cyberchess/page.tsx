@@ -7,7 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
-import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat } from "./ui";
+import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
@@ -532,6 +532,8 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
   useEffect(()=>{svChessy(chessy)},[chessy]);
   const[chessyFloat,sChessyFloat]=useState<{amount:number;key:number}|null>(null);
+  const[showConfetti,sShowConfetti]=useState(false);
+  const lastWinKeyRef=useRef<string|null>(null);
   const[chessyLog,sChessyLog]=useState<ChessyLogEntry[]>(()=>ldChessyLog());
   useEffect(()=>{svChessyLog(chessyLog)},[chessyLog]);
   const addChessy=useCallback((n:number,reason:string)=>{
@@ -1053,7 +1055,17 @@ export default function CyberChessPage(){
   useEffect(()=>{
     const h=(e:KeyboardEvent)=>{
       if(e.key==="Escape"){
+        if(promo){sPromo(null);return}
         if(pms.length>0||pmSel){sPms([]);sPmSel(null)}
+      }
+      // Promotion keyboard shortcut: Q/R/B/N
+      if(promo){
+        const k=e.key.toLowerCase();
+        if(k==="q"||k==="r"||k==="b"||k==="n"){
+          e.preventDefault();
+          exec(promo.from,promo.to,k as any);sPromo(null);
+          return;
+        }
       }
       // Global shortcuts (but not while typing in input)
       const target=e.target as HTMLElement;
@@ -1086,7 +1098,7 @@ export default function CyberChessPage(){
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
-  },[pms.length,pmSel,hist.length,fenHist,browseIdx]);
+  },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec]);
 
   /* ── Rival learning — after each encounter, adapt profile and save ── */
   const rivalLearnedRef=useRef<string|null>(null);
@@ -1286,6 +1298,17 @@ export default function CyberChessPage(){
       addChessy(8,`🤝 ничья с призраком ${activeGhost.name}`);
     }
   },[over,ghostMode,activeGhost,fenHist.length,addChessy]);
+
+  /* ── Confetti on player win ── */
+  useEffect(()=>{
+    if(!over)return;
+    const key=`${variant}-${fenHist.length}-${over}`;
+    if(lastWinKeyRef.current===key)return;
+    lastWinKeyRef.current=key;
+    if(over.includes("You win")||over.includes("timed out")||over.includes("победа!")||over.includes("Победили")||over.includes("ВЗОШЁЛ")||over.includes("взошёл")||over.includes("ЧЕМПИОН")){
+      sShowConfetti(true);
+    }
+  },[over,variant,fenHist.length]);
 
   /* ── Per-variant stats + Daily Variant Challenge bonus ── */
   useEffect(()=>{
@@ -4216,10 +4239,40 @@ export default function CyberChessPage(){
         </div>
       </div>}
 
-      {promo&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}} onClick={()=>sPromo(null)}>
-        <div style={{background:"#fff",borderRadius:14,padding:20,border:`1px solid ${T.border}`}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:14,fontWeight:800,color:T.text,marginBottom:12,textAlign:"center"}}>Promote</div>
-          <div style={{display:"flex",gap:8}}>{(["q","r","b","n"] as const).map(pt=><button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} style={{padding:"8px 12px",borderRadius:10,border:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",width:60,height:60}}><Piece type={pt} color={pCol}/></button>)}</div>
+      {promo&&<div className="cc-backdrop" style={{display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sPromo(null)}>
+        <div className="cc-modal-shell" style={{
+          background:"linear-gradient(180deg, #ffffff, #fafbfd)",
+          borderRadius:RADIUS.xl,padding:`${SPACE[4]}px ${SPACE[5]}px`,
+          border:`1px solid ${CC.border}`,
+          boxShadow:SHADOW.xl,
+          maxWidth:380
+        }} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:11,fontWeight:900,color:CC.brand,letterSpacing:1.5,textTransform:"uppercase" as const,textAlign:"center",marginBottom:SPACE[1]}}>Promotion · {promo.to.toUpperCase()}</div>
+          <div style={{fontSize:18,fontWeight:900,color:CC.text,textAlign:"center",marginBottom:SPACE[3]}}>В какую фигуру?</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[2]}}>
+            {(["q","r","b","n"] as const).map(pt=>{
+              const labels:Record<string,string>={q:"Ферзь",r:"Ладья",b:"Слон",n:"Конь"};
+              const hot:Record<string,string>={q:"Q",r:"R",b:"B",n:"N"};
+              return <button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} className="cc-focus-ring"
+                style={{
+                  display:"flex",flexDirection:"column",alignItems:"center",gap:4,
+                  padding:`${SPACE[2]}px ${SPACE[1]}px`,
+                  borderRadius:RADIUS.md,
+                  border:`2px solid ${CC.border}`,
+                  background:`linear-gradient(135deg, ${pt==="q"?"#fef3c7":CC.surface1}, ${pt==="q"?"#fde68a":CC.surface2})`,
+                  cursor:"pointer",
+                  transition:`all ${MOTION.fast} ${MOTION.ease}`,
+                  position:"relative"
+                }}
+                onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.borderColor=CC.brand;el.style.transform="translateY(-3px)";el.style.boxShadow="0 6px 16px rgba(5,150,105,0.25)"}}
+                onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.borderColor=CC.border;el.style.transform="";el.style.boxShadow="none"}}>
+                <div style={{width:54,height:54,display:"flex",alignItems:"center",justifyContent:"center"}}><Piece type={pt} color={pCol}/></div>
+                <span style={{fontSize:11,fontWeight:800,color:CC.text}}>{labels[pt]}</span>
+                <span style={{position:"absolute",top:4,right:6,fontSize:9,fontWeight:900,color:CC.textDim,fontFamily:"ui-monospace,monospace"}}>{hot[pt]}</span>
+              </button>;
+            })}
+          </div>
+          <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center"}}>Клик мимо — отмена</div>
         </div>
       </div>}
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}`}</style>
@@ -5611,6 +5664,7 @@ export default function CyberChessPage(){
 
     {/* Chessy gain floating animation */}
     {chessyFloat&&<ChessyFloat key={chessyFloat.key} amount={chessyFloat.amount} onDone={()=>sChessyFloat(null)}/>}
+    {showConfetti&&<Confetti onDone={()=>sShowConfetti(false)}/>}
 
     {/* Puzzle Rush — final result */}
     <Modal open={!!rushResult} onClose={()=>sRushResult(null)} size="sm" title={rushResult?.isNewBest?"🏆 Новый рекорд!":"⚡ Rush завершён"}>

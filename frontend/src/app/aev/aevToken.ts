@@ -382,6 +382,123 @@ export function simulateUpvote(
   return { wallet: newWallet, pins: newPins };
 }
 
+// ─── G. Proof-of-Network ──────────────────────────────────────────
+// Invite chain: ты приглашаешь юзера через свой code, приглашённый совершает
+// quality actions, ты получаешь % от его эмиссии (downstream royalty).
+// Симулируется на клиенте: simulateInviteJoin добавляет mock-друга, а
+// simulateInviteActivity — каждый "tick" этого друга что-то майнит, и нам капает.
+
+const NETWORK_KEY = "aevion_aev_network_v1";
+
+export type InvitedUser = {
+  id: string;            // mock-id (стабильный)
+  name: string;          // имя для UI
+  city?: string;
+  joinedTs: number;
+  qualityActions: number; // сколько quality-actions совершил downstream user
+  earnedFromMe: number;   // сколько AEV ты получил downstream от него
+};
+
+export type NetworkState = {
+  v: 1;
+  myCode: string;        // 8-char inviting code (стабильный для юзера)
+  invited: InvitedUser[];
+  totalDownstreamEarned: number;
+};
+
+export const NETWORK = {
+  royaltyPct: 0.10,        // 10% от downstream activity капает upstream'у
+  perActionAev: 0.4,       // средний AEV за quality action приглашённого
+  maxInvites: 50,
+  // Псевдо-стабильные имена для симуляции активности приглашённых
+  cities: ["Алматы", "Астана", "Шымкент", "Караганда", "Актобе", "Атырау", "Туркестан", "Тараз"],
+  firstNames: ["Айгерим", "Ержан", "Дамир", "Айдос", "Алина", "Нурлан", "Зарина", "Михаил", "Виктор", "Светлана", "Алмас", "Гульнара"],
+} as const;
+
+export function ldNetwork(): NetworkState {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(NETWORK_KEY) : null;
+    if (!s) return makeNetwork();
+    const r = JSON.parse(s);
+    if (!r || r.v !== 1 || !r.myCode) return makeNetwork();
+    return {
+      v: 1,
+      myCode: r.myCode,
+      invited: Array.isArray(r.invited) ? r.invited : [],
+      totalDownstreamEarned: typeof r.totalDownstreamEarned === "number" ? r.totalDownstreamEarned : 0,
+    };
+  } catch { return makeNetwork() }
+}
+
+function makeNetwork(): NetworkState {
+  // Stable code from a Crockford-friendly alphabet (no I/O/0/1 для ясности)
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let code = "AEV-";
+  for (let i = 0; i < 8; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return { v: 1, myCode: code, invited: [], totalDownstreamEarned: 0 };
+}
+
+export function svNetwork(n: NetworkState) {
+  try { localStorage.setItem(NETWORK_KEY, JSON.stringify(n)) } catch {}
+}
+
+// Invite a (mock) user: appends to invited list. No AEV minted yet — friend
+// must DO something quality-actions first.
+export function simulateInviteJoin(n: NetworkState, name?: string): NetworkState {
+  if (n.invited.length >= NETWORK.maxInvites) return n;
+  const fname = name?.trim() || NETWORK.firstNames[Math.floor(Math.random() * NETWORK.firstNames.length)];
+  const city = NETWORK.cities[Math.floor(Math.random() * NETWORK.cities.length)];
+  const id = `inv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+  const u: InvitedUser = {
+    id,
+    name: fname,
+    city,
+    joinedTs: Date.now(),
+    qualityActions: 0,
+    earnedFromMe: 0,
+  };
+  return { ...n, invited: [u, ...n.invited] };
+}
+
+// Simulate downstream activity: pick one invited user, increment their actions,
+// mint royalty to upstream wallet. Returns next wallet + next network. If no
+// invitees yet, no-op.
+export function simulateNetworkTick(
+  w: AEVWallet,
+  n: NetworkState,
+  forceUserId?: string,
+): { wallet: AEVWallet; network: NetworkState } {
+  if (n.invited.length === 0) return { wallet: w, network: n };
+  const target = forceUserId
+    ? n.invited.find((u) => u.id === forceUserId)
+    : n.invited[Math.floor(Math.random() * n.invited.length)];
+  if (!target) return { wallet: w, network: n };
+  const royalty = NETWORK.perActionAev * NETWORK.royaltyPct;
+  const newWallet = mint(
+    w,
+    royalty,
+    { kind: "play", module: "qcoreai", action: "network_royalty" },
+    `🌐 Royalty от ${target.name} · ${target.city ?? "?"}`,
+  );
+  const newInvited = n.invited.map((u) =>
+    u.id === target.id
+      ? { ...u, qualityActions: u.qualityActions + 1, earnedFromMe: u.earnedFromMe + royalty }
+      : u,
+  );
+  return {
+    wallet: newWallet,
+    network: {
+      ...n,
+      invited: newInvited,
+      totalDownstreamEarned: n.totalDownstreamEarned + royalty,
+    },
+  };
+}
+
+export function removeInvited(n: NetworkState, id: string): NetworkState {
+  return { ...n, invited: n.invited.filter((u) => u.id !== id) };
+}
+
 // ─── F. Proof-of-Streak ───────────────────────────────────────────
 function dayKey(d = new Date()): string {
   const y = d.getFullYear();

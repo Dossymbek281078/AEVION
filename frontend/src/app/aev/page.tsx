@@ -13,8 +13,11 @@ import {
   RATE_CARD,
   ldPins, svPins, pinsToday, recordPin, removePin, simulateUpvote,
   CURATION,
+  ldNetwork, svNetwork, simulateInviteJoin, simulateNetworkTick, removeInvited,
+  NETWORK,
   type AEVWallet, type EmissionMode, type PlayAction, type PlayModule, type MiningEvent,
   type PinnedItem, type PinKind,
+  type NetworkState,
 } from "./aevToken";
 
 const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: string; color: string; desc: string }> = {
@@ -45,10 +48,12 @@ export default function AEVPage() {
   // Lazy-init avoids SSR hydration mismatch.
   const [wallet, setWallet] = useState<AEVWallet | null>(null);
   const [pins, setPins] = useState<PinnedItem[] | null>(null);
+  const [network, setNetwork] = useState<NetworkState | null>(null);
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
     setPins(ldPins());
+    setNetwork(ldNetwork());
     // Auto-claim daily streak on mount if eligible
     const updated = recordDailyVisit(w);
     if (updated) {
@@ -65,6 +70,35 @@ export default function AEVPage() {
   // Persist on every change
   useEffect(() => { if (wallet) svWallet(wallet) }, [wallet]);
   useEffect(() => { if (pins) svPins(pins) }, [pins]);
+  useEffect(() => { if (network) svNetwork(network) }, [network]);
+
+  // Refs для cross-state autotick (network → wallet) без race conditions
+  const walletRef = useRef<AEVWallet | null>(null);
+  const networkRef = useRef<NetworkState | null>(null);
+  useEffect(() => { walletRef.current = wallet }, [wallet]);
+  useEffect(() => { networkRef.current = network }, [network]);
+
+  // Network auto-tick: каждые 18-32s случайный приглашённый совершает quality
+  // action, тебе капает royalty в wallet.
+  const networkInviteCount = network?.invited.length ?? 0;
+  useEffect(() => {
+    if (networkInviteCount === 0) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = () => {
+      if (cancelled) return;
+      const w = walletRef.current;
+      const n = networkRef.current;
+      if (w && n && n.invited.length > 0) {
+        const r = simulateNetworkTick(w, n);
+        setWallet(r.wallet);
+        setNetwork(r.network);
+      }
+      timer = setTimeout(tick, 18000 + Math.random() * 14000);
+    };
+    timer = setTimeout(tick, 18000 + Math.random() * 14000);
+    return () => { cancelled = true; if (timer) clearTimeout(timer) };
+  }, [networkInviteCount]);
 
   // Live tick: refresh pending dividend display every second
   const [, setTick] = useState(0);
@@ -443,6 +477,11 @@ export default function AEVPage() {
           )}
         </section>
 
+        {/* ═══ G. PROOF-OF-NETWORK (engine G · live) ═══════════════ */}
+        {network && (
+          <NetworkPanel wallet={wallet} setWallet={setWallet} network={network} setNetwork={setNetwork} />
+        )}
+
         {/* ═══ D. PROOF-OF-CURATION (engine D · live) ══════════════ */}
         <CurationWall wallet={wallet} setWallet={setWallet} pins={pins ?? []} setPins={setPins} />
 
@@ -722,8 +761,8 @@ const BUILTIN_PROPOSALS: Proposal[] = [
     letter: "G",
     emoji: "🌐",
     name: "Proof-of-Network",
-    tagline: "приглашение активного user'а",
-    desc: "AEV за invited user, который совершил N quality-actions (т.е. реально пользуется). Anti-spam через delay + KYC через QCoreAI verification.",
+    tagline: "✅ LIVE — engine выпущен 27.04",
+    desc: "Invite chain через твой персональный AEV-код. Приглашённый совершает quality-action — тебе капает 10% royalty. Симуляция активности приглашённых каждые 18-32s. Cap 50 invitees. Выпущен сразу после голосования.",
   },
   {
     id: "insight",
@@ -829,11 +868,13 @@ function FutureEngines() {
                   <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", lineHeight: 1.25 }}>{p.name}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end" as const, gap: 4 }}>
-                  {p.id === "streak" || p.id === "curation" ? (
+                  {p.id === "streak" || p.id === "curation" || p.id === "network" ? (
                     <span style={{
                       padding: "5px 11px", borderRadius: 5,
                       background: p.id === "curation"
                         ? "linear-gradient(135deg, #7c3aed, #a855f7)"
+                        : p.id === "network"
+                        ? "linear-gradient(135deg, #0891b2, #06b6d4)"
                         : "linear-gradient(135deg, #f97316, #ea580c)",
                       color: "#fff", fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
                     }}>✓ LIVE</span>
@@ -888,6 +929,213 @@ function FutureEngines() {
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ─── G. Network panel (engine G · live) ────────────────────────────
+function NetworkPanel({ wallet, setWallet, network, setNetwork }: {
+  wallet: AEVWallet;
+  setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
+  network: NetworkState;
+  setNetwork: React.Dispatch<React.SetStateAction<NetworkState | null>>;
+}) {
+  const [draftName, setDraftName] = useState("");
+  const [copied, setCopied] = useState(false);
+  const inviteUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/aev?ref=${network.myCode}`
+    : `/aev?ref=${network.myCode}`;
+
+  const copyCode = () => {
+    try {
+      navigator.clipboard?.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
+  };
+
+  const inviteOne = () => {
+    setNetwork((n) => (n ? simulateInviteJoin(n, draftName || undefined) : n));
+    setDraftName("");
+  };
+
+  const triggerActivityFor = (id: string) => {
+    const r = simulateNetworkTick(wallet, network, id);
+    setWallet(r.wallet);
+    setNetwork(r.network);
+  };
+
+  const removeOne = (id: string) => {
+    setNetwork((n) => (n ? removeInvited(n, id) : n));
+  };
+
+  const totalActions = network.invited.reduce((s, u) => s + u.qualityActions, 0);
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: "linear-gradient(135deg, #083344 0%, #0e7490 60%, #06b6d4 100%)",
+      color: "#fff", marginBottom: 14,
+      boxShadow: "0 6px 18px rgba(8,51,68,0.30)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12, flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: 18 }}>🌐</span>
+        <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>Proof-of-Network · invite chain</h2>
+        <span style={{
+          padding: "2px 9px", borderRadius: 5,
+          background: "linear-gradient(135deg, #fff, #e0f2fe)",
+          color: "#0e7490", fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+        }}>G · LIVE</span>
+        <span style={{ fontSize: 11, opacity: 0.85 }}>
+          {(NETWORK.royaltyPct * 100).toFixed(0)}% royalty downstream · cap {NETWORK.maxInvites} invitees
+        </span>
+      </div>
+
+      {/* My code panel */}
+      <div style={{
+        padding: 12, borderRadius: 8,
+        background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.25)",
+        marginBottom: 12,
+        display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center" as const,
+      }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, opacity: 0.85, textTransform: "uppercase" as const, marginBottom: 2 }}>
+            Твой invite code
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}>
+            {network.myCode}
+          </div>
+          <div style={{ fontSize: 10, opacity: 0.75, marginTop: 4, fontFamily: "ui-monospace, monospace", wordBreak: "break-all" as const }}>
+            {inviteUrl}
+          </div>
+        </div>
+        <button onClick={copyCode}
+          style={{
+            padding: "8px 14px", borderRadius: 6,
+            background: copied ? "#16a34a" : "rgba(255,255,255,0.95)",
+            color: copied ? "#fff" : "#0e7490",
+            border: "none", fontSize: 12, fontWeight: 800, cursor: "pointer",
+            transition: "all 0.2s",
+          }}>
+          {copied ? "✓ Скопировано" : "📋 Copy link"}
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Приглашено</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>
+            {network.invited.length} / {NETWORK.maxInvites}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Quality actions</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>{totalActions}</div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Royalty earned</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#86efac" }}>
+            {network.totalDownstreamEarned.toFixed(4)}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Per action</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>
+            +{(NETWORK.perActionAev * NETWORK.royaltyPct).toFixed(3)}
+          </div>
+        </div>
+      </div>
+
+      {/* Invite simulator */}
+      <div style={{
+        padding: 10, borderRadius: 8,
+        background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
+        marginBottom: 10,
+        display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" as const,
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>
+          Демо · симуляция invite
+        </span>
+        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={40}
+          placeholder="Имя друга (или оставь пустым — сгенерирую)"
+          style={{
+            padding: "6px 10px", borderRadius: 5,
+            border: "1px solid rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.25)",
+            color: "#fff", fontSize: 12, flex: "1 1 220px", minWidth: 0,
+          }} />
+        <button onClick={inviteOne}
+          disabled={network.invited.length >= NETWORK.maxInvites}
+          style={{
+            padding: "7px 14px", borderRadius: 5, border: "none",
+            background: network.invited.length >= NETWORK.maxInvites
+              ? "rgba(255,255,255,0.15)"
+              : "linear-gradient(135deg, #fff, #e0f2fe)",
+            color: network.invited.length >= NETWORK.maxInvites ? "#94a3b8" : "#0e7490",
+            fontSize: 12, fontWeight: 800,
+            cursor: network.invited.length >= NETWORK.maxInvites ? "default" : "pointer",
+          }}>
+          ➕ Invite
+        </button>
+        <span style={{ fontSize: 10, opacity: 0.7 }}>каждые 18-32s случайный invitee делает quality action</span>
+      </div>
+
+      {/* Invitees list */}
+      {network.invited.length === 0 ? (
+        <div style={{
+          padding: 18, textAlign: "center" as const, fontSize: 12, opacity: 0.85,
+          background: "rgba(0,0,0,0.18)", borderRadius: 8,
+        }}>
+          Пока никого не пригласил. Скопируй ссылку и поделись — или нажми «Invite» для демо.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: 4, maxHeight: 280, overflowY: "auto" as const }}>
+          {network.invited.map((u) => {
+            const ageH = Math.max(0, Math.floor((Date.now() - u.joinedTs) / 3600000));
+            const ageM = Math.max(0, Math.floor(((Date.now() - u.joinedTs) % 3600000) / 60000));
+            return (
+              <div key={u.id} style={{
+                padding: "8px 12px", borderRadius: 7,
+                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                display: "grid", gridTemplateColumns: "auto 1fr auto auto auto auto", gap: 10, alignItems: "center" as const, fontSize: 12,
+              }}>
+                <span style={{ fontSize: 16 }}>👤</span>
+                <span>
+                  <strong style={{ fontSize: 13 }}>{u.name}</strong>
+                  {u.city && <span style={{ opacity: 0.7 }}> · {u.city}</span>}
+                </span>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, opacity: 0.75 }}>
+                  joined {ageH > 0 ? `${ageH}h` : `${ageM}m`}
+                </span>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#fde68a", whiteSpace: "nowrap" as const }}>
+                  {u.qualityActions} act
+                </span>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#86efac", fontWeight: 800, whiteSpace: "nowrap" as const }}>
+                  +{u.earnedFromMe.toFixed(4)}
+                </span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => triggerActivityFor(u.id)} title="Манально дернуть quality action"
+                    style={{
+                      padding: "4px 8px", borderRadius: 4,
+                      border: "1px solid rgba(134,239,172,0.5)", background: "rgba(134,239,172,0.15)",
+                      color: "#86efac", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                    }}>
+                    ⚡
+                  </button>
+                  <button onClick={() => removeOne(u.id)} title="Убрать из списка"
+                    style={{
+                      padding: "4px 8px", borderRadius: 4,
+                      border: "1px solid rgba(252,165,165,0.5)", background: "rgba(252,165,165,0.10)",
+                      color: "#fca5a5", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                    }}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

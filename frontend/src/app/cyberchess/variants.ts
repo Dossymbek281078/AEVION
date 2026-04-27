@@ -3,7 +3,7 @@
 // (twin kings = «royal queen», diceblade = move filter, reinforcement)
 // проверяются в page.tsx как лёгкие хуки поверх стандартного движка.
 
-export type VariantId = "standard" | "fischer960" | "asymmetric" | "twinkings" | "diceblade" | "reinforcement";
+export type VariantId = "standard" | "fischer960" | "asymmetric" | "twinkings" | "diceblade" | "reinforcement" | "atomic" | "kingofthehill" | "threecheck" | "knightriders" | "pawnapocalypse";
 
 export type Variant = {
   id: VariantId;
@@ -70,6 +70,51 @@ export const VARIANTS: Variant[] = [
     longDesc: "Каждые 10 полуходов одна случайная захваченная фигура возвращается на случайное пустое поле своего лагеря. Партия не заканчивается обменом — приходится играть до мата.",
     tag: "Chaos",
     notes: ["Король не возвращается", "Спавн в первых 4 рядах своей стороны"],
+  },
+  {
+    id: "atomic",
+    name: "Atomic",
+    emoji: "💥",
+    shortDesc: "Взятие = взрыв 8 окрестных клеток",
+    longDesc: "Каждое взятие — это атомный взрыв: исчезают взявшая фигура + взятая + ВСЕ фигуры в радиусе 1 клетки (кроме пешек, они уцелеют только если они не в эпицентре). Взрыв собственного короля = поражение. Известен как Atomic Chess.",
+    tag: "Chaos",
+    notes: ["Шах больше не нужен — можно взорвать короля", "Стратегия превращается в минирование"],
+  },
+  {
+    id: "kingofthehill",
+    name: "King of the Hill",
+    emoji: "⛰",
+    shortDesc: "Король в центре = победа",
+    longDesc: "Дополнительная цель: если твой король встал на любую центральную клетку (d4, d5, e4, e5) — ты немедленно побеждаешь. Мат тоже работает. Защищать центр становится критично.",
+    tag: "Theory-free",
+    notes: ["Король рвётся к центру с первых ходов", "Игра ускоряется"],
+  },
+  {
+    id: "threecheck",
+    name: "Three-Check",
+    emoji: "⚡",
+    shortDesc: "3 шаха = победа",
+    longDesc: "Если ты объявил сопернику 3 шаха суммарно за партию — ты побеждаешь. Мат тоже считается. Стратегия меняется: жертвуешь материал ради чек-комбинации.",
+    tag: "Theory-free",
+    notes: ["Счётчик шахов на каждой стороне", "Каждый шах ценный"],
+  },
+  {
+    id: "knightriders",
+    name: "Knight Riders",
+    emoji: "🐎",
+    shortDesc: "Только король + кони + пешки",
+    longDesc: "У каждой стороны 6 коней вместо стандартного бэкранка (без слонов, ладей, ферзя). Только король + 6 коней + 8 пешек. Чистая тактика без линейных атак.",
+    tag: "Theory-free",
+    notes: ["Кони доминируют", "Пешки превращаются только в коней (по факту)"],
+  },
+  {
+    id: "pawnapocalypse",
+    name: "Pawn Apocalypse",
+    emoji: "💀",
+    shortDesc: "Двойной ряд пешек, без минор",
+    longDesc: "Только король + ферзь + 2 ладьи + ДВА ряда пешек (горизонтали 2-3 для белых, 6-7 для чёрных). Никаких коней или слонов. Эндшпиль с первого хода — пешечная война.",
+    tag: "Theory-free",
+    notes: ["Прорывы пешками — вся стратегия", "Превращения часты"],
   },
 ];
 
@@ -253,6 +298,113 @@ export function rollDice(): { face: 1 | 2 | 3 | 4 | 5 | 6; pieceType: string; la
 export function filterMovesByDice<T extends { piece: string }>(moves: T[], pieceType: string): T[] {
   if (!pieceType) return moves;
   return moves.filter(m => m.piece === pieceType || m.piece === "k");
+}
+
+// ── Atomic ───────────────────────────────────────────────
+// Standard start; explosion logic applied AFTER each capture.
+export function atomicFen(): string {
+  return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+}
+
+// Apply explosion: remove all non-pawn pieces in 3x3 around `sq`,
+// plus any piece on `sq` itself. Returns new placement string.
+// `sq` like "e4". Returns updated FEN string.
+export function applyExplosion(fen: string, sq: string): { fen: string; whiteKingDead: boolean; blackKingDead: boolean } {
+  const parts = fen.split(" ");
+  const ranks = parts[0].split("/");
+  // Convert each rank to a 8-char array (digits expanded)
+  const grid: string[][] = ranks.map(r => {
+    const row: string[] = [];
+    for (const c of r) {
+      if (/\d/.test(c)) for (let k = 0; k < parseInt(c); k++) row.push(".");
+      else row.push(c);
+    }
+    return row;
+  });
+  const file = sq.charCodeAt(0) - 97;
+  const rank = 8 - parseInt(sq[1]);
+  let whiteKingDead = false, blackKingDead = false;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let df = -1; df <= 1; df++) {
+      const r = rank + dr, f = file + df;
+      if (r < 0 || r > 7 || f < 0 || f > 7) continue;
+      const p = grid[r][f];
+      if (p === ".") continue;
+      // Pawns survive UNLESS they're on the epicenter
+      if ((p === "P" || p === "p") && (dr !== 0 || df !== 0)) continue;
+      // Track king deaths
+      if (p === "K") whiteKingDead = true;
+      if (p === "k") blackKingDead = true;
+      grid[r][f] = ".";
+    }
+  }
+  // Reconstruct FEN ranks (collapse dots into digits)
+  const newRanks = grid.map(row => {
+    let out = "", run = 0;
+    for (const c of row) {
+      if (c === ".") run++;
+      else { if (run > 0) { out += run; run = 0 } out += c }
+    }
+    if (run > 0) out += run;
+    return out;
+  });
+  parts[0] = newRanks.join("/");
+  return { fen: parts.join(" "), whiteKingDead, blackKingDead };
+}
+
+// ── King of the Hill ─────────────────────────────────────
+// Standard start; check after each move if a king reached a center square.
+export function kothFen(): string {
+  return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+}
+
+const KOTH_CENTER = ["d4", "d5", "e4", "e5"];
+
+// Returns "w" or "b" if their king is on a center square; null otherwise.
+export function kothWinner(fen: string): "w" | "b" | null {
+  try {
+    const placement = fen.split(" ")[0];
+    const ranks = placement.split("/");
+    for (let r = 0; r < 8; r++) {
+      let f = 0;
+      for (const c of ranks[r]) {
+        if (/\d/.test(c)) { f += parseInt(c); continue }
+        const sq = `${"abcdefgh"[f]}${8 - r}`;
+        if ((c === "K" || c === "k") && KOTH_CENTER.includes(sq)) {
+          return c === "K" ? "w" : "b";
+        }
+        f++;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+// ── Three-Check ──────────────────────────────────────────
+// Standard start; track checks delivered by each side. 3 → win.
+export function threeCheckFen(): string {
+  return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+}
+
+// ── Knight Riders ────────────────────────────────────────
+// 6 knights instead of standard backrank. King on e1/e8.
+export function knightRidersFen(): string {
+  // White: NNNKNNNN — but we need knight + king + knights. Place king at e (file 4).
+  // 8 slots: NNNNKNNN (king on file 4)
+  return "nnnnknnn/pppppppp/8/8/8/8/PPPPPPPP/NNNNKNNN w - - 0 1";
+}
+
+// ── Pawn Apocalypse ──────────────────────────────────────
+// King + queen + 2 rooks; double row of pawns (ranks 2-3 for white, 6-7 for black).
+// No minor pieces.
+export function pawnApocalypseFen(): string {
+  // White back rank (rank 1): R - - Q K - - R = "R2QK2R"
+  // Rank 2: pppppppp
+  // Rank 3: pppppppp
+  // Black back rank (rank 8): "r2qk2r"
+  // Rank 7: pppppppp
+  // Rank 6: pppppppp
+  return "r2qk2r/pppppppp/pppppppp/8/8/PPPPPPPP/PPPPPPPP/R2QK2R w KQkq - 0 1";
 }
 
 // ── Reinforcement ───────────────────────────────────────

@@ -17,7 +17,7 @@ import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
-import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, type VariantId, type ArmySlot } from "./variants";
+import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, type VariantId, type ArmySlot } from "./variants";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -468,6 +468,10 @@ export default function CyberChessPage(){
   const[diceRolling,sDiceRolling]=useState(false);
   // Reinforcement: track move counter for periodic spawn
   const reinfLastMoveRef=useRef(0);
+  // Three-Check counters
+  const[checksByWhite,sChecksByWhite]=useState(0);
+  const[checksByBlack,sChecksByBlack]=useState(0);
+  const lastCheckBkRef=useRef(-1);
   // Daily Brilliancy Hunt (killer #10)
   const[showBrilliancy,sShowBrilliancy]=useState(false);
   const[brilliancyHunt,sBrilliancyHunt]=useState<BrilliancyHunt|null>(null);
@@ -1087,6 +1091,95 @@ export default function CyberChessPage(){
     }
   },[bk,variant,over,on,game,pCol,rat,sts,addChessy]);
 
+  /* ── Variant: King of the Hill — king on center square = win ── */
+  useEffect(()=>{
+    if(variant!=="kingofthehill"||over||!on)return;
+    const winner=kothWinner(game.fen());
+    if(winner){
+      const youWon=winner===pCol;
+      sOver(youWon?"⛰ Король взошёл на холм — победа!":"⛰ Соперник занял центр — поражение");
+      sOn(false);snd("x");
+      if(youWon){
+        const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);
+        const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);
+        setTimeout(()=>addChessy(12,"⛰ KotH — занял холм"),400);
+      }else{
+        const nr=Math.max(100,rat-8);sRat(nr);svR(nr);
+        const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);
+      }
+    }
+  },[bk,variant,over,on,game,pCol,rat,sts,addChessy]);
+
+  /* ── Variant: Three-Check — track checks; 3 = win ── */
+  useEffect(()=>{
+    if(variant!=="threecheck"||over||!on||hist.length===0)return;
+    if(lastCheckBkRef.current===bk)return;
+    lastCheckBkRef.current=bk;
+    if(!game.isCheck())return;
+    // The side that just moved delivered the check (turn already toggled)
+    const checker=game.turn()==="w"?"b":"w";
+    if(checker==="w"){
+      sChecksByWhite(c=>{
+        const nv=c+1;
+        if(nv>=3){
+          const youWon=pCol==="w";
+          setTimeout(()=>{
+            sOver(youWon?"⚡ Три шаха — победа!":"⚡ Соперник дал 3 шаха — поражение");
+            sOn(false);snd("x");
+            if(youWon){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(12,"⚡ Three-Check")}
+            else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+          },50);
+        }
+        return nv;
+      });
+    }else{
+      sChecksByBlack(c=>{
+        const nv=c+1;
+        if(nv>=3){
+          const youWon=pCol==="b";
+          setTimeout(()=>{
+            sOver(youWon?"⚡ Три шаха — победа!":"⚡ Соперник дал 3 шаха — поражение");
+            sOn(false);snd("x");
+            if(youWon){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(12,"⚡ Three-Check")}
+            else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+          },50);
+        }
+        return nv;
+      });
+    }
+  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy]);
+
+  /* ── Variant: Atomic — explosion on every capture ── */
+  const lastAtomicBkRef=useRef(-1);
+  useEffect(()=>{
+    if(variant!=="atomic"||over||!on||hist.length===0)return;
+    if(lastAtomicBkRef.current===bk)return;
+    lastAtomicBkRef.current=bk;
+    const lastSan=hist[hist.length-1];
+    if(!lastSan||!lastSan.includes("x"))return;
+    // Find destination from last move (chess.js history records `to`)
+    try{
+      const verbose=game.history({verbose:true});
+      const last=verbose[verbose.length-1];
+      if(!last||!last.captured)return;
+      const{fen:explodedFen,whiteKingDead,blackKingDead}=applyExplosion(game.fen(),last.to);
+      try{
+        const ng=new Chess(explodedFen);setGame(ng);sBk(k=>k+1);
+        sFenHist(h=>[...h.slice(0,-1),explodedFen]);
+        showToast(`💥 Взрыв на ${last.to}`,"info");
+        if(whiteKingDead||blackKingDead){
+          const youDied=(whiteKingDead&&pCol==="w")||(blackKingDead&&pCol==="b");
+          setTimeout(()=>{
+            sOver(youDied?"💥 Твой король взорван — поражение":"💥 Король соперника взорван — победа!");
+            sOn(false);snd("x");
+            if(!youDied){const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);addChessy(15,"💥 Atomic")}
+            else{const nr=Math.max(100,rat-8);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns)}
+          },100);
+        }
+      }catch{}
+    }catch{}
+  },[bk,variant,over,on,hist.length,game,pCol,rat,sts,addChessy,showToast]);
+
   /* ── Variant: Reinforcement — spawn captured piece every 10 plies ── */
   useEffect(()=>{
     if(variant!=="reinforcement"||over||!on)return;
@@ -1485,10 +1578,16 @@ export default function CyberChessPage(){
     if(variant==="fischer960"){startFen=fischer960Fen()}
     else if(variant==="asymmetric"){const r=asymmetricFen();startFen=r.fen;armies={white:r.whiteArmy,black:r.blackArmy}}
     else if(variant==="twinkings"){startFen=twinKingsFen()}
+    else if(variant==="atomic"){startFen=atomicFen()}
+    else if(variant==="kingofthehill"){startFen=kothFen()}
+    else if(variant==="threecheck"){startFen=threeCheckFen()}
+    else if(variant==="knightriders"){startFen=knightRidersFen()}
+    else if(variant==="pawnapocalypse"){startFen=pawnApocalypseFen()}
     sVariantStartFen(startFen);sVariantArmies(armies);
     const ng=startFen?new Chess(startFen):new Chess();
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
     reinfLastMoveRef.current=0;
+    sChecksByWhite(0);sChecksByBlack(0);lastCheckBkRef.current=-1;
     // Roll initial die for diceblade
     if(variant==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
     const variantLabel=variant==="standard"?"":` · ${VARIANTS.find(v=>v.id===variant)?.name||""}`;
@@ -2796,6 +2895,28 @@ export default function CyberChessPage(){
               {variant==="fischer960"&&<>
                 <div style={{flex:1}}/>
                 <span style={{fontSize:11,color:CC.textDim,fontFamily:"ui-monospace, monospace"}}>{variantStartFen.split("/")[0]}</span>
+              </>}
+              {variant==="threecheck"&&<>
+                <div style={{flex:1}}/>
+                <span>⚪ {[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:14,height:14,borderRadius:"50%",margin:"0 1px",background:i<checksByWhite?CC.danger:CC.surface3,border:`1px solid ${CC.border}`}}/>)} {checksByWhite}/3</span>
+                <span>·</span>
+                <span>⚫ {[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:14,height:14,borderRadius:"50%",margin:"0 1px",background:i<checksByBlack?CC.danger:CC.surface3,border:`1px solid ${CC.border}`}}/>)} {checksByBlack}/3</span>
+              </>}
+              {variant==="kingofthehill"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11}}>цель: король на <b>d4·d5·e4·e5</b></span>
+              </>}
+              {variant==="atomic"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11,color:"#9a3412"}}>💥 каждое взятие = взрыв 3×3</span>
+              </>}
+              {variant==="knightriders"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11}}>🐎 только кони + пешки</span>
+              </>}
+              {variant==="pawnapocalypse"&&<>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:11}}>💀 пешечная война</span>
               </>}
             </div>
           </div>}

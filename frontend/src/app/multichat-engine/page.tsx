@@ -1735,6 +1735,20 @@ function AgentPanel(props: {
     setDraftPrompt(agent.customSystemPrompt ?? "");
   }, [agent.customSystemPrompt]);
 
+  // Approximate tokens in this panel (system prompt + every message body)
+  // — chars/4 is the universal rough heuristic used by every major tokeniser.
+  const tokenEstimate = useMemo(() => {
+    let chars =
+      (agent.customSystemPrompt?.trim() || ROLE_SYSTEM_PROMPT[agent.role]).length;
+    for (const m of agent.messages) chars += m.content.length;
+    return Math.round(chars / 4);
+  }, [agent.messages, agent.customSystemPrompt, agent.role]);
+
+  const tokenLabel =
+    tokenEstimate >= 1000 ? `~${(tokenEstimate / 1000).toFixed(1)}k tok` : `~${tokenEstimate} tok`;
+  const tokenColor =
+    tokenEstimate < 1000 ? "#475569" : tokenEstimate < 3000 ? "#fbbf24" : "#fca5a5";
+
   // Click on a handoff badge → scroll-into-view + flash the target panel
   const focusPanelByTag = useCallback((tag: string) => {
     if (typeof document === "undefined") return;
@@ -2003,7 +2017,21 @@ function AgentPanel(props: {
         >
           {t("mc.panel.export.json")}
         </button>
-        <span style={{ marginLeft: "auto", color: "#475569", fontSize: 10 }}>
+        <span
+          title="Approximate token count (chars/4 heuristic). Real tokenisation varies by provider."
+          style={{
+            marginLeft: "auto",
+            color: tokenColor,
+            fontSize: 10,
+            fontFamily: "ui-monospace, SFMono-Regular, monospace",
+          }}
+        >
+          {tokenLabel}
+        </span>
+        <span style={{ color: "#475569", fontSize: 10 }}>
+          ·
+        </span>
+        <span style={{ color: "#475569", fontSize: 10 }}>
           {t(agent.messages.length === 1 ? "mc.panel.msg.one" : "mc.panel.msg.many", { n: agent.messages.length })}
         </span>
       </div>

@@ -50,6 +50,7 @@ import { TimeTravel } from "./_components/TimeTravel";
 import { VoiceCommand } from "./_components/VoiceCommand";
 import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
+import { GoalTemplates } from "./_components/GoalTemplates";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { NetWorthTracker } from "./_components/NetWorthTracker";
 import { NotificationsCenter } from "./_components/NotificationsCenter";
@@ -447,6 +448,11 @@ function BankContent() {
               <AchievementsPanel account={account} operations={operations} />
             </div>
             <SavingsGoals accountId={account.id} notify={notify} />
+            <GoalTemplates
+              myAccountId={account.id}
+              operations={operations}
+              notify={notify}
+            />
             <RoundUpStash
               myAccountId={account.id}
               operations={operations}

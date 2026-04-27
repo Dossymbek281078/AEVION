@@ -238,6 +238,14 @@ export default function Globus3D({
   const pitchRef = useRef(DEFAULT_PITCH);
   const distanceRef = useRef(DEFAULT_DIST);
 
+  /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | MarkerCategory>("all");
+  const markerMeshesRef = useRef<
+    Array<{ mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; marker: Marker }>
+  >([]);
+  const pulseMeshByKeyRef = useRef<Map<string, THREE.Mesh>>(new Map());
+
   const [label, setLabel] = useState<{
     screenX: number;
     screenY: number;
@@ -361,6 +369,54 @@ export default function Globus3D({
 
     return [...projectMarkers, ...objectMarkers];
   }, [projects, qrightObjects, focusProjectIds]);
+
+  /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    const matches = (m: Marker) => {
+      if (filter !== "all" && m.category !== filter) return false;
+      if (!q) return true;
+      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
+      return (
+        inField(m.title) ||
+        inField(m.label) ||
+        inField(m.country) ||
+        inField(m.city) ||
+        (m.tags?.some((t) => inField(t)) ?? false)
+      );
+    };
+    for (const item of markerMeshesRef.current) {
+      item.mesh.visible = matches(item.marker);
+    }
+    for (const [key, pulseMesh] of pulseMeshByKeyRef.current) {
+      const item = markerMeshesRef.current.find((x) => x.marker.key === key);
+      pulseMesh.visible = !!item && item.mesh.visible;
+    }
+  }, [query, filter, markers]);
+
+  const visibleMatchCount = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (filter === "all" && !q) return markers.length;
+    let n = 0;
+    for (const m of markers) {
+      if (filter !== "all" && m.category !== filter) continue;
+      if (!q) {
+        n++;
+        continue;
+      }
+      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
+      if (
+        inField(m.title) ||
+        inField(m.label) ||
+        inField(m.country) ||
+        inField(m.city) ||
+        (m.tags?.some((t) => inField(t)) ?? false)
+      ) {
+        n++;
+      }
+    }
+    return n;
+  }, [markers, query, filter]);
 
   const counts = useMemo(() => {
     let live = 0;
@@ -686,24 +742,34 @@ export default function Globus3D({
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    const markerMeshes: Array<{ mesh: THREE.Mesh; marker: Marker }> = [];
+    const markerMeshes: Array<{
+      mesh: THREE.Mesh;
+      mat: THREE.MeshBasicMaterial;
+      marker: Marker;
+    }> = [];
     const pulseMeshes: Array<{
       mesh: THREE.Mesh;
       mat: THREE.MeshBasicMaterial;
       baseSize: number;
       offset: number;
+      markerKey: string;
     }> = [];
+    const pulseMeshByKey = new Map<string, THREE.Mesh>();
 
     let focusIndex = 0;
     for (const m of markers) {
       const p = geoFromLatLon(m.lat, m.lon, radius + 1.2);
       const markerGeo = new THREE.SphereGeometry(m.size, 16, 16);
-      const markerMat = new THREE.MeshBasicMaterial({ color: m.color });
+      const markerMat = new THREE.MeshBasicMaterial({
+        color: m.color,
+        transparent: true,
+        opacity: 1,
+      });
       const mesh = new THREE.Mesh(markerGeo, markerMat);
       mesh.position.set(p.x, p.y, p.z);
       mesh.userData = { key: m.key };
       earthGroup.add(mesh);
-      markerMeshes.push({ mesh, marker: m });
+      markerMeshes.push({ mesh, mat: markerMat, marker: m });
 
       if (m.category === "focus" || m.category === "award") {
         const pulseGeo = new THREE.SphereGeometry(m.size, 18, 18);
@@ -721,10 +787,14 @@ export default function Globus3D({
           mat: pulseMat,
           baseSize: m.size,
           offset: focusIndex * 0.35,
+          markerKey: m.key,
         });
+        pulseMeshByKey.set(m.key, pulse);
         focusIndex++;
       }
     }
+    markerMeshesRef.current = markerMeshes;
+    pulseMeshByKeyRef.current = pulseMeshByKey;
 
     const hemi = new THREE.HemisphereLight(0x9eb6ff, 0x080810, 0.55);
     scene.add(hemi);
@@ -1029,6 +1099,126 @@ export default function Globus3D({
           style={{
             position: "absolute",
             top: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 5,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(12,18,32,0.78)",
+            border: `1px solid ${visibleMatchCount === 0 ? "rgba(248,113,113,0.5)" : "rgba(120,160,220,0.28)"}`,
+            borderRadius: 999,
+            padding: "5px 6px 5px 12px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          <span style={{ fontSize: 12, opacity: 0.7 }}>🔍</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search"
+            aria-label="Search projects"
+            style={{
+              width: 130,
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              color: "#f1f5ff",
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "4px 0",
+            }}
+          />
+          {query ? (
+            <button
+              type="button"
+              title="Clear"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                background: "rgba(148,163,184,0.2)",
+                color: "#cbd5e1",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          ) : null}
+
+          <span
+            style={{
+              width: 1,
+              height: 18,
+              background: "rgba(148,163,184,0.25)",
+              margin: "0 2px",
+            }}
+          />
+
+          {[
+            { key: "all", label: "All", icon: "" },
+            { key: "product", label: "Products", icon: "🚀" },
+            { key: "award", label: "Awards", icon: "🏆" },
+            { key: "qright", label: "QRight", icon: "💎" },
+          ].map((c) => {
+            const active = filter === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                title={c.label}
+                aria-label={`Filter: ${c.label}`}
+                onClick={() => setFilter(c.key as typeof filter)}
+                style={{
+                  height: 26,
+                  padding: c.icon ? "0 8px" : "0 10px",
+                  borderRadius: 999,
+                  border: "1px solid transparent",
+                  background: active ? "rgba(125,211,252,0.18)" : "transparent",
+                  color: active ? "#bae6fd" : "#94a3b8",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: "0.02em",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                {c.icon ? <span style={{ fontSize: 12 }}>{c.icon}</span> : null}
+                {c.label}
+              </button>
+            );
+          })}
+
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: visibleMatchCount === 0 ? "#fca5a5" : "#94a3b8",
+              padding: "0 8px 0 4px",
+              minWidth: 28,
+              textAlign: "right",
+            }}
+          >
+            {visibleMatchCount}/{markers.length}
+          </span>
+        </div>
+      ) : null}
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 64,
             left: 14,
             zIndex: 4,
             background: "rgba(12,18,32,0.7)",
@@ -1090,7 +1280,7 @@ export default function Globus3D({
         <div
           style={{
             position: "absolute",
-            top: 14,
+            top: 64,
             right: 14,
             zIndex: 4,
             background: "rgba(12,18,32,0.7)",

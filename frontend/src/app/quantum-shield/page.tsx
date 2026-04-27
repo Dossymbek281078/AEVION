@@ -212,7 +212,7 @@ export default function QuantumShieldPage() {
                 </div>
               </div>
               <p style={{ margin: "0 0 12px", fontSize: 14, opacity: 0.82, lineHeight: 1.6, maxWidth: 600 }}>
-                Military-grade protection using Shamir's Secret Sharing. Keys split into shards &#8212; any threshold can reconstruct, but no single shard reveals anything.
+                Ed25519 with the private key Shamir-split across three independent locations &#8212; any 2 of 3 reconstruct it, no single party (including AEVION) ever holds enough to forge.
               </p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
                 {["Ed25519 + SSS", "Threshold 2/3", "Auto via QSign"].map((tag) => (

@@ -14,7 +14,7 @@ const faqs: FAQ[] = [
   },
   {
     q: "How do I register my intellectual property?",
-    a: "Go to Auth → create an account → go to QRight → fill in the title and description of your work → click 'Register'. Your content gets a cryptographic hash and timestamp that proves you had the content at this moment.",
+    a: "Auth → create an account → QRight → fill title + description → click Protect. You walk away with: a SHA-256 content fingerprint, AEVION + your-browser Ed25519 co-signatures, a Shamir-split private key (any 2 of 3 shards reconstruct it; AEVION holds at most 1), an OpenTimestamps proof anchored in a Bitcoin block, and a Verification Bundle .json anyone can verify offline forever — even if AEVION shuts down.",
   },
   {
     q: "What is Planet Compliance?",
@@ -30,7 +30,7 @@ const faqs: FAQ[] = [
   },
   {
     q: "Is my data safe?",
-    a: "Yes. We use Quantum Shield cryptography (Ed25519 + Shamir Secret Sharing), encrypted storage, and Merkle-tree audit trails. Your passwords are hashed. Your private data is never exposed through the public Trust Graph.",
+    a: "Yes. Quantum Shield combines Ed25519 with Shamir 2-of-3 Secret Sharing — the signing key is split across independent locations, AEVION holds at most one shard. QRight certificates also carry a co-signature held only in your browser, so even a full platform breach cannot forge new claims under your identity. Storage is encrypted, audit trails are Merkle-rooted, passwords are hashed, and private data never reaches the public Trust Graph.",
   },
   {
     q: "How does CyberChess work?",

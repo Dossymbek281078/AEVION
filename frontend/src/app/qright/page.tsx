@@ -403,7 +403,7 @@ export default function QRightPage() {
             {/* Author identity panel — your client-side keypair */}
             {cosignSupported === false && (
               <div role="alert" style={{ borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", padding: "12px 16px", marginBottom: 14, fontSize: 12, color: "#991b1b" }}>
-                Your browser does not support Ed25519 in WebCrypto. Co-signing is disabled — your work will still be protected by AEVION&apos;s 3-layer stack, but without the user-held key layer.
+                Your browser doesn&apos;t support Ed25519 in WebCrypto, so the author co-signature layer is disabled. The other three layers (SHA-256, HMAC, and Shamir-Ed25519) still apply — but for forge-resistance against an AEVION breach, open this page in an up-to-date Chromium or Firefox.
               </div>
             )}
             {keyError && (
@@ -470,9 +470,9 @@ export default function QRightPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, fontWeight: 900, color: "#0f766e", marginBottom: 4 }}>First time? Start here.</div>
                     <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.55 }}>
-                      Fill the <b>title</b> and <b>description</b> below — that is enough. Pick the work type, then press
+                      Fill <b>title</b> and <b>description</b>, pick the type, press
                       <span style={{ display: "inline-block", margin: "0 4px", padding: "1px 8px", borderRadius: 6, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 11 }}>🛡️ Protect My Work</span>.
-                      You get a certificate, an author shard to save offline, and a public verify URL — all in one click.
+                      You walk away with: a public verify URL, a downloadable PDF, an Author Shard you store offline, and a Verification Bundle that works even if AEVION goes dark. Save the bundle and the shard — that&apos;s the part we cannot do for you.
                     </div>
                   </div>
                   <button
@@ -531,7 +531,7 @@ export default function QRightPage() {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What is it? What makes it unique? The more detail, the stronger the protection."
+                  placeholder="What is it? What makes it identifiable as yours? Anything you write here becomes part of the signed certificate."
                   rows={4}
                   aria-label="Description of the work"
                   aria-required="true"

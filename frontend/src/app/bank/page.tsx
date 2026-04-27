@@ -44,6 +44,7 @@ import { SnapshotExport } from "./_components/SnapshotExport";
 import { TierProgression } from "./_components/TierProgression";
 import { TimeTravel } from "./_components/TimeTravel";
 import { VoiceCommand } from "./_components/VoiceCommand";
+import { WeeklyBrief } from "./_components/WeeklyBrief";
 import { GiftMode } from "./_components/GiftMode";
 import { MoneyFlowMap } from "./_components/MoneyFlowMap";
 import { PaymentRequestPanel } from "./_components/PaymentRequestPanel";
@@ -316,6 +317,9 @@ function BankContent() {
           </TabPanel>
 
           <TabPanel id="earn" active={activeTab}>
+            <div id="bank-anchor-brief" style={{ scrollMarginTop: 20 }}>
+              <WeeklyBrief accountId={account.id} operations={operations} />
+            </div>
             <TotalEarningsDashboard />
             <div id="bank-anchor-timetravel" style={{ scrollMarginTop: 20 }}>
               <TimeTravel account={account} operations={operations} />

@@ -402,6 +402,9 @@ export default function CyberChessPage(){
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
   const[replaying,sReplaying]=useState(false);
   const[replaySpeed,sReplaySpeed]=useState(1000);
+  // Replay Director — cinematic auto-replay (killer feature #9)
+  const[cinematic,sCinematic]=useState(false);
+  const[cinematicMoment,sCinematicMoment]=useState<{label:string;color:string;sub?:string}|null>(null);
   type Arrow={from:Square;to:Square;c:string};
   type SqHL={sq:Square;c:string};
   const[arrows,sArrows]=useState<Arrow[]>([]);
@@ -1242,14 +1245,37 @@ export default function CyberChessPage(){
   /* ── Replay auto-advance ── */
   useEffect(()=>{
     if(!replaying||hist.length===0)return;
-    const t=setInterval(()=>{
-      const cur=browseIdx<0?hist.length:browseIdx;
-      const ni=cur+1;
-      if(ni>=hist.length){sReplaying(false);sBrowseIdx(-1);try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1)}catch{}return}
-      try{const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());snd("move")}catch{sReplaying(false)}
-    },replaySpeed);
-    return()=>clearInterval(t);
-  },[replaying,replaySpeed,browseIdx,hist.length,fenHist]);
+    // Cinematic mode: speed adapts to quality of next move; key moments flash title cards
+    const cur=browseIdx<0?hist.length:browseIdx;
+    const ni=cur+1;
+    let delay=replaySpeed;
+    let momentForNext:typeof cinematicMoment=null;
+    if(cinematic&&ni<hist.length&&analysis[ni]){
+      const q=analysis[ni].quality;
+      if(q==="blunder"){delay=2200;momentForNext={label:"⚠ BLUNDER",color:"#dc2626",sub:`ход ${Math.floor(ni/2)+1}${ni%2===0?" белых":" чёрных"}`}}
+      else if(q==="mistake"){delay=1700;momentForNext={label:"✗ Ошибка",color:"#ea580c",sub:`ход ${Math.floor(ni/2)+1}`}}
+      else if(q==="inacc"){delay=1100;momentForNext={label:"~ Неточность",color:"#ca8a04"}}
+      else if(q==="great"){delay=1900;momentForNext={label:"✨ BRILLIANT",color:"#7c3aed",sub:"эталонный ход"}}
+      else delay=420;
+      // Special moments: mate-in-N flash
+      if(analysis[ni].mate!==0&&Math.abs(analysis[ni].mate)<=3){
+        const m=analysis[ni].mate;
+        momentForNext={label:m>0?`♛ Мат в ${m}`:`♚ Мат в ${-m}`,color:m>0?"#059669":"#dc2626",sub:"переломный момент"};
+        delay=2400;
+      }
+    }
+    const t=setTimeout(()=>{
+      if(ni>=hist.length){
+        sReplaying(false);sBrowseIdx(-1);
+        try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1)}catch{}
+        if(cinematic){sCinematicMoment({label:"🏁 КОНЕЦ ПАРТИИ",color:"#0f172a",sub:over||""});setTimeout(()=>{sCinematicMoment(null);sCinematic(false)},2400)}
+        return;
+      }
+      try{const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());snd("move")}catch{sReplaying(false);return}
+      if(cinematic&&momentForNext){sCinematicMoment(momentForNext);setTimeout(()=>sCinematicMoment(null),Math.min(1500,delay-300))}
+    },delay);
+    return()=>clearTimeout(t);
+  },[replaying,replaySpeed,browseIdx,hist.length,fenHist,cinematic,analysis,over]);
 
   /* ── Puzzle achievement tracker ── */
   useEffect(()=>{
@@ -2413,6 +2439,20 @@ export default function CyberChessPage(){
                   {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined}}><Piece type={p.type} color={p.color}/></div>}
                   {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
                 </div>}))}
+              {/* Cinematic title-card overlay */}
+              {cinematicMoment&&<div style={{position:"absolute",inset:0,
+                display:"flex",alignItems:"center",justifyContent:"center" as const,
+                pointerEvents:"none",zIndex:10,
+                background:`radial-gradient(circle at center, ${cinematicMoment.color}cc 0%, ${cinematicMoment.color}66 60%, transparent 95%)`,
+                animation:"cc-cinematic-flash 240ms ease-out"}}>
+                <div style={{textAlign:"center" as const,color:"#fff",
+                  textShadow:"0 4px 24px rgba(0,0,0,0.65), 0 1px 3px rgba(0,0,0,0.55)",
+                  letterSpacing:1,
+                  transform:"scale(1)",animation:"cc-cinematic-pop 360ms ease-out"}}>
+                  <div style={{fontSize:"clamp(28px,5.5vw,52px)",fontWeight:900,lineHeight:1.1}}>{cinematicMoment.label}</div>
+                  {cinematicMoment.sub&&<div style={{fontSize:"clamp(12px,1.8vw,16px)",fontWeight:700,marginTop:8,opacity:0.92,letterSpacing:0.8,textTransform:"uppercase" as const}}>{cinematicMoment.sub}</div>}
+                </div>
+              </div>}
             </div>
           </div>
           <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
@@ -2713,6 +2753,34 @@ export default function CyberChessPage(){
             </div>;
           })()}
           {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
+          {/* Replay Director — кинематографический автореплей (killer #9) */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&!cinematic&&<button
+            onClick={()=>{
+              try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}catch{}
+              sCinematic(true);sReplaying(true);
+              sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:`${hist.length} ходов · режиссёр AEVION`});
+              setTimeout(()=>sCinematicMoment(null),1800);
+            }}
+            className="cc-focus-ring"
+            style={{marginTop:8,width:"100%",padding:"12px 16px",borderRadius:10,
+              border:"none",background:"linear-gradient(90deg,#0c0a09,#1e1b4b,#831843,#1e1b4b,#0c0a09)",
+              backgroundSize:"200% 100%",
+              color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.5,cursor:"pointer",
+              boxShadow:"0 4px 16px rgba(15,23,42,0.4)",
+              display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
+            <span style={{fontSize:18}}>🎬</span>
+            <span>CINEMATIC REPLAY · ключевые моменты под спотлайтом</span>
+          </button>}
+          {cinematic&&<div style={{marginTop:8,padding:"10px 16px",borderRadius:10,
+            background:"linear-gradient(135deg,#0c0a09,#1e1b4b)",color:"#fff",
+            display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
+            boxShadow:"0 2px 12px rgba(15,23,42,0.3)"}}>
+            <span style={{fontSize:13,fontWeight:900,letterSpacing:0.5}}>🎬 CINEMATIC · ход {(browseIdx<0?hist.length:browseIdx)}/{hist.length}</span>
+            <button onClick={()=>{sCinematic(false);sReplaying(false);sCinematicMoment(null)}}
+              style={{padding:"4px 10px",fontSize:11,fontWeight:800,borderRadius:6,
+                background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",
+                color:"#fff",cursor:"pointer"}}>Стоп</button>
+          </div>}
 
           {/* ── Blunder Rewind — переиграть свои ошибки как пазлы ── */}
           {over&&(tab==="play"||tab==="coach")&&analysis.length>0&&(()=>{
@@ -3615,7 +3683,7 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:8}}>{(["q","r","b","n"] as const).map(pt=><button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} style={{padding:"8px 12px",borderRadius:10,border:`1px solid ${T.border}`,background:"#fff",cursor:"pointer",width:60,height:60}}><Piece type={pt} color={pCol}/></button>)}</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes cc-cinematic-flash{0%{opacity:0}25%{opacity:1}100%{opacity:0.7}}@keyframes cc-cinematic-pop{0%{transform:scale(0.4);opacity:0}55%{transform:scale(1.08);opacity:1}100%{transform:scale(1);opacity:1}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       const byCategory=(cat:string)=>savedGames.filter(g=>cat==="all"||g.category===cat);

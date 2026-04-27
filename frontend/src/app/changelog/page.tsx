@@ -11,6 +11,14 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    date: "2026-04-27",
+    highlight: "Bank story pages · Trust deep-dive · Receipts · Wallet card · Security model",
+    body:
+      "Five new indexable surfaces shipped: /bank/about (story), /bank/trust (factor breakdown + tier ladder + methodology), /bank/receipt/[id] (printable Ed25519-signed receipts with verify QR), /bank/card (virtual card whose tier follows Trust Score, flip + hide-balance + print), /bank/security (5-layer defence model + comparison table + FAQ). Each ships with locale-aware copy in EN/RU/KK and an edge-rendered OG image (1200×630). Story group surfaced in /bank/explore so the catalog reads narrative-first. Spend Forecast component, Smart Notifications Center, Multichat token meter and demo seed mode also landed in this push.",
+    modules: ["Bank", "Multichat"],
+    kind: "feat",
+  },
+  {
     date: "2026-04-26",
     highlight: "Multichat Engine goes live · Awards real submission UX · Demo refresh · Pitch evolution",
     body:

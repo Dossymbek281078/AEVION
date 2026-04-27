@@ -1648,6 +1648,25 @@ export default function Globus3D({
       el.removeEventListener("pointerleave", onPointerLeave);
       el.removeEventListener("wheel", onWheel);
       cancelAnimationFrame(raf);
+
+      // Освобождаем GPU-ресурсы — иначе hot-reload и ремаунт через смену markers
+      // быстро забивают видеопамять.
+      const disposed = new WeakSet<object>();
+      const disposeMaterial = (m: any) => {
+        if (!m || disposed.has(m)) return;
+        disposed.add(m);
+        if (typeof m.dispose === "function") m.dispose();
+      };
+      scene.traverse((obj: any) => {
+        if (obj.geometry && !disposed.has(obj.geometry)) {
+          disposed.add(obj.geometry);
+          if (typeof obj.geometry.dispose === "function") obj.geometry.dispose();
+        }
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach(disposeMaterial);
+          else disposeMaterial(obj.material);
+        }
+      });
       renderer.dispose();
       while (el.firstChild) el.removeChild(el.firstChild);
     };

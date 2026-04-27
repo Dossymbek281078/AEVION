@@ -108,6 +108,30 @@ const LEGAL_FRAMEWORKS = [
   { name: "KZ Digital Signature Law", desc: "Electronic digital signatures are legally equivalent to handwritten", scope: "Kazakhstan", color: "#f59e0b", article: "No. 370-II" },
 ];
 
+/* Relative time helper — keeps copy concise on cards / activity feed.
+ * Returns "just now", "5 min ago", "3 h ago", "yesterday", "12 d ago",
+ * "8 mo ago", or "2 y ago". Falls back to a localized date string for
+ * invalid input.
+ */
+function formatRelative(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  const diff = Date.now() - t;
+  const sec = Math.round(diff / 1000);
+  if (sec < 45) return "just now";
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} h ago`;
+  const day = Math.round(hr / 24);
+  if (day === 1) return "yesterday";
+  if (day < 30) return `${day} d ago`;
+  const mo = Math.round(day / 30);
+  if (mo < 12) return `${mo} mo ago`;
+  const yr = Math.round(mo / 12);
+  return `${yr} y ago`;
+}
+
 /* Debounce helper (tiny inline) */
 function useDebounced<T>(value: T, delay = 250): T {
   const [v, setV] = useState(value);
@@ -199,6 +223,14 @@ export default function BureauPage() {
   const [dragOver, setDragOver] = useState(false);
   const [batch, setBatch] = useState<Array<{ name: string; size: number; hash?: string; status: "hashing" | "checking" | "found" | "missing" | "error"; cert?: { id: string; title: string; author: string; protectedAt: string; verifiedCount: number }; error?: string }>>([]);
   const [helpOpen, setHelpOpen] = useState<boolean>(false);
+  // nowTick re-renders the page once a minute so relative timestamps
+  // ("3 min ago", "yesterday") stay accurate without a hard refresh.
+  const [nowTick, setNowTick] = useState<number>(0);
+  useEffect(() => {
+    const i = setInterval(() => setNowTick((n) => n + 1), 60_000);
+    return () => clearInterval(i);
+  }, []);
+  void nowTick;
   const searchRef = useRef<HTMLInputElement>(null);
 
   /* Load stats */
@@ -857,7 +889,7 @@ export default function BureauPage() {
                     <div style={{ fontSize: 12.5, fontWeight: 800, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</div>
                     <div style={{ fontSize: 10.5, color: "#64748b" }}>by {l.author}{l.location ? ` · ${l.location}` : ""}</div>
                   </div>
-                  <span style={{ fontSize: 10, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{new Date(l.protectedAt).toLocaleDateString()}</span>
+                  <span title={new Date(l.protectedAt).toLocaleString()} style={{ fontSize: 10, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{formatRelative(l.protectedAt)}</span>
                   <Link href={`/verify/${l.id}`} style={{ padding: "4px 10px", borderRadius: 6, background: "#fff", border: "1px solid rgba(15,23,42,0.12)", color: "#0d9488", textDecoration: "none", fontSize: 10, fontWeight: 800 }}>Verify →</Link>
                 </div>
               ))}
@@ -1021,7 +1053,7 @@ export default function BureauPage() {
                         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 16 }}>{KIND_ICONS[cert.kind] || "📦"}</span>
                           <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: `${kindColor}20`, color: kindColor, textTransform: "uppercase" }}>{KIND_LABELS[cert.kind] || cert.kind}</span>
-                          <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
+                          <span title={new Date(cert.protectedAt).toLocaleString()} style={{ fontSize: 11, color: "#94a3b8" }}>{formatRelative(cert.protectedAt)}</span>
                         </div>
                         <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cert.title}</div>
                         <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>

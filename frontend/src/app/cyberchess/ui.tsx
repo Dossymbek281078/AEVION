@@ -78,9 +78,21 @@ export function Btn({ variant = "secondary", size = "md", full, loading, disable
         transition: `background ${MOTION.fast} ${MOTION.ease}, transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.fast} ${MOTION.ease}`,
         ...variantStyle(variant, !!active), ...style,
       }}
+      onMouseEnter={e => {
+        if (disabled || loading) return;
+        const el = e.currentTarget as HTMLButtonElement;
+        el.style.transform = "translateY(-1px)";
+        const cur = el.style.boxShadow;
+        if (!cur) el.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
+      }}
       onMouseDown={e => { if (!disabled && !loading) (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.97)"; }}
-      onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = ""; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = ""; }}
+      onMouseUp={e => { if (!disabled && !loading) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLButtonElement;
+        el.style.transform = "";
+        // Reset only if we set it (heuristic: variant-secondary with no explicit shadow)
+        if (el.style.boxShadow === "0 4px 12px rgba(0,0,0,0.08)") el.style.boxShadow = "";
+      }}
     >
       {loading ? <Spinner size={sz.fs} /> : icon}
       {children}
@@ -107,6 +119,16 @@ export function Card({ children, padding = SPACE[4], radius = RADIUS.lg,
   return (
     <div
       onClick={onClick}
+      onMouseEnter={onClick ? e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.transform = "translateY(-2px)";
+        el.style.boxShadow = SHADOW.md;
+      } : undefined}
+      onMouseLeave={onClick ? e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.transform = "";
+        el.style.boxShadow = sh;
+      } : undefined}
       style={{
         background: bg, border: `1px solid ${COLOR.border}`,
         borderRadius: radius, padding, boxShadow: sh,
@@ -186,8 +208,10 @@ export function Tabs<V extends string>({ value, onChange, tabs, variant = "pill"
             className="cc-focus-ring cc-touch"
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
-              padding: pad, fontSize: fs, fontWeight: 700,
-              background: active ? (isUnder ? "transparent" : COLOR.surface1) : "transparent",
+              padding: pad, fontSize: fs, fontWeight: active ? 800 : 700,
+              background: active
+                ? (isUnder ? "transparent" : `linear-gradient(135deg, ${COLOR.surface1}, ${COLOR.surface2})`)
+                : "transparent",
               color: active ? (isUnder ? COLOR.brand : COLOR.text) : COLOR.textDim,
               border: "none",
               borderBottom: isUnder ? `2px solid ${active ? COLOR.brand : "transparent"}` : "none",
@@ -196,6 +220,18 @@ export function Tabs<V extends string>({ value, onChange, tabs, variant = "pill"
               boxShadow: active && isSeg ? SHADOW.sm : "none",
               transition: `all ${MOTION.fast} ${MOTION.ease}`,
               whiteSpace: "nowrap",
+            }}
+            onMouseEnter={e => {
+              if (active) return;
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.color = COLOR.text;
+              if (!isUnder) el.style.background = COLOR.surface2;
+            }}
+            onMouseLeave={e => {
+              if (active) return;
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.color = COLOR.textDim;
+              if (!isUnder) el.style.background = "transparent";
             }}
           >
             {t.icon}{t.label}

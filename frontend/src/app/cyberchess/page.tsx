@@ -282,17 +282,34 @@ function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarPr
       ? <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={sz}><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
     : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={sz}><rect x="4" y="7" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1.4" fill={col} stroke="none"/><circle cx="15" cy="13" r="1.4" fill={col} stroke="none"/><line x1="12" y1="3" x2="12" y2="7"/></svg>;
   return (
-    <div style={{padding:"10px 14px",borderRadius:10,background:bg,border:`1px solid ${bc}`}}>
+    <div style={{
+      padding:"12px 16px",borderRadius:12,background:bg,border:`1px solid ${bc}`,
+      boxShadow:isOver?(isWin?"0 4px 14px rgba(5,150,105,0.18)":"0 4px 14px rgba(220,38,38,0.18)"):chk?"0 4px 14px rgba(220,38,38,0.15)":"0 1px 3px rgba(0,0,0,0.04)",
+      transition:"all 200ms cubic-bezier(0.4, 0, 0.2, 1)",
+      position:"relative",overflow:"hidden",
+    }}>
+      {/* Animated accent bar at top for game over */}
+      {isOver && <div style={{position:"absolute",top:0,left:0,right:0,height:3,
+        background:isWin?"linear-gradient(90deg,#10b981,#059669,#10b981)":"linear-gradient(90deg,#ef4444,#dc2626,#ef4444)",
+        backgroundSize:"200% 100%",animation:"shimmer 2s linear infinite"}}/>}
       {isOver ? (
         <div>
-          <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:900,fontSize:15,color:col}}>{icon}<span>{label}</span></div>
+          <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:900,fontSize:15,color:col}}>
+            <span style={{animation:"pop 0.5s ease-out",display:"inline-flex"}}>{icon}</span>
+            <span>{label}</span>
+          </div>
           <div style={{fontSize:13,color:T.dim,marginTop:4,paddingLeft:26}}>{histLen} moves · {rat} {rkI}</div>
         </div>
       ) : (
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {icon}
           <span style={{fontWeight:700,fontSize:14,color:T.text}}>{label}</span>
-          {pmsLen>0 && <span style={{padding:"2px 8px",borderRadius:5,fontSize:12,fontWeight:800,background:"#dbeafe",color:T.blue,marginLeft:"auto"}}>{pmsLen} premove{pmsLen>1?"s":""}</span>}
+          {pmsLen>0 && <span style={{
+            padding:"3px 10px",borderRadius:RADIUS.full,fontSize:12,fontWeight:800,
+            background:"linear-gradient(135deg,#dbeafe,#bfdbfe)",color:T.blue,marginLeft:"auto",
+            boxShadow:"0 1px 3px rgba(37,99,235,0.2)",
+            display:"inline-flex",alignItems:"center",gap:4
+          }}>⚡ {pmsLen} premove{pmsLen>1?"s":""}</span>}
         </div>
       )}
     </div>
@@ -2494,51 +2511,68 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── Daily Variant Challenge (full-width) ─── */}
-          {dailyVariantInfo&&(()=>{
-            const dv=dailyVariantInfo;
-            const meta=VARIANTS.find(v=>v.id===dv.variant);
-            if(!meta)return null;
-            const done=dv.played&&dv.won;
-            return <button onClick={()=>{
-              sVariant(dv.variant);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
-              if(dv.variant==="asymmetric")sManualArmyFen("");
-              setTimeout(()=>newG(),50);
-              showToast(`☀ Daily Challenge: ${meta.name}`,"info");
-            }} className="cc-focus-ring"
-              style={{padding:SPACE[4],borderRadius:RADIUS.lg,
-                border:done?"1px solid #a7f3d0":"1px solid #c4b5fd",
-                background:done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",
-                cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3],
-                boxShadow:SHADOW.sm,transition:`all ${MOTION.base} ${MOTION.ease}`}}>
-              <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>{done?"✅":meta.emoji}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:10,fontWeight:900,color:done?"#065f46":"#5b21b6",letterSpacing:1,textTransform:"uppercase" as const}}>{done?"Daily Challenge выполнен":"Daily Variant Challenge"}</div>
-                <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:2}}>{meta.name} · <span style={{color:CC.accent}}>{meta.shortDesc}</span></div>
-                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{done?"Возвращайся завтра":`+50 Chessy за победу · ещё ${24-new Date().getHours()} ч`}</div>
+          {/* ─── DAILY hub: Daily Variant Challenge + Daily Puzzle side-by-side ─── */}
+          {(dailyVariantInfo||(dailyState&&PUZZLES[dailyState.idx]))&&(()=>{
+            const hours=24-new Date().getHours();
+            return <Card padding={0} elevation="sm" style={{overflow:"hidden",animation:"fadeInUp 0.4s ease-out"}}>
+              <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,
+                background:"linear-gradient(90deg,#fef3c7,#fde68a,#fef3c7)",
+                borderBottom:`1px solid ${CC.border}`,
+                display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <span style={{fontSize:18}}>☀</span>
+                <span style={{fontSize:11,fontWeight:900,color:"#78350f",letterSpacing:1,textTransform:"uppercase" as const}}>DAILY · {new Date().toLocaleDateString("ru-RU")}</span>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:10,color:"#92400e",fontWeight:700}}>сброс через {hours} ч</span>
               </div>
-              {!done&&<Badge tone="accent" size="md">▶ Принять</Badge>}
-            </button>;
-          })()}
-
-          {/* ─── Daily puzzle (full-width) ─── */}
-          {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
-            const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
-            return <button onClick={loadDailyPuzzle}
-              className="cc-focus-ring"
-              style={{padding:SPACE[4],borderRadius:RADIUS.lg,
-                border:solved?"1px solid #a7f3d0":"1px solid #fcd34d",
-                background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
-                cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[3],
-                boxShadow:SHADOW.sm,transition:`all ${MOTION.base} ${MOTION.ease}`}}>
-              <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>{solved?"✅":"☀"}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:10,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>{solved?"Пазл дня решён":"Пазл дня"}</div>
-                <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:2}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Найди лучший ход"} · <span style={{color:CC.gold}}>{pz.r}</span></div>
-                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{solved?"Возвращайся завтра":`+50 Chessy · осталось ${24-new Date().getHours()} ч`}</div>
+              <div style={{display:"grid",gridTemplateColumns:dailyVariantInfo&&(dailyState&&PUZZLES[dailyState.idx])?"1fr 1fr":"1fr",gap:0}}>
+                {dailyVariantInfo&&(()=>{
+                  const dv=dailyVariantInfo;
+                  const meta=VARIANTS.find(v=>v.id===dv.variant);
+                  if(!meta)return null;
+                  const done=dv.played&&dv.won;
+                  return <button onClick={()=>{
+                    sVariant(dv.variant);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
+                    if(dv.variant==="asymmetric")sManualArmyFen("");
+                    setTimeout(()=>newG(),50);
+                    showToast(`☀ Daily Challenge: ${meta.name}`,"info");
+                  }} className="cc-focus-ring"
+                    style={{padding:SPACE[3],
+                      border:"none",borderRight:dailyState&&PUZZLES[dailyState.idx]?`1px solid ${CC.border}`:"none",
+                      background:done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",
+                      cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[2],
+                      transition:`all ${MOTION.base} ${MOTION.ease}`}}
+                    onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=done?"linear-gradient(135deg,#dcfce7,#a7f3d0)":"linear-gradient(135deg,#ede9fe,#ddd6fe)"}
+                    onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background=done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)"}>
+                    <div style={{fontSize:30,lineHeight:1,flexShrink:0}}>{done?"✅":meta.emoji}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:9,fontWeight:900,color:done?"#065f46":"#5b21b6",letterSpacing:0.8,textTransform:"uppercase" as const}}>{done?"Variant решён":"Variant Challenge"}</div>
+                      <div style={{fontSize:13,fontWeight:900,color:CC.text,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{meta.name}</div>
+                      <div style={{fontSize:10,color:CC.textDim,marginTop:1}}>{done?"завтра new":"+50 Chessy"}</div>
+                    </div>
+                    {!done&&<Badge tone="accent" size="sm">▶</Badge>}
+                  </button>;
+                })()}
+                {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
+                  const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
+                  return <button onClick={loadDailyPuzzle}
+                    className="cc-focus-ring"
+                    style={{padding:SPACE[3],border:"none",
+                      background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
+                      cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[2],
+                      transition:`all ${MOTION.base} ${MOTION.ease}`}}
+                    onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=solved?"linear-gradient(135deg,#dcfce7,#a7f3d0)":"linear-gradient(135deg,#fef3c7,#fde68a)"}
+                    onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background=solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)"}>
+                    <div style={{fontSize:30,lineHeight:1,flexShrink:0}}>{solved?"✅":"🧩"}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:9,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:0.8,textTransform:"uppercase" as const}}>{solved?"Пазл решён":"Пазл дня"}</div>
+                      <div style={{fontSize:13,fontWeight:900,color:CC.text,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Лучший ход"} · {pz.r}</div>
+                      <div style={{fontSize:10,color:CC.textDim,marginTop:1}}>{solved?"завтра new":"+50 Chessy"}</div>
+                    </div>
+                    {!solved&&<Badge tone="gold" size="sm">▶</Badge>}
+                  </button>;
+                })()}
               </div>
-              {!solved&&<Badge tone="brand" size="md">▶ Решить</Badge>}
-            </button>;
+            </Card>;
           })()}
 
           {/* ─── Board theme + Premove slider (consolidated) ─── */}

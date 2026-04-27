@@ -22,8 +22,10 @@ export type Persona = {
   randMul: number;
 };
 
-// 16 personas — pool to draw from. Each tournament samples 8.
+// 26 personas — pool to draw from. Each tournament samples 8.
+// Mix of: current top GMs, women champions, juniors, legends, AI engines, fictional.
 export const PERSONAS: Persona[] = [
+  // Current top GMs
   { id: "magnus",   name: "Magnus C.",  flag: "🇳🇴", elo: 2847, style: "Universal",  motto: "Я никогда не проигрываю — либо побеждаю, либо учусь.", aiLevel: 5, randMul: 0.6 },
   { id: "hikaru",   name: "Hikaru N.",  flag: "🇺🇸", elo: 2795, style: "Tactical",   motto: "Bullet — это шахматы. Остальное — для медленных.",      aiLevel: 5, randMul: 0.8 },
   { id: "fabiano",  name: "Fabiano C.", flag: "🇺🇸", elo: 2758, style: "Positional", motto: "Theory matters. Каждый ход подготовлен.",                aiLevel: 5, randMul: 0.5 },
@@ -36,10 +38,25 @@ export const PERSONAS: Persona[] = [
   { id: "leinier",  name: "Leinier D.", flag: "🇺🇸", elo: 2551, style: "Universal",  motto: "Адаптируюсь под любого.",                                aiLevel: 3, randMul: 0.7 },
   { id: "praggna",  name: "R Praggna.", flag: "🇮🇳", elo: 2745, style: "Aggressive", motto: "Возраст — это просто число.",                            aiLevel: 4, randMul: 0.85 },
   { id: "gukesh",   name: "Gukesh D.",  flag: "🇮🇳", elo: 2740, style: "Universal",  motto: "Чемпион мира — это начало.",                             aiLevel: 5, randMul: 0.55 },
-  { id: "carlsen2", name: "AlphaZero",  flag: "🤖", elo: 3300, style: "Wild",       motto: "Я играю позиции, которые люди боятся.",                  aiLevel: 5, randMul: 0.3 },
+  // Women champions
+  { id: "judit",    name: "Judit P.",   flag: "🇭🇺", elo: 2735, style: "Aggressive", motto: "Шахматы не имеют пола.",                                 aiLevel: 5, randMul: 0.7 },
+  { id: "hou",      name: "Hou Y.",     flag: "🇨🇳", elo: 2658, style: "Positional", motto: "Тишина перед бурей.",                                    aiLevel: 4, randMul: 0.5 },
+  { id: "humpy",    name: "Humpy K.",   flag: "🇮🇳", elo: 2596, style: "Solid",      motto: "Терпение — моё оружие.",                                  aiLevel: 4, randMul: 0.4 },
+  { id: "bibisara", name: "Bibisara A.",flag: "🇰🇿", elo: 2516, style: "Tactical",   motto: "Я играю быстро и глубоко.",                              aiLevel: 4, randMul: 0.85 },
+  // Junior prodigies
+  { id: "abhi",     name: "Abhimanyu M.",flag: "🇺🇸", elo: 2580, style: "Universal", motto: "Я нашёл шахматы в 4 года.",                              aiLevel: 4, randMul: 0.7 },
+  { id: "yagiz",    name: "Yagiz K. K.",flag: "🇹🇷", elo: 2520, style: "Aggressive", motto: "Я моложе твоего рейтинга.",                              aiLevel: 4, randMul: 0.95 },
+  // Legends from history
   { id: "tal",      name: "Mikhail T.", flag: "🇷🇺", elo: 2705, style: "Hyper",      motto: "Жертвую — потому что могу.",                             aiLevel: 4, randMul: 1.2 },
   { id: "fischer",  name: "Bobby F.",   flag: "🇺🇸", elo: 2785, style: "Universal",  motto: "Шахматы — война на доске.",                              aiLevel: 5, randMul: 0.4 },
   { id: "kasparov", name: "Garry K.",   flag: "🇷🇺", elo: 2851, style: "Aggressive", motto: "Атака — лучшая защита.",                                  aiLevel: 5, randMul: 0.7 },
+  { id: "karpov",   name: "Anatoly K.", flag: "🇷🇺", elo: 2780, style: "Positional", motto: "Соперника удушает позиция, не я.",                       aiLevel: 5, randMul: 0.4 },
+  { id: "capablanca",name: "Jose R. C.",flag: "🇨🇺", elo: 2725, style: "Universal",  motto: "Я просто вижу следующий ход.",                           aiLevel: 5, randMul: 0.45 },
+  { id: "petrosian2",name: "Tigran P.", flag: "🇦🇲", elo: 2685, style: "Defensive",  motto: "Лучшая жертва — это та, которой не было.",              aiLevel: 4, randMul: 0.5 },
+  // AI engines
+  { id: "alphazero",name: "AlphaZero",  flag: "🤖", elo: 3300, style: "Wild",       motto: "Я играю позиции, которые люди боятся.",                  aiLevel: 5, randMul: 0.3 },
+  { id: "stockfish",name: "Stockfish",  flag: "🐟", elo: 3650, style: "Universal",  motto: "У меня нет стиля. У меня есть глубина.",                  aiLevel: 5, randMul: 0.2 },
+  { id: "leela",    name: "Leela Zero", flag: "🧠", elo: 3400, style: "Wild",       motto: "Я обучилась сама. Без книг.",                             aiLevel: 5, randMul: 0.35 },
 ];
 
 export type Match = {

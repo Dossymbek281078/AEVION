@@ -1808,8 +1808,13 @@ function ApiQuickstart({
   const sample = latest?.[0] ?? certs[0] ?? null;
   const sampleId = sample ? sample.id : "<cert-id>";
   const sampleHash = sample ? sample.contentHash : "<sha256-hex>";
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
-  const apiBase = `${origin}${apiUrl("/api")}`;
+  // For copy-paste curl recipes we want a stable, full URL the user
+  // can run from their own terminal — not the proxied "/api-backend"
+  // path the in-browser fetch uses. Fallback origin during SSR /
+  // prerender when window is not defined.
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "https://aevion.app";
+  const apiBase = `${origin}/api`;
 
   const recipes: Array<{ name: string; verb: string; desc: string; cmd: string }> = [
     {

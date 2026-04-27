@@ -68,6 +68,36 @@ interface PricingPayload {
   notes: string[];
 }
 
+interface Testimonial {
+  id: string;
+  author: string;
+  role: string;
+  company: string;
+  quote: string;
+  module?: string;
+  industry?: string;
+  avatarColor?: string;
+  rating?: number;
+}
+
+interface TrustNumber {
+  label: string;
+  value: string;
+  hint?: string;
+}
+
+interface TrustBadge {
+  id: string;
+  label: string;
+  status?: string;
+  category: string;
+}
+
+interface TrustPayload {
+  numbers: TrustNumber[];
+  badges: TrustBadge[];
+}
+
 interface QuoteLine {
   kind: "tier" | "addon" | "seat" | "bundle";
   label: string;
@@ -136,6 +166,11 @@ export default function PricingPage() {
     Array<{ code: string; description: string; kind: string; amount: number }>
   >([]);
   const [copiedPromo, setCopiedPromo] = useState<string | null>(null);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [trust, setTrust] = useState<TrustPayload | null>(null);
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterStatus, setNewsletterStatus] = useState<"idle" | "submitting" | "ok" | "error">("idle");
+  const [newsletterError, setNewsletterError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<BillingPeriod>("annual");
@@ -149,6 +184,29 @@ export default function PricingPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
+
+  async function submitNewsletter(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newsletterEmail.trim()) return;
+    setNewsletterStatus("submitting");
+    setNewsletterError(null);
+    try {
+      const r = await fetch(apiUrl("/api/pricing/newsletter"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: newsletterEmail.trim(), source: "pricing" }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error ?? `HTTP ${r.status}`);
+      }
+      setNewsletterStatus("ok");
+      setNewsletterEmail("");
+    } catch (e) {
+      setNewsletterStatus("error");
+      setNewsletterError(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   async function startCheckout(opts: {
     tierId: TierId;
@@ -209,6 +267,18 @@ export default function PricingPage() {
       .then((r) => r.json())
       .then((j) => {
         if (!cancelled && Array.isArray(j.items)) setActivePromos(j.items);
+      })
+      .catch(() => {});
+    fetch(apiUrl("/api/pricing/testimonials"))
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && Array.isArray(j.items)) setTestimonials(j.items);
+      })
+      .catch(() => {});
+    fetch(apiUrl("/api/pricing/trust"))
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && j) setTrust(j);
       })
       .catch(() => {});
     track({ type: "page_view", source: "pricing" });
@@ -342,6 +412,55 @@ export default function PricingPage() {
           модулей под одним аккаунтом.
         </p>
       </section>
+
+      {/* Trust numbers row */}
+      {trust && trust.numbers.length > 0 && (
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(auto-fit, minmax(140px, 1fr))`,
+            gap: 8,
+            marginBottom: 32,
+            padding: "16px 12px",
+            background: "rgba(13,148,136,0.04)",
+            borderRadius: 14,
+            border: "1px solid rgba(13,148,136,0.12)",
+          }}
+        >
+          {trust.numbers.slice(0, 6).map((n, i) => (
+            <div
+              key={i}
+              style={{
+                textAlign: "center",
+                padding: "8px 6px",
+              }}
+              title={n.hint}
+            >
+              <div
+                style={{
+                  fontSize: 22,
+                  fontWeight: 900,
+                  letterSpacing: "-0.02em",
+                  color: "#0d9488",
+                }}
+              >
+                {n.value}
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#475569",
+                  fontWeight: 700,
+                  marginTop: 2,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {n.label}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* Active promo banner */}
       {activePromos.length > 0 && (
@@ -788,6 +907,97 @@ export default function PricingPage() {
           ))}
         </div>
       </section>
+
+      {/* Testimonials */}
+      {testimonials.length > 0 && (
+        <section style={{ marginBottom: 56 }}>
+          <h2
+            style={{
+              fontSize: 28,
+              fontWeight: 900,
+              margin: 0,
+              marginBottom: 8,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Что говорят клиенты
+          </h2>
+          <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
+            Реальные команды на AEVION. Все цитаты с разрешением авторов.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: 14,
+            }}
+          >
+            {testimonials.map((t) => (
+              <div
+                key={t.id}
+                style={{
+                  background: "#fff",
+                  border: BORDER,
+                  borderRadius: 14,
+                  padding: 20,
+                  boxShadow: CARD,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                {t.rating && (
+                  <div style={{ fontSize: 12, color: "#f59e0b" }}>
+                    {"★".repeat(t.rating)}
+                    <span style={{ color: "#cbd5e1" }}>{"★".repeat(5 - t.rating)}</span>
+                  </div>
+                )}
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: "#0f172a",
+                    lineHeight: 1.5,
+                    margin: 0,
+                    fontStyle: "italic",
+                  }}
+                >
+                  «{t.quote}»
+                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto" }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      background: t.avatarColor ?? "#475569",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: 800,
+                      fontSize: 14,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {t.author
+                      .split(" ")
+                      .map((s) => s[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{t.author}</div>
+                    <div style={{ fontSize: 11, color: "#64748b" }}>
+                      {t.role} · {t.company}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Module matrix */}
       <section style={{ marginBottom: 56 }}>
@@ -1513,6 +1723,143 @@ export default function PricingPage() {
             </details>
           ))}
         </div>
+      </section>
+
+      {/* Compliance badges */}
+      {trust && trust.badges.length > 0 && (
+        <section style={{ marginBottom: 40 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, marginBottom: 12, color: "#475569" }}>
+            Compliance & технологии
+          </h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {trust.badges.map((b) => {
+              const live = b.status === "live";
+              return (
+                <div
+                  key={b.id}
+                  style={{
+                    padding: "8px 14px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    borderRadius: 8,
+                    border: live
+                      ? "1px solid rgba(13,148,136,0.3)"
+                      : "1px dashed rgba(15,23,42,0.15)",
+                    background: live ? "#ecfdf5" : "#f8fafc",
+                    color: live ? "#065f46" : "#475569",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span style={{ color: live ? "#10b981" : "#94a3b8", fontSize: 14 }}>
+                    {live ? "✓" : "○"}
+                  </span>
+                  <span>{b.label}</span>
+                  {b.status && b.status !== "live" && (
+                    <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 11 }}>
+                      · {b.status}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Newsletter signup */}
+      <section
+        style={{
+          marginBottom: 40,
+          padding: 28,
+          background: "linear-gradient(135deg, #0f172a, #1e293b)",
+          borderRadius: 16,
+          color: "#f8fafc",
+          textAlign: "center",
+        }}
+      >
+        <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 6, letterSpacing: "-0.02em" }}>
+          Не готовы покупать сейчас?
+        </h3>
+        <p style={{ color: "#94a3b8", margin: 0, marginBottom: 20, fontSize: 14 }}>
+          Подпишитесь на email-апдейты — раз в 2 недели: новые модули, кейсы клиентов, промо-коды.
+        </p>
+        {newsletterStatus === "ok" ? (
+          <div
+            style={{
+              display: "inline-block",
+              padding: "12px 24px",
+              background: "rgba(52,211,153,0.16)",
+              border: "1px solid rgba(52,211,153,0.4)",
+              borderRadius: 10,
+              color: "#34d399",
+              fontWeight: 700,
+              fontSize: 14,
+            }}
+          >
+            ✓ Подписка подтверждена. Спасибо!
+          </div>
+        ) : (
+          <form
+            onSubmit={submitNewsletter}
+            style={{
+              display: "inline-flex",
+              gap: 8,
+              flexWrap: "wrap",
+              justifyContent: "center",
+              maxWidth: "100%",
+            }}
+          >
+            <input
+              type="email"
+              required
+              placeholder="your@email.com"
+              value={newsletterEmail}
+              onChange={(e) => setNewsletterEmail(e.target.value)}
+              disabled={newsletterStatus === "submitting"}
+              style={{
+                padding: "10px 14px",
+                fontSize: 14,
+                fontWeight: 600,
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.06)",
+                color: "#f8fafc",
+                width: 280,
+                maxWidth: "100%",
+                outline: "none",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={newsletterStatus === "submitting" || !newsletterEmail.trim()}
+              style={{
+                padding: "10px 20px",
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 10,
+                border: "none",
+                cursor: newsletterStatus === "submitting" ? "wait" : "pointer",
+                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                color: "#fff",
+              }}
+            >
+              {newsletterStatus === "submitting" ? "Подписываемся..." : "Подписаться"}
+            </button>
+          </form>
+        )}
+        {newsletterStatus === "error" && newsletterError && (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              color: "#fca5a5",
+            }}
+          >
+            Ошибка: {newsletterError}
+          </div>
+        )}
       </section>
 
       {/* Notes / FAQ light */}

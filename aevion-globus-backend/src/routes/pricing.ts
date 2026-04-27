@@ -16,6 +16,7 @@ import {
   type TierId,
 } from "../data/pricing";
 import { projects } from "../data/projects";
+import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 
 export const pricingRouter = Router();
 
@@ -364,6 +365,115 @@ pricingRouter.get("/leads", (req, res) => {
     res.json({ items, total: lines.length });
   } catch (e) {
     console.error("[pricing/leads] read failed", e);
+    res.status(500).json({ error: "read_error" });
+  }
+});
+
+/**
+ * GET /api/pricing/testimonials
+ * Публичные отзывы — фильтрация по ?industry= и ?module=.
+ */
+pricingRouter.get("/testimonials", (req, res) => {
+  const industry = typeof req.query.industry === "string" ? req.query.industry : undefined;
+  const moduleId = typeof req.query.module === "string" ? req.query.module : undefined;
+  const items = TESTIMONIALS.filter(
+    (t) =>
+      (!industry || t.industry === industry) && (!moduleId || t.module === moduleId),
+  );
+  res.json({ items, total: items.length });
+});
+
+/**
+ * GET /api/pricing/trust
+ * Trust signals: цифры + бейджи compliance.
+ */
+pricingRouter.get("/trust", (_req, res) => {
+  res.json({
+    numbers: TRUST_NUMBERS,
+    badges: TRUST_BADGES,
+  });
+});
+
+/* ===========================
+ * Newsletter signup
+ * Хранение: data/newsletter.jsonl (gitignored).
+ * =========================== */
+
+const NEWSLETTER_FILE = process.env.NEWSLETTER_FILE
+  ? process.env.NEWSLETTER_FILE
+  : join(process.cwd(), "data", "newsletter.jsonl");
+
+const NEWSLETTER_RATE = new Map<string, { count: number; reset: number }>();
+function newsletterRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const cur = NEWSLETTER_RATE.get(ip);
+  if (!cur || cur.reset < now) {
+    NEWSLETTER_RATE.set(ip, { count: 1, reset: now + 10 * 60 * 1000 });
+    return false;
+  }
+  if (cur.count >= 3) return true;
+  cur.count += 1;
+  return false;
+}
+
+interface NewsletterEntry {
+  id: string;
+  ts: string;
+  email: string;
+  source?: string;
+  ip: string;
+}
+
+/**
+ * POST /api/pricing/newsletter
+ * Body: { email, source? }
+ *
+ * Лёгкий signup-форм для лидгена тех, кто не готов покупать.
+ */
+pricingRouter.post("/newsletter", (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (newsletterRateLimited(ip)) {
+    return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+  }
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "invalid_email" });
+  }
+  const source = typeof body.source === "string" ? body.source.trim().slice(0, 60) : undefined;
+
+  const entry: NewsletterEntry = {
+    id: `nl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    email,
+    source,
+    ip,
+  };
+
+  try {
+    const dir = dirname(NEWSLETTER_FILE);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    appendFileSync(NEWSLETTER_FILE, JSON.stringify(entry) + "\n", "utf8");
+  } catch (e) {
+    console.error("[newsletter] write failed", e);
+    return res.status(500).json({ error: "storage_error" });
+  }
+
+  res.status(201).json({ ok: true, id: entry.id });
+});
+
+/**
+ * GET /api/pricing/newsletter/count
+ * Количество подписчиков — не PII.
+ */
+pricingRouter.get("/newsletter/count", (_req, res) => {
+  try {
+    if (!existsSync(NEWSLETTER_FILE)) return res.json({ total: 0 });
+    const content = readFileSync(NEWSLETTER_FILE, "utf8");
+    const lines = content.split("\n").filter((l) => l.trim().length > 0);
+    res.json({ total: lines.length });
+  } catch (e) {
+    console.error("[newsletter/count] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
 });

@@ -164,6 +164,18 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/promo/validate": {
         post: { summary: "Validate a promo code against a tier (no charge)" },
       },
+      "/api/pricing/testimonials": {
+        get: { summary: "Public customer testimonials (filterable)" },
+      },
+      "/api/pricing/trust": {
+        get: { summary: "Trust signals: numbers + compliance badges" },
+      },
+      "/api/pricing/newsletter": {
+        post: { summary: "Newsletter signup (email only)" },
+      },
+      "/api/pricing/newsletter/count": {
+        get: { summary: "Total newsletter subscribers count" },
+      },
     },
   });
 });

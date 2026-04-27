@@ -36,6 +36,7 @@ const FEATURES: FeatureRef[] = [
   { id: "autopilot", cluster: "earn", anchor: "bank-anchor-statement", emoji: "🤖" },
 
   { id: "subScan", cluster: "send", emoji: "🩺", fresh: true },
+  { id: "cooldown", cluster: "send", anchor: "bank-anchor-cooldown", emoji: "⏳", fresh: true },
   { id: "trip", cluster: "send", anchor: "bank-anchor-trip", emoji: "✈", fresh: true },
   { id: "billingCalendar", cluster: "send", emoji: "📅", fresh: true },
   { id: "recurring", cluster: "send", anchor: "bank-anchor-recurring", emoji: "↻" },

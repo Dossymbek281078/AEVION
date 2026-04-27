@@ -35,6 +35,7 @@ import { BiometricCard } from "./_components/BiometricCard";
 import { ChessWinnings } from "./_components/ChessWinnings";
 import { CommandPalette } from "./_components/CommandPalette";
 import { ConceptPrimer } from "./_components/ConceptPrimer";
+import { CoolDownQueue } from "./_components/CoolDownQueue";
 import { DeviceManagement } from "./_components/DeviceManagement";
 import { EcosystemPulse } from "./_components/EcosystemPulse";
 import { FinancialCopilot } from "./_components/FinancialCopilot";
@@ -410,6 +411,14 @@ function BankContent() {
             </div>
 
             <SubscriptionScanner notify={notify} />
+
+            <div id="bank-anchor-cooldown" style={{ scrollMarginTop: 20 }}>
+              <CoolDownQueue
+                myAccountId={account.id}
+                send={send}
+                notify={notify}
+              />
+            </div>
 
             <div id="bank-anchor-trip" style={{ scrollMarginTop: 20 }}>
               <TripTracker

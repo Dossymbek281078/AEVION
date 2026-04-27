@@ -661,15 +661,43 @@ export default function Globus3D({
       }
     );
 
-    // Soft outer halo (space-photo look; typings for ShaderMaterial are incomplete in this repo).
-    const haloGeo = new THREE.SphereGeometry(radius * 1.14, 56, 56);
-    const haloMat = new THREE.MeshBasicMaterial({
-      color: 0x66aaff,
-      transparent: true,
-      opacity: 0.11,
+    // Fresnel-атмосфера: яркий ободок по краям планеты (космический look).
+    const haloGeo = new THREE.SphereGeometry(radius * 1.18, 64, 64);
+    const haloMat = new THREE.ShaderMaterial({
+      vertexShader: [
+        "varying vec3 vNormal;",
+        "varying vec3 vViewDir;",
+        "void main() {",
+        "  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);",
+        "  vNormal = normalize(normalMatrix * normal);",
+        "  vViewDir = normalize(-mvPosition.xyz);",
+        "  gl_Position = projectionMatrix * mvPosition;",
+        "}",
+      ].join("\n"),
+      fragmentShader: [
+        "varying vec3 vNormal;",
+        "varying vec3 vViewDir;",
+        "uniform vec3 glowColor;",
+        "uniform vec3 rimColor;",
+        "uniform float power;",
+        "uniform float strength;",
+        "void main() {",
+        "  float facing = max(dot(vNormal, vViewDir), 0.0);",
+        "  float fresnel = pow(1.0 - facing, power);",
+        "  vec3 col = mix(glowColor, rimColor, fresnel);",
+        "  gl_FragColor = vec4(col, fresnel * strength);",
+        "}",
+      ].join("\n"),
+      uniforms: {
+        glowColor: { value: new THREE.Color(0x4a7fb8) },
+        rimColor: { value: new THREE.Color(0xa5d8ff) },
+        power: { value: 2.6 },
+        strength: { value: 1.15 },
+      },
       side: THREE.BackSide,
-      depthWrite: false,
       blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
     });
     const halo = new THREE.Mesh(haloGeo, haloMat);
     earthGroup.add(halo);

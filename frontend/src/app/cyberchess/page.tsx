@@ -2672,12 +2672,28 @@ export default function CyberChessPage(){
                 const mn=Math.min(...pts),mx=Math.max(...pts);const rng=Math.max(30,mx-mn);
                 const dx=100/(pts.length-1);
                 const path=pts.map((v,i)=>`${i===0?"M":"L"}${(i*dx).toFixed(1)} ${(24-((v-mn)/rng)*22).toFixed(1)}`).join(" ");
+                // Filled area path for nice gradient under the line
+                const areaPath=path+` L 100 26 L 0 26 Z`;
                 const trend=pts[pts.length-1]-pts[0];const col=trend>=0?CC.brand:CC.danger;
+                const colSoft=trend>=0?CC.brandSoft:CC.dangerSoft;
+                const sparkId=`sg-${trend>=0?"up":"dn"}`;
                 return <div style={{marginTop:4}}>
-                  <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{width:"100%",height:28}}>
-                    <path d={path} fill="none" stroke={col} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{width:"100%",height:32,display:"block"}}>
+                    <defs>
+                      <linearGradient id={sparkId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={col} stopOpacity="0.35"/>
+                        <stop offset="100%" stopColor={col} stopOpacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    <path d={areaPath} fill={`url(#${sparkId})`} opacity="0.9"/>
+                    <path d={path} fill="none" stroke={col} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                    {/* Last point dot */}
+                    {pts.length>0&&<circle cx={(pts.length-1)*dx} cy={(24-((pts[pts.length-1]-mn)/rng)*22).toFixed(1)} r="1.8" fill={col} stroke="#fff" strokeWidth="0.8"/>}
                   </svg>
-                  <div style={{fontSize:10,fontWeight:700,color:col,marginTop:-2}}>{trend>=0?"+":""}{trend}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:4,marginTop:-2}}>
+                    <span style={{fontSize:10,fontWeight:800,color:col,padding:"1px 5px",borderRadius:RADIUS.sm,background:colSoft}}>{trend>=0?"▲":"▼"} {trend>=0?"+":""}{trend}</span>
+                    <span style={{fontSize:9,color:CC.textDim,fontWeight:600}}>last {pts.length}</span>
+                  </div>
                 </div>;
               })()}
               <div style={{display:"flex",justifyContent:"flex-start",gap:SPACE[2],marginTop:SPACE[2]}}>
@@ -2791,7 +2807,7 @@ export default function CyberChessPage(){
               />
             </div>
             <div style={{maxHeight:220,overflowY:"auto"}}>
-              {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map(g=>{
+              {savedGames.filter(g=>gamesFilter==="all"||g.category===gamesFilter).slice(0,30).map((g,gIdx)=>{
                 const isWin=g.result.includes("You win")||g.result.includes("timed out");
                 const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
                 const resCol=isWin?CC.brand:isDraw?CC.textDim:CC.danger;
@@ -2804,7 +2820,12 @@ export default function CyberChessPage(){
                   const fens=[new Chess().fen()];const tmp=new Chess();
                   for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
                   sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
-                }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+                }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",
+                  animation:`fadeInUp 0.3s ease-out ${Math.min(gIdx*30,400)}ms both`,
+                  borderLeft:`3px solid ${resCol}`,
+                  transition:`background ${MOTION.fast} ${MOTION.ease}, padding ${MOTION.fast} ${MOTION.ease}`}}
+                  onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.background=CC.surface2;el.style.paddingLeft="16px"}}
+                  onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.background=CC.surface1;el.style.paddingLeft="12px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                     <div style={{width:26,height:26,borderRadius:"50%",background:resCol+"18",color:resCol,
                       display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>
@@ -3579,9 +3600,13 @@ export default function CyberChessPage(){
           </button>}
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Analyzing…</div>}
 
-          <div ref={hR} style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-            <div style={{padding:"8px 14px",borderBottom:`1px solid ${T.border}`,background:"#f9fafb",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:12,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim}}>Ходы {hist.length>0&&<span style={{color:T.accent,marginLeft:4}}>· {Math.ceil(hist.length/2)}</span>}{refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const}}>⚡ уточняю d18...</span>}</span>
+          <div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:900,letterSpacing:"0.1em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:6}}>
+                <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2}}/>
+                Ходы {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
+                {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
+              </span>
               {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
                 <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>

@@ -437,6 +437,14 @@ export default function CyberChessPage(){
   const[ghostPastEval,sGhostPastEval]=useState<EvalSample[]>([]);
   const[ghostCurrentEval,sGhostCurrentEval]=useState<EvalSample[]>([]);
   const ghostLearnedRef=useRef<string|null>(null);
+  // Multiverse — параллельные вселенные top-3 ходов (killer feature #7)
+  const[showMultiverse,sShowMultiverse]=useState(false);
+  const[multiverseLines,sMultiverseLines]=useState<PVLine[]>([]);
+  const[multiverseRunning,sMultiverseRunning]=useState(false);
+  const[multiverseFen,sMultiverseFen]=useState<string>("");
+  const[multiverseTick,sMultiverseTick]=useState(0);
+  const[multiversePaused,sMultiversePaused]=useState(false);
+  const[multiverseSpeed,sMultiverseSpeed]=useState(850);
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -989,6 +997,42 @@ export default function CyberChessPage(){
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel,hist.length,fenHist,browseIdx]);
+
+  /* ── Multiverse: launch + animation tick ── */
+  const startMultiverse=useCallback(()=>{
+    if(!sfR.current?.ready()){showToast("Stockfish loading...","error");return}
+    const fen=game.fen();
+    sMultiverseFen(fen);sMultiverseLines([]);sMultiverseRunning(true);
+    sShowMultiverse(true);sMultiverseTick(0);sMultiversePaused(false);
+    sfR.current.multiPV(fen,14,3,(lines)=>{
+      const turn=fen.split(" ")[1];const sign=turn==="w"?1:-1;
+      sMultiverseLines(lines.map(l=>({...l,cp:l.cp*sign,mate:l.mate*sign})));
+      sMultiverseRunning(false);
+    });
+  },[game,showToast]);
+  useEffect(()=>{
+    if(!showMultiverse||multiverseRunning||multiversePaused||multiverseLines.length===0)return;
+    const maxLen=Math.max(...multiverseLines.map(l=>Math.min(l.moves.length,8)));
+    if(maxLen===0)return;
+    const id=setInterval(()=>{
+      sMultiverseTick(t=>(t+1)%(maxLen+2));
+    },multiverseSpeed);
+    return()=>clearInterval(id);
+  },[showMultiverse,multiverseRunning,multiversePaused,multiverseLines,multiverseSpeed]);
+  // Helper: replay UCI moves on a starting FEN up to given ply, return final FEN + last-move squares
+  const replayLine=useCallback((startFen:string,uciMoves:string[],upToPly:number):{fen:string;lm:{from:string;to:string}|null}=>{
+    try{
+      const c=new Chess(startFen);
+      let lm:{from:string;to:string}|null=null;
+      const upTo=Math.min(upToPly,uciMoves.length);
+      for(let i=0;i<upTo;i++){
+        const u=uciMoves[i];
+        const m=c.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:u.length>4?u[4] as any:"q"});
+        if(m)lm={from:m.from,to:m.to};
+      }
+      return{fen:c.fen(),lm};
+    }catch{return{fen:startFen,lm:null}}
+  },[]);
 
   /* ── Ghost Duel: detect divergence ── */
   useEffect(()=>{
@@ -3211,6 +3255,10 @@ export default function CyberChessPage(){
                 </div>
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
                 <button onClick={()=>{if(guessMode){sGuessMode(false);runMultiPV()}else startGuess()}} style={{padding:"6px 14px",borderRadius:7,border:guessMode?`2px solid #f59e0b`:`1px solid ${T.border}`,background:guessMode?"#fffbeb":"#fff",color:guessMode?"#92400e":T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>{guessMode?"✕ Exit Guess":"🎯 Guess Move"}</button>
+                <button onClick={startMultiverse} title="Top-3 кандидатских хода в параллельных вселенных" style={{padding:"6px 14px",borderRadius:7,border:"none",
+                  background:"linear-gradient(135deg,#0c0a09,#1e1b4b,#7c3aed)",
+                  color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",
+                  boxShadow:"0 2px 8px rgba(124,58,237,0.35)"}}>🌌 Multiverse</button>
               </div>
               {/* Current FEN display only (import buttons are in "Источник позиции" above) */}
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
@@ -4169,6 +4217,125 @@ export default function CyberChessPage(){
           }}>⚡ Ещё раз</Btn>
         </div>
       </div>}
+    </Modal>
+
+    {/* ─── Multiverse — параллельные вселенные top-3 ходов ─── */}
+    <Modal open={showMultiverse} onClose={()=>{sShowMultiverse(false);sMultiversePaused(true)}} size="lg"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🌌 Multiverse <Badge tone="neutral" size="sm">параллельные вселенные</Badge></span>}>
+      <div style={{fontSize:13,color:CC.text,lineHeight:1.5,marginBottom:SPACE[3]}}>
+        Stockfish считает три лучших хода и для каждого проигрывает 8 полуходов вперёд — на трёх досках одновременно. Кликни «→ В этот вариант», чтобы загрузить позицию в основную доску.
+      </div>
+      {multiverseRunning?<div style={{padding:SPACE[6],textAlign:"center" as const,color:"#fff",fontSize:14,fontWeight:800,background:"linear-gradient(135deg,#1e1b4b,#4c1d95)",borderRadius:RADIUS.md}}>
+        <div style={{fontSize:34,marginBottom:SPACE[2]}}>🔮</div>
+        <div>Stockfish раскладывает мультивселенную · depth 14, 3 варианта…</div>
+      </div>:multiverseLines.length===0?<div style={{padding:SPACE[5],textAlign:"center" as const,color:CC.textDim,fontSize:13}}>
+        Нет вариантов
+      </div>:<>
+        {/* Controls */}
+        <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[3],padding:SPACE[2],borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
+          <button onClick={()=>sMultiversePaused(p=>!p)} style={{padding:"6px 12px",borderRadius:RADIUS.sm,border:"none",background:multiversePaused?CC.brand:CC.text,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>
+            {multiversePaused?"▶ Play":"⏸ Pause"}
+          </button>
+          <button onClick={()=>sMultiverseTick(0)} style={{padding:"6px 12px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:12,fontWeight:800,cursor:"pointer"}}>↺ Reset</button>
+          <button onClick={startMultiverse} style={{padding:"6px 12px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:12,fontWeight:800,cursor:"pointer"}}>🔄 Пересчитать</button>
+          <div style={{flex:1}}/>
+          <span style={{fontSize:11,color:CC.textDim,fontWeight:700}}>Скорость</span>
+          {[500,850,1500].map(s=><button key={s} onClick={()=>sMultiverseSpeed(s)}
+            style={{padding:"4px 10px",borderRadius:RADIUS.sm,
+              border:multiverseSpeed===s?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+              background:multiverseSpeed===s?CC.brandSoft:CC.surface1,
+              color:multiverseSpeed===s?CC.brand:CC.textDim,fontSize:11,fontWeight:800,cursor:"pointer"}}>
+            {s===500?"🐇":s===850?"🚶":"🐢"} {s}ms
+          </button>)}
+          <div style={{padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.text,color:"#fff",fontSize:11,fontWeight:900,fontFamily:"ui-monospace, monospace"}}>
+            ply {multiverseTick}/8
+          </div>
+        </div>
+        {/* 3 mini-boards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:SPACE[3]}}>
+          {multiverseLines.map((line,i)=>{
+            const colors=["#22c55e","#3b82f6","#f59e0b"];
+            const ranks=["BEST","2-й","3-й"];
+            const accent=colors[i]||CC.textDim;
+            const{fen:miniFen,lm}=replayLine(multiverseFen,line.moves,multiverseTick);
+            const sansList=uciToSan(multiverseFen,line.moves.slice(0,8));
+            const evalLabel=line.mate!==0?(line.mate>0?`#${line.mate}`:`#${-line.mate}`):line.cp>=0?`+${(line.cp/100).toFixed(2)}`:`${(line.cp/100).toFixed(2)}`;
+            const evalCol=line.mate>0?CC.brand:line.mate<0?CC.danger:line.cp>=20?CC.brand:line.cp<=-20?CC.danger:CC.textDim;
+            // Render board
+            let boardObj:any=null;
+            try{boardObj=new Chess(miniFen).board()}catch{boardObj=null}
+            const fx=flip;
+            const rows=fx?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
+            const cols=fx?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
+            return <div key={i} style={{borderRadius:RADIUS.lg,border:`2px solid ${accent}`,
+              background:CC.surface1,overflow:"hidden",
+              boxShadow:i===0?`0 4px 16px ${accent}40`:SHADOW.sm}}>
+              {/* Header */}
+              <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,
+                background:`linear-gradient(135deg,${accent}, ${accent}cc)`,color:"#fff",
+                display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:11,fontWeight:900,letterSpacing:0.5}}>{ranks[i]||`PV ${i+1}`}</span>
+                </div>
+                <span style={{fontFamily:"ui-monospace, monospace",fontSize:13,fontWeight:900}}>{evalLabel}</span>
+              </div>
+              {/* Mini board */}
+              <div style={{aspectRatio:"1/1",display:"grid",gridTemplateColumns:"repeat(8,1fr)",gridTemplateRows:"repeat(8,1fr)",background:CC.text}}>
+                {boardObj&&rows.map(r=>cols.map(c=>{
+                  const sq=boardObj[r][c];
+                  const sqName=`${"abcdefgh"[c]}${8-r}`;
+                  const isLight=(r+c)%2===0;
+                  const isLast=lm&&(lm.from===sqName||lm.to===sqName);
+                  return <div key={`${r}-${c}`} style={{
+                    background:isLast?"rgba(250,204,21,0.55)":isLight?"#f0d9b5":"#b58863",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    transition:"background 250ms ease"
+                  }}>
+                    {sq&&<div style={{width:"82%",height:"82%"}}>
+                      <Piece type={sq.type as any} color={sq.color as any} size="100%"/>
+                    </div>}
+                  </div>;
+                }))}
+              </div>
+              {/* Move list */}
+              <div style={{padding:SPACE[2],fontSize:11,fontFamily:"ui-monospace, monospace",
+                color:CC.text,lineHeight:1.5,minHeight:42,
+                background:CC.surface2,borderTop:`1px solid ${CC.border}`}}>
+                {sansList.slice(0,8).map((san,j)=>{
+                  const isPlayed=j<multiverseTick;
+                  const isCurrent=j===multiverseTick-1;
+                  return <span key={j} style={{
+                    fontWeight:isCurrent?900:isPlayed?700:500,
+                    color:isCurrent?accent:isPlayed?CC.text:CC.textDim,
+                    background:isCurrent?`${accent}25`:"transparent",
+                    padding:isCurrent?"1px 4px":"1px 2px",
+                    borderRadius:3,marginRight:3
+                  }}>{j%2===0?`${Math.floor(j/2)+1}.`:""}{san}</span>;
+                })}
+              </div>
+              {/* Enter timeline button */}
+              <button onClick={()=>{
+                try{
+                  const c=new Chess(multiverseFen);
+                  const upTo=Math.min(Math.max(multiverseTick,1),line.moves.length);
+                  const mh:string[]=[];const fh:string[]=[multiverseFen];
+                  for(let k=0;k<upTo;k++){
+                    const u=line.moves[k];
+                    const m=c.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:u.length>4?u[4] as any:"q"});
+                    if(m){mh.push(m.san);fh.push(c.fen())}
+                  }
+                  setGame(c);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());
+                  sOver(null);sBrowseIdx(-1);sShowMultiverse(false);sMultiversePaused(true);
+                  showToast(`🌌 Загружено · ${ranks[i]} вариант · ${upTo} ходов`,"success");
+                }catch{showToast("Не удалось загрузить вариант","error")}
+              }} style={{width:"100%",padding:`${SPACE[2]}px`,border:"none",background:CC.text,color:"#fff",
+                fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.3}}>
+                → В этот вариант
+              </button>
+            </div>;
+          })}
+        </div>
+      </>}
     </Modal>
 
     {/* ─── Ghost Duel — выбор партии и режима ─── */}

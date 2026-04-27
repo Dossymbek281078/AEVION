@@ -1998,6 +1998,69 @@ export default function Globus3D({
         );
       })() : null}
 
+      {!initError && visibleMatchCount === 0 ? (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 6,
+            background: "rgba(8,12,24,0.88)",
+            border: "1px solid rgba(248,113,113,0.4)",
+            borderRadius: 14,
+            padding: "16px 18px",
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 14px 40px rgba(0,0,0,0.45)",
+            textAlign: "center",
+            maxWidth: 280,
+          }}
+        >
+          <div style={{ fontSize: 24, marginBottom: 6 }}>🔭</div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 800,
+              color: "#fca5a5",
+              marginBottom: 4,
+            }}
+          >
+            Nothing found
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#94a3b8",
+              marginBottom: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {query
+              ? `No nodes match "${query}"${filter !== "all" ? ` in ${filter}` : ""}.`
+              : `No nodes in this category.`}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setFilter("all");
+            }}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(148,163,184,0.3)",
+              background: "rgba(148,163,184,0.12)",
+              color: "#e8eefc",
+              fontWeight: 800,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      ) : null}
+
       {/* Sparse marker labels — постоянные подписи над focus/award (без ховера). */}
       {!initError
         ? markers

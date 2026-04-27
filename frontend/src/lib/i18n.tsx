@@ -1183,6 +1183,19 @@ const BANK_EXTRA_EN: Record<string, string> = {
   "referralLanding.bad.body": "The referral code is missing or malformed. Ask your inviter to share their original link.",
   "referralLanding.bad.cta": "Continue to AEVION",
 
+  // Leaderboard /bank/leaderboard
+  "leaderboard.title": "AEVION Network Leaderboard",
+  "leaderboard.subtitle": "Top creators, chess champions, and referrers powering the trust graph. Updated daily.",
+  "leaderboard.backToBank": "Back to AEVION Bank",
+  "leaderboard.tab.creators": "Creators",
+  "leaderboard.tab.chess": "CyberChess",
+  "leaderboard.tab.referrers": "Referrers",
+  "leaderboard.row.creator": "{works} verified works · {kind}",
+  "leaderboard.row.chess": "{games} games played · {fmt}",
+  "leaderboard.row.referrer": "{aec} earned in referral bonuses",
+  "leaderboard.row.invitedCount": "{n} invites",
+  "leaderboard.disclaimer": "Demo data — once the trust graph backend lands, this list will reflect real network activity within the last 30 days.",
+
   "gift.notify.pickRecipient": "Pick a recipient",
   "gift.notify.cannotGiftSelf": "You can't gift yourself",
   "gift.notify.invalidAmount": "Invalid amount",
@@ -2849,6 +2862,19 @@ const BANK_EXTRA_RU: Record<string, string> = {
   "referralLanding.bad.body": "\u0420\u0435\u0444\u0435\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u043a\u043e\u0434 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0438\u043b\u0438 \u043f\u043e\u0432\u0440\u0435\u0436\u0434\u0451\u043d. \u041f\u043e\u043f\u0440\u043e\u0441\u0438\u0442\u0435 \u043f\u0440\u0438\u0433\u043b\u0430\u0441\u0438\u0432\u0448\u0435\u0433\u043e \u043f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f \u043e\u0440\u0438\u0433\u0438\u043d\u0430\u043b\u044c\u043d\u043e\u0439 \u0441\u0441\u044b\u043b\u043a\u043e\u0439.",
   "referralLanding.bad.cta": "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c \u0432 AEVION",
 
+  // Leaderboard /bank/leaderboard
+  "leaderboard.title": "\u041b\u0438\u0434\u0435\u0440\u0431\u043e\u0440\u0434 \u0441\u0435\u0442\u0438 AEVION",
+  "leaderboard.subtitle": "\u0422\u043e\u043f \u0441\u043e\u0437\u0434\u0430\u0442\u0435\u043b\u0435\u0439, \u0447\u0435\u043c\u043f\u0438\u043e\u043d\u043e\u0432 CyberChess \u0438 \u043f\u0440\u0438\u0433\u043b\u0430\u0441\u0438\u0432\u0448\u0438\u0445. \u041e\u0431\u043d\u043e\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0435\u0436\u0435\u0434\u043d\u0435\u0432\u043d\u043e.",
+  "leaderboard.backToBank": "\u041d\u0430\u0437\u0430\u0434 \u0432 AEVION Bank",
+  "leaderboard.tab.creators": "\u0410\u0432\u0442\u043e\u0440\u044b",
+  "leaderboard.tab.chess": "CyberChess",
+  "leaderboard.tab.referrers": "\u041f\u0440\u0438\u0433\u043b\u0430\u0441\u0438\u0432\u0448\u0438\u0435",
+  "leaderboard.row.creator": "{works} \u0440\u0430\u0431\u043e\u0442 \u00b7 {kind}",
+  "leaderboard.row.chess": "{games} \u043f\u0430\u0440\u0442\u0438\u0439 \u00b7 {fmt}",
+  "leaderboard.row.referrer": "{aec} \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043e \u043d\u0430 \u0431\u043e\u043d\u0443\u0441\u0430\u0445",
+  "leaderboard.row.invitedCount": "{n} \u043f\u0440\u0438\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0439",
+  "leaderboard.disclaimer": "\u0414\u0435\u043c\u043e-\u0434\u0430\u043d\u043d\u044b\u0435 \u2014 \u043a\u043e\u0433\u0434\u0430 trust-graph backend \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u0441\u044f, \u043b\u0438\u0434\u0435\u0440\u0431\u043e\u0440\u0434 \u0431\u0443\u0434\u0435\u0442 \u043e\u0442\u0440\u0430\u0436\u0430\u0442\u044c \u0440\u0435\u0430\u043b\u044c\u043d\u0443\u044e \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0441\u0442\u044c \u0441\u0435\u0442\u0438 \u0437\u0430 30 \u0434\u043d\u0435\u0439.",
+
   "gift.notify.pickRecipient": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f",
   "gift.notify.cannotGiftSelf": "\u041d\u0435\u043b\u044c\u0437\u044f \u0434\u0430\u0440\u0438\u0442\u044c \u0441\u0430\u043c\u043e\u043c\u0443 \u0441\u0435\u0431\u0435",
   "gift.notify.invalidAmount": "\u041d\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u0441\u0443\u043c\u043c\u0430",
@@ -4364,6 +4390,19 @@ const BANK_EXTRA_KK: Record<string, string> = {
   "referralLanding.bad.title": "\u0416\u0430\u0440\u0430\u043c\u0441\u044b\u0437 \u0441\u0456\u043b\u0442\u0435\u043c\u0435",
   "referralLanding.bad.body": "\u0420\u0435\u0444\u0435\u0440\u0430\u043b \u043a\u043e\u0434\u044b \u0436\u043e\u049b \u043d\u0435\u043c\u0435\u0441\u0435 \u0431\u04b1\u0437\u044b\u043b\u0493\u0430\u043d. \u0428\u0430\u049b\u044b\u0440\u0443\u0448\u044b\u0434\u0430\u043d \u0442\u04af\u043f\u043d\u04b1\u0441\u049b\u0430 \u0441\u0456\u043b\u0442\u0435\u043c\u0435\u043d\u0456 \u0441\u04b1\u0440\u0430\u04a3\u044b\u0437.",
   "referralLanding.bad.cta": "AEVION-\u0493\u0430 \u04e9\u0442\u0443",
+
+  // Leaderboard /bank/leaderboard
+  "leaderboard.title": "AEVION \u0436\u0435\u043b\u0456 \u043b\u0438\u0434\u0435\u0440\u0431\u043e\u0440\u0434\u044b",
+  "leaderboard.subtitle": "\u04ae\u0437\u0434\u0456\u043a \u0430\u0432\u0442\u043e\u0440\u043b\u0430\u0440, CyberChess \u0447\u0435\u043c\u043f\u0438\u043e\u043d\u0434\u0430\u0440\u044b \u0436\u04d9\u043d\u0435 \u0448\u0430\u049b\u044b\u0440\u0443\u0448\u044b\u043b\u0430\u0440. \u041a\u04af\u043d \u0441\u0430\u0439\u044b\u043d \u0436\u0430\u04a3\u0430\u0440\u0430\u0434\u044b.",
+  "leaderboard.backToBank": "AEVION Bank-\u049b\u0430 \u049b\u0430\u0439\u0442\u0443",
+  "leaderboard.tab.creators": "\u0410\u0432\u0442\u043e\u0440\u043b\u0430\u0440",
+  "leaderboard.tab.chess": "CyberChess",
+  "leaderboard.tab.referrers": "\u0428\u0430\u049b\u044b\u0440\u0443\u0448\u044b\u043b\u0430\u0440",
+  "leaderboard.row.creator": "{works} \u0436\u04b1\u043c\u044b\u0441 \u00b7 {kind}",
+  "leaderboard.row.chess": "{games} \u043e\u0439\u044b\u043d \u00b7 {fmt}",
+  "leaderboard.row.referrer": "{aec} \u0431\u043e\u043d\u0443\u0441\u049b\u0430 \u0442\u0430\u0431\u044b\u043b\u0493\u0430\u043d",
+  "leaderboard.row.invitedCount": "{n} \u0448\u0430\u049b\u044b\u0440\u0443",
+  "leaderboard.disclaimer": "\u0414\u0435\u043c\u043e-\u0434\u0435\u0440\u0435\u043a\u0442\u0435\u0440 \u2014 trust-graph backend \u049b\u043e\u0441\u044b\u043b\u0493\u0430\u043d\u0434\u0430 \u0441\u043e\u04a3\u0493\u044b 30 \u043a\u04af\u043d\u0434\u0435\u0433\u0456 \u043d\u0430\u049b\u0442\u044b \u0436\u0435\u043b\u0456 \u0431\u0435\u043b\u0441\u0435\u043d\u0434\u0456\u043b\u0456\u0433\u0456\u043d \u043a\u04e9\u0440\u0441\u0435\u0442\u0435\u0434\u0456.",
 
   "gift.notify.pickRecipient": "\u0410\u043b\u0443\u0448\u044b\u043d\u044b \u0442\u0430\u04a3\u0434\u0430\u04a3\u044b\u0437",
   "gift.notify.cannotGiftSelf": "\u04e8\u0437\u0456\u04a3\u0456\u0437\u0433\u0435 \u0441\u044b\u0439\u043b\u044b\u049b \u0431\u0435\u0440\u0435 \u0430\u043b\u043c\u0430\u0439\u0441\u044b\u0437",

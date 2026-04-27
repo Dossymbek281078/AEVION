@@ -7,7 +7,7 @@ import { apiUrl } from "@/lib/apiBase";
 import {
   ldPairs, svPairs, ldPositions, svPositions,
   ldLimits, svLimits, checkLimitFills, buildOrderBook,
-  ldClosed, svClosed, buildClosed,
+  ldClosed, svClosed, buildClosed, checkBracketHit,
   tickPair, catchupPair, unrealizedPnl, unrealizedPct,
   fmtUsd, fmtPct, sparklinePath,
   type Pair, type Position, type PairId, type LimitOrder, type ClosedPosition,
@@ -74,6 +74,9 @@ export default function QTradePage() {
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [limitPrice, setLimitPrice] = useState("");
   const [tradeMsg, setTradeMsg] = useState<string | null>(null);
+  const [bracketEditId, setBracketEditId] = useState<string | null>(null);
+  const [bracketSL, setBracketSL] = useState("");
+  const [bracketTP, setBracketTP] = useState("");
 
   // AEV wallet (for AEV/USD spot conversion)
   const [aevWallet, setAevWallet] = useState<AEVWallet | null>(null);
@@ -89,7 +92,7 @@ export default function QTradePage() {
     setMarketsReady(true);
   }, []);
 
-  // Tick price every 1000ms after markets are ready + auto-fill limit orders
+  // Tick price every 1000ms after markets are ready + auto-fill limit orders + SL/TP brackets
   useEffect(() => {
     if (!marketsReady) return;
     const id = setInterval(() => {
@@ -126,6 +129,41 @@ export default function QTradePage() {
           }
           svLimits(remaining);
           return remaining;
+        });
+        // Check SL/TP brackets on open positions
+        setPositions((prevPos) => {
+          if (prevPos.length === 0) return prevPos;
+          const stillOpen: Position[] = [];
+          const triggered: { pos: Position; reason: "tp" | "sl"; price: number }[] = [];
+          for (const pos of prevPos) {
+            const pair = next.find((x) => x.id === pos.pair);
+            if (!pair) { stillOpen.push(pos); continue; }
+            const hit = checkBracketHit(pos, pair.price);
+            if (hit) triggered.push({ pos, reason: hit, price: pair.price });
+            else stillOpen.push(pos);
+          }
+          if (triggered.length === 0) return prevPos;
+          const newClosed: ClosedPosition[] = triggered.map(({ pos, price }) => buildClosed(pos, price));
+          setClosedPositions((cs) => [...newClosed, ...cs].slice(0, 200));
+          // Mint AEV per profitable bracket-close
+          const profitableCount = newClosed.filter((c) => c.realizedPnl > 0).length;
+          if (profitableCount > 0) {
+            setAevWallet((w) => {
+              if (!w) return w;
+              let next2 = w;
+              for (let i = 0; i < profitableCount; i++) {
+                next2 = recordPlay(next2, "qtrade_close_winning", "qtrade");
+              }
+              return next2;
+            });
+          }
+          const t = triggered[0];
+          setTradeMsg(
+            `${t.reason === "tp" ? "🎯 TP" : "🛑 SL"} hit · ${t.pos.side === "long" ? "Long" : "Short"} ${t.pos.qty} ${t.pos.pair.split("/")[0]} @ ${fmtUsd(t.price)}` +
+            (newClosed[0].realizedPnl >= 0 ? ` · +${fmtUsd(newClosed[0].realizedPnl)}` : ` · ${fmtUsd(newClosed[0].realizedPnl)}`),
+          );
+          setTimeout(() => setTradeMsg(null), 3500);
+          return stillOpen;
         });
         return next;
       });
@@ -197,6 +235,41 @@ export default function QTradePage() {
     setLimits((prev) => prev.filter((l) => l.id !== id));
     setTradeMsg("✓ Limit отменён");
     setTimeout(() => setTradeMsg(null), 1800);
+  };
+
+  const startEditBrackets = (pos: Position) => {
+    setBracketEditId(pos.id);
+    setBracketSL(pos.stopLoss !== undefined ? String(pos.stopLoss) : "");
+    setBracketTP(pos.takeProfit !== undefined ? String(pos.takeProfit) : "");
+  };
+
+  const saveBrackets = (posId: string) => {
+    const sl = bracketSL.trim() === "" ? undefined : Number(bracketSL);
+    const tp = bracketTP.trim() === "" ? undefined : Number(bracketTP);
+    if (sl !== undefined && (!Number.isFinite(sl) || sl <= 0)) { setTradeMsg("SL: положительная цена"); return; }
+    if (tp !== undefined && (!Number.isFinite(tp) || tp <= 0)) { setTradeMsg("TP: положительная цена"); return; }
+    setPositions((prev) => prev.map((p) => {
+      if (p.id !== posId) return p;
+      const cur = pairById.get(p.pair);
+      const px = cur?.price ?? p.entryPrice;
+      // Sanity: long → SL < px < TP; short → TP < px < SL
+      if (p.side === "long") {
+        if (sl !== undefined && sl >= px) { setTradeMsg(`SL должен быть ниже текущей ${fmtUsd(px)} для long`); return p; }
+        if (tp !== undefined && tp <= px) { setTradeMsg(`TP должен быть выше текущей ${fmtUsd(px)} для long`); return p; }
+      } else {
+        if (sl !== undefined && sl <= px) { setTradeMsg(`SL должен быть выше текущей ${fmtUsd(px)} для short`); return p; }
+        if (tp !== undefined && tp >= px) { setTradeMsg(`TP должен быть ниже текущей ${fmtUsd(px)} для short`); return p; }
+      }
+      return { ...p, stopLoss: sl, takeProfit: tp };
+    }));
+    setBracketEditId(null);
+    setTradeMsg("✓ Brackets сохранены");
+    setTimeout(() => setTradeMsg(null), 1800);
+  };
+
+  const clearBrackets = (posId: string) => {
+    setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, stopLoss: undefined, takeProfit: undefined } : p));
+    setBracketEditId(null);
   };
 
   const closePosition = (posId: string) => {
@@ -740,47 +813,111 @@ export default function QTradePage() {
                 const pnl = cur ? unrealizedPnl(pos, price) : 0;
                 const pct = cur ? unrealizedPct(pos, price) : 0;
                 const ageMin = Math.max(0, Math.round((Date.now() - pos.entryTs) / 60000));
+                const editing = bracketEditId === pos.id;
+                const hasSL = pos.stopLoss !== undefined;
+                const hasTP = pos.takeProfit !== undefined;
                 return (
-                  <div
-                    key={pos.id}
-                    style={{
-                      padding: "8px 12px", borderRadius: 8,
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      display: "grid",
-                      gridTemplateColumns: "auto 1fr auto auto",
-                      gap: 12, alignItems: "center", fontSize: 13,
-                    }}
-                  >
-                    <span style={{
-                      padding: "2px 8px", borderRadius: 4,
-                      background: pos.side === "long" ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)",
-                      color: pos.side === "long" ? "#86efac" : "#fca5a5",
-                      fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase",
-                    }}>
-                      {pos.side === "long" ? "▲ Long" : "▼ Short"} {pos.pair.split("/")[0]}
-                    </span>
-                    <span style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>
-                      {pos.qty} @ {fmtUsd(pos.entryPrice)} → {fmtUsd(price)}
-                      <span style={{ marginLeft: 8, color: "#64748b", fontSize: 11 }}>({ageMin}m ago)</span>
-                    </span>
-                    <span style={{
-                      fontFamily: "ui-monospace, monospace",
-                      fontWeight: 900,
-                      color: pnl > 0 ? "#22c55e" : pnl < 0 ? "#f87171" : "#cbd5e1",
-                    }}>
-                      {pnl >= 0 ? "+" : ""}{fmtUsd(pnl)} ({fmtPct(pct)})
-                    </span>
-                    <button
-                      onClick={() => closePosition(pos.id)}
-                      style={{
-                        padding: "5px 11px", borderRadius: 5,
-                        background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
-                        color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
-                      }}
-                    >
-                      Close
-                    </button>
+                  <div key={pos.id} style={{
+                    padding: "8px 12px", borderRadius: 8,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    display: "flex", flexDirection: "column" as const, gap: 6, fontSize: 13,
+                  }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto auto", gap: 12, alignItems: "center" as const }}>
+                      <span style={{
+                        padding: "2px 8px", borderRadius: 4,
+                        background: pos.side === "long" ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)",
+                        color: pos.side === "long" ? "#86efac" : "#fca5a5",
+                        fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+                      }}>
+                        {pos.side === "long" ? "▲ Long" : "▼ Short"} {pos.pair.split("/")[0]}
+                      </span>
+                      <span style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>
+                        {pos.qty} @ {fmtUsd(pos.entryPrice)} → {fmtUsd(price)}
+                        <span style={{ marginLeft: 8, color: "#64748b", fontSize: 11 }}>({ageMin}m ago)</span>
+                      </span>
+                      <span style={{
+                        fontFamily: "ui-monospace, monospace", fontWeight: 900,
+                        color: pnl > 0 ? "#22c55e" : pnl < 0 ? "#f87171" : "#cbd5e1",
+                      }}>
+                        {pnl >= 0 ? "+" : ""}{fmtUsd(pnl)} ({fmtPct(pct)})
+                      </span>
+                      <button
+                        onClick={() => editing ? setBracketEditId(null) : startEditBrackets(pos)}
+                        style={{
+                          padding: "5px 10px", borderRadius: 5,
+                          background: editing ? "rgba(34,211,238,0.18)" : "rgba(255,255,255,0.06)",
+                          border: `1px solid ${editing ? "#22d3ee" : "rgba(255,255,255,0.15)"}`,
+                          color: editing ? "#67e8f9" : "#cbd5e1", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                        }}
+                      >
+                        {hasSL || hasTP ? "🎯 SL/TP" : "+ SL/TP"}
+                      </button>
+                      <button
+                        onClick={() => closePosition(pos.id)}
+                        style={{
+                          padding: "5px 11px", borderRadius: 5,
+                          background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
+                          color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    {/* SL/TP chips (display when set, not editing) */}
+                    {!editing && (hasSL || hasTP) && (
+                      <div style={{ display: "flex", gap: 6, fontSize: 11, fontFamily: "ui-monospace, monospace" }}>
+                        {hasSL && (
+                          <span style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(220,38,38,0.18)", color: "#fca5a5", fontWeight: 700 }}>
+                            🛑 SL {fmtUsd(pos.stopLoss!)}
+                          </span>
+                        )}
+                        {hasTP && (
+                          <span style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(34,197,94,0.18)", color: "#86efac", fontWeight: 700 }}>
+                            🎯 TP {fmtUsd(pos.takeProfit!)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* SL/TP editor */}
+                    {editing && (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", padding: "6px 8px", borderRadius: 6, background: "rgba(34,211,238,0.07)", border: "1px solid rgba(34,211,238,0.25)" }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: "#fca5a5", letterSpacing: 0.5, textTransform: "uppercase" as const }}>SL</span>
+                        <input
+                          value={bracketSL}
+                          onChange={(e) => setBracketSL(e.target.value)}
+                          type="number" min={0} step="any"
+                          placeholder={pos.side === "long" ? `< ${fmtUsd(price)}` : `> ${fmtUsd(price)}`}
+                          style={{
+                            width: 110, padding: "4px 8px", borderRadius: 4,
+                            border: "1px solid rgba(220,38,38,0.5)", background: "#0f172a", color: "#fff",
+                            fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 12,
+                          }}
+                        />
+                        <span style={{ fontSize: 10, fontWeight: 800, color: "#86efac", letterSpacing: 0.5, textTransform: "uppercase" as const }}>TP</span>
+                        <input
+                          value={bracketTP}
+                          onChange={(e) => setBracketTP(e.target.value)}
+                          type="number" min={0} step="any"
+                          placeholder={pos.side === "long" ? `> ${fmtUsd(price)}` : `< ${fmtUsd(price)}`}
+                          style={{
+                            width: 110, padding: "4px 8px", borderRadius: 4,
+                            border: "1px solid rgba(34,197,94,0.5)", background: "#0f172a", color: "#fff",
+                            fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 12,
+                          }}
+                        />
+                        <button onClick={() => saveBrackets(pos.id)}
+                          style={{ padding: "5px 12px", borderRadius: 4, border: "none", background: "#22d3ee", color: "#0f172a", fontSize: 11, fontWeight: 900, cursor: "pointer" }}>
+                          Save
+                        </button>
+                        {(hasSL || hasTP) && (
+                          <button onClick={() => clearBrackets(pos.id)}
+                            style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

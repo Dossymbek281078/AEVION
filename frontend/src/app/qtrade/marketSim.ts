@@ -31,7 +31,21 @@ export type Position = {
   qty: number;
   entryPrice: number;
   entryTs: number;
+  stopLoss?: number;     // абсолютная цена; long — закрытие если price ≤ SL; short — если price ≥ SL
+  takeProfit?: number;   // абсолютная цена; long — закрытие если price ≥ TP; short — если price ≤ TP
 };
+
+// Returns "tp" / "sl" / null — какой триггер сработал у позиции при текущей цене.
+export function checkBracketHit(p: Position, price: number): "tp" | "sl" | null {
+  if (p.side === "long") {
+    if (p.takeProfit !== undefined && price >= p.takeProfit) return "tp";
+    if (p.stopLoss !== undefined && price <= p.stopLoss) return "sl";
+  } else {
+    if (p.takeProfit !== undefined && price <= p.takeProfit) return "tp";
+    if (p.stopLoss !== undefined && price >= p.stopLoss) return "sl";
+  }
+  return null;
+}
 
 export type Trade = {
   id: string;

@@ -24,7 +24,7 @@ import { computeGameDNA, type GameDNA } from "./gameDna";
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
 type TC = {name:string;ini:number;inc:number;cat:"Bullet"|"Blitz"|"Rapid"|"Classical"};
-type AL = {name:string;elo:number;depth:number;color:string;rand:number;thinkMs:number;persona?:string;flag?:string;style?:string;quote?:string;winQuote?:string;loseQuote?:string;avatarHair?:string;avatarSkin?:string};
+type AL = {name:string;elo:number;depth:number;color:string;rand:number;thinkMs:number;persona?:string;flag?:string;style?:string;quote?:string;winQuote?:string;loseQuote?:string;avatarHair?:string;avatarSkin?:string;thinkPhrase?:string};
 type Pre = {from:Square;to:Square;pr?:"q"|"r"|"b"|"n"};
 
 const TCS: TC[] = [
@@ -40,22 +40,22 @@ const TCS: TC[] = [
 ];
 const ALS: AL[] = [
   {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:6000,
-    persona:"Рома Новичок",flag:"🇰🇿",style:"Хаотичная атака · часто зевает",quote:"Я только учусь — давай играть!",winQuote:"Ого, я выиграл? Не верю своим глазам",loseQuote:"Хорошо ты мне дал. Сыграем ещё?",
+    persona:"Рома Новичок",flag:"🇰🇿",style:"Хаотичная атака · часто зевает",quote:"Я только учусь — давай играть!",winQuote:"Ого, я выиграл? Не верю своим глазам",loseQuote:"Хорошо ты мне дал. Сыграем ещё?",thinkPhrase:"хм…",
     avatarHair:"#a16207",avatarSkin:"#fed7aa"},
   {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:4500,
-    persona:"Сара Кэжуал",flag:"🇪🇸",style:"Спокойный позиционный стиль",quote:"Шахматы — это удовольствие, не работа",winQuote:"Buena partida! Хорошая игра",loseQuote:"Ты сегодня в форме, поздравляю",
+    persona:"Сара Кэжуал",flag:"🇪🇸",style:"Спокойный позиционный стиль",quote:"Шахматы — это удовольствие, не работа",winQuote:"Buena partida! Хорошая игра",loseQuote:"Ты сегодня в форме, поздравляю",thinkPhrase:"размышляю",
     avatarHair:"#7c2d12",avatarSkin:"#fde2c5"},
   {name:"Club",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:3000,
-    persona:"Клаус Клубмейстер",flag:"🇩🇪",style:"Знает дебюты · крепкая защита",quote:"Дисциплина и план — вот шахматы",winQuote:"Хорошая позиционная игра — типичная немецкая школа",loseQuote:"Ты переиграл меня, поздравляю",
+    persona:"Клаус Клубмейстер",flag:"🇩🇪",style:"Знает дебюты · крепкая защита",quote:"Дисциплина и план — вот шахматы",winQuote:"Хорошая позиционная игра — типичная немецкая школа",loseQuote:"Ты переиграл меня, поздравляю",thinkPhrase:"планирую",
     avatarHair:"#1f2937",avatarSkin:"#fde2c5"},
   {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:2000,
-    persona:"Анна Аналитик",flag:"🇷🇺",style:"Глубокий миттельшпиль · точная техника",quote:"5 лет тренировок не пройдут даром",winQuote:"План сработал. Идеально.",loseQuote:"Мне есть чему у тебя поучиться",
+    persona:"Анна Аналитик",flag:"🇷🇺",style:"Глубокий миттельшпиль · точная техника",quote:"5 лет тренировок не пройдут даром",winQuote:"План сработал. Идеально.",loseQuote:"Мне есть чему у тебя поучиться",thinkPhrase:"анализирую",
     avatarHair:"#451a03",avatarSkin:"#fde2c5"},
   {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:1200,
-    persona:"Эрик Эксперт",flag:"🇸🇪",style:"Тактический · любит жертвы",quote:"Жертвуй фигуру — выигрывай партию",winQuote:"Вот это была комбинация! Чувствуешь огонь?",loseQuote:"Серьёзный соперник. Reчасты!",
+    persona:"Эрик Эксперт",flag:"🇸🇪",style:"Тактический · любит жертвы",quote:"Жертвуй фигуру — выигрывай партию",winQuote:"Вот это была комбинация! Чувствуешь огонь?",loseQuote:"Серьёзный соперник. Respekt!",thinkPhrase:"вижу комбинацию",
     avatarHair:"#fef3c7",avatarSkin:"#fef3c7"},
   {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:600,
-    persona:"Магнус Мишра",flag:"🇮🇳",style:"Универсальный · ФИДЕ-мастер",quote:"На каждый твой план у меня свой ответ",winQuote:"Это была партия высокого уровня. Спасибо.",loseQuote:"Невероятно. Ты играл как настоящий мастер.",
+    persona:"Магнус Мишра",flag:"🇮🇳",style:"Универсальный · ФИДЕ-мастер",quote:"На каждый твой план у меня свой ответ",winQuote:"Это была партия высокого уровня. Спасибо.",loseQuote:"Невероятно. Ты играл как настоящий мастер.",thinkPhrase:"считаю варианты",
     avatarHair:"#0c0a09",avatarSkin:"#d6a47b"},
 ];
 const SFD: Record<number,number> = {3:8,4:12,5:16};
@@ -185,7 +185,7 @@ function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)re
 function svDaily(s:DailyState){try{localStorage.setItem(DK,JSON.stringify(s))}catch{}}
 
 /* ═══ PGN utilities ═══ */
-function buildPGN(moves:string[],meta:{white?:string;black?:string;result?:string;date?:string;event?:string}={}):string{
+function buildPGN(moves:string[],meta:{white?:string;black?:string;result?:string;date?:string;event?:string;analysis?:{quality?:string;cp?:number;mate?:number}[]}={}):string{
   const d=meta.date||new Date().toISOString().slice(0,10).replace(/-/g,".");
   const headers=[
     `[Event "${meta.event||"AEVION CyberChess"}"]`,
@@ -194,10 +194,23 @@ function buildPGN(moves:string[],meta:{white?:string;black?:string;result?:strin
     `[White "${meta.white||"White"}"]`,
     `[Black "${meta.black||"Black"}"]`,
     `[Result "${meta.result||"*"}"]`,
+    `[Annotator "AEVION Stockfish"]`,
   ];
+  // PGN NAG annotations: !! = $3, ! = $1, !? = $5, ?! = $6, ? = $2, ?? = $4
+  const nagFor=(q?:string)=>q==="great"?"$1":q==="blunder"?"$4":q==="mistake"?"$2":q==="inacc"?"$6":"";
+  const evalFor=(a?:{cp?:number;mate?:number})=>{
+    if(!a)return"";
+    if(a.mate!==undefined&&a.mate!==0)return ` { [%eval #${a.mate}] }`;
+    if(a.cp!==undefined)return ` { [%eval ${(a.cp/100).toFixed(2)}] }`;
+    return"";
+  };
+  const fmt=(idx:number,san:string)=>{
+    const a=meta.analysis?.[idx];
+    return san+(a?.quality?nagFor(a.quality):"")+evalFor(a);
+  };
   const body:string[]=[];
   for(let i=0;i<moves.length;i+=2){
-    const n=i/2+1;const w=moves[i];const b=moves[i+1];
+    const n=i/2+1;const w=moves[i]?fmt(i,moves[i]):"";const b=moves[i+1]?fmt(i+1,moves[i+1]):"";
     body.push(b?`${n}. ${w} ${b}`:`${n}. ${w}`);
   }
   return headers.join("\n")+"\n\n"+body.join(" ")+(meta.result?` ${meta.result}`:" *");
@@ -289,7 +302,8 @@ function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarPr
   const bg=isOver?(isWin?"#ecfdf5":"#fef2f2"):chk?"#fef2f2":think?"#fffbeb":T.surface;
   const bc=isOver?(isWin?"#a7f3d0":"#fecaca"):chk?"#fecaca":T.border;
   const col=isOver?(isWin?T.accent:T.danger):chk?T.danger:think?T.gold:myT?T.accent:T.dim;
-  const label=isOver?over:chk?"Check!":think?(useSF?"Stockfish thinking…":"AI thinking…"):myT?"Your move":"AI's turn";
+  // Persona-flavoured "thinking" line — only used when Status bar is told who's playing
+  const label=isOver?over:chk?"Check!":think?(useSF?"Stockfish считает…":"Соперник думает…"):myT?"Твой ход":"Ход соперника";
   const icon=isOver?(isWin
       ? <svg viewBox="0 0 24 24" fill={col} style={sz}><path d="M7 3h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V3zm-3 1h3v2a3 3 0 0 1-3-3V4zm13 0h3v1a3 3 0 0 1-3 3V4zM9 13h6v2l2 5H7l2-5v-2z"/></svg>
       : <svg viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2.5} strokeLinecap="round" style={sz}><circle cx="12" cy="12" r="9"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
@@ -1113,6 +1127,8 @@ export default function CyberChessPage(){
       if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
       if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
       if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on)){e.preventDefault();newGRef.current()}}
+      if(e.key==="r"||e.key==="R"){e.preventDefault();sRepertoireOpen(v=>!v)}
+      if(e.key==="g"||e.key==="G"){e.preventDefault();sFamousOpen(v=>!v)}
       if(hist.length===0)return;
       if(e.key==="ArrowLeft"){
         e.preventDefault();
@@ -2869,7 +2885,7 @@ export default function CyberChessPage(){
               const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
               const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
               const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
-              const pgn=buildPGN(hist,{white,black,result});
+              const pgn=buildPGN(hist,{white,black,result,analysis:analysis.length>0?analysis:undefined});
               const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
               const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
               try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
@@ -2940,7 +2956,7 @@ export default function CyberChessPage(){
                   {p2pMode&&<Badge tone="accent" size="xs">P2P · {p2p.latencyMs||"…"}мс</Badge>}
                   {p2pMode&&p2p.status==="connected"&&<span title="Связь активна" style={{width:8,height:8,borderRadius:"50%",background:"#10b981",animation:"cc-pulse-glow 2s ease-in-out infinite"}}/>}
                   {p2pMode&&p2p.status==="closed"&&<Badge tone="danger" size="xs">⚠ Соединение разорвано</Badge>}
-                  {think&&<Badge tone="gold" size="xs" icon={<Spinner size={10}/>}>думаю</Badge>}
+                  {think&&<Badge tone="gold" size="xs" icon={<Spinner size={10}/>}>{p2pMode?"ход…":(lv.thinkPhrase||"думаю")}</Badge>}
                 </div>
                 {capW.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:4,color:CC.textDim}} translate="no">{capW.join("")}</div>}
               </div>
@@ -4412,6 +4428,8 @@ export default function CyberChessPage(){
           ["F","Перевернуть доску"],
           ["M","Вкл./выкл. звук"],
           ["N","Новая партия (в Play, до старта)"],
+          ["R","📚 Открыть репертуар"],
+          ["G","🏆 Великие партии"],
           ["Esc","Сбросить все премувы"],
           ["?","Показать / скрыть эту подсказку"],
           ["ПКМ-drag","Стрелка на доске (Analysis / Coach / после партии)"],

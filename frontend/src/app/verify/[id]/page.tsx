@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -73,6 +73,7 @@ type InclusionProof = {
 
 export default function VerifyPage() {
   const params = useParams();
+  const router = useRouter();
   const certId = params?.id as string;
 
   const [loading, setLoading] = useState(true);
@@ -82,6 +83,7 @@ export default function VerifyPage() {
   const [proofBusy, setProofBusy] = useState(false);
   const [proofError, setProofError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [lookupId, setLookupId] = useState<string>("");
 
   useEffect(() => {
     if (!certId) return;
@@ -412,6 +414,40 @@ ${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
           ) : null}
         </div>
 
+        {/* Downloads — surface backend artifacts (PDF + badge SVG + raw JSON) */}
+        <div style={{ marginBottom: 24, padding: "16px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Download artifacts</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <a
+              href={apiUrl(`/api/pipeline/certificate/${cert.id}/pdf`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ padding: "9px 14px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              📄 Certificate PDF
+            </a>
+            <a
+              href={apiUrl(`/api/pipeline/badge/${cert.id}`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ padding: "9px 14px", borderRadius: 10, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              🛡️ Protection badge (SVG)
+            </a>
+            <a
+              href={apiUrl(`/api/pipeline/verify/${cert.id}`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", textDecoration: "none", fontWeight: 800, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              { } Raw verify JSON
+            </a>
+            <span style={{ fontSize: 11, color: "#64748b" }}>
+              All artifacts are stable — anyone can re-fetch and re-verify offline.
+            </span>
+          </div>
+        </div>
+
         {/* Share */}
         {(() => {
           const shareUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -436,6 +472,40 @@ ${proof.path.map((p, i) => `  ${i}. ${p.side}  ${p.hash}`).join("\n")}`}
             </div>
           );
         })()}
+
+        {/* Verify another */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const next = lookupId.trim();
+            if (!next || next === certId) return;
+            router.push(`/verify/${encodeURIComponent(next)}`);
+          }}
+          style={{ marginBottom: 24, padding: "16px 22px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}
+        >
+          <label htmlFor="verify-another" style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+            Verify another certificate
+          </label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              id="verify-another"
+              value={lookupId}
+              onChange={(e) => setLookupId(e.target.value)}
+              placeholder="Paste certificate ID (e.g. cert_…)"
+              style={{ flex: "1 1 260px", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, fontFamily: "ui-monospace, monospace" }}
+            />
+            <button
+              type="submit"
+              disabled={!lookupId.trim() || lookupId.trim() === certId}
+              style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: !lookupId.trim() || lookupId.trim() === certId ? "rgba(15,23,42,0.1)" : "#0f172a", color: !lookupId.trim() || lookupId.trim() === certId ? "#94a3b8" : "#fff", fontWeight: 800, fontSize: 13, cursor: !lookupId.trim() || lookupId.trim() === certId ? "default" : "pointer" }}
+            >
+              Verify →
+            </button>
+            <Link href="/bureau" style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 13, textDecoration: "none" }}>
+              Browse registry
+            </Link>
+          </div>
+        </form>
 
         {/* Footer */}
         <div style={{ textAlign: "center", padding: "20px 0" }}>

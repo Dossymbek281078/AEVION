@@ -6,9 +6,11 @@ import {
   MODULES_PRICING,
   BUNDLES,
   CURRENCY_RATES,
+  PROMO_CODES,
   buildQuote,
   getTier,
   getModulePrice,
+  resolvePromoCode,
   type CurrencyCode,
   type BillingPeriod,
   type TierId,
@@ -192,9 +194,60 @@ pricingRouter.post("/quote", (req, res) => {
       ? (body.currency as CurrencyCode)
       : "USD";
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];
+  const promoCode = typeof body.promoCode === "string" ? body.promoCode.trim().slice(0, 40) : undefined;
 
-  const quote = buildQuote({ tierId, modules, seats, period, currency });
+  const quote = buildQuote({ tierId, modules, seats, period, currency, promoCode });
   res.json(quote);
+});
+
+/**
+ * POST /api/pricing/promo/validate
+ * Body: { code, tierId }
+ * Возвращает: { valid, promo?, reason? }
+ *
+ * Используется фронтом для отдельной проверки кода до отправки full-quote.
+ */
+pricingRouter.post("/promo/validate", (req, res) => {
+  const body = req.body ?? {};
+  const code = typeof body.code === "string" ? body.code.trim().slice(0, 40) : "";
+  const tierId = body.tierId as TierId;
+  if (!code) {
+    return res.status(400).json({ valid: false, reason: "empty_code" });
+  }
+  if (!tierId || !["free", "pro", "business", "enterprise"].includes(tierId)) {
+    return res.status(400).json({ valid: false, reason: "invalid_tier" });
+  }
+  const { promo, reason } = resolvePromoCode(code, tierId);
+  if (!promo) {
+    return res.json({ valid: false, reason });
+  }
+  res.json({
+    valid: true,
+    promo: {
+      code: promo.code,
+      kind: promo.kind,
+      amount: promo.amount,
+      description: promo.description,
+    },
+  });
+});
+
+/**
+ * GET /api/pricing/promo
+ * Публичный список действующих промо-кодов (без maxUses, для маркетинга).
+ * Полезно для GTM-баннеров и landing pages.
+ */
+pricingRouter.get("/promo", (_req, res) => {
+  const now = new Date();
+  const items = PROMO_CODES.filter((p) => !p.validUntil || new Date(p.validUntil) > now).map((p) => ({
+    code: p.code,
+    kind: p.kind,
+    amount: p.amount,
+    description: p.description,
+    validUntil: p.validUntil,
+    tiers: p.tiers ?? [],
+  }));
+  res.json({ items, total: items.length });
 });
 
 /**

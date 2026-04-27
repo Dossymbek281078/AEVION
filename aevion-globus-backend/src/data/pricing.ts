@@ -403,6 +403,62 @@ export const MODULES_PRICING: ModulePrice[] = [
   },
 ];
 
+/**
+ * Промо-коды. Применяются на subtotal сметы.
+ * - kind='percent' → скидка в процентах
+ * - kind='fixed' → фикс в USD
+ * - validUntil ISO дата (опционально)
+ * - maxUses null = без ограничений (counter не ведём здесь — это GTM-список)
+ * - tiers — на каких тарифах применим (пустой массив = на всех платных)
+ */
+export interface PromoCode {
+  code: string;
+  kind: "percent" | "fixed";
+  amount: number;
+  description: string;
+  validUntil?: string;
+  tiers?: TierId[];
+  maxUses?: number | null;
+}
+
+export const PROMO_CODES: PromoCode[] = [
+  {
+    code: "AEVION20",
+    kind: "percent",
+    amount: 20,
+    description: "Запуск GTM — 20% на любой платный тариф",
+    validUntil: "2026-12-31T23:59:59Z",
+  },
+  {
+    code: "STARTUP50",
+    kind: "percent",
+    amount: 50,
+    description: "Стартапам в первый год — 50% на Pro",
+    validUntil: "2026-12-31T23:59:59Z",
+    tiers: ["pro"],
+  },
+  {
+    code: "EARLYBIRD",
+    kind: "percent",
+    amount: 30,
+    description: "Ранние пользователи — 30% на любой платный тариф",
+    validUntil: "2026-06-30T23:59:59Z",
+  },
+  {
+    code: "FRIEND10",
+    kind: "fixed",
+    amount: 10,
+    description: "Реферальный — $10 в первый месяц",
+  },
+  {
+    code: "TEAM100",
+    kind: "fixed",
+    amount: 100,
+    description: "Команды — $100 на Business",
+    tiers: ["business"],
+  },
+];
+
 /** Сборки модулей со скидкой — для GTM-лендинга. */
 export const BUNDLES: PricingBundle[] = [
   {
@@ -442,6 +498,29 @@ export function getModulePrice(id: string): ModulePrice | null {
 }
 
 /**
+ * Получить активный промо-код по строке. Возвращает null, если код:
+ *   - не существует
+ *   - истёк (validUntil < now)
+ *   - не применим к данному тарифу (tiers задан и tier не входит)
+ */
+export function resolvePromoCode(
+  raw: string | undefined,
+  tierId: TierId,
+): { promo: PromoCode | null; reason?: string } {
+  if (!raw) return { promo: null };
+  const code = raw.trim().toUpperCase();
+  const promo = PROMO_CODES.find((p) => p.code === code);
+  if (!promo) return { promo: null, reason: "promo_not_found" };
+  if (promo.validUntil && new Date(promo.validUntil) < new Date()) {
+    return { promo: null, reason: "promo_expired" };
+  }
+  if (promo.tiers && promo.tiers.length > 0 && !promo.tiers.includes(tierId)) {
+    return { promo: null, reason: "promo_tier_mismatch" };
+  }
+  return { promo };
+}
+
+/**
  * Расчёт сметы: тариф + список модулей + период + кол-во seats.
  * Возвращает { subtotal, discount, total, lines }.
  *
@@ -459,6 +538,15 @@ export interface QuoteLine {
   total: number;
 }
 
+export interface AppliedPromo {
+  code: string;
+  kind: "percent" | "fixed";
+  amount: number;
+  description: string;
+  /** Сумма применённой скидки в выбранной валюте */
+  applied: number;
+}
+
 export interface Quote {
   tierId: TierId;
   period: BillingPeriod;
@@ -468,6 +556,8 @@ export interface Quote {
   discount: number;
   total: number;
   notes: string[];
+  /** null = промо не применён или невалиден; reason — в notes[] */
+  promo: AppliedPromo | null;
 }
 
 export function buildQuote(input: {
@@ -476,6 +566,7 @@ export function buildQuote(input: {
   seats?: number;
   period?: BillingPeriod;
   currency?: CurrencyCode;
+  promoCode?: string;
 }): Quote {
   const period: BillingPeriod = input.period ?? "monthly";
   const currency: CurrencyCode = input.currency ?? "USD";
@@ -494,6 +585,7 @@ export function buildQuote(input: {
       discount: 0,
       total: 0,
       notes: [`Tier "${input.tierId}" not found`],
+      promo: null,
     };
   }
 
@@ -555,7 +647,37 @@ export function buildQuote(input: {
       discount = Math.round(tierLine.total * 0.16);
     }
   }
-  const totalUSD = Math.max(0, subtotal - discount);
+
+  // 5) Промо-код применяется на (subtotal - discount)
+  let promoApplied: AppliedPromo | null = null;
+  let promoUsd = 0;
+  if (input.promoCode) {
+    const { promo, reason } = resolvePromoCode(input.promoCode, tier.id);
+    if (promo) {
+      const base = Math.max(0, subtotal - discount);
+      promoUsd =
+        promo.kind === "percent"
+          ? Math.round((base * promo.amount) / 100)
+          : Math.min(base, promo.amount * (period === "annual" ? 12 : 1));
+      const rate = CURRENCY_RATES[currency].rate;
+      promoApplied = {
+        code: promo.code,
+        kind: promo.kind,
+        amount: promo.amount,
+        description: promo.description,
+        applied: Math.round(promoUsd * rate * 100) / 100,
+      };
+    } else {
+      const map: Record<string, string> = {
+        promo_not_found: "Промо-код не найден",
+        promo_expired: "Промо-код истёк",
+        promo_tier_mismatch: "Промо-код не применим к этому тарифу",
+      };
+      notes.push(map[reason ?? ""] ?? `Промо-код невалиден: ${input.promoCode}`);
+    }
+  }
+
+  const totalUSD = Math.max(0, subtotal - discount - promoUsd);
   const rate = CURRENCY_RATES[currency].rate;
 
   return {
@@ -568,8 +690,9 @@ export function buildQuote(input: {
       total: Math.round(l.total * rate * 100) / 100,
     })),
     subtotal: Math.round(subtotal * rate * 100) / 100,
-    discount: Math.round(discount * rate * 100) / 100,
+    discount: Math.round((discount + promoUsd) * rate * 100) / 100,
     total: Math.round(totalUSD * rate * 100) / 100,
     notes,
+    promo: promoApplied,
   };
 }

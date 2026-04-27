@@ -158,6 +158,12 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/leads": {
         get: { summary: "List recent leads — admin token required" },
       },
+      "/api/pricing/promo": {
+        get: { summary: "Public list of active promo codes" },
+      },
+      "/api/pricing/promo/validate": {
+        post: { summary: "Validate a promo code against a tier (no charge)" },
+      },
     },
   });
 });

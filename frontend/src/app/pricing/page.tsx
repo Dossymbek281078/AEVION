@@ -76,6 +76,14 @@ interface QuoteLine {
   total: number;
 }
 
+interface AppliedPromo {
+  code: string;
+  kind: "percent" | "fixed";
+  amount: number;
+  description: string;
+  applied: number;
+}
+
 interface Quote {
   tierId: TierId;
   period: BillingPeriod;
@@ -85,6 +93,7 @@ interface Quote {
   discount: number;
   total: number;
   notes: string[];
+  promo: AppliedPromo | null;
 }
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
@@ -123,6 +132,10 @@ function availabilityBadge(a: ModulePrice["availability"]) {
 
 export default function PricingPage() {
   const [data, setData] = useState<PricingPayload | null>(null);
+  const [activePromos, setActivePromos] = useState<
+    Array<{ code: string; description: string; kind: string; amount: number }>
+  >([]);
+  const [copiedPromo, setCopiedPromo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<BillingPeriod>("annual");
@@ -132,6 +145,7 @@ export default function PricingPage() {
   const [calcTier, setCalcTier] = useState<TierId>("pro");
   const [calcModules, setCalcModules] = useState<string[]>([]);
   const [calcSeats, setCalcSeats] = useState(1);
+  const [calcPromo, setCalcPromo] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
@@ -141,6 +155,8 @@ export default function PricingPage() {
     modules?: string[];
     seats?: number;
     period?: BillingPeriod;
+    promoCode?: string;
+    trial?: boolean;
   }) {
     setCheckingOut(opts.tierId);
     track({
@@ -189,6 +205,12 @@ export default function PricingPage() {
       }
     }
     load();
+    fetch(apiUrl("/api/pricing/promo"))
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && Array.isArray(j.items)) setActivePromos(j.items);
+      })
+      .catch(() => {});
     track({ type: "page_view", source: "pricing" });
     return () => {
       cancelled = true;
@@ -217,6 +239,7 @@ export default function PricingPage() {
           seats: calcSeats,
           period,
           currency,
+          promoCode: calcPromo || undefined,
         }),
       });
       const j: Quote = await r.json();
@@ -231,10 +254,10 @@ export default function PricingPage() {
   // Авто-пересчёт при изменении параметров
   useEffect(() => {
     if (!data) return;
-    const t = setTimeout(recalc, 200);
+    const t = setTimeout(recalc, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calcTier, calcModules, calcSeats, period, currency, data]);
+  }, [calcTier, calcModules, calcSeats, period, currency, calcPromo, data]);
 
   const moduleSelectable = useMemo(() => {
     if (!data) return [];
@@ -319,6 +342,61 @@ export default function PricingPage() {
           модулей под одним аккаунтом.
         </p>
       </section>
+
+      {/* Active promo banner */}
+      {activePromos.length > 0 && (
+        <section
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: "#64748b",
+              letterSpacing: "0.06em",
+              alignSelf: "center",
+              marginRight: 4,
+            }}
+          >
+            АКТИВНЫЕ ПРОМО:
+          </div>
+          {activePromos.map((p) => (
+            <button
+              key={p.code}
+              onClick={() => {
+                setCalcPromo(p.code);
+                navigator.clipboard?.writeText(p.code).catch(() => {});
+                setCopiedPromo(p.code);
+                setTimeout(() => setCopiedPromo(null), 1500);
+              }}
+              title={p.description}
+              style={{
+                padding: "6px 12px",
+                fontSize: 12,
+                fontWeight: 800,
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: "0.04em",
+                borderRadius: 6,
+                border: "1px dashed rgba(13,148,136,0.4)",
+                cursor: "pointer",
+                background: copiedPromo === p.code ? "#0d9488" : "rgba(13,148,136,0.08)",
+                color: copiedPromo === p.code ? "#fff" : "#0d9488",
+              }}
+            >
+              {copiedPromo === p.code ? "✓ Скопировано" : p.code} ·{" "}
+              <span style={{ opacity: 0.7 }}>
+                {p.kind === "percent" ? `−${p.amount}%` : `−$${p.amount}`}
+              </span>
+            </button>
+          ))}
+        </section>
+      )}
 
       {/* Period / Currency switch */}
       <section
@@ -527,26 +605,49 @@ export default function PricingPage() {
                 </button>
               )}
               {tier.id !== "enterprise" && tier.id !== "free" && (
-                <button
-                  style={{
-                    width: "100%",
-                    padding: "6px 16px",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    borderRadius: 8,
-                    border: "none",
-                    cursor: "pointer",
-                    background: "transparent",
-                    color: isHighlight ? "#94a3b8" : "#64748b",
-                    marginBottom: 12,
-                  }}
-                  onClick={() => {
-                    setCalcTier(tier.id);
-                    document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  Открыть калькулятор →
-                </button>
+                <>
+                  <button
+                    style={{
+                      width: "100%",
+                      padding: "8px 16px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      borderRadius: 8,
+                      border: isHighlight
+                        ? "1px solid rgba(255,255,255,0.2)"
+                        : "1px solid rgba(13,148,136,0.4)",
+                      cursor: "pointer",
+                      background: "transparent",
+                      color: isHighlight ? "#5eead4" : "#0d9488",
+                      marginBottom: 6,
+                    }}
+                    onClick={() =>
+                      startCheckout({ tierId: tier.id, period, seats: 1, trial: true })
+                    }
+                  >
+                    Попробовать 14 дней бесплатно
+                  </button>
+                  <button
+                    style={{
+                      width: "100%",
+                      padding: "6px 16px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: 8,
+                      border: "none",
+                      cursor: "pointer",
+                      background: "transparent",
+                      color: isHighlight ? "#94a3b8" : "#64748b",
+                      marginBottom: 12,
+                    }}
+                    onClick={() => {
+                      setCalcTier(tier.id);
+                      document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    Открыть калькулятор →
+                  </button>
+                </>
               )}
               <ul
                 style={{
@@ -905,6 +1006,50 @@ export default function PricingPage() {
                   marginBottom: 6,
                 }}
               >
+                ПРОМО-КОД
+              </label>
+              <input
+                value={calcPromo}
+                onChange={(e) => setCalcPromo(e.target.value.toUpperCase())}
+                placeholder="AEVION20 / STARTUP50"
+                style={{
+                  width: 200,
+                  padding: "8px 10px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  borderRadius: 8,
+                  border: quote?.promo
+                    ? "1px solid #34d399"
+                    : "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "#f8fafc",
+                  fontFamily: "ui-monospace, monospace",
+                  textTransform: "uppercase",
+                }}
+              />
+              {quote?.promo && (
+                <div style={{ marginTop: 4, fontSize: 11, color: "#34d399" }}>
+                  ✓ {quote.promo.description}
+                </div>
+              )}
+              {calcPromo && !quote?.promo && quote?.notes.some((n) => n.toLowerCase().includes("промо")) && (
+                <div style={{ marginTop: 4, fontSize: 11, color: "#fca5a5" }}>
+                  ✗ {quote.notes.find((n) => n.toLowerCase().includes("промо"))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#94a3b8",
+                  letterSpacing: "0.06em",
+                  display: "block",
+                  marginBottom: 6,
+                }}
+              >
                 ДОПОЛНИТЕЛЬНЫЕ МОДУЛИ
               </label>
               <div
@@ -1040,6 +1185,7 @@ export default function PricingPage() {
                         modules: calcModules,
                         seats: calcSeats,
                         period,
+                        promoCode: calcPromo || undefined,
                       })
                     }
                     style={{

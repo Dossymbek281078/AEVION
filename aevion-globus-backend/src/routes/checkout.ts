@@ -1,6 +1,6 @@
 import { Router } from "express";
 import Stripe from "stripe";
-import { TIERS, MODULES_PRICING, getTier, getModulePrice, type TierId, type BillingPeriod } from "../data/pricing";
+import { TIERS, MODULES_PRICING, getTier, getModulePrice, resolvePromoCode, type TierId, type BillingPeriod } from "../data/pricing";
 
 export const checkoutRouter = Router();
 
@@ -26,6 +26,8 @@ interface CheckoutBody {
   seats?: number;
   period?: BillingPeriod;
   email?: string;
+  promoCode?: string;
+  trial?: boolean;
 }
 
 /**
@@ -117,17 +119,54 @@ checkoutRouter.post("/session", async (req, res) => {
       return res.status(400).json({ error: "empty_cart" });
     }
 
+    // Promo-код: применяется как отрицательная line item, чтобы Stripe видел итог
+    let promoLine: { name: string; description: string; amountCents: number; qty: number } | null = null;
+    if (body.promoCode) {
+      const { promo } = resolvePromoCode(body.promoCode, tier.id);
+      if (promo) {
+        const subtotalCents = lineItems.reduce((s, l) => s + l.amountCents * l.qty, 0);
+        const promoCents =
+          promo.kind === "percent"
+            ? Math.round((subtotalCents * promo.amount) / 100)
+            : Math.min(subtotalCents, promo.amount * 100 * (period === "annual" ? 12 : 1));
+        // Stripe не принимает отрицательные line items в Checkout — используем coupon
+        promoLine = {
+          name: `Промо ${promo.code}`,
+          description: promo.description,
+          amountCents: -promoCents,
+          qty: 1,
+        };
+      }
+    }
+
+    const trialDays = body.trial && (tier.id === "pro" || tier.id === "business") ? 14 : 0;
+
     // Stub-fallback: нет ключа Stripe — эмулируем checkout
     if (!stripe) {
-      const total = lineItems.reduce((s, l) => s + l.amountCents * l.qty, 0);
+      let total = lineItems.reduce((s, l) => s + l.amountCents * l.qty, 0);
+      if (promoLine) total = Math.max(0, total + promoLine.amountCents * promoLine.qty);
+      const trialQs = trialDays > 0 ? `&trial=${trialDays}` : "";
       return res.json({
-        url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${total}`,
+        url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${total}${trialQs}`,
         mode: "stub",
         lineItems,
+        promo: promoLine,
+        trialDays: trialDays || undefined,
       });
     }
 
-    // Реальный Stripe Checkout
+    // Реальный Stripe Checkout. Promo конвертируется в Stripe coupon на лету.
+    let discounts: Array<{ coupon: string }> | undefined;
+    if (promoLine) {
+      const coupon = await stripe.coupons.create({
+        amount_off: -promoLine.amountCents,
+        currency: "usd",
+        name: promoLine.name,
+        duration: "once",
+      });
+      discounts = [{ coupon: coupon.id }];
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
@@ -142,6 +181,7 @@ checkoutRouter.post("/session", async (req, res) => {
         },
         quantity: l.qty,
       })),
+      ...(discounts ? { discounts } : { allow_promotion_codes: true }),
       success_url: `${FRONTEND_URL}/pricing/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${FRONTEND_URL}/pricing/checkout/cancel?tier=${tier.id}`,
       customer_email: body.email,
@@ -150,6 +190,8 @@ checkoutRouter.post("/session", async (req, res) => {
         period,
         seats: String(seats),
         modules: (body.modules ?? []).join(","),
+        promoCode: body.promoCode ?? "",
+        trialDays: String(trialDays),
       },
     });
 

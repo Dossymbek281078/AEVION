@@ -13,8 +13,13 @@ function SuccessInner() {
   const tier = sp.get("tier");
   const period = sp.get("period");
   const totalCents = sp.get("total");
+  const trialDays = sp.get("trial") ? parseInt(sp.get("trial")!, 10) : 0;
 
   const totalUsd = totalCents ? Math.round(parseInt(totalCents, 10) / 100) : null;
+  const trialEndDate =
+    trialDays > 0
+      ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU")
+      : null;
 
   useEffect(() => {
     track({
@@ -46,13 +51,35 @@ function SuccessInner() {
       >
         <div style={{ fontSize: 60, marginBottom: 16 }}>✓</div>
         <h1 style={{ fontSize: 32, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
-          {tier === "free" ? "Аккаунт активирован" : "Оплата прошла"}
+          {tier === "free"
+            ? "Аккаунт активирован"
+            : trialDays > 0
+              ? "Триал-период активирован"
+              : "Оплата прошла"}
         </h1>
         <p style={{ fontSize: 15, lineHeight: 1.6, margin: 0, marginBottom: 20, opacity: 0.92 }}>
           {tier === "free"
             ? "Вы перешли на Free. Можете сразу зарегистрировать первую идею в QRight."
-            : `Подписка AEVION ${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ""} активна. Welcome-email отправлен на ваш почтовый ящик.`}
+            : trialDays > 0
+              ? `Бесплатный доступ к AEVION ${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ""} на ${trialDays} дней. Карта не списывается до окончания триала.`
+              : `Подписка AEVION ${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ""} активна. Welcome-email отправлен на ваш почтовый ящик.`}
         </p>
+
+        {trialEndDate && (
+          <div
+            style={{
+              display: "inline-block",
+              background: "rgba(255,255,255,0.16)",
+              padding: "8px 14px",
+              borderRadius: 8,
+              fontSize: 13,
+              marginBottom: 16,
+              border: "1px dashed rgba(255,255,255,0.3)",
+            }}
+          >
+            Триал заканчивается: <strong>{trialEndDate}</strong>
+          </div>
+        )}
 
         {(totalUsd !== null || period) && tier !== "free" && (
           <div

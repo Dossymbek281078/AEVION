@@ -216,3 +216,50 @@ code {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Accessibility globals                                                      */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/* Reduced motion: collapse heavy animations / transitions for users who
+   prefer it. Bureau page uses shimmer skeletons + pulse dots + animated
+   sparkline transitions; this rule clamps animation-duration so the page
+   still renders correctly without strobing. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible focus ring for keyboard users (does not affect mouse users). */
+:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Screen-reader-only utility (visually hidden, available to AT). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Smooth scroll for anchor jumps inside long pages — but only for users
+   who haven't asked for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

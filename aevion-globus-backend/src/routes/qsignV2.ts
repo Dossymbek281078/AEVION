@@ -918,6 +918,24 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
     );
     doc.pipe(res);
 
+    const sanitizeHex = (raw: unknown): string | null => {
+      if (typeof raw !== "string") return null;
+      const v = raw.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
+      if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v}`;
+      return null;
+    };
+    const sanitizeText = (raw: unknown, maxLen: number): string | null => {
+      if (typeof raw !== "string") return null;
+      const cleaned = raw.replace(/[\x00-\x1f\x7f]/g, "").trim();
+      if (!cleaned) return null;
+      return cleaned.length > maxLen ? cleaned.slice(0, maxLen) : cleaned;
+    };
+
+    const accent = sanitizeHex(req.query.accent) ?? "#14b8a6";
+    const customTitle = sanitizeText(req.query.title, 60);
+    const customSubtitle = sanitizeText(req.query.subtitle, 120);
+
     const COLOR_VALID = "#0a7d2c";
     const COLOR_REVOKED = "#a40000";
     const COLOR_TAMPERED = "#a64100";
@@ -929,10 +947,18 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
     const statusColor =
       status === "valid" ? COLOR_VALID : status === "revoked" ? COLOR_REVOKED : COLOR_TAMPERED;
 
-    doc.fillColor(COLOR_TEXT).font("Helvetica-Bold").fontSize(20).text("AEVION QSign v2");
+    // Accent stripe at top — brand without compromising status semantics.
+    doc.rect(0, 0, doc.page.width, 6).fillColor(accent).fill();
+
+    doc.fillColor(COLOR_TEXT).font("Helvetica-Bold").fontSize(20).text(
+      customTitle ?? "AEVION QSign v2",
+      48,
+      48,
+    );
     doc.moveDown(0.15);
     doc.font("Helvetica").fontSize(10).fillColor(COLOR_MUTED).text(
-      "Verifiable digital signature  ·  RFC 8785 (JCS) canonicalization  ·  HMAC-SHA256 + Ed25519",
+      customSubtitle ??
+        "Verifiable digital signature  ·  RFC 8785 (JCS) canonicalization  ·  HMAC-SHA256 + Ed25519",
     );
 
     doc.moveDown(0.8);
@@ -1036,6 +1062,16 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       doc.page.height - 36,
       { width: qrX - 48 - 12, ellipsis: true },
     );
+
+    // Mandatory attribution when custom title is used — keeps trust chain intact.
+    if (customTitle) {
+      doc.font("Helvetica-Oblique").fontSize(7).fillColor(COLOR_MUTED).text(
+        "Powered by AEVION QSign v2",
+        48,
+        doc.page.height - 22,
+        { width: qrX - 48 - 12 },
+      );
+    }
 
     doc.end();
   } catch (e: any) {

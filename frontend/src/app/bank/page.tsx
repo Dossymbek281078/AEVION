@@ -44,6 +44,7 @@ import { ReferralsPanel } from "./_components/ReferralsPanel";
 import { RoundUpStash } from "./_components/RoundUpStash";
 import { SubscriptionScanner } from "./_components/SubscriptionScanner";
 import { SectionTabs, TabPanel, useActiveTab } from "./_components/SectionTabs";
+import { SmartSuggestions } from "./_components/SmartSuggestions";
 import { SnapshotExport } from "./_components/SnapshotExport";
 import { ThemeStyles, ThemeToggle } from "./_components/ThemeToggle";
 import { TierProgression } from "./_components/TierProgression";
@@ -308,6 +309,7 @@ function BankContent() {
 
           <TabPanel id="overview" active={activeTab}>
             <PitchValueCallout moduleId="bank" variant="dark" compact={true} />
+            <SmartSuggestions account={account} operations={operations} />
             <BalanceProjection account={account} />
             <div id="bank-anchor-constellation" style={{ scrollMarginTop: 20 }}>
               <WealthConstellation account={account} operations={operations} />

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { InstallBanner } from "../_components/InstallBanner";
 
 // Catalog hub for all the bank routes shipped this push. Solves the
 // discoverability problem (most sub-routes are noindex and live in deep
@@ -157,6 +158,8 @@ export default function ExplorePage() {
           {t("explore.subtitle")}
         </div>
       </header>
+
+      <InstallBanner />
 
       {CARDS.map((group, gi) => (
         <section key={gi} style={{ marginBottom: 24 }}>

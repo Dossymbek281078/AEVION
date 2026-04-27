@@ -10,7 +10,7 @@ type FAQ = { q: string; a: string };
 const faqs: FAQ[] = [
   {
     q: "What is AEVION?",
-    a: "AEVION is a global trust infrastructure platform for digital content and intellectual property. It includes IP registration (QRight), cryptographic signatures (QSign), a patent bureau, compliance certification (Planet), creator awards, a digital bank, and more — all connected through a single identity and trust system.",
+    a: "AEVION is a global trust infrastructure for digital content and IP. The flagship is QRight — register a work and walk away with a self-contained cryptographic proof of authorship that holds up offline, anchored to Bitcoin, even if AEVION shuts down. Around it: QSign (signatures), IP Bureau (Verified-tier KYC), Planet (compliance certification), creator Awards, a digital bank, and CyberChess — all stitched together by one identity and one trust graph.",
   },
   {
     q: "How do I register my intellectual property?",

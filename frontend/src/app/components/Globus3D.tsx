@@ -251,6 +251,17 @@ export default function Globus3D({
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | MarkerCategory>("all");
+
+  /** Узкий экран — компактный layout overlay'ев. */
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 600px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
   const markerMeshesRef = useRef<
     Array<{ mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; marker: Marker }>
   >([]);
@@ -382,6 +393,14 @@ export default function Globus3D({
 
     return [...projectMarkers, ...objectMarkers];
   }, [projects, qrightObjects, focusProjectIds]);
+
+  /** На тач-устройстве увеличиваем хитбоксы маркеров для удобства попадания. */
+  useEffect(() => {
+    const k = isNarrow ? 1.35 : 1;
+    for (const item of markerMeshesRef.current) {
+      item.mesh.scale.setScalar(k);
+    }
+  }, [isNarrow, markers]);
 
   /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
   useEffect(() => {
@@ -1082,9 +1101,10 @@ export default function Globus3D({
     }
   }, [markers]);
 
+  const ctrlSize = isNarrow ? 40 : 36;
   const ctrlBtn: CSSProperties = {
-    width: 36,
-    height: 36,
+    width: ctrlSize,
+    height: ctrlSize,
     borderRadius: 10,
     border: "1px solid rgba(120,160,220,0.35)",
     background: "rgba(12,18,32,0.78)",
@@ -1098,7 +1118,10 @@ export default function Globus3D({
     boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
     backdropFilter: "blur(6px)",
     transition: "transform 0.12s ease, background 0.15s ease",
+    touchAction: "manipulation",
   };
+
+  const globeHeight = isNarrow ? 400 : 520;
 
   const resetView = () => {
     targetYawRef.current = null;
@@ -1155,14 +1178,23 @@ export default function Globus3D({
   };
 
   return (
-    <div style={{ position: "relative", width: "100%", minHeight: 520, height: 520 }}>
+    <div
+      role="region"
+      aria-label="AEVION ecosystem 3D globe — drag to rotate, scroll to zoom"
+      style={{
+        position: "relative",
+        width: "100%",
+        minHeight: globeHeight,
+        height: globeHeight,
+      }}
+    >
       <div
         ref={containerRef}
         style={{
           width: "100%",
-          height: 520,
-          minHeight: 520,
-          borderRadius: 9999,
+          height: globeHeight,
+          minHeight: globeHeight,
+          borderRadius: isNarrow ? 22 : 9999,
           border: "1px solid rgba(40,55,90,0.45)",
           overflow: "hidden",
           background:
@@ -1201,7 +1233,7 @@ export default function Globus3D({
             placeholder="Search"
             aria-label="Search projects"
             style={{
-              width: 130,
+              width: isNarrow ? 90 : 130,
               background: "transparent",
               border: "none",
               outline: "none",
@@ -1250,6 +1282,8 @@ export default function Globus3D({
             { key: "qright", label: "QRight", icon: "💎" },
           ].map((c) => {
             const active = filter === c.key;
+            // На узком экране показываем только иконки, чтобы тулбар не вылезал.
+            const showText = !isNarrow || c.key === "all";
             return (
               <button
                 key={c.key}
@@ -1258,8 +1292,8 @@ export default function Globus3D({
                 aria-label={`Filter: ${c.label}`}
                 onClick={() => setFilter(c.key as typeof filter)}
                 style={{
-                  height: 26,
-                  padding: c.icon ? "0 8px" : "0 10px",
+                  height: 28,
+                  padding: showText ? (c.icon ? "0 8px" : "0 10px") : "0 7px",
                   borderRadius: 999,
                   border: "1px solid transparent",
                   background: active ? "rgba(125,211,252,0.18)" : "transparent",
@@ -1271,10 +1305,11 @@ export default function Globus3D({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 4,
+                  touchAction: "manipulation",
                 }}
               >
-                {c.icon ? <span style={{ fontSize: 12 }}>{c.icon}</span> : null}
-                {c.label}
+                {c.icon ? <span style={{ fontSize: 13 }}>{c.icon}</span> : null}
+                {showText ? c.label : null}
               </button>
             );
           })}
@@ -1294,7 +1329,7 @@ export default function Globus3D({
         </div>
       ) : null}
 
-      {!initError ? (
+      {!initError && !isNarrow ? (
         <div
           style={{
             position: "absolute",
@@ -1388,12 +1423,18 @@ export default function Globus3D({
           >
             Ecosystem
           </div>
-          {[
-            { k: "Nodes", v: counts.nodes, color: "#f1f5ff" },
-            { k: "LIVE", v: counts.live, color: "#86efac" },
-            { k: "Awards", v: counts.awards, color: "#e879f9" },
-            { k: "QRight", v: counts.qright, color: "#5eead4" },
-          ].map((row) => (
+          {(isNarrow
+            ? [
+                { k: "Nodes", v: counts.nodes, color: "#f1f5ff" },
+                { k: "LIVE", v: counts.live, color: "#86efac" },
+              ]
+            : [
+                { k: "Nodes", v: counts.nodes, color: "#f1f5ff" },
+                { k: "LIVE", v: counts.live, color: "#86efac" },
+                { k: "Awards", v: counts.awards, color: "#e879f9" },
+                { k: "QRight", v: counts.qright, color: "#5eead4" },
+              ]
+          ).map((row) => (
             <div
               key={row.k}
               style={{

@@ -949,6 +949,43 @@ export default function MultichatEnginePage() {
     setAgents([makeAgent()]);
   }, [t]);
 
+  /* Fork an agent's conversation: clone with messages[0..upTo] kept */
+  const forkAgent = useCallback((src: Agent, upToIndex: number) => {
+    let createdId: string | null = null;
+    setAgents((cur) => {
+      if (cur.length >= MAX_AGENTS) return cur;
+      const id = newId();
+      createdId = id;
+      const slicedMessages = src.messages.slice(0, upToIndex + 1);
+      const firstUser = slicedMessages.find((m) => m.role === "user");
+      const titleSeed = firstUser?.content ?? src.role;
+      const next: Agent = {
+        id,
+        role: src.role,
+        provider: src.provider,
+        model: src.model,
+        title: titleFromMessage(src.role, titleSeed),
+        messages: slicedMessages,
+        busy: false,
+        customSystemPrompt: src.customSystemPrompt,
+      };
+      return [...cur, next];
+    });
+    setTimeout(() => {
+      if (typeof document === "undefined" || !createdId) return;
+      const articles = document.querySelectorAll<HTMLElement>("[data-mc-role]");
+      const last = articles[articles.length - 1];
+      if (!last) return;
+      last.scrollIntoView({ behavior: "smooth", block: "center" });
+      const prev = last.style.boxShadow;
+      last.style.boxShadow =
+        "0 0 0 3px #5eead4, 0 8px 32px rgba(94,234,212,0.4)";
+      setTimeout(() => {
+        last.style.boxShadow = prev;
+      }, 1200);
+    }, 100);
+  }, []);
+
   /* Replace the current agent set with a preset bundle */
   const applyPreset = useCallback((preset: Preset) => {
     if (typeof window === "undefined") return;
@@ -1766,6 +1803,8 @@ export default function MultichatEnginePage() {
                 onChange={(patch) => updateAgent(a.id, patch)}
                 onClose={() => removeAgent(a.id)}
                 onSend={(text) => sendMessage(a.id, text)}
+                onFork={(idx) => forkAgent(a, idx)}
+                canFork={agents.length < MAX_AGENTS}
                 t={t}
               />
             ))}
@@ -1883,9 +1922,12 @@ function AgentPanel(props: {
   onChange: (patch: Partial<Agent> | ((a: Agent) => Partial<Agent>)) => void;
   onClose: () => void;
   onSend: (text: string) => void;
+  onFork: (messageIndex: number) => void;
+  canFork: boolean;
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
-  const { agent, providers, onChange, onClose, onSend, t } = props;
+  const { agent, providers, onChange, onClose, onSend, onFork, canFork, t } = props;
+  const [hoveredMsg, setHoveredMsg] = useState<number | null>(null);
   const [input, setInput] = useState("");
   const [editingPrompt, setEditingPrompt] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState(agent.customSystemPrompt ?? "");
@@ -2344,13 +2386,63 @@ function AgentPanel(props: {
             return (
               <div
                 key={i}
+                onMouseEnter={() => setHoveredMsg(i)}
+                onMouseLeave={() => setHoveredMsg((h) => (h === i ? null : h))}
                 style={{
                   display: "flex",
+                  alignItems: "flex-end",
+                  gap: 6,
                   justifyContent: mm.role === "user" ? "flex-end" : "flex-start",
                 }}
               >
+                {mm.role !== "user" && hoveredMsg === i && canFork ? (
+                  <button
+                    type="button"
+                    onClick={() => onFork(i)}
+                    title="Fork conversation from here"
+                    aria-label="Fork conversation from here"
+                    style={{
+                      order: 2,
+                      padding: "3px 8px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(94,234,212,0.4)",
+                      background: "rgba(15,23,42,0.85)",
+                      color: "#5eead4",
+                      cursor: "pointer",
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ↳ Fork
+                  </button>
+                ) : null}
+                {mm.role === "user" && hoveredMsg === i && canFork ? (
+                  <button
+                    type="button"
+                    onClick={() => onFork(i)}
+                    title="Fork conversation from here"
+                    aria-label="Fork conversation from here"
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(94,234,212,0.4)",
+                      background: "rgba(15,23,42,0.85)",
+                      color: "#5eead4",
+                      cursor: "pointer",
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ↳ Fork
+                  </button>
+                ) : null}
                 <div
                   style={{
+                    order: 1,
                     maxWidth: "88%",
                     padding: "9px 12px",
                     borderRadius:

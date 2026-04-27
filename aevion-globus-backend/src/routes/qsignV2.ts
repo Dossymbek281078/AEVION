@@ -403,6 +403,118 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
   }
 });
 
+/* ───────── POST /sign/batch (bulk) ─────────
+ * Sign N payloads in one round trip — same auth + same active kids for every item.
+ * Body: { items: [<payload1>, <payload2>, ...] }  OR  { items: [{ payload, gps? }, ...] }.
+ * Returns: { results: [{ ok, id?, error? }, ...], total, succeeded, failed }.
+ * Cap at 50 per call (to keep latency bounded and avoid abuse). Same rate limiter as /sign.
+ */
+
+const BATCH_MAX = 50;
+
+qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  try {
+    await ensureQSignV2Tables(pool);
+
+    const body = req.body ?? {};
+    const itemsRaw: unknown = Array.isArray(body) ? body : body.items;
+    if (!Array.isArray(itemsRaw)) {
+      return res.status(400).json({ error: "items must be an array of payloads" });
+    }
+    if (itemsRaw.length === 0) {
+      return res.status(400).json({ error: "items must not be empty" });
+    }
+    if (itemsRaw.length > BATCH_MAX) {
+      return res.status(400).json({
+        error: "batch_too_large",
+        max: BATCH_MAX,
+        got: itemsRaw.length,
+      });
+    }
+
+    const hmacKey = await getActiveHmac();
+    const edKey = await getActiveEd25519();
+    const fallbackGeo = resolveGeo(undefined, req);
+    const results: Array<{ ok: boolean; id?: string; error?: string }> = [];
+
+    for (let idx = 0; idx < itemsRaw.length; idx++) {
+      const item = itemsRaw[idx];
+      try {
+        let payload: unknown;
+        let gps: any = undefined;
+        if (item && typeof item === "object" && !Array.isArray(item) && "payload" in (item as any)) {
+          payload = (item as any).payload;
+          gps = (item as any).gps;
+        } else {
+          payload = item;
+        }
+        if (payload === null || (typeof payload !== "object" && !Array.isArray(payload))) {
+          results.push({ ok: false, error: "payload must be a JSON object or array" });
+          continue;
+        }
+
+        const canonical = canonicalJson(payload);
+        const payloadHash = sha256Hex(canonical);
+        const signatureHmac = signHmac(hmacKey.secret, canonical);
+        const signatureEd25519 = signEd25519Hex(edKey.privateKey, canonical);
+
+        const geo = gps !== undefined ? resolveGeo(gps, req) : fallbackGeo;
+        const id = crypto.randomUUID();
+
+        await pool.query(
+          `
+          INSERT INTO "QSignSignature"
+            ("id","hmacKid","ed25519Kid",
+             "payloadCanonical","payloadHash",
+             "signatureHmac","signatureEd25519","signatureDilithium",
+             "algoVersion","issuerUserId","issuerEmail",
+             "geoLat","geoLng","geoSource","geoCountry","geoCity")
+          VALUES ($1,$2,$3, $4,$5, $6,$7,NULL, $8,$9,$10, $11,$12,$13,$14,$15)
+          `,
+          [
+            id,
+            hmacKey.kid,
+            edKey.kid,
+            canonical,
+            payloadHash,
+            signatureHmac,
+            signatureEd25519,
+            ALGO_VERSION,
+            auth.sub,
+            auth.email,
+            geo.lat,
+            geo.lng,
+            geo.source,
+            geo.country,
+            geo.city,
+          ],
+        );
+
+        results.push({ ok: true, id });
+      } catch (e: any) {
+        results.push({ ok: false, error: e?.message || "sign_failed" });
+      }
+    }
+
+    const succeeded = results.filter((r) => r.ok).length;
+    res.status(succeeded === results.length ? 201 : 207).json({
+      total: results.length,
+      succeeded,
+      failed: results.length - succeeded,
+      hmacKid: hmacKey.kid,
+      ed25519Kid: edKey.kid,
+      algoVersion: ALGO_VERSION,
+      results,
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] sign/batch error", e);
+    res.status(500).json({ error: "batch_sign_failed", details: e?.message });
+  }
+});
+
 /* ───────── POST /verify (stateless) ─────────
  * Client presents { payload, hmacKid, signatureHmac } and optionally
  * { ed25519Kid, signatureEd25519 } and we recompute. Does NOT require DB row.

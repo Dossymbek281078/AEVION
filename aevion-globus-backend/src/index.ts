@@ -130,6 +130,8 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pipeline/bureau/anchor": { get: { summary: "Merkle root over all active certificate hashes — tamper-evident registry anchor" } },
       "/api/pipeline/bureau/proof/{certId}": { get: { summary: "Merkle inclusion proof for a certificate (leaf + path + root)" } },
       "/api/pipeline/bureau/snapshot.json": { get: { summary: "Full audit-friendly registry snapshot (certificates + anchor)" } },
+      "/api/pipeline/authors": { get: { summary: "List authors with certificate + verification counts (sorted by verifications). Default limit 50, max 200." } },
+      "/api/pipeline/authors/{slug}": { get: { summary: "Author profile — name + aggregate stats (kinds, countries, first/last protectedAt) + their certificates (recent first, max 200)." } },
       "/api/pipeline/lookup/{hash}": { get: { summary: "Reverse lookup — is this SHA-256 already protected in the AEVION registry?" } },
       "/api/pipeline/badge/{certId}": { get: { summary: "Embeddable SVG 'Protected by AEVION' badge" } },
       "/api/pipeline/health": { get: { summary: "Pipeline health & enabled crypto/legal steps" } },

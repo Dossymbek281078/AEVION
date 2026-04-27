@@ -993,6 +993,143 @@ pipelineRouter.get("/bureau/stats", async (_req, res) => {
 /**
  * GET /api/pipeline/lookup/:hash
  *
+ * Author profile helpers — slug = lowercased author name with everything
+ * outside [a-z0-9] collapsed to single hyphens. Stable, deterministic, no
+ * extra column required (resolved at query time). Empty / unknown
+ * author rows fall through to "anonymous".
+ */
+function slugifyAuthor(name: string | null | undefined): string {
+  const s = (name || "anonymous").trim().toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
+  const out = s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return out || "anonymous";
+}
+
+/**
+ * GET /api/pipeline/authors[?limit=N]
+ *
+ * List authors with their cert counts + verify counts. Sorted by
+ * verifications DESC, then certificates DESC. Default limit 50, max 200.
+ */
+pipelineRouter.get("/authors", async (req, res) => {
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+    const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+
+    type AuthorRow = { name: string; slug: string; certificates: number; verifications: number; lastProtectedAt: string | null };
+    const accum = new Map<string, AuthorRow>();
+
+    const ingest = (name: string | null, verifies: number, protectedAt: string | null) => {
+      const display = (name || "Anonymous").trim() || "Anonymous";
+      const slug = slugifyAuthor(display);
+      const cur = accum.get(slug) || { name: display, slug, certificates: 0, verifications: 0, lastProtectedAt: null as string | null };
+      cur.certificates++;
+      cur.verifications += Number(verifies || 0);
+      if (protectedAt && (!cur.lastProtectedAt || cur.lastProtectedAt < protectedAt)) cur.lastProtectedAt = protectedAt;
+      accum.set(slug, cur);
+    };
+
+    if (useDb) {
+      const r = await pool.query(
+        `SELECT "authorName","verifiedCount","protectedAt" FROM "IPCertificate" WHERE "status" = 'active'`
+      );
+      for (const row of r.rows) {
+        const at = row.protectedAt instanceof Date ? row.protectedAt.toISOString() : (row.protectedAt ? String(row.protectedAt) : null);
+        ingest(row.authorName, Number(row.verifiedCount || 0), at);
+      }
+    } else {
+      const all = memListCertificates({ limit: 5000, sort: "recent" });
+      for (const c of all) ingest(c.authorName, c.verifiedCount, c.protectedAt);
+    }
+
+    const rows = Array.from(accum.values()).sort((a, b) =>
+      (b.verifications - a.verifications) || (b.certificates - a.certificates) || a.name.localeCompare(b.name)
+    ).slice(0, limit);
+
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.json({ count: rows.length, authors: rows });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "authors failed";
+    console.error("[Pipeline] authors error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/pipeline/authors/:slug
+ *
+ * Author profile: name + aggregate counts + the author's certificates
+ * (sorted recent first, capped at 200).
+ */
+pipelineRouter.get("/authors/:slug", async (req, res) => {
+  try {
+    await ensureTables();
+    const useDb = await dbReady();
+    const slug = String(req.params.slug || "").toLowerCase();
+    if (!slug) return res.status(400).json({ error: "slug required" });
+
+    type CertRow = {
+      id: string; objectId: string; title: string; kind: string; description: string;
+      authorName: string | null; country: string | null; city: string | null;
+      contentHash: string; protectedAt: string; verifiedCount: number;
+    };
+    let raw: Array<Pick<CertRow, "id" | "objectId" | "title" | "kind" | "description" | "authorName" | "country" | "city" | "contentHash" | "protectedAt" | "verifiedCount">>;
+    if (useDb) {
+      const r = await pool.query(
+        `SELECT "id","objectId","title","kind","description","authorName","country","city","contentHash","protectedAt","verifiedCount"
+         FROM "IPCertificate" WHERE "status" = 'active'`
+      );
+      raw = r.rows.map((x: any) => ({
+        id: x.id, objectId: x.objectId, title: x.title, kind: x.kind, description: x.description,
+        authorName: x.authorName, country: x.country, city: x.city, contentHash: x.contentHash,
+        protectedAt: x.protectedAt instanceof Date ? x.protectedAt.toISOString() : String(x.protectedAt),
+        verifiedCount: Number(x.verifiedCount || 0),
+      }));
+    } else {
+      raw = memListCertificates({ limit: 5000, sort: "recent" }).map((c) => ({
+        id: c.id, objectId: c.objectId, title: c.title, kind: c.kind, description: c.description,
+        authorName: c.authorName, country: c.country, city: c.city, contentHash: c.contentHash,
+        protectedAt: c.protectedAt, verifiedCount: c.verifiedCount,
+      }));
+    }
+
+    const matches = raw.filter((c) => slugifyAuthor(c.authorName) === slug);
+    if (matches.length === 0) return res.status(404).json({ error: "author not found", slug });
+
+    const displayName = (matches[0].authorName || "Anonymous").trim() || "Anonymous";
+    const certificates = [...matches].sort((a, b) => (a.protectedAt < b.protectedAt ? 1 : -1)).slice(0, 200);
+
+    const verifications = matches.reduce((s, c) => s + c.verifiedCount, 0);
+    const kindMap = new Map<string, number>();
+    for (const c of matches) kindMap.set(c.kind, (kindMap.get(c.kind) || 0) + 1);
+    const byKind = Array.from(kindMap, ([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count);
+    const countries = Array.from(new Set(matches.map((c) => c.country).filter(Boolean))) as string[];
+    const firstProtectedAt = matches.reduce<string | null>((m, c) => (m && m < c.protectedAt ? m : c.protectedAt), null);
+    const lastProtectedAt = matches.reduce<string | null>((m, c) => (m && m > c.protectedAt ? m : c.protectedAt), null);
+
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.json({
+      slug,
+      name: displayName,
+      stats: {
+        certificates: matches.length,
+        verifications,
+        countries,
+        firstProtectedAt,
+        lastProtectedAt,
+        byKind,
+      },
+      certificates,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "author profile failed";
+    console.error("[Pipeline] author profile error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ *
  * Reverse lookup — "is this SHA-256 already protected?".
  * Public, no auth. Returns the matching certificate (if any) plus the
  * current registry anchor so clients can prove freshness.

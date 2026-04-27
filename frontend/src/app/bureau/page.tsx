@@ -972,7 +972,7 @@ export default function BureauPage() {
                   <span style={{ fontSize: 14 }}>{KIND_ICONS[l.kind] || "📦"}</span>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 800, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</div>
-                    <div style={{ fontSize: 10.5, color: "#64748b" }}>by {l.author}{l.location ? ` · ${l.location}` : ""}</div>
+                    <div style={{ fontSize: 10.5, color: "#64748b" }}>by <AuthorLink name={l.author} />{l.location ? ` · ${l.location}` : ""}</div>
                   </div>
                   <span title={new Date(l.protectedAt).toLocaleString()} style={{ fontSize: 10, color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{formatRelative(l.protectedAt)}</span>
                   <Link href={`/verify/${l.id}`} style={{ padding: "4px 10px", borderRadius: 6, background: "#fff", border: "1px solid rgba(15,23,42,0.12)", color: "#0d9488", textDecoration: "none", fontSize: 10, fontWeight: 800 }}>Verify →</Link>
@@ -1186,7 +1186,7 @@ export default function BureauPage() {
                           <span title={new Date(cert.protectedAt).toLocaleString()} style={{ fontSize: 11, color: "#94a3b8" }}>{formatRelative(cert.protectedAt)}</span>
                         </div>
                         <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cert.title}</div>
-                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>by <AuthorLink name={cert.author} />{cert.location ? ` · ${cert.location}` : ""}</div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                         <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" }}>✓ CERTIFIED</span>
@@ -1887,5 +1887,34 @@ function ApiQuickstart({
         ))}
       </div>
     </section>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Tiny helper: render an author name as a link to /bureau/author/<slug>.
+   "Anonymous" / empty stays plain text since there's nothing to land on.
+   Slug logic mirrors the backend slugifyAuthor() in pipeline.ts so the
+   round-trip is stable.
+   ────────────────────────────────────────────────────────────── */
+function slugifyAuthor(name: string | null | undefined): string {
+  const s = (name || "anonymous")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "");
+  return s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "anonymous";
+}
+
+function AuthorLink({ name }: { name: string | null | undefined }) {
+  const display = (name || "Anonymous").trim() || "Anonymous";
+  if (display.toLowerCase() === "anonymous") return <span>{display}</span>;
+  const slug = slugifyAuthor(display);
+  return (
+    <Link
+      href={`/bureau/author/${slug}`}
+      style={{ color: "inherit", textDecoration: "underline", textDecorationColor: "rgba(15,23,42,0.18)", textUnderlineOffset: 2 }}
+    >
+      {display}
+    </Link>
   );
 }

@@ -4,6 +4,7 @@ import { getApiBase } from "@/lib/apiBase";
 const BASE = process.env.NEXT_PUBLIC_SITE_URL || "https://aevion.app";
 
 type LatestCert = { id: string; protectedAt: string };
+type AuthorRow = { slug: string; lastProtectedAt: string | null };
 
 async function fetchLatestCerts(): Promise<LatestCert[]> {
   try {
@@ -14,6 +15,20 @@ async function fetchLatestCerts(): Promise<LatestCert[]> {
     if (!res.ok) return [];
     const j = (await res.json()) as { latest?: LatestCert[] } | null;
     return Array.isArray(j?.latest) ? j!.latest! : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchTopAuthors(): Promise<AuthorRow[]> {
+  try {
+    const apiBase = getApiBase();
+    const res = await fetch(`${apiBase}/api/pipeline/authors?limit=200`, {
+      next: { revalidate: 600 },
+    });
+    if (!res.ok) return [];
+    const j = (await res.json()) as { authors?: AuthorRow[] } | null;
+    return Array.isArray(j?.authors) ? j!.authors! : [];
   } catch {
     return [];
   }
@@ -52,7 +67,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Bureau is the primary public surface — expose every recently
   // protected certificate's verify URL so search engines can index
   // them (each is a real, durable page with its own dynamic OG card).
-  const latest = await fetchLatestCerts();
+  const [latest, authors] = await Promise.all([fetchLatestCerts(), fetchTopAuthors()]);
+
   const verifyEntries: MetadataRoute.Sitemap = latest.slice(0, 200).map((c) => ({
     url: `${BASE}/verify/${c.id}`,
     lastModified: c.protectedAt ? new Date(c.protectedAt) : now,
@@ -60,5 +76,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...base, ...verifyEntries];
+  // Author profile URLs — each one is a per-creator landing page with its
+  // own SEO/OG metadata. Skipping the "anonymous" bucket since it's not
+  // a meaningful destination.
+  const authorEntries: MetadataRoute.Sitemap = authors
+    .filter((a) => a.slug && a.slug !== "anonymous")
+    .map((a) => ({
+      url: `${BASE}/bureau/author/${a.slug}`,
+      lastModified: a.lastProtectedAt ? new Date(a.lastProtectedAt) : now,
+      changeFrequency: "weekly" as const,
+      priority: 0.6,
+    }));
+
+  return [...base, ...verifyEntries, ...authorEntries];
 }

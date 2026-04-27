@@ -275,6 +275,8 @@ export default function Globus3D({
       toKey: string;
     }>
   >([]);
+  /** DOM-overlay подписи над focus/award маркерами; обновляются прямо через style в animate. */
+  const sparseLabelsRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const [label, setLabel] = useState<{
     screenX: number;
@@ -1154,6 +1156,41 @@ export default function Globus3D({
       }
 
       updateCamera();
+
+      // Sparse-метки над focus/award маркерами — backside cull + screen project.
+      if (sparseLabelsRef.current.size > 0) {
+        const cw = canvas.clientWidth;
+        const ch = canvas.clientHeight;
+        const camDir = camera.position.clone().normalize();
+        const tmp = new THREE.Vector3();
+        const tmpDir = new THREE.Vector3();
+        for (const item of markerMeshesRef.current) {
+          if (item.marker.category !== "focus" && item.marker.category !== "award") {
+            continue;
+          }
+          const el = sparseLabelsRef.current.get(item.marker.key);
+          if (!el) continue;
+          if (!item.mesh.visible) {
+            if (el.style.display !== "none") el.style.display = "none";
+            continue;
+          }
+          item.mesh.getWorldPosition(tmp);
+          tmpDir.copy(tmp).normalize();
+          const facing = tmpDir.dot(camDir);
+          if (facing < 0.08) {
+            if (el.style.display !== "none") el.style.display = "none";
+            continue;
+          }
+          tmp.project(camera);
+          const sx = (tmp.x * 0.5 + 0.5) * cw;
+          const sy = (-tmp.y * 0.5 + 0.5) * ch;
+          el.style.display = "block";
+          el.style.left = `${sx}px`;
+          el.style.top = `${sy}px`;
+          el.style.opacity = String(Math.min(1, (facing - 0.08) / 0.2));
+        }
+      }
+
       renderer.render(scene, camera);
     };
 
@@ -1883,6 +1920,47 @@ export default function Globus3D({
           </div>
         );
       })() : null}
+
+      {/* Sparse marker labels — постоянные подписи над focus/award (без ховера). */}
+      {!initError
+        ? markers
+            .filter((m) => m.category === "focus" || m.category === "award")
+            .map((m) => {
+              const accent = m.category === "focus" ? "#fbbf24" : "#e879f9";
+              return (
+                <div
+                  key={`sparse:${m.key}`}
+                  ref={(el) => {
+                    if (el) sparseLabelsRef.current.set(m.key, el);
+                    else sparseLabelsRef.current.delete(m.key);
+                  }}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    transform: "translate(-50%, calc(-100% - 8px))",
+                    pointerEvents: "none",
+                    background: "rgba(8,12,24,0.78)",
+                    border: `1px solid ${accent}66`,
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: "0.06em",
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    boxShadow: `0 4px 10px rgba(0,0,0,0.45), 0 0 12px ${accent}33`,
+                    backdropFilter: "blur(4px)",
+                    display: "none",
+                    whiteSpace: "nowrap",
+                    zIndex: 3,
+                    transition: "opacity 0.15s ease",
+                  }}
+                >
+                  {m.label}
+                </div>
+              );
+            })
+        : null}
 
       {focused ? (() => {
         const m = focused;

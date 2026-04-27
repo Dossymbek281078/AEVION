@@ -1,7 +1,7 @@
 // @ts-nocheck — three@0.183 ships without complete typings; runtime API matches classic Three.js.
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { feature as topoFeature } from "topojson-client";
@@ -212,6 +212,26 @@ const DEFAULT_YAW = 0;
 const DEFAULT_PITCH = 0.22;
 const DEFAULT_DIST = 248;
 
+const VIEW_STORAGE_KEY = "aevion:globus:view:v1";
+type SavedView = {
+  yaw?: number;
+  pitch?: number;
+  distance?: number;
+  filter?: string;
+  autoRotate?: boolean;
+};
+function readSavedView(): SavedView | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw) as SavedView;
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Globus3D({
   projects,
   qrightObjects,
@@ -227,16 +247,35 @@ export default function Globus3D({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState<boolean>(
+    () => readSavedView()?.autoRotate ?? true,
+  );
   const autoRotateRef = useRef(autoRotate);
   useEffect(() => {
     autoRotateRef.current = autoRotate;
   }, [autoRotate]);
 
-  /** Внешний "пульт" камеры — кнопки UI меняют ref, animate подхватит на след. кадре. */
+  /** Внешний "пульт" камеры — refs инициализируются из localStorage один раз. */
   const yawRef = useRef(DEFAULT_YAW);
   const pitchRef = useRef(DEFAULT_PITCH);
   const distanceRef = useRef(DEFAULT_DIST);
+  const viewLoadedRef = useRef(false);
+  if (!viewLoadedRef.current) {
+    viewLoadedRef.current = true;
+    const saved = readSavedView();
+    if (saved) {
+      if (typeof saved.yaw === "number") yawRef.current = saved.yaw;
+      if (typeof saved.pitch === "number") {
+        pitchRef.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, saved.pitch));
+      }
+      if (typeof saved.distance === "number") {
+        distanceRef.current = Math.max(
+          MIN_DIST,
+          Math.min(MAX_DIST, saved.distance),
+        );
+      }
+    }
+  }
   /** Целевая позиция при click-to-focus; tween идёт в animate. */
   const targetYawRef = useRef<number | null>(null);
   const targetPitchRef = useRef<number | null>(null);
@@ -256,7 +295,17 @@ export default function Globus3D({
 
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | MarkerCategory>("all");
+  const [filter, setFilter] = useState<"all" | MarkerCategory>(() => {
+    const v = readSavedView()?.filter;
+    if (v === "all" || v === "product" || v === "award" || v === "qright" || v === "infra" || v === "focus") {
+      return v;
+    }
+    return "all";
+  });
+  const filterRef = useRef(filter);
+  useEffect(() => {
+    filterRef.current = filter;
+  }, [filter]);
 
   /** Узкий экран — компактный layout overlay'ев. */
   const [isNarrow, setIsNarrow] = useState(false);
@@ -304,6 +353,42 @@ export default function Globus3D({
 
   /** Прокси для onPointerUp — функция определена ниже, но обёртка стабильна. */
   const focusMarkerRef = useRef<(m: Marker) => void>(() => {});
+
+  /** Persist (debounced) — yaw/pitch/distance/filter/autoRotate. */
+  const persistTimerRef = useRef<number | null>(null);
+  const persistView = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        VIEW_STORAGE_KEY,
+        JSON.stringify({
+          yaw: yawRef.current,
+          pitch: pitchRef.current,
+          distance: distanceRef.current,
+          filter: filterRef.current,
+          autoRotate: autoRotateRef.current,
+        }),
+      );
+    } catch {}
+  }, []);
+  const persistViewDebounced = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null;
+      persistView();
+    }, 600);
+  }, [persistView]);
+  const persistViewRef = useRef(persistViewDebounced);
+  useEffect(() => {
+    persistViewRef.current = persistViewDebounced;
+  }, [persistViewDebounced]);
+  // Немедленное сохранение при изменении filter / autoRotate.
+  useEffect(() => {
+    persistView();
+  }, [filter, autoRotate, persistView]);
 
   const markers = useMemo<Marker[]>(() => {
     const projectMarkers: Marker[] = projects.map((p) => {
@@ -1087,6 +1172,7 @@ export default function Globus3D({
       if (activePointers.size === 0) {
         dragging = false;
         canvas.style.cursor = isHovering ? "pointer" : "grab";
+        persistViewRef.current();
       }
       if (activePointers.size < 2) pinchDist = 0;
       try {
@@ -1110,6 +1196,7 @@ export default function Globus3D({
       ev.preventDefault();
       const factor = Math.exp(ev.deltaY * 0.0015);
       distanceRef.current = clampDist(distanceRef.current * factor);
+      persistViewRef.current();
     };
 
     const onPointerLeave = () => {
@@ -1316,6 +1403,7 @@ export default function Globus3D({
     targetDistRef.current = 195;
     setAutoRotate(false);
     setFocused(m);
+    persistViewDebounced();
   };
   useEffect(() => {
     focusMarkerRef.current = focusOnMarker;

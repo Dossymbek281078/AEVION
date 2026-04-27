@@ -11,6 +11,10 @@ type Project = {
   id: string;
   code: string;
   name: string;
+  description?: string;
+  kind?: string;
+  status?: string;
+  tags?: string[];
   runtime?: { tier: string; hint?: string };
 };
 
@@ -21,11 +25,22 @@ type QRightObject = {
   city?: string;
 };
 
+type MarkerCategory = "product" | "award" | "infra" | "qright" | "focus";
+
 type Marker = {
   key: string;
   type: "project" | "qright";
+  /** Короткая метка (например, code "QR"). */
   label: string;
-  sublabel?: string;
+  /** Полное имя — заголовок ховер-карты. */
+  title: string;
+  description?: string;
+  category: MarkerCategory;
+  categoryLabel: string;
+  icon: string;
+  /** "LIVE", "API", "HUB" — иначе skip. */
+  statusLabel?: string;
+  tags?: string[];
   href?: string;
   country?: string;
   city?: string;
@@ -224,8 +239,6 @@ export default function Globus3D({
   const distanceRef = useRef(DEFAULT_DIST);
 
   const [label, setLabel] = useState<{
-    text: string;
-    sub?: string;
     screenX: number;
     screenY: number;
     marker: Marker;
@@ -268,15 +281,41 @@ export default function Globus3D({
       if (g.city) qs.set("city", g.city);
       const href = qs.toString() ? `${baseHref}?${qs.toString()}` : baseHref;
 
+      const category: MarkerCategory = isFocus
+        ? "focus"
+        : isAwardPin
+          ? "award"
+          : p.kind === "infra"
+            ? "infra"
+            : "product";
+      const categoryLabel =
+        category === "focus"
+          ? "Focus"
+          : category === "award"
+            ? "Award"
+            : category === "infra"
+              ? "Infra"
+              : "Product";
+      const icon =
+        category === "focus"
+          ? "★"
+          : category === "award"
+            ? "🏆"
+            : category === "infra"
+              ? "⚙"
+              : "🚀";
+
       return {
         key: `project:${p.id}`,
         type: "project",
         label: p.code,
-        sublabel:
-          g.city +
-          ", " +
-          g.country +
-          (p.runtime?.tier ? ` • ${tierShort(p.runtime.tier)}` : ""),
+        title: p.name,
+        description: p.description || p.runtime?.hint,
+        category,
+        categoryLabel,
+        icon,
+        statusLabel: p.runtime?.tier ? tierShort(p.runtime.tier) : undefined,
+        tags: p.tags,
         href,
         country: g.country,
         city: g.city,
@@ -293,7 +332,12 @@ export default function Globus3D({
         key: `qright:${o.id}`,
         type: "qright",
         label: o.title,
-        sublabel: g.city + ", " + g.country,
+        title: o.title,
+        description: "QRight registry record — content hash, author, geolocation.",
+        category: "qright",
+        categoryLabel: "QRight",
+        icon: "💎",
+        statusLabel: "REGISTERED",
         href: `/bureau?objectId=${encodeURIComponent(o.id)}`,
         country: g.country,
         city: g.city,
@@ -692,8 +736,6 @@ export default function Globus3D({
       const sy = (-v.y * 0.5 + 0.5) * rect.height;
 
       const nextLabel = {
-        text: found.marker.label,
-        sub: found.marker.sublabel,
         screenX: sx,
         screenY: sy,
         marker: found.marker,
@@ -1011,41 +1053,227 @@ export default function Globus3D({
         </div>
       ) : null}
 
-      {label ? (
-        <div
-          style={{
-            position: "absolute",
-            left: label.screenX,
-            top: label.screenY,
-            transform: "translate(-50%, -110%)",
-            pointerEvents: "none",
-            maxWidth: 320,
-          }}
-        >
+      {label ? (() => {
+        const m = label.marker;
+        const accent =
+          m.category === "focus"
+            ? "#fbbf24"
+            : m.category === "award"
+              ? "#e879f9"
+              : m.category === "qright"
+                ? "#34d399"
+                : m.category === "infra"
+                  ? "#94a3b8"
+                  : "#7dd3fc";
+        const statusBg =
+          m.statusLabel === "LIVE"
+            ? "rgba(34,197,94,0.18)"
+            : m.statusLabel === "API"
+              ? "rgba(59,130,246,0.18)"
+              : m.statusLabel === "REGISTERED"
+                ? "rgba(20,184,166,0.18)"
+                : "rgba(148,163,184,0.18)";
+        const statusFg =
+          m.statusLabel === "LIVE"
+            ? "#86efac"
+            : m.statusLabel === "API"
+              ? "#93c5fd"
+              : m.statusLabel === "REGISTERED"
+                ? "#5eead4"
+                : "#cbd5e1";
+        const location =
+          m.city && m.country
+            ? `${m.city}, ${m.country}`
+            : m.country || m.city || "";
+
+        return (
           <div
             style={{
-              background: "rgba(12,18,32,0.88)",
-              border: "1px solid rgba(120,160,220,0.35)",
-              borderRadius: 14,
-              padding: "10px 12px",
-              boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
-              backdropFilter: "blur(10px)",
+              position: "absolute",
+              left: label.screenX,
+              top: label.screenY,
+              transform: "translate(-50%, calc(-100% - 14px))",
+              pointerEvents: "none",
+              width: 280,
+              zIndex: 6,
             }}
           >
-            <div style={{ fontWeight: 850, fontSize: 13, color: "#f0f4ff" }}>
-              {label.text}
-            </div>
-            {label.sub ? (
-              <div style={{ marginTop: 4, fontSize: 12, color: "#a8b8d8" }}>
-                {label.sub}
+            <div
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(8,12,24,0.92) 100%)",
+                border: `1px solid ${accent}55`,
+                borderRadius: 14,
+                padding: "12px 14px 13px",
+                boxShadow: `0 14px 44px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 24px ${accent}22`,
+                backdropFilter: "blur(12px)",
+              }}
+            >
+              {/* header: category chip + status */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                    background: `${accent}1f`,
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <span style={{ fontSize: 11 }}>{m.icon}</span>
+                  {m.categoryLabel}
+                </span>
+                {m.statusLabel ? (
+                  <span
+                    style={{
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      background: statusBg,
+                      color: statusFg,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {m.statusLabel}
+                  </span>
+                ) : null}
               </div>
-            ) : null}
-            <div style={{ marginTop: 8, fontSize: 12, color: "#7a8fb0" }}>
-              click: open / select location
+
+              {/* title */}
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 16,
+                  color: "#f1f5ff",
+                  letterSpacing: "-0.01em",
+                  lineHeight: 1.2,
+                }}
+              >
+                {m.title}
+              </div>
+              {m.label && m.label !== m.title ? (
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontSize: 11,
+                    color: "#94a3b8",
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {m.label}
+                </div>
+              ) : null}
+
+              {/* location */}
+              {location ? (
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: "#a8b8d8",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <span style={{ opacity: 0.7 }}>📍</span>
+                  {location}
+                </div>
+              ) : null}
+
+              {/* description */}
+              {m.description ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: "#cbd5e1",
+                    lineHeight: 1.45,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {m.description}
+                </div>
+              ) : null}
+
+              {/* tags */}
+              {m.tags && m.tags.length > 0 ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 4,
+                  }}
+                >
+                  {m.tags.slice(0, 4).map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 6px",
+                        borderRadius: 6,
+                        background: "rgba(148,163,184,0.12)",
+                        color: "#cbd5e1",
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* CTA */}
+              {m.href ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    paddingTop: 9,
+                    borderTop: "1px solid rgba(148,163,184,0.14)",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: accent,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  Click to open →
+                </div>
+              ) : null}
             </div>
+
+            {/* стрелочка вниз — на маркер */}
+            <div
+              style={{
+                width: 0,
+                height: 0,
+                borderLeft: "7px solid transparent",
+                borderRight: "7px solid transparent",
+                borderTop: `7px solid ${accent}55`,
+                margin: "-1px auto 0",
+              }}
+            />
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
     </div>
   );
 }

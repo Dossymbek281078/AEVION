@@ -323,6 +323,105 @@ export default function AEVPage() {
           })}
         </div>
 
+        {/* ═══ MINING DASHBOARD — all 4 live engines at a glance ══ */}
+        {(() => {
+          const streakCur = wallet.streak?.current ?? 0;
+          const streakMult = Math.min(
+            RATE_CARD.streak.maxMultiplier,
+            1 + RATE_CARD.streak.multiplierPerWeek * Math.floor(streakCur / 7),
+          );
+          const streakRate = RATE_CARD.streak.base * streakMult;
+          const streakLastClaim = wallet.streak?.lastDayKey ? wallet.streak.lastDayKey : "—";
+
+          const netCount = network?.invited.length ?? 0;
+          const netRate = netCount * NETWORK.perActionAev * NETWORK.royaltyPct;
+          const netEarned = wallet.recent
+            .filter((e) => e.source.kind === "play" && (e.source as { kind: "play"; module: string; action: string }).action === "network_royalty")
+            .reduce((s, e) => s + e.amount, 0);
+
+          const mentorCount = mentorship?.students.length ?? 0;
+          const mentorEarned = wallet.recent
+            .filter((e) => e.source.kind === "play" && (e.source as { kind: "play"; module: string; action: string }).action === "mentorship_milestone")
+            .reduce((s, e) => s + e.amount, 0);
+
+          const curationPins = pins?.length ?? 0;
+          const curationEarned = wallet.recent
+            .filter((e) => e.source.kind === "play" && ["curation_pin", "curation_upvote_bonus"].includes((e.source as { kind: "play"; module: string; action: string }).action))
+            .reduce((s, e) => s + e.amount, 0);
+
+          const engines: {
+            id: string; label: string; tag: string; color: string; icon: string;
+            rate: string; earned: number; meta: string;
+          }[] = [
+            {
+              id: "D", label: "Curation", tag: "D · Proof-of-Curation", color: "#8b5cf6", icon: "📌",
+              rate: `${CURATION.perPinAev} AEV/pin`,
+              earned: curationEarned,
+              meta: `${curationPins} pin${curationPins !== 1 ? "s" : ""} saved`,
+            },
+            {
+              id: "E", label: "Mentorship", tag: "E · Proof-of-Mentorship", color: "#06b6d4", icon: "🎓",
+              rate: `${MENTORSHIP.perMilestoneAev} AEV/milestone`,
+              earned: mentorEarned,
+              meta: `${mentorCount} student${mentorCount !== 1 ? "s" : ""}`,
+            },
+            {
+              id: "F", label: "Streak", tag: "F · Proof-of-Streak", color: "#f97316", icon: "🔥",
+              rate: `${streakRate.toFixed(3)} AEV/day`,
+              earned: wallet.streak?.totalClaims ? wallet.streak.totalClaims * RATE_CARD.streak.base : 0,
+              meta: `day ${streakCur} · last ${streakLastClaim}`,
+            },
+            {
+              id: "G", label: "Network", tag: "G · Proof-of-Network", color: "#10b981", icon: "🌐",
+              rate: netCount > 0 ? `~${netRate.toFixed(4)} AEV/action` : "0 — invite first",
+              earned: netEarned,
+              meta: `${netCount} invited`,
+            },
+          ];
+
+          return (
+            <section style={{
+              padding: 16, borderRadius: 12, marginBottom: 18,
+              background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 8px 24px rgba(15,23,42,0.2)",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" as const, color: "#67e8f9", marginBottom: 12 }}>
+                ⚡ Mining Dashboard · все движки
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
+                {engines.map((eng) => (
+                  <div key={eng.id} style={{
+                    padding: "12px 14px", borderRadius: 10,
+                    background: "rgba(255,255,255,0.04)",
+                    border: `1px solid ${eng.color}44`,
+                    display: "flex", flexDirection: "column", gap: 6,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 18 }}>{eng.icon}</span>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: "uppercase" as const, color: eng.color }}>{eng.tag}</div>
+                        <div style={{ fontSize: 15, fontWeight: 900, color: "#fff" }}>{eng.label}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 4 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" as const }}>Rate</div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: eng.color, fontFamily: "ui-monospace, monospace" }}>{eng.rate}</div>
+                      </div>
+                      <div style={{ textAlign: "right" as const }}>
+                        <div style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" as const }}>Earned (session)</div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#86efac", fontFamily: "ui-monospace, monospace" }}>+{eng.earned.toFixed(4)}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#475569", fontWeight: 600 }}>{eng.meta}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
         {/* ═══ STREAK — Proof-of-Streak (engine F, voted live) ═════ */}
         <StreakCard wallet={wallet} claimed={streakClaimed} />
 

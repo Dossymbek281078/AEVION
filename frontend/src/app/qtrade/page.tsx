@@ -84,6 +84,40 @@ export default function QTradePage() {
   const [alertPrice, setAlertPrice] = useState("");
   const [alertDir, setAlertDir] = useState<"above" | "below">("above");
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>("default");
+  const [soundOn, setSoundOn] = useState(true);
+
+  // Beep sound для price alerts через Web Audio API (no asset, генерируем sine)
+  const playBeep = useCallback(() => {
+    if (!soundOn) return;
+    if (typeof window === "undefined") return;
+    try {
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = 880;       // A5
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.30);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.32);
+      // Auto-close context after sound to avoid leak
+      setTimeout(() => { try { ctx.close(); } catch {/* ignore */} }, 400);
+    } catch {/* AudioContext unavailable / blocked */}
+  }, [soundOn]);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("aevion_qtrade_sound_v1");
+      if (v === "0") setSoundOn(false);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("aevion_qtrade_sound_v1", soundOn ? "1" : "0"); } catch {}
+  }, [soundOn]);
   const [activePair, setActivePair] = useState<PairId | null>(null);
   const [orderQty, setOrderQty] = useState("1");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -222,6 +256,8 @@ export default function QTradePage() {
                 new Notification("⚡ AEVION QTrade · price alert", { body: msg + (a.note ? ` — ${a.note}` : "") });
               }
             } catch {}
+            // Audio beep (если включен toggle)
+            playBeep();
             setTradeMsg(`🔔 ${msg}`);
             setTimeout(() => setTradeMsg(null), 4000);
           }
@@ -1042,12 +1078,26 @@ export default function QTradePage() {
                     <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: "#94a3b8", textTransform: "uppercase" as const }}>
                       🔔 Price alerts
                     </span>
-                    {notifPerm !== "granted" && (
-                      <button onClick={requestNotifPerm}
-                        style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(34,211,238,0.4)", background: "transparent", color: "#67e8f9", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                        {notifPerm === "denied" ? "🚫 Уведомления запрещены" : "✓ Включить уведомления"}
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" as const, flexWrap: "wrap" as const }}>
+                      <button onClick={() => setSoundOn((v) => !v)}
+                        aria-label={soundOn ? "Выключить звук price-алертов" : "Включить звук price-алертов"}
+                        title={soundOn ? "Звук вкл (sine 880Hz beep)" : "Звук выкл"}
+                        style={{
+                          padding: "3px 8px", borderRadius: 4,
+                          border: `1px solid ${soundOn ? "rgba(134,239,172,0.4)" : "#334155"}`,
+                          background: "transparent",
+                          color: soundOn ? "#86efac" : "#94a3b8",
+                          fontSize: 10, fontWeight: 700, cursor: "pointer",
+                        }}>
+                        {soundOn ? "🔊 Sound" : "🔇 Muted"}
                       </button>
-                    )}
+                      {notifPerm !== "granted" && (
+                        <button onClick={requestNotifPerm}
+                          style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(34,211,238,0.4)", background: "transparent", color: "#67e8f9", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                          {notifPerm === "denied" ? "🚫 Уведомления запрещены" : "✓ Включить уведомления"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, alignItems: "center" }}>
                     <select value={alertDir} onChange={(e) => setAlertDir(e.target.value as "above" | "below")}

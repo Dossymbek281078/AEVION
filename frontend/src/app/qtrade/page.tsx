@@ -86,6 +86,46 @@ export default function QTradePage() {
   const [bracketSL, setBracketSL] = useState("");
   const [bracketTP, setBracketTP] = useState("");
 
+  // Watchlist + active pair persistence
+  const [watchlist, setWatchlist] = useState<Set<PairId>>(new Set());
+  const [watchOnly, setWatchOnly] = useState(false);
+  const [marketPrefsHydrated, setMarketPrefsHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const w = localStorage.getItem("aevion_qtrade_watchlist_v1");
+      if (w) {
+        const parsed = JSON.parse(w);
+        if (Array.isArray(parsed)) setWatchlist(new Set(parsed.filter((x): x is PairId => typeof x === "string")));
+      }
+      setWatchOnly(localStorage.getItem("aevion_qtrade_watch_only_v1") === "1");
+      const ap = localStorage.getItem("aevion_qtrade_active_pair_v1");
+      if (ap) setActivePair(ap as PairId);
+    } catch {}
+    setMarketPrefsHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (!marketPrefsHydrated) return;
+    try { localStorage.setItem("aevion_qtrade_watchlist_v1", JSON.stringify([...watchlist])) } catch {}
+  }, [watchlist, marketPrefsHydrated]);
+  useEffect(() => {
+    if (!marketPrefsHydrated) return;
+    try { localStorage.setItem("aevion_qtrade_watch_only_v1", watchOnly ? "1" : "0") } catch {}
+  }, [watchOnly, marketPrefsHydrated]);
+  useEffect(() => {
+    if (!marketPrefsHydrated) return;
+    try {
+      if (activePair) localStorage.setItem("aevion_qtrade_active_pair_v1", activePair);
+      else localStorage.removeItem("aevion_qtrade_active_pair_v1");
+    } catch {}
+  }, [activePair, marketPrefsHydrated]);
+  const toggleWatch = (id: PairId) => {
+    setWatchlist((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   // AEV wallet (for AEV/USD spot conversion)
   const [aevWallet, setAevWallet] = useState<AEVWallet | null>(null);
   const [aevSpotQty, setAevSpotQty] = useState("");
@@ -533,6 +573,20 @@ export default function QTradePage() {
               <span style={{ width: 6, height: 6, borderRadius: 3, background: "#22c55e", animation: "qt-pulse 1.4s ease-in-out infinite" }} />
               SIMULATED · 1s tick
             </span>
+            {/* Watchlist filter toggle */}
+            <button
+              onClick={() => setWatchOnly((v) => !v)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                padding: "3px 10px", borderRadius: 999, border: "none", cursor: "pointer",
+                background: watchOnly ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.07)",
+                color: watchOnly ? "#fbbf24" : "#94a3b8",
+                fontSize: 11, fontWeight: 800,
+                transition: "all 0.2s",
+              }}
+            >
+              {watchOnly ? "★" : "☆"} Watchlist
+            </button>
           </div>
           <div style={{ fontSize: 13, color: "#cbd5e1" }}>
             Открытые позиции: <strong style={{ color: "#fff" }}>{positions.length}</strong>
@@ -545,60 +599,83 @@ export default function QTradePage() {
 
         {/* Pair cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 14 }}>
-          {pairs.map((p) => {
+          {pairs.filter((p) => !watchOnly || watchlist.has(p.id)).map((p) => {
             const change24 = ((p.price - p.open24h) / p.open24h) * 100;
             const tickUp = p.price >= p.prevPrice;
             const isActive = activePair === p.id;
+            const isWatched = watchlist.has(p.id);
             const sparkColor = change24 >= 0 ? "#22c55e" : "#f87171";
             return (
-              <button
-                key={p.id}
-                onClick={() => setActivePair((cur) => (cur === p.id ? null : p.id))}
-                style={{
-                  textAlign: "left",
-                  background: isActive ? "rgba(34,211,238,0.12)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${isActive ? "#22d3ee" : "rgba(255,255,255,0.1)"}`,
-                  borderRadius: 10,
-                  padding: 12,
-                  cursor: "pointer",
-                  color: "#fff",
-                  transition: "background 0.2s, border 0.2s",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                  <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: 0.4 }}>{p.symbol}</span>
-                  <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>{p.name}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                  <span style={{
-                    fontFamily: "ui-monospace, SFMono-Regular, monospace",
-                    fontWeight: 900,
-                    fontSize: 19,
-                    color: tickUp ? "#86efac" : "#fca5a5",
-                    transition: "color 0.4s",
-                  }}>
-                    {fmtUsd(p.price)}
-                  </span>
-                  <span style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: change24 >= 0 ? "#22c55e" : "#f87171",
-                  }}>
-                    {fmtPct(change24)}
-                  </span>
-                </div>
-                <svg viewBox="0 0 100 30" preserveAspectRatio="none" style={{ width: "100%", height: 30, display: "block" }}>
-                  <path d={sparklinePath(p.history, 100, 30)} stroke={sparkColor} strokeWidth={1.4} fill="none" opacity={0.85} />
-                </svg>
-                <div style={{ fontSize: 10, color: "#64748b", letterSpacing: 0.4, fontWeight: 700 }}>
-                  {isActive ? "▼ свернуть" : "▶ торговать"}
-                </div>
-              </button>
+              <div key={p.id} style={{ position: "relative" }}>
+                {/* Star button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleWatch(p.id); }}
+                  title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+                  style={{
+                    position: "absolute", top: 8, right: 8, zIndex: 2,
+                    background: "none", border: "none", cursor: "pointer",
+                    fontSize: 16, lineHeight: 1,
+                    color: isWatched ? "#fbbf24" : "rgba(255,255,255,0.3)",
+                    transition: "color 0.2s",
+                    padding: 2,
+                  }}
+                >
+                  {isWatched ? "★" : "☆"}
+                </button>
+                <button
+                  onClick={() => setActivePair((cur) => (cur === p.id ? null : p.id))}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    background: isActive ? "rgba(34,211,238,0.12)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${isActive ? "#22d3ee" : "rgba(255,255,255,0.1)"}`,
+                    borderRadius: 10,
+                    padding: 12,
+                    cursor: "pointer",
+                    color: "#fff",
+                    transition: "background 0.2s, border 0.2s",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", paddingRight: 20 }}>
+                    <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: 0.4 }}>{p.symbol}</span>
+                    <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>{p.name}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                    <span style={{
+                      fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                      fontWeight: 900,
+                      fontSize: 19,
+                      color: tickUp ? "#86efac" : "#fca5a5",
+                      transition: "color 0.4s",
+                    }}>
+                      {fmtUsd(p.price)}
+                    </span>
+                    <span style={{
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: change24 >= 0 ? "#22c55e" : "#f87171",
+                    }}>
+                      {fmtPct(change24)}
+                    </span>
+                  </div>
+                  <svg viewBox="0 0 100 30" preserveAspectRatio="none" style={{ width: "100%", height: 30, display: "block" }}>
+                    <path d={sparklinePath(p.history, 100, 30)} stroke={sparkColor} strokeWidth={1.4} fill="none" opacity={0.85} />
+                  </svg>
+                  <div style={{ fontSize: 10, color: "#64748b", letterSpacing: 0.4, fontWeight: 700 }}>
+                    {isActive ? "▼ свернуть" : "▶ торговать"}
+                  </div>
+                </button>
+              </div>
             );
           })}
+          {watchOnly && watchlist.size === 0 && (
+            <div style={{ gridColumn: "1/-1", padding: 24, textAlign: "center" as const, color: "#64748b", fontSize: 13 }}>
+              Нет пар в вотчлисте. Нажми ☆ на карточке пары, чтобы добавить.
+            </div>
+          )}
         </div>
 
         {/* OHLC candle chart for active pair */}

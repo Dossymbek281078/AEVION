@@ -93,6 +93,8 @@ type RightObject = {
   createdAt: string;
   country?: string;
   city?: string;
+  revokedAt?: string | null;
+  revokeReason?: string | null;
 };
 
 const KIND_OPTIONS = [
@@ -127,6 +129,14 @@ export default function QRightPage() {
   const [showRegistry, setShowRegistry] = useState(false);
   const [items, setItems] = useState<RightObject[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [registryScope, setRegistryScope] = useState<"all" | "mine">("all");
+  const [registryQuery, setRegistryQuery] = useState("");
+  const [hasAuth, setHasAuth] = useState(false);
+  useEffect(() => {
+    try {
+      setHasAuth(!!localStorage.getItem(TOKEN_KEY));
+    } catch {}
+  }, []);
 
   const [showTour, setShowTour] = useState(false);
   useEffect(() => {
@@ -323,16 +333,57 @@ export default function QRightPage() {
     }
   };
 
-  const loadRegistry = async () => {
+  const loadRegistry = async (
+    overrideScope?: "all" | "mine",
+    overrideQuery?: string
+  ) => {
+    const scope = overrideScope ?? registryScope;
+    const query = (overrideQuery ?? registryQuery).trim();
     setLoadingItems(true);
     try {
-      const res = await fetch(apiUrl("/api/qright/objects"), { headers: { ...authHeaders() } });
+      const path =
+        query.length >= 2
+          ? `/api/qright/objects/search?q=${encodeURIComponent(query)}`
+          : scope === "mine"
+          ? "/api/qright/objects?mine=1"
+          : "/api/qright/objects";
+      const res = await fetch(apiUrl(path), { headers: { ...authHeaders() } });
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);
+      } else if (scope === "mine" && res.status === 401) {
+        showToast("Sign in to see your works", "error");
       }
     } catch {}
     setLoadingItems(false);
+  };
+
+  const revokeObject = async (obj: RightObject) => {
+    if (typeof window === "undefined") return;
+    const reason = window.prompt(
+      `Revoke "${obj.title}"?\n\nThis is public — embeds and badges flip to red. The record is kept for transparency.\n\nOptional reason:`,
+      ""
+    );
+    if (reason === null) return;
+    try {
+      const res = await fetch(
+        apiUrl(`/api/qright/revoke/${encodeURIComponent(obj.id)}`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ reason: reason || undefined }),
+        }
+      );
+      if (res.ok) {
+        showToast("Revoked. Embeds will flip red within ~5 min cache window.", "success");
+        await loadRegistry();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(`Revoke failed: ${data.error || res.status}`, "error");
+      }
+    } catch (e) {
+      showToast(`Revoke failed: ${(e as Error).message}`, "error");
+    }
   };
 
   const reset = () => {
@@ -872,14 +923,73 @@ export default function QRightPage() {
 
           {showRegistry && (
             <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 12 }}>
+                <input
+                  type="search"
+                  placeholder="Search by title (≥ 2 chars)…"
+                  value={registryQuery}
+                  onChange={(e) => {
+                    setRegistryQuery(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") loadRegistry(registryScope, registryQuery);
+                  }}
+                  onBlur={() => loadRegistry(registryScope, registryQuery)}
+                  style={{
+                    flex: "1 1 240px",
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(15,23,42,0.15)",
+                    fontSize: 13,
+                    color: "#0f172a",
+                    background: "#fff",
+                  }}
+                />
+                {hasAuth && (
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: "#f1f5f9", borderRadius: 8 }}>
+                    {(["all", "mine"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          setRegistryScope(s);
+                          setRegistryQuery("");
+                          loadRegistry(s, "");
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 6,
+                          border: "none",
+                          background: registryScope === s ? "#0f172a" : "transparent",
+                          color: registryScope === s ? "#fff" : "#475569",
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {s === "mine" ? "Mine" : "All"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {loadingItems ? (
                 <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Loading registry...</div>
               ) : items.length === 0 ? (
-                <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>No records yet. Protect your first work above!</div>
+                <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>
+                  {registryQuery.trim().length >= 2
+                    ? `No matches for "${registryQuery.trim()}".`
+                    : registryScope === "mine"
+                    ? "You have no protected works yet."
+                    : "No records yet. Protect your first work above!"}
+                </div>
               ) : (
                 <div style={{ display: "grid", gap: 10 }}>
-                  {items.map((x) => (
-                    <div key={x.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: 14, background: "#fff" }}>
+                  {items.map((x) => {
+                    const isRevoked = !!x.revokedAt;
+                    const showRevokeBtn = registryScope === "mine" && !isRevoked;
+                    return (
+                    <div key={x.id} style={{ border: `1px solid ${isRevoked ? "rgba(220,38,38,0.25)" : "rgba(15,23,42,0.08)"}`, borderRadius: 12, padding: 14, background: isRevoked ? "rgba(254,242,242,0.5)" : "#fff" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                         <div>
                           <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
@@ -888,9 +998,16 @@ export default function QRightPage() {
                           </div>
                           <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{x.title}</div>
                         </div>
-                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" }}>✓ REGISTERED</span>
+                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: isRevoked ? "rgba(220,38,38,0.1)" : "rgba(16,185,129,0.1)", color: isRevoked ? "#dc2626" : "#059669", whiteSpace: "nowrap" }}>
+                          {isRevoked ? "✕ REVOKED" : "✓ REGISTERED"}
+                        </span>
                       </div>
                       <div style={{ marginTop: 6, fontSize: 12, color: "#475569" }}>{x.description.slice(0, 120)}{x.description.length > 120 ? "..." : ""}</div>
+                      {isRevoked && x.revokeReason && (
+                        <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "rgba(220,38,38,0.06)", fontSize: 11, color: "#7f1d1d" }}>
+                          Revoked: {x.revokeReason}
+                        </div>
+                      )}
                       <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "#f8fafc", fontSize: 10, fontFamily: "monospace", color: "#64748b", wordBreak: "break-all" }}>
                         SHA-256: {x.contentHash}
                       </div>
@@ -914,9 +1031,19 @@ export default function QRightPage() {
                         >
                           Get embed code →
                         </Link>
+                        {showRevokeBtn && (
+                          <button
+                            onClick={() => revokeObject(x)}
+                            style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "transparent", padding: "4px 10px", border: "1px solid rgba(220,38,38,0.4)", borderRadius: 6, cursor: "pointer" }}
+                            title="Mark as revoked — embeds and badges flip red"
+                          >
+                            Revoke
+                          </button>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </div>

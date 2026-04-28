@@ -24,6 +24,9 @@ import { startSession as coordStart, registerHit as coordHit, isExpired as coord
 import { QUESTIONS as QUIZ_Q, PLAYERS as QUIZ_PLAYERS, scoreQuiz, loadResult as ldQuizResult, saveResult as svQuizResult, type QuizResult, type PlayerStyle } from "./personality";
 import { emptyBoard as edEmpty, startingBoard as edStart, fenToBoard as edFromFen, boardToFen as edToFen, validateBoard as edValidate, PIECE_TYPES as ED_PIECES, PIECE_NAMES as ED_NAMES, type EditorBoard, type Cell as EdCell } from "./boardEditor";
 import { computeInsights, type Insights } from "./insights";
+import { getValidGames as ldMasterGames, buildFenLine as masterFenLine, scoreGuess as masterScoreGuess, recordCompletion as masterRecord, type MasterGame } from "./masters";
+import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as oeBlackPct, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
+import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -558,6 +561,22 @@ export default function CyberChessPage(){
   const[editorErrors,sEditorErrors]=useState<string[]>([]);
   // Insights v2 (killer #16)
   const[showInsights,sShowInsights]=useState(false);
+  // Master Games (killer #17)
+  const[showMasters,sShowMasters]=useState(false);
+  const[masterCurrent,sMasterCurrent]=useState<MasterGame|null>(null);
+  const[masterPly,sMasterPly]=useState(0);
+  const[masterMode,sMasterMode]=useState<"replay"|"guess">("replay");
+  const[masterGuessInput,sMasterGuessInput]=useState("");
+  const[masterGuessFeedback,sMasterGuessFeedback]=useState<{correct:boolean;actual:string;guess:string}|null>(null);
+  const[masterStats,sMasterStats]=useState<{hits:number;misses:number}>({hits:0,misses:0});
+  // Opening Explorer (killer #18)
+  const[showOpeningExp,sShowOpeningExp]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_opening_exp_v1")==="1"}catch{return true}});
+  useEffect(()=>{try{localStorage.setItem("aevion_opening_exp_v1",showOpeningExp?"1":"0")}catch{}},[showOpeningExp]);
+  const[openingData,sOpeningData]=useState<OpeningEntry|null>(null);
+  const[openingLoading,sOpeningLoading]=useState(false);
+  // Endgame Tablebase (killer #19)
+  const[tbData,sTbData]=useState<TablebaseEntry|null>(null);
+  const[tbLoading,sTbLoading]=useState(false);
   useEffect(()=>{svChessy(chessy)},[chessy]);
   const[chessyFloat,sChessyFloat]=useState<{amount:number;key:number}|null>(null);
   const[showConfetti,sShowConfetti]=useState(false);
@@ -604,6 +623,24 @@ export default function CyberChessPage(){
     },100);
     return()=>clearInterval(id);
   },[coordSession,coordResult,addChessy]);
+  // Opening Explorer + Tablebase: fetch when on Analysis tab + position changes
+  useEffect(()=>{
+    if(tab!=="analysis"||!showOpeningExp){sOpeningData(null);return}
+    const fen=game.fen();
+    sOpeningLoading(true);
+    const ac=new AbortController();
+    fetchOpening(fen,ac.signal).then(d=>{sOpeningData(d);sOpeningLoading(false)}).catch(()=>sOpeningLoading(false));
+    return()=>ac.abort();
+  },[tab,bk,showOpeningExp]);
+  useEffect(()=>{
+    if(tab!=="analysis"){sTbData(null);return}
+    const fen=game.fen();
+    if(!isTablebaseEligible(fen)){sTbData(null);return}
+    sTbLoading(true);
+    const ac=new AbortController();
+    fetchTablebase(fen,ac.signal).then(d=>{sTbData(d);sTbLoading(false)}).catch(()=>sTbLoading(false));
+    return()=>ac.abort();
+  },[tab,bk]);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -2922,6 +2959,18 @@ export default function CyberChessPage(){
               <div style={{fontSize:11,fontWeight:800,color:"#047857",marginTop:SPACE[2]}}>Открыть →</div>
             </Card>
 
+            {/* Master Games (killer #17) */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
+              style={{background:"linear-gradient(135deg,#fef9c3,#fde68a)",borderColor:"#facc15",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:"#854d0e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Master Games</div>
+                <Badge tone="gold" size="xs">♛ new</Badge>
+              </div>
+              <div style={{fontSize:26,marginTop:2}}>♛</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Знаменитые партии · Угадай ход</div>
+              <div style={{fontSize:11,fontWeight:800,color:"#854d0e",marginTop:SPACE[2]}}>Изучать →</div>
+            </Card>
+
             {/* Game DNA — персональные паттерны (killer #3) */}
             <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowGameDna(true)}
               style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",borderColor:"#93c5fd",cursor:"pointer",gridColumn:gameDna.insights.length>0&&savedGames.length>0?"span 2":"auto"}}>
@@ -3766,6 +3815,93 @@ export default function CyberChessPage(){
                 </div>);
               })}
             </div>
+          </div>}
+
+          {/* ── Opening Explorer (Lichess masters) — Analysis tab ── */}
+          {tab==="analysis"&&showOpeningExp&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+            <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(135deg,#fef9c3,#fde68a)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:"#854d0e"}}>📚 Opening Explorer · Masters</span>
+              <button onClick={()=>sShowOpeningExp(false)} style={{padding:"2px 6px",borderRadius:4,border:"none",background:"transparent",color:"#854d0e",fontSize:11,fontWeight:800,cursor:"pointer"}}>скрыть</button>
+            </div>
+            {openingLoading?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Загрузка…</div>:!openingData||openingData.total===0?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>В мастерской базе нет партий из этой позиции — позиция оригинальная или редкая.</div>:<>
+              {openingData.opening?.name&&<div style={{padding:"6px 12px",fontSize:11,color:"#854d0e",fontWeight:700,background:"#fffbeb",borderBottom:`1px solid ${T.border}`}}>
+                {openingData.opening.eco?<span style={{fontFamily:"monospace",marginRight:6}}>{openingData.opening.eco}</span>:null}{openingData.opening.name}
+              </div>}
+              <div style={{padding:"4px 12px",fontSize:10,color:T.dim,fontFamily:"monospace",borderBottom:`1px solid ${T.border}`,background:"#fffbeb",display:"flex",justifyContent:"space-between"}}>
+                <span>{oeShortNum(openingData.total)} партий мастеров</span>
+                <span>{oeWhitePct(openingData)}% W · {oeDrawPct(openingData)}% D · {oeBlackPct(openingData)}% B</span>
+              </div>
+              <div style={{maxHeight:180,overflowY:"auto"}}>
+                {openingData.moves.slice(0,8).map((m,i)=>{
+                  const total=m.white+m.draws+m.black;
+                  const wp=oeWhitePct(m),dp=oeDrawPct(m),bp=oeBlackPct(m);
+                  return <div key={i} onClick={()=>{
+                    try{
+                      const ch=new Chess(game.fen());
+                      const mv=ch.move({from:m.uci.slice(0,2) as Square,to:m.uci.slice(2,4) as Square,promotion:(m.uci[4]||"q") as any});
+                      if(!mv)return;
+                      setGame(ch);sBk(k=>k+1);
+                      sHist(h=>[...h,mv.san]);
+                      sFenHist(fh=>[...fh,ch.fen()]);
+                      sLm({from:mv.from as Square,to:mv.to as Square});
+                      sSel(null);sVm(new Set());
+                    }catch{}
+                  }} style={{padding:"5px 12px",borderBottom:i<openingData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background="#fef9c3"}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
+                    <span style={{minWidth:50,fontSize:13,fontWeight:800,fontFamily:"monospace",color:T.text}}>{m.san}</span>
+                    <span style={{minWidth:60,fontSize:10,color:T.dim,fontFamily:"monospace"}}>{oeShortNum(total)}</span>
+                    <div style={{flex:1,display:"flex",height:6,borderRadius:3,overflow:"hidden",border:`1px solid ${T.border}`}}>
+                      <div style={{width:`${wp}%`,background:"#f8fafc"}}/>
+                      <div style={{width:`${dp}%`,background:"#94a3b8"}}/>
+                      <div style={{width:`${bp}%`,background:"#1e293b"}}/>
+                    </div>
+                    {m.averageRating&&<span style={{minWidth:40,fontSize:10,color:T.dim,fontFamily:"monospace",textAlign:"right"}}>{m.averageRating}</span>}
+                  </div>;
+                })}
+              </div>
+            </>}
+          </div>}
+          {tab==="analysis"&&!showOpeningExp&&<button onClick={()=>sShowOpeningExp(true)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${T.border}`,background:"#fffbeb",color:"#854d0e",fontSize:11,fontWeight:800,cursor:"pointer"}}>📚 Показать Opening Explorer</button>}
+
+          {/* ── Endgame Tablebase — Analysis tab, ≤7 фигур ── */}
+          {tab==="analysis"&&isTablebaseEligible(game.fen())&&<div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+            <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(135deg,#dbeafe,#bfdbfe)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:"#1e40af"}}>♔ Tablebase · 7-piece Syzygy</span>
+              <span style={{fontSize:10,color:"#1e40af",fontWeight:700}}>perfect play</span>
+            </div>
+            {tbLoading?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Загрузка…</div>:!tbData?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Tablebase недоступен (вероятно, оффлайн).</div>:<>
+              <div style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,background:"#f0f9ff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:13,fontWeight:900,color:tbColor(tbData.category)}}>{tbLabel(tbData.category,game.turn())}</span>
+                {tbData.dtm!==null&&!tbData.checkmate&&<span style={{fontSize:11,fontFamily:"monospace",fontWeight:800,color:T.text}}>DTM: {Math.abs(tbData.dtm)}</span>}
+                {tbData.checkmate&&<span style={{fontSize:11,fontWeight:800,color:tbColor(tbData.category)}}>Мат на доске</span>}
+                {tbData.stalemate&&<span style={{fontSize:11,fontWeight:800,color:T.dim}}>Пат</span>}
+              </div>
+              {tbData.moves.length>0&&<div style={{maxHeight:160,overflowY:"auto"}}>
+                {tbData.moves.slice(0,6).map((m,i)=>{
+                  return <div key={i} onClick={()=>{
+                    try{
+                      const ch=new Chess(game.fen());
+                      const mv=ch.move({from:m.uci.slice(0,2) as Square,to:m.uci.slice(2,4) as Square,promotion:(m.uci[4]||"q") as any});
+                      if(!mv)return;
+                      setGame(ch);sBk(k=>k+1);
+                      sHist(h=>[...h,mv.san]);
+                      sFenHist(fh=>[...fh,ch.fen()]);
+                      sLm({from:mv.from as Square,to:mv.to as Square});
+                      sSel(null);sVm(new Set());
+                    }catch{}
+                  }} style={{padding:"5px 12px",borderBottom:i<5&&i<tbData.moves.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background="#dbeafe"}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}>
+                    <span style={{minWidth:54,fontSize:13,fontWeight:i===0?900:700,fontFamily:"monospace",color:T.text}}>{m.san}</span>
+                    <span style={{padding:"1px 6px",borderRadius:3,fontSize:10,fontWeight:800,color:"#fff",background:tbColor(m.category),fontFamily:"monospace"}}>{m.category}</span>
+                    {m.dtm!==null&&!m.checkmate&&<span style={{fontSize:10,color:T.dim,fontFamily:"monospace"}}>DTM {Math.abs(m.dtm)}</span>}
+                    {m.checkmate&&<span style={{fontSize:10,fontWeight:800,color:tbColor(m.category)}}>#</span>}
+                    {m.stalemate&&<span style={{fontSize:10,color:T.dim}}>пат</span>}
+                  </div>;
+                })}
+              </div>}
+            </>}
           </div>}
 
           {/* Analyze Game button - when game has history */}
@@ -6205,6 +6341,183 @@ export default function CyberChessPage(){
                 showToast("Позиция загружена в Анализ","success");
               }catch(e:any){sEditorErrors([String(e?.message||e)])}
             }}>⚡ Анализировать позицию</Btn>
+          </div>
+        </div>;
+      })()}
+    </Modal>
+
+    {/* ═══ Master Games + Guess the Move (killer #17) ═══ */}
+    <Modal open={showMasters} onClose={()=>{sShowMasters(false);sMasterCurrent(null)}} size="xl"
+      title="♛ Master Games">
+      {(()=>{
+        const games=ldMasterGames();
+        if(!masterCurrent){
+          return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+            <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#fef9c3,#fde68a)",borderColor:"#facc15"}}>
+              <div style={{fontSize:13,color:"#854d0e",fontWeight:800,marginBottom:SPACE[1]}}>Что внутри</div>
+              <div style={{fontSize:13,color:CC.text,lineHeight:1.6}}>
+                {games.length} знаменитых партий — от «Бессмертной» (1851) до Карлсена (2014). Два режима: <b>Replay</b> (просто пройти партию с аннотациями) и <b>Угадай ход</b> (предсказывай ход мастера и получай Chessy за каждое попадание).
+              </div>
+            </Card>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px,1fr))",gap:SPACE[2]}}>
+              {games.map(g=>{
+                const themeCol={Attack:"#dc2626",Sacrifice:"#a21caf",Endgame:"#0369a1",Strategy:"#047857",Defense:"#854d0e"}[g.theme];
+                return <Card key={g.id} padding={SPACE[3]} tone="surface1" onClick={()=>{
+                    sMasterCurrent(g);sMasterPly(0);sMasterMode("replay");sMasterStats({hits:0,misses:0});sMasterGuessFeedback(null);sMasterGuessInput("");
+                    try{const ch=new Chess();setGame(ch);sBk(k=>k+1);sLm(null);sSel(null);sVm(new Set());sFlip(g.guessSide==="b")}catch{}
+                  }} style={{cursor:"pointer",borderLeft:`4px solid ${themeCol}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+                    <span style={{fontSize:14,fontWeight:900,color:CC.text}}>{g.white}</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontFamily:"monospace"}}>{g.year}</span>
+                  </div>
+                  <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[1]}}>vs {g.black}</div>
+                  <div style={{display:"flex",gap:4,marginBottom:SPACE[2]}}>
+                    <Badge tone="accent" size="xs" style={{background:`${themeCol}20`,color:themeCol,borderColor:themeCol}}>{g.theme}</Badge>
+                    <Badge tone="info" size="xs">{g.result}</Badge>
+                    <Badge tone="brand" size="xs">{Math.ceil(g.moves.length/2)} ходов</Badge>
+                  </div>
+                  <div style={{fontSize:12,color:CC.text,lineHeight:1.5,minHeight:54,maxHeight:72,overflow:"hidden"}}>{g.blurb}</div>
+                </Card>;
+              })}
+            </div>
+          </div>;
+        }
+        const g=masterCurrent;
+        const fens=masterFenLine(g);
+        const totalPly=g.moves.length;
+        const ply=Math.min(masterPly,totalPly);
+        const fenAt=fens[ply]||fens[fens.length-1];
+        const sideToMoveAtPly=ply%2===0?"w":"b";
+        const isGuessTurn=masterMode==="guess"&&sideToMoveAtPly===g.guessSide&&ply<totalPly&&!masterGuessFeedback;
+        const note=g.notes[ply-1]||g.notes[ply];
+        const guessRate=masterStats.hits+masterStats.misses>0?Math.round(masterStats.hits/(masterStats.hits+masterStats.misses)*100):0;
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:12,color:CC.textDim,fontWeight:700}}>{g.event} · {g.year}</div>
+              <div style={{fontSize:16,fontWeight:900,color:CC.text}}>{g.white} <span style={{color:CC.textDim}}>vs</span> {g.black}</div>
+            </div>
+            <Btn size="sm" variant="ghost" onClick={()=>sMasterCurrent(null)}>← К списку</Btn>
+          </div>
+          <div style={{display:"flex",gap:SPACE[2]}}>
+            <UiTabs<"replay"|"guess">
+              variant="segment"
+              size="sm"
+              value={masterMode}
+              onChange={m=>{sMasterMode(m);sMasterGuessFeedback(null);sMasterGuessInput("")}}
+              tabs={[
+                {value:"replay",label:"📖 Replay"},
+                {value:"guess",label:"🎯 Угадай ход"},
+              ]}
+            />
+            {masterMode==="guess"&&<div style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim}}>
+              <span>✓ {masterStats.hits}</span><span>✗ {masterStats.misses}</span>
+              {(masterStats.hits+masterStats.misses)>0&&<span style={{fontFamily:"monospace",fontWeight:800,color:guessRate>=60?CC.brand:CC.danger}}>{guessRate}%</span>}
+            </div>}
+          </div>
+          {/* Mini board */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 360px",gap:SPACE[3],alignItems:"start"}}>
+            <div>
+              {(()=>{
+                const ch=new Chess(fenAt);
+                const board=ch.board();
+                const flipB=g.guessSide==="b";
+                const rs=flipB?[...Array(8).keys()].reverse():[...Array(8).keys()];
+                const fs=flipB?[...Array(8).keys()].reverse():[...Array(8).keys()];
+                return <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",border:`2px solid ${CC.borderStrong}`,borderRadius:RADIUS.md,overflow:"hidden",aspectRatio:"1",maxWidth:480,margin:"0 auto"}}>
+                  {rs.flatMap(r=>fs.map(f=>{
+                    const cell=board[r][f];
+                    const isLight=(r+f)%2===0;
+                    return <div key={`mb-${r}-${f}`} style={{aspectRatio:"1",background:isLight?"#fef3c7":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,lineHeight:1}}>
+                      {cell&&<div style={{width:"86%",height:"86%",filter:"drop-shadow(0 2px 3px rgba(0,0,0,0.3))"}}><Piece type={cell.type} color={cell.color}/></div>}
+                    </div>;
+                  }))}
+                </div>;
+              })()}
+              <div style={{display:"flex",gap:4,marginTop:SPACE[2],justifyContent:"center"}}>
+                <Btn size="sm" variant="secondary" onClick={()=>{sMasterPly(0);sMasterGuessFeedback(null);sMasterGuessInput("")}}>⏮</Btn>
+                <Btn size="sm" variant="secondary" onClick={()=>{sMasterPly(p=>Math.max(0,p-1));sMasterGuessFeedback(null);sMasterGuessInput("")}}>◀</Btn>
+                <span style={{padding:"6px 12px",fontSize:12,color:CC.text,fontFamily:"monospace",fontWeight:800,background:CC.surface2,borderRadius:RADIUS.sm}}>
+                  {ply}/{totalPly}
+                </span>
+                <Btn size="sm" variant="secondary" disabled={ply>=totalPly||isGuessTurn} onClick={()=>{sMasterPly(p=>Math.min(totalPly,p+1));sMasterGuessFeedback(null);sMasterGuessInput("")}}>▶</Btn>
+                <Btn size="sm" variant="secondary" onClick={()=>{
+                  sMasterPly(totalPly);sMasterGuessFeedback(null);sMasterGuessInput("");
+                  if(masterStats.hits+masterStats.misses>0){
+                    masterRecord(g.id,totalPly,guessRate);
+                  }
+                }}>⏭</Btn>
+              </div>
+            </div>
+            {/* Side panel */}
+            <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+              {note&&<Card padding={SPACE[2]} tone="surface1" style={{background:"#fffbeb",borderColor:"#fcd34d"}}>
+                <div style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:4}}>Заметка</div>
+                <div style={{fontSize:13,color:CC.text,lineHeight:1.5}}>{note}</div>
+              </Card>}
+              {masterMode==="guess"&&isGuessTurn&&<Card padding={SPACE[2]} tone="surface1" style={{background:"#ecfdf5",borderColor:"#6ee7b7"}}>
+                <div style={{fontSize:11,color:"#047857",fontWeight:800,marginBottom:4}}>Угадай ход {g.guessSide==="w"?"белых":"чёрных"} (SAN, например <code>Nf3</code> или <code>e4</code>):</div>
+                <div style={{display:"flex",gap:4}}>
+                  <input value={masterGuessInput} onChange={e=>sMasterGuessInput(e.target.value)}
+                    onKeyDown={e=>{if(e.key==="Enter"){
+                      const actual=g.moves[ply];
+                      const result=masterScoreGuess(actual,masterGuessInput.trim());
+                      sMasterGuessFeedback(result);
+                      if(result.correct){sMasterStats(s=>({...s,hits:s.hits+1}));addChessy(result.reward,`Master guess: ${actual}`)}
+                      else sMasterStats(s=>({...s,misses:s.misses+1}));
+                    }}}
+                    placeholder="Nf3, exd5, O-O…"
+                    style={{flex:1,padding:"6px 8px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontFamily:"monospace",fontSize:13}}
+                    autoFocus/>
+                  <Btn size="sm" variant="primary" onClick={()=>{
+                    const actual=g.moves[ply];
+                    const result=masterScoreGuess(actual,masterGuessInput.trim());
+                    sMasterGuessFeedback(result);
+                    if(result.correct){sMasterStats(s=>({...s,hits:s.hits+1}));addChessy(result.reward,`Master guess: ${actual}`)}
+                    else sMasterStats(s=>({...s,misses:s.misses+1}));
+                  }}>✓</Btn>
+                </div>
+              </Card>}
+              {masterMode==="guess"&&masterGuessFeedback&&<Card padding={SPACE[2]} tone="surface1" style={{background:masterGuessFeedback.correct?"#ecfdf5":"#fef2f2",borderColor:masterGuessFeedback.correct?"#6ee7b7":"#fca5a5"}}>
+                <div style={{fontSize:13,fontWeight:800,color:masterGuessFeedback.correct?CC.brand:CC.danger,marginBottom:4}}>
+                  {masterGuessFeedback.correct?"✓ Точно! +15 Chessy":"✗ Не угадал"}
+                </div>
+                <div style={{fontSize:12,color:CC.text}}>
+                  Мастер сыграл: <b style={{fontFamily:"monospace"}}>{masterGuessFeedback.actual}</b>
+                  {!masterGuessFeedback.correct&&masterGuessFeedback.guess&&<> · твой: <span style={{fontFamily:"monospace",color:CC.danger}}>{masterGuessFeedback.guess}</span></>}
+                </div>
+                <Btn size="sm" variant="primary" full onClick={()=>{
+                  sMasterPly(p=>Math.min(totalPly,p+1));
+                  sMasterGuessFeedback(null);sMasterGuessInput("");
+                }} style={{marginTop:6}}>Дальше →</Btn>
+              </Card>}
+              {/* Move list */}
+              <Card padding={0} tone="surface1">
+                <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,borderBottom:`1px solid ${CC.border}`,fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const}}>Ходы</div>
+                <div style={{maxHeight:220,overflowY:"auto"}}>
+                  {Array.from({length:Math.ceil(totalPly/2)}).map((_,i)=>{
+                    const wIdx=i*2,bIdx=i*2+1;
+                    const wIsCur=ply===wIdx+1;
+                    const bIsCur=ply===bIdx+1;
+                    return <div key={i} style={{display:"grid",gridTemplateColumns:"34px 1fr 1fr",fontSize:12,fontFamily:"monospace",borderBottom:`1px solid ${CC.border}`}}>
+                      <span style={{padding:"4px 0",textAlign:"center",color:CC.textDim,background:CC.surface2,borderRight:`1px solid ${CC.border}`}}>{i+1}</span>
+                      <span onClick={()=>{sMasterPly(wIdx+1);sMasterGuessFeedback(null);sMasterGuessInput("")}}
+                        style={{padding:"4px 8px",cursor:"pointer",background:wIsCur?"rgba(245,158,11,0.18)":"transparent",fontWeight:wIsCur?900:600,color:masterMode==="guess"&&wIdx>=ply&&g.guessSide==="w"?"transparent":CC.text}}>
+                        {masterMode==="guess"&&wIdx>=ply&&g.guessSide==="w"?"???":g.moves[wIdx]||""}
+                      </span>
+                      <span onClick={()=>{if(g.moves[bIdx]){sMasterPly(bIdx+1);sMasterGuessFeedback(null);sMasterGuessInput("")}}}
+                        style={{padding:"4px 8px",cursor:g.moves[bIdx]?"pointer":"default",background:bIsCur?"rgba(245,158,11,0.18)":"transparent",fontWeight:bIsCur?900:600,color:masterMode==="guess"&&bIdx>=ply&&g.guessSide==="b"?"transparent":CC.text}}>
+                        {!g.moves[bIdx]?"":(masterMode==="guess"&&bIdx>=ply&&g.guessSide==="b"?"???":g.moves[bIdx])}
+                      </span>
+                    </div>;
+                  })}
+                </div>
+              </Card>
+              {ply>=totalPly&&<Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fef9c3,#fde68a)",borderColor:"#facc15",textAlign:"center"}}>
+                <div style={{fontSize:13,fontWeight:900,color:"#854d0e"}}>★ Партия завершена · {g.result}</div>
+                {masterMode==="guess"&&masterStats.hits+masterStats.misses>0&&<div style={{fontSize:12,color:"#854d0e",marginTop:4}}>Точность угадки: <b>{guessRate}%</b> ({masterStats.hits}/{masterStats.hits+masterStats.misses})</div>}
+              </Card>}
+            </div>
           </div>
         </div>;
       })()}

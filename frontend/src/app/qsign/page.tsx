@@ -132,6 +132,17 @@ type RecentItem = {
   publicUrl: string;
 };
 
+type Webhook = {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  createdAt: string | null;
+  lastFiredAt: string | null;
+  lastStatus: number | null;
+  lastError: string | null;
+};
+
 type RecentResponse = {
   items: RecentItem[];
   total: number;
@@ -226,6 +237,16 @@ export default function QSignPage() {
   const [hashAtSign, setHashAtSign] = useState<string>("");
   const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
   const [, setRateTick] = useState(0);
+  const [hashingFile, setHashingFile] = useState(false);
+
+  // webhooks
+  const [webhooks, setWebhooks] = useState<Webhook[] | null>(null);
+  const [webhookUrlInput, setWebhookUrlInput] = useState("");
+  const [creatingWebhook, setCreatingWebhook] = useState(false);
+  const [newWebhookSecret, setNewWebhookSecret] = useState<{
+    id: string;
+    secret: string;
+  } | null>(null);
 
   // verify pane
   const [verifyPayload, setVerifyPayload] = useState("");
@@ -314,6 +335,139 @@ export default function QSignPage() {
 
   const hashDrift =
     !!signed && !!hashAtSign && !!payloadHash && hashAtSign !== payloadHash;
+
+  /* — webhooks: list / create / delete —
+   * The list endpoint is auth-gated; we only fetch when a token is present.
+   * Create returns a one-time `secret` that we surface in a banner — once
+   * the user dismisses it the secret is unrecoverable, matching the
+   * server's "shown once" contract.
+   */
+  const loadWebhooks = async (currentToken?: string) => {
+    const t = (currentToken ?? token).trim();
+    if (!t) {
+      setWebhooks(null);
+      return;
+    }
+    try {
+      const r = await fetch(apiUrl("/api/qsign/v2/webhooks"), {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!r.ok) {
+        setWebhooks(null);
+        return;
+      }
+      const d = await r.json();
+      setWebhooks(d.webhooks || []);
+    } catch {
+      setWebhooks(null);
+    }
+  };
+
+  useEffect(() => {
+    if (token) loadWebhooks(token);
+    else setWebhooks(null);
+  }, [token]);
+
+  const createWebhook = async () => {
+    if (!token.trim()) {
+      showToast("Sign in first", "error");
+      return;
+    }
+    const url = webhookUrlInput.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      showToast("URL must start with http(s)://", "error");
+      return;
+    }
+    setCreatingWebhook(true);
+    try {
+      const r = await fetch(apiUrl("/api/qsign/v2/webhooks"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token.trim()}`,
+        },
+        body: JSON.stringify({ url, events: ["sign", "revoke"] }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showToast(d?.error || `Create failed (${r.status})`, "error");
+        return;
+      }
+      setNewWebhookSecret({ id: d.id, secret: d.secret });
+      setWebhookUrlInput("");
+      await loadWebhooks();
+      showToast("Webhook created — copy the secret now", "success");
+    } catch (e: any) {
+      showToast("Create error: " + (e?.message || String(e)), "error");
+    } finally {
+      setCreatingWebhook(false);
+    }
+  };
+
+  const deleteWebhook = async (id: string) => {
+    if (!token.trim()) return;
+    try {
+      const r = await fetch(apiUrl(`/api/qsign/v2/webhooks/${id}`), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        showToast(d?.error || `Delete failed (${r.status})`, "error");
+        return;
+      }
+      await loadWebhooks();
+      showToast("Webhook deleted", "success");
+    } catch (e: any) {
+      showToast("Delete error: " + (e?.message || String(e)), "error");
+    }
+  };
+
+  /* — hash a file client-side and load it as a sign-ready payload —
+   * Reads the entire file into memory and SHA-256s it via WebCrypto. The
+   * payload becomes a JSON envelope { type, name, size, mime, sha256,
+   * signedAt } that the server signs as-is — the file itself never leaves
+   * the browser. Suits documents, images, audio, anything whose integrity
+   * matters but whose contents are private.
+   *
+   * Memory cap: 50MB. Larger files would block the main thread and ESM
+   * crypto can't stream digests.
+   */
+  const FILE_MAX_BYTES = 50 * 1024 * 1024;
+  const hashFile = async (file: File) => {
+    if (file.size > FILE_MAX_BYTES) {
+      showToast(
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB > 50MB cap)`,
+        "error",
+      );
+      return;
+    }
+    setHashingFile(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buf);
+      const hex = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const envelope = {
+        type: "file",
+        name: file.name,
+        size: file.size,
+        mime: file.type || "application/octet-stream",
+        sha256: hex,
+        signedAt: new Date().toISOString(),
+      };
+      setPayloadText(JSON.stringify(envelope, null, 2));
+      setPayloadOrigin(
+        `file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
+      );
+      showToast(`Hashed ${file.name}`, "success");
+    } catch (e: any) {
+      showToast(`Hash failed: ${e?.message || String(e)}`, "error");
+    } finally {
+      setHashingFile(false);
+    }
+  };
 
   const requestGps = () => {
     if (!("geolocation" in navigator)) {
@@ -755,25 +909,52 @@ export default function QSignPage() {
                 }}
               >
                 <div style={label}>Payload (JSON)</div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPayloadText(JSON.stringify(SAMPLE_PAYLOAD, null, 2))
-                  }
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#0d9488",
-                    cursor: "pointer",
-                    padding: 0,
-                    textTransform: "none",
-                    letterSpacing: 0,
-                  }}
-                >
-                  Load sample
-                </button>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <label
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: hashingFile ? "#94a3b8" : "#6366f1",
+                      cursor: hashingFile ? "default" : "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    {hashingFile ? "Hashing…" : "📎 Hash a file"}
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          void hashFile(f);
+                          e.target.value = "";
+                        }
+                      }}
+                      disabled={hashingFile}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPayloadText(JSON.stringify(SAMPLE_PAYLOAD, null, 2))
+                    }
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#0d9488",
+                      cursor: "pointer",
+                      padding: 0,
+                      textTransform: "none",
+                      letterSpacing: 0,
+                    }}
+                  >
+                    Load sample
+                  </button>
+                </div>
               </div>
               <textarea
                 value={payloadText}
@@ -1414,6 +1595,225 @@ export default function QSignPage() {
                 </Link>
               ))}
             </div>
+          </div>
+        ) : null}
+
+        {/* ─── Webhooks (auth-gated) ─── */}
+        {token ? (
+          <div style={{ marginTop: 24, ...card }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 15 }}>Webhooks</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  HTTP callbacks fired on <code>sign</code> + <code>revoke</code>{" "}
+                  events for your signatures. Body is HMAC-SHA256 signed via the
+                  webhook secret; receivers verify the <code>X-QSign-Signature</code> header.
+                </div>
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "#64748b",
+                  fontFamily: "monospace",
+                }}
+              >
+                {webhooks ? `${webhooks.length}/10 used` : "—"}
+              </span>
+            </div>
+
+            {newWebhookSecret ? (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "rgba(245,158,11,0.08)",
+                  border: "1px solid rgba(245,158,11,0.4)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: "#92400e",
+                    marginBottom: 6,
+                  }}
+                >
+                  ⚠ Save this secret — it is shown ONCE
+                </div>
+                <code
+                  style={{
+                    ...mono,
+                    fontSize: 11,
+                    wordBreak: "break-all",
+                    display: "block",
+                    background: "#fff",
+                    padding: 8,
+                    borderRadius: 6,
+                    border: "1px solid rgba(245,158,11,0.3)",
+                    color: "#0f172a",
+                  }}
+                >
+                  {newWebhookSecret.secret}
+                </code>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    onClick={() =>
+                      copy(newWebhookSecret.secret, "Webhook secret")
+                    }
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Copy secret
+                  </button>
+                  <button
+                    onClick={() => setNewWebhookSecret(null)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#0f172a",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    I saved it — dismiss
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+              <input
+                value={webhookUrlInput}
+                onChange={(e) => setWebhookUrlInput(e.target.value)}
+                placeholder="https://your-app.example.com/qsign-webhook"
+                style={{ ...inputStyle, ...mono, fontSize: 12, flex: 1, minWidth: 240 }}
+              />
+              <button
+                onClick={createWebhook}
+                disabled={creatingWebhook || !webhookUrlInput.trim()}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  background:
+                    creatingWebhook || !webhookUrlInput.trim() ? "#94a3b8" : "#6366f1",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor:
+                    creatingWebhook || !webhookUrlInput.trim() ? "default" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {creatingWebhook ? "Creating…" : "Add webhook"}
+              </button>
+            </div>
+
+            {webhooks === null ? (
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading…</div>
+            ) : webhooks.length === 0 ? (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#64748b",
+                  fontStyle: "italic",
+                  padding: "16px 0",
+                }}
+              >
+                No webhooks yet. Add one above to start receiving sign / revoke events.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {webhooks.map((wh) => (
+                  <div
+                    key={wh.id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto auto",
+                      gap: 12,
+                      alignItems: "center",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                      border: "1px solid rgba(15,23,42,0.05)",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          ...mono,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#0f172a",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {wh.url}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+                        events: {wh.events.join(", ")}
+                        {wh.lastFiredAt
+                          ? ` · last fired ${new Date(wh.lastFiredAt).toISOString().slice(0, 19).replace("T", " ")}${wh.lastStatus ? ` (HTTP ${wh.lastStatus})` : ""}`
+                          : " · never fired"}
+                        {wh.lastError ? ` · err: ${wh.lastError.slice(0, 60)}` : ""}
+                      </div>
+                    </div>
+                    <span
+                      style={chip(
+                        wh.active ? "rgba(16,185,129,0.12)" : "rgba(148,163,184,0.18)",
+                        wh.active ? "#047857" : "#475569",
+                      )}
+                    >
+                      {wh.active ? "active" : "off"}
+                    </span>
+                    <button
+                      onClick={() => deleteWebhook(wh.id)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(220,38,38,0.25)",
+                        background: "#fff",
+                        color: "#b91c1c",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : null}
 

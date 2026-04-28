@@ -486,6 +486,21 @@ const obj = await a.qright.register({
           >
             {tp("api.cta.openapi")}
           </Link>
+          <Link
+            href="/pricing/calculator/embed"
+            style={{
+              padding: "10px 20px",
+              fontSize: 13,
+              fontWeight: 800,
+              borderRadius: 10,
+              background: "#fff",
+              color: "#0ea5e9",
+              textDecoration: "none",
+              border: "1px solid rgba(14,165,233,0.3)",
+            }}
+          >
+            Embed калькулятор →
+          </Link>
         </div>
       </section>
     </ProductPageShell>

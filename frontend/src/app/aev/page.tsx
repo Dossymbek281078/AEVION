@@ -70,6 +70,7 @@ export default function AEVPage() {
   const [marketMsg, setMarketMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [claimedQuests, setClaimedQuests] = useState<string[]>([]);
   const [questMsg, setQuestMsg] = useState<{ id: string; reward: number } | null>(null);
+  const notifiedQuestsRef = useRef<Set<string>>(new Set());
   const [activeTheme, setActiveTheme] = useState<ThemeId>("default");
   const [isOnline, setIsOnline] = useState<boolean>(true);
 
@@ -431,6 +432,37 @@ export default function AEVPage() {
               <span>Возраст кошелька: <strong style={{ color: "#fff" }}>{ageDays}d</strong></span>
               <span>Скорость: <strong style={{ color: "#fff" }}>{dailyRate.toFixed(3)} AEV/день</strong></span>
             </div>
+            {/* Mining velocity sparkline — balance trajectory из recent events */}
+            {wallet.recent.length >= 3 && (() => {
+              // Reverse чтобы рисовать слева-направо (старые → новые).
+              const events = [...wallet.recent].slice(0, 60).reverse();
+              const points = events.map((e) => e.balanceAfter);
+              if (points.length < 2) return null;
+              const w = 320, h = 32;
+              const min = Math.min(...points);
+              const max = Math.max(...points);
+              const range = (max - min) || 1;
+              const dx = w / (points.length - 1);
+              const path = points
+                .map((p, i) => `${i === 0 ? "M" : "L"} ${(i * dx).toFixed(2)} ${(h - ((p - min) / range) * h).toFixed(2)}`)
+                .join(" ");
+              const lastValue = points[points.length - 1];
+              const firstValue = points[0];
+              const trendUp = lastValue >= firstValue;
+              return (
+                <div style={{ marginTop: 10, display: "flex", alignItems: "center" as const, gap: 10 }}>
+                  <span style={{ fontSize: 9, color: "#94a3b8", fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" as const }}>
+                    📈 Last {events.length}
+                  </span>
+                  <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", maxWidth: 320, height: 32, display: "block" }}>
+                    <path d={path} fill="none" stroke={trendUp ? theme.accent : "#fca5a5"} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+                  </svg>
+                  <span style={{ fontSize: 10, color: trendUp ? "#86efac" : "#fca5a5", fontFamily: "ui-monospace, monospace", fontWeight: 800, whiteSpace: "nowrap" as const }}>
+                    {trendUp ? "▲" : "▼"} {((lastValue - firstValue)).toFixed(4)}
+                  </span>
+                </div>
+              );
+            })()}
             {/* Supply bar */}
             <div style={{ marginTop: 14, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" as const }}>
               <div style={{
@@ -2251,6 +2283,45 @@ function QuestsPanel({
     setTimeout(() => setQuestMsg(null), 4000);
   };
 
+  // ─── Quest claimable notifications ────────────────────────────
+  // Browser Notification когда quest transitions from in-progress → claimable.
+  // Track notified set чтобы не spam'ить (same quest = one notification).
+  const notifiedRef = useRef<Set<string>>(new Set());
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>(
+    typeof Notification !== "undefined" ? Notification.permission : "default",
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof Notification === "undefined") return;
+    if (notifPerm !== "granted") return;
+    for (const q of QUESTS) {
+      if (claimed.includes(q.id)) {
+        notifiedRef.current.delete(q.id);
+        continue;
+      }
+      const done = isQuestComplete(q, snapshot);
+      if (done && !notifiedRef.current.has(q.id)) {
+        notifiedRef.current.add(q.id);
+        try {
+          new Notification("🏆 AEV Quest готов к claim", {
+            body: `${q.title} · +${q.reward.toFixed(2)} AEV`,
+            tag: `quest-${q.id}`,
+            icon: "/aev-icon-192.svg",
+          });
+        } catch {/* notification API сбойнул — silently ignore */}
+      } else if (!done) {
+        notifiedRef.current.delete(q.id);
+      }
+    }
+  }, [snapshot, claimed, notifPerm]);
+
+  const enableNotif = async () => {
+    if (typeof Notification === "undefined") return;
+    try {
+      const p = await Notification.requestPermission();
+      setNotifPerm(p);
+    } catch {}
+  };
+
   const completedCount = QUESTS.filter((q) => isQuestComplete(q, snapshot)).length;
   const claimedCount = claimed.length;
   const pendingCount = QUESTS.filter((q) => isQuestComplete(q, snapshot) && !claimed.includes(q.id)).length;
@@ -2298,6 +2369,28 @@ function QuestsPanel({
         <span style={{ fontSize: 11, opacity: 0.85 }}>
           milestones по всем 8 движкам · награда AEV за completion
         </span>
+        {typeof Notification !== "undefined" && notifPerm === "default" && (
+          <button onClick={enableNotif}
+            aria-label="Включить browser-нотификации для quest-completion"
+            style={{
+              padding: "3px 10px", borderRadius: 5, border: "1px solid rgba(253,224,71,0.50)",
+              background: "rgba(253,224,71,0.12)", color: "#fde68a",
+              fontSize: 10, fontWeight: 800, cursor: "pointer", letterSpacing: 0.3,
+              marginLeft: "auto" as const, textTransform: "uppercase" as const,
+            }}>
+            🔔 Включить уведомления
+          </button>
+        )}
+        {notifPerm === "granted" && (
+          <span style={{
+            padding: "3px 8px", borderRadius: 5,
+            background: "rgba(134,239,172,0.15)", border: "1px solid rgba(134,239,172,0.35)",
+            color: "#86efac", fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+            marginLeft: "auto" as const, textTransform: "uppercase" as const,
+          }}>
+            🔔 notif on
+          </span>
+        )}
       </div>
 
       {/* Stats */}

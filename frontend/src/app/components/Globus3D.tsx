@@ -115,6 +115,122 @@ function geoFromLatLon(lat: number, lon: number, radius: number) {
 let borderVerticesCache: Float32Array | null = null;
 let borderVerticesBuildStarted = false;
 
+/** Кэш country-полигонов для point-in-polygon на ховере. */
+type CountryCacheEntry = {
+  name: string;
+  bbox: [number, number, number, number]; // [west, south, east, north]
+  rings: number[][][]; // массив полигонов (для MultiPolygon), каждый = массив колец, ring = [[lon,lat], ...]
+};
+let countriesCache: CountryCacheEntry[] | null = null;
+let countriesCacheBuildStarted = false;
+
+function pointInRing(lon: number, lat: number, ring: number[][]) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0],
+      yi = ring[i][1];
+    const xj = ring[j][0],
+      yj = ring[j][1];
+    if (
+      yi > lat !== yj > lat &&
+      lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function findCountryAt(lat: number, lon: number): string | null {
+  if (!countriesCache) return null;
+  for (const c of countriesCache) {
+    const [w, s, e, n] = c.bbox;
+    if (lat < s || lat > n) continue;
+    // Учёт wrap по долготе для стран на 180°.
+    if (w <= e ? lon < w || lon > e : lon < w && lon > e) continue;
+    for (const polygon of c.rings) {
+      // polygon[0] = outer ring; ignore holes для 110m carto.
+      if (pointInRing(lon, lat, polygon[0])) return c.name;
+    }
+  }
+  return null;
+}
+
+function pointToLatLon(p: THREE.Vector3): [number, number] {
+  const len = p.length() || 1;
+  const x = p.x / len;
+  const y = p.y / len;
+  const z = p.z / len;
+  const lat = Math.asin(Math.max(-1, Math.min(1, y))) * (180 / Math.PI);
+  let lon = Math.atan2(z, -x) * (180 / Math.PI) - 180;
+  while (lon < -180) lon += 360;
+  while (lon > 180) lon -= 360;
+  return [lat, lon];
+}
+
+function buildCountriesIfNeeded() {
+  if (countriesCache) return;
+  if (countriesCacheBuildStarted) return;
+  countriesCacheBuildStarted = true;
+
+  try {
+    const topoRoot = countriesData as Parameters<typeof topoFeature>[0];
+    const countriesObj = (
+      countriesData as { objects: { countries: Parameters<typeof topoFeature>[1] } }
+    ).objects.countries;
+    const geojson = topoFeature(topoRoot, countriesObj) as FeatureCollection;
+
+    const entries: CountryCacheEntry[] = [];
+    for (const f of geojson.features) {
+      const name: string =
+        (f.properties as Record<string, unknown> | null)?.name as string ??
+        (f.properties as Record<string, unknown> | null)?.NAME as string ??
+        "Unknown";
+      const geom = f.geometry;
+      if (!geom) continue;
+
+      const polys: number[][][] = [];
+      let west = 180, south = 90, east = -180, north = -90;
+
+      const processRing = (ring: number[][]) => {
+        for (const [lon, lat] of ring) {
+          if (lon < west) west = lon;
+          if (lon > east) east = lon;
+          if (lat < south) south = lat;
+          if (lat > north) north = lat;
+        }
+      };
+
+      if (geom.type === "Polygon") {
+        const poly = geom as Polygon;
+        if (!poly.coordinates?.length) continue;
+        polys.push(poly.coordinates[0]);
+        processRing(poly.coordinates[0]);
+      } else if (geom.type === "MultiPolygon") {
+        const mp = geom as MultiPolygon;
+        if (!mp.coordinates?.length) continue;
+        for (const poly of mp.coordinates) {
+          if (!poly?.length) continue;
+          polys.push(poly[0]);
+          processRing(poly[0]);
+        }
+      } else {
+        continue;
+      }
+
+      entries.push({
+        name,
+        bbox: [west, south, east, north],
+        rings: polys.map((ring) => [ring]),
+      });
+    }
+
+    countriesCache = entries;
+  } catch {
+    countriesCache = [];
+  }
+}
+
 function projectGeo(projectId: string) {
   const known: Record<
     string,
@@ -447,6 +563,10 @@ export default function Globus3D({
     marker: Marker;
   } | null>(null);
   const labelRef = useRef<typeof label>(null);
+
+  /** Country name detected by globe-surface point-in-polygon (shown as floating badge). */
+  const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+  const hoveredCountryRef = useRef<string | null>(null);
 
   useEffect(() => {
     labelRef.current = label;
@@ -1380,7 +1500,32 @@ export default function Globus3D({
         setLabel(null);
         isHovering = false;
         canvas.style.cursor = dragging ? "grabbing" : "grab";
+
+        // Globe-surface country detection — raycast the globe sphere.
+        buildCountriesIfNeeded();
+        const globeHits = raycaster.intersectObject(globe, false);
+        if (globeHits.length > 0) {
+          const pt = globeHits[0].point;
+          // Undo the earthGroup rotation (earthGroup has no rotation in this scene).
+          const [lat, lon] = pointToLatLon(pt);
+          const country = findCountryAt(lat, lon);
+          if (country !== hoveredCountryRef.current) {
+            hoveredCountryRef.current = country;
+            setHoveredCountry(country);
+          }
+        } else {
+          if (hoveredCountryRef.current !== null) {
+            hoveredCountryRef.current = null;
+            setHoveredCountry(null);
+          }
+        }
         return;
+      }
+
+      // If a marker is hovered, clear the country badge.
+      if (hoveredCountryRef.current !== null) {
+        hoveredCountryRef.current = null;
+        setHoveredCountry(null);
       }
 
       const top = intersects[0];
@@ -1506,6 +1651,10 @@ export default function Globus3D({
         setLabel(null);
         isHovering = false;
         cursorXYRef.current = null;
+        if (hoveredCountryRef.current !== null) {
+          hoveredCountryRef.current = null;
+          setHoveredCountry(null);
+        }
       }
     };
 
@@ -3035,6 +3184,44 @@ export default function Globus3D({
           >
             Clear filters
           </button>
+        </div>
+      ) : null}
+
+      {/* Country badge — shown on globe-surface hover when no marker is hovered. */}
+      {hoveredCountry && !label ? (
+        <div
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            bottom: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 6,
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(8,12,24,0.88)",
+            border: "1px solid rgba(120,160,220,0.35)",
+            borderRadius: 999,
+            padding: "5px 12px 5px 9px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.42)",
+            animation: "aev-hover-card-in 120ms ease-out",
+          }}
+        >
+          <span style={{ fontSize: 13, opacity: 0.75 }}>🌍</span>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: "#e2e8f8",
+              letterSpacing: "0.02em",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {hoveredCountry}
+          </span>
         </div>
       ) : null}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import {
@@ -71,6 +71,22 @@ export default function AEVPage() {
   const [claimedQuests, setClaimedQuests] = useState<string[]>([]);
   const [questMsg, setQuestMsg] = useState<{ id: string; reward: number } | null>(null);
   const [activeTheme, setActiveTheme] = useState<ThemeId>("default");
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+
+  // Network online/offline tracking — для visual feedback что mining
+  // полагается на background ticks, которые могут throttle'нуться offline.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsOnline(navigator.onLine);
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
@@ -362,6 +378,17 @@ export default function AEVPage() {
                   🎨 {theme.label}
                 </span>
               )}
+              <span style={{
+                padding: "3px 10px", borderRadius: 999,
+                background: isOnline ? "rgba(34,197,94,0.12)" : "rgba(252,165,165,0.18)",
+                border: isOnline ? "1px solid rgba(34,197,94,0.40)" : "1px solid rgba(252,165,165,0.50)",
+                fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                color: isOnline ? "#86efac" : "#fca5a5", textTransform: "uppercase" as const,
+                display: "inline-flex", alignItems: "center" as const, gap: 5,
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: 3, background: isOnline ? "#22c55e" : "#ef4444" }} />
+                {isOnline ? "online" : "offline"}
+              </span>
               {owned.includes("badge_founder") && (
                 <span style={{
                   padding: "3px 10px", borderRadius: 999,
@@ -746,9 +773,23 @@ export default function AEVPage() {
 
         {/* ═══ ACTIVITY FEED ═══════════════════════════════════════ */}
         <section style={{ padding: 16, borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff", marginBottom: 14 }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" as const, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" as const, marginBottom: 10, gap: 8, flexWrap: "wrap" as const }}>
             <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#0f172a" }}>📜 Активность</h2>
-            <span style={{ fontSize: 11, color: "#64748b" }}>последние {wallet.recent.length} событий</span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" as const }}>
+              <span style={{ fontSize: 11, color: "#64748b" }}>последние {wallet.recent.length} событий</span>
+              {wallet.recent.length > 0 && (
+                <button onClick={() => exportActivityCsv(wallet.recent)}
+                  aria-label="Скачать историю активности как CSV"
+                  title="Export Activity → CSV"
+                  style={{
+                    padding: "4px 10px", borderRadius: 5, border: "1px solid #cbd5e1",
+                    background: "#f8fafc", color: "#475569",
+                    fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  }}>
+                  ⬇ CSV
+                </button>
+              )}
+            </div>
           </div>
           {wallet.recent.length === 0 ? (
             <div style={{ padding: 24, textAlign: "center" as const, color: "#94a3b8", fontSize: 13 }}>
@@ -1442,7 +1483,7 @@ function MentorshipPanel({ mentorship, setMentorship, owned }: {
                 <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#fde68a", whiteSpace: "nowrap" as const }}>
                   {nextMilestone ? `→ ${nextMilestone} (${toNext})` : "max"}
                 </span>
-                <button onClick={() => removeOne(s.id)} title="Убрать студента"
+                <button onClick={() => removeOne(s.id)} title="Убрать студента" aria-label={`Убрать студента ${s.name}`}
                   style={{
                     padding: "4px 8px", borderRadius: 4,
                     border: "1px solid rgba(252,165,165,0.5)", background: "rgba(252,165,165,0.10)",
@@ -1670,7 +1711,7 @@ function NetworkPanel({ wallet, setWallet, network, setNetwork, owned }: {
                     }}>
                     ⚡
                   </button>
-                  <button onClick={() => removeOne(u.id)} title="Убрать из списка"
+                  <button onClick={() => removeOne(u.id)} title="Убрать из списка" aria-label={`Убрать ${u.name} из invitees`}
                     style={{
                       padding: "4px 8px", borderRadius: 4,
                       border: "1px solid rgba(252,165,165,0.5)", background: "rgba(252,165,165,0.10)",
@@ -1894,7 +1935,7 @@ function CurationWall({ wallet, setWallet, pins, setPins, owned }: {
                   }}>
                   👍 +{CURATION.upvoteBonusAev}
                 </button>
-                <button onClick={() => deletePin(p.id)} title="Удалить pin"
+                <button onClick={() => deletePin(p.id)} title="Удалить pin" aria-label={`Удалить pin ${p.title}`}
                   style={{
                     padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff",
                     color: "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer",
@@ -2106,7 +2147,7 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
                   }}>
                   ⚡
                 </button>
-                <button onClick={() => removeOne(q.id)} title="Удалить вопрос"
+                <button onClick={() => removeOne(q.id)} title="Удалить вопрос" aria-label="Удалить вопрос"
                   style={{
                     padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff",
                     color: "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer",
@@ -2155,7 +2196,9 @@ function QuestsPanel({
 }) {
   // Build snapshot: collect cross-module state. closedPositions читаем напрямую
   // из localStorage (QTrade владеет ключом aevion_qtrade_closed_v1).
-  const snapshot: QuestSnapshot = (() => {
+  // Memoized — пересчитывается только когда зависимости меняются (раньше это
+  // ре-вычислялось каждый render с tight-loop reduce'ами + JSON.parse).
+  const snapshot: QuestSnapshot = useMemo(() => {
     let closedWinningCount = 0;
     let closedTotalCount = 0;
     try {
@@ -2192,7 +2235,12 @@ function QuestsPanel({
       marketplaceOwned,
       modesActive,
     };
-  })();
+  }, [
+    wallet.balance, wallet.lifetimeMined, wallet.lifetimeSpent, wallet.dividendsClaimed,
+    wallet.recent, wallet.stake, wallet.streak, wallet.modes,
+    pinsCount, pinsUpvotes, studentsCount, studentsMilestones,
+    invitedCount, insightQuestions, insightHits, marketplaceOwned,
+  ]);
 
   const claim = (q: Quest) => {
     const result = claimQuest(wallet, claimed, q.id, snapshot);
@@ -2832,6 +2880,64 @@ function ActivityRow({ ev }: { ev: MiningEvent }) {
       <span style={{ fontSize: 11, color: "#94a3b8" }}>{ago}</span>
     </div>
   );
+}
+
+// CSV escape для одной ячейки (RFC 4180)
+function csvEscape(v: string): string {
+  if (v.includes(",") || v.includes('"') || v.includes("\n") || v.includes("\r")) {
+    return `"${v.replace(/"/g, '""')}"`;
+  }
+  return v;
+}
+
+// Activity export → CSV download. Used от Activity feed header.
+function exportActivityCsv(events: MiningEvent[]) {
+  const header = ["timestamp", "iso", "kind", "module_or_agent", "action_or_units", "amount_aev", "balance_after", "reason"];
+  const rows = events.map((ev) => {
+    const iso = new Date(ev.ts).toISOString();
+    let kindCol = ev.source.kind;
+    let moduleAgent = "";
+    let actionUnits = "";
+    if (ev.source.kind === "play") {
+      moduleAgent = ev.source.module;
+      actionUnits = ev.source.action;
+    } else if (ev.source.kind === "compute") {
+      moduleAgent = ev.source.agent;
+      actionUnits = String(ev.source.units);
+    } else if (ev.source.kind === "stewardship") {
+      actionUnits = `${ev.source.epochs} epochs`;
+    } else if (ev.source.kind === "trade") {
+      moduleAgent = ev.source.pair;
+      actionUnits = ev.source.side;
+    } else if (ev.source.kind === "stake") {
+      actionUnits = ev.source.verb;
+    } else if (ev.source.kind === "spend") {
+      actionUnits = ev.source.what;
+    } else if (ev.source.kind === "custom") {
+      actionUnits = ev.source.tag;
+    }
+    return [
+      String(ev.ts),
+      iso,
+      kindCol,
+      moduleAgent,
+      actionUnits,
+      ev.amount.toFixed(8),
+      ev.balanceAfter.toFixed(8),
+      ev.reason,
+    ].map(csvEscape).join(",");
+  });
+  const csv = [header.join(","), ...rows].join("\r\n");
+  try {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.download = `aev-activity-${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch {}
 }
 
 // ─── Data management — backup / restore / reset ─────────────────

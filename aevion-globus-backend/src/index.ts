@@ -1,8 +1,11 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import http from "http";
 import express from "express";
 import cors from "cors";
+
+import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
 
 import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
@@ -178,6 +181,8 @@ app.use(
   },
 );
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+attachQCoreWebSocket(server, "/api/qcoreai/ws");
+server.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
 });

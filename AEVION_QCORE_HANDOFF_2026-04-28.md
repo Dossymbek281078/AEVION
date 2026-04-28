@@ -65,7 +65,66 @@
   - FinalCard рисует partial-orange border и для capped тоже (ранее
     только для stopped).
 
-### 1.6. — feat(qcore): tool use lite — Analyst sees QRight objects
+### 1.7. — feat(qcore): V3 — WebSocket duplex + human-in-the-loop
+- **Dependency**: `ws@^8.20.0` + `@types/ws` (npm install hydrated lock).
+- **Server boot**: `src/index.ts` → `http.createServer(app)` +
+  `attachQCoreWebSocket(server, "/api/qcoreai/ws")`.
+- **`services/qcoreai/wsServer.ts`** — full duplex pipeline:
+  - Wire protocol JSON over WS:
+    - client→server: `start` (1×), `interject` (N×), `stop`, `ping`
+    - server→client: same OrchestratorEvent payloads as SSE +
+      `cost_cap_set`, `cost_cap_hit`, `tool_context`, `guidance_applied`,
+      `ack`, `pong`, `sse_end`
+  - Auth via `?token=...` query param (browsers can't set Authorization
+    on WS) — see new `verifyBearerToken()` in `lib/authJwt.ts`.
+  - 30 upgrades/min/IP rate-limit (in-memory token bucket).
+  - 64 KB max payload; guidance queue capped at 8 pending entries × 4 KB.
+  - End-of-run finalization mirrors the SSE handler exactly: `finishRun`
+    with status (done|stopped|error|capped), `renameSessionIfDefault`,
+    `touchSession`, webhook fan-out (env + per-user via
+    `getUserWebhookForRun`).
+  - `guidance_applied` events are persisted as a synthetic `role=user
+    stage=guidance` message → shows up in the trace and exports.
+
+- **`services/qcoreai/orchestrator.ts`** — interjection hooks at every
+  stage boundary:
+  - New input field `drainPendingGuidance?: () => string | null`. Polled
+    BEFORE each downstream stage (analyst→writer, writer→critic,
+    critic→revision, parallel writers, judge, debate
+    advocates+moderator). 7 injection points across all 3 strategies.
+  - Helpers: `pollGuidance(input, role, stage)` + `spliceGuidance(base,
+    text)` keep each stage 5 lines lighter.
+  - New event `guidance_applied { nextRole, nextStage, text }` yielded
+    when guidance lands.
+  - Drain semantics: each call returns latest queued guidance and
+    clears the queue, so guidance never re-applies.
+
+- **Frontend** (`/qcoreai/multi`):
+  - State: `useWS` toggle, `wsRef`, `injectOpen`, `injectText`,
+    `pendingGuidance`. RunState extended with `transport: "sse"|"ws"`
+    and `guidanceLog[]`.
+  - `applyStreamEvent(payload, ctx)` factored out of SSE switch — used
+    by BOTH SSE and WS paths so all rendering stays identical.
+  - WS path opens connection (with `?token=` if JWT in localStorage),
+    sends `start`, listens, awaits close. Stop sends `{type:"stop"}`
+    over the wire AND calls `ws.close()`.
+  - `interject(text)` sends `{type:"interject", text}`; UI flags
+    `pendingGuidance` count via `ack` events; clears on
+    `guidance_applied`.
+  - Config bar adds **"Mid-run guidance (WS)"** checkbox (purple
+    accent).
+  - Stop button replaced by Stop-stack while WS run is active: Stop on
+    top, **`💬 Inject (N queued)`** below. Click → inline form below
+    the textarea (Enter to send, Esc to close).
+
+- **Tests** — `tests/orchestratorGuidance.test.ts` (5 tests with
+  fake-streamed providers): sequential drain-once splices into Writer
+  prompt only; no-guidance leaves all prompts clean; empty-string drain
+  treated as no-op; parallel guidance reaches BOTH writer prompts;
+  debate guidance flows once into Pro+Con and a fresh queue entry
+  reaches the Moderator.
+
+Suite: 82 → **87 tests** in 11 files.
 - **Backend** `services/qcoreai/qrightContext.ts` — `fetchQRightContext(userId, email)`
   читает `QRightObject` напрямую через shared pool (read-only, не
   трогаем qright роутер — per CLAUDE.md §1 spirit). Возвращает
@@ -184,7 +243,7 @@
 | Backend `npm run build`                        | ✅ |
 | Frontend `next build --webpack`                | ✅ 26 routes |
 | `npm run verify` из корня worktree             | ✅ |
-| Backend `npm test` (vitest)                    | ✅ 82/82 passed (39 new QCore tests) |
+| Backend `npm test` (vitest)                    | ✅ 87/87 passed (44 new QCore tests) |
 | `/health` отдаёт `costCapDefaultUsd`           | ✅ (`null` без env, число с env) |
 | `scripts/qcore-smoke.sh` against local backend | ✅ (см. §6) |
 
@@ -209,9 +268,7 @@ PG для тестов. ~1 секунда runtime.
 
 ### Большое — следующая итерация
 
-- **WebSocket duplex / human-in-the-loop** — interrupt Writer мид-стримом,
-  inject guidance. Требует ws-сервер + изменение orchestrator на pull
-  guidance signals между stages, включая stop-and-rethink семантику.
+(пусто — V3 WebSocket duplex / human-in-the-loop тоже шипнут, см. §1.7)
 
 ### Тех-долг — cosmetic
 

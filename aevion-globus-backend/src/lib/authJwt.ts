@@ -15,6 +15,15 @@ export function getJwtSecret(): string {
 export function verifyBearerOptional(req: Request): JwtPayload | null {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  return verifyBearerToken(token);
+}
+
+/**
+ * Verify a raw bearer token (no Express Request context). Used by the WS
+ * upgrade path where the token arrives via ?token= query or Sec-WebSocket-
+ * Protocol — both unavailable as standard Authorization headers in browsers.
+ */
+export function verifyBearerToken(token: string | null | undefined): JwtPayload | null {
   if (!token) return null;
   try {
     return jwt.verify(token, getJwtSecret()) as JwtPayload;

@@ -72,6 +72,8 @@ type RunState = {
   costCapUsd?: number;
   tags?: string[];
   toolContext?: { source: string; chars: number };
+  guidanceLog?: Array<{ nextRole: string; nextStage: string; text: string }>;
+  transport?: "sse" | "ws";
   startedAt: number;
   totalDurationMs?: number;
   totalCostUsd?: number;
@@ -145,6 +147,9 @@ type SSEPayload =
   | { type: "cost_cap_set"; costCapUsd: number }
   | { type: "cost_cap_hit"; costCapUsd: number; totalCostUsd: number; message: string }
   | { type: "tool_context"; source: "qright"; chars: number }
+  | { type: "guidance_applied"; nextRole: AgentRole; nextStage: Stage; text: string }
+  | { type: "ack"; for: string; queued?: number }
+  | { type: "pong" }
   | { type: "sse_end" };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -330,6 +335,13 @@ export default function QCoreMultiAgentPage() {
   });
   const [maxRevisions, setMaxRevisions] = useState(1);
   const [useQRightContext, setUseQRightContext] = useState(false);
+  // Human-in-the-loop transport. When true, runs go over WebSocket so the
+  // user can inject guidance between stages via the "Inject" button.
+  const [useWS, setUseWS] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [injectOpen, setInjectOpen] = useState(false);
+  const [injectText, setInjectText] = useState("");
+  const [pendingGuidance, setPendingGuidance] = useState(0);
   const [configOpen, setConfigOpen] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [presets, setPresets] = useState<AgentPreset[]>([]);
@@ -684,6 +696,194 @@ export default function QCoreMultiAgentPage() {
     }
   }, []);
 
+  /**
+   * Shared event dispatcher — used by BOTH the SSE path and the WS path.
+   * Mutates ctx.realRunId / ctx.realSessionId in-place so callers see the
+   * latest IDs after the "session" event.
+   */
+  const applyStreamEvent = useCallback(
+    (payload: SSEPayload, ctx: { realRunId: string; realSessionId: string; tempRunId: string }) => {
+      switch (payload.type) {
+        case "session":
+          ctx.realRunId = payload.runId;
+          ctx.realSessionId = payload.sessionId;
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.tempRunId ? { ...r, id: payload.runId, sessionId: payload.sessionId } : r
+            )
+          );
+          if (!activeSessionId) setActiveSessionId(payload.sessionId);
+          break;
+        case "agent_start":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId
+                ? {
+                    ...r,
+                    turns: [
+                      ...r.turns,
+                      {
+                        role: payload.role,
+                        stage: payload.stage,
+                        instance: payload.instance,
+                        provider: payload.provider,
+                        model: payload.model,
+                        content: "",
+                        status: "streaming",
+                        startedAt: Date.now(),
+                      },
+                    ],
+                  }
+                : r
+            )
+          );
+          break;
+        case "chunk":
+          setRuns((prev) =>
+            prev.map((r) => {
+              if (r.id !== ctx.realRunId) return r;
+              const turns = r.turns.slice();
+              for (let i = turns.length - 1; i >= 0; i--) {
+                const t = turns[i];
+                if (
+                  t.status === "streaming" &&
+                  t.role === payload.role &&
+                  t.stage === payload.stage &&
+                  (t.instance || undefined) === (payload.instance || undefined)
+                ) {
+                  turns[i] = { ...t, content: t.content + payload.text };
+                  break;
+                }
+              }
+              return { ...r, turns };
+            })
+          );
+          break;
+        case "agent_end":
+          setRuns((prev) =>
+            prev.map((r) => {
+              if (r.id !== ctx.realRunId) return r;
+              const turns = r.turns.slice();
+              for (let i = turns.length - 1; i >= 0; i--) {
+                const t = turns[i];
+                if (
+                  t.status === "streaming" &&
+                  t.role === payload.role &&
+                  t.stage === payload.stage &&
+                  (t.instance || undefined) === (payload.instance || undefined)
+                ) {
+                  turns[i] = {
+                    ...t,
+                    content: payload.content || t.content,
+                    status: "done",
+                    durationMs: payload.durationMs,
+                    tokensIn: payload.tokensIn,
+                    tokensOut: payload.tokensOut,
+                    costUsd: payload.costUsd,
+                  };
+                  break;
+                }
+              }
+              return { ...r, turns };
+            })
+          );
+          break;
+        case "verdict":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId
+                ? { ...r, verdict: { approved: payload.approved, feedback: payload.feedback } }
+                : r
+            )
+          );
+          break;
+        case "final":
+          setRuns((prev) =>
+            prev.map((r) => (r.id === ctx.realRunId ? { ...r, finalContent: payload.content } : r))
+          );
+          break;
+        case "error":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId
+                ? { ...r, error: (r.error ? r.error + "\n" : "") + payload.message }
+                : r
+            )
+          );
+          break;
+        case "done":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId
+                ? {
+                    ...r,
+                    status: r.status === "capped" ? "capped" : r.error ? "error" : "done",
+                    totalDurationMs: payload.totalDurationMs,
+                    totalCostUsd: payload.totalCostUsd,
+                  }
+                : r
+            )
+          );
+          break;
+        case "cost_cap_set":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId ? { ...r, costCapUsd: payload.costCapUsd } : r
+            )
+          );
+          break;
+        case "cost_cap_hit":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId
+                ? {
+                    ...r,
+                    status: "capped",
+                    costCapUsd: payload.costCapUsd,
+                    error: payload.message || `cost cap reached: $${payload.totalCostUsd}`,
+                  }
+                : r
+            )
+          );
+          break;
+        case "tool_context":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId
+                ? { ...r, toolContext: { source: payload.source, chars: payload.chars } }
+                : r
+            )
+          );
+          break;
+        case "guidance_applied":
+          setRuns((prev) =>
+            prev.map((r) =>
+              r.id === ctx.realRunId
+                ? {
+                    ...r,
+                    guidanceLog: [
+                      ...(r.guidanceLog || []),
+                      { nextRole: payload.nextRole, nextStage: payload.nextStage, text: payload.text },
+                    ],
+                  }
+                : r
+            )
+          );
+          // Clear our local "queued" indicator: server confirmed it landed.
+          setPendingGuidance(0);
+          break;
+        case "ack":
+          // server confirms an interject was queued; reflect optimistic UI.
+          if (typeof payload.queued === "number") setPendingGuidance(payload.queued);
+          break;
+        case "pong":
+        case "sse_end":
+          break;
+      }
+    },
+    [activeSessionId]
+  );
+
   /* ── Send a new prompt (starts a run, streams SSE) ── */
   const send = useCallback(async (text?: string, opts?: { strategy?: Strategy; overrides?: Record<ConfigRoleId, { provider: string; model: string }>; maxRevisions?: number }) => {
     const msg = (text || input).trim();
@@ -714,15 +914,93 @@ export default function QCoreMultiAgentPage() {
         status: "running",
         startedAt: Date.now(),
         strategy: useStrategy,
+        transport: useWS ? "ws" : "sse",
       },
     ]);
 
     const controller = new AbortController();
     abortRef.current = controller;
 
+    const capParsed = parseFloat(costCapInput);
+    const useCostCap = Number.isFinite(capParsed) && capParsed > 0 ? capParsed : undefined;
+
+    /* ── WS path: open a duplex connection and let the user inject guidance ── */
+    if (useWS) {
+      try {
+        const ctx = { realRunId: tempRunId, realSessionId: activeSessionId || "", tempRunId };
+        const wsBase = getBackendOrigin().replace(/^http/, "ws");
+        const tokenQuery = (() => {
+          try {
+            const t = (typeof window !== "undefined" && localStorage.getItem("aevion_jwt")) || "";
+            return t ? `?token=${encodeURIComponent(t)}` : "";
+          } catch { return ""; }
+        })();
+        const ws = new WebSocket(`${wsBase}/api/qcoreai/ws${tokenQuery}`);
+        wsRef.current = ws;
+        setPendingGuidance(0);
+
+        await new Promise<void>((resolve, reject) => {
+          let opened = false;
+          ws.onopen = () => {
+            opened = true;
+            ws.send(JSON.stringify({
+              type: "start",
+              input: msg,
+              sessionId: activeSessionId,
+              strategy: useStrategy,
+              maxRevisions: useMaxRevisions,
+              overrides: {
+                analyst: useOverrides.analyst,
+                writer: useOverrides.writer,
+                writerB: useOverrides.writerB,
+                critic: useOverrides.critic,
+              },
+              ...(useCostCap !== undefined ? { costCapUsd: useCostCap } : {}),
+              ...(useQRightContext ? { useQRightContext: true } : {}),
+            }));
+          };
+          ws.onmessage = (ev) => {
+            try {
+              const payload = JSON.parse(ev.data) as SSEPayload;
+              applyStreamEvent(payload, ctx);
+            } catch { /* skip malformed */ }
+          };
+          ws.onerror = () => {
+            if (!opened) reject(new Error("WebSocket connection failed"));
+          };
+          ws.onclose = () => {
+            if (wsRef.current === ws) wsRef.current = null;
+            resolve();
+          };
+          controller.signal.addEventListener("abort", () => {
+            try { ws.send(JSON.stringify({ type: "stop" })); } catch { /* noop */ }
+            try { ws.close(1000, "client_abort"); } catch { /* noop */ }
+            resolve();
+          });
+        });
+
+        try {
+          const sessRes = await fetch(apiUrl("/api/qcoreai/sessions"), { headers: bearerHeader() });
+          const sessData = await sessRes.json();
+          if (Array.isArray(sessData?.items)) setSessions(sessData.items);
+        } catch { /* noop */ }
+      } catch (e: any) {
+        const isAbort = e?.name === "AbortError";
+        const msgText = isAbort ? "Stopped by user." : e?.message || "WebSocket failed";
+        if (!isAbort) setGlobalError(msgText);
+        setRuns((prev) =>
+          prev.map((r) => (r.status === "running" ? { ...r, status: isAbort ? "stopped" : "error", error: isAbort ? undefined : msgText } : r))
+        );
+      } finally {
+        abortRef.current = null;
+        setBusy(false);
+        setPendingGuidance(0);
+      }
+      return;
+    }
+
+    /* ── SSE path (default) ── */
     try {
-      const capParsed = parseFloat(costCapInput);
-      const useCostCap = Number.isFinite(capParsed) && capParsed > 0 ? capParsed : undefined;
       const body = {
         input: msg,
         sessionId: activeSessionId,
@@ -757,151 +1035,9 @@ export default function QCoreMultiAgentPage() {
         throw new Error(err?.error || `HTTP ${res.status}`);
       }
 
-      let realRunId = tempRunId;
-      let realSessionId = activeSessionId || "";
-
+      const ctx = { realRunId: tempRunId, realSessionId: activeSessionId || "", tempRunId };
       for await (const payload of readSSE<SSEPayload>(res.body)) {
-        switch (payload.type) {
-          case "session":
-            realRunId = payload.runId;
-            realSessionId = payload.sessionId;
-            setRuns((prev) => prev.map((r) => (r.id === tempRunId ? { ...r, id: realRunId, sessionId: realSessionId } : r)));
-            if (!activeSessionId) setActiveSessionId(realSessionId);
-            break;
-          case "agent_start":
-            setRuns((prev) =>
-              prev.map((r) =>
-                r.id === realRunId
-                  ? {
-                      ...r,
-                      turns: [
-                        ...r.turns,
-                        {
-                          role: payload.role,
-                          stage: payload.stage,
-                          instance: payload.instance,
-                          provider: payload.provider,
-                          model: payload.model,
-                          content: "",
-                          status: "streaming",
-                          startedAt: Date.now(),
-                        },
-                      ],
-                    }
-                  : r
-              )
-            );
-            break;
-          case "chunk":
-            setRuns((prev) =>
-              prev.map((r) => {
-                if (r.id !== realRunId) return r;
-                const turns = r.turns.slice();
-                for (let i = turns.length - 1; i >= 0; i--) {
-                  const t = turns[i];
-                  if (
-                    t.status === "streaming" &&
-                    t.role === payload.role &&
-                    t.stage === payload.stage &&
-                    (t.instance || undefined) === (payload.instance || undefined)
-                  ) {
-                    turns[i] = { ...t, content: t.content + payload.text };
-                    break;
-                  }
-                }
-                return { ...r, turns };
-              })
-            );
-            break;
-          case "agent_end":
-            setRuns((prev) =>
-              prev.map((r) => {
-                if (r.id !== realRunId) return r;
-                const turns = r.turns.slice();
-                for (let i = turns.length - 1; i >= 0; i--) {
-                  const t = turns[i];
-                  if (
-                    t.status === "streaming" &&
-                    t.role === payload.role &&
-                    t.stage === payload.stage &&
-                    (t.instance || undefined) === (payload.instance || undefined)
-                  ) {
-                    turns[i] = {
-                      ...t,
-                      content: payload.content || t.content,
-                      status: "done",
-                      durationMs: payload.durationMs,
-                      tokensIn: payload.tokensIn,
-                      tokensOut: payload.tokensOut,
-                      costUsd: payload.costUsd,
-                    };
-                    break;
-                  }
-                }
-                return { ...r, turns };
-              })
-            );
-            break;
-          case "verdict":
-            setRuns((prev) =>
-              prev.map((r) =>
-                r.id === realRunId ? { ...r, verdict: { approved: payload.approved, feedback: payload.feedback } } : r
-              )
-            );
-            break;
-          case "final":
-            setRuns((prev) =>
-              prev.map((r) => (r.id === realRunId ? { ...r, finalContent: payload.content } : r))
-            );
-            break;
-          case "error":
-            setRuns((prev) =>
-              prev.map((r) => (r.id === realRunId ? { ...r, error: (r.error ? r.error + "\n" : "") + payload.message } : r))
-            );
-            break;
-          case "done":
-            setRuns((prev) =>
-              prev.map((r) => (r.id === realRunId ? {
-                ...r,
-                status: r.status === "capped" ? "capped" : r.error ? "error" : "done",
-                totalDurationMs: payload.totalDurationMs,
-                totalCostUsd: payload.totalCostUsd,
-              } : r))
-            );
-            break;
-          case "cost_cap_set":
-            setRuns((prev) =>
-              prev.map((r) => (r.id === realRunId ? { ...r, costCapUsd: payload.costCapUsd } : r))
-            );
-            break;
-          case "cost_cap_hit":
-            setRuns((prev) =>
-              prev.map((r) =>
-                r.id === realRunId
-                  ? {
-                      ...r,
-                      status: "capped",
-                      costCapUsd: payload.costCapUsd,
-                      error: payload.message || `cost cap reached: $${payload.totalCostUsd}`,
-                    }
-                  : r
-              )
-            );
-            break;
-          case "tool_context":
-            // Informational only — Analyst received an extra context block.
-            // The UI displays a chip below the user message via run.toolContext.
-            setRuns((prev) =>
-              prev.map((r) =>
-                r.id === realRunId
-                  ? { ...r, toolContext: { source: payload.source, chars: payload.chars } }
-                  : r
-              )
-            );
-            break;
-          case "sse_end":
-            break;
-        }
+        applyStreamEvent(payload, ctx);
       }
 
       try {
@@ -922,7 +1058,20 @@ export default function QCoreMultiAgentPage() {
       abortRef.current = null;
       setBusy(false);
     }
-  }, [input, busy, activeSessionId, maxRevisions, overrides, strategy, costCapInput, useQRightContext]);
+  }, [input, busy, activeSessionId, maxRevisions, overrides, strategy, costCapInput, useQRightContext, useWS, applyStreamEvent]);
+
+  /** Send mid-run guidance over WebSocket. No-op when not in a WS run. */
+  const interject = useCallback((text: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== ws.OPEN) return false;
+    try {
+      ws.send(JSON.stringify({ type: "interject", text }));
+      setPendingGuidance((n) => n + 1);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const stop = useCallback(() => {
     // Signal compare-all loop to stop firing more strategies.
@@ -1750,6 +1899,29 @@ export default function QCoreMultiAgentPage() {
                   Analyst sees a list of your QRight objects (read-only).
                 </span>
               </div>
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                  title="Run over WebSocket so you can inject mid-run guidance between stages. Slightly higher latency at connection setup; identical pipeline otherwise."
+                >
+                  <input
+                    type="checkbox"
+                    checked={useWS}
+                    onChange={(e) => setUseWS(e.target.checked)}
+                    style={{ accentColor: "#7c3aed", cursor: "pointer" }}
+                  />
+                  Mid-run guidance (WS)
+                </label>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                  Adds an Inject button next to Stop while the run streams.
+                </span>
+              </div>
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 700 }}>Cost cap (USD):</span>
                 <input
@@ -2169,17 +2341,36 @@ export default function QCoreMultiAgentPage() {
                   }}
                 />
                 {busy ? (
-                  <button
-                    type="button"
-                    onClick={stop}
-                    style={{
-                      padding: "12px 20px", borderRadius: 12, border: "none",
-                      background: "#dc2626", color: "#fff",
-                      fontWeight: 800, fontSize: 14, cursor: "pointer", alignSelf: "stretch",
-                    }}
-                  >
-                    Stop
-                  </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, alignSelf: "stretch" }}>
+                    <button
+                      type="button"
+                      onClick={stop}
+                      style={{
+                        padding: "12px 20px", borderRadius: 12, border: "none",
+                        background: "#dc2626", color: "#fff",
+                        fontWeight: 800, fontSize: 14, cursor: "pointer", flex: 1,
+                      }}
+                    >
+                      Stop
+                    </button>
+                    {wsRef.current && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInjectOpen((v) => !v);
+                          setInjectText("");
+                        }}
+                        title="Send mid-run guidance — applied between stages"
+                        style={{
+                          padding: "8px 14px", borderRadius: 10, border: "1px solid #0d9488",
+                          background: injectOpen ? "rgba(13,148,136,0.12)" : "#fff",
+                          color: "#0f766e", fontWeight: 800, fontSize: 12, cursor: "pointer",
+                        }}
+                      >
+                        💬 Inject{pendingGuidance > 0 ? ` (${pendingGuidance} queued)` : ""}
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -2199,6 +2390,77 @@ export default function QCoreMultiAgentPage() {
                   </button>
                 )}
               </div>
+              {injectOpen && busy && wsRef.current && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 10,
+                    background: "rgba(13,148,136,0.06)",
+                    border: "1px solid rgba(13,148,136,0.3)",
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "stretch",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <input
+                    autoFocus
+                    type="text"
+                    value={injectText}
+                    onChange={(e) => setInjectText(e.target.value)}
+                    placeholder="Mid-run guidance (applied at the next stage boundary)…"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && injectText.trim()) {
+                        if (interject(injectText.trim())) {
+                          setInjectText("");
+                          setInjectOpen(false);
+                        }
+                      }
+                      if (e.key === "Escape") {
+                        setInjectOpen(false);
+                        setInjectText("");
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #cbd5e1",
+                      background: "#fff",
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      outline: "none",
+                      minWidth: 200,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (injectText.trim() && interject(injectText.trim())) {
+                        setInjectText("");
+                        setInjectOpen(false);
+                      }
+                    }}
+                    disabled={!injectText.trim()}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: injectText.trim() ? "#0d9488" : "#94a3b8",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: injectText.trim() ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    Send
+                  </button>
+                  <span style={{ fontSize: 10, color: "#64748b", alignSelf: "center" }}>
+                    Enter to send · Esc to close
+                  </span>
+                </div>
+              )}
             </div>
           </section>
         </div>

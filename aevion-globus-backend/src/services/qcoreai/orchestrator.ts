@@ -52,6 +52,14 @@ export type OrchestratorInput = {
   maxRevisions?: number;
   /** Optional prior user/assistant turns for follow-up context. */
   history?: ChatMessage[];
+  /**
+   * Human-in-the-loop hook. Polled by the orchestrator BETWEEN stages
+   * (analyst→writer, writer→critic, critic→revision, etc.). Each call
+   * should drain and return the latest pending guidance text, or null.
+   * The text is appended to the next agent's user message as
+   * "User guidance: <text>".
+   */
+  drainPendingGuidance?: () => string | null;
 };
 
 export type OrchestratorEvent =
@@ -95,11 +103,36 @@ export type OrchestratorEvent =
   | { type: "verdict"; approved: boolean; feedback: string }
   | { type: "final"; content: string }
   | { type: "error"; message: string; role?: AgentRole }
+  | { type: "guidance_applied"; nextStage: AgentStage; nextRole: AgentRole; text: string }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number };
 
 /* ═══════════════════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Drain the human-in-the-loop guidance queue right before the next stage
+ * starts. Returns both the event to yield (or null) and the text to splice
+ * into the next agent's user prompt (or null).
+ */
+function pollGuidance(
+  input: OrchestratorInput,
+  nextRole: AgentRole,
+  nextStage: AgentStage
+): { event: OrchestratorEvent | null; text: string | null } {
+  if (!input.drainPendingGuidance) return { event: null, text: null };
+  const text = input.drainPendingGuidance();
+  if (!text) return { event: null, text: null };
+  return {
+    event: { type: "guidance_applied", nextRole, nextStage, text },
+    text,
+  };
+}
+
+function spliceGuidance(base: string, text: string | null): string {
+  if (!text) return base;
+  return `${base}\n\n## User guidance (mid-run, applies NOW)\n\n${text}`;
+}
 
 /** Yield chunks for a single agent call and return the full accumulated text. */
 async function* streamAgent(
@@ -239,8 +272,13 @@ async function* runSequential(
     return;
   }
 
-  /* Stage 2: Writer draft */
-  const writerDraftUser = buildWriterPrompt(input.userInput, analystContent);
+  /* Stage 2: Writer draft (with optional human-in-the-loop guidance) */
+  const gWriter = pollGuidance(input, "writer", "draft");
+  if (gWriter.event) yield gWriter.event;
+  const writerDraftUser = spliceGuidance(
+    buildWriterPrompt(input.userInput, analystContent),
+    gWriter.text
+  );
   const writerMessages: ChatMessage[] = [
     { role: "system", content: writer.systemPrompt },
     ...history,
@@ -254,8 +292,13 @@ async function* runSequential(
     return;
   }
 
-  /* Stage 3: Critic */
-  const criticUser = buildCriticPrompt(input.userInput, analystContent, writerDraft);
+  /* Stage 3: Critic (with optional guidance) */
+  const gCritic = pollGuidance(input, "critic", "draft");
+  if (gCritic.event) yield gCritic.event;
+  const criticUser = spliceGuidance(
+    buildCriticPrompt(input.userInput, analystContent, writerDraft),
+    gCritic.text
+  );
   const criticMessages: ChatMessage[] = [
     { role: "system", content: critic.systemPrompt },
     { role: "user", content: criticUser },
@@ -275,9 +318,14 @@ async function* runSequential(
 
   let finalContent = writerDraft;
 
-  /* Stage 4: Writer revision (optional) */
+  /* Stage 4: Writer revision (optional, with guidance) */
   if (!verdict.approved && maxRevisions > 0) {
-    const reviseUser = buildRevisePrompt(input.userInput, writerDraft, verdict.feedback);
+    const gRevise = pollGuidance(input, "writer", "revision");
+    if (gRevise.event) yield gRevise.event;
+    const reviseUser = spliceGuidance(
+      buildRevisePrompt(input.userInput, writerDraft, verdict.feedback),
+      gRevise.text
+    );
     const reviseMessages: ChatMessage[] = [
       { role: "system", content: writer.systemPrompt },
       ...history,
@@ -335,8 +383,13 @@ async function* runParallel(
     return;
   }
 
-  /* Stage 2: Two writers in parallel */
-  const writerUserPrompt = buildWriterPrompt(input.userInput, analystContent);
+  /* Stage 2: Two writers in parallel (shared guidance) */
+  const gParWriters = pollGuidance(input, "writer", "draft");
+  if (gParWriters.event) yield gParWriters.event;
+  const writerUserPrompt = spliceGuidance(
+    buildWriterPrompt(input.userInput, analystContent),
+    gParWriters.text
+  );
   const writerAMessages: ChatMessage[] = [
     { role: "system", content: writerA.systemPrompt },
     ...history,
@@ -362,8 +415,13 @@ async function* runParallel(
     return;
   }
 
-  /* Stage 3: Judge */
-  const judgeUser = buildJudgePrompt(input.userInput, analystContent, draftA, draftB);
+  /* Stage 3: Judge (with guidance) */
+  const gJudge = pollGuidance(input, "critic", "judge");
+  if (gJudge.event) yield gJudge.event;
+  const judgeUser = spliceGuidance(
+    buildJudgePrompt(input.userInput, analystContent, draftA, draftB),
+    gJudge.text
+  );
   const judgeMessages: ChatMessage[] = [
     { role: "system", content: judge.systemPrompt },
     { role: "user", content: judgeUser },
@@ -420,8 +478,13 @@ async function* runDebate(
     return;
   }
 
-  /* Stage 2: Pro + Con in parallel */
-  const debateUser = buildDebatePrompt(input.userInput, analystContent);
+  /* Stage 2: Pro + Con in parallel (shared guidance) */
+  const gDebateAdvocates = pollGuidance(input, "writer", "draft");
+  if (gDebateAdvocates.event) yield gDebateAdvocates.event;
+  const debateUser = spliceGuidance(
+    buildDebatePrompt(input.userInput, analystContent),
+    gDebateAdvocates.text
+  );
   const proMessages: ChatMessage[] = [
     { role: "system", content: pro.systemPrompt },
     ...history,
@@ -447,8 +510,13 @@ async function* runDebate(
     return;
   }
 
-  /* Stage 3: Moderator synthesizes */
-  const modUser = buildModeratorPrompt(input.userInput, analystContent, proArg, conArg);
+  /* Stage 3: Moderator synthesizes (with guidance) */
+  const gModerator = pollGuidance(input, "critic", "judge");
+  if (gModerator.event) yield gModerator.event;
+  const modUser = spliceGuidance(
+    buildModeratorPrompt(input.userInput, analystContent, proArg, conArg),
+    gModerator.text
+  );
   const modMessages: ChatMessage[] = [
     { role: "system", content: moderator.systemPrompt },
     { role: "user", content: modUser },

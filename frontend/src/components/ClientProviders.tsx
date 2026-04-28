@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { WebVitals } from "@/components/WebVitals";
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -16,6 +17,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         </ToastProvider>
         <SiteFooter />
         <ServiceWorkerRegister />
+        <WebVitals />
       </AutoTranslate>
     </I18nProvider>
   );

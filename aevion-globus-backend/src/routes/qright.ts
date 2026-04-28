@@ -3,10 +3,17 @@ import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
+import { rateLimit } from "../lib/rateLimit";
 
 export const qrightRouter = Router();
 
 const pool = getPool();
+
+const objectsRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "qright:objects",
+});
 
 let ensuredTable = false;
 async function ensureQRightTable() {
@@ -39,7 +46,7 @@ async function ensureQRightTable() {
 }
 
 // 🔹 Получить все объекты (или ?mine=1 при Bearer — по ownerUserId, с fallback на старые строки по email)
-qrightRouter.get("/objects", async (req, res) => {
+qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
   try {
     await ensureQRightTable();
 
@@ -79,6 +86,45 @@ qrightRouter.get("/objects", async (req, res) => {
       total: result.rowCount,
       scope: "all",
     });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Получить один объект по id (с ETag/304 для эффективного embed-поллинга)
+qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const { id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM "QRightObject" WHERE "id" = $1 LIMIT 1',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const row = result.rows[0];
+    const etag = `W/"qright-${id}-${
+      row.createdAt instanceof Date ? row.createdAt.getTime() : row.createdAt
+    }"`;
+
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.status(304).end();
+    }
+
+    res.setHeader("ETag", etag);
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.json(row);
   } catch (err: any) {
     res.status(500).json({
       error: "DB error",

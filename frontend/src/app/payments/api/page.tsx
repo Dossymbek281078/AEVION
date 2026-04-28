@@ -133,9 +133,9 @@ const LANGS: { id: Lang; label: string }[] = [
   { id: "python", label: "Python" },
 ];
 
-function snippet(lang: Lang, e: Endpoint, apiKey: string): string {
+function snippet(lang: Lang, e: Endpoint, apiKey: string, base: string): string {
   const path = e.path;
-  const url = `https://api.aevion.app${path.replace(/:id/g, "pl_q9w2k47abc")}`;
+  const url = `${base}${path.replace(/:id/g, "pl_q9w2k47abc")}`;
   const k = apiKey || "YOUR_AEVION_API_KEY";
   if (lang === "curl") {
     if (e.method === "GET") {
@@ -217,9 +217,16 @@ export default function ApiPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("Production");
   const [newKeyLive, setNewKeyLive] = useState(false);
+  const [base, setBase] = useState<string>("https://api.aevion.app/v1");
+  const [tryResult, setTryResult] = useState<{
+    code: number;
+    body: string;
+  } | null>(null);
+  const [tryLoading, setTryLoading] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    setBase(`${window.location.origin}/api/payments/v1`);
     try {
       const raw = window.localStorage.getItem(KEYS_STORAGE);
       if (raw) setKeys(JSON.parse(raw));
@@ -471,7 +478,56 @@ export default function ApiPage() {
               <span style={{ flex: 1 }} />
               <button
                 type="button"
-                onClick={() => copy(snippet(tab, e, usableKey), `req_${activeEndpoint}_${tab}`)}
+                onClick={async () => {
+                  setTryLoading(true);
+                  setTryResult(null);
+                  try {
+                    const realPath = e.path.replace(/:id/g, "pl_q9w2k47abc");
+                    const url = `${base}${realPath}`;
+                    const init: RequestInit = {
+                      method: e.method,
+                      headers: {
+                        Authorization: `Bearer ${usableKey || "sk_test_demo000000000000000000"}`,
+                        "Content-Type": "application/json",
+                      },
+                    };
+                    if (e.method !== "GET" && e.body) init.body = e.body;
+                    const r = await fetch(url, init);
+                    const text = await r.text();
+                    let pretty = text;
+                    try {
+                      pretty = JSON.stringify(JSON.parse(text), null, 2);
+                    } catch {
+                      // not JSON, leave as-is
+                    }
+                    setTryResult({ code: r.status, body: pretty });
+                  } catch (err) {
+                    setTryResult({
+                      code: 0,
+                      body: err instanceof Error ? err.message : String(err),
+                    });
+                  } finally {
+                    setTryLoading(false);
+                  }
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 8,
+                  background: tryLoading ? "#94a3b8" : "#059669",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  border: "none",
+                  cursor: tryLoading ? "wait" : "pointer",
+                }}
+              >
+                {tryLoading ? "Calling…" : "▶ Try it"}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  copy(snippet(tab, e, usableKey, base), `req_${activeEndpoint}_${tab}`)
+                }
                 style={{
                   padding: "6px 14px",
                   borderRadius: 8,
@@ -487,7 +543,7 @@ export default function ApiPage() {
               </button>
             </div>
 
-            <pre style={codeStyle}>{snippet(tab, e, usableKey)}</pre>
+            <pre style={codeStyle}>{snippet(tab, e, usableKey, base)}</pre>
 
             <div
               style={{
@@ -498,9 +554,29 @@ export default function ApiPage() {
                 color: "#475569",
               }}
             >
-              Response · 200 OK
+              Response · sample
             </div>
             <pre style={codeStyle}>{e.resp}</pre>
+
+            {tryResult && (
+              <>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color:
+                      tryResult.code >= 200 && tryResult.code < 300
+                        ? "#047857"
+                        : "#b91c1c",
+                  }}
+                >
+                  Live response · HTTP {tryResult.code || "ERR"}
+                </div>
+                <pre style={codeStyle}>{tryResult.body}</pre>
+              </>
+            )}
           </article>
 
           <article
@@ -697,11 +773,15 @@ export default function ApiPage() {
               gap: 12,
             }}
           >
-            <FactCard label="Base URL" value="api.aevion.app/v1" />
+            <FactCard label="Base URL" value={base.replace(/^https?:\/\//, "")} />
             <FactCard label="Auth" value="Bearer token" />
             <FactCard label="Rate limit" value="100 req/sec" />
             <FactCard label="Idempotency" value="Idempotency-Key header" />
-            <FactCard label="OpenAPI 3.1" value="api.aevion.app/openapi.json" />
+            <FactCard
+              label="OpenAPI 3.1"
+              value="/api/openapi.json"
+              href="/api/openapi.json"
+            />
             <FactCard label="SDKs" value="Node 22+ · Python 3.11+" />
           </div>
         </section>
@@ -723,16 +803,17 @@ const codeStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.06)",
 };
 
-function FactCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        padding: "12px 14px",
-        borderRadius: 12,
-        background: "rgba(79,70,229,0.05)",
-        border: "1px solid rgba(79,70,229,0.18)",
-      }}
-    >
+function FactCard({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+}) {
+  const inner = (
+    <>
       <div
         style={{
           fontSize: 10,
@@ -755,8 +836,25 @@ function FactCard({ label, value }: { label: string; value: string }) {
         }}
       >
         {value}
+        {href && <span style={{ marginLeft: 6, color: "#4f46e5" }}>↗</span>}
       </div>
-    </div>
+    </>
+  );
+  const baseStyle: CSSProperties = {
+    padding: "12px 14px",
+    borderRadius: 12,
+    background: "rgba(79,70,229,0.05)",
+    border: "1px solid rgba(79,70,229,0.18)",
+    textDecoration: "none",
+    color: "inherit",
+    display: "block",
+  };
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer" style={baseStyle}>
+      {inner}
+    </a>
+  ) : (
+    <div style={baseStyle}>{inner}</div>
   );
 }
 

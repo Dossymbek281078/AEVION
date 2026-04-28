@@ -102,6 +102,7 @@ export default function PaymentLinksPage() {
   const [links, setLinks] = useState<PaymentLink[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [origin, setOrigin] = useState<string>("");
+  const [syncedIds, setSyncedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -142,7 +143,7 @@ export default function PaymentLinksPage() {
     return { active, paid, expired, totalActive };
   }, [links]);
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const num = parseFloat(amount);
     if (!Number.isFinite(num) || num <= 0) return;
@@ -150,8 +151,9 @@ export default function PaymentLinksPage() {
     const now = Date.now();
     const expiresAt =
       expiresInDays > 0 ? now + expiresInDays * 24 * 60 * 60 * 1000 : null;
-    const link: PaymentLink = {
-      id: genId(),
+    const localId = genId();
+    const localLink: PaymentLink = {
+      id: localId,
       amount: num,
       currency,
       title: title.trim(),
@@ -161,7 +163,74 @@ export default function PaymentLinksPage() {
       expiresAt,
       status: "active",
     };
-    setLinks((prev) => [link, ...prev]);
+    setLinks((prev) => [localLink, ...prev]);
+    void syncToApi(localLink);
+  }
+
+  async function syncToApi(local: PaymentLink) {
+    if (typeof window === "undefined") return;
+    const apiKey = ensureDemoApiKey();
+    try {
+      const r = await fetch(`${window.location.origin}/api/payments/v1/links`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: local.amount,
+          currency: local.currency,
+          title: local.title,
+          description: local.description,
+          settlement: local.settlement,
+          expires_in_days: local.expiresAt
+            ? Math.max(
+                1,
+                Math.round((local.expiresAt - Date.now()) / 86_400_000)
+              )
+            : undefined,
+        }),
+      });
+      if (!r.ok) return;
+      const remote: { id: string } = await r.json();
+      setLinks((prev) =>
+        prev.map((l) => (l.id === local.id ? { ...l, id: remote.id } : l))
+      );
+      setSyncedIds((prev) => {
+        const next = new Set(prev);
+        next.add(remote.id);
+        return next;
+      });
+    } catch {
+      // offline / API down — local link still works on this device
+    }
+  }
+
+  function ensureDemoApiKey(): string {
+    const KEY_STORE = "aevion.payments.api.keys.v1";
+    try {
+      const raw = window.localStorage.getItem(KEY_STORE);
+      const parsed: { full?: string }[] = raw ? JSON.parse(raw) : [];
+      if (parsed.length > 0 && parsed[0].full) return parsed[0].full;
+      const bytes = new Uint8Array(20);
+      crypto.getRandomValues(bytes);
+      const tail = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const full = "sk_test_" + tail;
+      const newKey = {
+        id: `key_demo_${Date.now().toString(36).slice(-4)}`,
+        name: "Auto-generated (Links page)",
+        prefix: full.slice(0, 12) + "…",
+        full,
+        createdAt: Date.now(),
+        livemode: false,
+      };
+      window.localStorage.setItem(KEY_STORE, JSON.stringify([newKey, ...parsed]));
+      return full;
+    } catch {
+      return "sk_test_DEMOFALLBACK";
+    }
   }
 
   function copyLink(id: string) {
@@ -577,6 +646,39 @@ export default function PaymentLinksPage() {
                   <SmallTag>
                     Created {new Date(l.createdAt).toLocaleDateString()}
                   </SmallTag>
+                  {syncedIds.has(l.id) ? (
+                    <span
+                      style={{
+                        padding: "3px 9px",
+                        borderRadius: 6,
+                        background: "rgba(5,150,105,0.12)",
+                        color: "#047857",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                      }}
+                      title="Mirrored to /api/payments/v1 — payable from any device"
+                    >
+                      ☁ shared
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        padding: "3px 9px",
+                        borderRadius: 6,
+                        background: "rgba(245,158,11,0.10)",
+                        color: "#92400e",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                      }}
+                      title="Local-only — server sync didn't complete"
+                    >
+                      local
+                    </span>
+                  )}
                 </div>
 
                 <div

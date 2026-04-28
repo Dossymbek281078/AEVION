@@ -75,14 +75,22 @@ export default function PayPage({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const rawLinks = window.localStorage.getItem(LINKS_KEY);
-      const list: PaymentLink[] = rawLinks ? JSON.parse(rawLinks) : [];
-      const found = list.find((l) => l.id === id);
-      if (!found) {
-        setPhase("not-found");
-        return;
+
+    function applyMethods() {
+      const rawMethods = window.localStorage.getItem(METHODS_KEY);
+      const methodsState: Record<string, boolean> = {};
+      if (rawMethods) {
+        Object.assign(methodsState, JSON.parse(rawMethods));
+      } else {
+        for (const m of FALLBACK_METHODS) methodsState[m.id] = m.defaultEnabled;
       }
+      setMethods(FALLBACK_METHODS);
+      setEnabled(methodsState);
+      const firstEnabled = FALLBACK_METHODS.find((m) => methodsState[m.id]);
+      setPicked(firstEnabled?.id ?? null);
+    }
+
+    function classify(found: PaymentLink) {
       setLink(found);
       if (found.status === "paid") {
         setPhase("already-paid");
@@ -95,22 +103,48 @@ export default function PayPage({
         setPhase("expired");
         return;
       }
-
-      const rawMethods = window.localStorage.getItem(METHODS_KEY);
-      const methodsState: Record<string, boolean> = {};
-      if (rawMethods) {
-        Object.assign(methodsState, JSON.parse(rawMethods));
-      } else {
-        for (const m of FALLBACK_METHODS) methodsState[m.id] = m.defaultEnabled;
-      }
-      setMethods(FALLBACK_METHODS);
-      setEnabled(methodsState);
-      const firstEnabled = FALLBACK_METHODS.find((m) => methodsState[m.id]);
-      setPicked(firstEnabled?.id ?? null);
+      applyMethods();
       setPhase("selecting");
-    } catch {
-      setPhase("not-found");
     }
+
+    try {
+      const rawLinks = window.localStorage.getItem(LINKS_KEY);
+      const list: PaymentLink[] = rawLinks ? JSON.parse(rawLinks) : [];
+      const found = list.find((l) => l.id === id);
+      if (found) {
+        classify(found);
+        return;
+      }
+    } catch {
+      // fall through to API
+    }
+
+    fetch(`${window.location.origin}/api/pay/${id}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const remote = (await r.json()) as {
+          id: string;
+          amount: number;
+          currency: Currency;
+          title: string;
+          description: string;
+          settlement: "bank" | "aec";
+          status: "active" | "paid" | "expired";
+          paid_at: number | null;
+        };
+        classify({
+          id: remote.id,
+          amount: remote.amount,
+          currency: remote.currency,
+          title: remote.title,
+          description: remote.description,
+          settlement: remote.settlement,
+          createdAt: Date.now(),
+          expiresAt: null,
+          status: remote.status,
+        });
+      })
+      .catch(() => setPhase("not-found"));
   }, [id]);
 
   const visibleMethods = useMemo(
@@ -123,7 +157,7 @@ export default function PayPage({
     [methods, picked]
   );
 
-  function markPaid() {
+  function markPaid(method: string) {
     if (typeof window === "undefined" || !link) return;
     try {
       const raw = window.localStorage.getItem(LINKS_KEY);
@@ -135,6 +169,11 @@ export default function PayPage({
     } catch {
       // ignore
     }
+    void fetch(`${window.location.origin}/api/pay/${link.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method }),
+    }).catch(() => undefined);
   }
 
   function handlePay(e: React.FormEvent) {
@@ -166,7 +205,7 @@ export default function PayPage({
         setPhase("failed");
         setError("Card declined: insufficient funds.");
       } else {
-        markPaid();
+        markPaid(pickedMeta.id);
         setPhase("settled");
       }
     }, 1700);

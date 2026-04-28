@@ -53,6 +53,7 @@ const ROUTES: Array<{ path: string; priority: number; changeFrequency: MetadataR
   { path: "/qcoreai",           priority: 0.75, changeFrequency: "weekly" },
   { path: "/multichat-engine",  priority: 0.7, changeFrequency: "weekly" },
   { path: "/help",              priority: 0.5, changeFrequency: "monthly" },
+  { path: "/press",             priority: 0.7, changeFrequency: "monthly" },
   { path: "/changelog",         priority: 0.4, changeFrequency: "weekly" },
   { path: "/privacy",           priority: 0.3, changeFrequency: "yearly" },
   { path: "/terms",             priority: 0.3, changeFrequency: "yearly" },

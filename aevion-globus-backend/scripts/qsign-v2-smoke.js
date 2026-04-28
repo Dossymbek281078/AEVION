@@ -105,6 +105,25 @@ async function main() {
     pass("openapi", `v${r.data.info.version} paths=${pathCount}`);
   }
 
+  // 1c — metrics (Prometheus exposition)
+  {
+    try {
+      const r = await fetch(`${BASE}/api/qsign/v2/metrics`);
+      if (!r.ok) return fail("metrics", `HTTP ${r.status}`);
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.startsWith("text/plain"))
+        return fail("metrics", `unexpected content-type ${ct}`);
+      const text = await r.text();
+      if (!text.includes("qsign_signatures_total"))
+        return fail("metrics", "missing qsign_signatures_total");
+      if (!text.includes("# TYPE qsign_uptime_seconds gauge"))
+        return fail("metrics", "missing TYPE annotations");
+      pass("metrics", `${text.split("\n").length} lines`);
+    } catch (e) {
+      return fail("metrics", e?.message || String(e));
+    }
+  }
+
   // 2 — register (idempotent enough: re-registering same email fails,
   //     so we use a unique email per run by default)
   {
@@ -146,6 +165,52 @@ async function main() {
       "sign",
       `id=${signed.id.slice(0, 8)} kids=${signed.hmac.kid}/${signed.ed25519.kid} pq=${signed.dilithium.kid}`,
     );
+  }
+
+  // 4b — idempotency: same Idempotency-Key + same payload returns the same id (replayed)
+  {
+    const idemKey = `smoke-idem-${Date.now()}`;
+    const r1 = await fetch(`${BASE}/api/qsign/v2/sign`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify({ payload: { idem: "test", n: 1 } }),
+    });
+    const d1 = await r1.json().catch(() => null);
+    if (!r1.ok) return fail("idem first", `HTTP ${r1.status}`);
+    if (d1?.idempotent !== "fresh") return fail("idem first", `expected fresh, got ${d1?.idempotent}`);
+
+    const r2 = await fetch(`${BASE}/api/qsign/v2/sign`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify({ payload: { idem: "test", n: 1 } }),
+    });
+    const d2 = await r2.json().catch(() => null);
+    if (!r2.ok) return fail("idem replay", `HTTP ${r2.status}`);
+    if (d2?.id !== d1?.id) return fail("idem replay", `id mismatch ${d2?.id} vs ${d1?.id}`);
+    if (d2?.idempotent !== "replayed")
+      return fail("idem replay", `expected replayed, got ${d2?.idempotent}`);
+
+    // Same key + DIFFERENT payload → 409
+    const r3 = await fetch(`${BASE}/api/qsign/v2/sign`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify({ payload: { idem: "test", n: 2 } }),
+    });
+    if (r3.status !== 409)
+      return fail("idem mismatch", `expected 409, got ${r3.status}`);
+    pass("idempotency", `fresh+replayed id=${d1.id.slice(0, 8)} mismatch→409`);
   }
 
   // 5 — stateless verify (should be valid)

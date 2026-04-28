@@ -18,6 +18,7 @@ const SECTIONS: Section[] = [
   { id: "send", accent: "#0ea5e9", glyph: "→", qCount: 5 },
   { id: "save", accent: "#fbbf24", glyph: "✦", qCount: 4 },
   { id: "credit", accent: "#a78bfa", glyph: "◯", qCount: 4 },
+  { id: "power", accent: "#0d9488", glyph: "★", qCount: 4 },
   { id: "privacy", accent: "#f472b6", glyph: "⛨", qCount: 4 },
   { id: "trouble", accent: "#dc2626", glyph: "⚠", qCount: 4 },
 ];

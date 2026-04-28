@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
+  title: "AEVION Film Awards — premium for AI and digital cinema",
+  description:
+    "AEVION Film Awards: submit through Planet (artifact type film), pass validator quorum, get a compliance certificate and AEC payout into AEVION Bank. No closed jury, no IP take.",
   alternates: { canonical: "/awards/film" },
+  openGraph: {
+    title: "AEVION Film Awards",
+    description: "Premium for AI and digital cinema on the Planet validator layer.",
+  },
   twitter: {
     card: "summary_large_image",
     title: "AEVION Film Awards",

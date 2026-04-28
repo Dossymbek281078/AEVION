@@ -1,33 +1,26 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { useI18n } from "@/lib/i18n";
 import { AwardPortal } from "../AwardPortal";
 import { AwardsTrackPanel } from "../_components/AwardsTrackPanel";
 
-export const metadata: Metadata = {
-  title: "AEVION Film Awards — premium for AI and digital cinema",
-  description:
-    "AEVION Film Awards: submit through Planet (artifact type movie), get a compliance certificate and AEC payout into AEVION Bank.",
-  openGraph: {
-    title: "AEVION Film Awards",
-    description: "Premium for AI and digital film on the Planet validator layer.",
-  },
-};
-
-const HERO_STATS = [
-  { label: "Wave", value: "AI film · 2nd", hint: "Following the AI-music wave" },
-  { label: "Submission type", value: "movie", hint: "Short films · video · animation" },
-  { label: "Payout rail", value: "AEC → Bank", hint: "Winners settle straight to wallet" },
-];
-
-const WHY_BULLETS = [
-  "AI-generated film has no Cannes, no Oscar, no festival circuit. AEVION ships the first credible certification track.",
-  "Authorship locked at submission time: QRight registry id binds creator, hash and geolocation to the file.",
-  "Validator quorum on Planet is transparent — votes and coverage of quorum Y are published per artifact.",
-  "Winnings settle in AEC into AEVION Bank, where the rest of the creator economy already lives.",
-];
-
 export default function FilmAwardsPage() {
+  const { t } = useI18n();
+
+  const heroStats = [
+    { label: t("awards.film.stat.wave.label"),    value: t("awards.film.stat.wave.value"),    hint: t("awards.film.stat.wave.hint") },
+    { label: t("awards.film.stat.kind.label"),    value: t("awards.film.stat.kind.value"),    hint: t("awards.film.stat.kind.hint") },
+    { label: t("awards.film.stat.payout.label"),  value: t("awards.film.stat.payout.value"),  hint: t("awards.film.stat.payout.hint") },
+  ];
+  const whyBullets = [
+    t("awards.film.why.1"),
+    t("awards.film.why.2"),
+    t("awards.film.why.3"),
+    t("awards.film.why.4"),
+  ];
+
   return (
     <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
       <section
@@ -50,7 +43,7 @@ export default function FilmAwardsPage() {
               marginBottom: 16,
             }}
           >
-            AEVION Film Awards · next wave
+            {t("awards.film.kicker")}
           </p>
           <h1
             style={{
@@ -65,7 +58,7 @@ export default function FilmAwardsPage() {
               backgroundClip: "text",
             }}
           >
-            The Oscars — for AI and digital cinema
+            {t("awards.film.h1")}
           </h1>
           <p
             style={{
@@ -76,7 +69,7 @@ export default function FilmAwardsPage() {
               margin: 0,
             }}
           >
-            One submission flow, one validator quorum, one AEC payout. Authorship registered in QRight, voted by the Planet network, paid into AEVION Bank.
+            {t("awards.film.subtitle")}
           </p>
 
           <div
@@ -87,7 +80,7 @@ export default function FilmAwardsPage() {
               gap: 12,
             }}
           >
-            {HERO_STATS.map((s) => (
+            {heroStats.map((s) => (
               <div
                 key={s.label}
                 style={{
@@ -117,10 +110,10 @@ export default function FilmAwardsPage() {
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#fde68a", marginBottom: 10, textTransform: "uppercase" }}>
-              Why this track matters
+              {t("awards.film.why.kicker")}
             </div>
             <ul style={{ margin: 0, paddingLeft: 20, color: "#e2e8f0", lineHeight: 1.7, fontSize: 14 }}>
-              {WHY_BULLETS.map((b) => (
+              {whyBullets.map((b) => (
                 <li key={b.slice(0, 40)} style={{ marginBottom: 8 }}>
                   {b}
                 </li>
@@ -130,15 +123,15 @@ export default function FilmAwardsPage() {
 
           <div style={{ marginTop: 22, display: "flex", flexWrap: "wrap", gap: 10, fontSize: 14 }}>
             <Link href="/awards" style={{ color: "#fde68a", fontWeight: 700, textDecoration: "none" }}>
-              ← Awards hub
+              {t("awards.film.link.hub")}
             </Link>
             <span style={{ color: "rgba(148,163,184,0.5)" }}>·</span>
             <Link href="/awards/music" style={{ color: "#c4b5fd", fontWeight: 700, textDecoration: "none" }}>
-              Music Awards →
+              {t("awards.film.link.music")}
             </Link>
             <span style={{ color: "rgba(148,163,184,0.5)" }}>·</span>
             <Link href="/pitch" style={{ color: "#5eead4", fontWeight: 700, textDecoration: "none" }}>
-              Investor pitch
+              {t("awards.film.link.pitch")}
             </Link>
           </div>
         </div>

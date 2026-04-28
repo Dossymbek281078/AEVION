@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
+  title: "AEVION Music Awards — premium for AI and digital music",
+  description:
+    "AEVION Music Awards: submit through Planet (artifact type music), get a compliance certificate and AEC payout into AEVION Bank.",
   alternates: { canonical: "/awards/music" },
+  openGraph: {
+    title: "AEVION Music Awards",
+    description: "Premium for AI and digital music on the Planet validator layer.",
+  },
   twitter: {
     card: "summary_large_image",
     title: "AEVION Music Awards",

@@ -1,33 +1,26 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { useI18n } from "@/lib/i18n";
 import { AwardPortal } from "../AwardPortal";
 import { AwardsTrackPanel } from "../_components/AwardsTrackPanel";
 
-export const metadata: Metadata = {
-  title: "AEVION Music Awards — premium for AI and digital music",
-  description:
-    "AEVION Music Awards: submit through Planet (artifact type music), get a compliance certificate and AEC payout into AEVION Bank.",
-  openGraph: {
-    title: "AEVION Music Awards",
-    description: "Premium for AI and digital music on the Planet validator layer.",
-  },
-};
-
-const HERO_STATS = [
-  { label: "Wave", value: "AI music · 1st", hint: "First creative track on AEVION" },
-  { label: "Submission type", value: "music", hint: "Tracks · samples · generative sound" },
-  { label: "Payout rail", value: "AEC → Bank", hint: "Winners settle straight to wallet" },
-];
-
-const WHY_BULLETS = [
-  "Pre-Grammy era for AI-generated music: existing institutions have no clear pathway. AEVION ships one.",
-  "Authorship is provable from the first second — QRight registers SHA-256 + HMAC + Quantum Shield before submission.",
-  "Validator quorum is on-chain transparent — no opaque jury, no PR-driven shortlists. Quorum Y is published on Planet.",
-  "Winnings settle in AEC into AEVION Bank, where Trust Score, Autopilot rules and savings goals already live.",
-];
-
 export default function MusicAwardsPage() {
+  const { t } = useI18n();
+
+  const heroStats = [
+    { label: t("awards.music.stat.wave.label"),    value: t("awards.music.stat.wave.value"),    hint: t("awards.music.stat.wave.hint") },
+    { label: t("awards.music.stat.kind.label"),    value: t("awards.music.stat.kind.value"),    hint: t("awards.music.stat.kind.hint") },
+    { label: t("awards.music.stat.payout.label"),  value: t("awards.music.stat.payout.value"),  hint: t("awards.music.stat.payout.hint") },
+  ];
+  const whyBullets = [
+    t("awards.music.why.1"),
+    t("awards.music.why.2"),
+    t("awards.music.why.3"),
+    t("awards.music.why.4"),
+  ];
+
   return (
     <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
       <section
@@ -50,7 +43,7 @@ export default function MusicAwardsPage() {
               marginBottom: 16,
             }}
           >
-            AEVION Music Awards · wave 1
+            {t("awards.music.kicker")}
           </p>
           <h1
             style={{
@@ -65,7 +58,7 @@ export default function MusicAwardsPage() {
               backgroundClip: "text",
             }}
           >
-            The Grammys — for AI and digital music
+            {t("awards.music.h1")}
           </h1>
           <p
             style={{
@@ -76,7 +69,7 @@ export default function MusicAwardsPage() {
               margin: 0,
             }}
           >
-            One submission flow, one validator quorum, one AEC payout. Authorship registered in QRight, voted by the Planet network, paid into AEVION Bank.
+            {t("awards.music.subtitle")}
           </p>
 
           <div
@@ -87,7 +80,7 @@ export default function MusicAwardsPage() {
               gap: 12,
             }}
           >
-            {HERO_STATS.map((s) => (
+            {heroStats.map((s) => (
               <div
                 key={s.label}
                 style={{
@@ -117,10 +110,10 @@ export default function MusicAwardsPage() {
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#c4b5fd", marginBottom: 10, textTransform: "uppercase" }}>
-              Why this track matters
+              {t("awards.music.why.kicker")}
             </div>
             <ul style={{ margin: 0, paddingLeft: 20, color: "#e2e8f0", lineHeight: 1.7, fontSize: 14 }}>
-              {WHY_BULLETS.map((b) => (
+              {whyBullets.map((b) => (
                 <li key={b.slice(0, 40)} style={{ marginBottom: 8 }}>
                   {b}
                 </li>
@@ -130,15 +123,15 @@ export default function MusicAwardsPage() {
 
           <div style={{ marginTop: 22, display: "flex", flexWrap: "wrap", gap: 10, fontSize: 14 }}>
             <Link href="/awards" style={{ color: "#c4b5fd", fontWeight: 700, textDecoration: "none" }}>
-              ← Awards hub
+              {t("awards.music.link.hub")}
             </Link>
             <span style={{ color: "rgba(148,163,184,0.5)" }}>·</span>
             <Link href="/awards/film" style={{ color: "#fde68a", fontWeight: 700, textDecoration: "none" }}>
-              Film Awards →
+              {t("awards.music.link.film")}
             </Link>
             <span style={{ color: "rgba(148,163,184,0.5)" }}>·</span>
             <Link href="/pitch" style={{ color: "#5eead4", fontWeight: 700, textDecoration: "none" }}>
-              Investor pitch
+              {t("awards.music.link.pitch")}
             </Link>
           </div>
         </div>

@@ -9944,9 +9944,150 @@ const BANK_EXTRA_KK: Record<string, string> = {
   "discover.wishlist.desc": "\u0416\u0438\u043d\u0430\u049b\u0442\u0430\u0443 \u049b\u0430\u0440\u049b\u044b\u043d\u044b \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0442\u044b \u0435\u0441\u0435\u043f\u0442\u0435\u043b\u0433\u0435\u043d \u049b\u0430\u043b\u0430\u0443\u043b\u0430\u0440.",
 };
 
+const AWARDS_EXTRA_EN: Record<string, string> = {
+  /* /awards/music */
+  "awards.music.kicker": "AEVION Music Awards · wave 1",
+  "awards.music.h1": "The Grammys — for AI and digital music",
+  "awards.music.subtitle": "One submission flow, one validator quorum, one AEC payout. Authorship registered in QRight, voted by the Planet network, paid into AEVION Bank.",
+  "awards.music.stat.wave.label": "Wave",
+  "awards.music.stat.wave.value": "AI music · 1st",
+  "awards.music.stat.wave.hint": "First creative track on AEVION",
+  "awards.music.stat.kind.label": "Submission type",
+  "awards.music.stat.kind.value": "music",
+  "awards.music.stat.kind.hint": "Tracks · samples · generative sound",
+  "awards.music.stat.payout.label": "Payout rail",
+  "awards.music.stat.payout.value": "AEC → Bank",
+  "awards.music.stat.payout.hint": "Winners settle straight to wallet",
+  "awards.music.why.kicker": "Why this track matters",
+  "awards.music.why.1": "Pre-Grammy era for AI-generated music: existing institutions have no clear pathway. AEVION ships one.",
+  "awards.music.why.2": "Authorship is provable from the first second — QRight registers SHA-256 + HMAC + Quantum Shield before submission.",
+  "awards.music.why.3": "Validator quorum is on-chain transparent — no opaque jury, no PR-driven shortlists. Quorum Y is published on Planet.",
+  "awards.music.why.4": "Winnings settle in AEC into AEVION Bank, where Trust Score, Autopilot rules and savings goals already live.",
+  "awards.music.link.hub": "← Awards hub",
+  "awards.music.link.film": "Film Awards →",
+  "awards.music.link.pitch": "Investor pitch",
+
+  /* /awards/film */
+  "awards.film.kicker": "AEVION Film Awards · wave 2",
+  "awards.film.h1": "The first credible AI-film festival",
+  "awards.film.subtitle": "QRight authorship, Planet validator quorum, AEC payout into AEVION Bank. No closed jury, no IP take, no exclusive license — recognition you can cite in distribution deals.",
+  "awards.film.stat.wave.label": "Wave",
+  "awards.film.stat.wave.value": "AI film · 2nd",
+  "awards.film.stat.wave.hint": "Opens after music wave 1 closes",
+  "awards.film.stat.kind.label": "Submission type",
+  "awards.film.stat.kind.value": "film",
+  "awards.film.stat.kind.hint": "Short · feature · hybrid AI/live",
+  "awards.film.stat.payout.label": "Payout rail",
+  "awards.film.stat.payout.value": "AEC → Bank",
+  "awards.film.stat.payout.hint": "Winners settle straight to wallet",
+  "awards.film.why.kicker": "Why this track matters",
+  "awards.film.why.1": "No Cannes, no Oscar, no clear path for AI cinema. AEVION ships the first certification track.",
+  "awards.film.why.2": "Authorship is provable from the first frame — QRight registers SHA-256 + HMAC + Quantum Shield before submission.",
+  "awards.film.why.3": "Validator quorum verifies AI-tool disclosure and runs perceptual-hash dedupe across the network. Verdicts on-chain.",
+  "awards.film.why.4": "Authorship and royalty splits stay with you — AEVION takes no IP, no exclusive license, no rev-share on future distribution.",
+  "awards.film.link.hub": "← Awards hub",
+  "awards.film.link.music": "← Music Awards",
+  "awards.film.link.pitch": "Investor pitch",
+};
+
+const AWARDS_EXTRA_RU: Record<string, string> = {
+  /* /awards/music */
+  "awards.music.kicker": "AEVION Music Awards · волна 1",
+  "awards.music.h1": "Грэмми — для AI и цифровой музыки",
+  "awards.music.subtitle": "Одна заявка, один валидаторский кворум, одна выплата в AEC. Авторство фиксируется в QRight, голосование — в сети Planet, выплата — в AEVION Bank.",
+  "awards.music.stat.wave.label": "Волна",
+  "awards.music.stat.wave.value": "AI-музыка · 1-я",
+  "awards.music.stat.wave.hint": "Первый креативный трек на AEVION",
+  "awards.music.stat.kind.label": "Тип заявки",
+  "awards.music.stat.kind.value": "music",
+  "awards.music.stat.kind.hint": "Треки · сэмплы · генеративный звук",
+  "awards.music.stat.payout.label": "Канал выплат",
+  "awards.music.stat.payout.value": "AEC → Bank",
+  "awards.music.stat.payout.hint": "Победители получают сразу в кошелёк",
+  "awards.music.why.kicker": "Почему этот трек важен",
+  "awards.music.why.1": "Pre-Grammy эра AI-музыки: у существующих институтов нет понятного маршрута. AEVION выкатывает его.",
+  "awards.music.why.2": "Авторство доказуемо с первой секунды — QRight фиксирует SHA-256 + HMAC + Quantum Shield до подачи.",
+  "awards.music.why.3": "Валидаторский кворум прозрачен on-chain — никакого закрытого жюри, никаких PR-шорт-листов. Quorum Y публикуется в Planet.",
+  "awards.music.why.4": "Выигрыши приходят в AEC прямо в AEVION Bank, где уже работают Trust Score, Autopilot и цели сбережений.",
+  "awards.music.link.hub": "← Хаб Awards",
+  "awards.music.link.film": "Film Awards →",
+  "awards.music.link.pitch": "Питч инвестора",
+
+  /* /awards/film */
+  "awards.film.kicker": "AEVION Film Awards · волна 2",
+  "awards.film.h1": "Первый релевантный фестиваль AI-кино",
+  "awards.film.subtitle": "Авторство в QRight, кворум валидаторов Planet, выплата в AEC в AEVION Bank. Без закрытого жюри, без захвата IP, без эксклюзивных лицензий — это признание, которое можно цитировать в дистрибьюторских сделках.",
+  "awards.film.stat.wave.label": "Волна",
+  "awards.film.stat.wave.value": "AI-кино · 2-я",
+  "awards.film.stat.wave.hint": "Открывается после закрытия music wave 1",
+  "awards.film.stat.kind.label": "Тип заявки",
+  "awards.film.stat.kind.value": "film",
+  "awards.film.stat.kind.hint": "Корот. метр · полный · гибрид AI/live",
+  "awards.film.stat.payout.label": "Канал выплат",
+  "awards.film.stat.payout.value": "AEC → Bank",
+  "awards.film.stat.payout.hint": "Победители получают сразу в кошелёк",
+  "awards.film.why.kicker": "Почему этот трек важен",
+  "awards.film.why.1": "Нет Канн, нет Оскара, нет внятного пути для AI-кино. AEVION выкатывает первую сертификационную ветку.",
+  "awards.film.why.2": "Авторство доказуемо с первого кадра — QRight фиксирует SHA-256 + HMAC + Quantum Shield до подачи.",
+  "awards.film.why.3": "Валидаторский кворум проверяет раскрытие AI-инструментов и запускает perceptual-hash дедуп по сети. Вердикты on-chain.",
+  "awards.film.why.4": "Авторство и доли роялти остаются за вами — AEVION не забирает IP, не требует эксклюзивных лицензий, не делит выручку с будущей дистрибуции.",
+  "awards.film.link.hub": "← Хаб Awards",
+  "awards.film.link.music": "← Music Awards",
+  "awards.film.link.pitch": "Питч инвестора",
+};
+
+const AWARDS_EXTRA_KK: Record<string, string> = {
+  /* /awards/music */
+  "awards.music.kicker": "AEVION Music Awards · 1-толқын",
+  "awards.music.h1": "Грэмми — AI және цифрлы музыкаға",
+  "awards.music.subtitle": "Бір өтінім, бір валидатор кворумы, бір AEC төлемі. Авторлық QRight-та тіркеледі, Planet желісі дауыс береді, AEVION Bank-ке төленеді.",
+  "awards.music.stat.wave.label": "Толқын",
+  "awards.music.stat.wave.value": "AI-музыка · 1-ші",
+  "awards.music.stat.wave.hint": "AEVION-дағы алғашқы шығармашылық трек",
+  "awards.music.stat.kind.label": "Өтінім түрі",
+  "awards.music.stat.kind.value": "music",
+  "awards.music.stat.kind.hint": "Тректер · сэмплдер · генеративті дыбыс",
+  "awards.music.stat.payout.label": "Төлем арнасы",
+  "awards.music.stat.payout.value": "AEC → Bank",
+  "awards.music.stat.payout.hint": "Жеңімпаздар тікелей әмиянға алады",
+  "awards.music.why.kicker": "Бұл трек неге маңызды",
+  "awards.music.why.1": "AI-музыка үшін Грэмми-ге дейінгі дәуір: бар институттардың айқын жолы жоқ. AEVION оны ашады.",
+  "awards.music.why.2": "Авторлық алғашқы секундтан дәлелді — QRight өтінімге дейін SHA-256 + HMAC + Quantum Shield-ті тіркейді.",
+  "awards.music.why.3": "Валидатор кворумы on-chain ашық — жабық жюри жоқ, PR шорт-листтер жоқ. Quorum Y Planet-те жарияланады.",
+  "awards.music.why.4": "Жеңіс AEC-те AEVION Bank-ке түседі, онда Trust Score, Autopilot ережелері және жинақ мақсаттары жұмыс істеп тұр.",
+  "awards.music.link.hub": "← Awards хабы",
+  "awards.music.link.film": "Film Awards →",
+  "awards.music.link.pitch": "Инвестор питчі",
+
+  /* /awards/film */
+  "awards.film.kicker": "AEVION Film Awards · 2-толқын",
+  "awards.film.h1": "AI-кинематографтың алғашқы салмақты фестивалі",
+  "awards.film.subtitle": "QRight-та авторлық, Planet валидатор кворумы, AEC төлем AEVION Bank-ке. Жабық жюри жоқ, IP-ды алу жоқ, эксклюзивті лицензия жоқ — дистрибуция мәмілелерінде сілтеме жасауға болатын мойындау.",
+  "awards.film.stat.wave.label": "Толқын",
+  "awards.film.stat.wave.value": "AI-кино · 2-ші",
+  "awards.film.stat.wave.hint": "Music wave 1 жабылғаннан кейін ашылады",
+  "awards.film.stat.kind.label": "Өтінім түрі",
+  "awards.film.stat.kind.value": "film",
+  "awards.film.stat.kind.hint": "Қысқа · толық · гибрид AI/live",
+  "awards.film.stat.payout.label": "Төлем арнасы",
+  "awards.film.stat.payout.value": "AEC → Bank",
+  "awards.film.stat.payout.hint": "Жеңімпаздар тікелей әмиянға алады",
+  "awards.film.why.kicker": "Бұл трек неге маңызды",
+  "awards.film.why.1": "Канн жоқ, Оскар жоқ, AI-кино үшін айқын жол жоқ. AEVION алғашқы сертификация саласын ашады.",
+  "awards.film.why.2": "Авторлық алғашқы кадрдан дәлелді — QRight өтінімге дейін SHA-256 + HMAC + Quantum Shield-ті тіркейді.",
+  "awards.film.why.3": "Валидатор кворумы AI-құрал ашықтығын тексереді және желі бойынша perceptual-hash дедуп жүргізеді. Шешімдер on-chain.",
+  "awards.film.why.4": "Авторлық пен роялти үлестері сізде қалады — AEVION IP-ды алмайды, эксклюзивті лицензия талап етпейді, болашақ дистрибуциядан үлес сұрамайды.",
+  "awards.film.link.hub": "← Awards хабы",
+  "awards.film.link.music": "← Music Awards",
+  "awards.film.link.pitch": "Инвестор питчі",
+};
+
 Object.assign(translations.en, BANK_EXTRA_EN);
 Object.assign(translations.ru, BANK_EXTRA_RU);
 Object.assign(translations.kk, BANK_EXTRA_KK);
+Object.assign(translations.en, AWARDS_EXTRA_EN);
+Object.assign(translations.ru, AWARDS_EXTRA_RU);
+Object.assign(translations.kk, AWARDS_EXTRA_KK);
 
 function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;

@@ -202,6 +202,13 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         hintKey: "explore.card.subscriptions.hint",
       },
       {
+        href: "/bank/forecast",
+        iconBg: "linear-gradient(135deg, #0ea5e9, #5eead4)",
+        iconChar: "⇗",
+        titleKey: "explore.card.forecast.title",
+        hintKey: "explore.card.forecast.hint",
+      },
+      {
         href: "/bank/flow",
         iconBg: "linear-gradient(135deg, #0d9488, #f472b6)",
         iconChar: "⤳",

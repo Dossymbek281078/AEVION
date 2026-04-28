@@ -138,7 +138,24 @@
 | Backend `npm run build`                        | ✅ |
 | Frontend `next build --webpack`                | ✅ 26 routes |
 | `npm run verify` из корня worktree             | ✅ |
+| Backend `npm test` (vitest)                    | ✅ 67/67 passed (24 new QCore tests) |
 | `/health` отдаёт `costCapDefaultUsd`           | ✅ (`null` без env, число с env) |
+| `scripts/qcore-smoke.sh` against local backend | ✅ (см. §6) |
+
+### Test coverage added
+
+- `tests/qcoreaiStore.test.ts` (9 tests): session ownership/isolation,
+  ensureSession reuse, createRun + insertMessage + getMaxOrdering,
+  finishRun (incl. status="capped"), applyRefinement накапливает
+  cost+duration, shareRun/unshareRun идемпотентность, searchRuns matches
+  на input/final/title с cross-user изоляцией, listRuns sort.
+- `tests/qcoreai.route.test.ts` (15 tests): /health поля, /providers,
+  /pricing, /agents, /sessions empty, input validation на /chat,
+  /multi-agent, /refine, /runs/:id, /shared/:token, /search edge cases.
+
+Тесты прогоняются полностью in-memory (mock pool через vi.mock —
+SELECT 1 пробит → store falls back to Maps). Не нужны ни LLM ключи, ни
+PG для тестов. ~1 секунда runtime.
 
 ---
 
@@ -157,17 +174,22 @@
 ### Тех-долг — cosmetic
 
 - `npm i baseline-browser-mapping@latest -D` — чистит warning при build.
-- 14 vulnerabilities в backend `npm audit` (1 low, 11 mod, 2 critical) —
-  отложено, риск breaking.
+- 14 vulnerabilities в backend `npm audit` (1 low, 11 mod, 2 critical):
+  все в зависимостях qright-v2 (`opentimestamps` → `bitcore-lib` →
+  `bn.js`/`elliptic`) и Prisma dev tool (`@hono/node-server` через
+  `@prisma/dev`, грузится только при миграциях). НЕ касаются QCore code
+  paths. `npm audit fix` хотел downgrade `opentimestamps` до v0.0.0
+  (broken), `--force` нужен major Prisma upgrade — обе опции рискованны
+  и вне scope §1.
 - Tags-функционал на runs (UI tagging + filter) — search покрывает 80%
   use case, tagging — V2.
 
 ### Операционное
 
-- PR #3 ждёт review/approve. После merge — деплой Railway + smoke-тест
-  всех 4 features end-to-end на проде.
-- Smoke-чеклист: `/health`, send Sequential, send Parallel, send Debate,
-  refine final, выставить cap=$0.001 → проверить cap_hit.
+- PR #3 ждёт review/approve.
+- Pre-deploy gate: `npm test` зелёное → review approved → merge.
+- Post-deploy: `QCORE_BASE=https://api.aevion.io ./scripts/qcore-smoke.sh`
+  должен дать `all checks green`.
 
 ---
 
@@ -205,3 +227,25 @@ export QCORE_WEBHOOK_SECRET="any-strong-shared-secret"
 
 После рестарта `/health` отдаст `webhookConfigured: true` +
 `costCapDefaultUsd`.
+
+---
+
+## 6. Smoke test (post-deploy)
+
+```bash
+# Local
+QCORE_BASE=http://127.0.0.1:4101 ./aevion-globus-backend/scripts/qcore-smoke.sh
+
+# Production (Railway)
+QCORE_BASE=https://api.aevion.io ./aevion-globus-backend/scripts/qcore-smoke.sh
+
+# With auth (для тестов изоляции /search)
+QCORE_BASE=https://api.aevion.io \
+  QCORE_BEARER="$(cat ~/.aevion-jwt)" \
+  ./aevion-globus-backend/scripts/qcore-smoke.sh
+```
+
+Проверяет 22 контракта в 6 секциях: meta endpoints, /health поля,
+input validation, /search, OPTIONS/CORS, rate-limit headers. Exit 0 если
+all green; non-zero c per-check FAIL detail иначе. Безопасно
+прогонять на проде — не создаёт runs, не трогает биллинг.

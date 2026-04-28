@@ -19,6 +19,11 @@ import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard,
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
+import { computeThreatMap, cellColor as threatCellColor, reportThreatMap, type ThreatMap } from "./threatMap";
+import { startSession as coordStart, registerHit as coordHit, isExpired as coordExpired, timeLeftMs as coordTimeLeft, summarize as coordSummarize, saveToLeaderboard as coordSaveLB, loadLeaderboard as coordLoadLB, rankTitle as coordRank, type CoordSession, type CoordResult, type CoordLeaderboardEntry } from "./coordTrainer";
+import { QUESTIONS as QUIZ_Q, PLAYERS as QUIZ_PLAYERS, scoreQuiz, loadResult as ldQuizResult, saveResult as svQuizResult, type QuizResult, type PlayerStyle } from "./personality";
+import { emptyBoard as edEmpty, startingBoard as edStart, fenToBoard as edFromFen, boardToFen as edToFen, validateBoard as edValidate, PIECE_TYPES as ED_PIECES, PIECE_NAMES as ED_NAMES, type EditorBoard, type Cell as EdCell } from "./boardEditor";
+import { computeInsights, type Insights } from "./insights";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -530,6 +535,29 @@ export default function CyberChessPage(){
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
+  // Threat Heatmap (killer #12) — overlay контроля доски, нет ни у chess.com, ни у lichess
+  const[showThreatMap,sShowThreatMap]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_threatmap_v1")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_threatmap_v1",showThreatMap?"1":"0")}catch{}},[showThreatMap]);
+  // Coordinates Trainer (killer #13)
+  const[showCoord,sShowCoord]=useState(false);
+  const[coordSession,sCoordSession]=useState<CoordSession|null>(null);
+  const[coordResult,sCoordResult]=useState<CoordResult|null>(null);
+  const[coordLB,sCoordLB]=useState<CoordLeaderboardEntry[]>([]);
+  const[coordTick,sCoordTick]=useState(0); // forces re-render for timer
+  const[coordFlash,sCoordFlash]=useState<{sq:string;ok:boolean;ts:number}|null>(null);
+  // Personality Quiz (killer #14)
+  const[showQuiz,sShowQuiz]=useState(false);
+  const[quizAnswers,sQuizAnswers]=useState<number[]>([]);
+  const[quizResult,sQuizResult]=useState<QuizResult|null>(null);
+  const[savedQuizResult,sSavedQuizResult]=useState<{ts:number;result:QuizResult}|null>(()=>(typeof window!=="undefined"?ldQuizResult():null));
+  // Board Editor (killer #15)
+  const[showEditor,sShowEditor]=useState(false);
+  const[editorBoard,sEditorBoard]=useState<EditorBoard>(()=>edStart());
+  const[editorSide,sEditorSide]=useState<"w"|"b">("w");
+  const[editorPalette,sEditorPalette]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k"|"erase";color:"w"|"b"}>({type:"p",color:"w"});
+  const[editorErrors,sEditorErrors]=useState<string[]>([]);
+  // Insights v2 (killer #16)
+  const[showInsights,sShowInsights]=useState(false);
   useEffect(()=>{svChessy(chessy)},[chessy]);
   const[chessyFloat,sChessyFloat]=useState<{amount:number;key:number}|null>(null);
   const[showConfetti,sShowConfetti]=useState(false);
@@ -560,6 +588,22 @@ export default function CyberChessPage(){
       return {...c,balance:c.balance+reward,lifetime:c.lifetime+reward,ach:{...c.ach,[key]:Date.now()}};
     });
   },[showToast]);
+  // Coord trainer tick (defined here so addChessy is in scope)
+  useEffect(()=>{
+    if(!coordSession||coordResult)return;
+    const id=setInterval(()=>{
+      sCoordTick(x=>x+1);
+      if(coordExpired(coordSession)){
+        const res=coordSummarize(coordSession);
+        sCoordResult(res);
+        sCoordLB(coordSaveLB(res));
+        const rank=coordRank(res.score);
+        addChessy(rank.reward,`Coord: ${rank.title}`);
+        clearInterval(id);
+      }
+    },100);
+    return()=>clearInterval(id);
+  },[coordSession,coordResult,addChessy]);
 
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
@@ -2824,6 +2868,60 @@ export default function CyberChessPage(){
               <div style={{fontSize:11,fontWeight:800,color:CC.accent,marginTop:SPACE[2]}}>Анализ →</div>
             </Card>
 
+            {/* Coordinates Trainer (killer #13) */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}}
+              style={{background:"linear-gradient(135deg,#fffbeb,#fef3c7)",borderColor:"#fcd34d",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:"#b45309",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Coordinates</div>
+                <Badge tone="gold" size="xs">⚡ new</Badge>
+              </div>
+              <div style={{fontSize:26,marginTop:2}}>🎯</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Тапай клетки на скорость · 30 сек</div>
+              <div style={{fontSize:11,fontWeight:800,color:"#b45309",marginTop:SPACE[2]}}>Тренировать →</div>
+            </Card>
+
+            {/* Personality Quiz (killer #14) */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}}
+              style={{background:"linear-gradient(135deg,#fdf4ff,#fae8ff)",borderColor:"#e9d5ff",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:"#a21caf",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Personality</div>
+                <Badge tone="accent" size="xs">🧠 new</Badge>
+              </div>
+              {savedQuizResult?<>
+                <div style={{fontSize:24,marginTop:2}}>{QUIZ_PLAYERS[savedQuizResult.result.topId].emoji}</div>
+                <div style={{fontSize:11,color:CC.text,fontWeight:800,marginTop:2}}>{QUIZ_PLAYERS[savedQuizResult.result.topId].name}</div>
+                <div style={{fontSize:11,fontWeight:800,color:"#a21caf",marginTop:SPACE[2]}}>Перепройти →</div>
+              </>:<>
+                <div style={{fontSize:26,marginTop:2}}>🧠</div>
+                <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>10 вопросов · твой стиль</div>
+                <div style={{fontSize:11,fontWeight:800,color:"#a21caf",marginTop:SPACE[2]}}>Пройти →</div>
+              </>}
+            </Card>
+
+            {/* Board Editor (killer #15) */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}}
+              style={{background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)",borderColor:"#7dd3fc",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:"#0369a1",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Board Editor</div>
+                <Badge tone="info" size="xs">FEN</Badge>
+              </div>
+              <div style={{fontSize:26,marginTop:2}}>♛</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Установи позицию · экспорт FEN</div>
+              <div style={{fontSize:11,fontWeight:800,color:"#0369a1",marginTop:SPACE[2]}}>Открыть →</div>
+            </Card>
+
+            {/* Insights v2 (killer #16) */}
+            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowInsights(true)}
+              style={{background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",borderColor:"#6ee7b7",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:"#047857",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Insights v2</div>
+                <Badge tone="brand" size="xs">📊 new</Badge>
+              </div>
+              <div style={{fontSize:26,marginTop:2}}>📊</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{savedGames.length>0?`${savedGames.length} партий — глубокий анализ`:"Сыграй партии"}</div>
+              <div style={{fontSize:11,fontWeight:800,color:"#047857",marginTop:SPACE[2]}}>Открыть →</div>
+            </Card>
+
             {/* Game DNA — персональные паттерны (killer #3) */}
             <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowGameDna(true)}
               style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",borderColor:"#93c5fd",cursor:"pointer",gridColumn:gameDna.insights.length>0&&savedGames.length>0?"span 2":"auto"}}>
@@ -2944,6 +3042,21 @@ export default function CyberChessPage(){
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative"}}>
+              {/* Threat Heatmap overlay (killer #12) */}
+              {showThreatMap&&(()=>{
+                const tm:ThreatMap=computeThreatMap(bd as any);
+                return <div style={{position:"absolute",inset:0,display:"grid",gridTemplateColumns:"repeat(8,1fr)",pointerEvents:"none",zIndex:4}}>
+                  {rws.flatMap(r=>cls.map(c=>{
+                    const cell=tm[r][c];
+                    const col=threatCellColor(cell);
+                    const total=cell.w+cell.b;
+                    const numCol=cell.w>cell.b?"#065f46":cell.b>cell.w?"#7f1d1d":"#92400e";
+                    return <div key={`tm-${r}-${c}`} style={{aspectRatio:"1",background:col,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:2}}>
+                      {total>0&&<span style={{fontSize:9,fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,color:numCol,background:"rgba(255,255,255,0.78)",borderRadius:3,padding:"0 3px",lineHeight:1.3,boxShadow:"0 1px 2px rgba(0,0,0,0.12)"}}>{cell.w>0&&cell.b>0?`${cell.w}·${cell.b}`:total}</span>}
+                    </div>;
+                  }))}
+                </div>;
+              })()}
               {/* Arrow / highlight overlay */}
               {(arrows.length>0||sqHL.length>0)&&(()=>{
                 const sqXY=(sq:Square):[number,number]=>{
@@ -3008,6 +3121,11 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:6,marginTop:SPACE[2],flexWrap:"wrap"}}>
             <Btn size="sm" variant="secondary" icon={<Icon.Flip width={14} height={14}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
             <Btn size="sm" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
+            <Btn size="sm" variant="secondary" onClick={()=>sShowThreatMap(v=>!v)}
+              title="Показать контроль доски: какие клетки атакованы белыми/чёрными"
+              style={showThreatMap?{background:"linear-gradient(135deg,#fef2f2,#ecfdf5)",color:"#0f172a",borderColor:"#a7f3d0",fontWeight:900}:undefined}>
+              {showThreatMap?"🌡 Heatmap ON":"🌡 Heatmap"}
+            </Btn>
             <Btn size="sm" variant="secondary" onClick={async()=>{
               try{
                 const text=await whisperAndSpeak(game.fen(),evalCp,evalMate);
@@ -5780,6 +5898,460 @@ export default function CyberChessPage(){
           }}>⚡ Ещё раз</Btn>
         </div>
       </div>}
+    </Modal>
+
+    {/* ═══ Coordinates Trainer (killer #13) ═══ */}
+    <Modal open={showCoord} onClose={()=>{sShowCoord(false);sCoordSession(null);sCoordResult(null)}} size="lg"
+      title="🎯 Coordinates Trainer">
+      {!coordSession?(()=>{
+        const top=coordLB[0];
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+          <Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#fffbeb,#fef3c7)",borderColor:"#fcd34d"}}>
+            <div style={{fontSize:13,color:"#92400e",fontWeight:800,marginBottom:SPACE[1]}}>Как играть</div>
+            <div style={{fontSize:13,color:CC.text,lineHeight:1.6}}>
+              Тебе показывают координату (например <b>e4</b>). Тапай по правильной клетке.
+              За 30 секунд набери максимум — каждое попадание даёт +100 очков, ошибка −50.
+              Чем быстрее реакция, тем больше бонус.
+            </div>
+            {top&&<div style={{marginTop:SPACE[2],fontSize:12,color:"#92400e"}}>
+              <b>Твой рекорд:</b> {top.result.score} очков · {top.result.hits}/{top.result.total} · средняя реакция {top.result.avgReactionMs}ms
+            </div>}
+          </Card>
+          <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+            <Btn variant="primary" size="lg" full onClick={()=>{sCoordSession(coordStart(30_000,true));sCoordResult(null)}}>
+              ▶ Старт · 30 сек (белыми)
+            </Btn>
+            <Btn variant="secondary" size="md" onClick={()=>{sCoordSession(coordStart(30_000,false));sCoordResult(null)}}>
+              ▶ Старт чёрными
+            </Btn>
+            <Btn variant="secondary" size="md" onClick={()=>{sCoordSession(coordStart(60_000,true));sCoordResult(null)}}>
+              ▶ 60 сек hardcore
+            </Btn>
+          </div>
+          {coordLB.length>0&&<Card padding={SPACE[3]} tone="surface1">
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>Лидерборд (TOP 10)</div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {coordLB.slice(0,10).map((e,i)=>{
+                const r=coordRank(e.result.score);
+                return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderRadius:RADIUS.sm,background:i===0?"#fef3c7":CC.surface1,border:`1px solid ${i===0?"#fcd34d":CC.border}`}}>
+                  <span style={{fontSize:12,fontWeight:800,color:CC.text}}>#{i+1} {r.emoji} {r.title}</span>
+                  <span style={{fontSize:13,fontWeight:900,fontFamily:"ui-monospace, monospace",color:CC.brand}}>{e.result.score}</span>
+                  <span style={{fontSize:11,color:CC.textDim,fontFamily:"ui-monospace, monospace"}}>{e.result.hits}/{e.result.total} · {e.result.avgReactionMs}ms</span>
+                </div>;
+              })}
+            </div>
+          </Card>}
+        </div>;
+      })():coordResult?(()=>{
+        const r=coordRank(coordResult.score);
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3],alignItems:"center"}}>
+          <div style={{fontSize:48}}>{r.emoji}</div>
+          <div style={{fontSize:22,fontWeight:900,color:CC.text}}>{r.title}</div>
+          <div style={{fontSize:48,fontWeight:900,color:CC.brand,fontFamily:"ui-monospace, monospace"}}>{coordResult.score}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:SPACE[2],width:"100%"}}>
+            <Card padding={SPACE[2]} tone="surface1"><div style={{fontSize:10,color:CC.textDim,fontWeight:800,textTransform:"uppercase" as const}}>Попадания</div><div style={{fontSize:18,fontWeight:900,color:CC.brand}}>{coordResult.hits}</div></Card>
+            <Card padding={SPACE[2]} tone="surface1"><div style={{fontSize:10,color:CC.textDim,fontWeight:800,textTransform:"uppercase" as const}}>Точность</div><div style={{fontSize:18,fontWeight:900,color:CC.text}}>{coordResult.accuracy}%</div></Card>
+            <Card padding={SPACE[2]} tone="surface1"><div style={{fontSize:10,color:CC.textDim,fontWeight:800,textTransform:"uppercase" as const}}>Средняя</div><div style={{fontSize:18,fontWeight:900,color:CC.text}}>{coordResult.avgReactionMs}ms</div></Card>
+            <Card padding={SPACE[2]} tone="surface1"><div style={{fontSize:10,color:CC.textDim,fontWeight:800,textTransform:"uppercase" as const}}>Лучшая</div><div style={{fontSize:18,fontWeight:900,color:CC.brand}}>{coordResult.bestReactionMs}ms</div></Card>
+          </div>
+          <div style={{fontSize:13,color:CC.textDim,textAlign:"center"}}>+{r.reward} Chessy в копилку 🎉</div>
+          <div style={{display:"flex",gap:SPACE[2],width:"100%"}}>
+            <Btn variant="primary" full onClick={()=>{sCoordSession(coordStart(30_000,true));sCoordResult(null)}}>↻ Ещё раз</Btn>
+            <Btn variant="secondary" full onClick={()=>{sCoordSession(null);sCoordResult(null)}}>← Меню</Btn>
+          </div>
+        </div>;
+      })():(()=>{
+        // Active session
+        const ms=coordTimeLeft(coordSession);
+        const sec=Math.ceil(ms/1000);
+        const target=coordSession.round.target;
+        const pct=Math.max(0,Math.min(100,(ms/coordSession.durationMs)*100));
+        const grid:string[][]=[];
+        for(let r=0;r<8;r++){const row:string[]=[];for(let f=0;f<8;f++)row.push(`${"abcdefgh"[f]}${8-r}`);grid.push(row);}
+        const flipBoard=!coordSession.asWhite;
+        const dispRows=flipBoard?[...grid].reverse().map(r=>[...r].reverse()):grid;
+        const flash=coordFlash;
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[2]}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Найди клетку</div>
+              <div style={{fontSize:48,fontWeight:900,color:CC.brand,fontFamily:"ui-monospace, monospace",lineHeight:1}}>{target}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Осталось</div>
+              <div style={{fontSize:32,fontWeight:900,color:sec<=5?CC.danger:CC.text,fontFamily:"ui-monospace, monospace",lineHeight:1}}>{sec}s</div>
+            </div>
+          </div>
+          <div style={{height:8,borderRadius:RADIUS.full,overflow:"hidden",background:CC.surface3}}>
+            <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${CC.brand},${sec<=5?CC.danger:CC.brand})`,transition:"width 0.1s linear"}}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:0,width:"100%",maxWidth:480,aspectRatio:"1",margin:"0 auto",border:`2px solid ${CC.borderStrong}`,borderRadius:RADIUS.md,overflow:"hidden"}}>
+            {dispRows.flatMap((row,rIdx)=>row.map((sq,fIdx)=>{
+              const isLight=(rIdx+fIdx)%2===0;
+              const isFlashing=flash&&flash.sq===sq&&Date.now()-flash.ts<400;
+              const flashCol=flash?.ok?"#10b981":"#ef4444";
+              return <button key={sq} onClick={()=>{
+                const{session,correct,reactionMs}=coordHit(coordSession,sq);
+                sCoordFlash({sq,ok:correct,ts:Date.now()});
+                if(correct)snd("move");else snd("check");
+                sCoordSession(session);
+                if(coordExpired(session)){
+                  const res=coordSummarize(session);
+                  sCoordResult(res);
+                  sCoordLB(coordSaveLB(res));
+                  const rank=coordRank(res.score);
+                  addChessy(rank.reward,`Coord: ${rank.title}`);
+                }
+              }} style={{aspectRatio:"1",border:"none",cursor:"pointer",background:isFlashing?flashCol:(isLight?"#fef3c7":"#92400e"),transition:"background 0.18s",fontSize:0,outline:"none"}} aria-label={sq}/>;
+            }))}
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,color:CC.textDim}}>
+            <span>✓ {coordSession.hits} · ✗ {coordSession.misses}</span>
+            <span style={{fontFamily:"ui-monospace, monospace"}}>{coordSession.asWhite?"Белыми":"Чёрными"}</span>
+            <Btn size="sm" variant="secondary" onClick={()=>{
+              const res=coordSummarize(coordSession);
+              sCoordResult(res);
+              sCoordLB(coordSaveLB(res));
+            }}>Стоп</Btn>
+          </div>
+        </div>;
+      })()}
+    </Modal>
+
+    {/* ═══ Personality Quiz (killer #14) ═══ */}
+    <Modal open={showQuiz} onClose={()=>{sShowQuiz(false);sQuizAnswers([]);sQuizResult(null)}} size="lg"
+      title="🧠 Chess Personality">
+      {(()=>{
+        if(quizResult){
+          const top=QUIZ_PLAYERS[quizResult.topId];
+          const second=QUIZ_PLAYERS[quizResult.ranked[1]];
+          return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+            <Card padding={SPACE[4]} tone="surface1" style={{background:`linear-gradient(135deg,#fdf4ff,#fae8ff)`,borderColor:"#e9d5ff",textAlign:"center"}}>
+              <div style={{fontSize:64,lineHeight:1}}>{top.emoji}</div>
+              <div style={{fontSize:11,color:"#a21caf",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[2]}}>Твой стиль ближе всего к</div>
+              <div style={{fontSize:24,fontWeight:900,color:CC.text,marginTop:4}}>{top.name}</div>
+              <div style={{fontSize:13,color:CC.textDim,marginTop:2,fontStyle:"italic"}}>{top.tagline} · {top.era}</div>
+              <div style={{fontSize:13,color:CC.text,lineHeight:1.6,marginTop:SPACE[2]}}>{top.bio}</div>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"center",marginTop:SPACE[3]}}>
+                {top.strengths.map(s=><Badge key={s} tone="accent" size="sm">{s}</Badge>)}
+              </div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:SPACE[2],fontFamily:"ui-monospace, monospace"}}>★ Знаковая партия: {top.signatureGame}</div>
+            </Card>
+            <Card padding={SPACE[3]} tone="surface1">
+              <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>Полный рейтинг</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {quizResult.ranked.map((id,i)=>{
+                  const p=QUIZ_PLAYERS[id];
+                  const score=quizResult.scores[id];
+                  const max=quizResult.scores[quizResult.topId];
+                  const pct=max>0?Math.round((score/max)*100):0;
+                  return <div key={id}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
+                      <span style={{fontWeight:i===0?900:700,color:CC.text}}>#{i+1} {p.emoji} {p.name}</span>
+                      <span style={{fontFamily:"ui-monospace, monospace",color:CC.textDim}}>{score} pts</span>
+                    </div>
+                    <div style={{height:6,borderRadius:RADIUS.full,overflow:"hidden",background:CC.surface3}}>
+                      <div style={{width:`${pct}%`,height:"100%",background:i===0?CC.accent:CC.textDim,transition:"width 0.6s ease"}}/>
+                    </div>
+                  </div>;
+                })}
+              </div>
+            </Card>
+            <div style={{display:"flex",gap:SPACE[2]}}>
+              <Btn variant="primary" full onClick={()=>{
+                svQuizResult(quizResult);
+                sSavedQuizResult({ts:Date.now(),result:quizResult});
+                showToast("Результат сохранён","success");
+                sShowQuiz(false);
+              }}>💾 Сохранить</Btn>
+              <Btn variant="secondary" onClick={()=>{
+                const txt=`Я как ${top.name} ${top.emoji} в шахматах! Найди свой стиль на AEVION CyberChess.`;
+                if(navigator.share)navigator.share({title:"Chess Personality",text:txt}).catch(()=>{});
+                else{navigator.clipboard?.writeText(txt);showToast("Скопировано в буфер","success")}
+              }}>📤 Поделиться</Btn>
+              <Btn variant="ghost" onClick={()=>{sQuizAnswers([]);sQuizResult(null)}}>↻ Заново</Btn>
+            </div>
+          </div>;
+        }
+        const idx=quizAnswers.length;
+        if(idx>=QUIZ_Q.length){
+          // защита
+          return null;
+        }
+        const q=QUIZ_Q[idx];
+        const pct=Math.round((idx/QUIZ_Q.length)*100);
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:4}}>
+              <span>Вопрос {idx+1} из {QUIZ_Q.length}</span><span>{pct}%</span>
+            </div>
+            <div style={{height:6,borderRadius:RADIUS.full,overflow:"hidden",background:CC.surface3}}>
+              <div style={{width:`${pct}%`,height:"100%",background:CC.accent,transition:"width 0.4s ease"}}/>
+            </div>
+          </div>
+          <div style={{fontSize:18,fontWeight:800,color:CC.text,lineHeight:1.4}}>{q.q}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+            {q.options.map((o,i)=>(
+              <button key={i} onClick={()=>{
+                const next=[...quizAnswers,i];
+                if(next.length>=QUIZ_Q.length){
+                  const res=scoreQuiz(next);
+                  sQuizResult(res);
+                  addChessy(30,"Personality Quiz");
+                }
+                sQuizAnswers(next);
+              }} style={{padding:"14px 16px",textAlign:"left",borderRadius:RADIUS.md,border:`1.5px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:14,fontWeight:600,lineHeight:1.5,cursor:"pointer",transition:`all ${MOTION.fast} ${MOTION.ease}`}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=CC.accent;e.currentTarget.style.background="#faf5ff"}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=CC.border;e.currentTarget.style.background=CC.surface1}}>
+                {String.fromCharCode(65+i)}. {o.label}
+              </button>
+            ))}
+          </div>
+          {idx>0&&<Btn size="sm" variant="ghost" onClick={()=>sQuizAnswers(quizAnswers.slice(0,-1))}>← Назад</Btn>}
+        </div>;
+      })()}
+    </Modal>
+
+    {/* ═══ Board Editor (killer #15) ═══ */}
+    <Modal open={showEditor} onClose={()=>sShowEditor(false)} size="xl"
+      title="♛ Board Editor">
+      {(()=>{
+        const fenPreview=edToFen(editorBoard,editorSide);
+        const palette:[("p"|"n"|"b"|"r"|"q"|"k"),"w"|"b"][]=ED_PIECES.flatMap(t=>[[t,"w" as const],[t,"b" as const]]);
+        const pieceGlyph=(t:"p"|"n"|"b"|"r"|"q"|"k",c:"w"|"b")=>PM[`${c}${t}`]||"";
+        const place=(r:number,f:number)=>{
+          sEditorBoard(b=>{
+            const cp=b.map(row=>row.slice());
+            if(editorPalette.type==="erase")cp[r][f]=null;
+            else cp[r][f]={type:editorPalette.type,color:editorPalette.color};
+            return cp;
+          });
+          sEditorErrors([]);
+        };
+        return <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:SPACE[3],alignItems:"start"}}>
+          {/* Board */}
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",border:`2px solid ${CC.borderStrong}`,borderRadius:RADIUS.md,overflow:"hidden",userSelect:"none",aspectRatio:"1",maxWidth:520,margin:"0 auto"}}>
+              {Array.from({length:8}).flatMap((_,r)=>Array.from({length:8}).map((__,f)=>{
+                const cell=editorBoard[r][f];
+                const isLight=(r+f)%2===0;
+                return <div key={`er-${r}-${f}`} onClick={()=>place(r,f)}
+                  style={{aspectRatio:"1",background:isLight?"#fef3c7":"#92400e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,cursor:"pointer",lineHeight:1,position:"relative",transition:"background 0.12s"}}>
+                  {cell&&<div style={{width:"86%",height:"86%",filter:"drop-shadow(0 2px 3px rgba(0,0,0,0.3))"}}><Piece type={cell.type} color={cell.color}/></div>}
+                </div>;
+              }))}
+            </div>
+            <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[2],flexWrap:"wrap",justifyContent:"center"}}>
+              <Btn size="sm" variant="secondary" onClick={()=>sEditorBoard(edStart())}>↻ Стартовая</Btn>
+              <Btn size="sm" variant="secondary" onClick={()=>sEditorBoard(edEmpty())}>🗑 Очистить</Btn>
+              <Btn size="sm" variant="secondary" onClick={()=>{
+                const fen=prompt("Вставь FEN:",fenPreview);
+                if(fen){try{sEditorBoard(edFromFen(fen.trim()));sEditorErrors([])}catch{sEditorErrors(["Невалидный FEN"])}}
+              }}>📋 Импорт FEN</Btn>
+            </div>
+          </div>
+          {/* Palette + side */}
+          <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:6}}>Палитра</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4}}>
+                {palette.map(([t,c])=>{
+                  const sel=editorPalette.type===t&&editorPalette.color===c;
+                  return <button key={`${c}${t}`} onClick={()=>sEditorPalette({type:t,color:c})}
+                    title={`${c==="w"?"Белые":"Чёрные"} · ${ED_NAMES[t]}`}
+                    style={{aspectRatio:"1",border:sel?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,background:sel?CC.brandSoft:CC.surface1,borderRadius:RADIUS.sm,fontSize:24,cursor:"pointer",lineHeight:1,padding:0,color:c==="w"?"#0f172a":"#0f172a",textShadow:c==="w"?"0 0 0 #fff":"none"}}>
+                    {pieceGlyph(t,c)}
+                  </button>;
+                })}
+              </div>
+              <button onClick={()=>sEditorPalette({type:"erase" as any,color:"w"})}
+                style={{width:"100%",marginTop:6,padding:"8px",borderRadius:RADIUS.sm,border:editorPalette.type==="erase"?`2px solid ${CC.danger}`:`1px solid ${CC.border}`,background:editorPalette.type==="erase"?"#fee2e2":CC.surface1,fontSize:12,fontWeight:800,color:editorPalette.type==="erase"?CC.danger:CC.text,cursor:"pointer"}}>🗑 Стереть</button>
+            </Card>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:6}}>Ход</div>
+              <div style={{display:"flex",gap:4}}>
+                {(["w","b"] as const).map(c=>{
+                  const sel=editorSide===c;
+                  return <button key={c} onClick={()=>sEditorSide(c)}
+                    style={{flex:1,padding:"8px",borderRadius:RADIUS.sm,border:sel?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,background:sel?CC.brandSoft:CC.surface1,fontSize:13,fontWeight:800,color:CC.text,cursor:"pointer"}}>
+                    {c==="w"?"Белые":"Чёрные"}
+                  </button>;
+                })}
+              </div>
+            </Card>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:6}}>FEN</div>
+              <textarea readOnly value={fenPreview} rows={3}
+                style={{width:"100%",padding:6,borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontFamily:"ui-monospace, monospace",fontSize:11,resize:"none",background:CC.surface2,color:CC.text}}/>
+              <Btn size="sm" variant="secondary" full onClick={()=>{
+                navigator.clipboard?.writeText(fenPreview);
+                showToast("FEN скопирован","success");
+              }}>📋 Копировать FEN</Btn>
+            </Card>
+            {editorErrors.length>0&&<Card padding={SPACE[2]} tone="surface1" style={{borderColor:"#fecaca",background:"#fef2f2"}}>
+              <div style={{fontSize:11,fontWeight:800,color:CC.danger,marginBottom:4}}>Проблемы:</div>
+              <ul style={{margin:0,paddingLeft:18,fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>
+                {editorErrors.map((e,i)=><li key={i}>{e}</li>)}
+              </ul>
+            </Card>}
+            <Btn variant="primary" full onClick={()=>{
+              const v=edValidate(editorBoard,editorSide);
+              if(!v.ok){sEditorErrors(v.errors);return}
+              try{
+                const ch=new Chess(v.fen);
+                setGame(ch);sBk(k=>k+1);sHist([]);sFenHist([v.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sSetup(false);sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(ch.turn());sFlip(ch.turn()==="b");sPms([]);sPmSel(null);
+                sTab("analysis");
+                sShowEditor(false);
+                showToast("Позиция загружена в Анализ","success");
+              }catch(e:any){sEditorErrors([String(e?.message||e)])}
+            }}>⚡ Анализировать позицию</Btn>
+          </div>
+        </div>;
+      })()}
+    </Modal>
+
+    {/* ═══ Insights v2 (killer #16) ═══ */}
+    <Modal open={showInsights} onClose={()=>sShowInsights(false)} size="xl"
+      title="📊 Insights v2">
+      {(()=>{
+        if(savedGames.length<3){
+          return <Card padding={SPACE[4]} tone="surface1" style={{textAlign:"center"}}>
+            <div style={{fontSize:48,marginBottom:SPACE[2]}}>📊</div>
+            <div style={{fontSize:16,fontWeight:800,color:CC.text}}>Нужно минимум 3 партии</div>
+            <div style={{fontSize:13,color:CC.textDim,marginTop:SPACE[1]}}>Сейчас сыграно: {savedGames.length}</div>
+            <div style={{marginTop:SPACE[3]}}>
+              <Btn variant="primary" onClick={()=>{sShowInsights(false);sTab("play");sSetup(true)}}>▶ Сыграть</Btn>
+            </div>
+          </Card>;
+        }
+        const ins:Insights=computeInsights(savedGames as any);
+        const fmt=(wr:Insights["overall"])=>wr.total>0?`${wr.winPct}%·${wr.wins}В/${wr.draws}Н/${wr.losses}П`:"—";
+        const formGlyph=(o:"W"|"L"|"D")=>o==="W"?"●":o==="L"?"●":"●";
+        const formCol=(o:"W"|"L"|"D")=>o==="W"?CC.brand:o==="L"?CC.danger:CC.textDim;
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+          {/* Top stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px,1fr))",gap:SPACE[2]}}>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Всего партий</div>
+              <div style={{fontSize:24,fontWeight:900,color:CC.text}}>{ins.total}</div>
+            </Card>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Win Rate</div>
+              <div style={{fontSize:24,fontWeight:900,color:ins.overall.winPct>=50?CC.brand:CC.danger}}>{ins.overall.winPct}%</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{ins.overall.wins}В · {ins.overall.draws}Н · {ins.overall.losses}П</div>
+            </Card>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Форма</div>
+              <div style={{display:"flex",gap:3,marginTop:6}}>
+                {ins.recentForm.length===0?<span style={{fontSize:13,color:CC.textDim}}>—</span>:
+                  ins.recentForm.map((o,i)=><span key={i} style={{color:formCol(o),fontSize:18,lineHeight:1}}>{formGlyph(o)}</span>)}
+              </div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>последние 10</div>
+            </Card>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Серия</div>
+              <div style={{fontSize:18,fontWeight:900,color:ins.streaks.current.type==="win"?CC.brand:ins.streaks.current.type==="loss"?CC.danger:CC.textDim}}>
+                {ins.streaks.current.type==="none"?"—":`${ins.streaks.current.length} ${ins.streaks.current.type==="win"?"побед":ins.streaks.current.type==="loss"?"пораж":"ничьих"}`}
+              </div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>лучшая серия побед: {ins.streaks.longestWin}</div>
+            </Card>
+            <Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Δ Рейтинг</div>
+              <div style={{fontSize:24,fontWeight:900,color:ins.ratingDelta>=0?CC.brand:CC.danger}}>{ins.ratingDelta>=0?"+":""}{ins.ratingDelta}</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>среднее: {ins.avgGameLength} ходов</div>
+            </Card>
+          </div>
+
+          {/* Color breakdown */}
+          <Card padding={SPACE[3]} tone="surface1">
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>По цвету</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2]}}>
+              <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:"#f8fafc",border:`1px solid ${CC.border}`}}>
+                <div style={{fontSize:13,fontWeight:800,color:CC.text}}>♔ Белыми</div>
+                <div style={{fontSize:18,fontWeight:900,color:ins.asWhite.winPct>=50?CC.brand:CC.danger,fontFamily:"ui-monospace, monospace"}}>{fmt(ins.asWhite)}</div>
+                <div style={{height:6,borderRadius:RADIUS.full,overflow:"hidden",background:CC.surface3,marginTop:4,display:"flex"}}>
+                  {ins.asWhite.total>0&&<><div style={{width:`${ins.asWhite.winPct}%`,background:CC.brand}}/><div style={{width:`${ins.asWhite.drawPct}%`,background:CC.textDim}}/><div style={{width:`${ins.asWhite.lossPct}%`,background:CC.danger}}/></>}
+                </div>
+              </div>
+              <div style={{padding:SPACE[2],borderRadius:RADIUS.sm,background:"#1e293b",border:`1px solid ${CC.borderStrong}`,color:"#f1f5f9"}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#f1f5f9"}}>♚ Чёрными</div>
+                <div style={{fontSize:18,fontWeight:900,color:ins.asBlack.winPct>=50?"#86efac":"#fca5a5",fontFamily:"ui-monospace, monospace"}}>{fmt(ins.asBlack)}</div>
+                <div style={{height:6,borderRadius:RADIUS.full,overflow:"hidden",background:"#334155",marginTop:4,display:"flex"}}>
+                  {ins.asBlack.total>0&&<><div style={{width:`${ins.asBlack.winPct}%`,background:"#10b981"}}/><div style={{width:`${ins.asBlack.drawPct}%`,background:"#94a3b8"}}/><div style={{width:`${ins.asBlack.lossPct}%`,background:"#ef4444"}}/></>}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Best & Kryptonite */}
+          {(ins.bestOpening||ins.kryptonite)&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2]}}>
+            {ins.bestOpening&&<Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",borderColor:"#6ee7b7"}}>
+              <div style={{fontSize:10,color:"#047857",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>★ Твоё лучшее</div>
+              <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:4,lineHeight:1.3}}>{ins.bestOpening.name}</div>
+              <div style={{fontSize:13,color:"#047857",fontFamily:"ui-monospace, monospace",marginTop:2}}>{ins.bestOpening.winPct}% · {ins.bestOpening.total} партий</div>
+            </Card>}
+            {ins.kryptonite&&<Card padding={SPACE[3]} tone="surface1" style={{background:"linear-gradient(135deg,#fef2f2,#fee2e2)",borderColor:"#fca5a5"}}>
+              <div style={{fontSize:10,color:"#991b1b",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>☠ Криптонит</div>
+              <div style={{fontSize:15,fontWeight:900,color:CC.text,marginTop:4,lineHeight:1.3}}>{ins.kryptonite.name}</div>
+              <div style={{fontSize:13,color:"#991b1b",fontFamily:"ui-monospace, monospace",marginTop:2}}>{ins.kryptonite.winPct}% · {ins.kryptonite.total} партий</div>
+            </Card>}
+          </div>}
+
+          {/* By format */}
+          <Card padding={SPACE[3]} tone="surface1">
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>По формату</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {(["Bullet","Blitz","Rapid","Classical"] as const).map(cat=>{
+                const wr=ins.byCategory[cat];
+                if(wr.total===0)return null;
+                const catCol={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Classical:"#3b82f6"}[cat];
+                return <div key={cat} style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                  <span style={{minWidth:80,fontSize:12,fontWeight:800,color:catCol}}>{cat}</span>
+                  <div style={{flex:1,height:8,borderRadius:RADIUS.full,overflow:"hidden",background:CC.surface3,display:"flex"}}>
+                    <div style={{width:`${wr.winPct}%`,background:CC.brand}}/>
+                    <div style={{width:`${wr.drawPct}%`,background:CC.textDim}}/>
+                    <div style={{width:`${wr.lossPct}%`,background:CC.danger}}/>
+                  </div>
+                  <span style={{minWidth:120,fontSize:12,fontFamily:"ui-monospace, monospace",color:CC.text,textAlign:"right"}}>{fmt(wr)}</span>
+                </div>;
+              })}
+            </div>
+            {ins.timePressure.pctGamesLostOnTime>0&&<div style={{marginTop:SPACE[2],padding:SPACE[2],borderRadius:RADIUS.sm,background:"#fffbeb",border:`1px solid #fcd34d`,fontSize:12,color:"#92400e"}}>
+              ⏰ Поражения по времени: <b>{ins.timePressure.pctGamesLostOnTime}%</b> от всех партий
+            </div>}
+          </Card>
+
+          {/* Openings detail */}
+          {ins.openings.length>0&&<Card padding={0} tone="surface1">
+            <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const}}>Все дебюты ({ins.openings.length})</div>
+            </div>
+            <div style={{maxHeight:240,overflowY:"auto"}}>
+              {ins.openings.map((o,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:SPACE[2],padding:"6px 12px",borderBottom:`1px solid ${CC.border}`,fontSize:12}}>
+                  <span style={{flex:1,fontWeight:700,color:CC.text}}>{o.name}</span>
+                  <span style={{minWidth:60,textAlign:"right",fontFamily:"ui-monospace, monospace",color:o.winPct>=50?CC.brand:CC.danger,fontWeight:800}}>{o.winPct}%</span>
+                  <span style={{minWidth:80,textAlign:"right",fontFamily:"ui-monospace, monospace",color:CC.textDim}}>{o.wins}В/{o.draws}Н/{o.losses}П</span>
+                </div>
+              ))}
+            </div>
+          </Card>}
+
+          {/* Highlights */}
+          {(ins.longestWin||ins.shortestLoss)&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SPACE[2]}}>
+            {ins.longestWin&&<Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>🏆 Самая длинная победа</div>
+              <div style={{fontSize:14,fontWeight:800,color:CC.text,marginTop:2}}>{ins.longestWin.moves} ходов</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{ins.longestWin.opening}</div>
+            </Card>}
+            {ins.shortestLoss&&<Card padding={SPACE[2]} tone="surface1">
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>💀 Самое быстрое поражение</div>
+              <div style={{fontSize:14,fontWeight:800,color:CC.danger,marginTop:2}}>{ins.shortestLoss.moves} ходов</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{ins.shortestLoss.opening}</div>
+            </Card>}
+          </div>}
+        </div>;
+      })()}
     </Modal>
 
     </ProductPageShell></main>);

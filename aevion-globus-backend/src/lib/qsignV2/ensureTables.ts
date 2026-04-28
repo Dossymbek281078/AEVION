@@ -107,6 +107,29 @@ export async function ensureQSignV2Tables(pool: PgPoolLike): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "QSignWebhook_active_idx" ON "QSignWebhook" ("active");`,
   );
 
+  /* Per-attempt delivery log — used by GET /webhooks/:id/deliveries and to
+   * help operators diagnose dead targets. One row per HTTP attempt; retries
+   * produce multiple rows linked by webhookId + event time clustering. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignWebhookDelivery" (
+      "id"           TEXT PRIMARY KEY,
+      "webhookId"    TEXT NOT NULL,
+      "event"        TEXT NOT NULL,
+      "attempt"      INTEGER NOT NULL DEFAULT 1,
+      "httpStatus"   INTEGER,
+      "error"        TEXT,
+      "durationMs"   INTEGER NOT NULL DEFAULT 0,
+      "succeeded"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookDelivery_webhookId_idx" ON "QSignWebhookDelivery" ("webhookId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookDelivery_createdAt_idx" ON "QSignWebhookDelivery" ("createdAt");`,
+  );
+
   /* Seed default keys if absent ---------------------------------------- */
   await pool.query(
     `

@@ -12,6 +12,29 @@ import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldGhostDuelStats, svGhostDuelStats, makeDuelConfig, getGhostMoveAt, checkDivergence, compareEvals, formatPastDate, ghostSummary, recordDuelResult, type GhostDuelConfig, type GhostDuelStats, type DuelMode, type EvalSample } from "./ghostDuel";
+import { ldWallet, svWallet, recordPlay, RATE_CARD, type PlayAction } from "../aev/aevToken";
+
+// ─── AEV connector — chess wins/puzzles auto-mint into the unified wallet ─
+// AEVION protocol: Proof-of-Play engine за валидируемые в чессе действия.
+// Возвращает количество AEV или 0 если ничего не сминтилось (cap, off mode, etc).
+function mintAevFromChess(action: PlayAction, overrideAev?: number): number {
+  try {
+    const w = ldWallet();
+    if (!w.modes.play) return 0;
+    const before = w.balance;
+    const next = recordPlay(w, action, "cyberchess", overrideAev);
+    if (next === w) return 0;
+    svWallet(next);
+    return next.balance - before;
+  } catch { return 0; }
+}
+
+function aevTierForAi(aiIdx: number): PlayAction {
+  // 0,1 = Beginner/Casual = easy; 2,3 = Club/Advanced = med; 4,5 = Expert/Master = hard
+  if (aiIdx <= 1) return "cyberchess_win_easy";
+  if (aiIdx <= 3) return "cyberchess_win_med";
+  return "cyberchess_win_hard";
+}
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -836,7 +859,19 @@ export default function CyberChessPage(){
                 }
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"пазл решён");
-                if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
+                // AEV mint for puzzle solve (cyberchess_puzzle = 0.2 baseline)
+                const aevPz=mintAevFromChess("cyberchess_puzzle");
+                if(aevPz>0&&pzMode!=="rush"){
+                  setTimeout(()=>showToast(`◆ +${aevPz.toFixed(2)} AEV · puzzle`,"info"),700);
+                }
+                if(pzCurrent.theme==="Твоя ошибка"){
+                  addChessy(3,"🎯 ошибка исправлена");
+                  // AEV: Blunder Rewind = special premium reward (0.8 AEV)
+                  const aevBlunder=mintAevFromChess("cyberchess_blunder_fix");
+                  if(aevBlunder>0){
+                    setTimeout(()=>showToast(`◆ +${aevBlunder.toFixed(2)} AEV · blunder fix bonus`,"success"),900);
+                  }
+                }
                 if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
                   setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
@@ -862,7 +897,18 @@ export default function CyberChessPage(){
           }
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"пазл решён");
-          if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
+          // AEV mint for puzzle solve (single-move path)
+          const aevPz=mintAevFromChess("cyberchess_puzzle");
+          if(aevPz>0&&pzMode!=="rush"){
+            setTimeout(()=>showToast(`◆ +${aevPz.toFixed(2)} AEV · puzzle`,"info"),700);
+          }
+          if(pzCurrent.theme==="Твоя ошибка"){
+            addChessy(3,"🎯 ошибка исправлена");
+            const aevBlunder=mintAevFromChess("cyberchess_blunder_fix");
+            if(aevBlunder>0){
+              setTimeout(()=>showToast(`◆ +${aevBlunder.toFixed(2)} AEV · blunder fix bonus`,"success"),900);
+            }
+          }
           // Daily puzzle bonus — first solve today
           if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
@@ -924,6 +970,12 @@ export default function CyberChessPage(){
             const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
             const reward=Math.max(5,Math.round(10*aiMul*timeMul));
             setTimeout(()=>addChessy(reward,`победа над ${lv.name}`),400);
+            // AEV mint: Proof-of-Play, scaled by difficulty tier
+            const aevAction=aevTierForAi(aiI);
+            const aevMinted=mintAevFromChess(aevAction);
+            if(aevMinted>0){
+              setTimeout(()=>showToast(`◆ +${aevMinted.toFixed(2)} AEV · ${RATE_CARD.play[aevAction].label.replace("CyberChess · ","")}`,"success"),1100);
+            }
             // Achievements
             const newWinCount=sts.w+1;
             setTimeout(()=>{
@@ -1631,6 +1683,15 @@ export default function CyberChessPage(){
     if(chessy>0)addChessy(chessy,`Puzzle Rush · ${rushScore} решено`);
     if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
     if(isNewBest&&rushScore>=25)unlockAch("rush_25",200,"Rush: 25 за сессию");
+    // AEV mint: Puzzle Rush finale — 1.0 base × score-scaled bonus.
+    // Capped to avoid over-emit if user farms rush; rate scales sub-linearly.
+    if(rushScore>0){
+      const bonusAev=Math.min(8,RATE_CARD.play.cyberchess_puzzle_rush.aev*Math.sqrt(rushScore));
+      const minted=mintAevFromChess("cyberchess_puzzle_rush",bonusAev);
+      if(minted>0){
+        setTimeout(()=>showToast(`◆ +${minted.toFixed(2)} AEV · Rush ${rushScore} solved${isNewBest?" · NEW BEST":""}`,"success"),600);
+      }
+    }
   },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);
 
   // Auto-advance to next puzzle in rush/timed modes after a correct solve

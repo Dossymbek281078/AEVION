@@ -17,6 +17,7 @@ import {
 } from "../lib/qsignV2/keyRegistry";
 import type { QSignVerifyResult } from "../lib/qsignV2/types";
 import { fireWebhooksFor } from "../lib/qsignV2/webhooks";
+import { QSIGN_V2_OPENAPI } from "../lib/qsignV2/openapiSpec";
 
 /* ───────── rate limits ─────────
  * Per-IP token-bucket style windows guarding the two expensive write paths.
@@ -77,6 +78,45 @@ export const qsignV2Router = Router();
 const pool = getPool();
 
 const ALGO_VERSION = "qsign-v2.0";
+
+/* ───────── request ID middleware ─────────
+ * Honor an inbound X-Request-Id when present; otherwise mint a short hex id.
+ * Attached to req as `(req as any).qsignReqId` and echoed back in
+ * response headers so callers can correlate failures with our logs. The
+ * helper `logErr` below uses it to prefix server-side error logs.
+ */
+qsignV2Router.use((req, res, next) => {
+  const incoming = req.headers["x-request-id"];
+  const id =
+    typeof incoming === "string" && /^[a-zA-Z0-9._-]{4,64}$/.test(incoming)
+      ? incoming
+      : crypto.randomBytes(6).toString("hex");
+  (req as any).qsignReqId = id;
+  res.setHeader("X-Request-Id", id);
+  next();
+});
+
+function reqId(req: Request): string {
+  return (req as any).qsignReqId || "no-req-id";
+}
+
+/**
+ * Standard 5xx error responder. Logs with [req=<id>] prefix, returns JSON
+ * with `requestId` so the user can quote it when reporting issues.
+ */
+function errResp(
+  req: Request,
+  res: Response,
+  status: number,
+  body: Record<string, unknown>,
+  err?: unknown,
+): void {
+  const id = reqId(req);
+  if (err !== undefined) {
+    console.error(`[qsign v2] [req=${id}] ${body.error || "error"}`, err);
+  }
+  res.status(status).json({ ...body, requestId: id });
+}
 
 /* ───────── helpers ───────── */
 
@@ -211,26 +251,122 @@ async function loadRevocation(signatureId: string) {
   return r.rows[0];
 }
 
-/* ───────── health ───────── */
+/* ───────── OpenAPI 3.0 spec ─────────
+ * Static export of the contract for client SDK generators (Postman,
+ * Stoplight, openapi-generator). Update lib/qsignV2/openapiSpec.ts when
+ * endpoint shape changes.
+ */
+qsignV2Router.get("/openapi.json", (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json(QSIGN_V2_OPENAPI);
+});
+
+/* ───────── health ─────────
+ * Production liveness + readiness probe. Composes:
+ *   - DB ping (`SELECT 1`) with latency
+ *   - active key resolution (HMAC + Ed25519)
+ *   - row counts for each managed table — useful for ops dashboards
+ *   - process uptime + memory snapshot
+ *
+ * Returns 200 with full payload when everything is reachable; 503 with
+ * `status="degraded"` and a per-component breakdown when the DB ping fails
+ * or active keys can't be resolved. The shape is stable so monitors can
+ * hard-code field paths.
+ */
+const PROCESS_STARTED_AT = Date.now();
 
 qsignV2Router.get("/health", async (_req, res) => {
+  const out: Record<string, unknown> = {
+    service: "qsign-v2",
+    algoVersion: ALGO_VERSION,
+    canonicalization: CANONICALIZATION_SPEC,
+    uptimeSec: Math.round((Date.now() - PROCESS_STARTED_AT) / 1000),
+  };
+
+  // 1. DB ping
+  let dbOk = false;
+  let dbLatencyMs: number | null = null;
+  let dbError: string | null = null;
+  try {
+    const t0 = Date.now();
+    await pool.query("SELECT 1");
+    dbLatencyMs = Date.now() - t0;
+    dbOk = true;
+  } catch (e: any) {
+    dbError = (e?.message || String(e)).slice(0, 200);
+  }
+  out.db = { ok: dbOk, latencyMs: dbLatencyMs, error: dbError };
+
+  if (!dbOk) {
+    out.status = "degraded";
+    return res.status(503).json(out);
+  }
+
+  // 2. Tables + active keys
   try {
     await ensureQSignV2Tables(pool);
+  } catch (e: any) {
+    out.status = "degraded";
+    out.tables = { ok: false, error: (e?.message || String(e)).slice(0, 200) };
+    return res.status(503).json(out);
+  }
+
+  let hmacKid: string | null = null;
+  let edKid: string | null = null;
+  let keyError: string | null = null;
+  try {
     const hmac = await getActiveHmac();
     const ed = await getActiveEd25519();
-    res.json({
-      status: "ok",
-      service: "qsign-v2",
-      algoVersion: ALGO_VERSION,
-      canonicalization: CANONICALIZATION_SPEC,
-      activeKeys: {
-        hmac: hmac.kid,
-        ed25519: ed.kid,
-      },
-    });
+    hmacKid = hmac.kid;
+    edKid = ed.kid;
   } catch (e: any) {
-    res.status(500).json({ status: "error", error: e?.message || String(e) });
+    keyError = (e?.message || String(e)).slice(0, 200);
   }
+  out.activeKeys = keyError
+    ? { hmac: null, ed25519: null, error: keyError }
+    : { hmac: hmacKid, ed25519: edKid };
+
+  if (keyError) {
+    out.status = "degraded";
+    return res.status(503).json(out);
+  }
+
+  // 3. Counts (best-effort; failure here doesn't degrade health)
+  try {
+    const r = (await pool.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM "QSignSignature") AS signatures,
+         (SELECT COUNT(*)::int FROM "QSignSignature" WHERE "revokedAt" IS NOT NULL) AS revoked,
+         (SELECT COUNT(*)::int FROM "QSignKey") AS keys,
+         (SELECT COUNT(*)::int FROM "QSignWebhook" WHERE "active" = TRUE) AS active_webhooks,
+         (SELECT COUNT(*)::int FROM "QSignWebhookDelivery") AS delivery_attempts`,
+    )) as any;
+    const c = r.rows?.[0] || {};
+    out.counts = {
+      signatures: c.signatures ?? 0,
+      revoked: c.revoked ?? 0,
+      keys: c.keys ?? 0,
+      activeWebhooks: c.active_webhooks ?? 0,
+      deliveryAttempts: c.delivery_attempts ?? 0,
+    };
+  } catch {
+    out.counts = null;
+  }
+
+  // 4. Memory snapshot — cheap, useful for catching slow leaks.
+  try {
+    const m = process.memoryUsage();
+    out.memory = {
+      rssMb: Math.round((m.rss / 1024 / 1024) * 10) / 10,
+      heapUsedMb: Math.round((m.heapUsed / 1024 / 1024) * 10) / 10,
+      heapTotalMb: Math.round((m.heapTotal / 1024 / 1024) * 10) / 10,
+    };
+  } catch {
+    /* ignore */
+  }
+
+  out.status = "ok";
+  res.json(out);
 });
 
 /* ───────── GET /stats (public metrics) ─────────
@@ -239,7 +375,7 @@ qsignV2Router.get("/health", async (_req, res) => {
  * never payloads or issuer identities.
  */
 
-qsignV2Router.get("/stats", async (_req, res) => {
+qsignV2Router.get("/stats", async (req, res) => {
   try {
     await ensureQSignV2Tables(pool);
 
@@ -308,8 +444,7 @@ qsignV2Router.get("/stats", async (_req, res) => {
       asOf: new Date().toISOString(),
     });
   } catch (e: any) {
-    console.error("[qsign v2] /stats error", e);
-    res.status(500).json({ error: "stats_failed", details: e?.message });
+    errResp(req, res, 500, { error: "stats_failed", details: e?.message }, e);
   }
 });
 
@@ -364,8 +499,7 @@ qsignV2Router.get("/recent", async (req, res) => {
       limit,
     });
   } catch (e: any) {
-    console.error("[qsign v2] /recent error", e);
-    res.status(500).json({ error: "recent_failed", details: e?.message });
+    errResp(req, res, 500, { error: "recent_failed", details: e?.message }, e);
   }
 });
 
@@ -494,8 +628,7 @@ qsignV2Router.get("/audit", async (req, res) => {
       asOf: new Date().toISOString(),
     });
   } catch (e: any) {
-    console.error("[qsign v2] /audit error", e);
-    res.status(500).json({ error: "audit_failed", details: e?.message });
+    errResp(req, res, 500, { error: "audit_failed", details: e?.message }, e);
   }
 });
 
@@ -605,8 +738,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       publicUrl: `/qsign/verify/${id}`,
     });
   } catch (e: any) {
-    console.error("[qsign v2] sign error", e);
-    res.status(500).json({ error: "sign_failed", details: e?.message });
+    errResp(req, res, 500, { error: "sign_failed", details: e?.message }, e);
   }
 });
 
@@ -728,8 +860,7 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
       results,
     });
   } catch (e: any) {
-    console.error("[qsign v2] sign/batch error", e);
-    res.status(500).json({ error: "batch_sign_failed", details: e?.message });
+    errResp(req, res, 500, { error: "batch_sign_failed", details: e?.message }, e);
   }
 });
 
@@ -801,8 +932,7 @@ qsignV2Router.post("/verify", async (req, res) => {
       stateless: true,
     });
   } catch (e: any) {
-    console.error("[qsign v2] verify error", e);
-    res.status(500).json({ error: "verify_failed", details: e?.message });
+    errResp(req, res, 500, { error: "verify_failed", details: e?.message }, e);
   }
 });
 
@@ -865,8 +995,7 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
 
     res.json(out);
   } catch (e: any) {
-    console.error("[qsign v2] verify/:id error", e);
-    res.status(500).json({ error: "verify_failed", details: e?.message });
+    errResp(req, res, 500, { error: "verify_failed", details: e?.message }, e);
   }
 });
 
@@ -984,8 +1113,7 @@ qsignV2Router.post("/revoke/:id", revokeLimiter, async (req, res) => {
         "Historical signatures remain cryptographically valid; verify endpoints will report valid=false due to revocation status.",
     });
   } catch (e: any) {
-    console.error("[qsign v2] /revoke/:id error", e);
-    res.status(500).json({ error: "revoke_failed", details: e?.message });
+    errResp(req, res, 500, { error: "revoke_failed", details: e?.message }, e);
   }
 });
 
@@ -1020,8 +1148,7 @@ qsignV2Router.get("/webhooks", async (req, res) => {
       })),
     });
   } catch (e: any) {
-    console.error("[qsign v2] /webhooks list error", e);
-    res.status(500).json({ error: "webhooks_list_failed", details: e?.message });
+    errResp(req, res, 500, { error: "webhooks_list_failed", details: e?.message }, e);
   }
 });
 
@@ -1073,8 +1200,64 @@ qsignV2Router.post("/webhooks", async (req, res) => {
         "Save the secret — it is shown ONCE and used to verify X-QSign-Signature on every delivery (HMAC-SHA256 over the raw JSON body).",
     });
   } catch (e: any) {
-    console.error("[qsign v2] /webhooks create error", e);
-    res.status(500).json({ error: "webhook_create_failed", details: e?.message });
+    errResp(req, res, 500, { error: "webhook_create_failed", details: e?.message }, e);
+  }
+});
+
+/* ───────── GET /webhooks/:id/deliveries ─────────
+ * Per-attempt delivery audit trail for a single webhook owned by the caller.
+ * Returns the most recent N rows (1..200, default 50) ordered by createdAt
+ * DESC. Used by operators to diagnose dead receivers and by the Studio UI
+ * to surface a per-webhook drawer.
+ */
+qsignV2Router.get("/webhooks/:id/deliveries", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+  try {
+    await ensureQSignV2Tables(pool);
+
+    // Owner-scope guard — the webhook must belong to the caller. Without
+    // this any authenticated user could enumerate any webhook id.
+    const own = (await pool.query(
+      `SELECT "id" FROM "QSignWebhook" WHERE "id" = $1 AND "ownerUserId" = $2`,
+      [req.params.id, auth.sub],
+    )) as any;
+    if (!own.rows.length) {
+      return res.status(404).json({ error: "webhook not found or not yours" });
+    }
+
+    const rawLimit = Number(req.query.limit);
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit >= 1 && rawLimit <= 200
+        ? Math.floor(rawLimit)
+        : 50;
+
+    const r = (await pool.query(
+      `SELECT "id","webhookId","event","attempt","httpStatus","error","durationMs","succeeded","createdAt"
+       FROM "QSignWebhookDelivery"
+       WHERE "webhookId" = $1
+       ORDER BY "createdAt" DESC
+       LIMIT $2`,
+      [req.params.id, limit],
+    )) as any;
+
+    res.json({
+      webhookId: req.params.id,
+      total: r.rows.length,
+      limit,
+      deliveries: (r.rows || []).map((row: any) => ({
+        id: row.id,
+        event: row.event,
+        attempt: row.attempt,
+        httpStatus: row.httpStatus,
+        error: row.error,
+        durationMs: row.durationMs,
+        succeeded: row.succeeded,
+        createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
+      })),
+    });
+  } catch (e: any) {
+    errResp(req, res, 500, { error: "deliveries_failed", details: e?.message }, e);
   }
 });
 
@@ -1083,23 +1266,36 @@ qsignV2Router.delete("/webhooks/:id", async (req, res) => {
   if (!auth) return;
   try {
     await ensureQSignV2Tables(pool);
-    const r = (await pool.query(
-      `DELETE FROM "QSignWebhook" WHERE "id" = $1 AND "ownerUserId" = $2`,
-      [req.params.id, auth.sub],
-    )) as any;
-    if (r.rowCount === 0) {
-      return res.status(404).json({ error: "webhook not found or not yours" });
+    // Cascade — drop the delivery audit rows alongside the webhook so the
+    // owner doesn't carry rows pointing at a webhook that no longer exists.
+    await pool.query("BEGIN");
+    try {
+      const r = (await pool.query(
+        `DELETE FROM "QSignWebhook" WHERE "id" = $1 AND "ownerUserId" = $2`,
+        [req.params.id, auth.sub],
+      )) as any;
+      if (r.rowCount === 0) {
+        await pool.query("ROLLBACK");
+        return res.status(404).json({ error: "webhook not found or not yours" });
+      }
+      await pool.query(
+        `DELETE FROM "QSignWebhookDelivery" WHERE "webhookId" = $1`,
+        [req.params.id],
+      );
+      await pool.query("COMMIT");
+    } catch (err) {
+      await pool.query("ROLLBACK");
+      throw err;
     }
     res.json({ deleted: true, id: req.params.id });
   } catch (e: any) {
-    console.error("[qsign v2] /webhooks delete error", e);
-    res.status(500).json({ error: "webhook_delete_failed", details: e?.message });
+    errResp(req, res, 500, { error: "webhook_delete_failed", details: e?.message }, e);
   }
 });
 
 /* ───────── GET /keys (JWKS-like registry) ───────── */
 
-qsignV2Router.get("/keys", async (_req, res) => {
+qsignV2Router.get("/keys", async (req, res) => {
   try {
     await ensureQSignV2Tables(pool);
     const all = await listKeys();
@@ -1128,8 +1324,7 @@ qsignV2Router.get("/keys", async (_req, res) => {
       total: items.length,
     });
   } catch (e: any) {
-    console.error("[qsign v2] /keys error", e);
-    res.status(500).json({ error: "keys_list_failed", details: e?.message });
+    errResp(req, res, 500, { error: "keys_list_failed", details: e?.message }, e);
   }
 });
 
@@ -1150,7 +1345,7 @@ qsignV2Router.get("/keys/:kid", async (req, res) => {
       notes: row.notes,
     });
   } catch (e: any) {
-    res.status(500).json({ error: "key_lookup_failed", details: e?.message });
+    errResp(req, res, 500, { error: "key_lookup_failed", details: e?.message }, e);
   }
 });
 
@@ -1286,8 +1481,7 @@ qsignV2Router.post("/keys/rotate", rotateLimiter, async (req, res) => {
         "Previous active key (if any) is now 'retired' and remains valid for verification of historical signatures.",
     });
   } catch (e: any) {
-    console.error("[qsign v2] /keys/rotate error", e);
-    res.status(500).json({ error: "rotate_failed", details: e?.message });
+    errResp(req, res, 500, { error: "rotate_failed", details: e?.message }, e);
   }
 });
 
@@ -1316,6 +1510,7 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       "recent",
       "webhooks",
       "audit",
+      "openapi.json",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
@@ -1556,7 +1751,7 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
   } catch (e: any) {
     console.error("[qsign v2] :id/pdf error", e);
     if (!res.headersSent) {
-      res.status(500).json({ error: "pdf_render_failed", details: e?.message });
+      errResp(req, res, 500, { error: "pdf_render_failed", details: e?.message }, e);
     } else {
       res.end();
     }
@@ -1585,6 +1780,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
       "recent",
       "webhooks",
       "audit",
+      "openapi.json",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
@@ -1665,8 +1861,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
           : null,
     });
   } catch (e: any) {
-    console.error("[qsign v2] :id/public error", e);
-    res.status(500).json({ error: "public_view_failed", details: e?.message });
+    errResp(req, res, 500, { error: "public_view_failed", details: e?.message }, e);
   }
 });
 

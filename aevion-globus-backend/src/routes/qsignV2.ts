@@ -127,6 +127,72 @@ function constantTimeEqHex(a: string, b: string): boolean {
   }
 }
 
+/* ───────── Dilithium preview slot (post-quantum reservation) ─────────
+ * Real ML-DSA (Dilithium) requires a WASM-bound PQClean impl which is on the
+ * roadmap but out of scope for v2. To reserve the API surface and prevent
+ * future breaking changes, every signature ships with a deterministic
+ * SHA-512 fingerprint of (canonical || kid). It is NOT a cryptographic
+ * signature — clients use it to (a) confirm the slot was emitted at sign
+ * time and (b) round-trip integrity-check the canonical payload against the
+ * server's view of it. v2.1 will replace `digest` with `signature` + add
+ * `publicKey`, leaving the same JSON shape.
+ */
+const DILITHIUM_PREVIEW_KID = "qsign-dilithium-mldsa65-preview-v1";
+const DILITHIUM_PREVIEW_NOTE =
+  "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. v2.1 will add real `signature` + `publicKey`.";
+
+function dilithiumPreviewDigest(canonical: string): string {
+  return crypto
+    .createHash("sha512")
+    .update(canonical, "utf8")
+    .update("|", "utf8")
+    .update(DILITHIUM_PREVIEW_KID, "utf8")
+    .digest("hex");
+}
+
+type DilithiumPreviewBlock = {
+  algo: "ML-DSA-65";
+  kid: string;
+  mode: "preview";
+  digest: string;
+  valid: boolean | null;
+  note: string;
+};
+
+function dilithiumPreviewBlock(canonical: string, validOverride?: boolean | null): DilithiumPreviewBlock {
+  return {
+    algo: "ML-DSA-65",
+    kid: DILITHIUM_PREVIEW_KID,
+    mode: "preview",
+    digest: dilithiumPreviewDigest(canonical),
+    valid: validOverride === undefined ? true : validOverride,
+    note: DILITHIUM_PREVIEW_NOTE,
+  };
+}
+
+/**
+ * For DB-backed verifies: row.signatureDilithium may be null (legacy rows pre-preview),
+ * a hex digest (post-preview rows), or anything else. We re-derive the expected digest
+ * from the stored canonical payload + kid and compare constant-time. Returns null when
+ * the column is null (legacy), otherwise a block with valid:true|false.
+ */
+function dilithiumPreviewFromRow(row: any): DilithiumPreviewBlock | null {
+  if (!row || typeof row.signatureDilithium !== "string" || !row.signatureDilithium) {
+    return null;
+  }
+  const stored = row.signatureDilithium;
+  const expected = dilithiumPreviewDigest(row.payloadCanonical);
+  const valid = constantTimeEqHex(stored, expected);
+  return {
+    algo: "ML-DSA-65",
+    kid: DILITHIUM_PREVIEW_KID,
+    mode: "preview",
+    digest: stored,
+    valid,
+    note: DILITHIUM_PREVIEW_NOTE,
+  };
+}
+
 // Re-exported from lib/qsignV2/geo.ts so downstream routes can reuse the helper.
 const extractClientIp = _extractClientIpImpl;
 
@@ -303,6 +369,136 @@ qsignV2Router.get("/recent", async (req, res) => {
   }
 });
 
+/* ───────── GET /audit (per-user event log) ─────────
+ * Auth required. Returns sign + revoke events touching the caller — either as
+ * issuer (sign events on their own signatures, revoke events the caller's
+ * signatures received) or as actor (revokes the caller performed). Ordered
+ * by event time DESC. Cursor-less; pagination via limit + offset.
+ *
+ * Query:
+ *   limit  1..100 (default 50)
+ *   offset 0..    (default 0)
+ *   event  "sign" | "revoke" (optional filter)
+ *
+ * Use case: compliance export, customer-facing activity log, abuse detection.
+ */
+
+qsignV2Router.get("/audit", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  try {
+    await ensureQSignV2Tables(pool);
+
+    const rawLimit = Number(req.query.limit);
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit >= 1 && rawLimit <= 100
+        ? Math.floor(rawLimit)
+        : 50;
+
+    const rawOffset = Number(req.query.offset);
+    const offset =
+      Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.floor(rawOffset) : 0;
+
+    const eventFilter =
+      typeof req.query.event === "string" && (req.query.event === "sign" || req.query.event === "revoke")
+        ? (req.query.event as "sign" | "revoke")
+        : null;
+
+    const includeSign = eventFilter === null || eventFilter === "sign";
+    const includeRevoke = eventFilter === null || eventFilter === "revoke";
+
+    const parts: string[] = [];
+    const params: unknown[] = [auth.sub];
+
+    if (includeSign) {
+      parts.push(`
+        SELECT
+          'sign'::text AS event,
+          s."id" AS "signatureId",
+          NULL::text AS "revocationId",
+          s."createdAt" AS at,
+          s."hmacKid",
+          s."ed25519Kid",
+          s."payloadHash",
+          s."geoCountry",
+          NULL::text AS reason,
+          NULL::text AS "causalSignatureId",
+          NULL::text AS "revokerUserId",
+          s."revokedAt"
+        FROM "QSignSignature" s
+        WHERE s."issuerUserId" = $1
+      `);
+    }
+
+    if (includeRevoke) {
+      parts.push(`
+        SELECT
+          'revoke'::text AS event,
+          r."signatureId",
+          r."id" AS "revocationId",
+          r."revokedAt" AS at,
+          s."hmacKid",
+          s."ed25519Kid",
+          s."payloadHash",
+          s."geoCountry",
+          r."reason",
+          r."causalSignatureId",
+          r."revokerUserId",
+          s."revokedAt"
+        FROM "QSignRevocation" r
+        JOIN "QSignSignature" s ON s."id" = r."signatureId"
+        WHERE s."issuerUserId" = $1 OR r."revokerUserId" = $1
+      `);
+    }
+
+    if (parts.length === 0) {
+      return res.json({ items: [], total: 0, limit, offset, event: eventFilter });
+    }
+
+    const unionSql = parts.join("\nUNION ALL\n");
+    const sql = `
+      WITH events AS (
+        ${unionSql}
+      )
+      SELECT * FROM events
+      ORDER BY at DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+    params.push(limit, offset);
+
+    const r = (await pool.query(sql, params)) as any;
+
+    const items = (r.rows || []).map((row: any) => ({
+      event: row.event,
+      signatureId: row.signatureId,
+      revocationId: row.revocationId,
+      at: row.at ? new Date(row.at).toISOString() : null,
+      hmacKid: row.hmacKid,
+      ed25519Kid: row.ed25519Kid,
+      payloadHash: row.payloadHash,
+      country: row.geoCountry,
+      reason: row.reason,
+      causalSignatureId: row.causalSignatureId,
+      revokerUserId: row.revokerUserId,
+      isMine: row.event === "sign" || row.revokerUserId !== auth.sub,
+      publicUrl: `/qsign/verify/${row.signatureId}`,
+    }));
+
+    res.json({
+      items,
+      total: items.length,
+      limit,
+      offset,
+      event: eventFilter,
+      asOf: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    console.error("[qsign v2] /audit error", e);
+    res.status(500).json({ error: "audit_failed", details: e?.message });
+  }
+});
+
 /* ───────── POST /sign ───────── */
 
 qsignV2Router.post("/sign", signLimiter, async (req, res) => {
@@ -332,6 +528,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
 
     const signatureHmac = signHmac(hmacKey.secret, canonical);
     const signatureEd25519 = signEd25519Hex(edKey.privateKey, canonical);
+    const dilithiumPreview = dilithiumPreviewBlock(canonical);
 
     // Geo anchoring: body.gps (explicit client GPS) takes priority; fallback to IP lookup.
     const geo = resolveGeo(body.gps, req);
@@ -345,7 +542,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
          "signatureHmac","signatureEd25519","signatureDilithium",
          "algoVersion","issuerUserId","issuerEmail",
          "geoLat","geoLng","geoSource","geoCountry","geoCity")
-      VALUES ($1,$2,$3, $4,$5, $6,$7,NULL, $8,$9,$10, $11,$12,$13,$14,$15)
+      VALUES ($1,$2,$3, $4,$5, $6,$7,$8, $9,$10,$11, $12,$13,$14,$15,$16)
       `,
       [
         id,
@@ -355,6 +552,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
         payloadHash,
         signatureHmac,
         signatureEd25519,
+        dilithiumPreview.digest,
         ALGO_VERSION,
         auth.sub,
         auth.email,
@@ -391,7 +589,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
         signature: signatureEd25519,
         publicKey: edKey.publicKeyHex,
       },
-      dilithium: null,
+      dilithium: dilithiumPreview,
       issuer: { userId: auth.sub, email: auth.email },
       geo: geo.source
         ? {
@@ -469,6 +667,7 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
         const payloadHash = sha256Hex(canonical);
         const signatureHmac = signHmac(hmacKey.secret, canonical);
         const signatureEd25519 = signEd25519Hex(edKey.privateKey, canonical);
+        const dilithiumDigest = dilithiumPreviewDigest(canonical);
 
         const geo = gps !== undefined ? resolveGeo(gps, req) : fallbackGeo;
         const id = crypto.randomUUID();
@@ -481,7 +680,7 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
              "signatureHmac","signatureEd25519","signatureDilithium",
              "algoVersion","issuerUserId","issuerEmail",
              "geoLat","geoLng","geoSource","geoCountry","geoCity")
-          VALUES ($1,$2,$3, $4,$5, $6,$7,NULL, $8,$9,$10, $11,$12,$13,$14,$15)
+          VALUES ($1,$2,$3, $4,$5, $6,$7,$8, $9,$10,$11, $12,$13,$14,$15,$16)
           `,
           [
             id,
@@ -491,6 +690,7 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
             payloadHash,
             signatureHmac,
             signatureEd25519,
+            dilithiumDigest,
             ALGO_VERSION,
             auth.sub,
             auth.email,
@@ -576,6 +776,20 @@ qsignV2Router.post("/verify", async (req, res) => {
 
     const valid = hmacValid && (edValid === null ? true : edValid);
 
+    const dilithiumDigestIn =
+      typeof req.body?.signatureDilithium === "string" ? req.body.signatureDilithium : null;
+    const dilithiumExpected = dilithiumPreviewDigest(canonical);
+    const dilithiumOut = dilithiumDigestIn
+      ? {
+          algo: "ML-DSA-65" as const,
+          kid: DILITHIUM_PREVIEW_KID,
+          mode: "preview" as const,
+          digest: dilithiumDigestIn,
+          valid: constantTimeEqHex(dilithiumDigestIn, dilithiumExpected),
+          note: DILITHIUM_PREVIEW_NOTE,
+        }
+      : null;
+
     res.json({
       valid,
       algoVersion: ALGO_VERSION,
@@ -583,6 +797,7 @@ qsignV2Router.post("/verify", async (req, res) => {
       payloadHash,
       hmac: { kid: hmacRow.kid, valid: hmacValid },
       ed25519: { kid: edKidOut, valid: edValid },
+      dilithium: dilithiumOut,
       stateless: true,
     });
   } catch (e: any) {
@@ -626,6 +841,7 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
       algoVersion: row.algoVersion || ALGO_VERSION,
       hmac: { kid: row.hmacKid, valid: hmacValid },
       ed25519: { kid: row.ed25519Kid ?? null, valid: edValid },
+      dilithium: dilithiumPreviewFromRow(row),
       revoked,
       revokedAt: revokedAtSrc ? new Date(revokedAtSrc).toISOString() : null,
       revocationReason: revocation?.reason ?? null,
@@ -1099,6 +1315,7 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       "stats",
       "recent",
       "webhooks",
+      "audit",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
@@ -1293,6 +1510,20 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       doc.moveDown(0.4);
     }
 
+    const dilithiumRow = dilithiumPreviewFromRow(row);
+    if (dilithiumRow) {
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(COLOR_MUTED).text(
+        `ML-DSA-65 (Dilithium-3) — ${dilithiumRow.mode}`,
+      );
+      doc.font("Courier").fontSize(8.5).fillColor(COLOR_TEXT).text(
+        `kid: ${dilithiumRow.kid}\ndigest: ${truncate(dilithiumRow.digest, 80)}\nverify: ${dilithiumRow.valid === null ? "—" : dilithiumRow.valid ? "✓" : "✗"}`,
+      );
+      doc.font("Helvetica-Oblique").fontSize(7).fillColor(COLOR_MUTED).text(
+        "Preview slot — real PQ signature lands in v2.1.",
+      );
+      doc.moveDown(0.4);
+    }
+
     const qrSize = 130;
     const qrX = doc.page.width - 48 - qrSize;
     const qrY = doc.page.height - 48 - qrSize - 30;
@@ -1353,6 +1584,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
       "stats",
       "recent",
       "webhooks",
+      "audit",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
@@ -1416,7 +1648,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
             valid: edValid,
           }
         : null,
-      dilithium: null,
+      dilithium: dilithiumPreviewFromRow(row),
       issuer: {
         userId: row.issuerUserId ?? null,
         email: row.issuerEmail ?? null,

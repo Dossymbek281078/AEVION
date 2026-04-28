@@ -189,13 +189,49 @@ export function spend(w: AEVWallet, amount: number, reason: string): AEVWallet |
   });
 }
 
+// ─── Active boost multipliers ─────────────────────────────────────
+// Reads marketplace boosts из localStorage и применяет multiplier к base mint.
+// Forward-uses ldBoosts() (declared in Marketplace section) — функция декларация
+// hoisted, runtime safe.
+
+function applyActionBoosts(amount: number, action: string): { amount: number; mult: number } {
+  if (typeof window === "undefined") return { amount, mult: 1 };
+  let mult = 1;
+  try {
+    const boosts = ldBoosts();
+    const now = Date.now();
+    for (const b of boosts) {
+      if (b.expiresTs <= now) continue;
+      if (b.itemId === "boost_play_2x") mult *= 2;
+      if (b.itemId === "boost_bot_2x" && action === "qtrade_dca_run") mult *= 2;
+    }
+  } catch {}
+  return { amount: amount * mult, mult };
+}
+
+function applyStreakBoost(amount: number): { amount: number; mult: number } {
+  if (typeof window === "undefined") return { amount, mult: 1 };
+  let mult = 1;
+  try {
+    const boosts = ldBoosts();
+    const now = Date.now();
+    for (const b of boosts) {
+      if (b.expiresTs <= now) continue;
+      if (b.itemId === "boost_streak_2x") mult *= 2;
+    }
+  } catch {}
+  return { amount: amount * mult, mult };
+}
+
 // ─── A. Proof-of-Play ─────────────────────────────────────────────
 export function recordPlay(w: AEVWallet, action: PlayAction, module: PlayModule = "cyberchess", overrideAev?: number): AEVWallet {
   if (!w.modes.play) return w;
   const card = RATE_CARD.play[action];
   if (!card) return w;
-  const aev = overrideAev ?? card.aev;
-  return mint(w, aev, { kind: "play", module, action }, card.label);
+  const baseAev = overrideAev ?? card.aev;
+  const { amount: aev, mult } = applyActionBoosts(baseAev, action);
+  const reason = mult > 1 ? `${card.label} · boost ×${mult}` : card.label;
+  return mint(w, aev, { kind: "play", module, action }, reason);
 }
 
 // ─── B. Proof-of-Useful-Compute ───────────────────────────────────
@@ -672,9 +708,11 @@ export function recordDailyVisit(w: AEVWallet, now = new Date()): AEVWallet | nu
   if (newCurrent === 7) { reward += RATE_CARD.streak.week7Bonus; milestone = "🔥 неделя без пропусков" }
   else if (newCurrent === 30) { reward += RATE_CARD.streak.month30Bonus; milestone = "🚀 30 дней — milestone" }
   else if (newCurrent === 100) { reward += RATE_CARD.streak.century100Bonus; milestone = "👑 100 дней — век" }
+  // Apply marketplace boost (boost_streak_2x)
+  const boosted = applyStreakBoost(reward);
   const reason = milestone
-    ? `${milestone} · day ${newCurrent}`
-    : `Streak day ${newCurrent} · ×${mult.toFixed(2)}`;
+    ? `${milestone} · day ${newCurrent}${boosted.mult > 1 ? ` · boost ×${boosted.mult}` : ""}`
+    : `Streak day ${newCurrent} · ×${mult.toFixed(2)}${boosted.mult > 1 ? ` · boost ×${boosted.mult}` : ""}`;
   const updated: AEVWallet = {
     ...w,
     streak: {
@@ -684,7 +722,7 @@ export function recordDailyVisit(w: AEVWallet, now = new Date()): AEVWallet | nu
       totalClaims: cur.totalClaims + 1,
     },
   };
-  return mint(updated, reward, { kind: "play", module: "qtrade", action: "streak" }, reason);
+  return mint(updated, boosted.amount, { kind: "play", module: "qtrade", action: "streak" }, reason);
 }
 
 export function previewStreakReward(w: AEVWallet): number {
@@ -702,7 +740,8 @@ export function previewStreakReward(w: AEVWallet): number {
   if (newCurrent === 7) reward += RATE_CARD.streak.week7Bonus;
   else if (newCurrent === 30) reward += RATE_CARD.streak.month30Bonus;
   else if (newCurrent === 100) reward += RATE_CARD.streak.century100Bonus;
-  return reward;
+  // Preview включает boost mult чтобы UI показывал реальную ожидаемую награду
+  return applyStreakBoost(reward).amount;
 }
 
 // ─── H. Proof-of-Insight ──────────────────────────────────────────
@@ -926,6 +965,74 @@ export function buyAev(w: AEVWallet, amount: number, atPrice: number): AEVWallet
     reason: `Куплено ${amount.toFixed(4)} AEV @ $${atPrice.toFixed(4)} ≈ $${usd.toFixed(2)}`,
     balanceAfter: next.balance,
   });
+}
+
+// ─── Theme provider ───────────────────────────────────────────────
+// Themes куплены в Marketplace activate'ятся через ldActiveTheme/svActiveTheme.
+// `default` всегда доступен. Применяется к Hero и balance-card на /aev page.
+
+const ACTIVE_THEME_KEY = "aevion_aev_active_theme_v1";
+
+export type ThemeId = "default" | "theme_aurora" | "theme_onyx" | "theme_sunset";
+
+export type ThemePalette = {
+  hero: string;          // gradient для Hero card
+  cardBg: string;        // background для Balance card
+  accent: string;        // основной accent (текст / outlines)
+  glow: string;          // shadow / glow color
+  pillBg: string;        // background для pills (small accents)
+  label: string;         // human-readable name
+};
+
+export const THEME_PALETTES: Record<ThemeId, ThemePalette> = {
+  default: {
+    hero:    "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    cardBg:  "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    accent:  "#22c55e",
+    glow:    "rgba(34,197,94,0.18)",
+    pillBg:  "rgba(34,197,94,0.18)",
+    label:   "Default Slate",
+  },
+  theme_aurora: {
+    hero:    "linear-gradient(135deg, #0c4a6e 0%, #047857 50%, #6d28d9 100%)",
+    cardBg:  "linear-gradient(135deg, #0c4a6e 0%, #134e4a 100%)",
+    accent:  "#34d399",
+    glow:    "rgba(52,211,153,0.30)",
+    pillBg:  "rgba(52,211,153,0.20)",
+    label:   "Aurora",
+  },
+  theme_onyx: {
+    hero:    "linear-gradient(135deg, #18181b 0%, #27272a 50%, #3f3f46 100%)",
+    cardBg:  "linear-gradient(135deg, #09090b 0%, #18181b 100%)",
+    accent:  "#fbbf24",
+    glow:    "rgba(251,191,36,0.28)",
+    pillBg:  "rgba(251,191,36,0.20)",
+    label:   "Onyx",
+  },
+  theme_sunset: {
+    hero:    "linear-gradient(135deg, #7f1d1d 0%, #ea580c 50%, #facc15 100%)",
+    cardBg:  "linear-gradient(135deg, #7f1d1d 0%, #9a3412 100%)",
+    accent:  "#fb923c",
+    glow:    "rgba(251,146,60,0.32)",
+    pillBg:  "rgba(251,146,60,0.22)",
+    label:   "Sunset",
+  },
+};
+
+export function ldActiveTheme(): ThemeId {
+  try {
+    if (typeof window === "undefined") return "default";
+    const v = localStorage.getItem(ACTIVE_THEME_KEY);
+    if (v && (v in THEME_PALETTES)) return v as ThemeId;
+  } catch {}
+  return "default";
+}
+
+export function svActiveTheme(id: ThemeId) {
+  try {
+    if (id === "default") localStorage.removeItem(ACTIVE_THEME_KEY);
+    else localStorage.setItem(ACTIVE_THEME_KEY, id);
+  } catch {}
 }
 
 // ─── Quests / Achievements ────────────────────────────────────────

@@ -23,6 +23,7 @@ import {
   ldOwned, svOwned, ldBoosts, svBoosts, purchaseItem, isBoostActive, getBoostExpiry,
   countSlotItems, MARKETPLACE,
   ldClaimedQuests, svClaimedQuests, isQuestComplete, claimQuest, QUESTS,
+  ldActiveTheme, svActiveTheme, THEME_PALETTES,
   type AEVWallet, type EmissionMode, type PlayAction, type PlayModule, type MiningEvent,
   type PinnedItem, type PinKind,
   type NetworkState,
@@ -30,6 +31,7 @@ import {
   type InsightState, type InsightTopic,
   type ActiveBoost, type MarketplaceItem, type ItemCategory,
   type Quest, type QuestSnapshot,
+  type ThemeId,
 } from "./aevToken";
 
 const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: string; color: string; desc: string }> = {
@@ -68,6 +70,7 @@ export default function AEVPage() {
   const [marketMsg, setMarketMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [claimedQuests, setClaimedQuests] = useState<string[]>([]);
   const [questMsg, setQuestMsg] = useState<{ id: string; reward: number } | null>(null);
+  const [activeTheme, setActiveTheme] = useState<ThemeId>("default");
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
@@ -78,6 +81,7 @@ export default function AEVPage() {
     setOwned(ldOwned());
     setBoosts(ldBoosts());
     setClaimedQuests(ldClaimedQuests());
+    setActiveTheme(ldActiveTheme());
     // Auto-claim daily streak on mount if eligible
     const updated = recordDailyVisit(w);
     if (updated) {
@@ -100,6 +104,7 @@ export default function AEVPage() {
   useEffect(() => { svOwned(owned) }, [owned]);
   useEffect(() => { svBoosts(boosts) }, [boosts]);
   useEffect(() => { svClaimedQuests(claimedQuests) }, [claimedQuests]);
+  useEffect(() => { svActiveTheme(activeTheme) }, [activeTheme]);
 
   // Boost expiry tick — drop expired boosts каждые 30s
   useEffect(() => {
@@ -283,24 +288,31 @@ export default function AEVPage() {
         <Wave1Nav />
 
         {/* ═══ HERO ════════════════════════════════════════════════ */}
+        {(() => {
+          const theme = THEME_PALETTES[activeTheme];
+          const hasGlow = owned.includes("cosmetic_glow");
+          return (
         <div style={{
           padding: 24, borderRadius: 14,
-          background: "radial-gradient(circle at 20% 0%, #1e3a8a, #0f172a 50%, #020617 100%)",
+          background: theme.hero,
           color: "#fff", marginBottom: 18,
-          boxShadow: "0 12px 40px rgba(15,23,42,0.35)",
+          boxShadow: hasGlow
+            ? `0 12px 40px ${theme.glow}, 0 0 60px ${theme.glow}`
+            : `0 12px 40px rgba(15,23,42,0.35)`,
           position: "relative" as const, overflow: "hidden" as const,
+          transition: "background 0.4s, box-shadow 0.4s",
         }}>
           <div style={{
             position: "absolute" as const, inset: 0,
-            backgroundImage: "radial-gradient(circle at 80% 100%, rgba(34,211,238,0.18), transparent 50%)",
+            backgroundImage: `radial-gradient(circle at 80% 100%, ${theme.glow}, transparent 50%)`,
             pointerEvents: "none" as const,
           }} />
           <div style={{ position: "relative" as const }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
               <span style={{
                 padding: "3px 10px", borderRadius: 999,
-                background: "rgba(34,211,238,0.15)", border: "1px solid rgba(34,211,238,0.5)",
-                fontSize: 10, fontWeight: 900, letterSpacing: 1, color: "#67e8f9", textTransform: "uppercase" as const,
+                background: theme.pillBg, border: `1px solid ${theme.accent}80`,
+                fontSize: 10, fontWeight: 900, letterSpacing: 1, color: theme.accent, textTransform: "uppercase" as const,
               }}>
                 AEV · нативный токен AEVION
               </span>
@@ -319,12 +331,48 @@ export default function AEVPage() {
               }}>
                 📊 Tokenomics →
               </a>
+              {activeTheme !== "default" && (
+                <span style={{
+                  padding: "3px 10px", borderRadius: 999,
+                  background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.20)",
+                  fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: "#fff", textTransform: "uppercase" as const,
+                }}>
+                  🎨 {theme.label}
+                </span>
+              )}
+              {owned.includes("badge_founder") && (
+                <span style={{
+                  padding: "3px 10px", borderRadius: 999,
+                  background: "linear-gradient(135deg, #fbbf24, #f59e0b)", border: "1px solid #fcd34d",
+                  fontSize: 10, fontWeight: 900, letterSpacing: 0.5, color: "#422006", textTransform: "uppercase" as const,
+                }}>
+                  👑 Founder
+                </span>
+              )}
+              {owned.includes("badge_pioneer") && (
+                <span style={{
+                  padding: "3px 10px", borderRadius: 999,
+                  background: "rgba(168,85,247,0.20)", border: "1px solid rgba(168,85,247,0.5)",
+                  fontSize: 10, fontWeight: 900, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const,
+                }}>
+                  🚀 Pioneer
+                </span>
+              )}
+              {owned.includes("badge_oracle") && (
+                <span style={{
+                  padding: "3px 10px", borderRadius: 999,
+                  background: "rgba(99,102,241,0.20)", border: "1px solid rgba(99,102,241,0.5)",
+                  fontSize: 10, fontWeight: 900, letterSpacing: 0.5, color: "#a5b4fc", textTransform: "uppercase" as const,
+                }}>
+                  🔮 Oracle
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8", letterSpacing: 0.5, fontWeight: 700, textTransform: "uppercase" as const, marginBottom: 4 }}>
               Балланс
             </div>
             <div style={{ fontSize: 56, fontWeight: 900, fontFamily: "ui-monospace, monospace", lineHeight: 1, color: "#fff", marginBottom: 6 }}>
-              {wallet.balance.toFixed(4)} <span style={{ fontSize: 24, color: "#67e8f9", fontWeight: 800 }}>AEV</span>
+              {wallet.balance.toFixed(4)} <span style={{ fontSize: 24, color: theme.accent, fontWeight: 800 }}>AEV</span>
             </div>
             <div style={{ display: "flex", gap: 18, fontSize: 13, color: "#cbd5e1", flexWrap: "wrap" }}>
               <span>Намайнено всего: <strong style={{ color: "#fff" }}>{wallet.lifetimeMined.toFixed(4)}</strong></span>
@@ -339,12 +387,24 @@ export default function AEVPage() {
               <div style={{
                 height: "100%",
                 width: `${Math.max(0.001, Math.min(100, supplyPct))}%`,
-                background: "linear-gradient(90deg, #22d3ee, #818cf8, #f472b6)",
+                background: `linear-gradient(90deg, ${theme.accent}, #818cf8, #f472b6)`,
                 transition: "width 600ms ease",
               }} />
             </div>
+            {/* Custom quote (cosmetic_quote item) */}
+            {owned.includes("cosmetic_quote") && (() => {
+              const q = (typeof window !== "undefined" ? localStorage.getItem("aevion_aev_custom_quote_v1") : null) ?? "";
+              if (!q.trim()) return null;
+              return (
+                <div style={{ marginTop: 12, fontSize: 12, fontStyle: "italic" as const, color: "#cbd5e1", opacity: 0.85, lineHeight: 1.5 }}>
+                  💬 {q.slice(0, 80)}
+                </div>
+              );
+            })()}
           </div>
         </div>
+          );
+        })()}
 
         {/* ═══ MODE TOGGLES ═════════════════════════════════════════ */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 18 }}>
@@ -725,6 +785,8 @@ export default function AEVPage() {
           setBoosts={setBoosts}
           marketMsg={marketMsg}
           setMarketMsg={setMarketMsg}
+          activeTheme={activeTheme}
+          setActiveTheme={setActiveTheme}
         />
 
         {/* ═══ FUTURE ENGINES — proposals + voting ═════════════════ */}
@@ -2252,6 +2314,7 @@ function fmtBoostRemaining(expiresTs: number, now = Date.now()): string {
 
 function MarketplacePanel({
   wallet, setWallet, owned, setOwned, boosts, setBoosts, marketMsg, setMarketMsg,
+  activeTheme, setActiveTheme,
 }: {
   wallet: AEVWallet;
   setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
@@ -2261,8 +2324,38 @@ function MarketplacePanel({
   setBoosts: React.Dispatch<React.SetStateAction<ActiveBoost[]>>;
   marketMsg: { kind: "ok" | "err"; text: string } | null;
   setMarketMsg: React.Dispatch<React.SetStateAction<{ kind: "ok" | "err"; text: string } | null>>;
+  activeTheme: ThemeId;
+  setActiveTheme: React.Dispatch<React.SetStateAction<ThemeId>>;
 }) {
   const [filterCat, setFilterCat] = useState<ItemCategory | "all">("all");
+  const [editingQuote, setEditingQuote] = useState(false);
+  const [quoteDraft, setQuoteDraft] = useState("");
+
+  // Hydrate quote draft from localStorage on first render
+  useEffect(() => {
+    try {
+      const q = localStorage.getItem("aevion_aev_custom_quote_v1");
+      if (q) setQuoteDraft(q);
+    } catch {}
+  }, []);
+
+  const saveQuote = () => {
+    try {
+      const trimmed = quoteDraft.trim().slice(0, 80);
+      if (trimmed) localStorage.setItem("aevion_aev_custom_quote_v1", trimmed);
+      else localStorage.removeItem("aevion_aev_custom_quote_v1");
+      setEditingQuote(false);
+      setMarketMsg({ kind: "ok", text: trimmed ? "✓ Цитата сохранена · видна в Hero" : "✓ Цитата убрана" });
+      setTimeout(() => setMarketMsg(null), 2800);
+    } catch {}
+  };
+
+  const applyTheme = (id: ThemeId) => {
+    setActiveTheme(id);
+    const meta = THEME_PALETTES[id];
+    setMarketMsg({ kind: "ok", text: `🎨 Тема применена: ${meta.label}` });
+    setTimeout(() => setMarketMsg(null), 2800);
+  };
 
   const buy = (itemId: string) => {
     const result = purchaseItem(wallet, owned, boosts, itemId);
@@ -2393,6 +2486,118 @@ function MarketplacePanel({
         }}>{marketMsg.kind === "err" ? "⚠ " : ""}{marketMsg.text}</div>
       )}
 
+      {/* Theme switcher row — visible когда смотрим Themes или All */}
+      {(filterCat === "all" || filterCat === "theme") && (
+        <div style={{
+          padding: "8px 12px", borderRadius: 6, marginBottom: 10,
+          background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.25)",
+          display: "flex", gap: 8, alignItems: "center" as const, flexWrap: "wrap" as const,
+        }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#c4b5fd", letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+            🎨 Активная тема:
+          </span>
+          <button onClick={() => applyTheme("default")}
+            style={{
+              padding: "4px 10px", borderRadius: 4,
+              background: activeTheme === "default" ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.20)",
+              color: activeTheme === "default" ? "#4338ca" : "#e0e7ff",
+              border: activeTheme === "default" ? "none" : "1px solid rgba(255,255,255,0.20)",
+              fontSize: 10, fontWeight: 800, cursor: "pointer", letterSpacing: 0.3,
+            }}>
+            {activeTheme === "default" ? "✓ " : ""}Default Slate
+          </button>
+          {(["theme_aurora", "theme_onyx", "theme_sunset"] as ThemeId[]).map((tid) => {
+            const isOwnedTheme = owned.includes(tid);
+            const isActive = activeTheme === tid;
+            const tMeta = THEME_PALETTES[tid];
+            return (
+              <button key={tid}
+                onClick={() => isOwnedTheme && applyTheme(tid)}
+                disabled={!isOwnedTheme}
+                title={isOwnedTheme ? `Применить ${tMeta.label}` : `Купи в Marketplace ниже`}
+                style={{
+                  padding: "4px 10px", borderRadius: 4,
+                  background: isActive
+                    ? "rgba(255,255,255,0.95)"
+                    : isOwnedTheme
+                    ? "rgba(0,0,0,0.20)"
+                    : "rgba(0,0,0,0.10)",
+                  color: isActive
+                    ? "#4338ca"
+                    : isOwnedTheme
+                    ? "#e0e7ff"
+                    : "#64748b",
+                  border: isActive
+                    ? "none"
+                    : `1px solid ${isOwnedTheme ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.10)"}`,
+                  fontSize: 10, fontWeight: 800, cursor: isOwnedTheme ? "pointer" : "not-allowed",
+                  letterSpacing: 0.3,
+                }}>
+                {isActive ? "✓ " : ""}{tMeta.label}{!isOwnedTheme && " 🔒"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Custom quote editor — visible если cosmetic_quote owned */}
+      {owned.includes("cosmetic_quote") && (filterCat === "all" || filterCat === "cosmetic") && (
+        <div style={{
+          padding: "8px 12px", borderRadius: 6, marginBottom: 10,
+          background: "rgba(236,72,153,0.10)", border: "1px solid rgba(236,72,153,0.25)",
+          display: "flex", gap: 8, alignItems: "center" as const, flexWrap: "wrap" as const,
+        }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#f9a8d4", letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+            💬 Custom quote (Hero):
+          </span>
+          {editingQuote ? (
+            <>
+              <input
+                value={quoteDraft}
+                onChange={(e) => setQuoteDraft(e.target.value.slice(0, 80))}
+                placeholder="Твоя цитата на /aev hero (до 80 char)"
+                style={{
+                  flex: "1 1 220px", minWidth: 0,
+                  padding: "5px 8px", borderRadius: 4,
+                  border: "1px solid rgba(236,72,153,0.40)", background: "rgba(0,0,0,0.30)", color: "#fff",
+                  fontSize: 12,
+                }}
+              />
+              <button onClick={saveQuote}
+                style={{
+                  padding: "5px 12px", borderRadius: 4, border: "none",
+                  background: "linear-gradient(135deg, #ec4899, #f472b6)", color: "#fff",
+                  fontSize: 11, fontWeight: 800, cursor: "pointer",
+                }}>
+                💾 Save
+              </button>
+              <button onClick={() => setEditingQuote(false)}
+                style={{
+                  padding: "5px 10px", borderRadius: 4,
+                  border: "1px solid rgba(255,255,255,0.20)", background: "rgba(0,0,0,0.20)", color: "#cbd5e1",
+                  fontSize: 11, fontWeight: 700, cursor: "pointer",
+                }}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 11, color: "#fdf2f8", fontStyle: "italic" as const, opacity: 0.85 }}>
+                {quoteDraft.trim() ? `"${quoteDraft}"` : "(не задано)"}
+              </span>
+              <button onClick={() => setEditingQuote(true)}
+                style={{
+                  padding: "4px 10px", borderRadius: 4,
+                  border: "1px solid rgba(236,72,153,0.40)", background: "rgba(236,72,153,0.20)", color: "#f9a8d4",
+                  fontSize: 11, fontWeight: 800, cursor: "pointer",
+                }}>
+                ✎ Edit
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Items grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
         {items.map((item) => {
@@ -2400,19 +2605,23 @@ function MarketplacePanel({
           const isOwned = owned.includes(item.id);
           const isBoost = item.category === "boost";
           const isSlot = item.category === "slot";
+          const isTheme = item.category === "theme";
           const slotCount = isSlot ? countSlotItems(owned, item.id) : 0;
           const boostExpiry = isBoost ? getBoostExpiry(boosts, item.id) : null;
           const boostActive = isBoost && boostExpiry !== null;
           const canBuy = wallet.balance >= item.price;
+          const isThemeActive = isTheme && activeTheme === item.id;
           // permanent (не-stackable) items нельзя купить дважды
           const blocked = !isBoost && !isSlot && isOwned;
           return (
             <div key={item.id} style={{
               padding: 11, borderRadius: 8,
-              background: blocked || boostActive
+              background: isThemeActive
+                ? "rgba(139,92,246,0.18)"
+                : blocked || boostActive
                 ? "rgba(134,239,172,0.10)"
                 : "rgba(0,0,0,0.25)",
-              border: `1px solid ${blocked || boostActive ? "rgba(134,239,172,0.40)" : `${cat.color}55`}`,
+              border: `1px solid ${isThemeActive ? "#a78bfa" : blocked || boostActive ? "rgba(134,239,172,0.40)" : `${cat.color}55`}`,
               display: "flex", flexDirection: "column" as const, gap: 6,
             }}>
               <div style={{ display: "flex", alignItems: "flex-start" as const, gap: 8 }}>
@@ -2423,7 +2632,16 @@ function MarketplacePanel({
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 900, color: "#fff", lineHeight: 1.2 }}>{item.name}</div>
                 </div>
-                {(blocked || boostActive) && (
+                {isThemeActive && (
+                  <span style={{
+                    padding: "2px 7px", borderRadius: 4,
+                    background: "linear-gradient(135deg, #a78bfa, #c4b5fd)", color: "#1e1b4b",
+                    fontSize: 9, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" as const,
+                  }}>
+                    🎨 active
+                  </span>
+                )}
+                {!isThemeActive && (blocked || boostActive) && (
                   <span style={{
                     padding: "2px 7px", borderRadius: 4,
                     background: "rgba(134,239,172,0.25)", color: "#86efac",
@@ -2452,26 +2670,39 @@ function MarketplacePanel({
                     </span>
                   )}
                 </span>
-                <button onClick={() => buy(item.id)}
-                  disabled={blocked || (boostActive && !canBuy) || !canBuy}
-                  style={{
-                    padding: "6px 14px", borderRadius: 5, border: "none",
-                    background: blocked
-                      ? "rgba(255,255,255,0.10)"
-                      : !canBuy
-                      ? "rgba(252,165,165,0.20)"
-                      : "linear-gradient(135deg, #fff, #e0e7ff)",
-                    color: blocked
-                      ? "#94a3b8"
-                      : !canBuy
-                      ? "#fca5a5"
-                      : "#4338ca",
-                    fontSize: 11, fontWeight: 900, letterSpacing: 0.3,
-                    cursor: blocked || !canBuy ? "default" : "pointer",
-                    whiteSpace: "nowrap" as const,
-                  }}>
-                  {blocked ? "✓ Owned" : !canBuy ? "Недостаточно" : (isBoost ? (boostActive ? "+ Продлить" : "⚡ Активировать") : (isSlot && slotCount > 0 ? "+ Ещё" : "🛒 Купить"))}
-                </button>
+                {/* Theme owned + not active → Apply button (вместо buy) */}
+                {isTheme && isOwned && !isThemeActive ? (
+                  <button onClick={() => applyTheme(item.id as ThemeId)}
+                    style={{
+                      padding: "6px 14px", borderRadius: 5, border: "none",
+                      background: "linear-gradient(135deg, #a78bfa, #c4b5fd)",
+                      color: "#1e1b4b", fontSize: 11, fontWeight: 900, letterSpacing: 0.3,
+                      cursor: "pointer", whiteSpace: "nowrap" as const,
+                    }}>
+                    🎨 Apply
+                  </button>
+                ) : (
+                  <button onClick={() => buy(item.id)}
+                    disabled={blocked || (boostActive && !canBuy) || !canBuy}
+                    style={{
+                      padding: "6px 14px", borderRadius: 5, border: "none",
+                      background: blocked
+                        ? "rgba(255,255,255,0.10)"
+                        : !canBuy
+                        ? "rgba(252,165,165,0.20)"
+                        : "linear-gradient(135deg, #fff, #e0e7ff)",
+                      color: blocked
+                        ? "#94a3b8"
+                        : !canBuy
+                        ? "#fca5a5"
+                        : "#4338ca",
+                      fontSize: 11, fontWeight: 900, letterSpacing: 0.3,
+                      cursor: blocked || !canBuy ? "default" : "pointer",
+                      whiteSpace: "nowrap" as const,
+                    }}>
+                    {blocked ? (isThemeActive ? "✓ Active" : "✓ Owned") : !canBuy ? "Недостаточно" : (isBoost ? (boostActive ? "+ Продлить" : "⚡ Активировать") : (isSlot && slotCount > 0 ? "+ Ещё" : "🛒 Купить"))}
+                  </button>
+                )}
               </div>
             </div>
           );

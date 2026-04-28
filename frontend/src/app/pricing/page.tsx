@@ -1944,6 +1944,12 @@ export default function PricingPage() {
           >
             Партнёрам →
           </Link>
+          <Link
+            href="/pricing/integrations"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Интеграции →
+          </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json

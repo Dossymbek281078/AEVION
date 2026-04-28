@@ -91,6 +91,14 @@ const featureCards = [
     accent: "#4f46e5",
     icon: "⚙️",
   },
+  {
+    slug: "dashboard",
+    title: "Dashboard",
+    description:
+      "Live overview across every surface — MRR, settlements, fraud queue, webhook health, links, and a unified activity feed.",
+    accent: "#0d9488",
+    icon: "📊",
+  },
 ];
 
 const roadmapItems = [
@@ -104,6 +112,9 @@ const roadmapItems = [
   { label: "Fraud detection via 6-rule engine + QSign device fingerprint", status: "live" },
   { label: "Planet compliance reports (KYC / sanctions / VAT-GST)", status: "live" },
   { label: "Developer SDK + OpenAPI 3.1 + API key manager", status: "live" },
+  { label: "Real /api/payments/v1 routes (links / checkout / subs / webhooks / settlements)", status: "live" },
+  { label: "OpenAPI 3.1 spec served at /api/openapi.json", status: "live" },
+  { label: "Cross-surface dashboard with live activity feed", status: "live" },
 ];
 
 export default function PaymentsPage() {
@@ -132,7 +143,7 @@ export default function PaymentsPage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Payments Rail · v1 · 8 surfaces live
+            Payments Rail · v1 · 9 surfaces · live API
           </div>
 
           <h1
@@ -167,14 +178,14 @@ export default function PaymentsPage() {
           <div
             style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 28 }}
           >
-            <Link href="/payments/links" style={btnPrimary}>
-              Create Payment Link →
+            <Link href="/payments/dashboard" style={btnPrimary}>
+              Open Dashboard →
+            </Link>
+            <Link href="/payments/links" style={btnGhost}>
+              Create a link
             </Link>
             <Link href="/payments/api" style={btnGhost}>
               Developer API
-            </Link>
-            <Link href="/bank" style={btnGhost}>
-              AEVION Bank
             </Link>
           </div>
         </div>

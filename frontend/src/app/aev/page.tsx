@@ -106,6 +106,28 @@ export default function AEVPage() {
   useEffect(() => { svClaimedQuests(claimedQuests) }, [claimedQuests]);
   useEffect(() => { svActiveTheme(activeTheme) }, [activeTheme]);
 
+  // ─── Cross-tab sync ───────────────────────────────────────────────
+  // Когда другой tab меняет localStorage — синхронизируемся, чтобы
+  // wallet / owned items / boosts / theme / прочее state не разъезжалось.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      switch (e.key) {
+        case "aevion_aev_wallet_v1":             setWallet(ldWallet()); break;
+        case "aevion_aev_pins_v1":               setPins(ldPins()); break;
+        case "aevion_aev_network_v1":            setNetwork(ldNetwork()); break;
+        case "aevion_aev_mentorship_v1":         setMentorship(ldMentorship()); break;
+        case "aevion_aev_insight_v1":            setInsight(ldInsight()); break;
+        case "aevion_aev_marketplace_owned_v1":  setOwned(ldOwned()); break;
+        case "aevion_aev_marketplace_boosts_v1": setBoosts(ldBoosts()); break;
+        case "aevion_aev_quests_claimed_v1":     setClaimedQuests(ldClaimedQuests()); break;
+        case "aevion_aev_active_theme_v1":       setActiveTheme(ldActiveTheme()); break;
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   // Boost expiry tick — drop expired boosts каждые 30s
   useEffect(() => {
     if (boosts.length === 0) return;

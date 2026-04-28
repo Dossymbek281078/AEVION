@@ -305,6 +305,27 @@ export default function QTradePage() {
   useEffect(() => { if (marketsReady) svBots(bots); }, [bots, marketsReady]);
   useEffect(() => { if (marketsReady) svGridBots(gridBots); }, [gridBots, marketsReady]);
 
+  // ─── Cross-tab sync ───────────────────────────────────────────────
+  // Другой tab пишет в localStorage → синхронизируем local state.
+  // Wallet особенно важен — buyAev/sellAev в spot-секции должны пересчитать
+  // балланс если /aev tab его поменял (mining / staking / claim).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      switch (e.key) {
+        case "aevion_aev_wallet_v1":        setAevWallet(ldWallet()); break;
+        case "aevion_qtrade_positions_v1":  setPositions(ldPositions()); break;
+        case "aevion_qtrade_limits_v1":     setLimits(ldLimits()); break;
+        case "aevion_qtrade_closed_v1":     setClosedPositions(ldClosed()); break;
+        case "aevion_qtrade_alerts_v1":     setAlerts(ldAlerts()); break;
+        case "aevion_qtrade_bots_v1":       setBots(ldBots()); break;
+        case "aevion_qtrade_grid_bots_v1":  setGridBots(ldGridBots()); break;
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   // Grid Bot tick — каждые 1.5s проверяем все grid bots для cross detection
   useEffect(() => {
     if (!marketsReady) return;

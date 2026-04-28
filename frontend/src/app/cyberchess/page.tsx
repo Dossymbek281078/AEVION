@@ -327,6 +327,12 @@ function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarPr
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
+  // SSR / hydration gate — все десятки state-init читают localStorage,
+  // на сервере они дают defaults, на клиенте — реальные сохранения.
+  // Без gate React детектит mismatch и регенерирует tree, ивент-хэндлеры
+  // прыгают, ходы / премувы / drag не работают стабильно.
+  const[mounted,sMounted]=useState(false);
+  useEffect(()=>{sMounted(true)},[]);
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=BOARD_THEMES.length?0:v}catch{return 0}});
@@ -2220,6 +2226,23 @@ export default function CyberChessPage(){
   const bd=virtualGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
 
   const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:13,fontWeight:700,cursor:"pointer"}}>{label}</button>);
+
+  // SSR: render an empty shell. Client-only mount populates the real UI
+  // after useEffect runs — this guarantees server HTML === client first paint
+  // (no localStorage-driven values in SSR), so React doesn't have to
+  // regenerate the tree on hydration, and event handlers attach immediately.
+  if(!mounted){
+    return(<main style={{background:T.bg,minHeight:"100vh"}}>
+      <ProductPageShell maxWidth={2000}><Wave1Nav/>
+        <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${T.dim}`,borderTopColor:T.accent,animation:"cc-spin 0.8s linear infinite"}}/>
+            <span>Подгружаю шахматы…</span>
+          </div>
+        </div>
+      </ProductPageShell>
+    </main>);
+  }
 
   return(<main style={{background:T.bg,minHeight:"100vh"}}>
     <ProductPageShell maxWidth={2000}><Wave1Nav/>

@@ -1890,6 +1890,12 @@ export default function PricingPage() {
           >
             Public roadmap →
           </Link>
+          <Link
+            href="/pricing/security"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Security &amp; Compliance →
+          </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json

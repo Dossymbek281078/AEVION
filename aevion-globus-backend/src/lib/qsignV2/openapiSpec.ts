@@ -516,6 +516,21 @@ export const QSIGN_V2_OPENAPI = {
         responses: { "200": { description: "Deleted" }, "404": { description: "Not yours" } },
       },
     },
+    "/webhooks/{id}/rotate-secret": {
+      post: {
+        tags: ["webhooks"],
+        summary: "Rotate webhook signing secret (returns one-time secret)",
+        description:
+          "Replaces the HMAC secret on the webhook row. The next delivery signs with " +
+          "the new secret — receivers MUST update before the next event.",
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "Rotated" },
+          "404": { description: "Webhook not found or not yours" },
+        },
+      },
+    },
     "/webhooks/{id}/deliveries": {
       get: {
         tags: ["webhooks"],

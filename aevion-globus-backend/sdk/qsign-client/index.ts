@@ -356,6 +356,17 @@ export class QSignClient {
     return this.req("DELETE", `/webhooks/${encodeURIComponent(id)}`);
   }
 
+  /**
+   * Rotates the webhook signing secret. The returned secret is shown ONCE —
+   * persist it before any further deliveries fire, otherwise the next
+   * webhook arrives with a signature your receiver can't verify.
+   */
+  rotateWebhookSecret(
+    id: string,
+  ): Promise<{ id: string; secret: string; rotatedAt: string; notice: string }> {
+    return this.req("POST", `/webhooks/${encodeURIComponent(id)}/rotate-secret`);
+  }
+
   listDeliveries(
     webhookId: string,
     opts: { limit?: number } = {},

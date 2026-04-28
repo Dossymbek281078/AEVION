@@ -1389,6 +1389,42 @@ qsignV2Router.post("/webhooks", async (req, res) => {
   }
 });
 
+/* ───────── POST /webhooks/:id/rotate-secret ─────────
+ * Generates a fresh 32-byte hex secret, replaces it on the row, returns
+ * once. Owner-scoped — only the webhook's creator can rotate. Use case:
+ * compromise response. After rotation, all future deliveries sign with
+ * the new secret; receivers MUST update their stored secret before the
+ * next event fires (typically seconds away — the rotation is immediate).
+ */
+qsignV2Router.post("/webhooks/:id/rotate-secret", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+  try {
+    await ensureQSignV2Tables(pool);
+    const own = (await pool.query(
+      `SELECT "id" FROM "QSignWebhook" WHERE "id" = $1 AND "ownerUserId" = $2`,
+      [req.params.id, auth.sub],
+    )) as any;
+    if (!own.rows.length) {
+      return res.status(404).json({ error: "webhook not found or not yours" });
+    }
+    const newSecret = crypto.randomBytes(32).toString("hex");
+    await pool.query(
+      `UPDATE "QSignWebhook" SET "secret" = $1 WHERE "id" = $2`,
+      [newSecret, req.params.id],
+    );
+    res.json({
+      id: req.params.id,
+      secret: newSecret,
+      rotatedAt: new Date().toISOString(),
+      notice:
+        "Save the new secret — it is shown ONCE and replaces the old. Update receiver-side verification immediately; the next delivery will sign with this secret.",
+    });
+  } catch (e: any) {
+    errResp(req, res, 500, { error: "webhook_rotate_failed", details: e?.message }, e);
+  }
+});
+
 /* ───────── GET /webhooks/:id/deliveries ─────────
  * Per-attempt delivery audit trail for a single webhook owned by the caller.
  * Returns the most recent N rows (1..200, default 50) ordered by createdAt

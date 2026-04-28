@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { Sparkline } from "@/components/Sparkline";
 import { apiUrl } from "@/lib/apiBase";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
@@ -72,6 +73,7 @@ export default function AdminQRightPage() {
   const [code, setCode] = useState<string>("admin-takedown");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [series, setSeries] = useState<Record<string, { day: string; fetches: number }[]>>({});
 
   const authHeaders = useCallback((): HeadersInit => {
     try {
@@ -125,6 +127,37 @@ export default function AdminQRightPage() {
   useEffect(() => {
     if (whoami?.isAdmin) load();
   }, [whoami, statusFilter, load]);
+
+  // Lazy-load series for visible rows (admin reads — no concern about scale).
+  useEffect(() => {
+    if (!whoami?.isAdmin || items.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      items.map(async (it) => {
+        if (series[it.id]) return null;
+        try {
+          const r = await fetch(
+            apiUrl(`/api/qright/objects/${encodeURIComponent(it.id)}/stats?days=30`),
+            { headers: authHeaders() }
+          );
+          if (!r.ok) return null;
+          const data = await r.json();
+          return [it.id, (data.series?.points || []) as { day: string; fetches: number }[]] as const;
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, { day: string; fetches: number }[]> = {};
+      for (const r of results) if (r) next[r[0]] = r[1];
+      if (Object.keys(next).length) setSeries((prev) => ({ ...prev, ...next }));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, whoami?.isAdmin]);
 
   const submit = async () => {
     if (!target) return;
@@ -254,6 +287,9 @@ export default function AdminQRightPage() {
                               <span style={{ ...labelStyle, marginLeft: 6 }}>
                                 👁 {Number(x.embedFetches).toLocaleString()}
                               </span>
+                              {series[x.id] && series[x.id].length > 0 && (
+                                <Sparkline points={series[x.id]} width={120} height={20} />
+                              )}
                             </div>
                             <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a", marginBottom: 4 }}>{x.title}</div>
                             <div style={{ fontSize: 12, color: "#64748b" }}>

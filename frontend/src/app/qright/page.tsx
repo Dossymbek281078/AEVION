@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { InfoTip } from "@/components/InfoTip";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
+import { Sparkline } from "@/components/Sparkline";
 import {
   exportAuthorKeyBackup,
   getOrCreateAuthorKey,
@@ -146,7 +147,7 @@ export default function QRightPage() {
   const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
   const [revokeText, setRevokeText] = useState<string>("");
   const [revokeBusy, setRevokeBusy] = useState(false);
-  const [stats, setStats] = useState<Record<string, { embedFetches: number; lastFetchedAt: string | null }>>({});
+  const [stats, setStats] = useState<Record<string, { embedFetches: number; lastFetchedAt: string | null; series: { day: string; fetches: number }[] }>>({});
   useEffect(() => {
     try {
       setHasAuth(!!localStorage.getItem(TOKEN_KEY));
@@ -388,14 +389,21 @@ export default function QRightPage() {
           });
           if (!r.ok) return null;
           const data = await r.json();
-          return [it.id, { embedFetches: data.embedFetches || 0, lastFetchedAt: data.lastFetchedAt || null }] as const;
+          return [
+            it.id,
+            {
+              embedFetches: data.embedFetches || 0,
+              lastFetchedAt: data.lastFetchedAt || null,
+              series: (data.series?.points || []) as { day: string; fetches: number }[],
+            },
+          ] as const;
         } catch {
           return null;
         }
       })
     ).then((results) => {
       if (cancelled) return;
-      const next: Record<string, { embedFetches: number; lastFetchedAt: string | null }> = {};
+      const next: Record<string, { embedFetches: number; lastFetchedAt: string | null; series: { day: string; fetches: number }[] }> = {};
       for (const r of results) if (r) next[r[0]] = r[1];
       if (Object.keys(next).length) setStats((prev) => ({ ...prev, ...next }));
     });
@@ -1070,10 +1078,13 @@ export default function QRightPage() {
                         SHA-256: {x.contentHash}
                       </div>
                       {registryScope === "mine" && stats[x.id] && (
-                        <div style={{ marginTop: 6, fontSize: 11, color: "#64748b", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <span>👁 {stats[x.id].embedFetches.toLocaleString()} embed fetches</span>
+                        <div style={{ marginTop: 6, fontSize: 11, color: "#64748b", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                          <span>👁 {stats[x.id].embedFetches.toLocaleString()} fetches</span>
+                          {stats[x.id].series.length > 0 && (
+                            <Sparkline points={stats[x.id].series} width={140} height={24} />
+                          )}
                           {stats[x.id].lastFetchedAt && (
-                            <span>· last {new Date(stats[x.id].lastFetchedAt!).toLocaleString()}</span>
+                            <span style={{ color: "#94a3b8" }}>· last {new Date(stats[x.id].lastFetchedAt!).toLocaleString()}</span>
                           )}
                         </div>
                       )}

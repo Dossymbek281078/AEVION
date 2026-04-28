@@ -43,6 +43,26 @@ const nextConfig: NextConfig = {
           { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
         ],
       },
+      {
+        // QRight public surfaces are intended to be embedded on third-party
+        // sites. Override X-Frame-Options to ALLOWALL (legacy) + CSP
+        // frame-ancestors *. The catch-all COEP above would otherwise prevent
+        // these from being loaded as <iframe>.
+        source: "/qright/object/:id",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+        ],
+      },
+      {
+        source: "/qright/badge/:id",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+        ],
+      },
     ];
   },
 

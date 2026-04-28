@@ -1552,6 +1552,7 @@ export default function Globus3D({
     let raf = 0;
     let isHovering = false;
     let lastTime = 0;
+    let lastSunUpdate = -1000;
 
     /** Drag/inertia. */
     let dragging = false;
@@ -1810,6 +1811,29 @@ export default function Globus3D({
 
       // Облака чуть-чуть бегут всегда — оживляет сцену.
       cloudMesh.rotation.y += dt * 0.00004;
+
+      // Dynamic sun: пересчитываем sunDir по реальному UTC раз в ~250мс,
+      // чтобы day/night terminator плавно следовал за реальным временем.
+      if (t - lastSunUpdate > 250) {
+        lastSunUpdate = t;
+        const now = new Date();
+        const utcH =
+          now.getUTCHours() +
+          now.getUTCMinutes() / 60 +
+          now.getUTCSeconds() / 3600;
+        const lonSun = -(utcH - 12) * 15;
+        const yearStart = Date.UTC(now.getUTCFullYear(), 0, 0);
+        const doy = (now.getTime() - yearStart) / 86400000;
+        const decDeg =
+          23.45 * Math.sin(((doy - 81) * 2 * Math.PI) / 365.25);
+        const sp = geoFromLatLon(decDeg, lonSun, 1);
+        sunWorldDir.set(sp.x, sp.y, sp.z).normalize();
+        const gm: any = globe.material;
+        if (gm?.uniforms?.sunDir?.value) {
+          gm.uniforms.sunDir.value.copy(sunWorldDir);
+        }
+        sun.position.copy(sunWorldDir).multiplyScalar(300);
+      }
 
       // Дыхание контура страны под курсором — синусоида 1.4с.
       if (countryOutlineGroup.children.length > 0) {

@@ -20,6 +20,26 @@ async function fetchCase(id: string): Promise<CaseSummary | null> {
   }
 }
 
+/**
+ * SSG — pre-render каждого case при build. Если backend недоступен на момент
+ * build (например в CI без бека) — fallback к dynamic, страницы будут
+ * генерироваться по запросу. Это безопасно: page.tsx уже умеет рендерить
+ * клиентский fetch.
+ */
+export async function generateStaticParams(): Promise<Array<{ id: string }>> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/pricing/cases`, { cache: "no-store" });
+    if (!r.ok) return [];
+    const j = (await r.json()) as { items?: Array<{ id: string }> };
+    return (j.items ?? []).map((c) => ({ id: c.id }));
+  } catch {
+    return [];
+  }
+}
+
+/** Принимать любые id — даже которых не было на момент build (новые кейсы). */
+export const dynamicParams = true;
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const c = await fetchCase(id);

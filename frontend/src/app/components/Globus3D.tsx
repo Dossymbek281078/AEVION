@@ -1274,6 +1274,10 @@ export default function Globus3D({
       earthGroup.add(borders);
     }
 
+    // Density heatmap — постоянный нежный контур стран, в которых есть наши маркеры.
+    const presenceOutlineGroup = new THREE.Group();
+    earthGroup.add(presenceOutlineGroup);
+
     // Hovered-country outline — светящийся контур поверх borders, пересоздаётся при смене страны.
     const countryOutlineGroup = new THREE.Group();
     earthGroup.add(countryOutlineGroup);
@@ -1285,15 +1289,6 @@ export default function Globus3D({
       depthTest: false,
     });
     countryOutlineMat.blending = THREE.AdditiveBlending;
-
-    const countryOutlineFillMat = new THREE.MeshBasicMaterial({
-      color: 0x4cc1ff,
-      transparent: true,
-      opacity: 0.08,
-      depthTest: false,
-      side: THREE.DoubleSide,
-    });
-    countryOutlineFillMat.blending = THREE.AdditiveBlending;
 
     let lastHighlightedCountry: string | null = null;
     const setCountryHighlight = (countryName: string | null) => {
@@ -1501,6 +1496,46 @@ export default function Globus3D({
     arcsRef.current = arcs;
     const arcStartTime = performance.now();
     const ARC_DRAW_MS = 1400;
+
+    // Density heatmap: outline стран, где у нас живут маркеры. Контур повторяется по
+    // числу маркеров (через increment opacity), и игнорирует hover-overlay по renderOrder.
+    {
+      buildCountriesIfNeeded();
+      if (countriesCache && countriesCache.length > 0) {
+        const presenceCount = new Map<string, number>();
+        for (const m of markers) {
+          const name = findCountryAt(m.lat, m.lon);
+          if (!name) continue;
+          presenceCount.set(name, (presenceCount.get(name) ?? 0) + 1);
+        }
+        for (const [name, count] of presenceCount) {
+          const entry = countriesCache.find((c) => c.name === name);
+          if (!entry) continue;
+          // Densitу — больше маркеров → ярче контур (clamped).
+          const op = Math.min(0.55, 0.18 + 0.08 * count);
+          const mat = new THREE.LineBasicMaterial({
+            color: 0x6cd6ff,
+            transparent: true,
+            opacity: op,
+            depthWrite: false,
+          });
+          mat.blending = THREE.AdditiveBlending;
+          for (const polygon of entry.rings) {
+            const ring = polygon[0];
+            if (!ring || ring.length < 2) continue;
+            const linePts: THREE.Vector3[] = [];
+            for (const [lon, lat] of ring) {
+              const p = geoFromLatLon(lat, lon, radius + 0.7);
+              linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+            }
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+            const line = new THREE.LineLoop(lineGeo, mat);
+            line.renderOrder = 3;
+            presenceOutlineGroup.add(line);
+          }
+        }
+      }
+    }
 
     // Освещение для облаков и halo (globe — shader-based, не зависит от scene lights).
     // hemi пониже — иначе облака на ночной стороне светятся, разрушая terminator.

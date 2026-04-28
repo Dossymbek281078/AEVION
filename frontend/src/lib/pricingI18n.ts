@@ -125,6 +125,7 @@ const dict: Record<Lang, Record<string, string>> = {
     "cases.solution": "Решение AEVION",
     "cases.outcome": "Результат",
     "cases.tryTier": "Попробовать {tier}",
+    "cases.openFullPage": "Открыть полностью",
     "cases.ctaTitle": "Хотите свой кейс?",
     "cases.ctaSubtitle": "Расскажите о результатах — мы оформим case study и подсветим вашу команду на /pricing/cases. Бесплатно для клиентов на Pro+.",
     "cases.ctaShare": "Поделиться кейсом",
@@ -396,6 +397,18 @@ const dict: Record<Lang, Record<string, string>> = {
     "partners.faq.q5": "Есть ли территориальная эксклюзивность?",
     "partners.faq.a5": "По договорённости. Для крупных reseller с quarterly committment $50k+ — даём эксклюзивность по стране/региону на 12 мес. Для SI и Agency — нет, мульти-партнёр модель.",
 
+    /* Case study detail page */
+    "caseDetail.allCases": "Все кейсы",
+    "caseDetail.notFound": "Кейс не найден",
+    "caseDetail.notFoundBody": "Возможно, кейс был удалён или ссылка устарела.",
+    "caseDetail.stackTitle": "ИСПОЛЬЗОВАННЫЕ МОДУЛИ AEVION",
+    "caseDetail.ctaTitle": "Хотите такие же результаты на тарифе {tier}?",
+    "caseDetail.ctaSubtitle": "Соберите свою конфигурацию в калькуляторе или подайте заявку на тариф.",
+    "caseDetail.ctaTier": "Перейти на {tier}",
+    "caseDetail.ctaEnterprise": "Связаться с продажами",
+    "caseDetail.ctaCalculator": "Открыть калькулятор",
+    "caseDetail.relatedTitle": "Другие кейсы из:",
+
     /* FAQ */
     "faq.title": "Вопросы и ответы",
     "faq.subtitle": "Самое частое — здесь. Если нет ответа, напишите",
@@ -561,6 +574,7 @@ const dict: Record<Lang, Record<string, string>> = {
     "cases.solution": "AEVION solution",
     "cases.outcome": "Outcome",
     "cases.tryTier": "Try {tier}",
+    "cases.openFullPage": "Open full page",
     "cases.ctaTitle": "Want your case here?",
     "cases.ctaSubtitle": "Share your results — we'll write up the case study and feature your team on /pricing/cases. Free for Pro+ customers.",
     "cases.ctaShare": "Share your case",
@@ -825,6 +839,17 @@ const dict: Record<Lang, Record<string, string>> = {
     "partners.faq.a4": "Tier 1 (general questions) — partner. Tier 2 (technical) — escalated to AEVION via dedicated Slack. SI/Agency get a dedicated CSM.",
     "partners.faq.q5": "Is there territory exclusivity?",
     "partners.faq.a5": "By agreement. Large resellers with quarterly commit $50k+ get exclusivity per country/region for 12 months. SI and Agency are multi-partner.",
+
+    "caseDetail.allCases": "All cases",
+    "caseDetail.notFound": "Case not found",
+    "caseDetail.notFoundBody": "The case may have been removed or the link is stale.",
+    "caseDetail.stackTitle": "AEVION MODULES USED",
+    "caseDetail.ctaTitle": "Want similar results on {tier}?",
+    "caseDetail.ctaSubtitle": "Build your config in the calculator or apply for the tier.",
+    "caseDetail.ctaTier": "Go to {tier}",
+    "caseDetail.ctaEnterprise": "Contact sales",
+    "caseDetail.ctaCalculator": "Open calculator",
+    "caseDetail.relatedTitle": "Other cases from:",
 
     "faq.title": "FAQ",
     "faq.subtitle": "Most common questions — here. If yours isn't, email",

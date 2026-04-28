@@ -397,22 +397,35 @@ export default function PricingCasesPage() {
                   ))}
                 </div>
 
-                {/* Toggle button */}
-                <button
-                  onClick={() => setActiveId(expanded ? null : c.id)}
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: "#0d9488",
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: "6px 0",
-                    marginBottom: expanded ? 12 : 0,
-                  }}
-                >
-                  {expanded ? tp("cases.hideDetails") : tp("cases.showDetails")} {expanded ? "↑" : "↓"}
-                </button>
+                {/* Toggle / detail link */}
+                <div style={{ display: "flex", gap: 16, marginBottom: expanded ? 12 : 0, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => setActiveId(expanded ? null : c.id)}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "#0d9488",
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "6px 0",
+                    }}
+                  >
+                    {expanded ? tp("cases.hideDetails") : tp("cases.showDetails")} {expanded ? "↑" : "↓"}
+                  </button>
+                  <Link
+                    href={`/pricing/cases/${c.id}`}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "#0ea5e9",
+                      textDecoration: "none",
+                      padding: "6px 0",
+                    }}
+                  >
+                    {tp("cases.openFullPage")} →
+                  </Link>
+                </div>
 
                 {expanded && (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>

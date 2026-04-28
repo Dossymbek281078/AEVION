@@ -1891,6 +1891,12 @@ export default function PricingPage() {
             Полная матрица тарифов →
           </Link>
           <Link
+            href="/pricing/cases"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Кейсы клиентов →
+          </Link>
+          <Link
             href="/pricing/roadmap"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >

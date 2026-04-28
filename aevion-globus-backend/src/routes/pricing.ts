@@ -18,6 +18,7 @@ import {
 import { projects } from "../data/projects";
 import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
+import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 
 export const pricingRouter = Router();
 
@@ -393,6 +394,41 @@ pricingRouter.get("/roadmap", (_req, res) => {
     phases: PHASE_META,
     generatedAt: new Date().toISOString(),
   });
+});
+
+/**
+ * GET /api/pricing/cases
+ * Customer case studies для /pricing/cases.
+ * Фильтры: ?industry=&tier=&module=
+ *
+ * Возвращает summary-объекты (без полного challenge/solution/outcome),
+ * чтобы листинг грузился быстро. Для полного — /api/pricing/cases/:id.
+ */
+pricingRouter.get("/cases", (req, res) => {
+  const industry = typeof req.query.industry === "string" ? req.query.industry : undefined;
+  const tier = typeof req.query.tier === "string" ? req.query.tier : undefined;
+  const moduleId = typeof req.query.module === "string" ? req.query.module : undefined;
+
+  const items = CASE_STUDIES.filter(
+    (c) =>
+      (!industry || c.industry === industry) &&
+      (!tier || c.tier === tier) &&
+      (!moduleId || c.modules.includes(moduleId)),
+  );
+
+  res.json({ items, total: items.length });
+});
+
+/**
+ * GET /api/pricing/cases/:id
+ * Детальный case study.
+ */
+pricingRouter.get("/cases/:id", (req, res) => {
+  const c = getCaseStudy(req.params.id);
+  if (!c) {
+    return res.status(404).json({ error: "case_not_found", id: req.params.id });
+  }
+  res.json(c);
 });
 
 /**

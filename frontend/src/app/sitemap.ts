@@ -17,6 +17,7 @@ const STATIC_ROUTES = [
   "/multichat-engine",
   "/planet",
   "/pricing",
+  "/pricing/cases",
   "/pricing/compare",
   "/pricing/contact",
   "/pricing/roadmap",

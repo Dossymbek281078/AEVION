@@ -517,6 +517,29 @@ export default function PricingAdminPage() {
 
       {tab === "leads" && (
         <section>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <ExportCsvButton
+              count={leads.length}
+              onClick={() =>
+                downloadCSV(
+                  `aevion-leads-${new Date().toISOString().slice(0, 10)}.csv`,
+                  ["ts", "name", "email", "company", "industry", "tier", "seats", "source", "message", "modules"],
+                  leads.map((l) => [
+                    l.ts,
+                    l.name,
+                    l.email,
+                    l.company ?? "",
+                    l.industry ?? "",
+                    l.tier ?? "",
+                    l.seats ?? "",
+                    l.source ?? "",
+                    l.message ?? "",
+                    (l.modules ?? []).join("; "),
+                  ]),
+                )
+              }
+            />
+          </div>
           {leads.length === 0 ? (
             <Empty text="Sales-лидов пока нет." />
           ) : (
@@ -561,47 +584,125 @@ export default function PricingAdminPage() {
       )}
 
       {tab === "affiliate" && (
-        <ApplicationTable
-          items={affiliate}
-          empty="Заявок на affiliate-программу пока нет."
-          extraColumns={[
-            { label: "Канал", get: (a) => a.channel ?? "—" },
-          ]}
-        />
+        <section>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <ExportCsvButton
+              count={affiliate.length}
+              onClick={() =>
+                downloadCSV(
+                  `aevion-affiliate-${new Date().toISOString().slice(0, 10)}.csv`,
+                  ["ts", "name", "email", "organization", "country", "channel", "details"],
+                  affiliate.map((a) => [
+                    a.ts,
+                    a.name,
+                    a.email,
+                    a.organization ?? "",
+                    a.country ?? "",
+                    a.channel ?? "",
+                    a.details ?? "",
+                  ]),
+                )
+              }
+            />
+          </div>
+          <ApplicationTable
+            items={affiliate}
+            empty="Заявок на affiliate-программу пока нет."
+            extraColumns={[
+              { label: "Канал", get: (a) => a.channel ?? "—" },
+            ]}
+          />
+        </section>
       )}
 
       {tab === "partners" && (
-        <ApplicationTable
-          items={partners}
-          empty="Заявок на partner-программу пока нет."
-          extraColumns={[
-            {
-              label: "Тип",
-              get: (a) =>
-                a.partnerType ? (
-                  <Pill
-                    text={a.partnerType.replace("_", " ").toUpperCase()}
-                    bg="#f5f3ff"
-                    fg="#6d28d9"
-                  />
-                ) : "—",
-            },
-          ]}
-        />
+        <section>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <ExportCsvButton
+              count={partners.length}
+              onClick={() =>
+                downloadCSV(
+                  `aevion-partners-${new Date().toISOString().slice(0, 10)}.csv`,
+                  ["ts", "name", "email", "organization", "country", "partner_type", "details"],
+                  partners.map((a) => [
+                    a.ts,
+                    a.name,
+                    a.email,
+                    a.organization ?? "",
+                    a.country ?? "",
+                    a.partnerType ?? "",
+                    a.details ?? "",
+                  ]),
+                )
+              }
+            />
+          </div>
+          <ApplicationTable
+            items={partners}
+            empty="Заявок на partner-программу пока нет."
+            extraColumns={[
+              {
+                label: "Тип",
+                get: (a) =>
+                  a.partnerType ? (
+                    <Pill
+                      text={a.partnerType.replace("_", " ").toUpperCase()}
+                      bg="#f5f3ff"
+                      fg="#6d28d9"
+                    />
+                  ) : "—",
+              },
+            ]}
+          />
+        </section>
       )}
 
       {tab === "edu" && (
-        <ApplicationTable
-          items={edu}
-          empty="Заявок на edu-программу пока нет."
-          extraColumns={[
-            { label: "Домен", get: (a) => a.institutionDomain ?? "—" },
-          ]}
-        />
+        <section>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <ExportCsvButton
+              count={edu.length}
+              onClick={() =>
+                downloadCSV(
+                  `aevion-edu-${new Date().toISOString().slice(0, 10)}.csv`,
+                  ["ts", "name", "email", "organization", "country", "institution_domain", "details"],
+                  edu.map((a) => [
+                    a.ts,
+                    a.name,
+                    a.email,
+                    a.organization ?? "",
+                    a.country ?? "",
+                    a.institutionDomain ?? "",
+                    a.details ?? "",
+                  ]),
+                )
+              }
+            />
+          </div>
+          <ApplicationTable
+            items={edu}
+            empty="Заявок на edu-программу пока нет."
+            extraColumns={[
+              { label: "Домен", get: (a) => a.institutionDomain ?? "—" },
+            ]}
+          />
+        </section>
       )}
 
       {tab === "newsletter" && (
         <section>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <ExportCsvButton
+              count={newsletter.length}
+              onClick={() =>
+                downloadCSV(
+                  `aevion-newsletter-${new Date().toISOString().slice(0, 10)}.csv`,
+                  ["ts", "email", "source"],
+                  newsletter.map((n) => [n.ts, n.email, n.source ?? ""]),
+                )
+              }
+            />
+          </div>
           {newsletter.length === 0 ? (
             <Empty text="Подписчиков пока нет." />
           ) : (
@@ -631,6 +732,48 @@ export default function PricingAdminPage() {
         </section>
       )}
     </ProductPageShell>
+  );
+}
+
+function csvEscape(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v).replace(/"/g, '""');
+  if (/[",\n\r]/.test(s)) return `"${s}"`;
+  return s;
+}
+
+function downloadCSV(filename: string, headers: string[], rows: unknown[][]) {
+  const lines = [headers.join(","), ...rows.map((r) => r.map(csvEscape).join(","))];
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function ExportCsvButton({ onClick, count }: { onClick: () => void; count: number }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={count === 0}
+      style={{
+        padding: "6px 12px",
+        fontSize: 11,
+        fontWeight: 800,
+        borderRadius: 6,
+        border: "1px solid rgba(13,148,136,0.3)",
+        background: count === 0 ? "#f1f5f9" : "#fff",
+        color: count === 0 ? "#94a3b8" : "#0d9488",
+        cursor: count === 0 ? "not-allowed" : "pointer",
+        letterSpacing: "0.04em",
+      }}
+    >
+      ⬇ Export CSV ({count})
+    </button>
   );
 }
 

@@ -1885,6 +1885,12 @@ export default function PricingPage() {
         </ul>
         <div style={{ marginTop: 16, fontSize: 13, color: "#64748b" }}>
           <Link
+            href="/pricing/compare"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Полная матрица тарифов →
+          </Link>
+          <Link
             href="/pricing/roadmap"
             style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
           >

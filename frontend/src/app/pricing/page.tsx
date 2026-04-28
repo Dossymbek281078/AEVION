@@ -1961,6 +1961,12 @@ export default function PricingPage() {
           >
             Миграция с DocuSign / OpenAI →
           </Link>
+          <Link
+            href="/pricing/glossary"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Глоссарий →
+          </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json

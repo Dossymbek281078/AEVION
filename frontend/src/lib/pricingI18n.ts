@@ -547,6 +547,19 @@ const dict: Record<Lang, Record<string, string>> = {
     "migrations.faq.q4": "Кто отвечает за data-loss при миграции?",
     "migrations.faq.a4": "Никаких операций без вашего подтверждения. Все экспорты — с вашей стороны, мы только подсказываем where и how. Customer Success делает dry-run на 5-10 записях, прежде чем мигрировать всё.",
 
+    /* Glossary */
+    "glossary.badge": "GLOSSARY · {count} ТЕРМИНОВ",
+    "glossary.title": "Словарь терминов AEVION",
+    "glossary.subtitle": "Что значит TSP, eIDAS, SOC 2, BYOK, RBAC и другие аббревиатуры из документации. С EN/RU расшифровкой и cross-links между терминами.",
+    "glossary.searchPlaceholder": "Найти термин...",
+    "glossary.filterCategory": "КАТЕГОРИЯ:",
+    "glossary.filterLetter": "БУКВА:",
+    "glossary.filterAll": "Все",
+    "glossary.empty": "По таким фильтрам ничего не найдено.",
+    "glossary.related": "См. также",
+    "glossary.submit.title": "Не хватает термина?",
+    "glossary.submit.subtitle": "Напишите — добавим в словарь. Глоссарий обновляется по запросам клиентов.",
+
     /* FAQ */
     "faq.title": "Вопросы и ответы",
     "faq.subtitle": "Самое частое — здесь. Если нет ответа, напишите",
@@ -1118,6 +1131,18 @@ const dict: Record<Lang, Record<string, string>> = {
     "migrations.faq.a3": "If you have an annual contract on DocuSign/OpenAI/Stripe — migrate gradually. AEVION provides a grace credit for the overlap (up to 6 months). Customer Success calculates ROI with sunk cost.",
     "migrations.faq.q4": "Who's responsible for data loss in migration?",
     "migrations.faq.a4": "No operation without your confirmation. All exports come from your side, we only advise where and how. Customer Success runs a dry-run on 5-10 records before migrating everything.",
+
+    "glossary.badge": "GLOSSARY · {count} TERMS",
+    "glossary.title": "AEVION glossary",
+    "glossary.subtitle": "What TSP, eIDAS, SOC 2, BYOK, RBAC and other abbreviations from the docs mean. EN/RU descriptions and cross-links.",
+    "glossary.searchPlaceholder": "Find a term...",
+    "glossary.filterCategory": "CATEGORY:",
+    "glossary.filterLetter": "LETTER:",
+    "glossary.filterAll": "All",
+    "glossary.empty": "No matches under these filters.",
+    "glossary.related": "See also",
+    "glossary.submit.title": "Missing a term?",
+    "glossary.submit.subtitle": "Email — we'll add it. Glossary grows on customer requests.",
 
     "faq.title": "FAQ",
     "faq.subtitle": "Most common questions — here. If yours isn't, email",

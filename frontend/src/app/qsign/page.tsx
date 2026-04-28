@@ -60,6 +60,15 @@ type Health = {
   activeKeys: { hmac: string; ed25519: string };
 };
 
+type DilithiumPreview = {
+  algo: "ML-DSA-65";
+  kid: string;
+  mode: "preview";
+  digest: string;
+  valid: boolean | null;
+  note: string;
+};
+
 type SignResponse = {
   id: string;
   algoVersion: string;
@@ -68,6 +77,7 @@ type SignResponse = {
   payloadCanonical: string;
   hmac: { kid: string; algo: string; signature: string };
   ed25519: { kid: string; algo: string; signature: string; publicKey: string };
+  dilithium: DilithiumPreview | null;
   issuer: { userId: string | null; email: string | null };
   geo: {
     source: string | null;
@@ -88,7 +98,14 @@ type VerifyResponse = {
   payloadHash: string;
   hmac: { kid: string; valid: boolean };
   ed25519: { kid: string | null; valid: boolean | null };
+  dilithium: DilithiumPreview | null;
   stateless?: boolean;
+};
+
+type RateLimitInfo = {
+  limit: number;
+  remaining: number;
+  resetAt: number | null;
 };
 
 type StatsResponse = {
@@ -207,6 +224,8 @@ export default function QSignPage() {
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState<SignResponse | null>(null);
   const [hashAtSign, setHashAtSign] = useState<string>("");
+  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
+  const [, setRateTick] = useState(0);
 
   // verify pane
   const [verifyPayload, setVerifyPayload] = useState("");
@@ -242,6 +261,17 @@ export default function QSignPage() {
       .then((d: Health) => setHealth(d))
       .catch(() => setHealth(null));
   }, []);
+
+  /* — tick countdown timer for rate-limit reset, only while a rate-limit
+   * window is known. The 1s tick triggers re-render via setRateTick so the
+   * "resets in Ns" text stays current; the actual reset value is read from
+   * RateLimit-Reset response headers and stored in `rateLimit.resetAt`.
+   */
+  useEffect(() => {
+    if (!rateLimit?.resetAt) return;
+    const t = setInterval(() => setRateTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [rateLimit?.resetAt]);
 
   /* — live stats + recent feed (refetched after every successful sign) — */
   const loadMetrics = () => {
@@ -344,6 +374,28 @@ export default function QSignPage() {
         },
         body: JSON.stringify(body),
       });
+      // RateLimit-* headers are exposed by express-rate-limit when standardHeaders=true.
+      // CORS-cross-origin reads require Access-Control-Expose-Headers on the server, so
+      // when fetched same-origin (Vercel→Vercel rewrite or local dev) values arrive; on
+      // cross-origin they may be null and the card simply won't render.
+      const limitH = res.headers.get("RateLimit-Limit");
+      const remH = res.headers.get("RateLimit-Remaining");
+      const resetH = res.headers.get("RateLimit-Reset");
+      if (limitH && remH) {
+        const limit = Number(limitH);
+        const remaining = Number(remH);
+        const resetSec = resetH ? Number(resetH) : null;
+        if (Number.isFinite(limit) && Number.isFinite(remaining)) {
+          setRateLimit({
+            limit,
+            remaining,
+            resetAt:
+              resetSec !== null && Number.isFinite(resetSec)
+                ? Date.now() + resetSec * 1000
+                : null,
+          });
+        }
+      }
       const data = await res.json();
       if (!res.ok) {
         showToast(data?.error || `Sign failed (${res.status})`, "error");
@@ -909,6 +961,48 @@ export default function QSignPage() {
               {signing ? "Signing…" : "Sign with HMAC + Ed25519"}
             </button>
 
+            {rateLimit
+              ? (() => {
+                  const secsLeft =
+                    rateLimit.resetAt !== null
+                      ? Math.max(0, Math.round((rateLimit.resetAt - Date.now()) / 1000))
+                      : null;
+                  const low = rateLimit.remaining <= 5;
+                  return (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        background: low ? "rgba(220,38,38,0.06)" : "#f1f5f9",
+                        border: low
+                          ? "1px solid rgba(220,38,38,0.25)"
+                          : "1px solid rgba(15,23,42,0.06)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        fontSize: 11,
+                      }}
+                    >
+                      <span style={{ color: "#64748b", fontWeight: 700 }}>
+                        Sign rate limit (per IP)
+                      </span>
+                      <span
+                        style={{
+                          ...mono,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: low ? "#b91c1c" : "#0f172a",
+                        }}
+                      >
+                        {rateLimit.remaining}/{rateLimit.limit} left
+                        {secsLeft !== null ? ` · resets in ${secsLeft}s` : ""}
+                      </span>
+                    </div>
+                  );
+                })()
+              : null}
+
             {/* signed result */}
             {signed ? (
               <div
@@ -939,6 +1033,46 @@ export default function QSignPage() {
                     value={signed.ed25519.publicKey}
                     onCopy={() => copy(signed.ed25519.publicKey, "Public key")}
                   />
+                  {signed.dilithium ? (
+                    <div
+                      style={{
+                        padding: 10,
+                        borderRadius: 8,
+                        background: "rgba(99,102,241,0.06)",
+                        border: "1px dashed rgba(99,102,241,0.35)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#4338ca" }}>
+                          ML-DSA-65 (Dilithium-3) · {signed.dilithium.mode}
+                        </div>
+                        <span style={chip("rgba(99,102,241,0.18)", "#4338ca")}>
+                          PQ slot reserved
+                        </span>
+                      </div>
+                      <code
+                        style={{
+                          ...mono,
+                          fontSize: 10,
+                          wordBreak: "break-all",
+                          color: "#475569",
+                        }}
+                      >
+                        digest: {signed.dilithium.digest.slice(0, 64)}…
+                      </code>
+                      <div style={{ marginTop: 4, fontSize: 10, color: "#64748b" }}>
+                        Real post-quantum signature lands in v2.1; current digest is a
+                        deterministic SHA-512 fingerprint of canonical||kid.
+                      </div>
+                    </div>
+                  ) : null}
                   {signed.geo ? (
                     <div style={{ fontSize: 11, color: "#475569" }}>
                       geo: {signed.geo.source}
@@ -1156,6 +1290,27 @@ export default function QSignPage() {
                           : verifyResult.ed25519.valid
                           ? "valid"
                           : "invalid"}
+                      </strong>
+                    </div>
+                  ) : null}
+                  {verifyResult.dilithium ? (
+                    <div>
+                      Dilithium-3 (preview):{" "}
+                      <strong
+                        style={{
+                          color:
+                            verifyResult.dilithium.valid === null
+                              ? "#64748b"
+                              : verifyResult.dilithium.valid
+                              ? "#4338ca"
+                              : "#b91c1c",
+                        }}
+                      >
+                        {verifyResult.dilithium.valid === null
+                          ? "not checked"
+                          : verifyResult.dilithium.valid
+                          ? "preview-ok"
+                          : "preview-mismatch"}
                       </strong>
                     </div>
                   ) : null}

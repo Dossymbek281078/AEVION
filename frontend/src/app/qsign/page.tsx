@@ -247,6 +247,7 @@ export default function QSignPage() {
     id: string;
     secret: string;
   } | null>(null);
+  const [sdkLang, setSdkLang] = useState<"curl" | "ts" | "python">("curl");
 
   // verify pane
   const [verifyPayload, setVerifyPayload] = useState("");
@@ -1817,6 +1818,133 @@ export default function QSignPage() {
           </div>
         ) : null}
 
+        {/* ─── Use the API (SDK examples) ─── */}
+        <div style={{ marginTop: 24, ...card }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 10,
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 15 }}>Use the API</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                Live snippets — copy and paste. Replace{" "}
+                <code style={mono}>$TOKEN</code> with your bearer.
+                {signed ? (
+                  <>
+                    {" "}
+                    Signature id <code style={mono}>{signed.id.slice(0, 8)}…</code> from
+                    your latest sign is preserved.
+                  </>
+                ) : null}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {(["curl", "ts", "python"] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => setSdkLang(lang)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(15,23,42,0.15)",
+                    background: sdkLang === lang ? "#0f172a" : "#fff",
+                    color: sdkLang === lang ? "#fff" : "#0f172a",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {lang === "curl" ? "curl" : lang === "ts" ? "TypeScript" : "Python"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <pre
+            style={{
+              ...mono,
+              background: "#0f172a",
+              color: "#e2e8f0",
+              padding: 14,
+              borderRadius: 10,
+              fontSize: 11.5,
+              overflowX: "auto",
+              margin: 0,
+              lineHeight: 1.6,
+            }}
+          >
+            {sdkLang === "curl"
+              ? buildCurlSnippet(signed)
+              : sdkLang === "ts"
+                ? buildTsSnippet(signed)
+                : buildPythonSnippet(signed)}
+          </pre>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() =>
+                copy(
+                  sdkLang === "curl"
+                    ? buildCurlSnippet(signed)
+                    : sdkLang === "ts"
+                      ? buildTsSnippet(signed)
+                      : buildPythonSnippet(signed),
+                  "Snippet",
+                )
+              }
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Copy snippet
+            </button>
+            <a
+              href={apiUrl("/api/qsign/v2/openapi.json")}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#0f172a",
+                textDecoration: "none",
+              }}
+            >
+              OpenAPI 3.0 spec ↗
+            </a>
+            <a
+              href="https://github.com/Dossymbek281078/AEVION/tree/main/aevion-globus-backend/sdk"
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#0f172a",
+                textDecoration: "none",
+              }}
+            >
+              SDK packages ↗
+            </a>
+          </div>
+        </div>
+
         {/* ─── How it works ─── */}
         <div
           style={{
@@ -1865,6 +1993,119 @@ export default function QSignPage() {
       </ProductPageShell>
     </main>
   );
+}
+
+/* ───────── SDK snippet builders ─────────
+ * Live code samples shown in the "Use the API" card. When the user has
+ * just signed a payload, the latest signature id flows into the verify
+ * URL examples so partners see a real working call rather than a stub.
+ */
+
+function buildCurlSnippet(signed: SignResponse | null): string {
+  const sigId = signed?.id ?? "<signature-id>";
+  const hmacKid = signed?.hmac.kid ?? "qsign-hmac-v1";
+  return `# 1. health
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/health | jq
+
+# 2. sign (idempotent)
+curl -s -X POST https://aevion-production-a70c.up.railway.app/api/qsign/v2/sign \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: order-2026-04-28-001" \\
+  -d '{"payload":{"artifact":"invoice-001","amount":1500.00,"currency":"USD"}}' | jq
+
+# 3. public verify (no auth)
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/${sigId}/public | jq
+
+# 4. PDF stamp
+curl -sL "https://aevion-production-a70c.up.railway.app/api/qsign/v2/${sigId}/pdf?download=1" \\
+  -o signed-${sigId.slice(0, 8)}.pdf
+
+# 5. recent activity
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/audit?limit=20 \\
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 6. Prometheus metrics scrape
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/metrics`;
+}
+
+function buildTsSnippet(signed: SignResponse | null): string {
+  const sigId = signed?.id ?? "<signature-id>";
+  return `// npm install @aevion/qsign-client
+import { QSignClient } from "@aevion/qsign-client";
+
+const qsign = new QSignClient({
+  baseUrl: "https://aevion-production-a70c.up.railway.app/api/qsign/v2",
+  token: process.env.AEVION_TOKEN,
+});
+
+// Sign — idempotent retries return the same id
+const sig = await qsign.sign(
+  { artifact: "invoice-001", amount: 1500.00, currency: "USD" },
+  { idempotencyKey: "order-2026-04-28-001" },
+);
+console.log(sig.id, sig.publicUrl);
+
+// Verify (stateless)
+const r = await qsign.verify({
+  payload: { artifact: "invoice-001", amount: 1500.00, currency: "USD" },
+  hmacKid: sig.hmac.kid,
+  signatureHmac: sig.hmac.signature,
+  ed25519Kid: sig.ed25519?.kid,
+  signatureEd25519: sig.ed25519?.signature,
+});
+console.log("valid:", r.valid);
+
+// DB-backed verify (includes revocation status)
+const live = await qsign.verifyById("${sigId}");
+console.log("revoked:", live.revoked);
+
+// Audit log
+const audit = await qsign.listAudit({ event: "sign", limit: 20 });
+audit.items.forEach((e) => console.log(e.at, e.signatureId));
+
+// Webhooks
+const wh = await qsign.createWebhook("https://your-app.example.com/qsign-events");
+console.log("save secret ONCE:", wh.secret);`;
+}
+
+function buildPythonSnippet(signed: SignResponse | null): string {
+  const sigId = signed?.id ?? "<signature-id>";
+  return `# pip install requests
+import os, requests
+
+BASE = "https://aevion-production-a70c.up.railway.app/api/qsign/v2"
+TOKEN = os.environ["AEVION_TOKEN"]
+H = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+# 1. sign — Idempotency-Key makes retries safe
+r = requests.post(
+    f"{BASE}/sign",
+    json={"payload": {"artifact": "invoice-001", "amount": 1500.0, "currency": "USD"}},
+    headers={**H, "Idempotency-Key": "order-2026-04-28-001"},
+)
+sig = r.json()
+print(sig["id"], sig["publicUrl"])
+
+# 2. verify (stateless)
+v = requests.post(f"{BASE}/verify", json={
+    "payload": {"artifact": "invoice-001", "amount": 1500.0, "currency": "USD"},
+    "hmacKid": sig["hmac"]["kid"],
+    "signatureHmac": sig["hmac"]["signature"],
+    "ed25519Kid": sig["ed25519"]["kid"],
+    "signatureEd25519": sig["ed25519"]["signature"],
+}).json()
+print("valid:", v["valid"])
+
+# 3. DB-backed verify
+live = requests.get(f"{BASE}/verify/${sigId}").json()
+print("revoked:", live["revoked"])
+
+# 4. Webhook receiver — verify X-QSign-Signature
+import hmac, hashlib
+def verify_qsign_webhook(raw_body: bytes, header_sig: str, secret: str) -> bool:
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header_sig.lower())`;
 }
 
 /* ───────── sub-components ───────── */

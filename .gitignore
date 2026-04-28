@@ -39,6 +39,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # Puzzle artifacts (generated locally)
 frontend/public/puzzles-fixed.json

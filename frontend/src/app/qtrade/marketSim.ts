@@ -493,3 +493,144 @@ export function botUnrealizedPct(bot: DcaBot, currentPrice: number): number {
   if (bot.avgEntry <= 0) return 0;
   return ((currentPrice - bot.avgEntry) / bot.avgEntry) * 100;
 }
+
+// ─── Grid Bots — buy низко, sell высоко по сетке ──────────────────
+// Grid bot задаёт диапазон [low, high] и N уровней. На каждый уровень:
+// - empty → если price падает через уровень — buy
+// - filled → если price поднимается на одно деление выше — sell, +profit
+// Continuous поведение: bot переключается между filled/empty уровнями
+// по мере колебания цены, накапливая realized profit.
+
+const GRID_BOTS_KEY = "aevion_qtrade_grid_bots_v1";
+
+export type GridLevel = {
+  price: number;
+  state: "empty" | "filled";
+  qty: number;
+  filledAtPrice?: number;
+  filledTs?: number;
+};
+
+export type GridBot = {
+  id: string;
+  pair: PairId;
+  lowPrice: number;
+  highPrice: number;
+  levels: GridLevel[];           // sorted asc by price
+  amountUsdPerLevel: number;
+  status: "active" | "paused" | "stopped";
+  createdTs: number;
+  lastPrice: number;
+  totalProfit: number;
+  totalBuys: number;
+  totalSells: number;
+};
+
+export function ldGridBots(): GridBot[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(GRID_BOTS_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as GridBot[] : [];
+  } catch { return [] }
+}
+
+export function svGridBots(bs: GridBot[]) {
+  try { localStorage.setItem(GRID_BOTS_KEY, JSON.stringify(bs.slice(0, 30))) } catch {}
+}
+
+export function makeGridBot(opts: {
+  pair: PairId;
+  lowPrice: number;
+  highPrice: number;
+  gridCount: number;
+  amountUsdPerLevel: number;
+  startPrice: number;
+}): GridBot | null {
+  if (opts.gridCount < 2) return null;
+  if (opts.lowPrice >= opts.highPrice) return null;
+  if (opts.amountUsdPerLevel <= 0) return null;
+  const levels: GridLevel[] = [];
+  for (let i = 0; i < opts.gridCount; i++) {
+    const price = opts.lowPrice + (opts.highPrice - opts.lowPrice) * i / (opts.gridCount - 1);
+    levels.push({ price, state: "empty", qty: 0 });
+  }
+  return {
+    id: `grid-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+    pair: opts.pair,
+    lowPrice: opts.lowPrice,
+    highPrice: opts.highPrice,
+    levels,
+    amountUsdPerLevel: opts.amountUsdPerLevel,
+    status: "active",
+    createdTs: Date.now(),
+    lastPrice: opts.startPrice,
+    totalProfit: 0,
+    totalBuys: 0,
+    totalSells: 0,
+  };
+}
+
+// Tick a grid bot: detect price-crossings, fill empty levels на падении,
+// release filled levels на подъёме (+ realize profit).
+// Returns updated bot + counts of new buys/sells (для AEV mint).
+export function tickGridBot(
+  bot: GridBot,
+  currentPrice: number,
+  now = Date.now(),
+): { bot: GridBot; buys: number; sells: number } {
+  if (bot.status !== "active") return { bot, buys: 0, sells: 0 };
+  if (currentPrice <= 0) return { bot, buys: 0, sells: 0 };
+  const prevPrice = bot.lastPrice;
+  let totalProfit = bot.totalProfit;
+  let totalBuys = bot.totalBuys;
+  let totalSells = bot.totalSells;
+  let newBuys = 0;
+  let newSells = 0;
+  const newLevels = bot.levels.map((lvl, i) => {
+    if (lvl.state === "empty") {
+      // Crossed DOWN через level → buy at currentPrice
+      if (prevPrice > lvl.price && currentPrice <= lvl.price) {
+        const qty = bot.amountUsdPerLevel / currentPrice;
+        totalBuys += 1; newBuys += 1;
+        return { ...lvl, state: "filled" as const, qty, filledAtPrice: currentPrice, filledTs: now };
+      }
+    } else if (lvl.state === "filled") {
+      // Sell-trigger price = next higher rung (если есть) или +2% gap
+      const sellTriggerPrice = i + 1 < bot.levels.length
+        ? bot.levels[i + 1].price
+        : lvl.price * 1.02;
+      if (prevPrice < sellTriggerPrice && currentPrice >= sellTriggerPrice) {
+        const buyPrice = lvl.filledAtPrice ?? lvl.price;
+        const profit = lvl.qty * (sellTriggerPrice - buyPrice);
+        totalProfit += profit;
+        totalSells += 1; newSells += 1;
+        return { price: lvl.price, state: "empty" as const, qty: 0 };
+      }
+    }
+    return lvl;
+  });
+  return {
+    bot: {
+      ...bot,
+      levels: newLevels,
+      lastPrice: currentPrice,
+      totalProfit,
+      totalBuys,
+      totalSells,
+    },
+    buys: newBuys,
+    sells: newSells,
+  };
+}
+
+// Inventory value at current price (для display)
+export function gridInventoryValue(bot: GridBot, currentPrice: number): number {
+  return bot.levels
+    .filter((l) => l.state === "filled")
+    .reduce((s, l) => s + l.qty * currentPrice, 0);
+}
+
+export function gridFilledCount(bot: GridBot): number {
+  return bot.levels.filter((l) => l.state === "filled").length;
+}

@@ -17,6 +17,10 @@ import {
   type TimeframeMs, type DcaBot,
 } from "./marketSim";
 import { ldWallet, svWallet, sellAev, buyAev, recordPlay, type AEVWallet } from "../aev/aevToken";
+import {
+  computePortfolioStats, computePairBreakdown, buildCalendar, fmtMs,
+  type PortfolioStats, type PairBreakdown, type CalendarCell,
+} from "./analytics";
 
 type Account = {
   id: string;
@@ -1383,24 +1387,10 @@ export default function QTradePage() {
           const filtered = journalTagFilter
             ? closedPositions.filter((c) => (c.tags ?? []).includes(journalTagFilter))
             : closedPositions;
-          const wins = filtered.filter((c) => c.realizedPnl > 0).length;
-          const losses = filtered.filter((c) => c.realizedPnl < 0).length;
-          const total = filtered.length;
-          const realizedSum = filtered.reduce((s, c) => s + c.realizedPnl, 0);
-          const winrate = total > 0 ? (wins / total) * 100 : 0;
-          const best = filtered.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl > b.realizedPnl ? c : b), null);
-          const worst = filtered.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl < b.realizedPnl ? c : b), null);
-          // Build equity curve по chronological close order. Cumulative P&L points.
-          const chrono = [...filtered].sort((a, b) => a.exitTs - b.exitTs);
-          let cum = 0;
-          const equityPoints = chrono.map((c) => { cum += c.realizedPnl; return { ts: c.exitTs, equity: cum } });
-          // Compute peak and drawdown
-          let peak = 0, maxDD = 0;
-          for (const pt of equityPoints) {
-            if (pt.equity > peak) peak = pt.equity;
-            const dd = peak - pt.equity;
-            if (dd > maxDD) maxDD = dd;
-          }
+          const stats = computePortfolioStats(filtered);
+          const pairBreakdown = computePairBreakdown(filtered);
+          const calendar = buildCalendar(filtered, 28);
+          const { wins, losses, total, realizedSum, winrate, best, worst, equity: equityPoints, peak, maxDrawdown: maxDD } = stats;
           // Tag-stats — агрегируем wins/losses/avg pnl по каждому тегу.
           const tagStats: Map<string, { count: number; wins: number; pnl: number }> = new Map();
           for (const c of closedPositions) {
@@ -1505,6 +1495,15 @@ export default function QTradePage() {
                   </div>
                 </div>
               )}
+
+              {/* Advanced analytics — Sharpe, profit factor, R-multiples, streaks */}
+              <AdvancedAnalytics stats={stats} />
+
+              {/* Calendar heatmap — last 28 days P&L */}
+              {stats.total > 0 && <CalendarHeatmap cells={calendar} />}
+
+              {/* Per-pair breakdown */}
+              {pairBreakdown.length > 1 && <PairBreakdownTable rows={pairBreakdown} />}
 
               {equityPoints.length >= 2 && <EquityCurve points={equityPoints} />}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" as const }}>
@@ -2363,6 +2362,196 @@ function EquityCurve({ points }: { points: { ts: number; equity: number }[] }) {
         <path d={eqPath} stroke={lastColor} strokeWidth={0.28} fill="none" />
       </svg>
     </div>
+  );
+}
+
+// ─── Advanced analytics ────────────────────────────────────────────
+// 12 derived metrics в plain key/value сетке. Цветовая семантика: зелёный =
+// healthy, жёлтый = borderline, красный = problem. Tooltip explains each metric
+// в plain Russian — то, чего не хватает обычным trade history.
+function AdvancedAnalytics({ stats }: { stats: PortfolioStats }) {
+  if (stats.total === 0) return null;
+  const sharpeColor = stats.sharpeLike === null ? "#94a3b8" : stats.sharpeLike >= 1.5 ? "#22c55e" : stats.sharpeLike >= 0.5 ? "#fbbf24" : "#f87171";
+  const pfColor = stats.profitFactor === null ? "#94a3b8" : stats.profitFactor >= 1.5 ? "#22c55e" : stats.profitFactor >= 1 ? "#fbbf24" : "#f87171";
+  const expColor = stats.expectancy > 0 ? "#22c55e" : stats.expectancy < 0 ? "#f87171" : "#cbd5e1";
+  const payoffColor = stats.payoffRatio === null ? "#94a3b8" : stats.payoffRatio >= 1.5 ? "#22c55e" : stats.payoffRatio >= 1 ? "#fbbf24" : "#f87171";
+  const ddColor = stats.maxDrawdownPct < 10 ? "#86efac" : stats.maxDrawdownPct < 25 ? "#fbbf24" : "#f87171";
+  const streakColor = stats.currentStreak.kind === "W" ? "#86efac" : stats.currentStreak.kind === "L" ? "#fca5a5" : "#94a3b8";
+  return (
+    <div style={{
+      marginBottom: 10, padding: "10px 12px", borderRadius: 8,
+      background: "linear-gradient(135deg, rgba(99,102,241,0.07), rgba(34,211,238,0.05))",
+      border: "1px solid rgba(99,102,241,0.18)",
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: "#a5b4fc", textTransform: "uppercase" as const, marginBottom: 8 }}>
+        🧮 Advanced metrics · risk-adjusted performance
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+        <Metric label="Sharpe-like" tooltip="√N × meanR / stdevR — насколько стабильно на единицу риска" color={sharpeColor}
+          value={stats.sharpeLike === null ? "—" : stats.sharpeLike.toFixed(2)} />
+        <Metric label="Profit factor" tooltip="grossWin / grossLoss — каждый $1 убытков покрывается стольким" color={pfColor}
+          value={stats.profitFactor === null ? (stats.grossWin > 0 ? "∞" : "—") : stats.profitFactor.toFixed(2)} />
+        <Metric label="Expectancy" tooltip="ожидаемый P&L на сделку = winrate × avgWin − lossrate × avgLoss" color={expColor}
+          value={`${stats.expectancy >= 0 ? "+" : ""}${fmtUsd(stats.expectancy)}`} />
+        <Metric label="Payoff ratio" tooltip="avgWin / avgLoss — типичная победа versus типичный проигрыш" color={payoffColor}
+          value={stats.payoffRatio === null ? (stats.avgWin > 0 ? "∞" : "—") : stats.payoffRatio.toFixed(2)} />
+        <Metric label="Avg R" tooltip="средний %-return на сделку (signed)" color={stats.avgRPct >= 0 ? "#86efac" : "#fca5a5"}
+          value={`${stats.avgRPct >= 0 ? "+" : ""}${stats.avgRPct.toFixed(2)}%`} />
+        <Metric label="Stdev R" tooltip="разброс %-доходности — мера риска / волатильности" color="#cbd5e1"
+          value={`${stats.stddevRPct.toFixed(2)}%`} />
+        <Metric label="Avg win" tooltip="средняя прибыль по выигрышной сделке" color="#86efac"
+          value={fmtUsd(stats.avgWin)} />
+        <Metric label="Avg loss" tooltip="средний убыток по проигрышной сделке" color="#fca5a5"
+          value={`-${fmtUsd(stats.avgLoss)}`} />
+        <Metric label="Max DD" tooltip="макс. просадка в $ от пика equity" color="#fca5a5"
+          value={`-${fmtUsd(stats.maxDrawdown)}`} />
+        <Metric label="Max DD %" tooltip="та же просадка в % от пика" color={ddColor}
+          value={`${stats.maxDrawdownPct.toFixed(1)}%`} />
+        <Metric label="Best streak" tooltip={`лонгест W ${stats.longestWinStreak} · L ${stats.longestLossStreak}`} color="#cbd5e1"
+          value={`${stats.longestWinStreak}W · ${stats.longestLossStreak}L`} />
+        <Metric label="Current streak" tooltip="текущая серия — W (вин), L (лосс) или — (ничья/начало)" color={streakColor}
+          value={stats.currentStreak.kind === "—" ? "—" : `${stats.currentStreak.kind}×${stats.currentStreak.len}`} />
+        <Metric label="Avg holding" tooltip="средняя длительность сделки от входа до выхода" color="#cbd5e1"
+          value={fmtMs(stats.avgHoldingMs)} />
+        <Metric label="Long / Short" tooltip={`Long ${stats.longCount} / Short ${stats.shortCount}`} color="#cbd5e1"
+          value={`${stats.longCount}/${stats.shortCount}`} />
+        <Metric label="Long PnL" tooltip="суммарный realized P&L по long-сделкам" color={stats.longPnl >= 0 ? "#86efac" : "#fca5a5"}
+          value={`${stats.longPnl >= 0 ? "+" : ""}${fmtUsd(stats.longPnl)}`} />
+        <Metric label="Short PnL" tooltip="суммарный realized P&L по short-сделкам" color={stats.shortPnl >= 0 ? "#86efac" : "#fca5a5"}
+          value={`${stats.shortPnl >= 0 ? "+" : ""}${fmtUsd(stats.shortPnl)}`} />
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, color, tooltip }: { label: string; value: string | number; color: string; tooltip?: string }) {
+  return (
+    <div title={tooltip} style={{
+      padding: "6px 8px", borderRadius: 6,
+      background: "rgba(0,0,0,0.18)",
+      border: "1px solid rgba(255,255,255,0.05)",
+      cursor: tooltip ? "help" : "default",
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color: "#94a3b8", textTransform: "uppercase" as const, marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 14, fontFamily: "ui-monospace, monospace", fontWeight: 800, color, lineHeight: 1.1 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// ─── Calendar heatmap — last 28 days realized P&L by day ──────────
+function CalendarHeatmap({ cells }: { cells: CalendarCell[] }) {
+  if (cells.length === 0) return null;
+  const maxAbs = Math.max(1, ...cells.map((c) => Math.abs(c.pnl)));
+  const labels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  // Align grid: first cell weekday → leading empty slots
+  const firstDate = new Date(cells[0].dayKey + "T00:00:00");
+  const firstDay = (firstDate.getDay() + 6) % 7; // Mon=0
+  const grid: (CalendarCell | null)[] = Array(firstDay).fill(null).concat(cells);
+  const totalPnl = cells.reduce((s, c) => s + c.pnl, 0);
+  const tradingDays = cells.filter((c) => c.trades > 0).length;
+  const avgPerDay = tradingDays > 0 ? totalPnl / tradingDays : 0;
+  return (
+    <div style={{
+      marginBottom: 10, padding: "10px 12px", borderRadius: 8,
+      background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.06)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap" as const, gap: 6 }}>
+        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: "#94a3b8", textTransform: "uppercase" as const }}>
+          📅 Calendar · последние 28 дней
+        </div>
+        <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#cbd5e1" }}>
+          <span>Trading days: <strong style={{ color: "#fff" }}>{tradingDays}/28</strong></span>
+          <span>Avg/day: <strong style={{ color: avgPerDay >= 0 ? "#86efac" : "#fca5a5" }}>{avgPerDay >= 0 ? "+" : ""}{fmtUsd(avgPerDay)}</strong></span>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 4 }}>
+        {labels.map((l) => (
+          <div key={l} style={{ fontSize: 9, color: "#64748b", textAlign: "center" as const, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" as const }}>{l}</div>
+        ))}
+        {grid.map((cell, i) => {
+          if (!cell) return <div key={`pad-${i}`} />;
+          const intensity = Math.abs(cell.pnl) / maxAbs;
+          const bg = cell.pnl > 0
+            ? `rgba(34,197,94,${0.15 + intensity * 0.55})`
+            : cell.pnl < 0
+              ? `rgba(220,38,38,${0.15 + intensity * 0.55})`
+              : cell.trades > 0 ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.02)";
+          const day = new Date(cell.dayKey + "T00:00:00").getDate();
+          return (
+            <div key={cell.dayKey} title={`${cell.dayKey} · ${cell.trades} сделок · ${cell.wins}W/${cell.losses}L · ${cell.pnl >= 0 ? "+" : ""}${fmtUsd(cell.pnl)}`}
+              style={{
+                aspectRatio: "1 / 1",
+                borderRadius: 4, background: bg,
+                border: cell.trades > 0 ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)",
+                padding: 3, display: "flex", flexDirection: "column", justifyContent: "space-between" as const,
+                cursor: cell.trades > 0 ? "help" : "default",
+                position: "relative" as const, minHeight: 38,
+              }}>
+              <div style={{ fontSize: 9, color: cell.trades > 0 ? "#fff" : "#475569", fontWeight: 700, lineHeight: 1 }}>{day}</div>
+              {cell.trades > 0 && (
+                <div style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", fontWeight: 800, color: cell.pnl >= 0 ? "#86efac" : "#fca5a5", lineHeight: 1, textAlign: "right" as const }}>
+                  {cell.pnl >= 0 ? "+" : ""}{Math.abs(cell.pnl) >= 1000 ? `${(cell.pnl / 1000).toFixed(1)}K` : cell.pnl.toFixed(0)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Per-pair breakdown ────────────────────────────────────────────
+function PairBreakdownTable({ rows }: { rows: PairBreakdown[] }) {
+  const headerStyle = { fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" as const };
+  const monoCell = { fontFamily: "ui-monospace, monospace" };
+  return (
+    <div style={{
+      marginBottom: 10, padding: "10px 12px", borderRadius: 8,
+      background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.06)",
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: "#94a3b8", textTransform: "uppercase" as const, marginBottom: 8 }}>
+        🎯 По парам · best & worst performers
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(80px, 1.2fr) 0.6fr 0.6fr 1fr 0.8fr 1fr", rowGap: 4, columnGap: 8, fontSize: 11, alignItems: "center" as const }}>
+        <div style={headerStyle}>Pair</div>
+        <div style={{ ...headerStyle, textAlign: "right" as const }}>Trades</div>
+        <div style={{ ...headerStyle, textAlign: "right" as const }}>WR</div>
+        <div style={{ ...headerStyle, textAlign: "right" as const }}>P&L</div>
+        <div style={{ ...headerStyle, textAlign: "right" as const }}>Avg R</div>
+        <div style={{ ...headerStyle, textAlign: "right" as const }}>Range</div>
+        {rows.map((r) => {
+          const wrColor = r.winrate >= 55 ? "#86efac" : r.winrate >= 40 ? "#fde68a" : "#fca5a5";
+          const pnlColor = r.pnl >= 0 ? "#86efac" : "#fca5a5";
+          return (
+            <PairRow key={r.pair} row={r} wrColor={wrColor} pnlColor={pnlColor} monoCell={monoCell} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PairRow({ row, wrColor, pnlColor, monoCell }: { row: PairBreakdown; wrColor: string; pnlColor: string; monoCell: React.CSSProperties }) {
+  return (
+    <>
+      <div style={{ fontWeight: 800, color: "#fff", ...monoCell }}>{row.pair}</div>
+      <div style={{ ...monoCell, color: "#cbd5e1", textAlign: "right" as const }}>{row.trades}</div>
+      <div style={{ ...monoCell, color: wrColor, textAlign: "right" as const }}>{row.winrate.toFixed(0)}%</div>
+      <div style={{ ...monoCell, color: pnlColor, fontWeight: 800, textAlign: "right" as const }}>
+        {row.pnl >= 0 ? "+" : ""}{fmtUsd(row.pnl)}
+      </div>
+      <div style={{ ...monoCell, color: row.avgR >= 0 ? "#86efac" : "#fca5a5", textAlign: "right" as const }}>
+        {row.avgR >= 0 ? "+" : ""}{row.avgR.toFixed(2)}%
+      </div>
+      <div style={{ ...monoCell, color: "#94a3b8", textAlign: "right" as const, fontSize: 10 }}>
+        {row.worstPct.toFixed(1)} … {row.bestPct >= 0 ? "+" : ""}{row.bestPct.toFixed(1)}%
+      </div>
+    </>
   );
 }
 

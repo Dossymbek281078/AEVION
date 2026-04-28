@@ -174,6 +174,13 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         hintKey: "explore.card.insights.hint",
       },
       {
+        href: "/bank/recurring",
+        iconBg: "linear-gradient(135deg, #0d9488, #6366f1)",
+        iconChar: "↻",
+        titleKey: "explore.card.recurring.title",
+        hintKey: "explore.card.recurring.hint",
+      },
+      {
         href: "/bank/flow",
         iconBg: "linear-gradient(135deg, #0d9488, #f472b6)",
         iconChar: "⤳",

@@ -43,6 +43,12 @@ const TERMS: Term[] = [
   { id: "roundUp", group: "saving", href: "/bank/savings" },
   { id: "apy", group: "saving" },
   { id: "earlyClaim", group: "saving" },
+  { id: "budgetCap", group: "saving", href: "/bank/budget" },
+  { id: "billingCalendar", group: "saving", href: "/bank/calendar" },
+  { id: "subscriptionScanner", group: "saving", href: "/bank/subscriptions" },
+  { id: "wealthForecast", group: "saving", href: "/bank/forecast" },
+  { id: "coolDown", group: "saving", href: "/bank/cooldown" },
+  { id: "wishlistItem", group: "saving", href: "/bank/wishlist" },
   // credit
   { id: "salaryAdvance", group: "credit" },
   { id: "creditLimit", group: "credit", href: "/bank/trust" },

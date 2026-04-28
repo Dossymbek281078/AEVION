@@ -16,10 +16,16 @@ import {
   halvingSchedule, currentCycle,
   fmtBigAev, fmtSupplyPctPrecise,
 } from "../tokenomics";
+import { ldPairs, sparklinePath, fmtUsd, type Pair } from "../../qtrade/marketSim";
 
 export default function TokenomicsPage() {
   const [wallet, setWallet] = useState<AEVWallet | null>(null);
-  useEffect(() => { setWallet(ldWallet()); }, []);
+  const [aevPair, setAevPair] = useState<Pair | null>(null);
+  useEffect(() => {
+    setWallet(ldWallet());
+    const pairs = ldPairs();
+    setAevPair(pairs.find((p) => p.id === "AEV/USD") ?? null);
+  }, []);
 
   // Live tick — feeds the supply bar and ledger timestamp display
   const [, setTick] = useState(0);
@@ -27,9 +33,13 @@ export default function TokenomicsPage() {
     const id = setInterval(() => setTick((t) => t + 1), 2_000);
     return () => clearInterval(id);
   }, []);
-  // Re-read wallet every 4s to catch mining events from other tabs
+  // Re-read wallet + AEV market price every 4s — other tabs могут двигать оба
   useEffect(() => {
-    const id = setInterval(() => setWallet(ldWallet()), 4_000);
+    const id = setInterval(() => {
+      setWallet(ldWallet());
+      const pairs = ldPairs();
+      setAevPair(pairs.find((p) => p.id === "AEV/USD") ?? null);
+    }, 4_000);
     return () => clearInterval(id);
   }, []);
 
@@ -131,6 +141,12 @@ export default function TokenomicsPage() {
             </div>
           </div>
         </div>
+
+        {/* ═══ AEV MARKET PRICE — simulated AEV/USD oracle ══════════ */}
+        {aevPair && <AevMarketTile pair={aevPair} mcapBase={wallet.lifetimeMined} />}
+
+        {/* ═══ CROSS-MODULE FLOW — какие модули питают какие движки ═ */}
+        <CrossModuleFlow />
 
         {/* ═══ DISTRIBUTION DONUT + LEGEND ═══════════════════════════ */}
         <section style={{
@@ -447,5 +463,174 @@ function LedgerRow({ event }: { event: MiningEvent }) {
         {ago}
       </span>
     </div>
+  );
+}
+
+// ─── AEV Market price tile — pulls live AEV/USD from QTrade marketSim ────
+function AevMarketTile({ pair, mcapBase }: { pair: Pair; mcapBase: number }) {
+  const change = pair.price - pair.open24h;
+  const changePct = pair.open24h > 0 ? (change / pair.open24h) * 100 : 0;
+  const up = change >= 0;
+  const path = sparklinePath(pair.history, 100, 30);
+  // Mock market cap = your lifetime mined × current price (sneak-peek)
+  const personalMcap = mcapBase * pair.price;
+  return (
+    <section style={{
+      padding: 18, borderRadius: 12, marginBottom: 14,
+      background: "linear-gradient(135deg, #052e3a 0%, #0c4a6e 50%, #0e7490 100%)",
+      border: "1px solid rgba(34,211,238,0.25)",
+      color: "#e2e8f0", position: "relative" as const, overflow: "hidden" as const,
+    }}>
+      <div style={{
+        position: "absolute" as const, inset: 0,
+        background: "radial-gradient(circle at 90% 0%, rgba(34,211,238,0.18), transparent 50%)",
+        pointerEvents: "none" as const,
+      }} />
+      <div style={{ position: "relative" as const, display: "grid", gridTemplateColumns: "1fr auto", gap: 18, alignItems: "center" as const, flexWrap: "wrap" as const }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" as const, marginBottom: 8, flexWrap: "wrap" as const }}>
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" as const, color: "#67e8f9" }}>
+              💹 AEV / USD · spot price (simulated)
+            </div>
+            <Link href="/qtrade" style={{
+              padding: "2px 9px", borderRadius: 999,
+              background: "rgba(34,211,238,0.14)", border: "1px solid rgba(34,211,238,0.45)",
+              fontSize: 10, fontWeight: 800, color: "#67e8f9", textDecoration: "none",
+            }}>
+              Trade →
+            </Link>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "baseline" as const, flexWrap: "wrap" as const }}>
+            <div style={{ fontSize: 38, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fff", lineHeight: 1 }}>
+              ${pair.price.toFixed(4)}
+            </div>
+            <div style={{
+              fontSize: 14, fontWeight: 800, fontFamily: "ui-monospace, monospace",
+              color: up ? "#86efac" : "#fca5a5",
+              padding: "3px 10px", borderRadius: 999,
+              background: up ? "rgba(34,197,94,0.12)" : "rgba(220,38,38,0.12)",
+              border: `1px solid ${up ? "rgba(34,197,94,0.3)" : "rgba(220,38,38,0.3)"}`,
+            }}>
+              {up ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 16, fontSize: 11, color: "#cbd5e1", marginTop: 8, flexWrap: "wrap" as const }}>
+            <span>24h open <strong style={{ color: "#fff", fontFamily: "ui-monospace, monospace" }}>${pair.open24h.toFixed(4)}</strong></span>
+            <span>vol <strong style={{ color: "#fff", fontFamily: "ui-monospace, monospace" }}>{(pair.vol * 100).toFixed(2)}%</strong></span>
+            <span>your mcap <strong style={{ color: "#fbbf24", fontFamily: "ui-monospace, monospace" }}>{fmtUsd(personalMcap)}</strong></span>
+          </div>
+        </div>
+        <svg viewBox="0 0 100 30" preserveAspectRatio="none" style={{ width: "100%", maxWidth: 260, height: 80 }}>
+          <defs>
+            <linearGradient id="sparkfill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={up ? "#22c55e" : "#ef4444"} stopOpacity="0.4" />
+              <stop offset="100%" stopColor={up ? "#22c55e" : "#ef4444"} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={`${path} L 100 30 L 0 30 Z`} fill="url(#sparkfill)" />
+          <path d={path} stroke={up ? "#22c55e" : "#ef4444"} strokeWidth={0.4} fill="none" />
+        </svg>
+      </div>
+    </section>
+  );
+}
+
+// ─── Cross-module flow — какой модуль кормит какой engine ─────────
+// Sankey-like, но без библиотеки: SVG bezier-кривые от модулей слева к
+// движкам справа. Толщина проп. кол-ву RATE_CARD-actions для пары.
+function CrossModuleFlow() {
+  // Маппинг module → engine ID (по structure RATE_CARD.play + наши connectors)
+  const FLOWS: { module: string; emoji: string; engine: "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H"; weight: number }[] = [
+    // CyberChess → A (Play): 6 actions feeding chess
+    { module: "CyberChess", emoji: "♟", engine: "A", weight: 6 },
+    // QSign → A: 2 (sign + verify)
+    { module: "QSign", emoji: "✍", engine: "A", weight: 2 },
+    // QRight → A: 1 (register)
+    { module: "QRight", emoji: "📜", engine: "A", weight: 1 },
+    // Bureau → A: 1 (verify)
+    { module: "Bureau", emoji: "⚖", engine: "A", weight: 1 },
+    // QTrade → A: 1 (winning close)
+    { module: "QTrade", emoji: "📈", engine: "A", weight: 1 },
+    // Multichat → A: 1 (handoff)
+    { module: "Multichat", emoji: "💬", engine: "A", weight: 1 },
+    // QCoreAI → B (Compute) + A (run complete)
+    { module: "QCoreAI", emoji: "🤖", engine: "B", weight: 3 },
+    { module: "QCoreAI", emoji: "🤖", engine: "A", weight: 1 },
+    // /aev itself drives stewardship (C), curation (D), mentorship (E),
+    // streak (F), network (G), insight (H)
+    { module: "/aev wallet", emoji: "◆", engine: "C", weight: 2 },
+    { module: "/aev wallet", emoji: "◆", engine: "D", weight: 2 },
+    { module: "/aev wallet", emoji: "◆", engine: "E", weight: 2 },
+    { module: "/aev wallet", emoji: "◆", engine: "F", weight: 1 },
+    { module: "/aev wallet", emoji: "◆", engine: "G", weight: 2 },
+    { module: "/aev wallet", emoji: "◆", engine: "H", weight: 2 },
+  ];
+  const modules = Array.from(new Set(FLOWS.map((f) => f.module))).map((name) => ({
+    name,
+    emoji: FLOWS.find((f) => f.module === name)!.emoji,
+  }));
+  // Engine ordering A-H
+  const enginesOrdered = ENGINES;
+  const W = 100;
+  const H = 60;
+  const leftX = 12;
+  const rightX = 88;
+  const moduleY = (i: number) => 4 + (i / Math.max(1, modules.length - 1)) * (H - 8);
+  const engineY = (i: number) => 4 + (i / Math.max(1, enginesOrdered.length - 1)) * (H - 8);
+  return (
+    <section style={{
+      padding: 18, borderRadius: 12, marginBottom: 14,
+      background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)",
+      border: "1px solid rgba(168,85,247,0.25)",
+      color: "#e2e8f0",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap" as const, gap: 8, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" as const, color: "#c4b5fd" }}>
+          🔀 Cross-module flow · какой модуль питает какой движок
+        </div>
+        <div style={{ fontSize: 11, color: "#a5b4fc" }}>
+          {modules.length} feeders → {enginesOrdered.length} engines
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 320, display: "block" }}>
+        {/* Flow curves */}
+        {FLOWS.map((flow, i) => {
+          const mIdx = modules.findIndex((m) => m.name === flow.module);
+          const eIdx = enginesOrdered.findIndex((e) => e.id === flow.engine);
+          if (mIdx < 0 || eIdx < 0) return null;
+          const y0 = moduleY(mIdx);
+          const y1 = engineY(eIdx);
+          const cx0 = leftX + (rightX - leftX) * 0.4;
+          const cx1 = leftX + (rightX - leftX) * 0.6;
+          const eng = enginesOrdered[eIdx];
+          const sw = 0.35 + flow.weight * 0.18;
+          return (
+            <path key={i}
+              d={`M ${leftX} ${y0} C ${cx0} ${y0}, ${cx1} ${y1}, ${rightX} ${y1}`}
+              stroke={eng.color} strokeWidth={sw} fill="none" opacity={0.55}
+            >
+              <title>{`${flow.module} → ${eng.id} (${eng.short}) · weight ${flow.weight}`}</title>
+            </path>
+          );
+        })}
+        {/* Module nodes (left) */}
+        {modules.map((m, i) => (
+          <g key={m.name}>
+            <circle cx={leftX} cy={moduleY(i)} r={1.6} fill="#c4b5fd" />
+            <text x={leftX - 1.5} y={moduleY(i) + 0.5} textAnchor="end" fill="#fff" fontSize={2.4} fontWeight={700} dominantBaseline="middle">{m.emoji} {m.name}</text>
+          </g>
+        ))}
+        {/* Engine nodes (right) */}
+        {enginesOrdered.map((e, i) => (
+          <g key={e.id}>
+            <circle cx={rightX} cy={engineY(i)} r={1.6} fill={e.color} />
+            <text x={rightX + 1.5} y={engineY(i) + 0.5} fill="#fff" fontSize={2.4} fontWeight={700} dominantBaseline="middle">{e.emoji} {e.id} · {e.short}</text>
+          </g>
+        ))}
+      </svg>
+      <div style={{ fontSize: 10, color: "#a5b4fc", lineHeight: 1.5, marginTop: 10, fontStyle: "italic" as const }}>
+        Толщина дуги ≈ количество отдельных RATE_CARD-action'ов которые модуль вкладывает в движок. Hover over arc для деталей.
+      </div>
+    </section>
   );
 }

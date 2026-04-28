@@ -114,10 +114,12 @@ async function main() {
     if (!r.ok) return fail("sign", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
     if (!r.data?.id || !r.data?.hmac?.signature || !r.data?.ed25519?.signature)
       return fail("sign", `malformed response: ${JSON.stringify(r.data)}`);
+    if (!r.data?.dilithium || r.data.dilithium.mode !== "preview" || !r.data.dilithium.digest)
+      return fail("sign", `missing dilithium preview block: ${JSON.stringify(r.data?.dilithium)}`);
     signed = r.data;
     pass(
       "sign",
-      `id=${signed.id.slice(0, 8)} kids=${signed.hmac.kid}/${signed.ed25519.kid}`,
+      `id=${signed.id.slice(0, 8)} kids=${signed.hmac.kid}/${signed.ed25519.kid} pq=${signed.dilithium.kid}`,
     );
   }
 
@@ -130,13 +132,19 @@ async function main() {
         signatureHmac: signed.hmac.signature,
         ed25519Kid: signed.ed25519.kid,
         signatureEd25519: signed.ed25519.signature,
+        signatureDilithium: signed.dilithium?.digest,
       },
     });
     if (!r.ok)
       return fail("stateless verify", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
     if (!r.data?.valid)
       return fail("stateless verify", `valid=false: ${JSON.stringify(r.data)}`);
-    pass("stateless verify", `hmac+ed25519 valid`);
+    if (!r.data?.dilithium || r.data.dilithium.valid !== true)
+      return fail(
+        "stateless verify",
+        `dilithium preview did not round-trip: ${JSON.stringify(r.data?.dilithium)}`,
+      );
+    pass("stateless verify", `hmac+ed25519+dilithium-preview valid`);
   }
 
   // 6 — stateless verify with tampered payload (should fail)
@@ -214,7 +222,20 @@ async function main() {
     pass("recent", `includes signed id, no leaked fields`);
   }
 
-  // 9d — PDF stamp render
+  // 9d — audit log (per-user)
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/audit?limit=20", { token });
+    if (!r.ok) return fail("audit", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!Array.isArray(r.data?.items))
+      return fail("audit", `items not array: ${JSON.stringify(r.data)}`);
+    const ours = r.data.items.find(
+      (it) => it.event === "sign" && it.signatureId === signed.id,
+    );
+    if (!ours) return fail("audit", "freshly signed id not in audit log");
+    pass("audit", `items=${r.data.items.length} mySign=found`);
+  }
+
+  // 9e — PDF stamp render
   {
     try {
       const r = await fetch(`${BASE}/api/qsign/v2/${signed.id}/pdf`);
@@ -263,6 +284,14 @@ async function main() {
     if (r3.status !== 409)
       return fail("double revoke", `expected 409, got ${r3.status}`);
     pass("double revoke", "409 conflict (expected)");
+
+    // 13 — audit log now contains a revoke event for our signature
+    const r4 = await jsonFetch("GET", `/api/qsign/v2/audit?event=revoke&limit=50`, { token });
+    if (!r4.ok) return fail("audit revoke", `HTTP ${r4.status}: ${JSON.stringify(r4.data)}`);
+    const rev = (r4.data?.items || []).find((it) => it.signatureId === signed.id);
+    if (!rev)
+      return fail("audit revoke", "revoke event for signed id not found in audit feed");
+    pass("audit revoke", `reason=${rev.reason}`);
   }
 
   const failed = results.filter((r) => !r.ok).length;

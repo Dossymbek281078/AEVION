@@ -115,6 +115,23 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreMessage — per-call cost (computed from provider/model/tokens at runtime).
   await pool.query(`ALTER TABLE "QCoreMessage" ADD COLUMN IF NOT EXISTS "costUsd" DOUBLE PRECISION;`);
 
+  // QCoreRun — free-form tags for organizing runs (e.g. "investor-demo", "broken").
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "tags" TEXT[] NOT NULL DEFAULT '{}';`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QCoreRun_tags_gin_idx" ON "QCoreRun" USING GIN ("tags");`
+  );
+
+  // Per-user outbound webhook (multi-tenant overlay on top of env-based webhook).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreUserWebhook" (
+      "userId"     TEXT PRIMARY KEY,
+      "url"        TEXT NOT NULL,
+      "secret"     TEXT,
+      "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

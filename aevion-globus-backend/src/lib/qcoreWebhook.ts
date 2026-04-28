@@ -31,34 +31,66 @@ export function isWebhookConfigured(): boolean {
   return !!process.env.QCORE_WEBHOOK_URL?.trim();
 }
 
-export async function notifyRunCompleted(evt: RunCompletedEvent): Promise<void> {
-  const url = process.env.QCORE_WEBHOOK_URL?.trim();
-  if (!url) return;
+export type WebhookTarget = {
+  url: string;
+  secret?: string | null;
+  /** Origin tag for log lines: "env" (global) or "user" (per-user override). */
+  origin: "env" | "user";
+};
 
+async function postOne(evt: RunCompletedEvent, target: WebhookTarget): Promise<void> {
   const body = JSON.stringify(evt);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "User-Agent": "AEVION-QCoreAI/1.0",
     "X-QCore-Event": "run.completed",
+    "X-QCore-Origin": target.origin,
   };
-
-  const secret = process.env.QCORE_WEBHOOK_SECRET?.trim();
-  if (secret) {
-    const sig = createHmac("sha256", secret).update(body).digest("hex");
+  if (target.secret) {
+    const sig = createHmac("sha256", target.secret).update(body).digest("hex");
     headers["X-QCore-Signature"] = `sha256=${sig}`;
   }
-
   try {
-    const r = await fetch(url, {
+    const r = await fetch(target.url, {
       method: "POST",
       headers,
       body,
       signal: AbortSignal.timeout(5_000),
     });
     if (!r.ok) {
-      console.warn(`[QCoreAI] webhook ${url} responded ${r.status} for run ${evt.runId}`);
+      console.warn(
+        `[QCoreAI] webhook(${target.origin}) ${target.url} responded ${r.status} for run ${evt.runId}`
+      );
     }
   } catch (e: any) {
-    console.warn(`[QCoreAI] webhook ${url} failed for run ${evt.runId}: ${e?.message || e}`);
+    console.warn(
+      `[QCoreAI] webhook(${target.origin}) ${target.url} failed for run ${evt.runId}: ${e?.message || e}`
+    );
   }
+}
+
+/**
+ * Fan-out an event to all targets. The env-based target (if configured) and
+ * any extra per-user webhook targets are posted in parallel. Failures do not
+ * propagate.
+ */
+export async function notifyRunCompleted(
+  evt: RunCompletedEvent,
+  extraTargets: WebhookTarget[] = []
+): Promise<void> {
+  const url = process.env.QCORE_WEBHOOK_URL?.trim();
+  const targets: WebhookTarget[] = [];
+  if (url) {
+    targets.push({
+      url,
+      secret: process.env.QCORE_WEBHOOK_SECRET?.trim() || null,
+      origin: "env",
+    });
+  }
+  for (const t of extraTargets) {
+    if (!t.url || typeof t.url !== "string") continue;
+    targets.push({ url: t.url, secret: t.secret ?? null, origin: t.origin });
+  }
+  if (targets.length === 0) return;
+  await Promise.allSettled(targets.map((t) => postOne(evt, t)));
 }

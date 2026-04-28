@@ -89,6 +89,13 @@ check "POST /multi-agent empty → 400"    "400" "$(curl_status POST /api/qcorea
 check "POST /refine on bogus run → 404"  "404" "$(curl_status POST /api/qcoreai/runs/bogus/refine '{"instruction":"x"}')"
 check "GET /runs/:id bogus → 404"        "404" "$(curl_status GET /api/qcoreai/runs/bogus)"
 check "GET /shared/:token bogus → 404"   "404" "$(curl_status GET /api/qcoreai/shared/bogus)"
+check "PATCH tags non-array → 400"       "400" "$(curl_status PATCH /api/qcoreai/runs/bogus/tags '{"tags":"x"}')"
+check "PATCH tags bogus run → 404"       "404" "$(curl_status PATCH /api/qcoreai/runs/bogus/tags '{"tags":["x"]}')"
+
+# Auth-gated /me/webhook returns 401 without bearer (or 200 if BEARER provided).
+WH_GET_EXPECT="401"
+if [ -n "$BEARER" ]; then WH_GET_EXPECT="200"; fi
+check "GET /me/webhook auth gate"        "$WH_GET_EXPECT" "$(curl_status GET /api/qcoreai/me/webhook)"
 
 echo
 echo "[4/6] search endpoint"

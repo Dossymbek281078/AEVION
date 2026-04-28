@@ -114,6 +114,49 @@ describe("QCoreAI routes — input validation", () => {
   });
 });
 
+describe("QCoreAI routes — me/webhook (auth gate)", () => {
+  test("GET /me/webhook without bearer → 401", async () => {
+    const res = await request(makeApp()).get("/api/qcoreai/me/webhook");
+    expect(res.status).toBe(401);
+  });
+
+  test("PUT /me/webhook without bearer → 401", async () => {
+    const res = await request(makeApp())
+      .put("/api/qcoreai/me/webhook")
+      .send({ url: "https://hooks.example.com/x" });
+    expect(res.status).toBe(401);
+  });
+
+  test("DELETE /me/webhook without bearer → 401", async () => {
+    const res = await request(makeApp()).delete("/api/qcoreai/me/webhook");
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("QCoreAI routes — tags", () => {
+  test("PATCH /runs/:id/tags non-array body → 400", async () => {
+    const res = await request(makeApp())
+      .patch("/api/qcoreai/runs/whatever/tags")
+      .send({ tags: "not-an-array" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/array/);
+  });
+
+  test("PATCH /runs/:id/tags missing tags → 400", async () => {
+    const res = await request(makeApp())
+      .patch("/api/qcoreai/runs/whatever/tags")
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  test("PATCH /runs/:id/tags on bogus run → 404", async () => {
+    const res = await request(makeApp())
+      .patch("/api/qcoreai/runs/does-not-exist/tags")
+      .send({ tags: ["x"] });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("QCoreAI routes — search", () => {
   test("GET /search empty query → empty items", async () => {
     const res = await request(makeApp()).get("/api/qcoreai/search?q=");

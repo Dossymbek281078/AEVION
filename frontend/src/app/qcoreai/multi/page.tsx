@@ -70,6 +70,7 @@ type RunState = {
   error?: string;
   status: "running" | "done" | "error" | "stopped" | "capped";
   costCapUsd?: number;
+  tags?: string[];
   startedAt: number;
   totalDurationMs?: number;
   totalCostUsd?: number;
@@ -339,6 +340,13 @@ export default function QCoreMultiAgentPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<SearchHit[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
+  // Per-user webhook settings panel.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userWebhook, setUserWebhookState] = useState<{
+    configured: boolean;
+    url?: string;
+    hasSecret?: boolean;
+  } | null>(null);
   // Sessions sidebar state — only honored on mobile via CSS, always-open on desktop.
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -387,6 +395,21 @@ export default function QCoreMultiAgentPage() {
         if (typeof healthData?.costCapDefaultUsd === "number") {
           setCostCapDefaultUsd(healthData.costCapDefaultUsd);
         }
+
+        // Best-effort fetch the per-user webhook (skip silently when no auth).
+        try {
+          const whRes = await fetch(apiUrl("/api/qcoreai/me/webhook"), {
+            headers: bearerHeader(),
+          });
+          if (whRes.ok) {
+            const whData = await whRes.json();
+            setUserWebhookState({
+              configured: !!whData?.configured,
+              url: whData?.url,
+              hasSecret: whData?.hasSecret,
+            });
+          }
+        } catch { /* ignore */ }
 
         if (provData?.providers) setProviders(provData.providers);
         if (Array.isArray(agData?.strategies)) setStrategies(agData.strategies);
@@ -578,6 +601,7 @@ export default function QCoreMultiAgentPage() {
         agentConfig: r.agentConfig ?? undefined,
         persisted: true,
         shareToken: r.shareToken ?? null,
+        tags: Array.isArray(r.tags) ? r.tags : [],
       }));
       setRuns(hydrated);
       setActiveSessionId(sessionId);
@@ -943,6 +967,21 @@ export default function QCoreMultiAgentPage() {
     } catch (e: any) {
       setGlobalError(e?.message || "Unshare failed");
     }
+  }, []);
+
+  /** Replace a run's tags. Persists via PATCH and updates local state. */
+  const updateRunTags = useCallback(async (runId: string, tags: string[]) => {
+    const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/tags`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...bearerHeader() },
+      body: JSON.stringify({ tags }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    setRuns((prev) =>
+      prev.map((r) => (r.id === runId ? { ...r, tags: data.tags || [] } : r))
+    );
+    return data.tags as string[];
   }, []);
 
   /** Refine an already-finished run: server appends a `final/refinement` message
@@ -1363,6 +1402,34 @@ export default function QCoreMultiAgentPage() {
                   Webhook wired
                 </span>
               )}
+              <button
+                onClick={() => setSettingsOpen(true)}
+                title={
+                  userWebhook?.configured
+                    ? `Per-user webhook: ${userWebhook.url}`
+                    : "Configure your personal webhook URL"
+                }
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 10px",
+                  borderRadius: 10,
+                  background: userWebhook?.configured
+                    ? "rgba(16,185,129,0.18)"
+                    : "rgba(255,255,255,0.08)",
+                  border: userWebhook?.configured
+                    ? "1px solid rgba(16,185,129,0.45)"
+                    : "1px solid rgba(255,255,255,0.18)",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <span style={{ fontSize: 12 }}>⚙</span>
+                {userWebhook?.configured ? "My webhook" : "Settings"}
+              </button>
               {liveRun && (
                 <LiveCostBadge run={liveRun} />
               )}
@@ -1957,6 +2024,7 @@ export default function QCoreMultiAgentPage() {
                     onShare={() => shareRun(run.id)}
                     onUnshare={() => unshareRun(run.id)}
                     onRefine={(instruction: string) => refineRun(run.id, instruction)}
+                    onUpdateTags={(tags: string[]) => updateRunTags(run.id, tags)}
                   />
                 ))
               )}
@@ -2118,6 +2186,13 @@ export default function QCoreMultiAgentPage() {
           }
         `}</style>
       </ProductPageShell>
+      {settingsOpen && (
+        <UserWebhookModal
+          current={userWebhook}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={(next) => setUserWebhookState(next)}
+        />
+      )}
     </main>
   );
 }
@@ -2391,6 +2466,7 @@ function RunCard({
   onShare,
   onUnshare,
   onRefine,
+  onUpdateTags,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
@@ -2399,6 +2475,7 @@ function RunCard({
   onShare?: () => void;
   onUnshare?: () => void;
   onRefine?: (instruction: string) => Promise<unknown>;
+  onUpdateTags?: (tags: string[]) => Promise<string[]>;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
@@ -2544,6 +2621,10 @@ function RunCard({
             💲 {formatMoney(totalCost)}
           </span>
 
+          {onUpdateTags && run.persisted && run.id && !run.id.startsWith("tmp_") && (
+            <TagStrip tags={run.tags || []} onUpdate={onUpdateTags} />
+          )}
+
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
             {onEdit && run.status !== "running" && (
               <button
@@ -2654,6 +2735,396 @@ function RunCard({
             )}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function UserWebhookModal({
+  current,
+  onClose,
+  onSaved,
+}: {
+  current: { configured: boolean; url?: string; hasSecret?: boolean } | null;
+  onClose: () => void;
+  onSaved: (next: { configured: boolean; url?: string; hasSecret?: boolean }) => void;
+}) {
+  const [url, setUrl] = useState(current?.url || "");
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [authNeeded, setAuthNeeded] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    setAuthNeeded(false);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/webhook"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ url, secret: secret || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        setAuthNeeded(true);
+        return;
+      }
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      onSaved({
+        configured: !!data?.configured,
+        url: data?.url,
+        hasSecret: !!data?.hasSecret,
+      });
+      onClose();
+    } catch (e: any) {
+      setError(e?.message || "save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!current?.configured) return;
+    if (!confirm("Disable your per-user webhook?")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/webhook"), {
+        method: "DELETE",
+        headers: bearerHeader(),
+      });
+      if (res.status === 401) {
+        setAuthNeeded(true);
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      onSaved({ configured: false });
+      onClose();
+    } catch (e: any) {
+      setError(e?.message || "delete failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          background: "#fff",
+          borderRadius: 14,
+          padding: 20,
+          boxShadow: "0 20px 60px rgba(15,23,42,0.4)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0f172a" }}>
+            My webhook
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              padding: "4px 10px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              cursor: "pointer",
+              fontSize: 14,
+              color: "#475569",
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {authNeeded ? (
+          <div style={{ padding: 12, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 10, color: "#92400e", fontSize: 13 }}>
+            Sign in first — per-user webhooks are auth-only. The env-based webhook (set by ops) still applies globally.
+          </div>
+        ) : (
+          <>
+            <p style={{ margin: "0 0 16px", fontSize: 13, lineHeight: 1.5, color: "#475569" }}>
+              POST <code>run.completed</code> events to your endpoint when YOUR runs finish. Set a secret to receive HMAC-SHA256 signatures via <code>X-QCore-Signature</code>. Independent of the global env-based webhook.
+            </p>
+
+            <label style={{ display: "block", marginBottom: 10 }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>
+                Webhook URL (https)
+              </span>
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://hooks.example.com/qcore"
+                disabled={busy}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  fontSize: 13,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </label>
+
+            <label style={{ display: "block", marginBottom: 10 }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>
+                HMAC secret (optional)
+              </span>
+              <input
+                type="password"
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                placeholder={current?.hasSecret ? "•••••••• (saved — replace to rotate)" : "leave empty to skip signing"}
+                disabled={busy}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  fontSize: 13,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </label>
+
+            {error && (
+              <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#991b1b", fontSize: 12 }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+              <button
+                onClick={remove}
+                disabled={busy || !current?.configured}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  background: "#fff",
+                  color: current?.configured ? "#991b1b" : "#94a3b8",
+                  border: "1px solid #fecaca",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: busy || !current?.configured ? "not-allowed" : "pointer",
+                }}
+              >
+                Disable
+              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={onClose}
+                  disabled={busy}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    background: "#fff",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: busy ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={save}
+                  disabled={busy || !url.trim()}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    background: busy || !url.trim() ? "#94a3b8" : "#0f172a",
+                    color: "#fff",
+                    border: "none",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: busy || !url.trim() ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {busy ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TagStrip({
+  tags,
+  onUpdate,
+}: {
+  tags: string[];
+  onUpdate: (tags: string[]) => Promise<string[]>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const commit = async (next: string[]) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await onUpdate(next);
+    } catch (e: any) {
+      setErr(e?.message || "tags update failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addTag = async () => {
+    const t = draft.trim();
+    if (!t) return;
+    if (tags.includes(t)) {
+      setDraft("");
+      setEditing(false);
+      return;
+    }
+    await commit([...tags, t]);
+    setDraft("");
+    setEditing(false);
+  };
+
+  const removeTag = async (t: string) => {
+    await commit(tags.filter((x) => x !== t));
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+      {tags.map((t) => (
+        <span
+          key={t}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "2px 4px 2px 8px",
+            borderRadius: 999,
+            background: "rgba(99,102,241,0.08)",
+            border: "1px solid rgba(99,102,241,0.25)",
+            color: "#4f46e5",
+            fontSize: 10,
+            fontWeight: 700,
+          }}
+        >
+          #{t}
+          <button
+            onClick={() => removeTag(t)}
+            disabled={busy}
+            aria-label={`Remove tag ${t}`}
+            style={{
+              padding: 0,
+              width: 14,
+              height: 14,
+              border: "none",
+              background: "transparent",
+              color: "#6366f1",
+              cursor: busy ? "not-allowed" : "pointer",
+              fontSize: 12,
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            if (draft.trim()) {
+              void addTag();
+            } else {
+              setEditing(false);
+              setErr(null);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void addTag();
+            }
+            if (e.key === "Escape") {
+              setEditing(false);
+              setDraft("");
+              setErr(null);
+            }
+          }}
+          maxLength={32}
+          placeholder="tag…"
+          disabled={busy}
+          style={{
+            width: 110,
+            padding: "2px 8px",
+            borderRadius: 999,
+            border: "1px dashed #6366f1",
+            background: "#fff",
+            color: "#4f46e5",
+            fontSize: 10,
+            fontWeight: 700,
+            outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          disabled={busy || tags.length >= 16}
+          title={tags.length >= 16 ? "16 tags max per run" : "Add a tag"}
+          style={{
+            padding: "2px 8px",
+            borderRadius: 999,
+            border: "1px dashed #94a3b8",
+            background: "transparent",
+            color: "#475569",
+            fontSize: 10,
+            fontWeight: 700,
+            cursor: busy || tags.length >= 16 ? "not-allowed" : "pointer",
+          }}
+        >
+          + Tag
+        </button>
+      )}
+      {err && (
+        <span style={{ fontSize: 10, color: "#991b1b" }} role="alert">
+          {err}
+        </span>
       )}
     </div>
   );

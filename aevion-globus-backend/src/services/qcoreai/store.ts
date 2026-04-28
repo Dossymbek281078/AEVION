@@ -39,8 +39,17 @@ export type RunRow = {
   totalDurationMs: number | null;
   totalCostUsd: number | null;
   shareToken: string | null;
+  tags: string[];
   startedAt: string;
   finishedAt: string | null;
+};
+
+export type UserWebhookRow = {
+  userId: string;
+  url: string;
+  secret: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type MessageRow = {
@@ -67,6 +76,7 @@ export type MessageRow = {
 const memSessions = new Map<string, SessionRow>();
 const memRuns = new Map<string, RunRow>();
 const memMessagesByRun = new Map<string, MessageRow[]>();
+const memUserWebhooks = new Map<string, UserWebhookRow>();
 
 function nowIso(): string { return new Date().toISOString(); }
 
@@ -290,6 +300,7 @@ export async function createRun(opts: {
       totalDurationMs: null,
       totalCostUsd: null,
       shareToken: null,
+      tags: [],
       startedAt: nowIso(),
       finishedAt: null,
     };
@@ -398,6 +409,41 @@ export async function applyRefinement(opts: {
      WHERE "id"=$1
      RETURNING *`,
     [opts.runId, opts.finalContent, opts.addCostUsd, opts.addDurationMs]
+  );
+  return (r.rows?.[0] as RunRow) || null;
+}
+
+/**
+ * Replace the run's tags. Returns the updated row, or null if the run
+ * doesn't exist or the caller doesn't own the parent session.
+ */
+export async function setRunTags(
+  runId: string,
+  userId: string | null,
+  tags: string[]
+): Promise<RunRow | null> {
+  const run = await getRun(runId);
+  if (!run) return null;
+  const session = await getSession(run.sessionId, userId);
+  if (!session) return null;
+
+  // Normalize: trim, drop empty, dedupe, cap to 16 tags x 32 chars each.
+  const cleaned = Array.from(
+    new Set(
+      tags
+        .map((t) => (typeof t === "string" ? t.trim().slice(0, 32) : ""))
+        .filter((t) => t.length > 0)
+    )
+  ).slice(0, 16);
+
+  if (!isDbReady()) {
+    run.tags = cleaned;
+    memRuns.set(runId, run);
+    return run;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreRun" SET "tags"=$2 WHERE "id"=$1 RETURNING *`,
+    [runId, cleaned]
   );
   return (r.rows?.[0] as RunRow) || null;
 }
@@ -781,7 +827,7 @@ export type SearchHit = {
   startedAt: string;
   totalCostUsd: number | null;
   preview: string;
-  matched: "input" | "final" | "title";
+  matched: "input" | "final" | "title" | "tag";
 };
 
 export async function searchRuns(
@@ -817,7 +863,8 @@ export async function searchRuns(
       const inInput = r.userInput?.toLowerCase().includes(ql);
       const inFinal = r.finalContent?.toLowerCase().includes(ql);
       const inTitle = sess.title?.toLowerCase().includes(ql);
-      if (!inInput && !inFinal && !inTitle) continue;
+      const inTags = (r.tags || []).some((t) => t.toLowerCase().includes(ql));
+      if (!inInput && !inFinal && !inTitle && !inTags) continue;
       hits.push({
         runId: r.id,
         sessionId: r.sessionId,
@@ -830,8 +877,10 @@ export async function searchRuns(
           ? buildPreview(r.userInput, q)
           : inFinal
           ? buildPreview(r.finalContent || "", q)
+          : inTags
+          ? `tag · ${(r.tags || []).find((t) => t.toLowerCase().includes(ql))}`
           : sess.title,
-        matched: inInput ? "input" : inFinal ? "final" : "title",
+        matched: inInput ? "input" : inFinal ? "final" : inTags ? "tag" : "title",
       });
     }
     hits.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
@@ -845,28 +894,32 @@ export async function searchRuns(
   const r = await pool.query(
     `SELECT r."id" AS "runId", r."sessionId" AS "sessionId", s."title" AS "sessionTitle",
             r."strategy", r."status", r."startedAt", r."totalCostUsd",
-            r."userInput", r."finalContent",
+            r."userInput", r."finalContent", r."tags",
             (CASE
                WHEN r."userInput"    ILIKE $${queryParamIdx} THEN 'input'
                WHEN r."finalContent" ILIKE $${queryParamIdx} THEN 'final'
+               WHEN EXISTS (SELECT 1 FROM unnest(COALESCE(r."tags", ARRAY[]::TEXT[])) AS t WHERE t ILIKE $${queryParamIdx}) THEN 'tag'
                ELSE 'title'
              END) AS matched
        FROM "QCoreRun" r JOIN "QCoreSession" s ON s."id"=r."sessionId"
       WHERE ${userPredicate}
         AND (r."userInput" ILIKE $${queryParamIdx}
              OR r."finalContent" ILIKE $${queryParamIdx}
-             OR s."title" ILIKE $${queryParamIdx})
+             OR s."title" ILIKE $${queryParamIdx}
+             OR EXISTS (SELECT 1 FROM unnest(COALESCE(r."tags", ARRAY[]::TEXT[])) AS t WHERE t ILIKE $${queryParamIdx}))
       ORDER BY r."startedAt" DESC
       LIMIT $${queryParamIdx + 1}`,
     [...baseParams, pat, lim]
   );
   return r.rows.map((row: any): SearchHit => {
-    const matched = row.matched as "input" | "final" | "title";
+    const matched = row.matched as "input" | "final" | "title" | "tag";
     const preview =
       matched === "input"
         ? buildPreview(row.userInput || "", q)
         : matched === "final"
         ? buildPreview(row.finalContent || "", q)
+        : matched === "tag"
+        ? `tag · ${(row.tags || []).find((t: string) => t.toLowerCase().includes(q.toLowerCase())) || ""}`
         : row.sessionTitle || "";
     return {
       runId: row.runId,
@@ -880,6 +933,78 @@ export async function searchRuns(
       matched,
     };
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Per-user webhook (multi-tenant overlay on top of env-based webhook)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function getUserWebhook(userId: string): Promise<UserWebhookRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memUserWebhooks.get(userId) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreUserWebhook" WHERE "userId"=$1`, [userId]);
+  return (r.rows?.[0] as UserWebhookRow) || null;
+}
+
+export async function setUserWebhook(
+  userId: string,
+  url: string,
+  secret: string | null
+): Promise<UserWebhookRow> {
+  await ensureQCoreTables(pool);
+  const cleanUrl = url.trim().slice(0, 2000);
+  const cleanSecret = secret ? secret.trim().slice(0, 256) : null;
+
+  if (!isDbReady()) {
+    const existing = memUserWebhooks.get(userId);
+    const row: UserWebhookRow = {
+      userId,
+      url: cleanUrl,
+      secret: cleanSecret,
+      createdAt: existing?.createdAt || nowIso(),
+      updatedAt: nowIso(),
+    };
+    memUserWebhooks.set(userId, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreUserWebhook" ("userId","url","secret")
+       VALUES ($1,$2,$3)
+     ON CONFLICT ("userId") DO UPDATE
+       SET "url"=EXCLUDED."url",
+           "secret"=EXCLUDED."secret",
+           "updatedAt"=NOW()
+     RETURNING *`,
+    [userId, cleanUrl, cleanSecret]
+  );
+  return r.rows[0] as UserWebhookRow;
+}
+
+export async function deleteUserWebhook(userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memUserWebhooks.delete(userId);
+  const r = await pool.query(`DELETE FROM "QCoreUserWebhook" WHERE "userId"=$1`, [userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+/** Returns the user webhook for the run's session.userId, or null if none. */
+export async function getUserWebhookForRun(runId: string): Promise<UserWebhookRow | null> {
+  const run = await getRun(runId);
+  if (!run) return null;
+  if (!isDbReady()) {
+    const sess = memSessions.get(run.sessionId);
+    if (!sess?.userId) return null;
+    return memUserWebhooks.get(sess.userId) ?? null;
+  }
+  const r = await pool.query(
+    `SELECT w.*
+       FROM "QCoreSession" s
+       JOIN "QCoreUserWebhook" w ON w."userId" = s."userId"
+      WHERE s."id" = $1`,
+    [run.sessionId]
+  );
+  return (r.rows?.[0] as UserWebhookRow) || null;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

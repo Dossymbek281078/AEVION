@@ -12,18 +12,23 @@ import {
   createRun,
   createSession,
   deleteSession,
+  deleteUserWebhook,
   ensureSession,
   finishRun,
   getMaxOrdering,
   getRun,
   getRunByShareToken,
   getSession,
+  getUserWebhook,
+  getUserWebhookForRun,
   insertMessage,
   listMessages,
   listRuns,
   listSessions,
   renameSession,
   searchRuns,
+  setRunTags,
+  setUserWebhook,
   shareRun,
   unshareRun,
 } from "../src/services/qcoreai/store";
@@ -200,6 +205,95 @@ describe("QCoreAI store (in-memory mode)", () => {
     // Cross-user isolation
     const otherHits = await searchRuns(u1(), "QSign", 10);
     expect(otherHits.find((h) => h.runId === ra.id)).toBeUndefined();
+  });
+
+  test("setRunTags normalizes (trim/dedupe/cap) and enforces ownership", async () => {
+    const u = u1();
+    const sess = await createSession({ userId: u });
+    const run = await createRun({ sessionId: sess.id, userInput: "x" });
+    expect(run.tags).toEqual([]);
+
+    // Mixed: whitespace, dups, empty strings, way too many
+    const overload = Array.from({ length: 30 }, (_, i) => `tag-${i % 5}`);
+    const updated = await setRunTags(run.id, u, [
+      "  Investor demo  ",
+      "investor demo",
+      "",
+      "  ",
+      ...overload,
+    ]);
+    expect(updated).not.toBeNull();
+    expect(updated!.tags.length).toBeLessThanOrEqual(16);
+    expect(updated!.tags).toContain("Investor demo");
+    expect(updated!.tags).toContain("investor demo"); // case-sensitive distinct
+    // No empty strings
+    expect(updated!.tags.every((t) => t.length > 0)).toBe(true);
+
+    // Cross-user denied
+    expect(await setRunTags(run.id, u1(), ["hack"])).toBeNull();
+
+    // Empty array clears
+    const cleared = await setRunTags(run.id, u, []);
+    expect(cleared!.tags).toEqual([]);
+  });
+
+  test("searchRuns matches on tag and reports matched='tag'", async () => {
+    const u = u1();
+    const sess = await createSession({ userId: u, title: "Plain title" });
+    const run = await createRun({ sessionId: sess.id, userInput: "ordinary input" });
+    await finishRun(run.id, "done", { finalContent: "ordinary final" });
+    await setRunTags(run.id, u, ["broken-pdf-export", "investor"]);
+
+    const hits = await searchRuns(u, "broken", 10);
+    expect(hits.length).toBe(1);
+    expect(hits[0].matched).toBe("tag");
+    expect(hits[0].preview).toMatch(/broken-pdf-export/);
+
+    // Anonymous shouldn't see this user's run
+    expect(await searchRuns(null, "broken", 10)).toEqual([]);
+  });
+
+  test("user webhook upsert + read + delete", async () => {
+    const u = u1();
+    expect(await getUserWebhook(u)).toBeNull();
+
+    const created = await setUserWebhook(u, "https://hooks.example.com/qcore", "secret123");
+    expect(created.url).toBe("https://hooks.example.com/qcore");
+    expect(created.secret).toBe("secret123");
+
+    // Upsert: same userId updates
+    const updated = await setUserWebhook(u, "https://hooks2.example.com/qcore", null);
+    expect(updated.url).toBe("https://hooks2.example.com/qcore");
+    expect(updated.secret).toBeNull();
+    expect(updated.createdAt).toBe(created.createdAt); // preserve createdAt on upsert
+
+    expect(await getUserWebhook(u)).toMatchObject({ url: "https://hooks2.example.com/qcore" });
+    expect(await deleteUserWebhook(u)).toBe(true);
+    expect(await getUserWebhook(u)).toBeNull();
+    // Second delete returns false
+    expect(await deleteUserWebhook(u)).toBe(false);
+  });
+
+  test("getUserWebhookForRun resolves the run owner's webhook", async () => {
+    const u = u1();
+    const otherUser = u1();
+    const sess = await createSession({ userId: u });
+    const run = await createRun({ sessionId: sess.id, userInput: "x" });
+
+    // No webhook configured yet
+    expect(await getUserWebhookForRun(run.id)).toBeNull();
+
+    await setUserWebhook(u, "https://owner.example.com/hook", "s");
+    const hook = await getUserWebhookForRun(run.id);
+    expect(hook?.url).toBe("https://owner.example.com/hook");
+
+    // Other user's webhook is irrelevant to this run
+    await setUserWebhook(otherUser, "https://stranger.example.com/hook", null);
+    const hook2 = await getUserWebhookForRun(run.id);
+    expect(hook2?.url).toBe("https://owner.example.com/hook");
+
+    // Bogus runId → null
+    expect(await getUserWebhookForRun("does-not-exist")).toBeNull();
   });
 
   test("listRuns is sorted by startedAt ascending", async () => {

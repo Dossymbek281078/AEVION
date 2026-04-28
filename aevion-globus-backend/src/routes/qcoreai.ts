@@ -22,6 +22,7 @@ import {
   buildHistoryContext,
   createRun,
   deleteSession,
+  deleteUserWebhook,
   ensureSession,
   finishRun,
   getAnalytics,
@@ -30,6 +31,8 @@ import {
   getRunByShareToken,
   getSession,
   getSessionPublic,
+  getUserWebhook,
+  getUserWebhookForRun,
   insertMessage,
   listMessages,
   listRuns,
@@ -37,6 +40,8 @@ import {
   renameSession,
   renameSessionIfDefault,
   searchRuns,
+  setRunTags,
+  setUserWebhook,
   shareRun,
   touchSession,
   unshareRun,
@@ -200,6 +205,85 @@ qcoreaiRouter.delete("/sessions/:id", async (req, res) => {
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: "delete session failed", details: err?.message });
+  }
+});
+
+/**
+ * PATCH /api/qcoreai/runs/:id/tags
+ * Replace the run's tags. Owner-only. Body: { tags: string[] }.
+ */
+qcoreaiRouter.patch("/runs/:id/tags", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const incoming = Array.isArray(req.body?.tags) ? req.body.tags : null;
+    if (incoming === null) {
+      return res.status(400).json({ error: "tags must be an array of strings" });
+    }
+    const updated = await setRunTags(String(req.params.id), auth?.sub ?? null, incoming);
+    if (!updated) return res.status(404).json({ error: "run not found or forbidden" });
+    res.json({ ok: true, tags: updated.tags });
+  } catch (err: any) {
+    res.status(500).json({ error: "set tags failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Per-user webhook (multi-tenant overlay on the env-based webhook)
+   GET    /api/qcoreai/me/webhook       — returns { url?, hasSecret }
+   PUT    /api/qcoreai/me/webhook       — body: { url, secret? }
+   DELETE /api/qcoreai/me/webhook
+   Auth required (no anon webhooks; env webhook still exists for global use).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/me/webhook", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const hook = await getUserWebhook(auth.sub);
+    if (!hook) return res.json({ configured: false });
+    res.json({
+      configured: true,
+      url: hook.url,
+      hasSecret: !!hook.secret,
+      updatedAt: hook.updatedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "get webhook failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.put("/me/webhook", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ error: "url must be http(s)://..." });
+    }
+    const secret =
+      typeof req.body?.secret === "string" && req.body.secret.length > 0
+        ? req.body.secret
+        : null;
+    const row = await setUserWebhook(auth.sub, url, secret);
+    res.json({
+      configured: true,
+      url: row.url,
+      hasSecret: !!row.secret,
+      updatedAt: row.updatedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "set webhook failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/me/webhook", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deleteUserWebhook(auth.sub);
+    res.json({ ok, configured: false });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete webhook failed", details: err?.message });
   }
 });
 
@@ -754,22 +838,36 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   }
 
   // Fire-and-forget webhook for external integrations (Zapier, Make, etc.).
-  // Never blocks the SSE response and never throws back into the request loop.
-  if (isWebhookConfigured()) {
-    void notifyRunCompleted({
-      event: "run.completed",
-      runId,
-      sessionId,
-      status: runStatus,
-      strategy,
-      userInput,
-      finalContent: runFinal,
-      totalDurationMs,
-      totalCostUsd: totalCost,
-      error: hadError ?? null,
-      finishedAt: new Date().toISOString(),
-    });
-  }
+  // Fans out to env-based webhook (if configured) AND the run owner's
+  // per-user webhook (if they set one via PUT /me/webhook). Never blocks the
+  // SSE response and never throws back into the request loop.
+  void (async () => {
+    const extraTargets = [];
+    try {
+      const userHook = await getUserWebhookForRun(runId);
+      if (userHook?.url) {
+        extraTargets.push({ url: userHook.url, secret: userHook.secret, origin: "user" as const });
+      }
+    } catch { /* swallow — webhook is best-effort */ }
+    if (isWebhookConfigured() || extraTargets.length > 0) {
+      await notifyRunCompleted(
+        {
+          event: "run.completed",
+          runId,
+          sessionId,
+          status: runStatus,
+          strategy,
+          userInput,
+          finalContent: runFinal,
+          totalDurationMs,
+          totalCostUsd: totalCost,
+          error: hadError ?? null,
+          finishedAt: new Date().toISOString(),
+        },
+        extraTargets
+      );
+    }
+  })();
 
   if (!aborted) {
     send({ type: "sse_end" });

@@ -65,7 +65,38 @@
   - FinalCard рисует partial-orange border и для capped тоже (ранее
     только для stopped).
 
-### 1.4. (this commit) — feat(qcore): quick-find search across runs
+### 1.5. — feat(qcore): run tagging + per-user webhook URLs (V2)
+- **Run tagging**:
+  - DDL: `QCoreRun.tags TEXT[] DEFAULT '{}'` + GIN index.
+  - `setRunTags(runId, userId, tags)` нормализует (trim/dedupe/cap 16
+    тегов × 32 символа), enforce ownership.
+  - `searchRuns` дополнительно матчит tags (ILIKE по `unnest(tags)`),
+    `matched: "tag"` и preview `tag · <matched-tag>`.
+  - Route `PATCH /api/qcoreai/runs/:id/tags` — owner-only.
+  - UI: TagStrip компонент в run footer — chips с `×` для удаления,
+    inline `+ Tag` input (Enter/blur to save, Escape to cancel,
+    16-tags max, 32-char max). Persists через PATCH.
+
+- **Per-user webhook URLs** (multi-tenant):
+  - DDL: `QCoreUserWebhook(userId PRIMARY KEY, url, secret, ...)`.
+  - Store: `getUserWebhook`, `setUserWebhook` (upsert preserves
+    createdAt), `deleteUserWebhook`, `getUserWebhookForRun` (JOIN на
+    `QCoreSession.userId`).
+  - Routes (auth required, 401 без bearer):
+    - `GET /api/qcoreai/me/webhook` → `{ configured, url?, hasSecret? }`.
+    - `PUT /api/qcoreai/me/webhook { url, secret? }` — http(s) обязателен.
+    - `DELETE /api/qcoreai/me/webhook`.
+  - `notifyRunCompleted` теперь принимает `extraTargets[]` и
+    fans out через `Promise.allSettled`. На каждом запросе headers
+    `X-QCore-Origin: env|user` чтобы receiver различал источники.
+  - В `/multi-agent` после `finishRun` берётся owner's webhook через
+    `getUserWebhookForRun` и приправляется к env target. Failures
+    swallowed.
+  - UI: `⚙ Settings`/`⚙ My webhook` chip в header (зелёный когда
+    настроен). Клик → modal с URL + optional HMAC secret + Save/Disable/
+    Cancel. 401 detected → friendly "Sign in first" message.
+
+### 1.4. — feat(qcore): quick-find search across runs
 - **Backend**:
   - `searchRuns(userId, query, limit=30)` в store: ILIKE substring match
     через `userInput`, `finalContent`, parent `session.title`. Возвращает
@@ -163,9 +194,6 @@ PG для тестов. ~1 секунда runtime.
 
 ### Большое — следующая итерация
 
-- **Per-user webhook URLs** — multi-tenant вместо текущего env-based.
-  Нужна модель `QCoreWebhook(userId, url, secret, events)`, UI настроек
-  и fan-out.
 - **Tool use** — Analyst читает QRight через существующий API. Только
   read-only, требует cross-module scope (CLAUDE.md §1).
 - **WebSocket duplex / human-in-the-loop** — interrupt Writer мид-стримом,
@@ -181,8 +209,9 @@ PG для тестов. ~1 секунда runtime.
   paths. `npm audit fix` хотел downgrade `opentimestamps` до v0.0.0
   (broken), `--force` нужен major Prisma upgrade — обе опции рискованны
   и вне scope §1.
-- Tags-функционал на runs (UI tagging + filter) — search покрывает 80%
-  use case, tagging — V2.
+- Tag-фильтр в сайдбаре (отдельный chip-picker рядом с search input) —
+  сейчас теги матчатся через free-text search, что покрывает 95% use
+  case; выделенный фильтр — micro-polish для V3.
 
 ### Операционное
 

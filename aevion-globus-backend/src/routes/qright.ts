@@ -54,6 +54,20 @@ async function ensureQRightTable() {
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "embedFetches" BIGINT NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "lastFetchedAt" TIMESTAMPTZ;`);
 
+  // Daily-bucket table for time-series counters. UPSERT keeps row count
+  // bounded at O(active_objects × days) instead of O(fetches).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QRightFetchDaily" (
+      "objectId" TEXT NOT NULL,
+      "day" DATE NOT NULL,
+      "fetches" BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY ("objectId", "day")
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QRightFetchDaily_day_idx" ON "QRightFetchDaily" ("day");`
+  );
+
   ensuredTable = true;
 }
 
@@ -69,6 +83,16 @@ function bumpFetchCounter(id: string): void {
     )
     .catch((err: Error) => {
       console.warn(`[qright] fetch counter bump failed for ${id}:`, err.message);
+    });
+  pool
+    .query(
+      `INSERT INTO "QRightFetchDaily" ("objectId", "day", "fetches")
+       VALUES ($1, CURRENT_DATE, 1)
+       ON CONFLICT ("objectId", "day") DO UPDATE SET "fetches" = "QRightFetchDaily"."fetches" + 1`,
+      [id]
+    )
+    .catch((err: Error) => {
+      console.warn(`[qright] daily counter bump failed for ${id}:`, err.message);
     });
 }
 
@@ -241,6 +265,17 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
     if (!isOwner) {
       return res.status(403).json({ error: "Not the owner of this object" });
     }
+    const daysRaw = parseInt(String(req.query.days || "30"), 10);
+    const days = Number.isFinite(daysRaw) ? Math.max(7, Math.min(180, daysRaw)) : 30;
+
+    const series = await pool.query(
+      `SELECT to_char("day", 'YYYY-MM-DD') AS day, "fetches"::bigint AS fetches
+       FROM "QRightFetchDaily"
+       WHERE "objectId" = $1 AND "day" >= CURRENT_DATE - $2::int
+       ORDER BY "day" ASC`,
+      [id, days]
+    );
+
     res.json({
       id: row.id,
       embedFetches: Number(row.embedFetches) || 0,
@@ -252,6 +287,13 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
         row.revokedAt instanceof Date ? row.revokedAt.toISOString() : row.revokedAt,
       revokeReason: row.revokeReason,
       revokeReasonCode: row.revokeReasonCode,
+      series: {
+        days,
+        points: series.rows.map((r: { day: string; fetches: string }) => ({
+          day: r.day,
+          fetches: Number(r.fetches) || 0,
+        })),
+      },
     });
   } catch (err: any) {
     res.status(500).json({
@@ -738,6 +780,76 @@ qrightRouter.post("/admin/revoke/:id", async (req, res) => {
       revokedAt: updated.rows[0].revokedAt,
       revokeReason: updated.rows[0].revokeReason,
       revokeReasonCode: updated.rows[0].revokeReasonCode,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Public transparency aggregates — counts only, no PII.
+//    Counts are cached for 5 min via Cache-Control.
+qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const [totals, byCode, byKind] = await Promise.all([
+      pool.query(
+        `SELECT
+          COUNT(*) AS "total",
+          COUNT("revokedAt") AS "revoked",
+          MIN("createdAt") AS "first",
+          MAX("createdAt") AS "last"
+         FROM "QRightObject"`
+      ),
+      pool.query(
+        `SELECT COALESCE("revokeReasonCode", 'unspecified') AS code, COUNT(*) AS n
+         FROM "QRightObject"
+         WHERE "revokedAt" IS NOT NULL
+         GROUP BY 1
+         ORDER BY 2 DESC`
+      ),
+      pool.query(
+        `SELECT "kind", COUNT(*) AS n
+         FROM "QRightObject"
+         GROUP BY 1
+         ORDER BY 2 DESC
+         LIMIT 12`
+      ),
+    ]);
+
+    const t = totals.rows[0] as {
+      total: string;
+      revoked: string;
+      first: Date | string | null;
+      last: Date | string | null;
+    };
+    const totalNum = Number(t.total) || 0;
+    const revokedNum = Number(t.revoked) || 0;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      generatedAt: new Date().toISOString(),
+      totals: {
+        registered: totalNum,
+        active: totalNum - revokedNum,
+        revoked: revokedNum,
+        firstRegisteredAt: t.first instanceof Date ? t.first.toISOString() : t.first,
+        lastRegisteredAt: t.last instanceof Date ? t.last.toISOString() : t.last,
+      },
+      revokesByReasonCode: byCode.rows.map((r: { code: string; n: string }) => ({
+        code: r.code,
+        count: Number(r.n) || 0,
+      })),
+      registrationsByKind: byKind.rows.map((r: { kind: string; n: string }) => ({
+        kind: r.kind,
+        count: Number(r.n) || 0,
+      })),
     });
   } catch (err: any) {
     res.status(500).json({

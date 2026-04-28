@@ -114,6 +114,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qright/admin/whoami": {
         get: { summary: "Probe — returns isAdmin for the current Bearer" },
       },
+      "/api/qright/transparency": {
+        get: { summary: "Public aggregate counts (totals, by-reason-code, by-kind) — no PII" },
+      },
       "/api/qsign/sign": { post: { summary: "[v1] Sign payload (HMAC, no persistence)" } },
       "/api/qsign/verify": { post: { summary: "[v1] Stateless verify" } },
       "/api/qsign/v2/health": { get: { summary: "[v2] QSign health + active kids" } },

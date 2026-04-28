@@ -141,6 +141,20 @@ function pointInRing(lon: number, lat: number, ring: number[][]) {
   return inside;
 }
 
+/**
+ * topojson country names ↔ имена в наших данных (`m.country`).
+ * 110m carto использует "United States of America" / "United Kingdom",
+ * у нас в `projectGeo`/`objectGeo` — "United States" / "UK".
+ */
+const COUNTRY_NAME_ALIASES: Record<string, string> = {
+  "United States of America": "United States",
+  "United Kingdom": "UK",
+  "Russian Federation": "Russia",
+};
+function aliasCountry(name: string): string {
+  return COUNTRY_NAME_ALIASES[name] ?? name;
+}
+
 function findCountryAt(lat: number, lon: number): string | null {
   if (!countriesCache) return null;
   for (const c of countriesCache) {
@@ -568,6 +582,11 @@ export default function Globus3D({
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const hoveredCountryRef = useRef<string | null>(null);
   const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const selectedCountryRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedCountryRef.current = selectedCountry;
+  }, [selectedCountry]);
 
   useEffect(() => {
     labelRef.current = label;
@@ -583,9 +602,11 @@ export default function Globus3D({
   /** Рефы на сеттеры — чтобы Three.js-обработчики могли менять search/filter без эффекта-зависимости. */
   const setQueryRef = useRef(setQuery);
   const setFilterToAllRef = useRef(() => setFilter("all"));
+  const setSelectedCountryRef = useRef(setSelectedCountry);
   useEffect(() => {
     setQueryRef.current = setQuery;
     setFilterToAllRef.current = () => setFilter("all");
+    setSelectedCountryRef.current = setSelectedCountry;
   });
 
   /** Прокси для onPointerUp — функция определена ниже, но обёртка стабильна. */
@@ -733,11 +754,19 @@ export default function Globus3D({
     return [...projectMarkers, ...objectMarkers];
   }, [projects, qrightObjects, focusProjectIds]);
 
+  /** Маркеры в выбранной стране — для side-sheet списка. */
+  const selectedCountryMarkers = useMemo<Marker[]>(() => {
+    if (!selectedCountry) return [];
+    return markers.filter((m) => m.country === selectedCountry);
+  }, [selectedCountry, markers]);
+
   /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
   useEffect(() => {
     const q = query.trim().toLowerCase();
+    const sel = selectedCountry;
     const matches = (m: Marker) => {
       if (filter !== "all" && m.category !== filter) return false;
+      if (sel && m.country !== sel) return false;
       if (!q) return true;
       const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
       return (
@@ -765,7 +794,7 @@ export default function Globus3D({
         visibleByKey.get(a.fromKey) === true &&
         visibleByKey.get(a.toKey) === true;
     }
-  }, [query, filter, markers]);
+  }, [query, filter, selectedCountry, markers]);
 
   /** Auto-focus при единственном совпадении поиска. */
   useEffect(() => {
@@ -1743,11 +1772,12 @@ export default function Globus3D({
             city: cur.marker.city,
           });
         } else if (hoveredCountryRef.current) {
-          // Клик по пустой стране → фильтр маркеров по стране через query (matches m.country).
-          const c = hoveredCountryRef.current;
+          // Клик по пустой стране → выбираем её: side sheet + фильтр по стране.
+          const aliased = aliasCountry(hoveredCountryRef.current);
           setFilterToAllRef.current();
-          setQueryRef.current(c);
-          onSelectLocationRef.current({ country: c });
+          setQueryRef.current("");
+          setSelectedCountryRef.current(aliased);
+          onSelectLocationRef.current({ country: aliased });
         }
       }
     };
@@ -2144,6 +2174,7 @@ export default function Globus3D({
     setTour(false);
     setQuery("");
     setFilter("all");
+    setSelectedCountry(null);
     setKbSelectedKey(null);
   };
 
@@ -2267,7 +2298,7 @@ export default function Globus3D({
 
   /** ESC закрывает focus-режим и тур. */
   useEffect(() => {
-    if (!focused && !tour) return;
+    if (!focused && !tour && !selectedCountry) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         targetYawRef.current = null;
@@ -2275,11 +2306,12 @@ export default function Globus3D({
         targetDistRef.current = null;
         setFocused(null);
         setTour(false);
+        setSelectedCountry(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focused, tour]);
+  }, [focused, tour, selectedCountry]);
 
   /** Tour mode — последовательный focus по приоритету. */
   const tourQueue = useMemo(() => {
@@ -2747,6 +2779,165 @@ export default function Globus3D({
               </span>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {!initError && selectedCountry ? (
+        <div
+          aria-label={`Country sheet: ${selectedCountry}`}
+          style={{
+            position: "absolute",
+            top: isNarrow ? 64 : 232,
+            right: 14,
+            zIndex: 5,
+            background: "rgba(12,18,32,0.78)",
+            border: "1px solid rgba(108,214,255,0.35)",
+            borderRadius: 12,
+            padding: "12px 14px",
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+            width: 234,
+            maxHeight: "60vh",
+            overflowY: "auto",
+            animation: "aev-hover-card-in 140ms ease-out",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>🌍</span>
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 900,
+                  color: "#e2e8f8",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {selectedCountry}
+              </span>
+            </div>
+            <button
+              type="button"
+              title="Clear country filter"
+              aria-label="Clear country filter"
+              onClick={() => setSelectedCountry(null)}
+              style={{
+                background: "transparent",
+                color: "#94a3b8",
+                border: "1px solid rgba(120,160,220,0.28)",
+                borderRadius: 8,
+                width: 24,
+                height: 24,
+                cursor: "pointer",
+                fontSize: 12,
+                lineHeight: 1,
+                padding: 0,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            style={{
+              fontSize: 11,
+              color: "#6cd6ff",
+              fontWeight: 800,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              marginTop: 6,
+              marginBottom: 8,
+            }}
+          >
+            {selectedCountryMarkers.length}{" "}
+            {selectedCountryMarkers.length === 1 ? "node" : "nodes"}
+          </div>
+
+          {selectedCountryMarkers.length === 0 ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#94a3b8",
+                lineHeight: 1.45,
+              }}
+            >
+              No AEVION nodes registered in {selectedCountry} yet.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {selectedCountryMarkers.slice(0, 8).map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => focusOnMarker(m)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 8px",
+                    background: "rgba(20,28,46,0.6)",
+                    border: "1px solid rgba(120,160,220,0.18)",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    color: "#e2e8f8",
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: m.color,
+                      boxShadow: `0 0 6px ${m.color}aa`,
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      flex: 1,
+                    }}
+                  >
+                    {m.title || m.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "#94a3b8",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {m.city || ""}
+                  </span>
+                </button>
+              ))}
+              {selectedCountryMarkers.length > 8 ? (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#7a8fb0",
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  + {selectedCountryMarkers.length - 8} more
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -3368,6 +3559,7 @@ export default function Globus3D({
             onClick={() => {
               setQuery("");
               setFilter("all");
+              setSelectedCountry(null);
             }}
             style={{
               padding: "8px 14px",

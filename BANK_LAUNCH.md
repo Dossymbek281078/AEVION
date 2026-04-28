@@ -1,8 +1,10 @@
 # AEVION Bank — Production Launch Checklist
 
-> Last updated: 2026-04-27. Maintainer: Bank track. Target: smooth zero-surprise prod cutover.
+> Last updated: 2026-04-28 (late). Maintainer: Bank track. Target: smooth zero-surprise prod cutover.
 
 This file lists every concrete step needed to flip AEVION Bank from "feature-complete dev branch" to "live on aevion.app". Skim this before any prod push.
+
+**Branch state at this writing:** `bank-payment-layer` is **164 commits ahead** of `main` (PR #5 open). 42 indexable bank sub-routes. Build green. All 18 wallet widgets are live, plus 14 standalone widget pages added on 2026-04-28.
 
 ---
 
@@ -21,8 +23,8 @@ Live: https://aevion.app · API: https://api.aevion.app · Status: https://statu
 ## 1. Pre-merge gates (block if red)
 
 - [ ] `npm run verify` from `aevion-core/` returns green (backend `tsc` + frontend `next build`)
-- [ ] All 16+ bank routes render server-side without TypeScript errors
-- [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`
+- [ ] All 42+ bank routes render server-side without TypeScript errors
+- [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`, `/bank/budget`, `/bank/calendar`, `/bank/subscriptions`, `/bank/forecast`, `/bank/changelog`
 - [ ] `/api/qtrade/accounts`, `/transfers`, `/operations` resolve under 200ms p95 in staging
 - [ ] QSign sign + verify round-trips on staging within 100ms p95
 - [ ] No 401/403 from `/api/auth/me` while logged in
@@ -78,8 +80,14 @@ Run these in order. Each should take <5 seconds.
 | 7 | Open `/bank/about` in incognito | page loads, OG image lifts via `curl -I` |
 | 8 | Open `/bank/help`, search "AEC" | matching answer expands |
 | 9 | Open `/bank/glossary`, scroll to Trust group | 4 trust terms render |
-| 10 | Run `curl https://aevion.app/sitemap.xml` | XML with 30+ urls |
+| 10 | Run `curl https://aevion.app/sitemap.xml` | XML with 55+ urls |
 | 11 | Test PWA install on mobile | install prompt appears |
+| 12 | Open `/bank/budget`, set a category cap | cap saves, pace + projection populate |
+| 13 | Open `/bank/calendar` | heat-mapped 30-day grid renders |
+| 14 | Open `/bank/subscriptions` | scanner runs, flag counts surface |
+| 15 | Open `/bank/forecast` | 3 scenario × 3 horizon controls work |
+| 16 | Open `/bank/changelog` | timeline groups render with type tags |
+| 17 | Cmd+K → "Jump to Budget Caps" while on `/bank/insights` | navigates to `/bank#bank-anchor-budget` |
 
 ## 7. Rollback plan
 

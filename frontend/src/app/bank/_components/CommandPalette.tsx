@@ -22,7 +22,14 @@ type PaletteAction = {
 function scrollToId(id: string) {
   if (typeof document === "undefined") return;
   const el = document.getElementById(id);
-  if (!el) return;
+  if (!el) {
+    // Anchor not on current page (e.g. user is on /bank/insights). Bounce to /bank
+    // with a hash so the browser scrolls to the section after navigation.
+    if (typeof window !== "undefined" && !window.location.pathname.endsWith("/bank")) {
+      window.location.href = `/bank#${id}`;
+    }
+    return;
+  }
   const prm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   el.scrollIntoView({ behavior: prm ? "auto" : "smooth", block: "start" });
   if (prm) return;

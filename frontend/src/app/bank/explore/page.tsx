@@ -279,6 +279,13 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         hintKey: "explore.card.cooldown.hint",
       },
       {
+        href: "/bank/changelog",
+        iconBg: "linear-gradient(135deg, #475569, #5eead4)",
+        iconChar: "≡",
+        titleKey: "explore.card.changelog.title",
+        hintKey: "explore.card.changelog.hint",
+      },
+      {
         href: "/bank/flow",
         iconBg: "linear-gradient(135deg, #0d9488, #f472b6)",
         iconChar: "⤳",

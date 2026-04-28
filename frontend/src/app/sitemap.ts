@@ -45,6 +45,7 @@ const ROUTES: Array<{ path: string; priority: number; changeFrequency: MetadataR
   { path: "/bank/wishlist",     priority: 0.7, changeFrequency: "weekly" },
   { path: "/bank/loyalty",      priority: 0.7, changeFrequency: "weekly" },
   { path: "/bank/cooldown",     priority: 0.7, changeFrequency: "monthly" },
+  { path: "/bank/changelog",    priority: 0.65, changeFrequency: "weekly" },
   { path: "/awards",            priority: 0.8, changeFrequency: "weekly" },
   { path: "/awards/music",      priority: 0.75, changeFrequency: "weekly" },
   { path: "/awards/film",       priority: 0.75, changeFrequency: "weekly" },

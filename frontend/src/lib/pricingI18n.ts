@@ -207,6 +207,21 @@ const dict: Record<Lang, Record<string, string>> = {
     "changelog.subscribeCta": "Подписаться",
     "changelog.roadmapCta": "Открыть roadmap",
 
+    /* API pricing */
+    "api.badge": "API PRICING · ДЛЯ РАЗРАБОТЧИКОВ",
+    "api.title": "Per-call API биллинг",
+    "api.subtitle": "Каждый AEVION-эндпоинт имеет публичную цену за вызов. Free quota на старте, скидки −15% / −30% / −50% за объём. SDK на TypeScript / Python / Go.",
+    "api.filter": "ГРУППА:",
+    "api.filterAll": "Все",
+    "api.quickstart.title": "Quickstart",
+    "api.quickstart.copy": "Копировать",
+    "api.quickstart.copied": "✓ Скопировано",
+    "api.quickstart.note": "Полная OpenAPI-спецификация:",
+    "api.cta.title": "Нужны выделенные лимиты или dedicated VPC?",
+    "api.cta.subtitle": "Enterprise-tier с SLA, BYO-key, on-prem развёртыванием. Customer Success свяжется в течение 24 часов.",
+    "api.cta.contact": "Связаться по API-плану",
+    "api.cta.openapi": "OpenAPI спецификация",
+
     /* FAQ */
     "faq.title": "Вопросы и ответы",
     "faq.subtitle": "Самое частое — здесь. Если нет ответа, напишите",
@@ -451,6 +466,20 @@ const dict: Record<Lang, Record<string, string>> = {
     "changelog.subscribeSubtitle": "Subscribe to the newsletter — every 2 weeks you get a digest of new modules, promo codes and important pricing changes.",
     "changelog.subscribeCta": "Subscribe",
     "changelog.roadmapCta": "Open roadmap",
+
+    "api.badge": "API PRICING · FOR DEVELOPERS",
+    "api.title": "Per-call API billing",
+    "api.subtitle": "Every AEVION endpoint has a public per-call price. Free quota to start, −15% / −30% / −50% volume discounts. SDKs for TypeScript / Python / Go.",
+    "api.filter": "GROUP:",
+    "api.filterAll": "All",
+    "api.quickstart.title": "Quickstart",
+    "api.quickstart.copy": "Copy",
+    "api.quickstart.copied": "✓ Copied",
+    "api.quickstart.note": "Full OpenAPI spec:",
+    "api.cta.title": "Need dedicated quotas or VPC?",
+    "api.cta.subtitle": "Enterprise tier with SLA, BYO-key, on-prem deployment. Customer Success replies within 24 hours.",
+    "api.cta.contact": "Contact API plan",
+    "api.cta.openapi": "OpenAPI spec",
 
     "faq.title": "FAQ",
     "faq.subtitle": "Most common questions — here. If yours isn't, email",

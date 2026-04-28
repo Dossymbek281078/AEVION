@@ -275,6 +275,26 @@ function runStats(run: RunState): { tokensIn: number; tokensOut: number; costUsd
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Slash-command palette
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type SlashCommand = {
+  name: string;
+  args?: string;
+  description: string;
+  /** If true, selecting inserts the command and leaves cursor for the user to type args. */
+  needsArg?: boolean;
+};
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  { name: "/clear",     description: "Clear all runs from this panel" },
+  { name: "/summarize", description: "Summarize the last run's final answer" },
+  { name: "/broadcast", args: "<msg>", description: "Send a message to all strategy panels (compare mode)", needsArg: true },
+  { name: "/save",      args: "<name>", description: "Save the current agent preset with a name", needsArg: true },
+  { name: "/help",      description: "Show all available slash commands" },
+];
+
+/* ═══════════════════════════════════════════════════════════════════════
    Component
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -316,6 +336,11 @@ export default function QCoreMultiAgentPage() {
   const userScrolledUpRef = useRef(false);
   // Tells `sendCompareAll` to stop firing remaining strategies. Set by Stop.
   const compareAbortRef = useRef(false);
+
+  /* ── Slash-command palette state ── */
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [paletteIndex, setPaletteIndex] = useState(0);
 
   /* ── Load providers + role defaults + sessions + pricing on mount ── */
   useEffect(() => {
@@ -871,6 +896,131 @@ export default function QCoreMultiAgentPage() {
 
   /* ── Live run stats for the header (last run in the timeline) ── */
   const liveRun = runs.find((r) => r.status === "running");
+
+  /* ── Slash-command palette helpers ── */
+  const paletteCommands = paletteQuery
+    ? SLASH_COMMANDS.filter((c) => c.name.startsWith("/" + paletteQuery.replace(/^\//, "")))
+    : SLASH_COMMANDS;
+
+  const executeSlashCommand = useCallback((cmd: SlashCommand) => {
+    setPaletteOpen(false);
+    setPaletteQuery("");
+    if (cmd.name === "/clear") {
+      setRuns([]);
+      setInput("");
+      return;
+    }
+    if (cmd.name === "/help") {
+      const helpText = SLASH_COMMANDS.map((c) =>
+        `${c.name}${c.args ? " " + c.args : ""}  — ${c.description}`
+      ).join("\n");
+      alert("Slash commands:\n\n" + helpText);
+      setInput("");
+      return;
+    }
+    if (cmd.name === "/summarize") {
+      // Find the last completed run with a finalContent.
+      const lastRun = [...runs].reverse().find((r) => r.finalContent && r.status !== "running");
+      if (!lastRun?.finalContent) {
+        setGlobalError("No completed run to summarize yet.");
+        setInput("");
+        return;
+      }
+      const prompt = "Please summarize the following answer in 3 bullet points:\n\n" + lastRun.finalContent;
+      setInput("");
+      send(prompt);
+      return;
+    }
+    // /broadcast and /save need user-supplied arg — pre-fill and let them type
+    if (cmd.name === "/broadcast" || cmd.name === "/save") {
+      setInput(cmd.name + " ");
+      setTimeout(() => {
+        const el = textareaRef.current;
+        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+      }, 0);
+      return;
+    }
+    // Fallback: insert command name.
+    setInput(cmd.name + (cmd.needsArg ? " " : ""));
+    setTimeout(() => {
+      const el = textareaRef.current;
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }, 0);
+  }, [runs, send]);
+
+  /** Handle the "/broadcast <msg>" and "/save <name>" commands that need argument text. */
+  const maybeRunBroadcastOrSave = useCallback((val: string): boolean => {
+    const broadcastMatch = /^\/broadcast\s+(.+)$/i.exec(val.trim());
+    if (broadcastMatch) {
+      const msg = broadcastMatch[1].trim();
+      if (!msg) return false;
+      setInput("");
+      setCompareMode(true);
+      send(msg, { strategy: "sequential" });
+      return true;
+    }
+    const saveMatch = /^\/save\s+(.+)$/i.exec(val.trim());
+    if (saveMatch) {
+      const name = saveMatch[1].trim();
+      if (!name) return false;
+      const existing = presets.filter((p) => p.name !== name);
+      const next: AgentPreset[] = [
+        ...existing,
+        { id: `p_${Date.now()}`, name, strategy, overrides, maxRevisions },
+      ];
+      persistPresets(next);
+      setInput("");
+      alert(`Preset "${name}" saved.`);
+      return true;
+    }
+    return false;
+  }, [send, presets, strategy, overrides, maxRevisions, persistPresets]);
+
+  const onInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    // Open palette when input starts with "/" and no space yet (still choosing a command)
+    if (val.startsWith("/") && !val.includes(" ")) {
+      setPaletteQuery(val.slice(1));
+      setPaletteOpen(true);
+      setPaletteIndex(0);
+    } else {
+      setPaletteOpen(false);
+      setPaletteQuery("");
+    }
+  }, []);
+
+  const onInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (paletteOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setPaletteIndex((i) => Math.min(i + 1, paletteCommands.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setPaletteIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const cmd = paletteCommands[paletteIndex];
+        if (cmd) executeSlashCommand(cmd);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setPaletteOpen(false);
+        return;
+      }
+    }
+    // Normal Enter (no palette open)
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (maybeRunBroadcastOrSave(input)) return;
+      if (compareMode) sendCompareAll(); else send();
+    }
+  }, [paletteOpen, paletteCommands, paletteIndex, executeSlashCommand, maybeRunBroadcastOrSave, input, compareMode, sendCompareAll, send]);
 
   return (
     <main>
@@ -1474,66 +1624,111 @@ export default function QCoreMultiAgentPage() {
               </div>
             )}
 
-            {/* Input */}
-            <div style={{ display: "flex", gap: 8 }}>
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (compareMode) sendCompareAll(); else send();
-                  }
-                }}
-                placeholder={
-                  compareMode
-                    ? "Compare mode: your prompt runs through Sequential + Parallel + Debate, back-to-back."
-                    : strategy === "debate"
-                    ? "Ask a decision or trade-off question — Pro and Con will argue it out, Moderator synthesizes."
-                    : strategy === "parallel"
-                    ? "Describe your task — Analyst plans, two Writers draft on different models, Judge synthesizes."
-                    : "Describe your task — Analyst decomposes, Writer drafts, Critic reviews and revises."
-                }
-                disabled={busy}
-                rows={3}
-                style={{
-                  flex: 1, padding: "12px 14px",
-                  borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)",
-                  fontSize: 14, resize: "vertical", fontFamily: "inherit", outline: "none",
-                  background: busy ? "#f1f5f9" : "#fff",
-                }}
-              />
-              {busy ? (
-                <button
-                  type="button"
-                  onClick={stop}
+            {/* Input — wrapped in relative div for palette popup positioning */}
+            <div style={{ position: "relative" }}>
+              {/* Slash-command palette popup */}
+              {paletteOpen && paletteCommands.length > 0 && (
+                <div
                   style={{
-                    padding: "12px 20px", borderRadius: 12, border: "none",
-                    background: "#dc2626", color: "#fff",
-                    fontWeight: 800, fontSize: 14, cursor: "pointer", alignSelf: "stretch",
+                    position: "absolute",
+                    bottom: "calc(100% + 6px)",
+                    left: 0,
+                    right: 0,
+                    background: "#fff",
+                    border: "1px solid rgba(15,23,42,0.15)",
+                    borderRadius: 12,
+                    boxShadow: "0 8px 24px rgba(15,23,42,0.12)",
+                    zIndex: 50,
+                    overflow: "hidden",
+                    maxHeight: 260,
+                    overflowY: "auto",
                   }}
                 >
-                  Stop
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => compareMode ? sendCompareAll() : send()}
-                  disabled={!input.trim() || !anyConfigured}
-                  style={{
-                    padding: "12px 24px", borderRadius: 12, border: "none",
-                    background: !input.trim() || !anyConfigured ? "#94a3b8"
-                      : compareMode ? "linear-gradient(135deg, #f59e0b, #ef4444)"
-                      : "linear-gradient(135deg, #0d9488, #06b6d4)",
-                    color: "#fff", fontWeight: 800, fontSize: 14,
-                    cursor: !input.trim() || !anyConfigured ? "default" : "pointer",
-                    alignSelf: "stretch", whiteSpace: "nowrap",
-                  }}
-                >
-                  {compareMode ? "Send × 3" : "Send"}
-                </button>
+                  <div style={{ padding: "6px 10px 4px", fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
+                    Commands — ↑↓ navigate · Enter select · Esc dismiss
+                  </div>
+                  {paletteCommands.map((cmd, idx) => (
+                    <button
+                      key={cmd.name}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); executeSlashCommand(cmd); }}
+                      onMouseEnter={() => setPaletteIndex(idx)}
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 10,
+                        width: "100%",
+                        padding: "8px 12px",
+                        background: idx === paletteIndex ? "rgba(13,148,136,0.08)" : "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        borderBottom: idx < paletteCommands.length - 1 ? "1px solid rgba(15,23,42,0.04)" : "none",
+                      }}
+                    >
+                      <span style={{ fontFamily: "monospace", fontWeight: 800, fontSize: 13, color: idx === paletteIndex ? "#0d9488" : "#0f172a", minWidth: 120 }}>
+                        {cmd.name}{cmd.args ? " " + cmd.args : ""}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#64748b" }}>{cmd.description}</span>
+                    </button>
+                  ))}
+                </div>
               )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={onInputChange}
+                  onKeyDown={onInputKeyDown}
+                  placeholder={
+                    compareMode
+                      ? "Compare mode: your prompt runs through Sequential + Parallel + Debate, back-to-back. Type / for commands."
+                      : strategy === "debate"
+                      ? "Ask a decision or trade-off question — Pro and Con will argue it out, Moderator synthesizes. Type / for commands."
+                      : strategy === "parallel"
+                      ? "Describe your task — Analyst plans, two Writers draft on different models, Judge synthesizes. Type / for commands."
+                      : "Describe your task — Analyst decomposes, Writer drafts, Critic reviews and revises. Type / for commands."
+                  }
+                  disabled={busy}
+                  rows={3}
+                  style={{
+                    flex: 1, padding: "12px 14px",
+                    borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)",
+                    fontSize: 14, resize: "vertical", fontFamily: "inherit", outline: "none",
+                    background: busy ? "#f1f5f9" : "#fff",
+                  }}
+                />
+                {busy ? (
+                  <button
+                    type="button"
+                    onClick={stop}
+                    style={{
+                      padding: "12px 20px", borderRadius: 12, border: "none",
+                      background: "#dc2626", color: "#fff",
+                      fontWeight: 800, fontSize: 14, cursor: "pointer", alignSelf: "stretch",
+                    }}
+                  >
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => compareMode ? sendCompareAll() : send()}
+                    disabled={!input.trim() || !anyConfigured}
+                    style={{
+                      padding: "12px 24px", borderRadius: 12, border: "none",
+                      background: !input.trim() || !anyConfigured ? "#94a3b8"
+                        : compareMode ? "linear-gradient(135deg, #f59e0b, #ef4444)"
+                        : "linear-gradient(135deg, #0d9488, #06b6d4)",
+                      color: "#fff", fontWeight: 800, fontSize: 14,
+                      cursor: !input.trim() || !anyConfigured ? "default" : "pointer",
+                      alignSelf: "stretch", whiteSpace: "nowrap",
+                    }}
+                  >
+                    {compareMode ? "Send × 3" : "Send"}
+                  </button>
+                )}
+              </div>
             </div>
           </section>
         </div>

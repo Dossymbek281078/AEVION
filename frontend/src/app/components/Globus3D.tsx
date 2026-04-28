@@ -579,6 +579,14 @@ export default function Globus3D({
     onSelectLocationRef.current = onSelectLocation;
   }, [onNavigate, onSelectLocation]);
 
+  /** Рефы на сеттеры — чтобы Three.js-обработчики могли менять search/filter без эффекта-зависимости. */
+  const setQueryRef = useRef(setQuery);
+  const setFilterToAllRef = useRef(() => setFilter("all"));
+  useEffect(() => {
+    setQueryRef.current = setQuery;
+    setFilterToAllRef.current = () => setFilter("all");
+  });
+
   /** Прокси для onPointerUp — функция определена ниже, но обёртка стабильна. */
   const focusMarkerRef = useRef<(m: Marker) => void>(() => {});
 
@@ -1693,6 +1701,12 @@ export default function Globus3D({
             country: cur.marker.country,
             city: cur.marker.city,
           });
+        } else if (hoveredCountryRef.current) {
+          // Клик по пустой стране → фильтр маркеров по стране через query (matches m.country).
+          const c = hoveredCountryRef.current;
+          setFilterToAllRef.current();
+          setQueryRef.current(c);
+          onSelectLocationRef.current({ country: c });
         }
       }
     };
@@ -3286,6 +3300,18 @@ export default function Globus3D({
             }}
           >
             {hoveredCountry}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: "rgba(180,210,255,0.7)",
+              marginLeft: 4,
+              borderLeft: "1px solid rgba(120,160,220,0.28)",
+              paddingLeft: 8,
+              whiteSpace: "nowrap",
+            }}
+          >
+            click → filter
           </span>
         </div>
       ) : null}

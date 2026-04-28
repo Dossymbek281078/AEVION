@@ -138,6 +138,12 @@ export default function QTradePage() {
   useEffect(() => { setAevWallet(ldWallet()) }, []);
   useEffect(() => { if (aevWallet) svWallet(aevWallet) }, [aevWallet]);
 
+  // ─── Trading Journal ─────────────────────────────────────────────
+  const [journalEditId, setJournalEditId] = useState<string | null>(null);
+  const [journalNote, setJournalNote] = useState("");
+  const [journalTags, setJournalTags] = useState("");
+  const [journalTagFilter, setJournalTagFilter] = useState<string | null>(null);
+
   // ─── DCA Auto-Trader (Bots) ──────────────────────────────────────
   const [bots, setBots] = useState<DcaBot[]>([]);
   const [botPair, setBotPair] = useState<PairId>("AEV/USD");
@@ -1201,15 +1207,19 @@ export default function QTradePage() {
 
         {/* Trade history + performance */}
         {closedPositions.length > 0 && (() => {
-          const wins = closedPositions.filter((c) => c.realizedPnl > 0).length;
-          const losses = closedPositions.filter((c) => c.realizedPnl < 0).length;
-          const total = closedPositions.length;
-          const realizedSum = closedPositions.reduce((s, c) => s + c.realizedPnl, 0);
+          // Tag-based filtering (если выбран тег — только сделки с этим тегом)
+          const filtered = journalTagFilter
+            ? closedPositions.filter((c) => (c.tags ?? []).includes(journalTagFilter))
+            : closedPositions;
+          const wins = filtered.filter((c) => c.realizedPnl > 0).length;
+          const losses = filtered.filter((c) => c.realizedPnl < 0).length;
+          const total = filtered.length;
+          const realizedSum = filtered.reduce((s, c) => s + c.realizedPnl, 0);
           const winrate = total > 0 ? (wins / total) * 100 : 0;
-          const best = closedPositions.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl > b.realizedPnl ? c : b), null);
-          const worst = closedPositions.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl < b.realizedPnl ? c : b), null);
-          // Build equity curve by chronological close order. Cumulative P&L points.
-          const chrono = [...closedPositions].sort((a, b) => a.exitTs - b.exitTs);
+          const best = filtered.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl > b.realizedPnl ? c : b), null);
+          const worst = filtered.reduce<ClosedPosition | null>((b, c) => (!b || c.realizedPnl < b.realizedPnl ? c : b), null);
+          // Build equity curve по chronological close order. Cumulative P&L points.
+          const chrono = [...filtered].sort((a, b) => a.exitTs - b.exitTs);
           let cum = 0;
           const equityPoints = chrono.map((c) => { cum += c.realizedPnl; return { ts: c.exitTs, equity: cum } });
           // Compute peak and drawdown
@@ -1219,11 +1229,51 @@ export default function QTradePage() {
             const dd = peak - pt.equity;
             if (dd > maxDD) maxDD = dd;
           }
+          // Tag-stats — агрегируем wins/losses/avg pnl по каждому тегу.
+          const tagStats: Map<string, { count: number; wins: number; pnl: number }> = new Map();
+          for (const c of closedPositions) {
+            for (const t of c.tags ?? []) {
+              const cur = tagStats.get(t) ?? { count: 0, wins: 0, pnl: 0 };
+              cur.count += 1;
+              if (c.realizedPnl > 0) cur.wins += 1;
+              cur.pnl += c.realizedPnl;
+              tagStats.set(t, cur);
+            }
+          }
+          const tagList = [...tagStats.entries()]
+            .map(([tag, s]) => ({ tag, ...s, wr: s.count > 0 ? (s.wins / s.count) * 100 : 0 }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 12);
+          const startEdit = (c: ClosedPosition) => {
+            setJournalEditId(c.id);
+            setJournalNote(c.notes ?? "");
+            setJournalTags((c.tags ?? []).join(", "));
+          };
+          const saveEdit = () => {
+            if (!journalEditId) return;
+            const tags = journalTags
+              .split(",")
+              .map((t) => t.trim().toLowerCase().replace(/\s+/g, "-"))
+              .filter((t) => t.length > 0 && t.length <= 24 && /^[a-z0-9а-яё-]+$/i.test(t))
+              .filter((t, i, a) => a.indexOf(t) === i)
+              .slice(0, 8);
+            setClosedPositions((cs) => cs.map((c) =>
+              c.id === journalEditId
+                ? { ...c, notes: journalNote.trim().slice(0, 240), tags: tags.length > 0 ? tags : undefined }
+                : c
+            ));
+            setJournalEditId(null);
+          };
+          const cancelEdit = () => setJournalEditId(null);
           return (
             <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" as const, color: "#cbd5e1" }}>
-                  📊 История сделок · performance
+                  📊 История сделок · performance{journalTagFilter && (
+                    <span style={{ marginLeft: 8, padding: "2px 7px", borderRadius: 4, background: "rgba(99,102,241,0.18)", color: "#a5b4fc", fontSize: 10, letterSpacing: 0.5 }}>
+                      filter: #{journalTagFilter} ✕
+                    </span>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 14, fontSize: 12, color: "#cbd5e1", flexWrap: "wrap" }}>
                   <span>Closed: <strong style={{ color: "#fff" }}>{total}</strong></span>
@@ -1235,9 +1285,58 @@ export default function QTradePage() {
                   {worst && worst.realizedPnl < 0 && <span style={{ color: "#fca5a5" }}>Worst <strong>{fmtUsd(worst.realizedPnl)}</strong></span>}
                 </div>
               </div>
+
+              {/* Tag stats — журнал по тегам сетапов */}
+              {tagList.length > 0 && (
+                <div style={{
+                  marginBottom: 10, padding: "8px 10px", borderRadius: 6,
+                  background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.20)",
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: "#a5b4fc", textTransform: "uppercase" as const, marginBottom: 6 }}>
+                    🏷 Trade Journal · по тегам сетапов · клик = фильтр
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+                    {journalTagFilter && (
+                      <button onClick={() => setJournalTagFilter(null)}
+                        style={{
+                          padding: "3px 9px", borderRadius: 12, border: "1px solid rgba(252,165,165,0.4)",
+                          background: "rgba(252,165,165,0.12)", color: "#fca5a5",
+                          fontSize: 10, fontWeight: 800, cursor: "pointer",
+                        }}>
+                        ✕ clear filter
+                      </button>
+                    )}
+                    {tagList.map((t) => {
+                      const isActive = t.tag === journalTagFilter;
+                      const wrColor = t.wr >= 55 ? "#86efac" : t.wr >= 40 ? "#fde68a" : "#fca5a5";
+                      return (
+                        <button key={t.tag}
+                          onClick={() => setJournalTagFilter(isActive ? null : t.tag)}
+                          title={`${t.count} сделок · ${t.wins}W · WR ${t.wr.toFixed(1)}% · PnL ${t.pnl >= 0 ? "+" : ""}${fmtUsd(t.pnl)}`}
+                          style={{
+                            padding: "3px 9px", borderRadius: 12,
+                            border: isActive ? "1px solid #6366f1" : "1px solid rgba(165,180,252,0.30)",
+                            background: isActive ? "rgba(99,102,241,0.30)" : "rgba(255,255,255,0.05)",
+                            color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer",
+                            display: "flex", gap: 5, alignItems: "center" as const,
+                            fontFamily: "ui-monospace, monospace",
+                          }}>
+                          <span>#{t.tag}</span>
+                          <span style={{ color: "#94a3b8" }}>×{t.count}</span>
+                          <span style={{ color: wrColor }}>{t.wr.toFixed(0)}%</span>
+                          <span style={{ color: t.pnl >= 0 ? "#86efac" : "#fca5a5" }}>
+                            {t.pnl >= 0 ? "+" : ""}{fmtUsd(t.pnl)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {equityPoints.length >= 2 && <EquityCurve points={equityPoints} />}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflowY: "auto" as const }}>
-                {closedPositions.slice(0, 30).map((c) => {
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" as const }}>
+                {filtered.slice(0, 30).map((c) => {
                   const dur = (() => {
                     const ms = c.exitTs - c.entryTs;
                     if (ms < 60000) return `${Math.round(ms / 1000)}s`;
@@ -1245,39 +1344,140 @@ export default function QTradePage() {
                     if (ms < 86400000) return `${Math.round(ms / 3600000)}h`;
                     return `${Math.round(ms / 86400000)}d`;
                   })();
+                  const isEditing = journalEditId === c.id;
+                  const hasJournal = (c.notes && c.notes.length > 0) || (c.tags && c.tags.length > 0);
                   return (
                     <div key={c.id} style={{
                       padding: "6px 12px", borderRadius: 6,
                       background: c.realizedPnl >= 0 ? "rgba(34,197,94,0.07)" : "rgba(220,38,38,0.07)",
                       border: `1px solid ${c.realizedPnl >= 0 ? "rgba(34,197,94,0.18)" : "rgba(220,38,38,0.18)"}`,
-                      display: "grid",
-                      gridTemplateColumns: "auto 1fr auto auto",
-                      gap: 12, alignItems: "center" as const, fontSize: 12,
+                      display: "flex", flexDirection: "column" as const, gap: 4,
                     }}>
-                      <span style={{
-                        padding: "2px 7px", borderRadius: 4,
-                        background: c.side === "long" ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)",
-                        color: c.side === "long" ? "#86efac" : "#fca5a5",
-                        fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "auto 1fr auto auto auto",
+                        gap: 12, alignItems: "center" as const, fontSize: 12,
                       }}>
-                        {c.side === "long" ? "▲L" : "▼S"} {c.pair.split("/")[0]}
-                      </span>
-                      <span style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>
-                        {c.qty} @ {fmtUsd(c.entryPrice)} → {fmtUsd(c.exitPrice)}
-                        <span style={{ marginLeft: 8, color: "#64748b", fontSize: 11 }}>· {dur}</span>
-                      </span>
-                      <span style={{
-                        fontFamily: "ui-monospace, monospace", fontWeight: 900,
-                        color: c.realizedPnl > 0 ? "#22c55e" : c.realizedPnl < 0 ? "#f87171" : "#cbd5e1",
-                      }}>
-                        {c.realizedPnl >= 0 ? "+" : ""}{fmtUsd(c.realizedPnl)}
-                      </span>
-                      <span style={{
-                        fontFamily: "ui-monospace, monospace", fontSize: 11,
-                        color: c.realizedPct >= 0 ? "#86efac" : "#fca5a5",
-                      }}>
-                        {fmtPct(c.realizedPct)}
-                      </span>
+                        <span style={{
+                          padding: "2px 7px", borderRadius: 4,
+                          background: c.side === "long" ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)",
+                          color: c.side === "long" ? "#86efac" : "#fca5a5",
+                          fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+                        }}>
+                          {c.side === "long" ? "▲L" : "▼S"} {c.pair.split("/")[0]}
+                        </span>
+                        <span style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>
+                          {c.qty} @ {fmtUsd(c.entryPrice)} → {fmtUsd(c.exitPrice)}
+                          <span style={{ marginLeft: 8, color: "#64748b", fontSize: 11 }}>· {dur}</span>
+                        </span>
+                        <span style={{
+                          fontFamily: "ui-monospace, monospace", fontWeight: 900,
+                          color: c.realizedPnl > 0 ? "#22c55e" : c.realizedPnl < 0 ? "#f87171" : "#cbd5e1",
+                        }}>
+                          {c.realizedPnl >= 0 ? "+" : ""}{fmtUsd(c.realizedPnl)}
+                        </span>
+                        <span style={{
+                          fontFamily: "ui-monospace, monospace", fontSize: 11,
+                          color: c.realizedPct >= 0 ? "#86efac" : "#fca5a5",
+                        }}>
+                          {fmtPct(c.realizedPct)}
+                        </span>
+                        <button onClick={() => isEditing ? cancelEdit() : startEdit(c)}
+                          title={isEditing ? "Отмена" : (hasJournal ? "Редактировать заметку" : "Добавить заметку")}
+                          style={{
+                            padding: "3px 7px", borderRadius: 4,
+                            border: "1px solid rgba(165,180,252,0.30)",
+                            background: hasJournal ? "rgba(99,102,241,0.18)" : "rgba(255,255,255,0.04)",
+                            color: hasJournal ? "#a5b4fc" : "#94a3b8",
+                            fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          }}>
+                          {isEditing ? "✕" : (hasJournal ? "✎" : "+")}
+                        </button>
+                      </div>
+
+                      {/* Existing journal display */}
+                      {!isEditing && hasJournal && (
+                        <div style={{ display: "flex", flexDirection: "column" as const, gap: 4, paddingLeft: 4 }}>
+                          {c.tags && c.tags.length > 0 && (
+                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" as const }}>
+                              {c.tags.map((t) => (
+                                <button key={t} onClick={() => setJournalTagFilter(t === journalTagFilter ? null : t)}
+                                  style={{
+                                    padding: "1px 8px", borderRadius: 10,
+                                    background: t === journalTagFilter ? "rgba(99,102,241,0.30)" : "rgba(99,102,241,0.10)",
+                                    border: "1px solid rgba(99,102,241,0.30)",
+                                    color: "#a5b4fc", fontSize: 10, fontWeight: 700,
+                                    fontFamily: "ui-monospace, monospace",
+                                    cursor: "pointer",
+                                  }}>
+                                  #{t}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {c.notes && (
+                            <div style={{
+                              padding: "4px 8px", borderRadius: 4,
+                              background: "rgba(255,255,255,0.04)",
+                              fontSize: 11, color: "#cbd5e1", lineHeight: 1.4,
+                              fontStyle: "italic" as const,
+                            }}>
+                              💭 {c.notes}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Edit form */}
+                      {isEditing && (
+                        <div style={{
+                          padding: 8, borderRadius: 5,
+                          background: "rgba(99,102,241,0.10)", border: "1px solid rgba(99,102,241,0.25)",
+                          display: "flex", flexDirection: "column" as const, gap: 6,
+                        }}>
+                          <textarea
+                            value={journalNote}
+                            onChange={(e) => setJournalNote(e.target.value.slice(0, 240))}
+                            rows={2}
+                            placeholder="Заметка о сделке: вход на breakout, exit на news (до 240 char)"
+                            style={{
+                              padding: "6px 8px", borderRadius: 4,
+                              border: "1px solid rgba(165,180,252,0.30)",
+                              background: "rgba(0,0,0,0.30)", color: "#fff",
+                              fontSize: 12, fontFamily: "inherit", resize: "vertical" as const, lineHeight: 1.4,
+                            }}
+                          />
+                          <input
+                            value={journalTags}
+                            onChange={(e) => setJournalTags(e.target.value)}
+                            placeholder="Теги через запятую: breakout, news, trend, scalp"
+                            style={{
+                              padding: "6px 8px", borderRadius: 4,
+                              border: "1px solid rgba(165,180,252,0.30)",
+                              background: "rgba(0,0,0,0.30)", color: "#fff",
+                              fontSize: 12, fontFamily: "ui-monospace, monospace",
+                            }}
+                          />
+                          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" as const }}>
+                            <button onClick={cancelEdit}
+                              style={{
+                                padding: "5px 12px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.15)",
+                                background: "rgba(255,255,255,0.04)", color: "#94a3b8",
+                                fontSize: 11, fontWeight: 700, cursor: "pointer",
+                              }}>
+                              Cancel
+                            </button>
+                            <button onClick={saveEdit}
+                              style={{
+                                padding: "5px 14px", borderRadius: 4, border: "none",
+                                background: "linear-gradient(135deg, #6366f1, #818cf8)",
+                                color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                              }}>
+                              💾 Save
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

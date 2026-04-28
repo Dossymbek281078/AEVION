@@ -77,6 +77,8 @@ export type ClosedPosition = {
   exitTs: number;
   realizedPnl: number;     // USD
   realizedPct: number;     // %
+  notes?: string;          // trade journal note
+  tags?: string[];         // trade journal tags (lowercased, deduped)
 };
 
 export function ldClosed(): ClosedPosition[] {

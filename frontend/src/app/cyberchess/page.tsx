@@ -431,6 +431,7 @@ export default function CyberChessPage(){
   const[gamesModalOpen,sGamesModalOpen]=useState(false);
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
+  const[showSettings,sShowSettings]=useState(false);
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
   const[replaying,sReplaying]=useState(false);
   const[replaySpeed,sReplaySpeed]=useState(1000);
@@ -2356,6 +2357,15 @@ export default function CyberChessPage(){
           title={liveCommentary?"Выключить live-комментарии":"Live commentary от Coach — читает ходы вслух"}
           ariaLabel="Live commentary toggle"
           active={liveCommentary}
+          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
+        />
+        <Btn
+          variant="secondary"
+          size="sm"
+          icon={<Icon.Settings/>}
+          onClick={()=>sShowSettings(true)}
+          title="Настройки"
+          ariaLabel="Настройки"
           style={{padding:"6px 10px",minHeight:36,minWidth:36}}
         />
         <Btn
@@ -6414,6 +6424,61 @@ export default function CyberChessPage(){
                 showToast("Позиция загружена в Анализ","success");
               }catch(e:any){sEditorErrors([String(e?.message||e)])}
             }}>⚡ Анализировать позицию</Btn>
+          </div>
+        </div>;
+      })()}
+    </Modal>
+
+    {/* ═══ Settings — единая панель управления ═══ */}
+    <Modal open={showSettings} onClose={()=>sShowSettings(false)} size="md"
+      title="⚙ Настройки">
+      {(()=>{
+        const Row=({label,desc,checked,onChange,disabled}:{label:string;desc:string;checked:boolean;onChange:()=>void;disabled?:boolean})=>(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[3],padding:`${SPACE[2]}px 0`,borderBottom:`1px solid ${CC.border}`,opacity:disabled?0.55:1}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{label}</div>
+              <div style={{fontSize:12,color:CC.textDim,marginTop:1,lineHeight:1.4}}>{desc}</div>
+            </div>
+            <button onClick={disabled?undefined:onChange} disabled={disabled}
+              style={{position:"relative",width:42,height:24,borderRadius:12,border:`1px solid ${checked?CC.brand:CC.border}`,background:checked?CC.brand:CC.surface3,cursor:disabled?"not-allowed":"pointer",transition:`all ${MOTION.fast} ${MOTION.ease}`,padding:0,flexShrink:0}}>
+              <span style={{position:"absolute",top:2,left:checked?20:2,width:18,height:18,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:`left ${MOTION.fast} ${MOTION.ease}`}}/>
+            </button>
+          </div>
+        );
+        return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>
+            <Row label="Звук в игре" desc="Хлопки фигур, шах, мат, сигналы." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
+            <Row label="Голосовые комментарии" desc="Coach зачитывает важные моменты партии (Chrome)." checked={liveCommentary} onChange={()=>sLiveCommentary(v=>!v)}/>
+            <Row label="Голос на Master Games" desc="Чтение разбора и заметок к ходам в библиотеке мастеров." checked={masterVoice} onChange={()=>{
+              if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
+              sMasterVoice(v=>!v);
+            }}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
+            <Row label="Threat Heatmap" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
+            <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>📚 Анализ</div>
+            <Row label="Opening Explorer" desc="Автозагрузка статистики мастеров для текущей позиции в Analysis." checked={showOpeningExp} onChange={()=>sShowOpeningExp(v=>!v)}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎨 Тема доски</div>
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>Сейчас: <b style={{color:CC.text}}>{bT.name} {bT.icon}</b>. Выбор полной палитры — на главном экране (Play tab).</div>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.danger,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>⚠ Сброс данных</div>
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>Удалить локальные данные: партии, рейтинг, Chessy, достижения, прогресс мастер-партий. Это действие необратимо.</div>
+            <Btn size="sm" variant="danger" onClick={()=>{
+              if(!confirm("Точно сбросить ВСЁ? Партии, рейтинг, Chessy и прогресс будут удалены."))return;
+              try{
+                const keys=["aevion_chess_games_v1","aevion_chess_rating_v2","aevion_chess_stats_v2","aevion_chessy_v1","aevion_chessy_log_v1","aevion_chess_master_progress_v1","aevion_chess_coord_lb_v1","aevion_chess_personality_v1","aevion_chess_daily_v1","aevion_variant_stats_v1","aevion_chess_clones_v1","aevion_chess_rival_v1","aevion_chess_tournament_v1","aevion_chess_trophies_v1"];
+                for(const k of keys)try{localStorage.removeItem(k)}catch{}
+                showToast("Локальные данные сброшены — обнови страницу","success");
+              }catch{showToast("Не удалось сбросить","error")}
+            }}>🗑 Сбросить локальные данные</Btn>
           </div>
         </div>;
       })()}

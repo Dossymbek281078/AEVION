@@ -6,6 +6,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { WebVitals } from "@/components/WebVitals";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         <SiteFooter />
         <ServiceWorkerRegister />
         <WebVitals />
+        <InstallPrompt />
       </AutoTranslate>
     </I18nProvider>
   );

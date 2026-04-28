@@ -14,6 +14,40 @@ export const metadata: Metadata = {
   alternates: { canonical: "/awards" },
 };
 
+const articleJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  headline: "Recognition, tied to revenue.",
+  name: "AEVION Awards",
+  description:
+    "AEVION Awards hub: creative recognition wired to QRight authorship, Planet validator quorum and Bank AEC payouts. Music wave 1, film wave 2.",
+  inLanguage: ["en", "ru", "kk"],
+  about: ["AEVION Awards", "Music Awards", "Film Awards", "Creator Economy", "Planet Validators"],
+  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/awards" },
+};
+
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
+    { "@type": "ListItem", position: 2, name: "Awards", item: "https://aevion.app/awards" },
+  ],
+};
+
 export default function AwardsLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      {children}
+    </>
+  );
 }

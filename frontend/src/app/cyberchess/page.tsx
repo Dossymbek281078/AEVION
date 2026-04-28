@@ -569,6 +569,24 @@ export default function CyberChessPage(){
   const[masterGuessInput,sMasterGuessInput]=useState("");
   const[masterGuessFeedback,sMasterGuessFeedback]=useState<{correct:boolean;actual:string;guess:string}|null>(null);
   const[masterStats,sMasterStats]=useState<{hits:number;misses:number}>({hits:0,misses:0});
+  const[masterVoice,sMasterVoice]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_master_voice_v1")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_master_voice_v1",masterVoice?"1":"0")}catch{}},[masterVoice]);
+  const lastSpokenPlyRef=useRef<string>("");
+  useEffect(()=>{
+    if(!masterVoice||!masterCurrent||!showMasters)return;
+    if(typeof window==="undefined"||!window.speechSynthesis)return;
+    const key=`${masterCurrent.id}#${masterPly}`;
+    if(lastSpokenPlyRef.current===key)return;
+    lastSpokenPlyRef.current=key;
+    const text=masterPly===0?masterCurrent.blurb:(masterCurrent.notes[masterPly-1]||masterCurrent.notes[masterPly]);
+    if(!text)return;
+    try{
+      const utt=new SpeechSynthesisUtterance(text);
+      utt.lang="ru-RU";utt.rate=1.05;utt.volume=0.85;utt.pitch=1.0;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utt);
+    }catch{}
+  },[masterVoice,masterCurrent,masterPly,showMasters]);
   // Opening Explorer (killer #18)
   const[showOpeningExp,sShowOpeningExp]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_opening_exp_v1")==="1"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("aevion_opening_exp_v1",showOpeningExp?"1":"0")}catch{}},[showOpeningExp]);
@@ -623,6 +641,33 @@ export default function CyberChessPage(){
     },100);
     return()=>clearInterval(id);
   },[coordSession,coordResult,addChessy]);
+  // PGN paste in Analysis tab — Ctrl+V loads pasted PGN (lichess/chess.com export-friendly)
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    const handler=(e:ClipboardEvent)=>{
+      if(tab!=="analysis")return;
+      const tgt=e.target as HTMLElement|null;
+      const tag=tgt?.tagName?.toLowerCase()||"";
+      if(tag==="input"||tag==="textarea"||tgt?.isContentEditable)return;
+      const txt=e.clipboardData?.getData("text/plain")||"";
+      if(!txt||txt.length<6)return;
+      // Looks like PGN if it has a SAN move or a header tag
+      if(!/\b[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8]/.test(txt)&&!/\[\w+\s+"/.test(txt))return;
+      try{
+        const ch=new Chess();
+        ch.loadPgn(txt);
+        const moves=ch.history();
+        if(moves.length<2)return;
+        const replay=new Chess();
+        const fens=[replay.fen()];
+        for(const san of moves){replay.move(san);fens.push(replay.fen())}
+        setGame(replay);sBk(k=>k+1);sHist(moves);sFenHist(fens);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sBrowseIdx(-1);
+        showToast(`📋 PGN загружен: ${moves.length} ходов`,"success");
+      }catch{}
+    };
+    window.addEventListener("paste",handler);
+    return()=>window.removeEventListener("paste",handler);
+  },[tab,showToast]);
   // Opening Explorer + Tablebase: fetch when on Analysis tab + position changes
   useEffect(()=>{
     if(tab!=="analysis"||!showOpeningExp){sOpeningData(null);return}
@@ -6399,7 +6444,7 @@ export default function CyberChessPage(){
             </div>
             <Btn size="sm" variant="ghost" onClick={()=>sMasterCurrent(null)}>← К списку</Btn>
           </div>
-          <div style={{display:"flex",gap:SPACE[2]}}>
+          <div style={{display:"flex",gap:SPACE[2],alignItems:"center",flexWrap:"wrap"}}>
             <UiTabs<"replay"|"guess">
               variant="segment"
               size="sm"
@@ -6410,6 +6455,12 @@ export default function CyberChessPage(){
                 {value:"guess",label:"🎯 Угадай ход"},
               ]}
             />
+            <button onClick={()=>{
+              if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
+              sMasterVoice(v=>!v);
+            }} style={{padding:"4px 10px",borderRadius:RADIUS.sm,border:`1px solid ${masterVoice?"#5eead4":CC.border}`,background:masterVoice?"#ccfbf1":CC.surface1,color:masterVoice?"#115e59":CC.text,fontSize:12,fontWeight:800,cursor:"pointer"}}>
+              {masterVoice?"🔊 Voice ON":"🔇 Voice"}
+            </button>
             {masterMode==="guess"&&<div style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim}}>
               <span>✓ {masterStats.hits}</span><span>✗ {masterStats.misses}</span>
               {(masterStats.hits+masterStats.misses)>0&&<span style={{fontFamily:"monospace",fontWeight:800,color:guessRate>=60?CC.brand:CC.danger}}>{guessRate}%</span>}

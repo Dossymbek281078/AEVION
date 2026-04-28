@@ -62,15 +62,15 @@ const featureCards = [
 ];
 
 const roadmapItems = [
-  { label: "Payment Links — create & share", status: "scaffold" },
-  { label: "Payment Methods — unified checkout", status: "scaffold" },
-  { label: "Webhooks — signed event delivery", status: "scaffold" },
-  { label: "Settlements — bank + AEC wallet", status: "scaffold" },
+  { label: "Payment Links — create & share", status: "live" },
+  { label: "Payment Methods — unified checkout", status: "live" },
+  { label: "Webhooks — signed event delivery", status: "live" },
+  { label: "Settlements — bank + AEC wallet", status: "live" },
+  { label: "Royalty auto-split on settlement (AEVION Bank)", status: "live" },
+  { label: "Multi-currency support (USD / EUR / KZT / AEC)", status: "live" },
   { label: "Recurring billing & subscriptions", status: "planned" },
-  { label: "Multi-currency support", status: "planned" },
   { label: "Fraud detection via QSign integrity checks", status: "planned" },
   { label: "Planet compliance reports for payment flows", status: "planned" },
-  { label: "Royalty auto-split on settlement (AEVION Bank)", status: "planned" },
   { label: "Developer SDK & OpenAPI spec", status: "planned" },
 ];
 
@@ -100,7 +100,7 @@ export default function PaymentsPage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Payments Rail · scaffold
+            Payments Rail · live
           </div>
 
           <h1
@@ -384,16 +384,16 @@ export default function PaymentsPage() {
                     padding: "3px 8px",
                     borderRadius: 6,
                     background:
-                      item.status === "scaffold"
-                        ? "rgba(13,148,136,0.12)"
+                      item.status === "live"
+                        ? "rgba(5,150,105,0.14)"
                         : "rgba(124,58,237,0.10)",
                     color:
-                      item.status === "scaffold" ? "#0f766e" : "#6d28d9",
+                      item.status === "live" ? "#047857" : "#6d28d9",
                     textTransform: "uppercase" as const,
                     letterSpacing: "0.05em",
                   }}
                 >
-                  {item.status === "scaffold" ? "scaffold" : "planned"}
+                  {item.status === "live" ? "live" : "planned"}
                 </span>
                 <span
                   style={{

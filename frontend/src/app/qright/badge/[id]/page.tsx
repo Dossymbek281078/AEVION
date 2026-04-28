@@ -11,7 +11,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 type EmbedData = {
   id: string;
-  status: "registered" | "not_found";
+  status: "registered" | "revoked" | "not_found";
   title?: string;
   kind?: string;
   contentHash?: string;
@@ -20,6 +20,7 @@ type EmbedData = {
   country?: string | null;
   city?: string | null;
   createdAt?: string;
+  certificateId?: string | null;
 };
 
 const card: CSSProperties = {
@@ -86,7 +87,12 @@ export default function QRightBadgePage({
 
   const absoluteBadgeUrl = origin ? `${origin}${badgePath}` : badgePath;
   const absoluteEmbedUrl = origin ? `${origin}${embedPath}` : embedPath;
-  const absoluteVerifyUrl = origin ? `${origin}/qright/badge/${id}` : `/qright/badge/${id}`;
+  // Prefer the cryptographic verify page when a certificate exists; otherwise
+  // the public registration page is the most informative target.
+  const verifyTarget = data?.certificateId
+    ? `/verify/${data.certificateId}`
+    : `/qright/object/${id}`;
+  const absoluteVerifyUrl = origin ? `${origin}${verifyTarget}` : verifyTarget;
 
   useEffect(() => {
     let alive = true;

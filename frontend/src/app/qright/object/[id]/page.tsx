@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getApiBase } from "@/lib/apiBase";
+import { CopyHash } from "./CopyHash";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ type EmbedView = {
   createdAt?: string;
   revokedAt?: string | null;
   revokeReason?: string | null;
+  certificateId?: string | null;
 };
 
 async function loadEmbed(id: string): Promise<EmbedView | null> {
@@ -267,7 +269,10 @@ export default async function QRightObjectPage({ params }: Props) {
           {data.contentHash && (
             <>
               <div style={dt}>SHA-256 of canonical payload</div>
-              <p style={{ ...dd, ...mono }}>{data.contentHash}</p>
+              <p style={{ ...dd, ...mono, display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ flex: "1 1 auto" }}>{data.contentHash}</span>
+                <CopyHash value={data.contentHash} label="SHA-256" />
+              </p>
             </>
           )}
           <div style={dt}>Object ID</div>
@@ -283,13 +288,30 @@ export default async function QRightObjectPage({ params }: Props) {
             the work&apos;s file plus the verification bundle into the offline verifier.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {data.certificateId && (
+              <Link
+                href={`/verify/${data.certificateId}`}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  background: accent,
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  textDecoration: "none",
+                }}
+              >
+                Cryptographic verify →
+              </Link>
+            )}
             <Link
               href="/verify-offline"
               style={{
                 padding: "10px 16px",
                 borderRadius: 10,
-                background: "#0f172a",
-                color: "#fff",
+                background: data.certificateId ? "#fff" : "#0f172a",
+                color: data.certificateId ? "#0f172a" : "#fff",
+                border: data.certificateId ? "1px solid rgba(15,23,42,0.15)" : "none",
                 fontWeight: 800,
                 fontSize: 13,
                 textDecoration: "none",

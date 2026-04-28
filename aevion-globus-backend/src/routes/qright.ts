@@ -259,9 +259,17 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
     await ensureQRightTable();
 
     const id = String(req.params.id);
+    // LEFT JOIN IPCertificate so the embed surface can deep-link to /verify/[certId].
+    // The pipeline route writes both rows in one transaction, but the JOIN tolerates
+    // legacy QRightObject rows created via POST /objects with no certificate.
     const result = await pool.query(
-      `SELECT id, title, kind, "contentHash", "ownerName", country, city, "createdAt", "revokedAt", "revokeReason"
-       FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      `SELECT q.id, q.title, q.kind, q."contentHash", q."ownerName", q.country, q.city,
+              q."createdAt", q."revokedAt", q."revokeReason",
+              c.id AS "certificateId"
+       FROM "QRightObject" q
+       LEFT JOIN "IPCertificate" c ON c."objectId" = q.id
+       WHERE q."id" = $1
+       LIMIT 1`,
       [id]
     );
 
@@ -283,6 +291,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       createdAt: Date | string;
       revokedAt: Date | string | null;
       revokeReason: string | null;
+      certificateId: string | null;
     };
 
     const createdAtMs =
@@ -321,7 +330,10 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
           : row.revokedAt
         : null,
       revokeReason: row.revokeReason,
-      verifyUrl: `/qright/object/${row.id}`,
+      certificateId: row.certificateId,
+      verifyUrl: row.certificateId
+        ? `/verify/${row.certificateId}`
+        : `/qright/object/${row.id}`,
     });
   } catch (err: any) {
     res.status(500).json({

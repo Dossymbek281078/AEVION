@@ -7,6 +7,8 @@ import { apiUrl } from "@/lib/apiBase";
 
 const TOKEN_KEY = "aevion_admin_token";
 
+type Tab = "overview" | "leads" | "affiliate" | "partners" | "edu" | "newsletter";
+
 interface Lead {
   id: string;
   ts: string;
@@ -18,6 +20,27 @@ interface Lead {
   modules?: string[];
   seats?: number;
   message?: string;
+  source?: string;
+}
+
+interface Application {
+  id: string;
+  ts: string;
+  kind: "affiliate" | "partner" | "edu";
+  name: string;
+  email: string;
+  organization?: string;
+  country?: string;
+  details?: string;
+  channel?: string;
+  partnerType?: string;
+  institutionDomain?: string;
+}
+
+interface NewsletterEntry {
+  id: string;
+  ts: string;
+  email: string;
   source?: string;
 }
 
@@ -42,20 +65,34 @@ interface RecentEvent {
   value?: number;
 }
 
+const TAB_META: Record<Tab, { label: string; color: string }> = {
+  overview: { label: "Обзор", color: "#0d9488" },
+  leads: { label: "Sales-лиды", color: "#0ea5e9" },
+  affiliate: { label: "Affiliate", color: "#be185d" },
+  partners: { label: "Partners", color: "#7c3aed" },
+  edu: { label: "Education", color: "#065f46" },
+  newsletter: { label: "Newsletter", color: "#f59e0b" },
+};
+
 export default function PricingAdminPage() {
   const [token, setToken] = useState<string>("");
   const [authed, setAuthed] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("overview");
 
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [affiliate, setAffiliate] = useState<Application[]>([]);
+  const [partners, setPartners] = useState<Application[]>([]);
+  const [edu, setEdu] = useState<Application[]>([]);
+  const [newsletter, setNewsletter] = useState<NewsletterEntry[]>([]);
+  const [counts, setCounts] = useState({ leads: 0, affiliate: 0, partners: 0, edu: 0, newsletter: 0 });
   const [summary, setSummary] = useState<EventsSummary | null>(null);
   const [events, setEvents] = useState<RecentEvent[]>([]);
   const [hours, setHours] = useState(24);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Восстановление токена из localStorage
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = localStorage.getItem(TOKEN_KEY);
@@ -94,7 +131,7 @@ export default function PricingAdminPage() {
       try {
         localStorage.setItem(TOKEN_KEY, tokenInput.trim());
       } catch {
-        // ignore
+        /* ignore */
       }
       setToken(tokenInput.trim());
       setAuthed(true);
@@ -106,11 +143,15 @@ export default function PricingAdminPage() {
     try {
       localStorage.removeItem(TOKEN_KEY);
     } catch {
-      // ignore
+      /* ignore */
     }
     setToken("");
     setAuthed(false);
     setLeads([]);
+    setAffiliate([]);
+    setPartners([]);
+    setEdu([]);
+    setNewsletter([]);
     setSummary(null);
     setEvents([]);
   }
@@ -120,23 +161,52 @@ export default function PricingAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [leadsR, summaryR, eventsR] = await Promise.all([
-        fetch(apiUrl("/api/pricing/leads") + "?limit=100", { headers: { "x-admin-token": token } }),
-        fetch(apiUrl("/api/pricing/events/summary") + `?hours=${hours}`, { headers: { "x-admin-token": token } }),
-        fetch(apiUrl("/api/pricing/events/recent") + "?limit=50", { headers: { "x-admin-token": token } }),
+      const headers = { "x-admin-token": token };
+      const [
+        leadsR,
+        affR,
+        prtR,
+        eduR,
+        nlR,
+        summaryR,
+        eventsR,
+      ] = await Promise.all([
+        fetch(apiUrl("/api/pricing/leads") + "?limit=100", { headers }),
+        fetch(apiUrl("/api/pricing/applications") + "?kind=affiliate&limit=100", { headers }),
+        fetch(apiUrl("/api/pricing/applications") + "?kind=partner&limit=100", { headers }),
+        fetch(apiUrl("/api/pricing/applications") + "?kind=edu&limit=100", { headers }),
+        fetch(apiUrl("/api/pricing/newsletter/list") + "?limit=100", { headers }),
+        fetch(apiUrl("/api/pricing/events/summary") + `?hours=${hours}`, { headers }),
+        fetch(apiUrl("/api/pricing/events/recent") + "?limit=50", { headers }),
       ]);
 
-      if (leadsR.status === 401 || summaryR.status === 401 || eventsR.status === 401) {
+      const responses = [leadsR, affR, prtR, eduR, nlR, summaryR, eventsR];
+      if (responses.some((r) => r.status === 401)) {
         logout();
         setError("Сессия истекла или токен сменился");
         return;
       }
 
       const leadsJ = await leadsR.json();
+      const affJ = await affR.json();
+      const prtJ = await prtR.json();
+      const eduJ = await eduR.json();
+      const nlJ = await nlR.json();
       const summaryJ = await summaryR.json();
       const eventsJ = await eventsR.json();
 
       setLeads(leadsJ.items ?? []);
+      setAffiliate(affJ.items ?? []);
+      setPartners(prtJ.items ?? []);
+      setEdu(eduJ.items ?? []);
+      setNewsletter(nlJ.items ?? []);
+      setCounts({
+        leads: leadsJ.total ?? 0,
+        affiliate: affJ.total ?? 0,
+        partners: prtJ.total ?? 0,
+        edu: eduJ.total ?? 0,
+        newsletter: nlJ.total ?? 0,
+      });
       setSummary(summaryJ);
       setEvents(eventsJ.items ?? []);
     } catch (e) {
@@ -250,30 +320,68 @@ export default function PricingAdminPage() {
       <h1 style={{ fontSize: 32, fontWeight: 900, margin: 0, marginBottom: 8, letterSpacing: "-0.025em" }}>
         Pricing Admin
       </h1>
-      <p style={{ color: "#64748b", margin: 0, marginBottom: 24, fontSize: 14 }}>
-        GTM-метрики и заявки. Данные читаются прямо из JSONL.
+      <p style={{ color: "#64748b", margin: 0, marginBottom: 20, fontSize: 14 }}>
+        GTM-метрики, лиды, заявки и подписки. Все JSONL-источники в одном месте.
       </p>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>ОКНО:</span>
-        {[1, 24, 168, 720].map((h) => (
-          <button
-            key={h}
-            onClick={() => setHours(h)}
-            style={{
-              padding: "6px 12px",
-              fontSize: 12,
-              fontWeight: 700,
-              borderRadius: 6,
-              border: "1px solid rgba(15,23,42,0.12)",
-              background: hours === h ? "#0d9488" : "#fff",
-              color: hours === h ? "#fff" : "#475569",
-              cursor: "pointer",
-            }}
-          >
-            {h === 1 ? "1ч" : h === 24 ? "24ч" : h === 168 ? "7д" : "30д"}
-          </button>
-        ))}
+      {/* Tabs */}
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          marginBottom: 20,
+          padding: 4,
+          background: "#f1f5f9",
+          borderRadius: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        {(Object.keys(TAB_META) as Tab[]).map((t) => {
+          const meta = TAB_META[t];
+          const count =
+            t === "overview" ? null
+              : t === "leads" ? counts.leads
+                : t === "affiliate" ? counts.affiliate
+                  : t === "partners" ? counts.partners
+                    : t === "edu" ? counts.edu
+                      : counts.newsletter;
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 800,
+                borderRadius: 8,
+                border: "none",
+                cursor: "pointer",
+                background: tab === t ? "#fff" : "transparent",
+                color: tab === t ? meta.color : "#64748b",
+                boxShadow: tab === t ? "0 2px 6px rgba(15,23,42,0.08)" : "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              {meta.label}
+              {count !== null && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "1px 6px",
+                    background: tab === t ? meta.color : "rgba(15,23,42,0.08)",
+                    color: tab === t ? "#fff" : "#475569",
+                    borderRadius: 999,
+                  }}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
         <button
           onClick={loadAll}
           disabled={loading}
@@ -299,119 +407,82 @@ export default function PricingAdminPage() {
         </div>
       )}
 
-      {/* Metric tiles */}
-      {summary && (
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: 10,
-            marginBottom: 24,
-          }}
-        >
-          <Tile label="ВСЕГО СОБЫТИЙ" value={summary.total.toLocaleString("ru-RU")} />
-          <Tile label="СЕССИЙ" value={summary.sessionCount.toLocaleString("ru-RU")} />
-          <Tile label="PAGE VIEWS" value={(summary.byType.page_view ?? 0).toLocaleString("ru-RU")} />
-          <Tile label="CHECKOUT START" value={(summary.byType.checkout_start ?? 0).toLocaleString("ru-RU")} />
-          <Tile label="CHECKOUT SUCCESS" value={(summary.byType.checkout_success ?? 0).toLocaleString("ru-RU")} accent="#0d9488" />
-          <Tile label="LEAD SUBMIT" value={(summary.byType.lead_submit ?? 0).toLocaleString("ru-RU")} accent="#7c3aed" />
-        </section>
-      )}
-
-      {/* Breakdowns */}
-      {summary && (
-        <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 32 }}>
-          <Breakdown title="По типам событий" data={summary.byType} />
-          <Breakdown title="По tier" data={summary.byTier} />
-          <Breakdown title="По индустриям" data={summary.byIndustry} />
-          <Breakdown title="По источникам" data={summary.bySource} />
-        </section>
-      )}
-
-      {/* Leads */}
-      <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
-          Заявки ({leads.length})
-        </h2>
-        {leads.length === 0 ? (
-          <div style={{ padding: 20, background: "#fff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, color: "#64748b", fontSize: 13, textAlign: "center" }}>
-            Заявок пока нет.
+      {tab === "overview" && (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>ОКНО АНАЛИТИКИ:</span>
+            {[1, 24, 168, 720].map((h) => (
+              <button
+                key={h}
+                onClick={() => setHours(h)}
+                style={{
+                  padding: "6px 12px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  borderRadius: 6,
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  background: hours === h ? "#0d9488" : "#fff",
+                  color: hours === h ? "#fff" : "#475569",
+                  cursor: "pointer",
+                }}
+              >
+                {h === 1 ? "1ч" : h === 24 ? "24ч" : h === 168 ? "7д" : "30д"}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: "#f8fafc" }}>
-                    <th style={th}>Время</th>
-                    <th style={th}>Имя</th>
-                    <th style={th}>Email</th>
-                    <th style={th}>Компания</th>
-                    <th style={th}>Индустрия</th>
-                    <th style={th}>Tier</th>
-                    <th style={th}>Seats</th>
-                    <th style={th}>Источник</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leads.map((l, i) => (
-                    <tr
-                      key={l.id}
-                      style={{ borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)" }}
-                      title={l.message ?? undefined}
-                    >
-                      <td style={td}>{new Date(l.ts).toLocaleString("ru-RU")}</td>
-                      <td style={{ ...td, fontWeight: 700 }}>{l.name}</td>
-                      <td style={td}>
-                        <a href={`mailto:${l.email}`} style={{ color: "#0d9488", textDecoration: "none" }}>
-                          {l.email}
-                        </a>
-                      </td>
-                      <td style={td}>{l.company ?? "—"}</td>
-                      <td style={td}>{l.industry ?? "—"}</td>
-                      <td style={td}>
-                        {l.tier ? (
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 800,
-                              padding: "2px 6px",
-                              background: "#e0f2fe",
-                              color: "#075985",
-                              borderRadius: 4,
-                              letterSpacing: "0.04em",
-                            }}
-                          >
-                            {l.tier.toUpperCase()}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td style={td}>{l.seats ?? "—"}</td>
-                      <td style={td}>{l.source ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
 
-      {/* Recent events */}
-      <section style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
-          Последние события
-        </h2>
-        {events.length === 0 ? (
-          <div style={{ padding: 20, background: "#fff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, color: "#64748b", fontSize: 13, textAlign: "center" }}>
-            Событий пока нет.
-          </div>
-        ) : (
-          <div style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          {summary && (
+            <section
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 10,
+                marginBottom: 24,
+              }}
+            >
+              <Tile label="ВСЕГО СОБЫТИЙ" value={summary.total.toLocaleString("ru-RU")} />
+              <Tile label="СЕССИЙ" value={summary.sessionCount.toLocaleString("ru-RU")} />
+              <Tile label="PAGE VIEWS" value={(summary.byType.page_view ?? 0).toLocaleString("ru-RU")} />
+              <Tile label="CHECKOUT START" value={(summary.byType.checkout_start ?? 0).toLocaleString("ru-RU")} />
+              <Tile label="CHECKOUT SUCCESS" value={(summary.byType.checkout_success ?? 0).toLocaleString("ru-RU")} accent="#0d9488" />
+              <Tile label="LEAD SUBMIT" value={(summary.byType.lead_submit ?? 0).toLocaleString("ru-RU")} accent="#7c3aed" />
+            </section>
+          )}
+
+          {/* Pipeline counts */}
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: 10,
+              marginBottom: 32,
+            }}
+          >
+            <Tile label="SALES LEADS" value={counts.leads.toString()} accent="#0ea5e9" />
+            <Tile label="AFFILIATE" value={counts.affiliate.toString()} accent="#be185d" />
+            <Tile label="PARTNERS" value={counts.partners.toString()} accent="#7c3aed" />
+            <Tile label="EDU APPLICATIONS" value={counts.edu.toString()} accent="#065f46" />
+            <Tile label="NEWSLETTER" value={counts.newsletter.toString()} accent="#f59e0b" />
+          </section>
+
+          {summary && (
+            <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 32 }}>
+              <Breakdown title="По типам событий" data={summary.byType} />
+              <Breakdown title="По tier" data={summary.byTier} />
+              <Breakdown title="По индустриям" data={summary.byIndustry} />
+              <Breakdown title="По источникам" data={summary.bySource} />
+            </section>
+          )}
+
+          {/* Recent events */}
+          <section style={{ marginBottom: 24 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 12, letterSpacing: "-0.02em" }}>
+              Последние события
+            </h2>
+            {events.length === 0 ? (
+              <Empty text="Событий пока нет." />
+            ) : (
+              <Table>
                 <thead>
                   <tr style={{ background: "#f8fafc" }}>
                     <th style={th}>Время</th>
@@ -438,12 +509,218 @@ export default function PricingAdminPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
+              </Table>
+            )}
+          </section>
+        </>
+      )}
+
+      {tab === "leads" && (
+        <section>
+          {leads.length === 0 ? (
+            <Empty text="Sales-лидов пока нет." />
+          ) : (
+            <Table>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={th}>Время</th>
+                  <th style={th}>Имя</th>
+                  <th style={th}>Email</th>
+                  <th style={th}>Компания</th>
+                  <th style={th}>Индустрия</th>
+                  <th style={th}>Tier</th>
+                  <th style={th}>Seats</th>
+                  <th style={th}>Источник</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((l, i) => (
+                  <tr
+                    key={l.id}
+                    style={{ borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)" }}
+                    title={l.message ?? undefined}
+                  >
+                    <td style={td}>{new Date(l.ts).toLocaleString("ru-RU")}</td>
+                    <td style={{ ...td, fontWeight: 700 }}>{l.name}</td>
+                    <td style={td}>
+                      <a href={`mailto:${l.email}`} style={{ color: "#0d9488", textDecoration: "none" }}>
+                        {l.email}
+                      </a>
+                    </td>
+                    <td style={td}>{l.company ?? "—"}</td>
+                    <td style={td}>{l.industry ?? "—"}</td>
+                    <td style={td}>{l.tier ? <Pill text={l.tier.toUpperCase()} bg="#e0f2fe" fg="#075985" /> : "—"}</td>
+                    <td style={td}>{l.seats ?? "—"}</td>
+                    <td style={td}>{l.source ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </section>
+      )}
+
+      {tab === "affiliate" && (
+        <ApplicationTable
+          items={affiliate}
+          empty="Заявок на affiliate-программу пока нет."
+          extraColumns={[
+            { label: "Канал", get: (a) => a.channel ?? "—" },
+          ]}
+        />
+      )}
+
+      {tab === "partners" && (
+        <ApplicationTable
+          items={partners}
+          empty="Заявок на partner-программу пока нет."
+          extraColumns={[
+            {
+              label: "Тип",
+              get: (a) =>
+                a.partnerType ? (
+                  <Pill
+                    text={a.partnerType.replace("_", " ").toUpperCase()}
+                    bg="#f5f3ff"
+                    fg="#6d28d9"
+                  />
+                ) : "—",
+            },
+          ]}
+        />
+      )}
+
+      {tab === "edu" && (
+        <ApplicationTable
+          items={edu}
+          empty="Заявок на edu-программу пока нет."
+          extraColumns={[
+            { label: "Домен", get: (a) => a.institutionDomain ?? "—" },
+          ]}
+        />
+      )}
+
+      {tab === "newsletter" && (
+        <section>
+          {newsletter.length === 0 ? (
+            <Empty text="Подписчиков пока нет." />
+          ) : (
+            <Table>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={th}>Время</th>
+                  <th style={th}>Email</th>
+                  <th style={th}>Источник</th>
+                </tr>
+              </thead>
+              <tbody>
+                {newsletter.map((n, i) => (
+                  <tr key={n.id} style={{ borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)" }}>
+                    <td style={td}>{new Date(n.ts).toLocaleString("ru-RU")}</td>
+                    <td style={td}>
+                      <a href={`mailto:${n.email}`} style={{ color: "#0d9488", textDecoration: "none" }}>
+                        {n.email}
+                      </a>
+                    </td>
+                    <td style={td}>{n.source ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </section>
+      )}
     </ProductPageShell>
+  );
+}
+
+function ApplicationTable({
+  items,
+  empty,
+  extraColumns,
+}: {
+  items: Application[];
+  empty: string;
+  extraColumns: Array<{ label: string; get: (a: Application) => React.ReactNode }>;
+}) {
+  if (items.length === 0) return <Empty text={empty} />;
+  return (
+    <Table>
+      <thead>
+        <tr style={{ background: "#f8fafc" }}>
+          <th style={th}>Время</th>
+          <th style={th}>Имя</th>
+          <th style={th}>Email</th>
+          <th style={th}>Компания</th>
+          <th style={th}>Страна</th>
+          {extraColumns.map((c) => (
+            <th key={c.label} style={th}>
+              {c.label}
+            </th>
+          ))}
+          <th style={th}>Детали</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((a, i) => (
+          <tr key={a.id} style={{ borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)" }}>
+            <td style={td}>{new Date(a.ts).toLocaleString("ru-RU")}</td>
+            <td style={{ ...td, fontWeight: 700 }}>{a.name}</td>
+            <td style={td}>
+              <a href={`mailto:${a.email}`} style={{ color: "#0d9488", textDecoration: "none" }}>
+                {a.email}
+              </a>
+            </td>
+            <td style={td}>{a.organization ?? "—"}</td>
+            <td style={td}>{a.country ?? "—"}</td>
+            {extraColumns.map((c) => (
+              <td key={c.label} style={td}>
+                {c.get(a)}
+              </td>
+            ))}
+            <td style={{ ...td, maxWidth: 240, whiteSpace: "normal", color: "#64748b" }} title={a.details}>
+              {a.details ? (a.details.length > 60 ? `${a.details.slice(0, 60)}…` : a.details) : "—"}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
+function Table({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>{children}</table>
+      </div>
+    </div>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return (
+    <div style={{ padding: 20, background: "#fff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, color: "#64748b", fontSize: 13, textAlign: "center" }}>
+      {text}
+    </div>
+  );
+}
+
+function Pill({ text, bg, fg }: { text: string; bg: string; fg: string }) {
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 800,
+        padding: "2px 6px",
+        background: bg,
+        color: fg,
+        borderRadius: 4,
+        letterSpacing: "0.04em",
+      }}
+    >
+      {text}
+    </span>
   );
 }
 

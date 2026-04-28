@@ -731,6 +731,87 @@ pricingRouter.post("/edu/apply", (req, res) => {
 });
 
 /**
+ * GET /api/pricing/applications?kind=affiliate|partner|edu
+ * Token-gated: x-admin-token. Возвращает последние N заявок из соответствующего JSONL.
+ * Используется /pricing/admin для мониторинга всех program-applications в одном месте.
+ */
+pricingRouter.get("/applications", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    return res.status(401).json({ error: "admin_token_not_configured" });
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const kind = req.query.kind === "affiliate" || req.query.kind === "partner" || req.query.kind === "edu"
+    ? (req.query.kind as "affiliate" | "partner" | "edu")
+    : null;
+  if (!kind) {
+    return res.status(400).json({ error: "invalid_kind", expected: ["affiliate", "partner", "edu"] });
+  }
+  const file =
+    kind === "affiliate" ? AFFILIATE_FILE : kind === "partner" ? PARTNERS_FILE : EDU_FILE;
+
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+
+  try {
+    if (!existsSync(file)) return res.json({ items: [], total: 0, kind });
+    const content = readFileSync(file, "utf8");
+    const lines = content.split("\n").filter((l) => l.trim().length > 0);
+    const tail = lines.slice(-limit).reverse();
+    const items: ProgramApplication[] = [];
+    for (const line of tail) {
+      try {
+        items.push(JSON.parse(line) as ProgramApplication);
+      } catch {
+        // skip malformed
+      }
+    }
+    res.json({ items, total: lines.length, kind });
+  } catch (e) {
+    console.error(`[applications/${kind}] read failed`, e);
+    res.status(500).json({ error: "read_error" });
+  }
+});
+
+/**
+ * GET /api/pricing/newsletter/list
+ * Token-gated: список последних подписчиков newsletter (без PII в публичном /count).
+ */
+pricingRouter.get("/newsletter/list", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    return res.status(401).json({ error: "admin_token_not_configured" });
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+
+  try {
+    if (!existsSync(NEWSLETTER_FILE)) return res.json({ items: [], total: 0 });
+    const content = readFileSync(NEWSLETTER_FILE, "utf8");
+    const lines = content.split("\n").filter((l) => l.trim().length > 0);
+    const tail = lines.slice(-limit).reverse();
+    const items: NewsletterEntry[] = [];
+    for (const line of tail) {
+      try {
+        items.push(JSON.parse(line) as NewsletterEntry);
+      } catch {
+        // skip
+      }
+    }
+    res.json({ items, total: lines.length });
+  } catch (e) {
+    console.error("[newsletter/list] read failed", e);
+    res.status(500).json({ error: "read_error" });
+  }
+});
+
+/**
  * GET /api/pricing/healthz
  * Sanity-check для CI/мониторинга.
  */

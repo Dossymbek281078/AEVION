@@ -1782,6 +1782,7 @@ export default function CyberChessPage(){
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
+    console.log("[CC click]",sq,"sel=",sel,"vm.has=",vm.has(sq),"turn=",game.turn(),"pCol=",pCol,"on=",on,"over=",over,"think=",think);
     // ── BOARD EDITOR MODE (Coach tab) ──
     if(editorMode){
       try{
@@ -1885,10 +1886,18 @@ export default function CyberChessPage(){
 
   /* ── Drag ── */
   const dRef=useRef<Square|null>(null);
-  const dS=(sq:Square)=>{const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}else sPmSel(sq)}};
-  const dD=(sq:Square)=>{if(!dRef.current)return;const f=dRef.current;dRef.current=null;
-    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
-    if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else exec(f,sq)}else{sSel(null);sVm(new Set())}};
+  const dS=(sq:Square)=>{
+    const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;
+    console.log("[CC dragstart]",sq,"piece=",p,"side=",side,"turn=",game.turn(),"pCol=",pCol,"over=",over,"on=",on);
+    if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}else sPmSel(sq)}
+    else console.log("[CC dragstart] BLOCKED — piece not mine or game over");
+  };
+  const dD=(sq:Square)=>{
+    console.log("[CC drop]",sq,"dRef=",dRef.current,"vm.has=",vm.has(sq),"turn=",game.turn(),"pCol=",pCol);
+    if(!dRef.current)return;const f=dRef.current;dRef.current=null;
+    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";console.log("[CC drop] premove queued",f,"→",sq);sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
+    if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else{console.log("[CC drop] exec move",f,"→",sq);exec(f,sq)}}else{console.log("[CC drop] illegal target — clearing sel");sSel(null);sVm(new Set())}
+  };
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;
     // Determine starting FEN based on variant
@@ -3242,7 +3251,7 @@ export default function CyberChessPage(){
                 // right-click draws arrows & highlights. During a live play game, right-click still
                 // removes premoves as before.
                 const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
-                return<div key={sq} onClick={()=>{if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();click(sq)}} onMouseDown={e=>{if(e.button===2){rcStartRef.current=sq;e.preventDefault()}}} onMouseUp={e=>{
+                return<div key={sq} onClick={()=>{console.log("[CC cell onClick]",sq);if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();click(sq)}} onMouseDown={e=>{if(e.button===2){rcStartRef.current=sq;e.preventDefault()}else if(e.button===0)console.log("[CC cell mousedown LMB]",sq,"draggable=",!!p&&(tab==="analysis"?true:p.color===pCol)&&!over)}} onMouseUp={e=>{
                   if(e.button!==2)return;
                   const start=rcStartRef.current;rcStartRef.current=null;
                   if(!annotActive)return;

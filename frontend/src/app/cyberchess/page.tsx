@@ -3875,7 +3875,7 @@ export default function CyberChessPage(){
               <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:"#854d0e"}}>📚 Opening Explorer · Masters</span>
               <button onClick={()=>sShowOpeningExp(false)} style={{padding:"2px 6px",borderRadius:4,border:"none",background:"transparent",color:"#854d0e",fontSize:11,fontWeight:800,cursor:"pointer"}}>скрыть</button>
             </div>
-            {openingLoading?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Загрузка…</div>:!openingData||openingData.total===0?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>В мастерской базе нет партий из этой позиции — позиция оригинальная или редкая.</div>:<>
+            {openingLoading?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Загрузка из Lichess masters…</div>:!openingData?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Сервис недоступен (Lichess masters API). Попробуй позже.</div>:openingData.total===0?<div style={{padding:"10px 12px",fontSize:12,color:T.dim,textAlign:"center"}}>Позиция оригинальная — в мастерской базе нет партий.</div>:<>
               {openingData.opening?.name&&<div style={{padding:"6px 12px",fontSize:11,color:"#854d0e",fontWeight:700,background:"#fffbeb",borderBottom:`1px solid ${T.border}`}}>
                 {openingData.opening.eco?<span style={{fontFamily:"monospace",marginRight:6}}>{openingData.opening.eco}</span>:null}{openingData.opening.name}
               </div>}
@@ -6316,7 +6316,7 @@ export default function CyberChessPage(){
           });
           sEditorErrors([]);
         };
-        return <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:SPACE[3],alignItems:"start"}}>
+        return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(100%, 260px), 1fr))",gap:SPACE[3],alignItems:"start"}}>
           {/* Board */}
           <div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",border:`2px solid ${CC.borderStrong}`,borderRadius:RADIUS.md,overflow:"hidden",userSelect:"none",aspectRatio:"1",maxWidth:520,margin:"0 auto"}}>
@@ -6474,7 +6474,7 @@ export default function CyberChessPage(){
             </div>}
           </div>
           {/* Mini board */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 360px",gap:SPACE[3],alignItems:"start"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(100%, 320px), 1fr))",gap:SPACE[3],alignItems:"start"}}>
             <div>
               {(()=>{
                 const ch=new Chess(fenAt);

@@ -258,6 +258,27 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         hintKey: "explore.card.constellation.hint",
       },
       {
+        href: "/bank/wishlist",
+        iconBg: "linear-gradient(135deg, #5eead4, #0d9488)",
+        iconChar: "♥",
+        titleKey: "explore.card.wishlist.title",
+        hintKey: "explore.card.wishlist.hint",
+      },
+      {
+        href: "/bank/loyalty",
+        iconBg: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+        iconChar: "🎫",
+        titleKey: "explore.card.loyalty.title",
+        hintKey: "explore.card.loyalty.hint",
+      },
+      {
+        href: "/bank/cooldown",
+        iconBg: "linear-gradient(135deg, #7c3aed, #a78bfa)",
+        iconChar: "⏳",
+        titleKey: "explore.card.cooldown.title",
+        hintKey: "explore.card.cooldown.hint",
+      },
+      {
         href: "/bank/flow",
         iconBg: "linear-gradient(135deg, #0d9488, #f472b6)",
         iconChar: "⤳",

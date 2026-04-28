@@ -40,20 +40,26 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "Scan to pay",
         short_name: "Pay",
-        description: "Generate a QR for an in-person AEC payment",
-        url: "/bank/explore",
+        description: "Open the camera scanner for an in-person AEC payment",
+        url: "/bank/qr-scan",
+      },
+      {
+        name: "Spending insights",
+        short_name: "Insights",
+        description: "Where your money went this month — auto-categorised",
+        url: "/bank/insights",
+      },
+      {
+        name: "Monthly budget",
+        short_name: "Budget",
+        description: "Caps per category with real-time pace and projection",
+        url: "/bank/budget",
       },
       {
         name: "Statement",
         short_name: "Statement",
         description: "Printable wallet report",
         url: "/bank/statement",
-      },
-      {
-        name: "Leaderboard",
-        short_name: "Top",
-        description: "Top creators, chess and referrers",
-        url: "/bank/leaderboard",
       },
     ],
   };

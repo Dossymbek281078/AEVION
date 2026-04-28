@@ -14,9 +14,30 @@ export const metadata: Metadata = {
   alternates: { canonical: "/bank" },
 };
 
+// Schema.org WebApplication — surfaces /bank as a fintech web app to
+// search engines so it can appear in rich app-card results with category
+// and inLanguage signals. Keeps the breadcrumb chain rooted here.
+const webAppJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "AEVION Bank",
+  url: "https://aevion.app/bank",
+  applicationCategory: "FinanceApplication",
+  operatingSystem: "Web (Chrome, Safari, Firefox, Edge); installable PWA",
+  inLanguage: ["en", "ru", "kk"],
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  description:
+    "Unified wallet for AEC credits, automatic royalties from IP usage, savings goals, recurring payments, salary advance gated by Trust Score. Multilingual EN/RU/KK.",
+  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+};
+
 export default function BankLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webAppJsonLd) }}
+      />
       {/* Global a11y polish for every /bank/* surface. Keyboard-only focus
         ring (visible on Tab, hidden on mouse-click) + reduced-motion respect
         for any svg/path/animated element. Scoped via attribute selectors so

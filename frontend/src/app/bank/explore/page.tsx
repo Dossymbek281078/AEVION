@@ -195,6 +195,13 @@ const CARDS: Array<{ groupKey: string; items: Card[] }> = [
         hintKey: "explore.card.calendar.hint",
       },
       {
+        href: "/bank/subscriptions",
+        iconBg: "linear-gradient(135deg, #dc2626, #db2777)",
+        iconChar: "⚠",
+        titleKey: "explore.card.subscriptions.title",
+        hintKey: "explore.card.subscriptions.hint",
+      },
+      {
         href: "/bank/flow",
         iconBg: "linear-gradient(135deg, #0d9488, #f472b6)",
         iconChar: "⤳",

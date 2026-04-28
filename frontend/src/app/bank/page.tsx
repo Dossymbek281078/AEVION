@@ -415,7 +415,9 @@ function BankContent() {
               />
             </div>
 
-            <SubscriptionScanner notify={notify} />
+            <div id="bank-anchor-subscriptions" style={{ scrollMarginTop: 20 }}>
+              <SubscriptionScanner notify={notify} />
+            </div>
 
             <div id="bank-anchor-cooldown" style={{ scrollMarginTop: 20 }}>
               <CoolDownQueue

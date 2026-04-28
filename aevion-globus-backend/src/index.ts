@@ -105,6 +105,15 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qright/revoke/{id}": {
         post: { summary: "Revoke a QRight object (owner only, Bearer required)" },
       },
+      "/api/qright/admin/objects": {
+        get: { summary: "Admin: list all (filters: status, q, limit)" },
+      },
+      "/api/qright/admin/revoke/{id}": {
+        post: { summary: "Admin: force-revoke any object regardless of ownership" },
+      },
+      "/api/qright/admin/whoami": {
+        get: { summary: "Probe — returns isAdmin for the current Bearer" },
+      },
       "/api/qsign/sign": { post: { summary: "[v1] Sign payload (HMAC, no persistence)" } },
       "/api/qsign/verify": { post: { summary: "[v1] Stateless verify" } },
       "/api/qsign/v2/health": { get: { summary: "[v2] QSign health + active kids" } },

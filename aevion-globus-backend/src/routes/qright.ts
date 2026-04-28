@@ -81,7 +81,27 @@ const REVOKE_REASON_CODES = new Set([
   "mistake",
   "superseded",
   "other",
+  // Admin-only:
+  "admin-takedown",
 ]);
+
+// Admin allowlist by email (ENV) + JWT role=admin. Used for force-revoke and
+// audit listing. Empty allowlist = no email-based admins (only role=admin).
+function getAdminEmailAllowlist(): Set<string> {
+  return new Set(
+    (process.env.QRIGHT_ADMIN_EMAILS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function isQRightAdmin(auth: { role?: string; email?: string } | null): boolean {
+  if (!auth) return false;
+  if (auth.role === "admin") return true;
+  if (auth.email && getAdminEmailAllowlist().has(auth.email.toLowerCase())) return true;
+  return false;
+}
 
 // 🔹 Получить все объекты (или ?mine=1 при Bearer — по ownerUserId, с fallback на старые строки по email)
 qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
@@ -612,6 +632,131 @@ qrightRouter.post("/objects", async (req, res) => {
       details: err.message,
     });
   }
+});
+
+// 🔹 Admin: list all objects with optional status/query filters
+qrightRouter.get("/admin/objects", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!isQRightAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+
+    const status = String(req.query.status || "all").toLowerCase();
+    const q = String(req.query.q || "").trim();
+    const limitRaw = parseInt(String(req.query.limit || "100"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 100;
+
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (status === "active") conds.push(`"revokedAt" IS NULL`);
+    else if (status === "revoked") conds.push(`"revokedAt" IS NOT NULL`);
+    if (q.length >= 2) {
+      params.push(`%${q}%`);
+      conds.push(`("title" ILIKE $${params.length} OR "ownerEmail" ILIKE $${params.length})`);
+    }
+    params.push(limit);
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const result = await pool.query(
+      `SELECT id, title, kind, "contentHash", "ownerName", "ownerEmail", country, city,
+              "createdAt", "revokedAt", "revokeReason", "revokeReasonCode",
+              "embedFetches", "lastFetchedAt"
+       FROM "QRightObject"
+       ${where}
+       ORDER BY "createdAt" DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    res.json({
+      total: result.rowCount,
+      filter: { status, q: q || null },
+      items: result.rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Admin: force-revoke any object (regardless of ownership)
+//    Required for handling DMCA-style takedowns, fraudulent registrations,
+//    and dispute outcomes where the registrant is uncooperative.
+qrightRouter.post("/admin/revoke/:id", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!isQRightAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+
+    const id = String(req.params.id);
+    const reason = String(req.body?.reason || "").slice(0, 500) || null;
+    const reasonCodeRaw = String(req.body?.reasonCode || "admin-takedown").trim();
+    if (!REVOKE_REASON_CODES.has(reasonCodeRaw)) {
+      return res.status(400).json({
+        error: "Unknown reasonCode",
+        allowed: Array.from(REVOKE_REASON_CODES),
+      });
+    }
+
+    const existing = await pool.query(
+      `SELECT id, "revokedAt" FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    if (existing.rows[0].revokedAt) {
+      return res.status(409).json({ error: "Already revoked", revokedAt: existing.rows[0].revokedAt });
+    }
+
+    const updated = await pool.query(
+      `UPDATE "QRightObject"
+       SET "revokedAt" = NOW(), "revokeReason" = $2, "revokeReasonCode" = $3
+       WHERE "id" = $1
+       RETURNING id, "revokedAt", "revokeReason", "revokeReasonCode"`,
+      [id, reason, reasonCodeRaw]
+    );
+
+    console.warn(
+      `[qright] admin force-revoke id=${id} by=${auth?.email || auth?.sub} code=${reasonCodeRaw}`
+    );
+
+    res.json({
+      id: updated.rows[0].id,
+      status: "revoked",
+      adminAction: true,
+      revokedAt: updated.rows[0].revokedAt,
+      revokeReason: updated.rows[0].revokeReason,
+      revokeReasonCode: updated.rows[0].revokeReasonCode,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Admin probe — lets the frontend /admin/qright check role without leaking data
+qrightRouter.get("/admin/whoami", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  res.json({
+    isAdmin: isQRightAdmin(auth),
+    email: auth?.email || null,
+    role: auth?.role || null,
+  });
 });
 
 // 🔹 Revoke — POST /revoke/:id

@@ -20,7 +20,17 @@ type EmbedView = {
   createdAt?: string;
   revokedAt?: string | null;
   revokeReason?: string | null;
+  revokeReasonCode?: string | null;
   certificateId?: string | null;
+};
+
+const REVOKE_REASON_LABELS: Record<string, string> = {
+  "license-conflict": "License conflict",
+  withdrawn: "Withdrawn by author",
+  dispute: "Disputed authorship",
+  mistake: "Registered by mistake",
+  superseded: "Superseded by new version",
+  other: "Other",
 };
 
 async function loadEmbed(id: string): Promise<EmbedView | null> {
@@ -287,7 +297,10 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
           {isRevoked && (
             <p style={{ marginTop: 10, marginBottom: 0, color: "#7f1d1d", fontSize: 13 }}>
               <strong>This registration has been revoked by the owner.</strong>
-              {data.revokeReason ? ` Reason: ${data.revokeReason}` : null}
+              {data.revokeReasonCode ? (
+                <> Reason: <em>{REVOKE_REASON_LABELS[data.revokeReasonCode] || data.revokeReasonCode}</em>.</>
+              ) : null}
+              {data.revokeReason ? ` ${data.revokeReason}` : null}
             </p>
           )}
           <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

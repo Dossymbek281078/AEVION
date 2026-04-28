@@ -50,9 +50,21 @@ async function ensureQRightTable() {
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "ownerUserId" TEXT;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokedAt" TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokeReason" TEXT;`);
+  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokeReasonCode" TEXT;`);
 
   ensuredTable = true;
 }
+
+// Closed set — UI is the source of truth. Any unrecognised value is rejected
+// to keep the public revoke ledger machine-readable.
+const REVOKE_REASON_CODES = new Set([
+  "license-conflict",
+  "withdrawn",
+  "dispute",
+  "mistake",
+  "superseded",
+  "other",
+]);
 
 // 🔹 Получить все объекты (или ?mine=1 при Bearer — по ownerUserId, с fallback на старые строки по email)
 qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
@@ -264,7 +276,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
     // legacy QRightObject rows created via POST /objects with no certificate.
     const result = await pool.query(
       `SELECT q.id, q.title, q.kind, q."contentHash", q."ownerName", q.country, q.city,
-              q."createdAt", q."revokedAt", q."revokeReason",
+              q."createdAt", q."revokedAt", q."revokeReason", q."revokeReasonCode",
               c.id AS "certificateId"
        FROM "QRightObject" q
        LEFT JOIN "IPCertificate" c ON c."objectId" = q.id
@@ -291,6 +303,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       createdAt: Date | string;
       revokedAt: Date | string | null;
       revokeReason: string | null;
+      revokeReasonCode: string | null;
       certificateId: string | null;
     };
 
@@ -330,6 +343,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
           : row.revokedAt
         : null,
       revokeReason: row.revokeReason,
+      revokeReasonCode: row.revokeReasonCode,
       certificateId: row.certificateId,
       verifyUrl: row.certificateId
         ? `/verify/${row.certificateId}`
@@ -533,6 +547,14 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
 
     const id = String(req.params.id);
     const reason = String(req.body?.reason || "").slice(0, 500) || null;
+    const reasonCodeRaw = String(req.body?.reasonCode || "").trim();
+    const reasonCode = reasonCodeRaw || null;
+    if (reasonCode && !REVOKE_REASON_CODES.has(reasonCode)) {
+      return res.status(400).json({
+        error: "Unknown reasonCode",
+        allowed: Array.from(REVOKE_REASON_CODES),
+      });
+    }
 
     const owned = await pool.query(
       `SELECT "id", "ownerUserId", "ownerEmail", "revokedAt"
@@ -562,10 +584,10 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
 
     const updated = await pool.query(
       `UPDATE "QRightObject"
-       SET "revokedAt" = NOW(), "revokeReason" = $2
+       SET "revokedAt" = NOW(), "revokeReason" = $2, "revokeReasonCode" = $3
        WHERE "id" = $1
-       RETURNING id, "revokedAt", "revokeReason"`,
-      [id, reason]
+       RETURNING id, "revokedAt", "revokeReason", "revokeReasonCode"`,
+      [id, reason, reasonCode]
     );
 
     res.json({
@@ -573,6 +595,7 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
       status: "revoked",
       revokedAt: updated.rows[0].revokedAt,
       revokeReason: updated.rows[0].revokeReason,
+      revokeReasonCode: updated.rows[0].revokeReasonCode,
     });
   } catch (err: any) {
     res.status(500).json({

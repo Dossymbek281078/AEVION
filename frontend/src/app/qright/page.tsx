@@ -95,6 +95,16 @@ type RightObject = {
   city?: string;
   revokedAt?: string | null;
   revokeReason?: string | null;
+  revokeReasonCode?: string | null;
+};
+
+const REVOKE_REASON_LABELS: Record<string, string> = {
+  "license-conflict": "License conflict",
+  withdrawn: "Withdrawn by author",
+  dispute: "Disputed authorship",
+  mistake: "Registered by mistake",
+  superseded: "Superseded by new version",
+  other: "Other (free text)",
 };
 
 const KIND_OPTIONS = [
@@ -132,6 +142,10 @@ export default function QRightPage() {
   const [registryScope, setRegistryScope] = useState<"all" | "mine">("all");
   const [registryQuery, setRegistryQuery] = useState("");
   const [hasAuth, setHasAuth] = useState(false);
+  const [revokingObj, setRevokingObj] = useState<RightObject | null>(null);
+  const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
+  const [revokeText, setRevokeText] = useState<string>("");
+  const [revokeBusy, setRevokeBusy] = useState(false);
   useEffect(() => {
     try {
       setHasAuth(!!localStorage.getItem(TOKEN_KEY));
@@ -358,24 +372,30 @@ export default function QRightPage() {
     setLoadingItems(false);
   };
 
-  const revokeObject = async (obj: RightObject) => {
-    if (typeof window === "undefined") return;
-    const reason = window.prompt(
-      `Revoke "${obj.title}"?\n\nThis is public — embeds and badges flip to red. The record is kept for transparency.\n\nOptional reason:`,
-      ""
-    );
-    if (reason === null) return;
+  const startRevoke = (obj: RightObject) => {
+    setRevokingObj(obj);
+    setRevokeCode("withdrawn");
+    setRevokeText("");
+  };
+
+  const submitRevoke = async () => {
+    if (!revokingObj) return;
+    setRevokeBusy(true);
     try {
       const res = await fetch(
-        apiUrl(`/api/qright/revoke/${encodeURIComponent(obj.id)}`),
+        apiUrl(`/api/qright/revoke/${encodeURIComponent(revokingObj.id)}`),
         {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({ reason: reason || undefined }),
+          body: JSON.stringify({
+            reasonCode: revokeCode,
+            reason: revokeText.trim() || undefined,
+          }),
         }
       );
       if (res.ok) {
-        showToast("Revoked. Embeds will flip red within ~5 min cache window.", "success");
+        showToast("Revoked. Embeds flip red within ~5 min.", "success");
+        setRevokingObj(null);
         await loadRegistry();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -383,6 +403,8 @@ export default function QRightPage() {
       }
     } catch (e) {
       showToast(`Revoke failed: ${(e as Error).message}`, "error");
+    } finally {
+      setRevokeBusy(false);
     }
   };
 
@@ -1003,9 +1025,12 @@ export default function QRightPage() {
                         </span>
                       </div>
                       <div style={{ marginTop: 6, fontSize: 12, color: "#475569" }}>{x.description.slice(0, 120)}{x.description.length > 120 ? "..." : ""}</div>
-                      {isRevoked && x.revokeReason && (
+                      {isRevoked && (x.revokeReasonCode || x.revokeReason) && (
                         <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "rgba(220,38,38,0.06)", fontSize: 11, color: "#7f1d1d" }}>
-                          Revoked: {x.revokeReason}
+                          {x.revokeReasonCode && (
+                            <strong style={{ marginRight: 6 }}>{REVOKE_REASON_LABELS[x.revokeReasonCode] || x.revokeReasonCode}:</strong>
+                          )}
+                          {x.revokeReason || (x.revokeReasonCode ? "no further detail" : "")}
                         </div>
                       )}
                       <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "#f8fafc", fontSize: 10, fontFamily: "monospace", color: "#64748b", wordBreak: "break-all" }}>
@@ -1033,7 +1058,7 @@ export default function QRightPage() {
                         </Link>
                         {showRevokeBtn && (
                           <button
-                            onClick={() => revokeObject(x)}
+                            onClick={() => startRevoke(x)}
                             style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "transparent", padding: "4px 10px", border: "1px solid rgba(220,38,38,0.4)", borderRadius: 6, cursor: "pointer" }}
                             title="Mark as revoked — embeds and badges flip red"
                           >
@@ -1050,6 +1075,68 @@ export default function QRightPage() {
           )}
         </div>
       </ProductPageShell>
+
+      {revokingObj && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setRevokingObj(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}
+        >
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 480, boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 4 }}>
+              Revoke registration
+            </div>
+            <div style={{ fontSize: 13, color: "#475569", marginBottom: 16 }}>
+              <strong>{revokingObj.title}</strong>
+              <br />
+              This is public — embeds and badges flip red. The record stays for transparency.
+            </div>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+              Reason
+            </label>
+            <select
+              value={revokeCode}
+              onChange={(e) => setRevokeCode(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, color: "#0f172a", background: "#fff", marginBottom: 12 }}
+            >
+              {Object.entries(REVOKE_REASON_LABELS).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+              Optional details (public, ≤ 500 chars)
+            </label>
+            <textarea
+              value={revokeText}
+              onChange={(e) => setRevokeText(e.target.value.slice(0, 500))}
+              rows={3}
+              placeholder="Visible on the public revocation banner."
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, color: "#0f172a", background: "#fff", marginBottom: 16, resize: "vertical", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setRevokingObj(null)}
+                disabled={revokeBusy}
+                style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontWeight: 700, fontSize: 13, cursor: revokeBusy ? "not-allowed" : "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRevoke}
+                disabled={revokeBusy}
+                style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 13, cursor: revokeBusy ? "not-allowed" : "pointer", opacity: revokeBusy ? 0.7 : 1 }}
+              >
+                {revokeBusy ? "Revoking…" : "Revoke"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 
@@ -97,7 +97,34 @@ const faqs: FAQ[] = [
 export default function HelpPage() {
   const [open, setOpen] = useState<number | null>(null);
   const [category, setCategory] = useState<FaqCategory>("users");
-  const activeFaqs = category === "investors" ? investorFaqs : faqs;
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const initial = new URLSearchParams(window.location.search).get("q") || "";
+    if (initial) {
+      setQuery(initial);
+      const lower = initial.toLowerCase();
+      const inUsers = faqs.some((f) => (f.q + " " + f.a).toLowerCase().includes(lower));
+      const inInvestors = investorFaqs.some((f) => (f.q + " " + f.a).toLowerCase().includes(lower));
+      if (!inUsers && inInvestors) setCategory("investors");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (query) url.searchParams.set("q", query);
+    else url.searchParams.delete("q");
+    window.history.replaceState({}, "", url.toString());
+  }, [query]);
+
+  const baseFaqs = category === "investors" ? investorFaqs : faqs;
+  const activeFaqs = useMemo(() => {
+    if (!query.trim()) return baseFaqs;
+    const lower = query.trim().toLowerCase();
+    return baseFaqs.filter((f) => (f.q + " " + f.a).toLowerCase().includes(lower));
+  }, [baseFaqs, query]);
 
   return (
     <main>
@@ -154,6 +181,31 @@ export default function HelpPage() {
               <div style={{ fontSize: 12, color: "#94a3b8" }}>{item.desc}</div>
             </Link>
           ))}
+        </div>
+
+        {/* FAQ search */}
+        <div style={{ marginBottom: 16, position: "relative" }}>
+          <label htmlFor="help-search" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
+            Search FAQ
+          </label>
+          <input
+            id="help-search"
+            type="search"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setOpen(null); }}
+            placeholder="Search FAQ — try 'AEC', 'royalties', 'IP', 'moat'…"
+            style={{
+              width: "100%",
+              padding: "12px 16px",
+              borderRadius: 12,
+              border: "1px solid rgba(15,23,42,0.15)",
+              fontSize: 14,
+              fontWeight: 600,
+              outline: "none",
+              background: "#fff",
+              boxSizing: "border-box",
+            }}
+          />
         </div>
 
         {/* FAQ */}
@@ -218,6 +270,25 @@ export default function HelpPage() {
             </Link>
             .
           </p>
+        ) : null}
+        {activeFaqs.length === 0 ? (
+          <div
+            style={{
+              padding: "20px 16px",
+              border: "1px dashed rgba(15,23,42,0.2)",
+              borderRadius: 12,
+              fontSize: 14,
+              color: "#475569",
+              textAlign: "center",
+            }}
+          >
+            No matches for &quot;{query}&quot; in {category === "investors" ? "investor" : "user"} FAQ.
+            Try the other tab or email us at{" "}
+            <a href="mailto:yahiin1978@gmail.com" style={{ color: "#0d9488", fontWeight: 700 }}>
+              yahiin1978@gmail.com
+            </a>
+            .
+          </div>
         ) : null}
         <div style={{ display: "grid", gap: 8 }}>
           {activeFaqs.map((faq, i) => (

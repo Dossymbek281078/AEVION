@@ -337,7 +337,7 @@ const refineLimiter = rateLimit({
 qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const run = await getRun(req.params.id);
+    const run = await getRun(String(req.params.id));
     if (!run) return res.status(404).json({ error: "run not found" });
     const session = await getSession(run.sessionId, auth?.sub ?? null);
     if (!session) return res.status(403).json({ error: "forbidden" });

@@ -814,6 +814,9 @@ export default function AEVPage() {
         {/* ═══ FUTURE ENGINES — proposals + voting ═════════════════ */}
         <FutureEngines />
 
+        {/* ═══ DATA MANAGEMENT — backup / restore / reset ══════════ */}
+        <DataManagementPanel />
+
         {/* ═══ FOOTER LINKS ════════════════════════════════════════ */}
         <div style={{
           padding: 14, borderRadius: 10,
@@ -2828,5 +2831,187 @@ function ActivityRow({ ev }: { ev: MiningEvent }) {
       <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: 800, color }}>{sign}{ev.amount.toFixed(4)} AEV</span>
       <span style={{ fontSize: 11, color: "#94a3b8" }}>{ago}</span>
     </div>
+  );
+}
+
+// ─── Data management — backup / restore / reset ─────────────────
+// Production-критичный QoL: юзер может выгрузить все state ключи как
+// JSON файл (backup) или загрузить обратно (restore на новом устройстве).
+// Reset очищает все aevion_* ключи с явным confirm.
+const BACKUP_KEYS = [
+  "aevion_aev_wallet_v1",
+  "aevion_aev_pins_v1",
+  "aevion_aev_network_v1",
+  "aevion_aev_mentorship_v1",
+  "aevion_aev_insight_v1",
+  "aevion_aev_proposal_votes_v1",
+  "aevion_aev_custom_proposals_v1",
+  "aevion_aev_marketplace_owned_v1",
+  "aevion_aev_marketplace_boosts_v1",
+  "aevion_aev_quests_claimed_v1",
+  "aevion_aev_active_theme_v1",
+  "aevion_aev_custom_quote_v1",
+  "aevion_qtrade_pairs_v1",
+  "aevion_qtrade_positions_v1",
+  "aevion_qtrade_limits_v1",
+  "aevion_qtrade_closed_v1",
+  "aevion_qtrade_alerts_v1",
+  "aevion_qtrade_bots_v1",
+  "aevion_qtrade_grid_bots_v1",
+  "aevion_qtrade_watchlist_v1",
+  "aevion_qtrade_watch_only_v1",
+  "aevion_qtrade_active_pair_v1",
+  "aevion_qtrade_chart_tf_v1",
+];
+
+function DataManagementPanel() {
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const flash = (kind: "ok" | "err", text: string) => {
+    setMsg({ kind, text });
+    setTimeout(() => setMsg(null), 3500);
+  };
+
+  const exportData = () => {
+    try {
+      const payload: Record<string, unknown> = {
+        v: 1,
+        exportedAt: new Date().toISOString(),
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+      };
+      for (const key of BACKUP_KEYS) {
+        const raw = localStorage.getItem(key);
+        if (raw !== null) {
+          try { payload[key] = JSON.parse(raw); }
+          catch { payload[key] = raw; }
+        }
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      a.download = `aevion-backup-${stamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flash("ok", "✓ Backup сохранён · все state-ключи в JSON");
+    } catch (e) {
+      flash("err", "Ошибка export: " + (e instanceof Error ? e.message : "unknown"));
+    }
+  };
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const payload = JSON.parse(String(reader.result));
+        if (!payload || typeof payload !== "object" || payload.v !== 1) {
+          flash("err", "Неверный формат backup (требуется v:1)");
+          return;
+        }
+        let restored = 0;
+        for (const key of BACKUP_KEYS) {
+          if (key in payload) {
+            const value = payload[key];
+            try {
+              localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+              restored += 1;
+            } catch {}
+          }
+        }
+        flash("ok", `✓ Восстановлено ${restored} ключей. Перезагрузи страницу для применения.`);
+      } catch (err) {
+        flash("err", "Ошибка import: " + (err instanceof Error ? err.message : "unknown"));
+      }
+    };
+    reader.onerror = () => flash("err", "Ошибка чтения файла");
+    reader.readAsText(file);
+    // Reset input so same file can be picked again
+    e.target.value = "";
+  };
+
+  const resetAll = () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      setTimeout(() => setConfirmReset(false), 5000);
+      return;
+    }
+    try {
+      let cleared = 0;
+      for (const key of BACKUP_KEYS) {
+        if (localStorage.getItem(key) !== null) {
+          localStorage.removeItem(key);
+          cleared += 1;
+        }
+      }
+      flash("ok", `✓ Очищено ${cleared} ключей. Перезагрузи страницу.`);
+      setConfirmReset(false);
+    } catch (err) {
+      flash("err", "Ошибка reset: " + (err instanceof Error ? err.message : "unknown"));
+    }
+  };
+
+  return (
+    <section style={{
+      padding: 14, borderRadius: 10,
+      background: "linear-gradient(135deg, #18181b 0%, #27272a 100%)",
+      color: "#fff", marginBottom: 14,
+      border: "1px solid #3f3f46",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.20)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: 16 }}>💾</span>
+        <h2 style={{ fontSize: 14, fontWeight: 900, margin: 0 }}>Data management</h2>
+        <span style={{ fontSize: 10, color: "#a1a1aa", marginLeft: "auto" as const }}>
+          backup / restore / reset · {BACKUP_KEYS.length} state-ключей
+        </span>
+      </div>
+      {msg && (
+        <div style={{
+          padding: "7px 12px", borderRadius: 6, marginBottom: 10,
+          background: msg.kind === "ok" ? "rgba(134,239,172,0.15)" : "rgba(252,165,165,0.15)",
+          border: `1px solid ${msg.kind === "ok" ? "rgba(134,239,172,0.40)" : "rgba(252,165,165,0.40)"}`,
+          color: msg.kind === "ok" ? "#86efac" : "#fca5a5",
+          fontSize: 12, fontWeight: 700,
+        }}>{msg.text}</div>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" as const }}>
+        <button onClick={exportData}
+          style={{
+            padding: "7px 14px", borderRadius: 5, border: "none",
+            background: "linear-gradient(135deg, #22d3ee, #06b6d4)", color: "#fff",
+            fontSize: 12, fontWeight: 800, cursor: "pointer", letterSpacing: 0.3,
+            boxShadow: "0 2px 6px rgba(6,182,212,0.30)",
+          }}>
+          ⬇ Export backup
+        </button>
+        <label style={{
+          padding: "7px 14px", borderRadius: 5, border: "1px solid #71717a",
+          background: "rgba(255,255,255,0.05)", color: "#e4e4e7",
+          fontSize: 12, fontWeight: 800, cursor: "pointer", letterSpacing: 0.3,
+        }}>
+          ⬆ Import backup
+          <input type="file" accept="application/json,.json" onChange={importData}
+            style={{ display: "none" }} />
+        </label>
+        <button onClick={resetAll}
+          style={{
+            padding: "7px 14px", borderRadius: 5,
+            border: confirmReset ? "1px solid #fca5a5" : "1px solid #71717a",
+            background: confirmReset ? "rgba(252,165,165,0.20)" : "rgba(255,255,255,0.05)",
+            color: confirmReset ? "#fca5a5" : "#a1a1aa",
+            fontSize: 12, fontWeight: 800, cursor: "pointer", letterSpacing: 0.3, marginLeft: "auto" as const,
+          }}>
+          {confirmReset ? "⚠ Точно? нажми ещё раз" : "🗑 Reset all data"}
+        </button>
+      </div>
+      <div style={{ fontSize: 10, color: "#71717a", marginTop: 8, lineHeight: 1.5 }}>
+        Backup сохраняет JSON со всеми wallet/pins/network/mentorship/insight/positions/bots/etc.
+        Import пишет в localStorage — после перезагрузки данные применяются. Reset с двойным подтверждением (5s window).
+      </div>
+    </section>
   );
 }

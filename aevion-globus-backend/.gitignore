@@ -10,5 +10,8 @@ data/leads.jsonl
 data/events.jsonl
 data/newsletter.jsonl
 data/subscriptions.jsonl
+data/affiliate.jsonl
+data/partners.jsonl
+data/edu.jsonl
 
 /src/generated/prisma

@@ -23,7 +23,10 @@ export type EventType =
   | "tier_view"
   | "industry_view"
   | "faq_open"
-  | "comparison_view";
+  | "comparison_view"
+  | "affiliate_apply"
+  | "partner_apply"
+  | "edu_apply";
 
 export interface TrackPayload {
   type: EventType;

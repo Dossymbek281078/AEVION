@@ -540,6 +540,196 @@ pricingRouter.get("/newsletter/count", (_req, res) => {
   }
 });
 
+/* ===========================
+ * Affiliate / Partner programs
+ * Хранение: data/affiliate.jsonl, data/partners.jsonl, data/edu.jsonl
+ * =========================== */
+
+const AFFILIATE_FILE = process.env.AFFILIATE_FILE
+  ? process.env.AFFILIATE_FILE
+  : join(process.cwd(), "data", "affiliate.jsonl");
+
+const PARTNERS_FILE = process.env.PARTNERS_FILE
+  ? process.env.PARTNERS_FILE
+  : join(process.cwd(), "data", "partners.jsonl");
+
+const EDU_FILE = process.env.EDU_FILE
+  ? process.env.EDU_FILE
+  : join(process.cwd(), "data", "edu.jsonl");
+
+const PROGRAM_RATE = new Map<string, { count: number; reset: number }>();
+function programRateLimited(ip: string, kind: string): boolean {
+  const key = `${kind}:${ip}`;
+  const now = Date.now();
+  const cur = PROGRAM_RATE.get(key);
+  if (!cur || cur.reset < now) {
+    PROGRAM_RATE.set(key, { count: 1, reset: now + 10 * 60 * 1000 });
+    return false;
+  }
+  if (cur.count >= 3) return true;
+  cur.count += 1;
+  return false;
+}
+
+interface ProgramApplication {
+  id: string;
+  ts: string;
+  kind: "affiliate" | "partner" | "edu";
+  name: string;
+  email: string;
+  organization?: string;
+  country?: string;
+  details?: string;
+  ip: string;
+  /** affiliate-only: предполагаемый канал привлечения */
+  channel?: string;
+  /** partner-only: тип партнёра */
+  partnerType?: "reseller" | "system_integrator" | "agency";
+  /** edu-only: домен .edu / название университета */
+  institutionDomain?: string;
+}
+
+function persistApplication(file: string, app: ProgramApplication) {
+  const dir = dirname(file);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  appendFileSync(file, JSON.stringify(app) + "\n", "utf8");
+}
+
+/**
+ * POST /api/pricing/affiliate/apply
+ * Body: { name, email, organization?, country?, channel?, details? }
+ * Заявка на участие в реферальной программе AEVION (20% recurring lifetime).
+ */
+pricingRouter.post("/affiliate/apply", (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (programRateLimited(ip, "affiliate")) {
+    return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+  }
+  const body = req.body ?? {};
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  const organization = typeof body.organization === "string" ? body.organization.trim().slice(0, 200) : undefined;
+  const country = typeof body.country === "string" ? body.country.trim().slice(0, 100) : undefined;
+  const channel = typeof body.channel === "string" ? body.channel.trim().slice(0, 200) : undefined;
+  const details = typeof body.details === "string" ? body.details.trim().slice(0, 2000) : undefined;
+
+  if (!name || name.length < 2) return res.status(400).json({ error: "invalid_name" });
+  if (!email || !isValidEmail(email)) return res.status(400).json({ error: "invalid_email" });
+
+  const app: ProgramApplication = {
+    id: `aff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    kind: "affiliate",
+    name,
+    email,
+    organization,
+    country,
+    channel,
+    details,
+    ip,
+  };
+
+  try {
+    persistApplication(AFFILIATE_FILE, app);
+  } catch (e) {
+    console.error("[affiliate/apply] write failed", e);
+    return res.status(500).json({ error: "storage_error" });
+  }
+
+  res.status(201).json({ ok: true, id: app.id });
+});
+
+/**
+ * POST /api/pricing/partners/apply
+ * Body: { name, email, organization, country, partnerType, details? }
+ */
+pricingRouter.post("/partners/apply", (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (programRateLimited(ip, "partners")) {
+    return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+  }
+  const body = req.body ?? {};
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  const organization = typeof body.organization === "string" ? body.organization.trim().slice(0, 200) : "";
+  const country = typeof body.country === "string" ? body.country.trim().slice(0, 100) : undefined;
+  const partnerType = ["reseller", "system_integrator", "agency"].includes(body.partnerType)
+    ? body.partnerType
+    : undefined;
+  const details = typeof body.details === "string" ? body.details.trim().slice(0, 2000) : undefined;
+
+  if (!name || name.length < 2) return res.status(400).json({ error: "invalid_name" });
+  if (!email || !isValidEmail(email)) return res.status(400).json({ error: "invalid_email" });
+  if (!organization) return res.status(400).json({ error: "invalid_organization" });
+  if (!partnerType) return res.status(400).json({ error: "invalid_partner_type" });
+
+  const app: ProgramApplication = {
+    id: `prt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    kind: "partner",
+    name,
+    email,
+    organization,
+    country,
+    partnerType,
+    details,
+    ip,
+  };
+
+  try {
+    persistApplication(PARTNERS_FILE, app);
+  } catch (e) {
+    console.error("[partners/apply] write failed", e);
+    return res.status(500).json({ error: "storage_error" });
+  }
+
+  res.status(201).json({ ok: true, id: app.id });
+});
+
+/**
+ * POST /api/pricing/edu/apply
+ * Body: { name, email, organization, institutionDomain, country?, details? }
+ */
+pricingRouter.post("/edu/apply", (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (programRateLimited(ip, "edu")) {
+    return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+  }
+  const body = req.body ?? {};
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  const organization = typeof body.organization === "string" ? body.organization.trim().slice(0, 200) : "";
+  const institutionDomain = typeof body.institutionDomain === "string" ? body.institutionDomain.trim().toLowerCase().slice(0, 200) : "";
+  const country = typeof body.country === "string" ? body.country.trim().slice(0, 100) : undefined;
+  const details = typeof body.details === "string" ? body.details.trim().slice(0, 2000) : undefined;
+
+  if (!name || name.length < 2) return res.status(400).json({ error: "invalid_name" });
+  if (!email || !isValidEmail(email)) return res.status(400).json({ error: "invalid_email" });
+  if (!organization) return res.status(400).json({ error: "invalid_organization" });
+
+  const app: ProgramApplication = {
+    id: `edu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    kind: "edu",
+    name,
+    email,
+    organization,
+    country,
+    institutionDomain,
+    details,
+    ip,
+  };
+
+  try {
+    persistApplication(EDU_FILE, app);
+  } catch (e) {
+    console.error("[edu/apply] write failed", e);
+    return res.status(500).json({ error: "storage_error" });
+  }
+
+  res.status(201).json({ ok: true, id: app.id });
+});
+
 /**
  * GET /api/pricing/healthz
  * Sanity-check для CI/мониторинга.

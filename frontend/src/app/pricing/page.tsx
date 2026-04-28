@@ -1926,6 +1926,12 @@ export default function PricingPage() {
           >
             API pricing →
           </Link>
+          <Link
+            href="/pricing/affiliate"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Реферальная программа →
+          </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json

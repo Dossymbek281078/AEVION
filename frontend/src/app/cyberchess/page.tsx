@@ -587,6 +587,13 @@ export default function CyberChessPage(){
       window.speechSynthesis.speak(utt);
     }catch{}
   },[masterVoice,masterCurrent,masterPly,showMasters]);
+  // Stop master TTS as soon as the modal closes — otherwise queued utterances keep talking.
+  useEffect(()=>{
+    if(showMasters)return;
+    if(typeof window==="undefined"||!window.speechSynthesis)return;
+    try{window.speechSynthesis.cancel()}catch{}
+    lastSpokenPlyRef.current="";
+  },[showMasters]);
   // Opening Explorer (killer #18)
   const[showOpeningExp,sShowOpeningExp]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_opening_exp_v1")==="1"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("aevion_opening_exp_v1",showOpeningExp?"1":"0")}catch{}},[showOpeningExp]);

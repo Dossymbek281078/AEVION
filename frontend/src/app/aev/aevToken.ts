@@ -928,6 +928,116 @@ export function buyAev(w: AEVWallet, amount: number, atPrice: number): AEVWallet
   });
 }
 
+// ─── Quests / Achievements ────────────────────────────────────────
+// Cross-module milestone tracking. Quest progress вычисляется из QuestSnapshot —
+// агрегированного состояния всех движков. Reward minted при claim.
+
+const QUESTS_CLAIMED_KEY = "aevion_aev_quests_claimed_v1";
+
+export type QuestSnapshot = {
+  walletBalance: number;
+  walletLifetimeMined: number;
+  walletLifetimeSpent: number;
+  walletDividendsClaimed: number;
+  pinsCount: number;
+  pinsUpvotes: number;
+  studentsCount: number;
+  studentsMilestones: number;
+  invitedCount: number;
+  insightQuestions: number;
+  insightHits: number;
+  streakCurrent: number;
+  streakLongest: number;
+  totalStaked: number;
+  closedWinningCount: number;
+  closedTotalCount: number;
+  computeUnits: number;
+  marketplaceOwned: number;
+  modesActive: number;        // сколько mining-modes включено
+};
+
+export type Quest = {
+  id: string;
+  emoji: string;
+  title: string;
+  desc: string;
+  reward: number;
+  target: (s: QuestSnapshot) => number;
+  progress: (s: QuestSnapshot) => number;
+  category: "play" | "stewardship" | "social" | "trading" | "compute" | "milestone";
+};
+
+export const QUESTS: Quest[] = [
+  // Play / mining
+  { id: "first_mint",      emoji: "🌱", title: "Первый AEV",        desc: "Намайни хотя бы 0.01 AEV любым способом.", reward: 0.5,  category: "play",        target: () => 0.01, progress: (s) => Math.min(s.walletLifetimeMined, 0.01) },
+  { id: "hundred_strong",  emoji: "💯", title: "Hundred Strong",    desc: "Накопи 100 AEV (lifetime mined).",          reward: 5,    category: "milestone",   target: () => 100,  progress: (s) => Math.min(s.walletLifetimeMined, 100) },
+  { id: "whale",           emoji: "🐳", title: "Whale",             desc: "Накопи 500 AEV (lifetime mined).",          reward: 25,   category: "milestone",   target: () => 500,  progress: (s) => Math.min(s.walletLifetimeMined, 500) },
+  { id: "all_engines",     emoji: "🌟", title: "All Engines On",    desc: "Включи все 3 mining-mode (Play/Compute/Stewardship).", reward: 2, category: "play", target: () => 3, progress: (s) => Math.min(s.modesActive, 3) },
+
+  // Curation / social
+  { id: "curator",         emoji: "📌", title: "Curator",            desc: "Запинни 5 items в Curation Wall.",          reward: 1.5,  category: "social",      target: () => 5,    progress: (s) => Math.min(s.pinsCount, 5) },
+  { id: "curator_loved",   emoji: "❤", title: "Loved Curator",      desc: "Получи 10 upvotes на свои pins.",            reward: 2.5,  category: "social",      target: () => 10,   progress: (s) => Math.min(s.pinsUpvotes, 10) },
+  { id: "mentor",          emoji: "🎓", title: "Mentor",             desc: "Зарегистрируй 3 students в Mentorship.",     reward: 1.5,  category: "social",      target: () => 3,    progress: (s) => Math.min(s.studentsCount, 3) },
+  { id: "mentor_progress", emoji: "📈", title: "Master Teacher",     desc: "Студенты пройдут 10 milestones совокупно.",  reward: 5,    category: "social",      target: () => 10,   progress: (s) => Math.min(s.studentsMilestones, 10) },
+  { id: "networker",       emoji: "🌐", title: "Networker",          desc: "Пригласи 3 users через свой code.",          reward: 1,    category: "social",      target: () => 3,    progress: (s) => Math.min(s.invitedCount, 3) },
+
+  // Insight / Streak
+  { id: "insight_sage",    emoji: "💡", title: "Insight Sage",       desc: "Получи 10 cache-hits на свои вопросы.",      reward: 2,    category: "play",        target: () => 10,   progress: (s) => Math.min(s.insightHits, 10) },
+  { id: "streaker_7",      emoji: "🔥", title: "Week Warrior",       desc: "Достигни 7-дневного streak'а.",              reward: 3,    category: "play",        target: () => 7,    progress: (s) => Math.min(s.streakCurrent, 7) },
+  { id: "streaker_30",     emoji: "🚀", title: "Month Champion",     desc: "Streak в 30 дней — настоящий ритм.",         reward: 15,   category: "milestone",   target: () => 30,   progress: (s) => Math.min(s.streakLongest, 30) },
+
+  // Stewardship
+  { id: "stewart",         emoji: "🛡", title: "Stewart",            desc: "Застейкай 10 AEV в Stewardship.",           reward: 1.5,  category: "stewardship", target: () => 10,   progress: (s) => Math.min(s.totalStaked, 10) },
+  { id: "patient",         emoji: "⏳", title: "Patient Steward",    desc: "Получи 1 AEV из dividend'ов суммарно.",      reward: 2,    category: "stewardship", target: () => 1,    progress: (s) => Math.min(s.walletDividendsClaimed, 1) },
+
+  // Trading
+  { id: "trader_5",        emoji: "📈", title: "Trader",             desc: "Закрой 5 прибыльных позиций в QTrade.",      reward: 2,    category: "trading",     target: () => 5,    progress: (s) => Math.min(s.closedWinningCount, 5) },
+  { id: "trader_20",       emoji: "💎", title: "Veteran Trader",     desc: "Закрой 20 сделок (любых) в QTrade.",         reward: 4,    category: "trading",     target: () => 20,   progress: (s) => Math.min(s.closedTotalCount, 20) },
+
+  // Compute
+  { id: "compute_100",     emoji: "🧠", title: "Compute Lord",       desc: "Выполни 100 compute-юнитов.",                reward: 1.5,  category: "compute",     target: () => 100,  progress: (s) => Math.min(s.computeUnits, 100) },
+
+  // Spend cycle
+  { id: "spender",         emoji: "🛒", title: "Spender",            desc: "Потрать 20 AEV в Marketplace или продав.",   reward: 2,    category: "milestone",   target: () => 20,   progress: (s) => Math.min(s.walletLifetimeSpent, 20) },
+  { id: "collector",       emoji: "🏆", title: "Collector",          desc: "Купи 5 items в Marketplace.",                reward: 3,    category: "milestone",   target: () => 5,    progress: (s) => Math.min(s.marketplaceOwned, 5) },
+];
+
+export function ldClaimedQuests(): string[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(QUESTS_CLAIMED_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as string[] : [];
+  } catch { return [] }
+}
+
+export function svClaimedQuests(c: string[]) {
+  try { localStorage.setItem(QUESTS_CLAIMED_KEY, JSON.stringify(c)) } catch {}
+}
+
+export function isQuestComplete(q: Quest, snap: QuestSnapshot): boolean {
+  return q.progress(snap) >= q.target(snap);
+}
+
+export function claimQuest(
+  w: AEVWallet,
+  claimed: string[],
+  questId: string,
+  snap: QuestSnapshot,
+): { wallet: AEVWallet; claimed: string[] } | { error: string } {
+  if (claimed.includes(questId)) return { error: "Уже заклеймлено" };
+  const q = QUESTS.find((x) => x.id === questId);
+  if (!q) return { error: "Quest не найден" };
+  if (!isQuestComplete(q, snap)) return { error: "Цель ещё не достигнута" };
+  const next = mint(
+    w,
+    q.reward,
+    { kind: "play", module: "qcoreai", action: "quest_complete" },
+    `🏆 Quest: ${q.title}`,
+  );
+  return { wallet: next, claimed: [...claimed, questId] };
+}
+
 // ─── Marketplace ──────────────────────────────────────────────────
 // Закрывает петлю эмиссии: AEV mint → AEV spend на cosmetic / utility
 // items. Owned items persist отдельно от wallet'а — они unlock'ают

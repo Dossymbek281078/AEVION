@@ -22,12 +22,14 @@ import {
   questionsToday, INSIGHT, TOPIC_META,
   ldOwned, svOwned, ldBoosts, svBoosts, purchaseItem, isBoostActive, getBoostExpiry,
   countSlotItems, MARKETPLACE,
+  ldClaimedQuests, svClaimedQuests, isQuestComplete, claimQuest, QUESTS,
   type AEVWallet, type EmissionMode, type PlayAction, type PlayModule, type MiningEvent,
   type PinnedItem, type PinKind,
   type NetworkState,
   type MentorshipState,
   type InsightState, type InsightTopic,
   type ActiveBoost, type MarketplaceItem, type ItemCategory,
+  type Quest, type QuestSnapshot,
 } from "./aevToken";
 
 const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: string; color: string; desc: string }> = {
@@ -64,6 +66,8 @@ export default function AEVPage() {
   const [owned, setOwned] = useState<string[]>([]);
   const [boosts, setBoosts] = useState<ActiveBoost[]>([]);
   const [marketMsg, setMarketMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [claimedQuests, setClaimedQuests] = useState<string[]>([]);
+  const [questMsg, setQuestMsg] = useState<{ id: string; reward: number } | null>(null);
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
@@ -73,6 +77,7 @@ export default function AEVPage() {
     setInsight(ldInsight());
     setOwned(ldOwned());
     setBoosts(ldBoosts());
+    setClaimedQuests(ldClaimedQuests());
     // Auto-claim daily streak on mount if eligible
     const updated = recordDailyVisit(w);
     if (updated) {
@@ -94,6 +99,7 @@ export default function AEVPage() {
   useEffect(() => { if (insight) svInsight(insight) }, [insight]);
   useEffect(() => { svOwned(owned) }, [owned]);
   useEffect(() => { svBoosts(boosts) }, [boosts]);
+  useEffect(() => { svClaimedQuests(claimedQuests) }, [claimedQuests]);
 
   // Boost expiry tick — drop expired boosts каждые 30s
   useEffect(() => {
@@ -690,6 +696,24 @@ export default function AEVPage() {
         {insight && (
           <InsightPanel wallet={wallet} setWallet={setWallet} insight={insight} setInsight={setInsight} />
         )}
+
+        {/* ═══ QUESTS / ACHIEVEMENTS — cross-module milestone loop ══ */}
+        <QuestsPanel
+          wallet={wallet}
+          setWallet={setWallet}
+          claimed={claimedQuests}
+          setClaimed={setClaimedQuests}
+          pinsCount={pins?.length ?? 0}
+          pinsUpvotes={(pins ?? []).reduce((s, p) => s + p.upvotes, 0)}
+          studentsCount={mentorship?.students.length ?? 0}
+          studentsMilestones={(mentorship?.students ?? []).reduce((s, st) => s + st.passedMilestones.length, 0)}
+          invitedCount={network?.invited.length ?? 0}
+          insightQuestions={insight?.questions.length ?? 0}
+          insightHits={insight?.totalHits ?? 0}
+          marketplaceOwned={owned.length}
+          questMsg={questMsg}
+          setQuestMsg={setQuestMsg}
+        />
 
         {/* ═══ AEV MARKETPLACE — spend цикл ═════════════════════════ */}
         <MarketplacePanel
@@ -1951,6 +1975,260 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+// ─── Quests / Achievements panel ──────────────────────────────────
+const QUEST_CAT_META: Record<Quest["category"], { color: string; label: string }> = {
+  play:        { color: "#22c55e", label: "Play" },
+  stewardship: { color: "#f59e0b", label: "Steward" },
+  social:      { color: "#06b6d4", label: "Social" },
+  trading:     { color: "#3b82f6", label: "Trade" },
+  compute:     { color: "#8b5cf6", label: "Compute" },
+  milestone:   { color: "#eab308", label: "Milestone" },
+};
+
+function QuestsPanel({
+  wallet, setWallet, claimed, setClaimed,
+  pinsCount, pinsUpvotes, studentsCount, studentsMilestones,
+  invitedCount, insightQuestions, insightHits, marketplaceOwned,
+  questMsg, setQuestMsg,
+}: {
+  wallet: AEVWallet;
+  setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
+  claimed: string[];
+  setClaimed: React.Dispatch<React.SetStateAction<string[]>>;
+  pinsCount: number;
+  pinsUpvotes: number;
+  studentsCount: number;
+  studentsMilestones: number;
+  invitedCount: number;
+  insightQuestions: number;
+  insightHits: number;
+  marketplaceOwned: number;
+  questMsg: { id: string; reward: number } | null;
+  setQuestMsg: React.Dispatch<React.SetStateAction<{ id: string; reward: number } | null>>;
+}) {
+  // Build snapshot: collect cross-module state. closedPositions читаем напрямую
+  // из localStorage (QTrade владеет ключом aevion_qtrade_closed_v1).
+  const snapshot: QuestSnapshot = (() => {
+    let closedWinningCount = 0;
+    let closedTotalCount = 0;
+    try {
+      if (typeof window !== "undefined") {
+        const s = localStorage.getItem("aevion_qtrade_closed_v1");
+        if (s) {
+          const arr = JSON.parse(s);
+          if (Array.isArray(arr)) {
+            closedTotalCount = arr.length;
+            closedWinningCount = arr.filter((c: { realizedPnl?: number }) => (c.realizedPnl ?? 0) > 0).length;
+          }
+        }
+      }
+    } catch {}
+    const computeUnits = wallet.recent
+      .filter((e) => e.source.kind === "compute")
+      .reduce((s, e) => s + (e.source.kind === "compute" ? e.source.units : 0), 0);
+    const totalStakedAmt = wallet.stake.reduce((s, x) => s + x.amount, 0);
+    const modesActive = (wallet.modes.play ? 1 : 0) + (wallet.modes.compute ? 1 : 0) + (wallet.modes.stewardship ? 1 : 0);
+    return {
+      walletBalance: wallet.balance,
+      walletLifetimeMined: wallet.lifetimeMined,
+      walletLifetimeSpent: wallet.lifetimeSpent,
+      walletDividendsClaimed: wallet.dividendsClaimed,
+      pinsCount, pinsUpvotes,
+      studentsCount, studentsMilestones,
+      invitedCount,
+      insightQuestions, insightHits,
+      streakCurrent: wallet.streak?.current ?? 0,
+      streakLongest: wallet.streak?.longest ?? 0,
+      totalStaked: totalStakedAmt,
+      closedWinningCount, closedTotalCount,
+      computeUnits,
+      marketplaceOwned,
+      modesActive,
+    };
+  })();
+
+  const claim = (q: Quest) => {
+    const result = claimQuest(wallet, claimed, q.id, snapshot);
+    if ("error" in result) return;
+    setWallet(result.wallet);
+    setClaimed(result.claimed);
+    setQuestMsg({ id: q.id, reward: q.reward });
+    setTimeout(() => setQuestMsg(null), 4000);
+  };
+
+  const completedCount = QUESTS.filter((q) => isQuestComplete(q, snapshot)).length;
+  const claimedCount = claimed.length;
+  const pendingCount = QUESTS.filter((q) => isQuestComplete(q, snapshot) && !claimed.includes(q.id)).length;
+  const totalReward = QUESTS.reduce((s, q) => s + q.reward, 0);
+  const claimedReward = claimed.reduce((s, id) => {
+    const q = QUESTS.find((x) => x.id === id);
+    return s + (q?.reward ?? 0);
+  }, 0);
+
+  // Sort: completed-not-claimed first, then in-progress, then claimed last
+  const sorted = [...QUESTS].sort((a, b) => {
+    const aDone = isQuestComplete(a, snapshot);
+    const bDone = isQuestComplete(b, snapshot);
+    const aClaimed = claimed.includes(a.id);
+    const bClaimed = claimed.includes(b.id);
+    const aClaimable = aDone && !aClaimed;
+    const bClaimable = bDone && !bClaimed;
+    if (aClaimable !== bClaimable) return aClaimable ? -1 : 1;
+    if (aClaimed !== bClaimed) return aClaimed ? 1 : -1;
+    if (aDone !== bDone) return aDone ? -1 : 1;
+    // же progress %
+    const aPct = a.progress(snapshot) / a.target(snapshot);
+    const bPct = b.progress(snapshot) / b.target(snapshot);
+    return bPct - aPct;
+  });
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: "linear-gradient(135deg, #422006 0%, #92400e 60%, #d97706 100%)",
+      color: "#fff", marginBottom: 14,
+      boxShadow: "0 6px 18px rgba(146,64,14,0.30)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: 18 }}>🏆</span>
+        <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>Quests · Achievements</h2>
+        {pendingCount > 0 && (
+          <span style={{
+            padding: "2px 10px", borderRadius: 5,
+            background: "linear-gradient(135deg, #fbbf24, #f59e0b)", color: "#422006",
+            fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+            animation: "qt-pulse 1.4s ease-in-out infinite",
+          }}>● {pendingCount} ready to claim</span>
+        )}
+        <span style={{ fontSize: 11, opacity: 0.85 }}>
+          milestones по всем 8 движкам · награда AEV за completion
+        </span>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Completed</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>{completedCount} / {QUESTS.length}</div>
+        </div>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Claimed</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>{claimedCount}</div>
+        </div>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Заработано</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fde68a" }}>+{claimedReward.toFixed(2)} AEV</div>
+        </div>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Total reward pool</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#86efac" }}>{totalReward.toFixed(2)} AEV</div>
+        </div>
+      </div>
+
+      {/* Toast on claim */}
+      {questMsg && (() => {
+        const q = QUESTS.find((x) => x.id === questMsg.id);
+        if (!q) return null;
+        return (
+          <div style={{
+            padding: "8px 14px", borderRadius: 7, marginBottom: 10,
+            background: "rgba(134,239,172,0.20)", border: "1px solid rgba(134,239,172,0.45)",
+            color: "#86efac", fontSize: 13, fontWeight: 800,
+          }}>
+            🏆 Claimed · {q.title} · +{questMsg.reward.toFixed(2)} AEV
+          </div>
+        );
+      })()}
+
+      {/* Quests grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+        {sorted.map((q) => {
+          const cur = q.progress(snapshot);
+          const tgt = q.target(snapshot);
+          const pct = tgt > 0 ? Math.min(100, (cur / tgt) * 100) : 0;
+          const done = cur >= tgt;
+          const isClaimed = claimed.includes(q.id);
+          const claimable = done && !isClaimed;
+          const cat = QUEST_CAT_META[q.category];
+          return (
+            <div key={q.id} style={{
+              padding: 10, borderRadius: 8,
+              background: isClaimed
+                ? "rgba(0,0,0,0.30)"
+                : claimable
+                ? "rgba(253,224,71,0.15)"
+                : "rgba(0,0,0,0.20)",
+              border: `1px solid ${isClaimed ? "rgba(255,255,255,0.10)" : claimable ? "#fbbf24" : `${cat.color}55`}`,
+              opacity: isClaimed ? 0.65 : 1,
+              display: "flex", flexDirection: "column" as const, gap: 6,
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start" as const, gap: 8 }}>
+                <span style={{ fontSize: 22 }}>{q.emoji}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" as const, marginBottom: 1 }}>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: cat.color, letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+                      {cat.label}
+                    </span>
+                    <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, color: "#fde68a", fontWeight: 800 }}>
+                      +{q.reward.toFixed(2)} AEV
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "#fff", lineHeight: 1.2 }}>{q.title}</div>
+                </div>
+                {isClaimed && (
+                  <span style={{ fontSize: 14, color: "#86efac" }}>✓</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: "#fef3c7", lineHeight: 1.4, opacity: 0.85, minHeight: 32 }}>{q.desc}</div>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between" as const, fontSize: 10, marginBottom: 3, fontFamily: "ui-monospace, monospace" }}>
+                  <span style={{ color: "#fef3c7", opacity: 0.85 }}>
+                    {cur < 1 && tgt < 1 ? cur.toFixed(2) : Math.floor(cur)} / {tgt < 1 ? tgt.toFixed(2) : Math.floor(tgt)}
+                  </span>
+                  <span style={{ color: done ? "#86efac" : "#fde68a", fontWeight: 800 }}>{pct.toFixed(0)}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: "rgba(0,0,0,0.30)", overflow: "hidden" as const }}>
+                  <div style={{
+                    height: "100%", width: `${pct}%`,
+                    background: done
+                      ? "linear-gradient(90deg, #fbbf24, #f59e0b)"
+                      : "linear-gradient(90deg, #fbbf24aa, #fbbf24)",
+                    transition: "width 0.4s",
+                  }} />
+                </div>
+              </div>
+              <button onClick={() => claim(q)} disabled={!claimable}
+                style={{
+                  padding: "6px 12px", borderRadius: 5, border: "none",
+                  background: isClaimed
+                    ? "rgba(255,255,255,0.05)"
+                    : claimable
+                    ? "linear-gradient(135deg, #fff, #fde68a)"
+                    : "rgba(0,0,0,0.30)",
+                  color: isClaimed
+                    ? "#94a3b8"
+                    : claimable
+                    ? "#92400e"
+                    : "#fef3c7",
+                  fontSize: 11, fontWeight: 900, letterSpacing: 0.3,
+                  cursor: claimable ? "pointer" : "default",
+                  opacity: claimable ? 1 : 0.7,
+                }}>
+                {isClaimed ? "✓ Claimed" : claimable ? `🏆 Claim +${q.reward.toFixed(2)} AEV` : "В процессе…"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 10, opacity: 0.75, marginTop: 10, lineHeight: 1.5 }}>
+        Quests читают live state по всем движкам (Wallet, Pins, Mentorship, Network, Insight, Streak, Stake, QTrade closed positions, Compute units).
+        Когда target достигнут — quest становится claimable; награда mintит'ся как Proof-of-Play action `quest_complete`.
+      </div>
     </section>
   );
 }

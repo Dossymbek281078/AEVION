@@ -32,7 +32,27 @@ type DeliveryAttempt = {
   attempts: number;
   at: number;
   payload: string;
+  signature: string;
+  timestamp: number;
 };
+
+async function hmacHex(secret: string, body: string): Promise<string> {
+  if (typeof crypto === "undefined" || !crypto.subtle) {
+    return "subtle_unavailable";
+  }
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 const STORAGE_ENDPOINTS = "aevion.payments.webhooks.endpoints.v1";
 const STORAGE_DELIVERIES = "aevion.payments.webhooks.deliveries.v1";
@@ -269,17 +289,23 @@ export default function WebhooksPage() {
     });
   }
 
-  function fireTestEvent(endpoint: WebhookEndpoint, event: EventType) {
+  async function fireTestEvent(endpoint: WebhookEndpoint, event: EventType) {
     const willFail = Math.random() < 0.18;
+    const ts = Date.now();
+    const payload = samplePayload(event);
+    const signedBody = `${ts}.${payload}`;
+    const signature = await hmacHex(endpoint.secret, signedBody);
     const delivery: DeliveryAttempt = {
       id: genId("att"),
       endpointId: endpoint.id,
       event,
-      status: willFail ? "pending" : "pending",
+      status: "pending",
       httpCode: null,
       attempts: 1,
-      at: Date.now(),
-      payload: samplePayload(event),
+      at: ts,
+      payload,
+      signature,
+      timestamp: ts,
     };
     setDeliveries((prev) => [delivery, ...prev]);
     window.setTimeout(() => {
@@ -297,20 +323,34 @@ export default function WebhooksPage() {
     }, 700);
   }
 
-  function retryDelivery(deliveryId: string) {
+  async function retryDelivery(deliveryId: string) {
+    const d = deliveries.find((x) => x.id === deliveryId);
+    if (!d) return;
+    const ep = endpoints.find((e) => e.id === d.endpointId);
+    const ts = Date.now();
+    const signature = ep
+      ? await hmacHex(ep.secret, `${ts}.${d.payload}`)
+      : d.signature;
     setDeliveries((prev) =>
-      prev.map((d) =>
-        d.id === deliveryId
-          ? { ...d, status: "pending", attempts: d.attempts + 1, at: Date.now() }
-          : d
+      prev.map((x) =>
+        x.id === deliveryId
+          ? {
+              ...x,
+              status: "pending",
+              attempts: x.attempts + 1,
+              at: ts,
+              timestamp: ts,
+              signature,
+            }
+          : x
       )
     );
     window.setTimeout(() => {
       setDeliveries((prev) =>
-        prev.map((d) =>
-          d.id === deliveryId
-            ? { ...d, status: "delivered", httpCode: 200 }
-            : d
+        prev.map((x) =>
+          x.id === deliveryId
+            ? { ...x, status: "delivered", httpCode: 200 }
+            : x
         )
       );
     }, 600);
@@ -802,21 +842,26 @@ export default function WebhooksPage() {
                 lineHeight: 1.65,
               }}
             >
-{`// Node.js verification
+{`// Node.js verification — matches the signature attached to test deliveries
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export function verify(rawBody, header, secret) {
-  const expected = createHmac("sha256", secret)
-    .update(rawBody)
-    .digest("hex");
-  const a = Buffer.from(expected, "hex");
-  const b = Buffer.from(header, "hex");
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+export function verify(rawBody, headers, secret) {
+  const ts = headers["x-aevion-timestamp"];
+  const sig = headers["x-aevion-signature"];
+  if (!ts || !sig) return false;
 
-// Header sent on every delivery:
-//   X-AEVION-Signature: <hex>
-//   X-AEVION-Timestamp: <unix_ms>`}
+  // Reject replays older than 5 minutes
+  if (Math.abs(Date.now() - Number(ts)) > 5 * 60 * 1000) return false;
+
+  const signedBody = \`\${ts}.\${rawBody}\`;
+  const expected = createHmac("sha256", secret)
+    .update(signedBody)
+    .digest("hex");
+
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(sig, "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
+}`}
             </pre>
           </section>
         </section>
@@ -903,22 +948,42 @@ function DeliveryRow({
         )}
       </div>
       {isOpen && (
-        <pre
-          style={{
-            marginTop: 8,
-            marginBottom: 0,
-            padding: "10px 12px",
-            borderRadius: 8,
-            background: "#0f172a",
-            color: "#e2e8f0",
-            fontSize: 11,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            overflow: "auto",
-            lineHeight: 1.55,
-          }}
-        >
-          {delivery.payload}
-        </pre>
+        <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+          <div
+            style={{
+              padding: "8px 10px",
+              borderRadius: 6,
+              background: "rgba(13,148,136,0.06)",
+              border: "1px solid rgba(13,148,136,0.18)",
+              fontSize: 10,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              color: "#0f766e",
+              wordBreak: "break-all",
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: "#0f172a" }}>X-AEVION-Timestamp:</strong>{" "}
+            {delivery.timestamp}
+            <br />
+            <strong style={{ color: "#0f172a" }}>X-AEVION-Signature:</strong>{" "}
+            {delivery.signature}
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "#0f172a",
+              color: "#e2e8f0",
+              fontSize: 11,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              overflow: "auto",
+              lineHeight: 1.55,
+            }}
+          >
+            {delivery.payload}
+          </pre>
+        </div>
       )}
     </div>
   );

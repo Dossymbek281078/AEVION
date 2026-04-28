@@ -1205,6 +1205,178 @@ export default function QTradePage() {
           </div>
         )}
 
+        {/* Risk Dashboard — agg-уровневая аналитика поверх открытых позиций */}
+        {positions.length > 0 && (() => {
+          // Per-position risk numbers
+          const rows = positions.map((pos) => {
+            const cur = pairById.get(pos.pair);
+            const price = cur?.price ?? pos.entryPrice;
+            const notional = price * pos.qty;
+            const dir = pos.side === "long" ? 1 : -1;
+            const slDist = pos.stopLoss !== undefined
+              ? Math.max(0, (price - pos.stopLoss) * dir)
+              : null; // null → SL не выставлен
+            const slLoss = slDist !== null ? slDist * pos.qty : null;
+            const tpDist = pos.takeProfit !== undefined
+              ? Math.max(0, (pos.takeProfit - price) * dir)
+              : null;
+            const tpProfit = tpDist !== null ? tpDist * pos.qty : null;
+            // Implied "tick risk" — pair.vol × notional. Pair vol — per-tick stdev.
+            const tickRisk = (cur?.vol ?? 0) * notional;
+            // Hourly stdev = tick stdev × sqrt(3600)
+            const hourlyRisk = tickRisk * Math.sqrt(3600);
+            return { pos, price, notional, dir, slLoss, tpProfit, tickRisk, hourlyRisk, hasSl: pos.stopLoss !== undefined };
+          });
+
+          const totalExposure = rows.reduce((s, r) => s + r.notional, 0);
+          const longExposure = rows.filter((r) => r.pos.side === "long").reduce((s, r) => s + r.notional, 0);
+          const shortExposure = rows.filter((r) => r.pos.side === "short").reduce((s, r) => s + r.notional, 0);
+          const netBiasPct = totalExposure > 0 ? ((longExposure - shortExposure) / totalExposure) * 100 : 0;
+          const largest = rows.reduce<typeof rows[number] | null>((b, r) => (!b || r.notional > b.notional ? r : b), null);
+          const largestPct = totalExposure > 0 && largest ? (largest.notional / totalExposure) * 100 : 0;
+
+          // Per-pair aggregation
+          const perPair = new Map<PairId, { exposure: number; count: number; sl: number; unprotected: number }>();
+          for (const r of rows) {
+            const cur = perPair.get(r.pos.pair) ?? { exposure: 0, count: 0, sl: 0, unprotected: 0 };
+            cur.exposure += r.notional;
+            cur.count += 1;
+            if (r.slLoss !== null) cur.sl += r.slLoss;
+            else cur.unprotected += r.notional;
+            perPair.set(r.pos.pair, cur);
+          }
+          const pairBreakdown = [...perPair.entries()]
+            .map(([pair, agg]) => ({ pair, ...agg, pct: totalExposure > 0 ? (agg.exposure / totalExposure) * 100 : 0 }))
+            .sort((a, b) => b.exposure - a.exposure);
+
+          const totalSlLoss = rows.reduce((s, r) => s + (r.slLoss ?? 0), 0);
+          const totalTpProfit = rows.reduce((s, r) => s + (r.tpProfit ?? 0), 0);
+          const unprotectedCount = rows.filter((r) => !r.hasSl).length;
+          const unprotectedExposure = rows.filter((r) => !r.hasSl).reduce((s, r) => s + r.notional, 0);
+          const totalHourlyVol = rows.reduce((s, r) => s + r.hourlyRisk, 0);
+
+          // Concentration severity: HHI of pair shares
+          const hhi = pairBreakdown.reduce((s, p) => {
+            const share = totalExposure > 0 ? p.exposure / totalExposure : 0;
+            return s + share * share;
+          }, 0);
+          const concentrationLabel = hhi >= 0.5 ? "HIGH" : hhi >= 0.25 ? "MED" : "LOW";
+          const concentrationColor = hhi >= 0.5 ? "#fca5a5" : hhi >= 0.25 ? "#fde68a" : "#86efac";
+
+          return (
+            <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "linear-gradient(135deg, rgba(220,38,38,0.06), rgba(0,0,0,0.30))", border: "1px solid rgba(252,165,165,0.18)" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" as const, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" as const, color: "#fca5a5" }}>
+                  ⚠ Risk Dashboard · агрегатная экспозиция
+                </div>
+                <span style={{
+                  padding: "2px 8px", borderRadius: 5,
+                  background: `${concentrationColor}20`, color: concentrationColor,
+                  fontSize: 10, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase" as const,
+                }}>
+                  Concentration: {concentrationLabel} (HHI {hhi.toFixed(2)})
+                </span>
+                {unprotectedCount > 0 && (
+                  <span style={{
+                    padding: "2px 8px", borderRadius: 5,
+                    background: "rgba(252,165,165,0.18)", color: "#fca5a5",
+                    fontSize: 10, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase" as const,
+                  }}>
+                    🛡 {unprotectedCount} без SL · {fmtUsd(unprotectedExposure)} unprotected
+                  </span>
+                )}
+              </div>
+
+              {/* Top metrics row */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 10 }}>
+                <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#cbd5e1", textTransform: "uppercase" as const }}>Total exposure</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fff" }}>{fmtUsd(totalExposure)}</div>
+                </div>
+                <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#cbd5e1", textTransform: "uppercase" as const }}>Net bias</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: netBiasPct > 30 ? "#86efac" : netBiasPct < -30 ? "#fca5a5" : "#cbd5e1" }}>
+                    {netBiasPct >= 0 ? "▲ +" : "▼ "}{netBiasPct.toFixed(0)}%
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b", fontFamily: "ui-monospace, monospace" }}>
+                    L {fmtUsd(longExposure)} · S {fmtUsd(shortExposure)}
+                  </div>
+                </div>
+                <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#cbd5e1", textTransform: "uppercase" as const }}>Largest position</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: largestPct >= 50 ? "#fca5a5" : largestPct >= 30 ? "#fde68a" : "#86efac" }}>
+                    {largestPct.toFixed(1)}%
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b", fontFamily: "ui-monospace, monospace" }}>
+                    {largest ? `${largest.pos.pair.split("/")[0]} ${largest.pos.side === "long" ? "▲L" : "▼S"}` : "—"}
+                  </div>
+                </div>
+                <div style={{ padding: 9, borderRadius: 7, background: "rgba(220,38,38,0.10)", border: "1px solid rgba(220,38,38,0.25)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#fca5a5", textTransform: "uppercase" as const }}>Max loss if all SL hit</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fca5a5" }}>
+                    -{fmtUsd(totalSlLoss)}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b", fontFamily: "ui-monospace, monospace" }}>
+                    {unprotectedCount > 0 ? `+ ${fmtUsd(unprotectedExposure)} unprotected` : "all positions guarded"}
+                  </div>
+                </div>
+                <div style={{ padding: 9, borderRadius: 7, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#86efac", textTransform: "uppercase" as const }}>Max profit if all TP hit</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#86efac" }}>
+                    +{fmtUsd(totalTpProfit)}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b", fontFamily: "ui-monospace, monospace" }}>
+                    R/R {totalSlLoss > 0 ? (totalTpProfit / totalSlLoss).toFixed(2) : "∞"}
+                  </div>
+                </div>
+                <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#cbd5e1", textTransform: "uppercase" as const }}>1h vol exposure</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>
+                    ±{fmtUsd(totalHourlyVol)}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b" }}>1σ ожидаемый swing/час</div>
+                </div>
+              </div>
+
+              {/* Per-pair breakdown */}
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 4 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.5, textTransform: "uppercase" as const, marginBottom: 4 }}>
+                  Распределение по парам
+                </div>
+                {pairBreakdown.map((b) => {
+                  const barColor = b.pct >= 50 ? "#fca5a5" : b.pct >= 30 ? "#fde68a" : "#a5b4fc";
+                  return (
+                    <div key={b.pair} style={{
+                      padding: "5px 9px", borderRadius: 5,
+                      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                      display: "grid", gridTemplateColumns: "70px 1fr auto auto auto", gap: 10, alignItems: "center" as const, fontSize: 11,
+                    }}>
+                      <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: 800, color: "#fff" }}>{b.pair.split("/")[0]}</span>
+                      <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.06)", overflow: "hidden" as const }}>
+                        <div style={{ height: "100%", width: `${b.pct}%`, background: `linear-gradient(90deg, ${barColor}AA, ${barColor})`, transition: "width 0.3s" }} />
+                      </div>
+                      <span style={{ fontFamily: "ui-monospace, monospace", color: barColor, fontWeight: 800, minWidth: 50, textAlign: "right" as const }}>
+                        {b.pct.toFixed(1)}%
+                      </span>
+                      <span style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1", fontSize: 10, minWidth: 80, textAlign: "right" as const }}>
+                        {fmtUsd(b.exposure)}
+                      </span>
+                      <span style={{ fontSize: 10, color: b.unprotected > 0 ? "#fca5a5" : "#64748b", minWidth: 80, textAlign: "right" as const, fontFamily: "ui-monospace, monospace" }}>
+                        {b.count} pos {b.unprotected > 0 ? `· ${fmtUsd(b.unprotected)} ⚠` : "· guarded"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ fontSize: 10, color: "#64748b", marginTop: 8, lineHeight: 1.5 }}>
+                HHI (Herfindahl) — индекс концентрации (sum of squared shares); ≥0.5 = HIGH risk, ≤0.25 = диверсифицировано.
+                «1h vol exposure» — 1σ ожидаемый swing за час по pair-vol параметрам симулятора.
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Trade history + performance */}
         {closedPositions.length > 0 && (() => {
           // Tag-based filtering (если выбран тег — только сделки с этим тегом)

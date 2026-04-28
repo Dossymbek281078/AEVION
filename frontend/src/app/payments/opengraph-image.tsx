@@ -83,10 +83,14 @@ export default function PaymentsOg() {
           {/* Feature pills */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {[
-              "Payment Links",
-              "Payment Methods",
+              "Links",
+              "Methods",
               "Webhooks",
               "Settlements",
+              "Subscriptions",
+              "Fraud",
+              "Compliance",
+              "API",
             ].map((label) => (
               <div
                 key={label}
@@ -135,7 +139,7 @@ export default function PaymentsOg() {
         >
           <div style={{ display: "flex" }}>aevion.app/payments</div>
           <div style={{ color: "#5eead4", display: "flex" }}>
-            payments-rail · scaffold
+            payments-rail · v1 · 9 surfaces
           </div>
         </div>
       </div>

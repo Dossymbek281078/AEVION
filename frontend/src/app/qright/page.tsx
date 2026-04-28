@@ -146,6 +146,7 @@ export default function QRightPage() {
   const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
   const [revokeText, setRevokeText] = useState<string>("");
   const [revokeBusy, setRevokeBusy] = useState(false);
+  const [stats, setStats] = useState<Record<string, { embedFetches: number; lastFetchedAt: string | null }>>({});
   useEffect(() => {
     try {
       setHasAuth(!!localStorage.getItem(TOKEN_KEY));
@@ -371,6 +372,38 @@ export default function QRightPage() {
     } catch {}
     setLoadingItems(false);
   };
+
+  // Lazy-load fetch counters when scope=mine — only useful to the owner.
+  useEffect(() => {
+    if (registryScope !== "mine" || items.length === 0) return;
+    let cancelled = false;
+    const headers = authHeaders();
+    if (!Object.keys(headers).length) return;
+    Promise.all(
+      items.map(async (it) => {
+        if (stats[it.id]) return null;
+        try {
+          const r = await fetch(apiUrl(`/api/qright/objects/${encodeURIComponent(it.id)}/stats`), {
+            headers,
+          });
+          if (!r.ok) return null;
+          const data = await r.json();
+          return [it.id, { embedFetches: data.embedFetches || 0, lastFetchedAt: data.lastFetchedAt || null }] as const;
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, { embedFetches: number; lastFetchedAt: string | null }> = {};
+      for (const r of results) if (r) next[r[0]] = r[1];
+      if (Object.keys(next).length) setStats((prev) => ({ ...prev, ...next }));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, registryScope]);
 
   const startRevoke = (obj: RightObject) => {
     setRevokingObj(obj);
@@ -1036,6 +1069,14 @@ export default function QRightPage() {
                       <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "#f8fafc", fontSize: 10, fontFamily: "monospace", color: "#64748b", wordBreak: "break-all" }}>
                         SHA-256: {x.contentHash}
                       </div>
+                      {registryScope === "mine" && stats[x.id] && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: "#64748b", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span>👁 {stats[x.id].embedFetches.toLocaleString()} embed fetches</span>
+                          {stats[x.id].lastFetchedAt && (
+                            <span>· last {new Date(stats[x.id].lastFetchedAt!).toLocaleString()}</span>
+                          )}
+                        </div>
+                      )}
                       <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img

@@ -51,8 +51,25 @@ async function ensureQRightTable() {
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokedAt" TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokeReason" TEXT;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokeReasonCode" TEXT;`);
+  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "embedFetches" BIGINT NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "lastFetchedAt" TIMESTAMPTZ;`);
 
   ensuredTable = true;
+}
+
+// Best-effort counter bump — fire-and-forget. Errors here must never break
+// the embed/badge response, since these endpoints are loaded by third parties.
+function bumpFetchCounter(id: string): void {
+  pool
+    .query(
+      `UPDATE "QRightObject"
+       SET "embedFetches" = "embedFetches" + 1, "lastFetchedAt" = NOW()
+       WHERE "id" = $1`,
+      [id]
+    )
+    .catch((err: Error) => {
+      console.warn(`[qright] fetch counter bump failed for ${id}:`, err.message);
+    });
 }
 
 // Closed set — UI is the source of truth. Any unrecognised value is rejected
@@ -154,6 +171,67 @@ qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
       kind: kind || null,
       total: result.rowCount,
       items: result.rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Owner-only stats — GET /objects/:id/stats
+//    Returns aggregate fetch counter (no PII, no per-IP data) + revoke metadata.
+//    Declared BEFORE the catch-all /objects/:id so it isn't shadowed.
+qrightRouter.get("/objects/:id/stats", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!auth) {
+      return res.status(401).json({ error: "Bearer token required" });
+    }
+
+    const id = String(req.params.id);
+    const result = await pool.query(
+      `SELECT id, "ownerUserId", "ownerEmail", "embedFetches", "lastFetchedAt",
+              "revokedAt", "revokeReason", "revokeReasonCode", "createdAt"
+       FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    const row = result.rows[0] as {
+      id: string;
+      ownerUserId: string | null;
+      ownerEmail: string | null;
+      embedFetches: string | number;
+      lastFetchedAt: Date | string | null;
+      revokedAt: Date | string | null;
+      revokeReason: string | null;
+      revokeReasonCode: string | null;
+      createdAt: Date | string;
+    };
+    const isOwner =
+      (row.ownerUserId && row.ownerUserId === auth.sub) ||
+      (!row.ownerUserId && row.ownerEmail && row.ownerEmail === auth.email);
+    if (!isOwner) {
+      return res.status(403).json({ error: "Not the owner of this object" });
+    }
+    res.json({
+      id: row.id,
+      embedFetches: Number(row.embedFetches) || 0,
+      lastFetchedAt:
+        row.lastFetchedAt instanceof Date ? row.lastFetchedAt.toISOString() : row.lastFetchedAt,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      revoked: !!row.revokedAt,
+      revokedAt:
+        row.revokedAt instanceof Date ? row.revokedAt.toISOString() : row.revokedAt,
+      revokeReason: row.revokeReason,
+      revokeReasonCode: row.revokeReasonCode,
     });
   } catch (err: any) {
     res.status(500).json({
@@ -323,6 +401,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       return res.status(304).end();
     }
 
+    bumpFetchCounter(row.id);
     res.setHeader("ETag", etag);
     res.setHeader("Cache-Control", "public, max-age=120");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -440,6 +519,8 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     }
 
     const dateLabel = createdAt.toISOString().slice(0, 10);
+
+    bumpFetchCounter(row.id);
 
     if (row.revokedAt) {
       // Revoked: keep the badge so the third-party site doesn't 404, but

@@ -89,6 +89,9 @@ app.get("/api/openapi.json", (_req, res) => {
         post: { summary: "Create QRight object" },
       },
       "/api/qright/objects/{id}": { get: { summary: "Get one QRight object (ETag/304)" } },
+      "/api/qright/objects/{id}/stats": {
+        get: { summary: "Owner-only fetch counter + revoke metadata (Bearer required)" },
+      },
       "/api/qright/objects.csv": { get: { summary: "Download QRight registry as CSV" } },
       "/api/qright/objects/search": {
         get: { summary: "Search by title (ILIKE), optional ?kind, ?limit≤50" },

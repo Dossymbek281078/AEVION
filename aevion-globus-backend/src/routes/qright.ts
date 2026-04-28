@@ -135,6 +135,65 @@ qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
   }
 });
 
+// 🔹 CSV export — GET /objects.csv
+qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const result = await pool.query(
+      `SELECT id, title, kind, "contentHash", "ownerName", "ownerEmail", country, city, "createdAt"
+       FROM "QRightObject"
+       ORDER BY "createdAt" DESC`
+    );
+
+    // RFC 4180 CSV escaping: wrap field in quotes if it contains comma, quote, or newline;
+    // escape internal double-quotes by doubling them.
+    function csvField(value: unknown): string {
+      if (value === null || value === undefined) return "";
+      const s =
+        value instanceof Date ? value.toISOString() : String(value);
+      if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    }
+
+    const columns = [
+      "id",
+      "title",
+      "kind",
+      "contentHash",
+      "ownerName",
+      "ownerEmail",
+      "country",
+      "city",
+      "createdAt",
+    ] as const;
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="qright-objects-${today}.csv"`
+    );
+    res.setHeader("Cache-Control", "public, max-age=60");
+
+    const header = columns.join(",");
+    const rows = result.rows.map((row: Record<string, unknown>) =>
+      columns.map((col) => csvField(row[col])).join(",")
+    );
+    res.send([header, ...rows].join("\r\n"));
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
 // 🔹 Создать объект
 qrightRouter.post("/objects", async (req, res) => {
   try {

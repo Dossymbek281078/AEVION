@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -22,6 +23,46 @@ type GlobusProject = {
   tags: string[];
   runtime?: ModuleRuntime;
 };
+
+const DEDICATED_ROUTES: Record<string, string> = {
+  qright: "/qright",
+  qsign: "/qsign",
+  "aevion-ip-bureau": "/bureau",
+  qtradeoffline: "/qtrade",
+  qcoreai: "/qcoreai",
+  "multichat-engine": "/multichat-engine",
+  auth: "/auth",
+};
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }> | { id: string };
+}): Promise<Metadata> {
+  const p = (await Promise.resolve(params)) as { id: string };
+  const id = p.id;
+  try {
+    const res = await fetch(apiUrl(`/api/globus/projects/${id}`), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return { title: id, alternates: { canonical: `/${id}` } };
+    const project = (await res.json()) as GlobusProject;
+    const desc = (project.description || `AEVION ${project.kind} module: ${project.name}`).slice(0, 200);
+    const title = `${project.code} · ${project.name}`;
+    const canonical = DEDICATED_ROUTES[project.id] || `/${id}`;
+    return {
+      title,
+      description: desc,
+      openGraph: { title, description: desc, type: "article", siteName: "AEVION" },
+      twitter: { card: "summary_large_image", title, description: desc },
+      alternates: { canonical },
+      robots: { index: true, follow: true },
+    };
+  } catch {
+    return { title: id, alternates: { canonical: `/${id}` } };
+  }
+}
 
 function ProjectFetchFailed({ id, status }: { id: string; status?: number }) {
   return (

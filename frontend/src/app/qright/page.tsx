@@ -6,6 +6,21 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
+
+// AEV connector — Proof-of-Play engine A: успешная регистрация права в QRight
+// mint'ит AEV (qright_register = 2.5 AEV — самая дорогая play-action).
+function mintAevQRight(): number {
+  try {
+    const w = ldWallet();
+    if (!w.modes.play) return 0;
+    const before = w.balance;
+    const next = recordPlay(w, "qright_register", "qright");
+    if (next === w) return 0;
+    svWallet(next);
+    return next.balance - before;
+  } catch { return 0; }
+}
 
 type CertificateData = {
   id: string;
@@ -157,6 +172,8 @@ export default function QRightPage() {
       setResult(data as PipelineResult);
       setStep("done");
       showToast("Your work is now protected!", "success");
+      const aev = mintAevQRight();
+      if (aev > 0) setTimeout(() => showToast(`◆ +${aev.toFixed(2)} AEV · QRight · право зарегистрировано`, "success"), 700);
     } catch (e) {
       timers.forEach(clearTimeout);
       setErr((e as Error).message);

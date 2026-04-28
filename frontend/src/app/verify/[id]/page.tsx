@@ -3,6 +3,26 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
+import { ldWallet, svWallet, recordPlay } from "../../aev/aevToken";
+
+// AEV connector — Bureau verification: успешная проверка certificate'а на /verify/[id]
+// = "bureau_verify" play action (1.0 AEV). Дедуплицируется через sessionStorage,
+// чтобы рефреш страницы не миня тот же AEV дважды.
+function mintAevBureauVerify(certId: string): number {
+  try {
+    if (typeof window === "undefined") return 0;
+    const key = `aevion_aev_bureau_verified_${certId}`;
+    if (sessionStorage.getItem(key) === "1") return 0;
+    const w = ldWallet();
+    if (!w.modes.play) return 0;
+    const before = w.balance;
+    const next = recordPlay(w, "bureau_verify", "bureau");
+    if (next === w) return 0;
+    svWallet(next);
+    sessionStorage.setItem(key, "1");
+    return next.balance - before;
+  } catch { return 0; }
+}
 
 type VerifyData = {
   valid: boolean;
@@ -60,6 +80,7 @@ export default function VerifyPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<VerifyData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aevMinted, setAevMinted] = useState<number>(0);
 
   useEffect(() => {
     if (!certId) return;
@@ -74,6 +95,9 @@ export default function VerifyPage() {
           return;
         }
         setData(json as VerifyData);
+        // AEV mint: успешная Bureau-верификация (deduped per-cert per-session)
+        const aev = mintAevBureauVerify(certId);
+        if (aev > 0) setAevMinted(aev);
       } catch {
         setError("Failed to connect to verification server");
       } finally {
@@ -158,6 +182,18 @@ export default function VerifyPage() {
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
             Verified at {new Date(data.verifiedAt).toLocaleString()} · Check #{data.stats.verifiedCount}
           </div>
+          {aevMinted > 0 && (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 8, marginTop: 12,
+              padding: "6px 14px", borderRadius: 999,
+              background: "linear-gradient(135deg, rgba(34,211,238,0.12), rgba(168,85,247,0.10))",
+              border: "1px solid rgba(34,211,238,0.35)",
+              color: "#0e7490", fontWeight: 800, fontSize: 12,
+            }}>
+              ◆ +{aevMinted.toFixed(2)} AEV minted · Bureau verify reward
+              <a href="/aev/tokenomics" style={{ color: "#0e7490", textDecoration: "underline", fontWeight: 700 }}>see ledger →</a>
+            </div>
+          )}
         </div>
 
         {/* Certificate card */}

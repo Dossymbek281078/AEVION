@@ -7,6 +7,21 @@ import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
+
+// AEV connector — Proof-of-Play engine A: успешные signing/verify действия mint'ят
+// AEV в общий wallet. Возвращает количество сminted AEV или 0 если cap/off-mode.
+function mintAevQSign(action: "qsign_sign" | "qsign_verify"): number {
+  try {
+    const w = ldWallet();
+    if (!w.modes.play) return 0;
+    const before = w.balance;
+    const next = recordPlay(w, action, "qsign");
+    if (next === w) return 0;
+    svWallet(next);
+    return next.balance - before;
+  } catch { return 0; }
+}
 
 export default function QSignPage() {
   const { showToast } = useToast();
@@ -44,6 +59,8 @@ export default function QSignPage() {
       setSignature((data as any).signature || "");
       setResult(JSON.stringify(data, null, 2));
       showToast("Payload signed successfully", "success");
+      const aev = mintAevQSign("qsign_sign");
+      if (aev > 0) setTimeout(() => showToast(`◆ +${aev.toFixed(2)} AEV · QSign · подпись`, "success"), 600);
     } catch (e: any) {
       setResult("Error: " + (e?.message || String(e)));
       showToast("Signing error", "error");
@@ -61,8 +78,11 @@ export default function QSignPage() {
       });
       const data = await res.json();
       setResult(JSON.stringify(data, null, 2));
-      if (data.valid) showToast("Signature VALID", "success");
-      else showToast("Signature INVALID", "error");
+      if (data.valid) {
+        showToast("Signature VALID", "success");
+        const aev = mintAevQSign("qsign_verify");
+        if (aev > 0) setTimeout(() => showToast(`◆ +${aev.toFixed(2)} AEV · QSign · verify`, "info"), 600);
+      } else showToast("Signature INVALID", "error");
     } catch (e: any) {
       setResult("Error: " + e.message);
       showToast("Verification error", "error");

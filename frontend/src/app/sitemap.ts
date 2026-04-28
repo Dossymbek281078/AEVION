@@ -25,6 +25,7 @@ const STATIC_ROUTES = [
   "/pricing/contact",
   "/pricing/edu",
   "/pricing/integrations",
+  "/pricing/migrations",
   "/pricing/partners",
   "/pricing/refund-policy",
   "/pricing/roadmap",

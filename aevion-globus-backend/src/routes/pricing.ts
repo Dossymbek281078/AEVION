@@ -19,6 +19,7 @@ import { projects } from "../data/projects";
 import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
+import { sendEmail } from "./provisioning";
 
 export const pricingRouter = Router();
 
@@ -595,6 +596,114 @@ function persistApplication(file: string, app: ProgramApplication) {
   appendFileSync(file, JSON.stringify(app) + "\n", "utf8");
 }
 
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL?.trim() || "hello@aevion.io";
+
+const PROGRAM_LABELS: Record<ProgramApplication["kind"], { label: string; eta: string; subject: string }> = {
+  affiliate: {
+    label: "Affiliate Program",
+    eta: "1-2 рабочих дня",
+    subject: "AEVION Affiliate — заявка получена",
+  },
+  partner: {
+    label: "Partner Program",
+    eta: "1-2 рабочих дня",
+    subject: "AEVION Partner — заявка получена",
+  },
+  edu: {
+    label: "Education Program",
+    eta: "1-2 рабочих дня (с verification)",
+    subject: "AEVION for Education — заявка получена",
+  },
+};
+
+function applicantHtml(app: ProgramApplication): string {
+  const meta = PROGRAM_LABELS[app.kind];
+  return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a">
+  <div style="background:#fff;border-radius:14px;padding:28px;border:1px solid rgba(15,23,42,0.08)">
+    <div style="font-size:11px;font-weight:800;color:#0d9488;letter-spacing:0.06em;margin-bottom:8px">AEVION · ${meta.label.toUpperCase()}</div>
+    <h1 style="font-size:22px;margin:0 0 12px">Заявка получена, ${escapeHtml(app.name)}</h1>
+    <p style="font-size:14px;line-height:1.5;color:#475569;margin:0 0 16px">
+      Спасибо за интерес к ${meta.label}. Customer Success рассмотрит заявку и свяжется в течение <strong>${meta.eta}</strong>.
+    </p>
+    <div style="background:#f8fafc;border-radius:8px;padding:14px;font-size:13px;color:#475569;font-family:ui-monospace,monospace">
+      ID заявки: <strong style="color:#0f172a">${escapeHtml(app.id)}</strong>
+    </div>
+    <p style="font-size:13px;color:#94a3b8;margin:16px 0 0">
+      Вопросы — отвечайте на это письмо или пишите ${NOTIFY_EMAIL}.
+    </p>
+  </div>
+</body></html>`;
+}
+
+function applicantText(app: ProgramApplication): string {
+  const meta = PROGRAM_LABELS[app.kind];
+  return `Заявка получена, ${app.name}
+
+Спасибо за интерес к ${meta.label}. Customer Success рассмотрит заявку и свяжется в течение ${meta.eta}.
+
+ID заявки: ${app.id}
+
+Вопросы — отвечайте на это письмо или пишите ${NOTIFY_EMAIL}.
+
+— AEVION`;
+}
+
+function notifyHtml(app: ProgramApplication): string {
+  const meta = PROGRAM_LABELS[app.kind];
+  const fields: Array<[string, string | undefined]> = [
+    ["Имя", app.name],
+    ["Email", app.email],
+    ["Организация", app.organization],
+    ["Страна", app.country],
+    ["Канал", app.channel],
+    ["Тип партнёра", app.partnerType],
+    ["Домен вуза", app.institutionDomain],
+    ["Детали", app.details],
+  ];
+  const rows = fields
+    .filter(([, v]) => v && v.trim().length > 0)
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 10px;color:#64748b;font-weight:700;vertical-align:top">${k}</td><td style="padding:6px 10px;color:#0f172a">${escapeHtml(v as string)}</td></tr>`,
+    )
+    .join("");
+  return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:20px">
+  <div style="font-size:11px;font-weight:800;color:#0d9488;letter-spacing:0.06em;margin-bottom:6px">NEW ${meta.label.toUpperCase()} APPLICATION</div>
+  <h2 style="margin:0 0 14px;font-size:18px">${escapeHtml(app.name)} · ${escapeHtml(app.organization ?? "—")}</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">${rows}</table>
+  <div style="margin-top:14px;font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace">
+    ID: ${escapeHtml(app.id)} · IP: ${escapeHtml(app.ip)} · ${escapeHtml(app.ts)}
+  </div>
+</body></html>`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function notifyApplication(app: ProgramApplication): Promise<void> {
+  const meta = PROGRAM_LABELS[app.kind];
+  // Auto-reply заявителю
+  sendEmail({
+    to: app.email,
+    subject: meta.subject,
+    html: applicantHtml(app),
+    text: applicantText(app),
+  }).catch((e) => console.error(`[apply/${app.kind}] applicant email failed`, e));
+  // Внутреннее уведомление
+  sendEmail({
+    to: NOTIFY_EMAIL,
+    subject: `[${app.kind}] ${app.name} · ${app.organization ?? "—"}`,
+    html: notifyHtml(app),
+    text: `New ${app.kind} application: ${app.name} (${app.email}) · ${app.organization ?? "—"}\nID: ${app.id}\nDetails: ${app.details ?? "—"}`,
+  }).catch((e) => console.error(`[apply/${app.kind}] notify email failed`, e));
+}
+
 /**
  * POST /api/pricing/affiliate/apply
  * Body: { name, email, organization?, country?, channel?, details? }
@@ -636,6 +745,7 @@ pricingRouter.post("/affiliate/apply", (req, res) => {
     return res.status(500).json({ error: "storage_error" });
   }
 
+  notifyApplication(app);
   res.status(201).json({ ok: true, id: app.id });
 });
 
@@ -683,6 +793,7 @@ pricingRouter.post("/partners/apply", (req, res) => {
     return res.status(500).json({ error: "storage_error" });
   }
 
+  notifyApplication(app);
   res.status(201).json({ ok: true, id: app.id });
 });
 
@@ -727,6 +838,7 @@ pricingRouter.post("/edu/apply", (req, res) => {
     return res.status(500).json({ error: "storage_error" });
   }
 
+  notifyApplication(app);
   res.status(201).json({ ok: true, id: app.id });
 });
 

@@ -69,7 +69,7 @@ interface EmailPayload {
   text: string;
 }
 
-async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string }> {
+export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string }> {
   if (!RESEND_KEY) {
     console.log(`[email/STUB] To: ${payload.to} | Subject: ${payload.subject}`);
     return { ok: true, mode: "stub" };

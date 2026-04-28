@@ -246,12 +246,13 @@ export default function WebhooksPage() {
     );
   }
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!url.trim()) return;
     if (selected.length === 0) return;
+    const localId = genId("we");
     const ep: WebhookEndpoint = {
-      id: genId("we"),
+      id: localId,
       url: url.trim(),
       description: description.trim(),
       secret: genSecret(),
@@ -261,6 +262,135 @@ export default function WebhooksPage() {
     };
     setEndpoints((prev) => [ep, ...prev]);
     setRevealedSecret(ep.id);
+
+    // Mirror to API so server-side delivery can target this webhook.
+    try {
+      const apiKey = ensureDemoApiKey();
+      const r = await fetch(
+        `${window.location.origin}/api/payments/v1/webhooks`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: ep.url, events: ep.events }),
+        }
+      );
+      if (!r.ok) return;
+      const remote: { id: string; secret: string } = await r.json();
+      setEndpoints((prev) =>
+        prev.map((x) =>
+          x.id === localId
+            ? { ...x, id: remote.id, secret: remote.secret }
+            : x
+        )
+      );
+      setRevealedSecret(remote.id);
+    } catch {
+      // offline / sync failed
+    }
+  }
+
+  function ensureDemoApiKey(): string {
+    const KEY_STORE = "aevion.payments.api.keys.v1";
+    try {
+      const raw = window.localStorage.getItem(KEY_STORE);
+      const parsed: { full?: string }[] = raw ? JSON.parse(raw) : [];
+      if (parsed.length > 0 && parsed[0].full) return parsed[0].full;
+      const bytes = new Uint8Array(20);
+      crypto.getRandomValues(bytes);
+      const tail = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const full = "sk_test_" + tail;
+      const newKey = {
+        id: `key_demo_${Date.now().toString(36).slice(-4)}`,
+        name: "Auto-generated (Webhooks page)",
+        prefix: full.slice(0, 12) + "…",
+        full,
+        createdAt: Date.now(),
+        livemode: false,
+      };
+      window.localStorage.setItem(KEY_STORE, JSON.stringify([newKey, ...parsed]));
+      return full;
+    } catch {
+      return "sk_test_DEMOFALLBACK";
+    }
+  }
+
+  async function fireRealHttpEvent(endpoint: WebhookEndpoint, event: EventType) {
+    const ts = Date.now();
+    const placeholder: DeliveryAttempt = {
+      id: genId("att"),
+      endpointId: endpoint.id,
+      event,
+      status: "pending",
+      httpCode: null,
+      attempts: 1,
+      at: ts,
+      payload: `{"event":"${event}","note":"awaiting server response..."}`,
+      signature: "(server-signed)",
+      timestamp: ts,
+    };
+    setDeliveries((prev) => [placeholder, ...prev]);
+
+    try {
+      const apiKey = ensureDemoApiKey();
+      const r = await fetch(
+        `${window.location.origin}/api/payments/v1/webhooks/${endpoint.id}/test`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ event }),
+        }
+      );
+      const j = (await r.json()) as {
+        delivered?: boolean;
+        http_code?: number | null;
+        timestamp?: number;
+        signature?: string;
+        payload?: unknown;
+        error?: string | null;
+        duration_ms?: number;
+      };
+      setDeliveries((prev) =>
+        prev.map((d) =>
+          d.id === placeholder.id
+            ? {
+                ...d,
+                status: j.delivered ? "delivered" : "failed",
+                httpCode: j.http_code ?? r.status ?? null,
+                signature: j.signature ?? d.signature,
+                timestamp: j.timestamp ?? d.timestamp,
+                payload: j.payload
+                  ? JSON.stringify(j.payload, null, 2) +
+                    (j.error ? `\n\n// error: ${j.error}` : "") +
+                    (j.duration_ms ? `\n// duration: ${j.duration_ms}ms` : "")
+                  : d.payload,
+              }
+            : d
+        )
+      );
+    } catch (err) {
+      setDeliveries((prev) =>
+        prev.map((d) =>
+          d.id === placeholder.id
+            ? {
+                ...d,
+                status: "failed",
+                httpCode: 0,
+                payload:
+                  d.payload +
+                  `\n\n// ${err instanceof Error ? err.message : String(err)}`,
+              }
+            : d
+        )
+      );
+    }
   }
 
   function toggleEndpoint(id: string) {
@@ -731,42 +861,102 @@ export default function WebhooksPage() {
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {ep.events.map((evId) => {
-                      const ev = EVENTS.find((e) => e.id === evId);
-                      if (!ev) return null;
-                      return (
-                        <button
-                          key={evId}
-                          type="button"
-                          onClick={() => fireTestEvent(ep, evId)}
-                          disabled={!ep.enabled}
-                          style={{
-                            padding: "5px 10px",
-                            borderRadius: 8,
-                            background: ep.enabled
-                              ? ev.color + "15"
-                              : "rgba(15,23,42,0.04)",
-                            color: ep.enabled ? ev.color : "#94a3b8",
-                            border: ep.enabled
-                              ? `1px solid ${ev.color}55`
-                              : "1px solid rgba(15,23,42,0.08)",
-                            fontFamily:
-                              "ui-monospace, SFMono-Regular, Menlo, monospace",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: ep.enabled ? "pointer" : "not-allowed",
-                          }}
-                          title={
-                            ep.enabled
-                              ? `Fire test ${ev.label}`
-                              : "Endpoint paused"
-                          }
-                        >
-                          ▶ {ev.label}
-                        </button>
-                      );
-                    })}
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
+                        color: "#64748b",
+                      }}
+                    >
+                      Simulated (in-memory delivery, ~18% random fail)
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {ep.events.map((evId) => {
+                        const ev = EVENTS.find((e) => e.id === evId);
+                        if (!ev) return null;
+                        return (
+                          <button
+                            key={evId}
+                            type="button"
+                            onClick={() => fireTestEvent(ep, evId)}
+                            disabled={!ep.enabled}
+                            style={{
+                              padding: "5px 10px",
+                              borderRadius: 8,
+                              background: ep.enabled
+                                ? ev.color + "15"
+                                : "rgba(15,23,42,0.04)",
+                              color: ep.enabled ? ev.color : "#94a3b8",
+                              border: ep.enabled
+                                ? `1px solid ${ev.color}55`
+                                : "1px solid rgba(15,23,42,0.08)",
+                              fontFamily:
+                                "ui-monospace, SFMono-Regular, Menlo, monospace",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: ep.enabled ? "pointer" : "not-allowed",
+                            }}
+                            title={
+                              ep.enabled
+                                ? `Fire test ${ev.label}`
+                                : "Endpoint paused"
+                            }
+                          >
+                            ▶ {ev.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
+                        color: "#0d9488",
+                        marginTop: 4,
+                      }}
+                    >
+                      Live HTTP (real fetch from server, 4s timeout)
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {ep.events.map((evId) => {
+                        const ev = EVENTS.find((e) => e.id === evId);
+                        if (!ev) return null;
+                        return (
+                          <button
+                            key={`live_${evId}`}
+                            type="button"
+                            onClick={() => fireRealHttpEvent(ep, evId)}
+                            disabled={!ep.enabled}
+                            style={{
+                              padding: "5px 10px",
+                              borderRadius: 8,
+                              background: ep.enabled
+                                ? "#0d9488"
+                                : "rgba(15,23,42,0.04)",
+                              color: ep.enabled ? "#fff" : "#94a3b8",
+                              border: "none",
+                              fontFamily:
+                                "ui-monospace, SFMono-Regular, Menlo, monospace",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: ep.enabled ? "pointer" : "not-allowed",
+                            }}
+                            title={
+                              ep.enabled
+                                ? `Server POST signed ${ev.label} to ${ep.url}`
+                                : "Endpoint paused"
+                            }
+                          >
+                            ▲ {ev.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {epDeliveries.length > 0 && (

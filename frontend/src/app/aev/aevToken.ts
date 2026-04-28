@@ -704,6 +704,194 @@ export function previewStreakReward(w: AEVWallet): number {
   return reward;
 }
 
+// ─── H. Proof-of-Insight ──────────────────────────────────────────
+// Ты задаёшь качественный вопрос AI Coach'у (любой модуль AEVION). Запрос
+// кэшируется. Когда другой юзер задаёт похожий вопрос — cache-hit на твой,
+// и ты получаешь AEV. Награда за уникальный, содержательный вопрос.
+// Симулируется на клиенте: каждый tick есть quality-зависимый шанс hit'а.
+
+const INSIGHT_KEY = "aevion_aev_insight_v1";
+
+export type InsightTopic = "chess" | "qsign" | "qright" | "qtrade" | "compute" | "general";
+
+export type InsightQuestion = {
+  id: string;
+  q: string;                  // текст вопроса
+  topic: InsightTopic;
+  ts: number;
+  hits: number;               // сколько раз cache-hit'нулось (≈ скольким помог)
+  earned: number;             // сколько AEV заработано с этого вопроса
+  quality: number;            // 0..100 — авто-оценка качества вопроса
+  lastHitTs: number;
+};
+
+export type InsightState = {
+  v: 1;
+  questions: InsightQuestion[];
+  totalHits: number;
+  totalEarned: number;
+};
+
+export const INSIGHT = {
+  perHitAev: 0.25,            // AEV за каждый cache-hit
+  dailyAskLimit: 20,          // anti-spam: max 20 вопросов в день
+  maxQuestions: 100,          // total cap
+  hitTickMs: 12_000,          // каждые 12s проверяем hit'ы
+  hitProbBase: 0.18,          // базовый шанс hit'а на тик
+  hitProbQualityMul: 0.55,    // + до +55% от quality/100
+  topics: ["chess", "qsign", "qright", "qtrade", "compute", "general"] as const,
+} as const;
+
+export const TOPIC_META: Record<InsightTopic, { emoji: string; label: string; color: string }> = {
+  chess:    { emoji: "♟", label: "CyberChess",   color: "#0ea5e9" },
+  qsign:    { emoji: "✍", label: "QSign",        color: "#10b981" },
+  qright:   { emoji: "📜", label: "QRight",       color: "#8b5cf6" },
+  qtrade:   { emoji: "📈", label: "QTrade",       color: "#f59e0b" },
+  compute:  { emoji: "🧠", label: "Compute / AI", color: "#3b82f6" },
+  general:  { emoji: "💬", label: "General",      color: "#64748b" },
+};
+
+export function ldInsight(): InsightState {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(INSIGHT_KEY) : null;
+    if (!s) return { v: 1, questions: [], totalHits: 0, totalEarned: 0 };
+    const r = JSON.parse(s);
+    if (!r || r.v !== 1) return { v: 1, questions: [], totalHits: 0, totalEarned: 0 };
+    return {
+      v: 1,
+      questions: Array.isArray(r.questions) ? r.questions : [],
+      totalHits: typeof r.totalHits === "number" ? r.totalHits : 0,
+      totalEarned: typeof r.totalEarned === "number" ? r.totalEarned : 0,
+    };
+  } catch { return { v: 1, questions: [], totalHits: 0, totalEarned: 0 } }
+}
+
+export function svInsight(s: InsightState) {
+  try { localStorage.setItem(INSIGHT_KEY, JSON.stringify(s)) } catch {}
+}
+
+export function questionsToday(qs: InsightQuestion[]): number {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  return qs.filter((q) => q.ts >= start.getTime()).length;
+}
+
+// Quality score (0..100): длина + знак вопроса + word-count + уникальность слов.
+// Detalised, но детерминированный — короткие/повторяющиеся вопросы получают мало hit'ов.
+function scoreQuality(q: string): number {
+  const s = q.trim();
+  const len = Math.min(s.length, 240);
+  const lenScore = (len / 240) * 50;
+  const hasQuestion = /[?]/.test(s) ? 10 : 0;
+  const words = s.split(/\s+/).filter(Boolean);
+  const wordScore = Math.min(20, words.length * 1.5);
+  const uniqWords = new Set(s.toLowerCase().split(/\s+/).filter(Boolean)).size;
+  const uniqScore = Math.min(20, uniqWords * 2);
+  return Math.round(Math.min(100, lenScore + hasQuestion + wordScore + uniqScore));
+}
+
+// Pre-compute quality для UI (превью награды до submit'а)
+export function previewQuality(q: string): number {
+  return scoreQuality(q);
+}
+
+export function askQuestion(
+  s: InsightState,
+  q: string,
+  topic: InsightTopic = "general",
+): { state: InsightState } | { error: string } {
+  const text = q.trim();
+  if (!text) return { error: "Вопрос пустой" };
+  if (text.length < 12) return { error: "Слишком коротко — добавь контекст (мин 12 символов)" };
+  if (questionsToday(s.questions) >= INSIGHT.dailyAskLimit) {
+    return { error: `Дневной лимит ${INSIGHT.dailyAskLimit} вопросов исчерпан · возвращайся завтра` };
+  }
+  const quality = scoreQuality(text);
+  const item: InsightQuestion = {
+    id: `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+    q: text.slice(0, 240),
+    topic,
+    ts: Date.now(),
+    hits: 0,
+    earned: 0,
+    quality,
+    lastHitTs: 0,
+  };
+  return {
+    state: {
+      ...s,
+      questions: [item, ...s.questions].slice(0, INSIGHT.maxQuestions),
+    },
+  };
+}
+
+export function removeQuestion(s: InsightState, id: string): InsightState {
+  return { ...s, questions: s.questions.filter((q) => q.id !== id) };
+}
+
+// Каждый tick, каждый вопрос имеет quality-зависимый шанс получить cache-hit.
+// Per-hit мintit AEV в wallet и инкрементит hits/earned у вопроса.
+export function simulateInsightTick(
+  w: AEVWallet,
+  s: InsightState,
+): { wallet: AEVWallet; insight: InsightState } {
+  if (s.questions.length === 0) return { wallet: w, insight: s };
+  let curWallet = w;
+  let totalNewHits = 0;
+  let totalNewEarned = 0;
+  const newQuestions = s.questions.map((q) => {
+    const probability = INSIGHT.hitProbBase + INSIGHT.hitProbQualityMul * (q.quality / 100);
+    if (Math.random() > probability) return q;
+    const reward = INSIGHT.perHitAev;
+    curWallet = mint(
+      curWallet,
+      reward,
+      { kind: "play", module: "qcoreai", action: "insight_hit" },
+      `💡 Cache-hit · «${q.q.slice(0, 40)}${q.q.length > 40 ? "…" : ""}»`,
+    );
+    totalNewHits += 1;
+    totalNewEarned += reward;
+    return { ...q, hits: q.hits + 1, earned: q.earned + reward, lastHitTs: Date.now() };
+  });
+  return {
+    wallet: curWallet,
+    insight: {
+      ...s,
+      questions: newQuestions,
+      totalHits: s.totalHits + totalNewHits,
+      totalEarned: s.totalEarned + totalNewEarned,
+    },
+  };
+}
+
+// Manual trigger одного hit'а для конкретного вопроса (UI «⚡»).
+export function triggerInsightHit(
+  w: AEVWallet,
+  s: InsightState,
+  qid: string,
+): { wallet: AEVWallet; insight: InsightState } {
+  const target = s.questions.find((q) => q.id === qid);
+  if (!target) return { wallet: w, insight: s };
+  const reward = INSIGHT.perHitAev;
+  const newWallet = mint(
+    w,
+    reward,
+    { kind: "play", module: "qcoreai", action: "insight_hit" },
+    `💡 Cache-hit · «${target.q.slice(0, 40)}${target.q.length > 40 ? "…" : ""}»`,
+  );
+  const newQuestions = s.questions.map((q) =>
+    q.id === qid ? { ...q, hits: q.hits + 1, earned: q.earned + reward, lastHitTs: Date.now() } : q,
+  );
+  return {
+    wallet: newWallet,
+    insight: {
+      ...s,
+      questions: newQuestions,
+      totalHits: s.totalHits + 1,
+      totalEarned: s.totalEarned + reward,
+    },
+  };
+}
+
 // ─── QTrade integration helpers ───────────────────────────────────
 // Sell AEV at simulated price → debits balance, returns USD-equivalent (not deposited
 // anywhere yet, just shows up in event log; backend mock).

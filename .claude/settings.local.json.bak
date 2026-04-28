@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npx --no-install tsc --noEmit)",
+      "Bash(/c/Users/user/aevion-core/frontend/node_modules/.bin/tsc *)",
+      "Bash(npm install *)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(tee /tmp/tsc.out)",
+      "Bash(git -C /c/Users/user/aevion-core/frontend-exchange status)",
+      "Bash(git -C /c/Users/user/aevion-core/frontend-exchange diff --stat)",
+      "Bash(git *)",
+      "Bash(tee /tmp/tsc2.out)",
+      "Bash(tee /tmp/tsc3.out)",
+      "Bash(tee /tmp/tsc4.out)",
+      "Bash(tee /tmp/tsc5.out)",
+      "Bash(tee /tmp/tsc6.out)",
+      "Bash(tee /tmp/tsc7.out)",
+      "Bash(tee /tmp/tsc8.out)",
+      "Bash(tee /tmp/tsc9.out)",
+      "Bash(tee /tmp/tsc10.out)",
+      "Bash(tee /tmp/tsc11.out)",
+      "Bash(tee /tmp/tsc12.out)",
+      "Bash(tee /tmp/tsc13.out)",
+      "Bash(tee /tmp/tsc14.out)",
+      "Bash(tee /tmp/tsc15.out)",
+      "Bash(tee /tmp/tsc16.out)",
+      "Bash(tee /tmp/tsc17.out)",
+      "Bash(tee /tmp/tsc18.out)",
+      "Bash(tee /tmp/tsc19.out)",
+      "Bash(./node_modules/.bin/tsc --noEmit)"
+    ]
+  }
+}

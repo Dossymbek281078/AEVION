@@ -17,10 +17,14 @@ import {
   NETWORK,
   ldMentorship, svMentorship, addStudent, removeStudent, tickStudents,
   MENTORSHIP,
+  ldInsight, svInsight, askQuestion, simulateInsightTick, triggerInsightHit,
+  removeQuestion as removeInsightQuestion, previewQuality,
+  questionsToday, INSIGHT, TOPIC_META,
   type AEVWallet, type EmissionMode, type PlayAction, type PlayModule, type MiningEvent,
   type PinnedItem, type PinKind,
   type NetworkState,
   type MentorshipState,
+  type InsightState, type InsightTopic,
 } from "./aevToken";
 
 const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: string; color: string; desc: string }> = {
@@ -53,12 +57,14 @@ export default function AEVPage() {
   const [pins, setPins] = useState<PinnedItem[] | null>(null);
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [mentorship, setMentorship] = useState<MentorshipState | null>(null);
+  const [insight, setInsight] = useState<InsightState | null>(null);
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
     setPins(ldPins());
     setNetwork(ldNetwork());
     setMentorship(ldMentorship());
+    setInsight(ldInsight());
     // Auto-claim daily streak on mount if eligible
     const updated = recordDailyVisit(w);
     if (updated) {
@@ -77,14 +83,17 @@ export default function AEVPage() {
   useEffect(() => { if (pins) svPins(pins) }, [pins]);
   useEffect(() => { if (network) svNetwork(network) }, [network]);
   useEffect(() => { if (mentorship) svMentorship(mentorship) }, [mentorship]);
+  useEffect(() => { if (insight) svInsight(insight) }, [insight]);
 
   // Refs для cross-state autotick без race conditions
   const walletRef = useRef<AEVWallet | null>(null);
   const networkRef = useRef<NetworkState | null>(null);
   const mentorshipRef = useRef<MentorshipState | null>(null);
+  const insightRef = useRef<InsightState | null>(null);
   useEffect(() => { walletRef.current = wallet }, [wallet]);
   useEffect(() => { networkRef.current = network }, [network]);
   useEffect(() => { mentorshipRef.current = mentorship }, [mentorship]);
+  useEffect(() => { insightRef.current = insight }, [insight]);
 
   // Network auto-tick: каждые 18-32s случайный приглашённый совершает quality
   // action, тебе капает royalty в wallet.
@@ -126,6 +135,23 @@ export default function AEVPage() {
     }, 10_000);
     return () => clearInterval(id);
   }, [mentorshipCount]);
+
+  // Insight auto-tick: каждые INSIGHT.hitTickMs (12s) проверяем cache-hit'ы
+  // на каждый вопрос с quality-зависимой вероятностью.
+  const insightCount = insight?.questions.length ?? 0;
+  useEffect(() => {
+    if (insightCount === 0) return;
+    const id = setInterval(() => {
+      const w = walletRef.current;
+      const s = insightRef.current;
+      if (!w || !s || s.questions.length === 0) return;
+      const r = simulateInsightTick(w, s);
+      if (r.wallet === w && r.insight === s) return;
+      setWallet(r.wallet);
+      setInsight(r.insight);
+    }, INSIGHT.hitTickMs);
+    return () => clearInterval(id);
+  }, [insightCount]);
 
   // Live tick: refresh pending dividend display every second
   const [, setTick] = useState(0);
@@ -256,6 +282,14 @@ export default function AEVPage() {
               }}>
                 Hard cap 21M · {fmtSupplyPct(wallet)}
               </span>
+              <a href="/aev/tokenomics" style={{
+                padding: "3px 10px", borderRadius: 999,
+                background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.5)",
+                fontSize: 10, fontWeight: 900, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const,
+                textDecoration: "none",
+              }}>
+                📊 Tokenomics →
+              </a>
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8", letterSpacing: 0.5, fontWeight: 700, textTransform: "uppercase" as const, marginBottom: 4 }}>
               Балланс
@@ -349,6 +383,13 @@ export default function AEVPage() {
             .filter((e) => e.source.kind === "play" && ["curation_pin", "curation_upvote_bonus"].includes((e.source as { kind: "play"; module: string; action: string }).action))
             .reduce((s, e) => s + e.amount, 0);
 
+          const insightCount = insight?.questions.length ?? 0;
+          const insightHits = insight?.totalHits ?? 0;
+          const insightEarned = insight?.totalEarned ?? 0;
+          const insightAvgQuality = insightCount > 0
+            ? Math.round((insight!.questions.reduce((s, q) => s + q.quality, 0) / insightCount))
+            : 0;
+
           const engines: {
             id: string; label: string; tag: string; color: string; icon: string;
             rate: string; earned: number; meta: string;
@@ -376,6 +417,12 @@ export default function AEVPage() {
               rate: netCount > 0 ? `~${netRate.toFixed(4)} AEV/action` : "0 — invite first",
               earned: netEarned,
               meta: `${netCount} invited`,
+            },
+            {
+              id: "H", label: "Insight", tag: "H · Proof-of-Insight", color: "#eab308", icon: "💡",
+              rate: insightCount > 0 ? `${INSIGHT.perHitAev} AEV/hit · q${insightAvgQuality}` : `${INSIGHT.perHitAev} AEV/hit`,
+              earned: insightEarned,
+              meta: insightCount > 0 ? `${insightCount} q · ${insightHits} hit${insightHits !== 1 ? "s" : ""}` : "ask first",
             },
           ];
 
@@ -615,6 +662,11 @@ export default function AEVPage() {
 
         {/* ═══ D. PROOF-OF-CURATION (engine D · live) ══════════════ */}
         <CurationWall wallet={wallet} setWallet={setWallet} pins={pins ?? []} setPins={setPins} />
+
+        {/* ═══ H. PROOF-OF-INSIGHT (engine H · live) ═══════════════ */}
+        {insight && (
+          <InsightPanel wallet={wallet} setWallet={setWallet} insight={insight} setInsight={setInsight} />
+        )}
 
         {/* ═══ FUTURE ENGINES — proposals + voting ═════════════════ */}
         <FutureEngines />
@@ -900,8 +952,8 @@ const BUILTIN_PROPOSALS: Proposal[] = [
     letter: "H",
     emoji: "💡",
     name: "Proof-of-Insight",
-    tagline: "вопрос Coach'у помог другим",
-    desc: "Когда твой query к AI Coach (CyberChess) кэшируется и помогает другому юзеру при cache-hit — ты получаешь AEV. Награда за уникальный качественный вопрос.",
+    tagline: "✅ LIVE — engine выпущен 28.04",
+    desc: "Задай качественный вопрос AI Coach'у (любой модуль). Запрос кэшируется. Когда другой юзер задаст похожее — cache-hit на твой, +0.25 AEV. Quality auto-считается из длины/уникальных слов: чем содержательнее вопрос, тем больше hit'ов. Cap 100 вопросов, лимит 20 в день. Выпущен сразу после голосования.",
   },
 ];
 
@@ -999,7 +1051,7 @@ function FutureEngines() {
                   <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", lineHeight: 1.25 }}>{p.name}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end" as const, gap: 4 }}>
-                  {p.id === "streak" || p.id === "curation" || p.id === "network" || p.id === "mentorship" ? (
+                  {p.id === "streak" || p.id === "curation" || p.id === "network" || p.id === "mentorship" || p.id === "insight" ? (
                     <span style={{
                       padding: "5px 11px", borderRadius: 5,
                       background: p.id === "curation"
@@ -1008,6 +1060,8 @@ function FutureEngines() {
                         ? "linear-gradient(135deg, #0891b2, #06b6d4)"
                         : p.id === "mentorship"
                         ? "linear-gradient(135deg, #16a34a, #22c55e)"
+                        : p.id === "insight"
+                        ? "linear-gradient(135deg, #ca8a04, #eab308)"
                         : "linear-gradient(135deg, #f97316, #ea580c)",
                       color: "#fff", fontSize: 11, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
                     }}>✓ LIVE</span>
@@ -1639,6 +1693,218 @@ function CurationWall({ wallet, setWallet, pins, setPins }: {
                   👍 +{CURATION.upvoteBonusAev}
                 </button>
                 <button onClick={() => deletePin(p.id)} title="Удалить pin"
+                  style={{
+                    padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff",
+                    color: "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                  }}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── H. Insight panel (engine H · live) ───────────────────────────
+function InsightPanel({ wallet, setWallet, insight, setInsight }: {
+  wallet: AEVWallet;
+  setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
+  insight: InsightState;
+  setInsight: React.Dispatch<React.SetStateAction<InsightState | null>>;
+}) {
+  const [draftQ, setDraftQ] = useState("");
+  const [draftTopic, setDraftTopic] = useState<InsightTopic>("chess");
+  const [error, setError] = useState<string | null>(null);
+
+  const today = questionsToday(insight.questions);
+  const remaining = Math.max(0, INSIGHT.dailyAskLimit - today);
+  const previewQ = draftQ.trim().length >= 12 ? previewQuality(draftQ) : 0;
+  const previewProb = INSIGHT.hitProbBase + INSIGHT.hitProbQualityMul * (previewQ / 100);
+
+  const submit = () => {
+    setError(null);
+    const result = askQuestion(insight, draftQ, draftTopic);
+    if ("error" in result) {
+      setError(result.error);
+      setTimeout(() => setError(null), 4500);
+      return;
+    }
+    setInsight(result.state);
+    setDraftQ("");
+  };
+
+  const triggerOne = (id: string) => {
+    const r = triggerInsightHit(wallet, insight, id);
+    setWallet(r.wallet);
+    setInsight(r.insight);
+  };
+
+  const removeOne = (id: string) => {
+    setInsight(removeInsightQuestion(insight, id));
+  };
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: "linear-gradient(135deg, #fefce8 0%, #fff 60%)",
+      border: "1px solid #fde047", marginBottom: 14,
+      boxShadow: "0 6px 18px rgba(202,138,4,0.10)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12, flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: 18 }}>💡</span>
+        <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0, color: "#0f172a" }}>Proof-of-Insight · cache-hit вопросы</h2>
+        <span style={{
+          padding: "2px 9px", borderRadius: 5,
+          background: "linear-gradient(135deg, #ca8a04, #eab308)",
+          color: "#fff", fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+        }}>H · LIVE</span>
+        <span style={{ fontSize: 11, color: "#64748b" }}>
+          +{INSIGHT.perHitAev} AEV за каждый cache-hit · cap {INSIGHT.maxQuestions} вопросов
+        </span>
+      </div>
+
+      {/* ─── Stats row ────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: 10, borderRadius: 8, background: "#fefce8", border: "1px solid #fde047" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#854d0e", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Сегодня вопросов</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#713f12" }}>
+            {today} / {INSIGHT.dailyAskLimit}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "#f0f9ff", border: "1px solid #bae6fd" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#0369a1", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Всего вопросов</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#0c4a6e" }}>
+            {insight.questions.length} / {INSIGHT.maxQuestions}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "#ecfdf5", border: "1px solid #86efac" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#14532d", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Cache-hits всего</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#15803d" }}>
+            {insight.totalHits}
+          </div>
+        </div>
+        <div style={{ padding: 10, borderRadius: 8, background: "#fff7ed", border: "1px solid #fed7aa" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#9a3412", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Заработано</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#7c2d12" }}>
+            {insight.totalEarned.toFixed(3)} AEV
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Ask form ────────────────────────────────────────── */}
+      <div style={{ padding: 12, borderRadius: 8, background: "#fff", border: "1px solid #fde047", marginBottom: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" as const }}>
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#475569", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Тема</label>
+            <select value={draftTopic} onChange={(e) => setDraftTopic(e.target.value as InsightTopic)}
+              style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }}>
+              {INSIGHT.topics.map((t) => (
+                <option key={t} value={t}>{TOPIC_META[t].emoji} {TOPIC_META[t].label}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11, color: "#64748b" }}>{remaining > 0 ? `Осталось ${remaining} в лимите дня` : "Дневной лимит исчерпан"}</span>
+          </div>
+          <textarea value={draftQ} onChange={(e) => setDraftQ(e.target.value.slice(0, 240))}
+            rows={3}
+            placeholder="Задай содержательный вопрос — например: «Почему в Каро-Канн c..d4 даёт чёрным более активную игру против системы Фантази?»"
+            style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical" as const, fontFamily: "inherit", lineHeight: 1.4 }} />
+          <div style={{ display: "flex", gap: 10, alignItems: "center" as const, flexWrap: "wrap" as const }}>
+            <div style={{ flex: "1 1 200px", minWidth: 200 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", fontWeight: 700, marginBottom: 3, letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+                <span>Превью quality</span>
+                <span style={{ color: previewQ >= 70 ? "#15803d" : previewQ >= 40 ? "#ca8a04" : "#94a3b8" }}>
+                  {draftQ.trim().length < 12 ? "—" : `${previewQ} / 100 · ~${(previewProb * 100).toFixed(0)}% hit/tick`}
+                </span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", overflow: "hidden" as const }}>
+                <div style={{
+                  height: "100%",
+                  width: `${draftQ.trim().length < 12 ? 0 : previewQ}%`,
+                  background: previewQ >= 70
+                    ? "linear-gradient(90deg, #16a34a, #22c55e)"
+                    : previewQ >= 40
+                    ? "linear-gradient(90deg, #ca8a04, #eab308)"
+                    : "linear-gradient(90deg, #94a3b8, #cbd5e1)",
+                  transition: "width 0.2s",
+                }} />
+              </div>
+            </div>
+            <button onClick={submit}
+              disabled={draftQ.trim().length < 12 || remaining <= 0}
+              style={{
+                padding: "8px 18px", borderRadius: 6, border: "none",
+                background: draftQ.trim().length < 12 || remaining <= 0 ? "#cbd5e1" : "linear-gradient(135deg, #ca8a04, #eab308)",
+                color: "#fff", fontWeight: 800, fontSize: 13,
+                cursor: draftQ.trim().length < 12 || remaining <= 0 ? "default" : "pointer",
+                boxShadow: draftQ.trim().length < 12 || remaining <= 0 ? "none" : "0 2px 8px rgba(202,138,4,0.3)",
+              }}>
+              💡 Ask Coach
+            </button>
+            {error && (
+              <span style={{
+                padding: "5px 10px", borderRadius: 5,
+                background: "#fef2f2", border: "1px solid #fca5a5",
+                color: "#b91c1c", fontSize: 12, fontWeight: 700,
+              }}>⚠ {error}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Questions list ─────────────────────────────────── */}
+      {insight.questions.length === 0 ? (
+        <div style={{ padding: 18, textAlign: "center" as const, color: "#94a3b8", fontSize: 13, background: "#f8fafc", borderRadius: 8 }}>
+          Пока ни одного вопроса. Чем содержательнее вопрос — тем выше quality и шанс cache-hit'а каждые 12s.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, maxHeight: 360, overflowY: "auto" as const }}>
+          {insight.questions.map((q) => {
+            const meta = TOPIC_META[q.topic];
+            const ago = (() => {
+              const dt = (Date.now() - q.ts) / 1000;
+              if (dt < 60) return `${Math.round(dt)}s назад`;
+              if (dt < 3600) return `${Math.round(dt / 60)}m назад`;
+              if (dt < 86400) return `${Math.round(dt / 3600)}h назад`;
+              return `${Math.round(dt / 86400)}d назад`;
+            })();
+            return (
+              <div key={q.id} style={{
+                padding: "10px 12px", borderRadius: 8,
+                background: "#fff", border: `1px solid ${meta.color}33`,
+                borderLeft: `3px solid ${meta.color}`,
+                display: "grid", gridTemplateColumns: "auto 1fr auto auto auto auto", gap: 10, alignItems: "center" as const,
+              }}>
+                <span style={{ fontSize: 18 }}>{meta.emoji}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", lineHeight: 1.3 }}>{q.q}</div>
+                  <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+                    <span>{meta.label}</span>
+                    <span>· {ago}</span>
+                    <span style={{ color: q.quality >= 70 ? "#15803d" : q.quality >= 40 ? "#ca8a04" : "#94a3b8", fontWeight: 800 }}>
+                      · q{q.quality}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" as const, minWidth: 36 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#15803d", lineHeight: 1 }}>
+                    {q.hits}
+                  </div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.4, textTransform: "uppercase" as const }}>hits</div>
+                </div>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#86efac", fontWeight: 800, whiteSpace: "nowrap" as const }}>
+                  +{q.earned.toFixed(3)}
+                </span>
+                <button onClick={() => triggerOne(q.id)} title="Триггернуть cache-hit (демо)"
+                  style={{
+                    padding: "5px 9px", borderRadius: 5, border: "1px solid #fde047", background: "#fefce8",
+                    color: "#854d0e", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                  }}>
+                  ⚡
+                </button>
+                <button onClick={() => removeOne(q.id)} title="Удалить вопрос"
                   style={{
                     padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff",
                     color: "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer",

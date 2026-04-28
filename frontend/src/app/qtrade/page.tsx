@@ -22,6 +22,7 @@ import {
   computePortfolioStats, computePairBreakdown, buildCalendar, fmtMs,
   type PortfolioStats, type PairBreakdown, type CalendarCell,
 } from "./analytics";
+import { runBacktest, type BacktestResult, type StrategyKind } from "./backtest";
 
 type Account = {
   id: string;
@@ -156,6 +157,18 @@ export default function QTradePage() {
   const [botAmount, setBotAmount] = useState("25");
   const [botBudget, setBotBudget] = useState("500");
   const [botMsg, setBotMsg] = useState<string | null>(null);
+
+  // ─── Backtester ──────────────────────────────────────────────────
+  const [btStrategy, setBtStrategy] = useState<StrategyKind>("dca");
+  const [btPair, setBtPair] = useState<PairId>("BTC/USD");
+  const [btDcaInterval, setBtDcaInterval] = useState("3");      // candles
+  const [btDcaAmount, setBtDcaAmount] = useState("25");
+  const [btGridLow, setBtGridLow] = useState("");
+  const [btGridHigh, setBtGridHigh] = useState("");
+  const [btGridCount, setBtGridCount] = useState("8");
+  const [btGridAmount, setBtGridAmount] = useState("25");
+  const [btBnhTotal, setBtBnhTotal] = useState("1000");
+  const [btResult, setBtResult] = useState<BacktestResult | null>(null);
 
   // ─── Grid Bot ────────────────────────────────────────────────────
   const [gridBots, setGridBots] = useState<GridBot[]>([]);
@@ -2366,6 +2379,266 @@ export default function QTradePage() {
               Grid bot работает в боковом тренде: задаёшь [low, high] и N уровней. На падении через level → buy.
               На подъёме через level выше → sell, +profit. Realized profit копит'ся за каждый buy-sell cycle.
               Active inventory = AEV-эквивалент filled levels по current price (mark-to-market).
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* ═══ BACKTESTER — applies стратегия на исторических OHLC ═══ */}
+      {(() => {
+        const pair = pairs.find((p) => p.id === btPair);
+        const candles = pair?.candles ?? [];
+        const candleCount = candles.length;
+
+        const runBt = () => {
+          if (!pair || candleCount === 0) {
+            setBtResult({ ok: false, error: "Нет candles на паре — подожди пока накопятся", strategy: btStrategy, equity: [], totalSpent: 0, finalQty: 0, finalValue: 0, realizedProfit: 0, totalReturn: 0, maxDrawdown: 0, maxDrawdownPct: 0, numTrades: 0, numBuys: 0, numSells: 0 });
+            return;
+          }
+          if (btStrategy === "dca") {
+            const r = runBacktest(candles, {
+              kind: "dca",
+              cfg: {
+                amountUsd: Math.max(1, Number(btDcaAmount) || 0),
+                intervalCandles: Math.max(1, Math.floor(Number(btDcaInterval) || 1)),
+              },
+            });
+            setBtResult(r);
+          } else if (btStrategy === "grid") {
+            const r = runBacktest(candles, {
+              kind: "grid",
+              cfg: {
+                lowPrice: Number(btGridLow) || 0,
+                highPrice: Number(btGridHigh) || 0,
+                gridCount: Math.max(2, Math.min(60, Math.floor(Number(btGridCount) || 0))),
+                amountUsdPerLevel: Math.max(1, Number(btGridAmount) || 0),
+              },
+            });
+            setBtResult(r);
+          } else {
+            const r = runBacktest(candles, {
+              kind: "bnh",
+              cfg: { totalUsd: Math.max(1, Number(btBnhTotal) || 0) },
+            });
+            setBtResult(r);
+          }
+        };
+
+        const fillGridFromCurrent = () => {
+          if (!pair) return;
+          const lo = pair.price * 0.95;
+          const hi = pair.price * 1.05;
+          setBtGridLow(lo.toFixed(pair.price < 1 ? 4 : 2));
+          setBtGridHigh(hi.toFixed(pair.price < 1 ? 4 : 2));
+        };
+
+        // Equity curve SVG
+        const eqSvg = (() => {
+          if (!btResult || !btResult.ok || btResult.equity.length < 2) return null;
+          const w = 600, h = 80, pad = 4;
+          const pl = btResult.equity.map((p) => p.equity - p.spent);
+          const minPl = Math.min(...pl, 0);
+          const maxPl = Math.max(...pl, 0);
+          const range = (maxPl - minPl) || 1;
+          const dx = (w - pad * 2) / (pl.length - 1);
+          const path = pl
+            .map((v, i) => `${i === 0 ? "M" : "L"} ${(pad + i * dx).toFixed(2)} ${(pad + (h - pad * 2) - ((v - minPl) / range) * (h - pad * 2)).toFixed(2)}`)
+            .join(" ");
+          // Zero line
+          const zeroY = pad + (h - pad * 2) - ((0 - minPl) / range) * (h - pad * 2);
+          return (
+            <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: 80, display: "block" }}>
+              <line x1={pad} x2={w - pad} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.20)" strokeDasharray="3 3" strokeWidth={1} />
+              <path d={path} fill="none" stroke={btResult.totalReturn >= 0 ? "#86efac" : "#fca5a5"} strokeWidth={2} />
+            </svg>
+          );
+        })();
+
+        return (
+          <section style={{
+            marginBottom: 18, padding: 16, borderRadius: 12,
+            background: "linear-gradient(135deg, #1e1b4b 0%, #4c1d95 60%, #7e22ce 100%)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            color: "#fff",
+            boxShadow: "0 8px 24px rgba(76,29,149,0.25)",
+          }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" as const }}>
+              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" as const, color: "#c4b5fd" }}>
+                🧪 Backtester
+              </div>
+              <span style={{ fontSize: 10, color: "#cbd5e1" }}>
+                applies стратегия на исторических OHLC candles ({candleCount} candles доступно)
+              </span>
+            </div>
+
+            {/* Strategy tabs */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" as const }}>
+              {(["dca", "grid", "bnh"] as StrategyKind[]).map((s) => {
+                const labels: Record<StrategyKind, string> = { dca: "DCA", grid: "Grid", bnh: "Buy & Hold" };
+                const active = btStrategy === s;
+                return (
+                  <button key={s} onClick={() => { setBtStrategy(s); setBtResult(null); }}
+                    style={{
+                      padding: "5px 12px", borderRadius: 5,
+                      background: active ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.20)",
+                      color: active ? "#4c1d95" : "#e0e7ff",
+                      border: active ? "none" : "1px solid rgba(255,255,255,0.20)",
+                      fontSize: 11, fontWeight: 800, letterSpacing: 0.3, cursor: "pointer",
+                      textTransform: "uppercase" as const,
+                    }}>
+                    {labels[s]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Config form */}
+            <div style={{
+              padding: 10, borderRadius: 8,
+              background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.10)",
+              marginBottom: 10,
+              display: "flex", gap: 10, flexWrap: "wrap" as const, alignItems: "flex-end" as const,
+            }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                Pair
+                <select value={btPair} onChange={(e) => setBtPair(e.target.value as PairId)}
+                  style={{ padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontSize: 13, fontWeight: 700 }}>
+                  {(["AEV/USD", "BTC/USD", "ETH/USD", "SOL/USD"] as PairId[]).map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </label>
+              {btStrategy === "dca" && (
+                <>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                    Buy every (candles)
+                    <input type="number" min={1} step={1} value={btDcaInterval} onChange={(e) => setBtDcaInterval(e.target.value)}
+                      style={{ width: 110, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                    $ per buy
+                    <input type="number" min={1} step="any" value={btDcaAmount} onChange={(e) => setBtDcaAmount(e.target.value)}
+                      style={{ width: 90, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                </>
+              )}
+              {btStrategy === "grid" && (
+                <>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                    Low ($)
+                    <input type="number" min={0} step="any" value={btGridLow} onChange={(e) => setBtGridLow(e.target.value)}
+                      style={{ width: 100, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                    High ($)
+                    <input type="number" min={0} step="any" value={btGridHigh} onChange={(e) => setBtGridHigh(e.target.value)}
+                      style={{ width: 100, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                    Levels
+                    <input type="number" min={2} max={60} step={1} value={btGridCount} onChange={(e) => setBtGridCount(e.target.value)}
+                      style={{ width: 70, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                    $/level
+                    <input type="number" min={1} step="any" value={btGridAmount} onChange={(e) => setBtGridAmount(e.target.value)}
+                      style={{ width: 80, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <button onClick={fillGridFromCurrent}
+                    style={{
+                      padding: "6px 10px", borderRadius: 5,
+                      border: "1px solid rgba(196,181,253,0.40)", background: "rgba(196,181,253,0.12)",
+                      color: "#c4b5fd", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    }}>
+                    ±5%
+                  </button>
+                </>
+              )}
+              {btStrategy === "bnh" && (
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                  Total invest ($)
+                  <input type="number" min={1} step="any" value={btBnhTotal} onChange={(e) => setBtBnhTotal(e.target.value)}
+                    style={{ width: 110, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                </label>
+              )}
+              <button onClick={runBt}
+                disabled={candleCount < 2}
+                style={{
+                  padding: "8px 18px", borderRadius: 6, border: "none",
+                  background: candleCount < 2 ? "rgba(255,255,255,0.15)" : "linear-gradient(135deg, #c4b5fd, #fff)",
+                  color: candleCount < 2 ? "#94a3b8" : "#4c1d95",
+                  fontWeight: 800, fontSize: 13,
+                  cursor: candleCount < 2 ? "default" : "pointer",
+                  boxShadow: candleCount < 2 ? "none" : "0 2px 8px rgba(196,181,253,0.4)",
+                }}>
+                ▶ Запустить backtest
+              </button>
+            </div>
+
+            {/* Result */}
+            {btResult && !btResult.ok && (
+              <div style={{
+                padding: "8px 12px", borderRadius: 6,
+                background: "rgba(252,165,165,0.18)", border: "1px solid rgba(252,165,165,0.40)",
+                color: "#fca5a5", fontSize: 12, fontWeight: 700,
+              }}>⚠ {btResult.error}</div>
+            )}
+            {btResult && btResult.ok && (
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+                  <div style={{ padding: 8, borderRadius: 6, background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const }}>Total return</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: btResult.totalReturn >= 0 ? "#86efac" : "#fca5a5" }}>
+                      {btResult.totalReturn >= 0 ? "+" : ""}{btResult.totalReturn.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div style={{ padding: 8, borderRadius: 6, background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const }}>Final value</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fff" }}>{fmtUsd(btResult.finalValue)}</div>
+                    <div style={{ fontSize: 9, color: "#94a3b8", fontFamily: "ui-monospace, monospace" }}>spent {fmtUsd(btResult.totalSpent)}</div>
+                  </div>
+                  <div style={{ padding: 8, borderRadius: 6, background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const }}>Max drawdown</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fca5a5" }}>
+                      -{fmtUsd(btResult.maxDrawdown)}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#94a3b8", fontFamily: "ui-monospace, monospace" }}>{btResult.maxDrawdownPct.toFixed(1)}%</div>
+                  </div>
+                  <div style={{ padding: 8, borderRadius: 6, background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const }}>Trades</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fff" }}>{btResult.numTrades}</div>
+                    <div style={{ fontSize: 9, color: "#94a3b8", fontFamily: "ui-monospace, monospace" }}>{btResult.numBuys}B {btResult.numSells}S</div>
+                  </div>
+                  {btResult.realizedProfit !== 0 && (
+                    <div style={{ padding: 8, borderRadius: 6, background: "rgba(134,239,172,0.10)", border: "1px solid rgba(134,239,172,0.30)" }}>
+                      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#86efac", textTransform: "uppercase" as const }}>Realized profit</div>
+                      <div style={{ fontSize: 17, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#86efac" }}>
+                        +{fmtUsd(btResult.realizedProfit)}
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ padding: 8, borderRadius: 6, background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const }}>Final qty</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "ui-monospace, monospace", color: "#fff" }}>{btResult.finalQty.toFixed(6)}</div>
+                    <div style={{ fontSize: 9, color: "#94a3b8", fontFamily: "ui-monospace, monospace" }}>{btPair.split("/")[0]}</div>
+                  </div>
+                </div>
+                {/* Equity curve */}
+                {eqSvg && (
+                  <div style={{ padding: 8, borderRadius: 6, background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#c4b5fd", textTransform: "uppercase" as const, marginBottom: 4 }}>
+                      P&L equity curve · {btResult.equity.length} candles
+                    </div>
+                    {eqSvg}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ fontSize: 10, color: "#c4b5fd", marginTop: 10, lineHeight: 1.5 }}>
+              Backtest применяет стратегию на исторических 30s-candles той пары (накопленных pair tick'ами).
+              Чем дольше держишь страничку открытой — тем больше candle history для backtest.
+              DCA: buy fixed-amount каждые N candles. Grid: buy/sell на cross levels. B&H: одна покупка на старте.
             </div>
           </section>
         );

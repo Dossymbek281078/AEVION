@@ -1914,6 +1914,12 @@ export default function PricingPage() {
           >
             Refund policy →
           </Link>
+          <Link
+            href="/pricing/changelog"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Changelog →
+          </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json

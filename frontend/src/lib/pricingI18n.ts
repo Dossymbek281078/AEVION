@@ -195,6 +195,18 @@ const dict: Record<Lang, Record<string, string>> = {
     "refund.linkTerms": "Terms of Service",
     "refund.linkPrivacy": "Privacy Policy",
 
+    /* Changelog */
+    "changelog.badge": "PUBLIC CHANGELOG",
+    "changelog.title": "Changelog тарифов и модулей",
+    "changelog.subtitle": "Что мы добавили, изменили или убрали в pricing AEVION. Реверс-хронологически с группировкой по месяцам и фильтром по типу.",
+    "changelog.filter": "ФИЛЬТР:",
+    "changelog.filterAll": "Все",
+    "changelog.empty": "Нет записей под этот фильтр.",
+    "changelog.subscribeTitle": "Не пропустить будущие изменения",
+    "changelog.subscribeSubtitle": "Подпишитесь на newsletter — раз в 2 недели получаете дайджест новых модулей, промо-кодов и важных изменений в тарифах.",
+    "changelog.subscribeCta": "Подписаться",
+    "changelog.roadmapCta": "Открыть roadmap",
+
     /* FAQ */
     "faq.title": "Вопросы и ответы",
     "faq.subtitle": "Самое частое — здесь. Если нет ответа, напишите",
@@ -428,6 +440,17 @@ const dict: Record<Lang, Record<string, string>> = {
     "refund.lastUpdated": "Last updated",
     "refund.linkTerms": "Terms of Service",
     "refund.linkPrivacy": "Privacy Policy",
+
+    "changelog.badge": "PUBLIC CHANGELOG",
+    "changelog.title": "Pricing & modules changelog",
+    "changelog.subtitle": "What we added, changed or removed in AEVION pricing. Reverse-chronological with monthly grouping and type filter.",
+    "changelog.filter": "FILTER:",
+    "changelog.filterAll": "All",
+    "changelog.empty": "No entries under this filter.",
+    "changelog.subscribeTitle": "Don't miss future changes",
+    "changelog.subscribeSubtitle": "Subscribe to the newsletter — every 2 weeks you get a digest of new modules, promo codes and important pricing changes.",
+    "changelog.subscribeCta": "Subscribe",
+    "changelog.roadmapCta": "Open roadmap",
 
     "faq.title": "FAQ",
     "faq.subtitle": "Most common questions — here. If yours isn't, email",

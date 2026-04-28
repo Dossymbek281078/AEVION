@@ -5,16 +5,21 @@ import type { MetadataRoute } from "next";
 // /demo routes still work, just not as the launcher target.
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/?source=pwa",
     name: "AEVION — Trust infrastructure & Bank",
     short_name: "AEVION",
     description:
       "Wallet, royalties, signatures, awards, chess and more — bound by a single trust graph. Multilingual EN / RU / KZ.",
+    lang: "en",
+    dir: "ltr",
     start_url: "/bank",
     scope: "/",
     display: "standalone",
+    display_override: ["window-controls-overlay", "standalone"],
     orientation: "portrait",
     background_color: "#0f172a",
     theme_color: "#0d9488",
+    prefer_related_applications: false,
     categories: ["finance", "productivity", "social", "entertainment"],
     icons: [
       {

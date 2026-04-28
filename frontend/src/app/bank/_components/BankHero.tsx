@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { useI18n } from "@/lib/i18n";
 import { CurrencySwitcher } from "./Money";
@@ -25,20 +26,43 @@ export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }
           flexWrap: "wrap",
         }}
       >
-        <div
-          style={{
-            display: "inline-block",
-            padding: "4px 12px",
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase" as const,
-            border: "1px solid rgba(255,255,255,0.2)",
-            background: "rgba(255,255,255,0.08)",
-          }}
-        >
-          {t("hero.badge")}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "inline-block",
+              padding: "4px 12px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.08)",
+            }}
+          >
+            {t("hero.badge")}
+          </div>
+          <Link
+            href="/bank/changelog"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              padding: "4px 11px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: "0.05em",
+              border: "1px solid rgba(94,234,212,0.40)",
+              background: "rgba(94,234,212,0.10)",
+              color: "#5eead4",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span aria-hidden>★</span>
+            {t("hero.whatsNew")}
+          </Link>
         </div>
         <LanguageSwitcher variant="hero" />
       </div>

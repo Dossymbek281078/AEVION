@@ -10082,12 +10082,107 @@ const AWARDS_EXTRA_KK: Record<string, string> = {
   "awards.film.link.pitch": "Инвестор питчі",
 };
 
+const HELP_EXTRA_EN: Record<string, string> = {
+  /* /help — chrome */
+  "helpRoot.h1": "Help Center",
+  "helpRoot.subtitle": "Everything you need to know about using AEVION. Can't find an answer? Email us at yahiin1978@gmail.com",
+  "helpRoot.search.placeholder": "Search FAQ — try 'AEC', 'royalties', 'IP', 'moat'…",
+  "helpRoot.search.label": "Search FAQ",
+  "helpRoot.faq.title": "Frequently asked questions",
+  "helpRoot.faq.tab.users": "For users",
+  "helpRoot.faq.tab.investors": "For investors",
+  "helpRoot.faq.investorBanner": "Quick answers to the questions investors ask. Full narrative — at",
+  "helpRoot.faq.empty.users": "No matches for \"{q}\" in user FAQ. Try the other tab or email us.",
+  "helpRoot.faq.empty.investors": "No matches for \"{q}\" in investor FAQ. Try the other tab or email us.",
+  "helpRoot.contact.title": "Still need help?",
+  "helpRoot.contact.body": "Email us at yahiin1978@gmail.com and we will get back to you within 24 hours. You can also check our",
+  "helpRoot.contact.demoLink": "full demo",
+  "helpRoot.contact.bodyTail": "for a walkthrough of all features.",
+
+  /* Quick-link cards */
+  "helpRoot.qlink.start.label": "Getting started",
+  "helpRoot.qlink.start.desc": "Create your account",
+  "helpRoot.qlink.qright.label": "Register IP",
+  "helpRoot.qlink.qright.desc": "Protect your work",
+  "helpRoot.qlink.planet.label": "Planet",
+  "helpRoot.qlink.planet.desc": "Get certified",
+  "helpRoot.qlink.awards.label": "Awards",
+  "helpRoot.qlink.awards.desc": "Win recognition",
+  "helpRoot.qlink.bank.label": "Bank",
+  "helpRoot.qlink.bank.desc": "Manage earnings",
+  "helpRoot.qlink.chess.label": "CyberChess",
+  "helpRoot.qlink.chess.desc": "Play chess",
+};
+
+const HELP_EXTRA_RU: Record<string, string> = {
+  "helpRoot.h1": "Центр помощи",
+  "helpRoot.subtitle": "Всё, что нужно знать об использовании AEVION. Не нашли ответ? Напишите на yahiin1978@gmail.com",
+  "helpRoot.search.placeholder": "Поиск по FAQ — попробуйте 'AEC', 'роялти', 'IP', 'moat'…",
+  "helpRoot.search.label": "Поиск по FAQ",
+  "helpRoot.faq.title": "Часто задаваемые вопросы",
+  "helpRoot.faq.tab.users": "Для пользователей",
+  "helpRoot.faq.tab.investors": "Для инвесторов",
+  "helpRoot.faq.investorBanner": "Короткие ответы на инвесторские вопросы. Полный нарратив — в",
+  "helpRoot.faq.empty.users": "Совпадений по \"{q}\" в пользовательском FAQ нет. Попробуйте другую вкладку или напишите нам.",
+  "helpRoot.faq.empty.investors": "Совпадений по \"{q}\" в инвесторском FAQ нет. Попробуйте другую вкладку или напишите нам.",
+  "helpRoot.contact.title": "Остались вопросы?",
+  "helpRoot.contact.body": "Напишите на yahiin1978@gmail.com — ответим в течение 24 часов. Также можно посмотреть",
+  "helpRoot.contact.demoLink": "полное демо",
+  "helpRoot.contact.bodyTail": "с обзором всех функций.",
+
+  "helpRoot.qlink.start.label": "Начало",
+  "helpRoot.qlink.start.desc": "Создайте аккаунт",
+  "helpRoot.qlink.qright.label": "Регистрация IP",
+  "helpRoot.qlink.qright.desc": "Защитите работы",
+  "helpRoot.qlink.planet.label": "Planet",
+  "helpRoot.qlink.planet.desc": "Получите сертификат",
+  "helpRoot.qlink.awards.label": "Премии",
+  "helpRoot.qlink.awards.desc": "Признание + AEC",
+  "helpRoot.qlink.bank.label": "Банк",
+  "helpRoot.qlink.bank.desc": "Управляйте выплатами",
+  "helpRoot.qlink.chess.label": "CyberChess",
+  "helpRoot.qlink.chess.desc": "Сыграйте партию",
+};
+
+const HELP_EXTRA_KK: Record<string, string> = {
+  "helpRoot.h1": "Көмек орталығы",
+  "helpRoot.subtitle": "AEVION-ды пайдалану туралы білуіңіз керектің бәрі. Жауап таппадыңыз ба? yahiin1978@gmail.com мекенжайына жазыңыз",
+  "helpRoot.search.placeholder": "FAQ іздеу — 'AEC', 'роялти', 'IP', 'moat' көріңіз…",
+  "helpRoot.search.label": "FAQ іздеу",
+  "helpRoot.faq.title": "Жиі қойылатын сұрақтар",
+  "helpRoot.faq.tab.users": "Пайдаланушыларға",
+  "helpRoot.faq.tab.investors": "Инвесторларға",
+  "helpRoot.faq.investorBanner": "Инвесторлар сұрайтын сұрақтарға қысқа жауаптар. Толық нарратив —",
+  "helpRoot.faq.empty.users": "\"{q}\" бойынша пайдаланушы FAQ-тан табылған жоқ. Басқа қойындыны қараңыз немесе бізге жазыңыз.",
+  "helpRoot.faq.empty.investors": "\"{q}\" бойынша инвестор FAQ-тан табылған жоқ. Басқа қойындыны қараңыз немесе бізге жазыңыз.",
+  "helpRoot.contact.title": "Сұрақтар бар ма?",
+  "helpRoot.contact.body": "yahiin1978@gmail.com мекенжайына жазыңыз — 24 сағат ішінде жауап береміз. Сондай-ақ қарап шығыңыз:",
+  "helpRoot.contact.demoLink": "толық демо",
+  "helpRoot.contact.bodyTail": "— барлық функцияларды шолу.",
+
+  "helpRoot.qlink.start.label": "Бастау",
+  "helpRoot.qlink.start.desc": "Аккаунт жасаңыз",
+  "helpRoot.qlink.qright.label": "IP-ды тіркеу",
+  "helpRoot.qlink.qright.desc": "Жұмысыңызды қорғаңыз",
+  "helpRoot.qlink.planet.label": "Planet",
+  "helpRoot.qlink.planet.desc": "Сертификат алыңыз",
+  "helpRoot.qlink.awards.label": "Марапаттар",
+  "helpRoot.qlink.awards.desc": "Мойындау + AEC",
+  "helpRoot.qlink.bank.label": "Банк",
+  "helpRoot.qlink.bank.desc": "Кірістерді басқарыңыз",
+  "helpRoot.qlink.chess.label": "CyberChess",
+  "helpRoot.qlink.chess.desc": "Шахмат ойнаңыз",
+};
+
 Object.assign(translations.en, BANK_EXTRA_EN);
 Object.assign(translations.ru, BANK_EXTRA_RU);
 Object.assign(translations.kk, BANK_EXTRA_KK);
 Object.assign(translations.en, AWARDS_EXTRA_EN);
 Object.assign(translations.ru, AWARDS_EXTRA_RU);
 Object.assign(translations.kk, AWARDS_EXTRA_KK);
+Object.assign(translations.en, HELP_EXTRA_EN);
+Object.assign(translations.ru, HELP_EXTRA_RU);
+Object.assign(translations.kk, HELP_EXTRA_KK);
 
 function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;

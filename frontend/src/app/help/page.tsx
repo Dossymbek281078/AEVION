@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { useI18n } from "@/lib/i18n";
 
 type FAQ = { q: string; a: string };
 type FaqCategory = "users" | "investors";
@@ -95,6 +96,7 @@ const faqs: FAQ[] = [
 ];
 
 export default function HelpPage() {
+  const { t } = useI18n();
   const [open, setOpen] = useState<number | null>(null);
   const [category, setCategory] = useState<FaqCategory>("users");
   const [query, setQuery] = useState("");
@@ -140,10 +142,10 @@ export default function HelpPage() {
             }}
           >
             <h1 style={{ fontSize: 26, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-0.03em" }}>
-              Help Center
+              {t("helpRoot.h1")}
             </h1>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.9, lineHeight: 1.5 }}>
-              Everything you need to know about using AEVION. Can&apos;t find an answer? Email us at yahiin1978@gmail.com
+              {t("helpRoot.subtitle")}
             </p>
           </div>
         </div>
@@ -158,12 +160,12 @@ export default function HelpPage() {
           }}
         >
           {[
-            { label: "Getting started", href: "/auth", desc: "Create your account" },
-            { label: "Register IP", href: "/qright", desc: "Protect your work" },
-            { label: "Planet", href: "/planet", desc: "Get certified" },
-            { label: "Awards", href: "/awards", desc: "Win recognition" },
-            { label: "Bank", href: "/bank", desc: "Manage earnings" },
-            { label: "CyberChess", href: "/cyberchess", desc: "Play chess" },
+            { label: t("helpRoot.qlink.start.label"),  href: "/auth",       desc: t("helpRoot.qlink.start.desc") },
+            { label: t("helpRoot.qlink.qright.label"), href: "/qright",     desc: t("helpRoot.qlink.qright.desc") },
+            { label: t("helpRoot.qlink.planet.label"), href: "/planet",     desc: t("helpRoot.qlink.planet.desc") },
+            { label: t("helpRoot.qlink.awards.label"), href: "/awards",     desc: t("helpRoot.qlink.awards.desc") },
+            { label: t("helpRoot.qlink.bank.label"),   href: "/bank",       desc: t("helpRoot.qlink.bank.desc") },
+            { label: t("helpRoot.qlink.chess.label"),  href: "/cyberchess", desc: t("helpRoot.qlink.chess.desc") },
           ].map((item) => (
             <Link
               key={item.href}
@@ -186,14 +188,14 @@ export default function HelpPage() {
         {/* FAQ search */}
         <div style={{ marginBottom: 16, position: "relative" }}>
           <label htmlFor="help-search" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
-            Search FAQ
+            {t("helpRoot.search.label")}
           </label>
           <input
             id="help-search"
             type="search"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setOpen(null); }}
-            placeholder="Search FAQ — try 'AEC', 'royalties', 'IP', 'moat'…"
+            placeholder={t("helpRoot.search.placeholder")}
             style={{
               width: "100%",
               padding: "12px 16px",
@@ -210,7 +212,7 @@ export default function HelpPage() {
 
         {/* FAQ */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>Frequently asked questions</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>{t("helpRoot.faq.title")}</h2>
           <div
             role="tablist"
             aria-label="FAQ audience"
@@ -245,7 +247,7 @@ export default function HelpPage() {
                     letterSpacing: "0.05em",
                   }}
                 >
-                  {c === "investors" ? "For investors" : "For users"}
+                  {c === "investors" ? t("helpRoot.faq.tab.investors") : t("helpRoot.faq.tab.users")}
                 </button>
               );
             })}
@@ -264,7 +266,7 @@ export default function HelpPage() {
               border: "1px solid rgba(251,191,36,0.3)",
             }}
           >
-            Quick answers to the questions investors ask. Full narrative — at{" "}
+            {t("helpRoot.faq.investorBanner")}{" "}
             <Link href="/pitch" style={{ color: "#b45309", fontWeight: 800 }}>
               /pitch
             </Link>
@@ -282,12 +284,10 @@ export default function HelpPage() {
               textAlign: "center",
             }}
           >
-            No matches for &quot;{query}&quot; in {category === "investors" ? "investor" : "user"} FAQ.
-            Try the other tab or email us at{" "}
+            {t(category === "investors" ? "helpRoot.faq.empty.investors" : "helpRoot.faq.empty.users", { q: query })}{" "}
             <a href="mailto:yahiin1978@gmail.com" style={{ color: "#0d9488", fontWeight: 700 }}>
               yahiin1978@gmail.com
             </a>
-            .
           </div>
         ) : null}
         <div style={{ display: "grid", gap: 8 }}>
@@ -348,11 +348,11 @@ export default function HelpPage() {
             background: "rgba(15,23,42,0.02)",
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>Still need help?</div>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>{t("helpRoot.contact.title")}</div>
           <p style={{ margin: 0, fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
-            Email us at <a href="mailto:yahiin1978@gmail.com" style={{ color: "#0d9488", fontWeight: 700 }}>yahiin1978@gmail.com</a> and 
-            we will get back to you within 24 hours. You can also check our{" "}
-            <Link href="/demo" style={{ color: "#0d9488", fontWeight: 700 }}>full demo</Link> for a walkthrough of all features.
+            {t("helpRoot.contact.body")}{" "}
+            <Link href="/demo" style={{ color: "#0d9488", fontWeight: 700 }}>{t("helpRoot.contact.demoLink")}</Link>{" "}
+            {t("helpRoot.contact.bodyTail")}
           </p>
         </div>
       </ProductPageShell>

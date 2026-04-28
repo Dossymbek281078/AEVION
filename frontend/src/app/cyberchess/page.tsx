@@ -2881,8 +2881,8 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── First-visit hint — гасится после 1-й партии или первого Chessy ─── */}
-          {savedGames.length===0&&chessy.lifetime===0&&<div className="cc-firstvisit">
+          {/* ─── First-visit hint — гасится после 1-й сохранённой партии ─── */}
+          {savedGames.length===0&&<div className="cc-firstvisit">
             <div style={{position:"relative",display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
               <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>♟</div>
               <div style={{flex:1,minWidth:200}}>
@@ -3265,26 +3265,7 @@ export default function CyberChessPage(){
                   className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
                   style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                   {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)"}}/>}
-                  {p&&(()=>{
-                    const isSlideDst=!!lm&&lm.to===sq;
-                    let slideStyle:React.CSSProperties={};
-                    if(isSlideDst){
-                      const srcFile=FILES.indexOf(lm.from[0]);
-                      const srcRank=parseInt(lm.from[1]);
-                      const srcR=8-srcRank,srcC=srcFile;
-                      const sign=flip?-1:1;
-                      const offsetX=sign*(srcC-c)*100;
-                      const offsetY=sign*(srcR-r)*100;
-                      slideStyle={["--cc-piece-from-x" as any]:`${offsetX}%`,["--cc-piece-from-y" as any]:`${offsetY}%`};
-                    }
-                    const baseAnim=iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined;
-                    return <div
-                      key={isSlideDst?`slide-${bk}`:"static"}
-                      className={isSlideDst?"cc-piece-sliding":undefined}
-                      style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s",animation:baseAnim,borderRadius:iCk?"50%":undefined,...slideStyle}}>
-                      <Piece type={p.type} color={p.color}/>
-                    </div>;
-                  })()}
+                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
                   {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
                 </div>}))}
             </div>

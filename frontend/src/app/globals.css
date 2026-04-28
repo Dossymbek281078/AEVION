@@ -461,30 +461,6 @@ code {
   100% { transform: scale(1); }
 }
 
-/* Piece slide animation — fundament under future sports skins.
-   The destination cell's piece is rendered with --cc-piece-from-x / -y as
-   offsets in cell-units (e.g. 200% = 2 cells), and animates to translate(0,0).
-   Combined with a subtle scale-pop on landing for tactile feel. */
-@keyframes cc-piece-slide {
-  0% {
-    transform:
-      translate(var(--cc-piece-from-x, 0), var(--cc-piece-from-y, 0))
-      scale(0.94);
-  }
-  72% {
-    transform: translate(0, 0) scale(1.06);
-  }
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-}
-.cc-piece-sliding {
-  animation: cc-piece-slide 220ms cubic-bezier(0.16, 1.05, 0.3, 1) !important;
-  will-change: transform;
-}
-@media (prefers-reduced-motion: reduce) {
-  .cc-piece-sliding { animation: none !important; }
-}
 
 /* Confetti for game-over win */
 .cc-confetti {

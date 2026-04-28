@@ -832,6 +832,13 @@ export default function QRightPage() {
               >
                 ⭐ Upgrade to Verified ($19)
               </Link>
+              <Link
+                href={`/qright/badge/${result.qright.id}`}
+                style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                title="Get an embeddable trust badge for your site"
+              >
+                🔖 Embed Badge
+              </Link>
               <button
                 onClick={reset}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}
@@ -886,6 +893,21 @@ export default function QRightPage() {
                       <div style={{ marginTop: 6, fontSize: 12, color: "#475569" }}>{x.description.slice(0, 120)}{x.description.length > 120 ? "..." : ""}</div>
                       <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "#f8fafc", fontSize: 10, fontFamily: "monospace", color: "#64748b", wordBreak: "break-all" }}>
                         SHA-256: {x.contentHash}
+                      </div>
+                      <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={apiUrl(`/api/qright/badge/${x.id}.svg`)}
+                          alt={`AEVION QRight badge — ${x.title}`}
+                          height={22}
+                          style={{ display: "block" }}
+                        />
+                        <Link
+                          href={`/qright/badge/${x.id}`}
+                          style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(13,148,136,0.3)", borderRadius: 6 }}
+                        >
+                          Get embed code →
+                        </Link>
                       </div>
                     </div>
                   ))}

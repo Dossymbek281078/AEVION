@@ -326,6 +326,7 @@ export default function QCoreMultiAgentPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -436,6 +437,49 @@ export default function QCoreMultiAgentPage() {
   const deletePreset = useCallback((id: string) => {
     persistPresets(presets.filter((p) => p.id !== id));
   }, [presets, persistPresets]);
+
+  /* ── Workspace export / import ── */
+  const exportWorkspace = useCallback(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const name = (presets.length > 0 ? presets[presets.length - 1].name : "workspace")
+      .replace(/[^a-z0-9_-]/gi, "-")
+      .toLowerCase();
+    const payload = { strategy, overrides, maxRevisions, presets };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `workspace-${name}-${today}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [strategy, overrides, maxRevisions, presets]);
+
+  const importWorkspace = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setImportError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset the input so the same file can be re-imported after a fix.
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const raw = ev.target?.result;
+        if (typeof raw !== "string") throw new Error("Could not read file.");
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") throw new Error("Not a valid JSON object.");
+        if (!Array.isArray(parsed.panels) && typeof parsed.strategy !== "string") {
+          throw new Error("Missing required fields (strategy, overrides, presets).");
+        }
+        if (typeof parsed.strategy === "string") setStrategy(parsed.strategy as Strategy);
+        if (parsed.overrides && typeof parsed.overrides === "object") setOverrides(parsed.overrides);
+        if (typeof parsed.maxRevisions === "number") setMaxRevisions(parsed.maxRevisions);
+        if (Array.isArray(parsed.presets)) persistPresets(parsed.presets);
+      } catch (err: any) {
+        setImportError(err?.message || "Invalid workspace file.");
+      }
+    };
+    reader.readAsText(file);
+  }, [persistPresets]);
 
   /* ── Auto-scroll on new chunks (only if user is at the bottom) ── */
   useEffect(() => {
@@ -1386,6 +1430,55 @@ export default function QCoreMultiAgentPage() {
                 >
                   + Save current
                 </button>
+              )}
+            </div>
+
+            {/* Workspace export / import */}
+            <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 11 }}>
+              <button
+                type="button"
+                onClick={exportWorkspace}
+                title="Download current strategy, role config, and presets as a JSON file"
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  background: "rgba(255,255,255,0.07)",
+                  color: "rgba(255,255,255,0.85)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Export workspace
+              </button>
+              <label
+                title="Load a previously exported workspace JSON file"
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  background: "rgba(255,255,255,0.07)",
+                  color: "rgba(255,255,255,0.85)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                Import workspace
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={importWorkspace}
+                  style={{ display: "none" }}
+                />
+              </label>
+              {importError && (
+                <span style={{ color: "#fca5a5", fontSize: 11, fontWeight: 600 }}>
+                  {importError}
+                </span>
               )}
             </div>
           </div>

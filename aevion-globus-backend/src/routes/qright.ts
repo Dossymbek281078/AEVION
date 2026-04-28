@@ -48,6 +48,8 @@ async function ensureQRightTable() {
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "country" TEXT;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "city" TEXT;`);
   await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "ownerUserId" TEXT;`);
+  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokedAt" TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "revokeReason" TEXT;`);
 
   ensuredTable = true;
 }
@@ -92,6 +94,54 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       items: result.rows,
       total: result.rowCount,
       scope: "all",
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Search — GET /objects/search?q=...&kind=music&limit=20
+//    Case-insensitive ILIKE on title; optional kind filter; capped at 50.
+//    Declared BEFORE /objects/:id so Express doesn't treat "search" as an id.
+qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const q = String(req.query.q || "").trim();
+    if (q.length < 2) {
+      return res.status(400).json({ error: "q must be at least 2 chars" });
+    }
+    const kind = String(req.query.kind || "").trim();
+    const limitRaw = parseInt(String(req.query.limit || "20"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 20;
+
+    const params: unknown[] = [`%${q}%`];
+    let where = `"title" ILIKE $1`;
+    if (kind) {
+      params.push(kind);
+      where += ` AND "kind" = $${params.length}`;
+    }
+    params.push(limit);
+
+    const result = await pool.query(
+      `SELECT id, title, kind, "contentHash", "ownerName", country, city, "createdAt", "revokedAt"
+       FROM "QRightObject"
+       WHERE ${where}
+       ORDER BY "createdAt" DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    res.json({
+      query: q,
+      kind: kind || null,
+      total: result.rowCount,
+      items: result.rows,
     });
   } catch (err: any) {
     res.status(500).json({
@@ -210,7 +260,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
 
     const id = String(req.params.id);
     const result = await pool.query(
-      `SELECT id, title, kind, "contentHash", "ownerName", country, city, "createdAt"
+      `SELECT id, title, kind, "contentHash", "ownerName", country, city, "createdAt", "revokedAt", "revokeReason"
        FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
       [id]
     );
@@ -231,11 +281,19 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       country: string | null;
       city: string | null;
       createdAt: Date | string;
+      revokedAt: Date | string | null;
+      revokeReason: string | null;
     };
 
     const createdAtMs =
       row.createdAt instanceof Date ? row.createdAt.getTime() : new Date(row.createdAt).getTime();
-    const etag = `W/"qright-embed-${row.id}-${createdAtMs}"`;
+    const revokedAtMs = row.revokedAt
+      ? row.revokedAt instanceof Date
+        ? row.revokedAt.getTime()
+        : new Date(row.revokedAt).getTime()
+      : 0;
+    // ETag must change on revoke so cached badges flip without manual purge.
+    const etag = `W/"qright-embed-${row.id}-${createdAtMs}-${revokedAtMs}"`;
 
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -248,7 +306,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.json({
       id: row.id,
-      status: "registered",
+      status: row.revokedAt ? "revoked" : "registered",
       title: row.title,
       kind: row.kind,
       contentHashPrefix: row.contentHash.slice(0, 16),
@@ -257,7 +315,13 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       country: row.country,
       city: row.city,
       createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
-      verifyUrl: `/qright/embed/${row.id}`,
+      revokedAt: row.revokedAt
+        ? row.revokedAt instanceof Date
+          ? row.revokedAt.toISOString()
+          : row.revokedAt
+        : null,
+      revokeReason: row.revokeReason,
+      verifyUrl: `/qright/object/${row.id}`,
     });
   } catch (err: any) {
     res.status(500).json({
@@ -279,7 +343,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     const theme = String(req.query.theme || "dark").toLowerCase() === "light" ? "light" : "dark";
 
     const result = await pool.query(
-      `SELECT id, kind, "createdAt"
+      `SELECT id, kind, "createdAt", "revokedAt"
        FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
       [id]
     );
@@ -328,10 +392,20 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
       return res.send(svgShell("AEVION QRIGHT", "not found", "#94a3b8"));
     }
 
-    const row = result.rows[0] as { id: string; kind: string; createdAt: Date | string };
+    const row = result.rows[0] as {
+      id: string;
+      kind: string;
+      createdAt: Date | string;
+      revokedAt: Date | string | null;
+    };
     const createdAt =
       row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt);
-    const etag = `W/"qright-badge-${row.id}-${createdAt.getTime()}-${theme}"`;
+    const revokedAtMs = row.revokedAt
+      ? row.revokedAt instanceof Date
+        ? row.revokedAt.getTime()
+        : new Date(row.revokedAt).getTime()
+      : 0;
+    const etag = `W/"qright-badge-${row.id}-${createdAt.getTime()}-${revokedAtMs}-${theme}"`;
 
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -340,8 +414,16 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     }
 
     const dateLabel = createdAt.toISOString().slice(0, 10);
-    const right = `${row.kind.toUpperCase()} · ${dateLabel}`;
 
+    if (row.revokedAt) {
+      // Revoked: keep the badge so the third-party site doesn't 404, but
+      // visibly flip it red — the integrity guarantee no longer holds.
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.send(svgShell("AEVION QRIGHT", `REVOKED · ${dateLabel}`, "#dc2626"));
+    }
+
+    const right = `${row.kind.toUpperCase()} · ${dateLabel}`;
     res.setHeader("ETag", etag);
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION QRIGHT", right, "#0d9488"));
@@ -415,6 +497,71 @@ qrightRouter.post("/objects", async (req, res) => {
     );
 
     res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Revoke — POST /revoke/:id
+//    Owner-only. Marks the object as revoked; embed/badge surfaces flip red.
+//    Original record is kept (regulatory: revocation is a public event, not a delete).
+qrightRouter.post("/revoke/:id", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!auth) {
+      return res.status(401).json({ error: "Bearer token required" });
+    }
+
+    const id = String(req.params.id);
+    const reason = String(req.body?.reason || "").slice(0, 500) || null;
+
+    const owned = await pool.query(
+      `SELECT "id", "ownerUserId", "ownerEmail", "revokedAt"
+       FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    if (owned.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    const row = owned.rows[0] as {
+      id: string;
+      ownerUserId: string | null;
+      ownerEmail: string | null;
+      revokedAt: Date | string | null;
+    };
+
+    const isOwner =
+      (row.ownerUserId && row.ownerUserId === auth.sub) ||
+      (!row.ownerUserId && row.ownerEmail && row.ownerEmail === auth.email);
+    if (!isOwner) {
+      return res.status(403).json({ error: "Not the owner of this object" });
+    }
+
+    if (row.revokedAt) {
+      return res.status(409).json({ error: "Already revoked", revokedAt: row.revokedAt });
+    }
+
+    const updated = await pool.query(
+      `UPDATE "QRightObject"
+       SET "revokedAt" = NOW(), "revokeReason" = $2
+       WHERE "id" = $1
+       RETURNING id, "revokedAt", "revokeReason"`,
+      [id, reason]
+    );
+
+    res.json({
+      id: updated.rows[0].id,
+      status: "revoked",
+      revokedAt: updated.rows[0].revokedAt,
+      revokeReason: updated.rows[0].revokeReason,
+    });
   } catch (err: any) {
     res.status(500).json({
       error: "DB error",

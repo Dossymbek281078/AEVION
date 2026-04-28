@@ -90,11 +90,17 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/qright/objects/{id}": { get: { summary: "Get one QRight object (ETag/304)" } },
       "/api/qright/objects.csv": { get: { summary: "Download QRight registry as CSV" } },
+      "/api/qright/objects/search": {
+        get: { summary: "Search by title (ILIKE), optional ?kind, ?limit≤50" },
+      },
       "/api/qright/embed/{id}": {
         get: { summary: "Public sanitized JSON for embeds (CORS, ETag/304)" },
       },
       "/api/qright/badge/{id}.svg": {
-        get: { summary: "Embeddable SVG trust badge — ?theme=dark|light" },
+        get: { summary: "Embeddable SVG trust badge — ?theme=dark|light, red on revoke" },
+      },
+      "/api/qright/revoke/{id}": {
+        post: { summary: "Revoke a QRight object (owner only, Bearer required)" },
       },
       "/api/qsign/sign": { post: { summary: "[v1] Sign payload (HMAC, no persistence)" } },
       "/api/qsign/verify": { post: { summary: "[v1] Stateless verify" } },

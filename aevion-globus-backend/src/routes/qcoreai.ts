@@ -36,6 +36,7 @@ import {
   listSessions,
   renameSession,
   renameSessionIfDefault,
+  searchRuns,
   shareRun,
   touchSession,
   unshareRun,
@@ -125,6 +126,7 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     const { getPool } = await import("../lib/dbPool");
     await ensureQCoreTables(getPool());
   } catch { /* probe errors are reflected via isDbReady() */ }
+  const envCap = parseEnvCap();
   res.json({
     service: "qcoreai",
     ok: true,
@@ -134,9 +136,22 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     storage: isDbReady() ? "postgres" : "in-memory",
     storageError: isDbReady() ? null : getDbError(),
     webhookConfigured: isWebhookConfigured(),
+    costCapDefaultUsd: envCap,
     at: new Date().toISOString(),
   });
 });
+
+/**
+ * Parse the env hard-cap. Allows ops to set a global guardrail per worker:
+ *   QCORE_HARD_CAP_USD=0.50
+ * Per-request body field `costCapUsd` overrides this default downward.
+ */
+function parseEnvCap(): number | null {
+  const raw = process.env.QCORE_HARD_CAP_USD;
+  if (!raw) return null;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    Sessions CRUD
@@ -283,6 +298,24 @@ qcoreaiRouter.get("/analytics", async (req, res) => {
     res.json(summary);
   } catch (err: any) {
     res.status(500).json({ error: "analytics failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/search?q=...
+ * Substring search across the caller's runs. Matches userInput,
+ * finalContent, and parent session.title. Used by the sidebar quick-find.
+ */
+qcoreaiRouter.get("/search", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const q = String(req.query.q ?? "").trim().slice(0, 200);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    if (!q) return res.json({ items: [], query: "" });
+    const items = await searchRuns(auth?.sub ?? null, q, limit);
+    res.json({ items, query: q });
+  } catch (err: any) {
+    res.status(500).json({ error: "search failed", details: err?.message });
   }
 });
 
@@ -508,6 +541,16 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     critic: parseAgentOverride(req.body?.overrides?.critic),
   };
 
+  // Hard cost cap. Per-request body wins; falls back to QCORE_HARD_CAP_USD env.
+  // When the running total (USD) crosses the cap after any agent_end, the
+  // orchestrator is shut down and the run finishes with status="capped".
+  const envCap = parseEnvCap();
+  const requestedCap =
+    typeof req.body?.costCapUsd === "number" && req.body.costCapUsd > 0
+      ? req.body.costCapUsd
+      : null;
+  const costCapUsd: number | null = requestedCap ?? envCap;
+
   let sessionId: string;
   let runId: string;
   try {
@@ -554,12 +597,16 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   }, 20000);
 
   let aborted = false;
+  let capped = false;
   req.on("close", () => {
     aborted = true;
     clearInterval(heartbeat);
   });
 
   send({ type: "session", sessionId, runId });
+  if (costCapUsd != null) {
+    send({ type: "cost_cap_set", costCapUsd });
+  }
 
   const history = await buildHistoryContext(sessionId, 6);
 
@@ -617,6 +664,17 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
             ordering: ordering++,
           });
           pendingByKey.delete(key);
+          if (costCapUsd != null && totalCost >= costCapUsd) {
+            capped = true;
+            send({
+              type: "cost_cap_hit",
+              costCapUsd,
+              totalCostUsd: totalCost,
+              message:
+                `Cost cap reached: $${totalCost.toFixed(4)} ≥ $${costCapUsd.toFixed(4)}. ` +
+                "Pipeline halted before the next agent.",
+            });
+          }
           break;
         }
         case "final":
@@ -634,6 +692,10 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
         default:
           break;
       }
+
+      // Stop iterating the orchestrator generator after a cap hit. The
+      // generator's `return()` finalizer will fire and close upstream streams.
+      if (capped) break;
     }
   } catch (err: any) {
     hadError = err?.message || "orchestrator crashed";
@@ -647,10 +709,19 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   // Persist run finalization. When the client aborted mid-stream we save the
   // last agent output as a partial final so the user can still see what
   // arrived before they hit Stop.
-  let runStatus: "done" | "stopped" | "error" = "done";
+  let runStatus: "done" | "stopped" | "error" | "capped" = "done";
   let runFinal: string | null = finalContent;
   try {
-    if (aborted) {
+    if (capped) {
+      runStatus = "capped";
+      runFinal = finalContent ?? lastAgentContent ?? null;
+      await finishRun(runId, "capped", {
+        error: `cost cap reached: $${totalCost.toFixed(4)} >= $${(costCapUsd ?? 0).toFixed(4)}`,
+        finalContent: runFinal,
+        totalDurationMs,
+        totalCostUsd: totalCost,
+      });
+    } else if (aborted) {
       runStatus = "stopped";
       runFinal = finalContent ?? lastAgentContent ?? null;
       await finishRun(runId, "stopped", {

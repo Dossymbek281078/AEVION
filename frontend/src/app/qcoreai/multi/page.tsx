@@ -68,7 +68,8 @@ type RunState = {
   verdict?: { approved: boolean; feedback: string };
   finalContent?: string;
   error?: string;
-  status: "running" | "done" | "error" | "stopped";
+  status: "running" | "done" | "error" | "stopped" | "capped";
+  costCapUsd?: number;
   startedAt: number;
   totalDurationMs?: number;
   totalCostUsd?: number;
@@ -76,6 +77,18 @@ type RunState = {
   agentConfig?: any;
   persisted?: boolean;
   shareToken?: string | null;
+};
+
+type SearchHit = {
+  runId: string;
+  sessionId: string;
+  sessionTitle: string;
+  strategy: string | null;
+  status: string;
+  startedAt: string;
+  totalCostUsd: number | null;
+  preview: string;
+  matched: "input" | "final" | "title";
 };
 
 type SessionSummary = {
@@ -127,6 +140,8 @@ type SSEPayload =
   | { type: "final"; content: string }
   | { type: "error"; message: string; role?: AgentRole }
   | { type: "done"; totalDurationMs: number; totalCostUsd: number }
+  | { type: "cost_cap_set"; costCapUsd: number }
+  | { type: "cost_cap_hit"; costCapUsd: number; totalCostUsd: number; message: string }
   | { type: "sse_end" };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -317,6 +332,13 @@ export default function QCoreMultiAgentPage() {
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [webhookConfigured, setWebhookConfigured] = useState(false);
+  // Hard cost cap. Empty string = no per-request cap (server may still apply env default).
+  const [costCapInput, setCostCapInput] = useState<string>("");
+  const [costCapDefaultUsd, setCostCapDefaultUsd] = useState<number | null>(null);
+  // Sidebar quick-find across all the caller's runs.
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<SearchHit[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
   // Sessions sidebar state — only honored on mobile via CSS, always-open on desktop.
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -361,6 +383,9 @@ export default function QCoreMultiAgentPage() {
         const healthData = await healthRes.json().catch(() => ({}));
         if (typeof healthData?.webhookConfigured === "boolean") {
           setWebhookConfigured(healthData.webhookConfigured);
+        }
+        if (typeof healthData?.costCapDefaultUsd === "number") {
+          setCostCapDefaultUsd(healthData.costCapDefaultUsd);
         }
 
         if (provData?.providers) setProviders(provData.providers);
@@ -497,6 +522,37 @@ export default function QCoreMultiAgentPage() {
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     userScrolledUpRef.current = distFromBottom > 80;
   }, []);
+
+  /* ── Debounced search across all runs ── */
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchBusy(false);
+      return;
+    }
+    setSearchBusy(true);
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(q)}`),
+          { headers: bearerHeader(), signal: ctrl.signal }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.items)) setSearchResults(data.items);
+        else setSearchResults([]);
+      } catch {
+        /* aborted or network — leave previous results */
+      } finally {
+        setSearchBusy(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [searchQuery]);
 
   /* ── Load a session's runs when selected ── */
   const loadSession = useCallback(async (sessionId: string) => {
@@ -638,6 +694,8 @@ export default function QCoreMultiAgentPage() {
     abortRef.current = controller;
 
     try {
+      const capParsed = parseFloat(costCapInput);
+      const useCostCap = Number.isFinite(capParsed) && capParsed > 0 ? capParsed : undefined;
       const body = {
         input: msg,
         sessionId: activeSessionId,
@@ -649,6 +707,7 @@ export default function QCoreMultiAgentPage() {
           writerB: useOverrides.writerB,
           critic: useOverrides.critic,
         },
+        ...(useCostCap !== undefined ? { costCapUsd: useCostCap } : {}),
       };
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
         method: "POST",
@@ -776,10 +835,29 @@ export default function QCoreMultiAgentPage() {
             setRuns((prev) =>
               prev.map((r) => (r.id === realRunId ? {
                 ...r,
-                status: r.error ? "error" : "done",
+                status: r.status === "capped" ? "capped" : r.error ? "error" : "done",
                 totalDurationMs: payload.totalDurationMs,
                 totalCostUsd: payload.totalCostUsd,
               } : r))
+            );
+            break;
+          case "cost_cap_set":
+            setRuns((prev) =>
+              prev.map((r) => (r.id === realRunId ? { ...r, costCapUsd: payload.costCapUsd } : r))
+            );
+            break;
+          case "cost_cap_hit":
+            setRuns((prev) =>
+              prev.map((r) =>
+                r.id === realRunId
+                  ? {
+                      ...r,
+                      status: "capped",
+                      costCapUsd: payload.costCapUsd,
+                      error: payload.message || `cost cap reached: $${payload.totalCostUsd}`,
+                    }
+                  : r
+              )
             );
             break;
           case "sse_end":
@@ -805,7 +883,7 @@ export default function QCoreMultiAgentPage() {
       abortRef.current = null;
       setBusy(false);
     }
-  }, [input, busy, activeSessionId, maxRevisions, overrides, strategy]);
+  }, [input, busy, activeSessionId, maxRevisions, overrides, strategy, costCapInput]);
 
   const stop = useCallback(() => {
     // Signal compare-all loop to stop firing more strategies.
@@ -1567,6 +1645,40 @@ export default function QCoreMultiAgentPage() {
                   </span>
                 </div>
               )}
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 700 }}>Cost cap (USD):</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  value={costCapInput}
+                  onChange={(e) => setCostCapInput(e.target.value)}
+                  placeholder={
+                    costCapDefaultUsd != null ? `default $${costCapDefaultUsd.toFixed(2)}` : "no cap"
+                  }
+                  style={{
+                    width: 130, padding: "6px 10px", borderRadius: 8,
+                    border: "1px solid #cbd5e1", background: "#fff",
+                    color: "#0f172a", fontSize: 13, fontFamily: "inherit", outline: "none",
+                  }}
+                />
+                {costCapInput && (
+                  <button
+                    onClick={() => setCostCapInput("")}
+                    style={{
+                      padding: "4px 10px", borderRadius: 8,
+                      background: "#fff", border: "1px solid #cbd5e1",
+                      color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                  Pipeline halts when running cost ≥ cap. {costCapDefaultUsd != null ? `Server enforces $${costCapDefaultUsd.toFixed(2)} by default.` : "Leave empty for no cap."}
+                </span>
+              </div>
             </div>
           )}
         </div>
@@ -1624,6 +1736,133 @@ export default function QCoreMultiAgentPage() {
             >
               + New session
             </button>
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search runs… (text, title)"
+                style={{
+                  width: "100%",
+                  padding: "8px 32px 8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#0f172a",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  style={{
+                    position: "absolute",
+                    right: 6,
+                    top: 6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    border: "none",
+                    background: "transparent",
+                    color: "#94a3b8",
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {searchQuery.trim() && (
+              <div style={{ marginBottom: 12 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    padding: "4px 6px 6px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span>
+                    Search results {searchBusy ? "…" : `(${searchResults.length})`}
+                  </span>
+                </div>
+                {!searchBusy && searchResults.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px" }}>
+                    No matches.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {searchResults.map((hit) => (
+                      <button
+                        key={hit.runId}
+                        onClick={() => loadSession(hit.sessionId)}
+                        title={hit.preview}
+                        style={{
+                          textAlign: "left",
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(13,148,136,0.2)",
+                          background:
+                            activeSessionId === hit.sessionId ? "rgba(13,148,136,0.08)" : "#fff",
+                          color: "#0f172a",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 11,
+                            color: "#0f766e",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              flex: 1,
+                            }}
+                          >
+                            {hit.sessionTitle || "(untitled)"}
+                          </span>
+                          <span style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase" }}>
+                            {hit.matched}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 11,
+                            color: "#475569",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {hit.preview}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "8px 6px 4px" }}>
               Sessions
             </div>
@@ -2218,7 +2457,7 @@ function RunCard({
         <FinalCard
           content={run.finalContent}
           runId={run.id}
-          stopped={run.status === "stopped"}
+          stopped={run.status === "stopped" || run.status === "capped"}
           onRefine={
             run.persisted && run.id && !run.id.startsWith("tmp_") && run.status !== "running"
               ? onRefine
@@ -2263,6 +2502,22 @@ function RunCard({
               }}
             >
               STOPPED
+            </span>
+          )}
+          {run.status === "capped" && (
+            <span
+              title={
+                run.costCapUsd != null
+                  ? `Cost cap $${run.costCapUsd.toFixed(4)} reached`
+                  : "Cost cap reached"
+              }
+              style={{
+                padding: "2px 8px", borderRadius: 999,
+                background: "#ffedd5", color: "#9a3412",
+                fontSize: 10, fontWeight: 800, border: "1px solid #fed7aa",
+              }}
+            >
+              CAPPED {run.costCapUsd != null ? `· $${run.costCapUsd.toFixed(2)}` : ""}
             </span>
           )}
           {run.status === "error" && (

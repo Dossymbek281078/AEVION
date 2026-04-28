@@ -17,7 +17,7 @@ export type RunCompletedEvent = {
   event: "run.completed";
   runId: string;
   sessionId: string;
-  status: "done" | "stopped" | "error";
+  status: "done" | "stopped" | "error" | "capped";
   strategy: string;
   userInput: string;
   finalContent: string | null;

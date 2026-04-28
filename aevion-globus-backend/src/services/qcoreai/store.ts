@@ -31,7 +31,7 @@ export type RunRow = {
   id: string;
   sessionId: string;
   userInput: string;
-  status: "pending" | "running" | "done" | "error" | "stopped";
+  status: "pending" | "running" | "done" | "error" | "stopped" | "capped";
   error: string | null;
   agentConfig: any;
   strategy: string | null;
@@ -315,7 +315,7 @@ export async function createRun(opts: {
 
 export async function finishRun(
   runId: string,
-  status: "done" | "error" | "stopped",
+  status: "done" | "error" | "stopped" | "capped",
   opts: {
     error?: string | null;
     finalContent?: string | null;
@@ -766,6 +766,120 @@ function analyticsFromMemory(userId: string | null, scope: "mine" | "anonymous")
     byModel: Array.from(byModelMap.values()).sort((a, b) => b.calls - a.calls).slice(0, 20),
     recent,
   };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Search across runs (substring match on userInput / finalContent / title)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type SearchHit = {
+  runId: string;
+  sessionId: string;
+  sessionTitle: string;
+  strategy: string | null;
+  status: string;
+  startedAt: string;
+  totalCostUsd: number | null;
+  preview: string;
+  matched: "input" | "final" | "title";
+};
+
+export async function searchRuns(
+  userId: string | null,
+  query: string,
+  limit = 30
+): Promise<SearchHit[]> {
+  await ensureQCoreTables(pool);
+  const q = (query || "").trim();
+  if (!q) return [];
+  const lim = Math.max(1, Math.min(100, limit));
+
+  const buildPreview = (hay: string, needle: string): string => {
+    const lower = hay.toLowerCase();
+    const idx = lower.indexOf(needle.toLowerCase());
+    if (idx < 0) return hay.slice(0, 160);
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(hay.length, idx + needle.length + 80);
+    const slice = hay.slice(start, end).replace(/\s+/g, " ");
+    return (start > 0 ? "…" : "") + slice + (end < hay.length ? "…" : "");
+  };
+
+  if (!isDbReady()) {
+    const sessions = Array.from(memSessions.values()).filter((s) =>
+      userId ? s.userId === userId : s.userId == null
+    );
+    const sessionById = new Map(sessions.map((s) => [s.id, s]));
+    const hits: SearchHit[] = [];
+    const ql = q.toLowerCase();
+    for (const r of memRuns.values()) {
+      const sess = sessionById.get(r.sessionId);
+      if (!sess) continue;
+      const inInput = r.userInput?.toLowerCase().includes(ql);
+      const inFinal = r.finalContent?.toLowerCase().includes(ql);
+      const inTitle = sess.title?.toLowerCase().includes(ql);
+      if (!inInput && !inFinal && !inTitle) continue;
+      hits.push({
+        runId: r.id,
+        sessionId: r.sessionId,
+        sessionTitle: sess.title,
+        strategy: r.strategy,
+        status: r.status,
+        startedAt: r.startedAt,
+        totalCostUsd: r.totalCostUsd,
+        preview: inInput
+          ? buildPreview(r.userInput, q)
+          : inFinal
+          ? buildPreview(r.finalContent || "", q)
+          : sess.title,
+        matched: inInput ? "input" : inFinal ? "final" : "title",
+      });
+    }
+    hits.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return hits.slice(0, lim);
+  }
+
+  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const baseParams: any[] = userId ? [userId] : [];
+  const pat = `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%`;
+  const queryParamIdx = baseParams.length + 1;
+  const r = await pool.query(
+    `SELECT r."id" AS "runId", r."sessionId" AS "sessionId", s."title" AS "sessionTitle",
+            r."strategy", r."status", r."startedAt", r."totalCostUsd",
+            r."userInput", r."finalContent",
+            (CASE
+               WHEN r."userInput"    ILIKE $${queryParamIdx} THEN 'input'
+               WHEN r."finalContent" ILIKE $${queryParamIdx} THEN 'final'
+               ELSE 'title'
+             END) AS matched
+       FROM "QCoreRun" r JOIN "QCoreSession" s ON s."id"=r."sessionId"
+      WHERE ${userPredicate}
+        AND (r."userInput" ILIKE $${queryParamIdx}
+             OR r."finalContent" ILIKE $${queryParamIdx}
+             OR s."title" ILIKE $${queryParamIdx})
+      ORDER BY r."startedAt" DESC
+      LIMIT $${queryParamIdx + 1}`,
+    [...baseParams, pat, lim]
+  );
+  return r.rows.map((row: any): SearchHit => {
+    const matched = row.matched as "input" | "final" | "title";
+    const preview =
+      matched === "input"
+        ? buildPreview(row.userInput || "", q)
+        : matched === "final"
+        ? buildPreview(row.finalContent || "", q)
+        : row.sessionTitle || "";
+    return {
+      runId: row.runId,
+      sessionId: row.sessionId,
+      sessionTitle: row.sessionTitle,
+      strategy: row.strategy,
+      status: row.status,
+      startedAt: row.startedAt,
+      totalCostUsd: row.totalCostUsd != null ? Number(row.totalCostUsd) : null,
+      preview,
+      matched,
+    };
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

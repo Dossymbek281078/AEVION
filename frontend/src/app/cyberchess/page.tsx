@@ -2622,6 +2622,62 @@ export default function CyberChessPage(){
             </Card>;
           })()}
 
+          {/* ─── Daily Puzzle Leaderboard ─── */}
+          {(()=>{
+            const PUZZLE_LB=[
+              {rank:1,name:"Magnus_C",initial:"M",time:"00:08",streak:31},
+              {rank:2,name:"DarkBishop",initial:"D",time:"00:14",streak:7},
+              {rank:3,name:"QueenGambit",initial:"Q",time:"00:22",streak:14},
+              {rank:4,name:"RookHunter",initial:"R",time:"00:35",streak:5},
+              {rank:5,name:"Aevion_X",initial:"A",time:"00:47",streak:22},
+              {rank:6,name:"NightRider",initial:"N",time:"00:59",streak:3},
+              {rank:7,name:"SilentKnight",initial:"S",time:"01:04",streak:9},
+              {rank:8,name:"PawnStorm",initial:"P",time:"01:10",streak:1},
+              {rank:9,name:"BlitzPrince",initial:"B",time:"01:11",streak:18},
+              {rank:10,name:"ChessDragon",initial:"C",time:"01:12",streak:6},
+            ];
+            const medalColor=(r:number)=>r===1?"#f59e0b":r===2?"#94a3b8":r===3?"#b45309":"transparent";
+            const medalText=(r:number)=>r===1?"🥇":r===2?"🥈":r===3?"🥉":`#${r}`;
+            return <Card padding={0} elevation="sm" style={{overflow:"hidden",animation:"fadeInUp 0.4s ease-out 0.1s both"}}>
+              <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,
+                background:"linear-gradient(90deg,#e0f2fe,#bae6fd,#e0f2fe)",
+                borderBottom:`1px solid ${CC.border}`,
+                display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <span style={{fontSize:16}}>🏆</span>
+                <span style={{fontSize:11,fontWeight:900,color:"#0c4a6e",letterSpacing:1,textTransform:"uppercase" as const}}>Daily Puzzle · Top 10 Fastest</span>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:10,color:"#075985",fontWeight:700}}>сегодня</span>
+              </div>
+              <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,display:"flex",flexDirection:"column",gap:2}}>
+                {PUZZLE_LB.map(entry=>(
+                  <div key={entry.rank} style={{
+                    display:"flex",alignItems:"center",gap:SPACE[2],
+                    padding:`${SPACE[1]}px ${SPACE[2]}px`,
+                    borderRadius:RADIUS.sm,
+                    background:entry.rank<=3?`${medalColor(entry.rank)}18`:CC.surface1,
+                    border:`1px solid ${entry.rank<=3?`${medalColor(entry.rank)}44`:CC.border}`,
+                    transition:`background ${MOTION.base} ${MOTION.ease}`}}>
+                    <span style={{fontSize:entry.rank<=3?15:12,fontWeight:900,minWidth:28,textAlign:"center" as const}}>{medalText(entry.rank)}</span>
+                    <div style={{
+                      width:28,height:28,borderRadius:"50%",flexShrink:0,
+                      background:`linear-gradient(135deg,${CC.brand},${CC.accent})`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:12,fontWeight:900,color:"#fff"}}>
+                      {entry.initial}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:CC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{entry.name}</div>
+                      <div style={{fontSize:10,color:CC.textDim,display:"flex",alignItems:"center",gap:4}}>
+                        <span>🔥 {entry.streak}d streak</span>
+                      </div>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:900,color:entry.rank===1?CC.accent:CC.text,fontVariantNumeric:"tabular-nums",letterSpacing:0.5}}>{entry.time}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>;
+          })()}
+
           {/* ─── Board theme + Premove slider (consolidated) ─── */}
           <Card padding={SPACE[3]}>
             <div style={{display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>

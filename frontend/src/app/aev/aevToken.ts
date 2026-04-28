@@ -928,6 +928,133 @@ export function buyAev(w: AEVWallet, amount: number, atPrice: number): AEVWallet
   });
 }
 
+// ─── Marketplace ──────────────────────────────────────────────────
+// Закрывает петлю эмиссии: AEV mint → AEV spend на cosmetic / utility
+// items. Owned items persist отдельно от wallet'а — они unlock'ают
+// фичи UI (themes / badges / slot expansions). Boost'ы имеют expiresTs.
+
+const MARKETPLACE_OWNED_KEY = "aevion_aev_marketplace_owned_v1";
+const MARKETPLACE_BOOSTS_KEY = "aevion_aev_marketplace_boosts_v1";
+
+export type ItemCategory = "theme" | "badge" | "boost" | "slot" | "cosmetic";
+
+export type MarketplaceItem = {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  price: number;
+  category: ItemCategory;
+  durationHours?: number;       // только для boost'ов
+};
+
+export type ActiveBoost = {
+  itemId: string;
+  expiresTs: number;
+};
+
+export const MARKETPLACE: MarketplaceItem[] = [
+  // Themes (cosmetic UI palettes)
+  { id: "theme_aurora",   emoji: "🌌", name: "Theme: Aurora",   desc: "Северное-сияние палитра для /qtrade и /aev. Cosmetic, никаких механик.", price: 10, category: "theme" },
+  { id: "theme_onyx",     emoji: "🖤", name: "Theme: Onyx",     desc: "Чёрный premium-вид: deep blacks + subtle gold accents. Cosmetic.", price: 8,  category: "theme" },
+  { id: "theme_sunset",   emoji: "🌅", name: "Theme: Sunset",   desc: "Тёплая магма-палитра: orange/red/gold. Cosmetic.", price: 6,  category: "theme" },
+
+  // Badges (profile flair)
+  { id: "badge_founder",   emoji: "👑", name: "Founder Badge",  desc: "Золотая иконка «Founder» рядом с балансом — перманентная.", price: 25, category: "badge" },
+  { id: "badge_pioneer",   emoji: "🚀", name: "Early Pioneer",  desc: "Маленький pioneer-знак — для wave-1 юзеров AEVION.", price: 12, category: "badge" },
+  { id: "badge_oracle",    emoji: "🔮", name: "Oracle",         desc: "Иконка предсказателя — для тех, кто шарит в QTrade.", price: 18, category: "badge" },
+
+  // Boosts (temporary multipliers)
+  { id: "boost_streak_2x", emoji: "⚡", name: "Streak ×2 · 24h", desc: "Удваивает streak rate на следующие 24 часа.", price: 8,  category: "boost", durationHours: 24 },
+  { id: "boost_bot_2x",    emoji: "🤖", name: "Bot ×2 · 1h",     desc: "Удваивает AEV mint от DCA bot тиков на 1 час.", price: 5,  category: "boost", durationHours: 1  },
+  { id: "boost_play_2x",   emoji: "🎮", name: "Play ×2 · 12h",   desc: "Удваивает AEV от Proof-of-Play действий на 12 часов.", price: 12, category: "boost", durationHours: 12 },
+
+  // Slot expansions (extends caps)
+  { id: "slot_curation_5", emoji: "📌", name: "+5 Curation slots", desc: "Расширяет cap pin'ов с 50 до 55. Кумулятивно.", price: 6,  category: "slot" },
+  { id: "slot_mentor_5",   emoji: "🎓", name: "+5 Student slots",  desc: "Расширяет cap students с 30 до 35. Кумулятивно.", price: 7,  category: "slot" },
+  { id: "slot_invite_10",  emoji: "🌐", name: "+10 Invite slots",  desc: "Расширяет cap invitees с 50 до 60. Кумулятивно.", price: 8,  category: "slot" },
+
+  // Cosmetic / fun
+  { id: "cosmetic_quote",  emoji: "💬", name: "Custom Quote",      desc: "Закрепи свою цитату на /aev hero (до 80 char).", price: 4,  category: "cosmetic" },
+  { id: "cosmetic_glow",   emoji: "✨", name: "Wallet Glow",       desc: "Добавляет золотое свечение на balance card.", price: 9, category: "cosmetic" },
+];
+
+export function ldOwned(): string[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(MARKETPLACE_OWNED_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as string[] : [];
+  } catch { return [] }
+}
+
+export function svOwned(o: string[]) {
+  try { localStorage.setItem(MARKETPLACE_OWNED_KEY, JSON.stringify(o)) } catch {}
+}
+
+export function ldBoosts(): ActiveBoost[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(MARKETPLACE_BOOSTS_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    if (!Array.isArray(r)) return [];
+    // Drop expired при load
+    const now = Date.now();
+    return (r as ActiveBoost[]).filter((b) => b.expiresTs > now);
+  } catch { return [] }
+}
+
+export function svBoosts(b: ActiveBoost[]) {
+  try { localStorage.setItem(MARKETPLACE_BOOSTS_KEY, JSON.stringify(b)) } catch {}
+}
+
+export function isBoostActive(boosts: ActiveBoost[], itemId: string, now = Date.now()): boolean {
+  return boosts.some((b) => b.itemId === itemId && b.expiresTs > now);
+}
+
+export function getBoostExpiry(boosts: ActiveBoost[], itemId: string, now = Date.now()): number | null {
+  const active = boosts.filter((b) => b.itemId === itemId && b.expiresTs > now);
+  if (active.length === 0) return null;
+  // Самый дальний expiry если несколько раз куплен
+  return Math.max(...active.map((b) => b.expiresTs));
+}
+
+export function purchaseItem(
+  w: AEVWallet,
+  owned: string[],
+  boosts: ActiveBoost[],
+  itemId: string,
+): { wallet: AEVWallet; owned: string[]; boosts: ActiveBoost[] } | { error: string } {
+  const item = MARKETPLACE.find((i) => i.id === itemId);
+  if (!item) return { error: "Item not found" };
+  // Не-boost items не разрешаем покупать дважды
+  const isBoost = item.category === "boost";
+  const isSlot = item.category === "slot";
+  const isStackable = isBoost || isSlot;
+  if (!isStackable && owned.includes(itemId)) return { error: "Already owned" };
+  if (w.balance < item.price) return { error: `Не хватает AEV: нужно ${item.price.toFixed(2)}, есть ${w.balance.toFixed(2)}` };
+  const newWallet = spend(w, item.price, `🛒 Marketplace: ${item.name}`);
+  if (!newWallet) return { error: "Spend failed" };
+  let newOwned = owned;
+  let newBoosts = boosts;
+  if (isBoost && item.durationHours) {
+    const exp = Date.now() + item.durationHours * 3600 * 1000;
+    newBoosts = [...boosts, { itemId, expiresTs: exp }];
+    if (!owned.includes(itemId)) newOwned = [...owned, itemId];
+  } else if (isSlot) {
+    // Slots: stack via duplicate entries
+    newOwned = [...owned, itemId];
+  } else {
+    newOwned = [...owned, itemId];
+  }
+  return { wallet: newWallet, owned: newOwned, boosts: newBoosts };
+}
+
+// Helper: count slot expansions of a given type (для cap-bonus вычислений в UI)
+export function countSlotItems(owned: string[], itemId: string): number {
+  return owned.filter((o) => o === itemId).length;
+}
+
 // ─── Formatting ───────────────────────────────────────────────────
 export function fmtAev(n: number, decimals = 4): string {
   if (!Number.isFinite(n)) return "—";

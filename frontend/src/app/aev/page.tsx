@@ -20,11 +20,14 @@ import {
   ldInsight, svInsight, askQuestion, simulateInsightTick, triggerInsightHit,
   removeQuestion as removeInsightQuestion, previewQuality,
   questionsToday, INSIGHT, TOPIC_META,
+  ldOwned, svOwned, ldBoosts, svBoosts, purchaseItem, isBoostActive, getBoostExpiry,
+  countSlotItems, MARKETPLACE,
   type AEVWallet, type EmissionMode, type PlayAction, type PlayModule, type MiningEvent,
   type PinnedItem, type PinKind,
   type NetworkState,
   type MentorshipState,
   type InsightState, type InsightTopic,
+  type ActiveBoost, type MarketplaceItem, type ItemCategory,
 } from "./aevToken";
 
 const MODE_META: Record<EmissionMode, { label: string; emoji: string; tagline: string; color: string; desc: string }> = {
@@ -58,6 +61,9 @@ export default function AEVPage() {
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [mentorship, setMentorship] = useState<MentorshipState | null>(null);
   const [insight, setInsight] = useState<InsightState | null>(null);
+  const [owned, setOwned] = useState<string[]>([]);
+  const [boosts, setBoosts] = useState<ActiveBoost[]>([]);
+  const [marketMsg, setMarketMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [streakClaimed, setStreakClaimed] = useState<{ amount: number; day: number } | null>(null);
   useEffect(() => {
     const w = ldWallet();
@@ -65,6 +71,8 @@ export default function AEVPage() {
     setNetwork(ldNetwork());
     setMentorship(ldMentorship());
     setInsight(ldInsight());
+    setOwned(ldOwned());
+    setBoosts(ldBoosts());
     // Auto-claim daily streak on mount if eligible
     const updated = recordDailyVisit(w);
     if (updated) {
@@ -84,6 +92,21 @@ export default function AEVPage() {
   useEffect(() => { if (network) svNetwork(network) }, [network]);
   useEffect(() => { if (mentorship) svMentorship(mentorship) }, [mentorship]);
   useEffect(() => { if (insight) svInsight(insight) }, [insight]);
+  useEffect(() => { svOwned(owned) }, [owned]);
+  useEffect(() => { svBoosts(boosts) }, [boosts]);
+
+  // Boost expiry tick — drop expired boosts каждые 30s
+  useEffect(() => {
+    if (boosts.length === 0) return;
+    const id = setInterval(() => {
+      const now = Date.now();
+      setBoosts((prev) => {
+        const live = prev.filter((b) => b.expiresTs > now);
+        return live.length === prev.length ? prev : live;
+      });
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [boosts.length]);
 
   // Refs для cross-state autotick без race conditions
   const walletRef = useRef<AEVWallet | null>(null);
@@ -667,6 +690,18 @@ export default function AEVPage() {
         {insight && (
           <InsightPanel wallet={wallet} setWallet={setWallet} insight={insight} setInsight={setInsight} />
         )}
+
+        {/* ═══ AEV MARKETPLACE — spend цикл ═════════════════════════ */}
+        <MarketplacePanel
+          wallet={wallet}
+          setWallet={setWallet}
+          owned={owned}
+          setOwned={setOwned}
+          boosts={boosts}
+          setBoosts={setBoosts}
+          marketMsg={marketMsg}
+          setMarketMsg={setMarketMsg}
+        />
 
         {/* ═══ FUTURE ENGINES — proposals + voting ═════════════════ */}
         <FutureEngines />
@@ -1916,6 +1951,260 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+// ─── Marketplace ──────────────────────────────────────────────────
+const CATEGORY_META: Record<ItemCategory, { label: string; emoji: string; color: string }> = {
+  theme:    { label: "Темы",        emoji: "🎨", color: "#8b5cf6" },
+  badge:    { label: "Бейджи",      emoji: "🏅", color: "#f59e0b" },
+  boost:    { label: "Бусты",       emoji: "⚡", color: "#06b6d4" },
+  slot:     { label: "Слоты",       emoji: "📦", color: "#10b981" },
+  cosmetic: { label: "Косметика",   emoji: "✨", color: "#ec4899" },
+};
+
+function fmtBoostRemaining(expiresTs: number, now = Date.now()): string {
+  const ms = Math.max(0, expiresTs - now);
+  if (ms < 60_000) return `${Math.ceil(ms / 1000)}s`;
+  if (ms < 3600_000) return `${Math.ceil(ms / 60_000)}m`;
+  if (ms < 86400_000) return `${Math.ceil(ms / 3600_000)}h`;
+  return `${Math.ceil(ms / 86400_000)}d`;
+}
+
+function MarketplacePanel({
+  wallet, setWallet, owned, setOwned, boosts, setBoosts, marketMsg, setMarketMsg,
+}: {
+  wallet: AEVWallet;
+  setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
+  owned: string[];
+  setOwned: React.Dispatch<React.SetStateAction<string[]>>;
+  boosts: ActiveBoost[];
+  setBoosts: React.Dispatch<React.SetStateAction<ActiveBoost[]>>;
+  marketMsg: { kind: "ok" | "err"; text: string } | null;
+  setMarketMsg: React.Dispatch<React.SetStateAction<{ kind: "ok" | "err"; text: string } | null>>;
+}) {
+  const [filterCat, setFilterCat] = useState<ItemCategory | "all">("all");
+
+  const buy = (itemId: string) => {
+    const result = purchaseItem(wallet, owned, boosts, itemId);
+    if ("error" in result) {
+      setMarketMsg({ kind: "err", text: result.error });
+      setTimeout(() => setMarketMsg(null), 3500);
+      return;
+    }
+    setWallet(result.wallet);
+    setOwned(result.owned);
+    setBoosts(result.boosts);
+    const item = MARKETPLACE.find((i) => i.id === itemId)!;
+    setMarketMsg({ kind: "ok", text: `✓ Куплено · ${item.name} (-${item.price.toFixed(2)} AEV)` });
+    setTimeout(() => setMarketMsg(null), 3500);
+  };
+
+  const items = MARKETPLACE.filter((i) => filterCat === "all" || i.category === filterCat);
+  const totalSpent = MARKETPLACE.reduce((s, i) => {
+    const isStackable = i.category === "boost" || i.category === "slot";
+    if (!isStackable) return owned.includes(i.id) ? s + i.price : s;
+    return s + countSlotItems(owned, i.id) * i.price;
+  }, 0);
+
+  const activeBoostCount = boosts.filter((b) => b.expiresTs > Date.now()).length;
+
+  // Categories для tab bar
+  const categories: (ItemCategory | "all")[] = ["all", "theme", "badge", "boost", "slot", "cosmetic"];
+
+  return (
+    <section style={{
+      padding: 16, borderRadius: 12,
+      background: "linear-gradient(135deg, #312e81 0%, #4338ca 60%, #6366f1 100%)",
+      color: "#fff", marginBottom: 14,
+      boxShadow: "0 6px 18px rgba(67,56,202,0.28)",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" as const }}>
+        <span style={{ fontSize: 18 }}>🛒</span>
+        <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>AEV Marketplace</h2>
+        <span style={{
+          padding: "2px 8px", borderRadius: 5,
+          background: "linear-gradient(135deg, #fff, #e0e7ff)", color: "#4338ca",
+          fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
+        }}>spend cycle</span>
+        <span style={{ fontSize: 11, opacity: 0.85 }}>
+          трать AEV на cosmetic / utility — закрывает петлю эмиссии
+        </span>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Wallet</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>{wallet.balance.toFixed(2)} AEV</div>
+        </div>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Items owned</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>{owned.length}</div>
+        </div>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Boosts active</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: activeBoostCount > 0 ? "#86efac" : "#fff" }}>
+            {activeBoostCount > 0 ? `● ${activeBoostCount}` : "0"}
+          </div>
+        </div>
+        <div style={{ padding: 9, borderRadius: 7, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Lifetime spent</div>
+          <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#fde68a" }}>
+            {totalSpent.toFixed(2)} AEV
+          </div>
+        </div>
+      </div>
+
+      {/* Active boosts (если есть) */}
+      {activeBoostCount > 0 && (
+        <div style={{
+          padding: 10, borderRadius: 7,
+          background: "rgba(134,239,172,0.10)", border: "1px solid rgba(134,239,172,0.30)",
+          marginBottom: 12, display: "flex", flexWrap: "wrap" as const, gap: 8,
+        }}>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: "#86efac", textTransform: "uppercase" as const, alignSelf: "center" as const }}>
+            ⚡ Активные бусты
+          </span>
+          {boosts.filter((b) => b.expiresTs > Date.now()).map((b, i) => {
+            const item = MARKETPLACE.find((it) => it.id === b.itemId);
+            if (!item) return null;
+            return (
+              <span key={i} style={{
+                padding: "4px 10px", borderRadius: 5,
+                background: "rgba(134,239,172,0.20)", border: "1px solid rgba(134,239,172,0.40)",
+                color: "#86efac", fontSize: 11, fontWeight: 700, fontFamily: "ui-monospace, monospace",
+                display: "flex", gap: 6, alignItems: "center" as const,
+              }}>
+                {item.emoji} {item.name} · {fmtBoostRemaining(b.expiresTs)}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Category tabs */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginBottom: 10 }}>
+        {categories.map((c) => {
+          const active = filterCat === c;
+          const meta = c === "all" ? null : CATEGORY_META[c];
+          return (
+            <button key={c} onClick={() => setFilterCat(c)}
+              style={{
+                padding: "5px 12px", borderRadius: 5,
+                background: active ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.20)",
+                color: active ? "#4338ca" : "#e0e7ff",
+                border: active ? "none" : "1px solid rgba(255,255,255,0.20)",
+                fontSize: 11, fontWeight: 800, letterSpacing: 0.3, cursor: "pointer",
+                textTransform: "uppercase" as const,
+              }}>
+              {meta ? `${meta.emoji} ${meta.label}` : "🛒 Все"}
+            </button>
+          );
+        })}
+      </div>
+
+      {marketMsg && (
+        <div style={{
+          padding: "7px 12px", borderRadius: 6, marginBottom: 10,
+          background: marketMsg.kind === "ok" ? "rgba(134,239,172,0.18)" : "rgba(252,165,165,0.18)",
+          border: `1px solid ${marketMsg.kind === "ok" ? "rgba(134,239,172,0.40)" : "rgba(252,165,165,0.40)"}`,
+          color: marketMsg.kind === "ok" ? "#86efac" : "#fca5a5",
+          fontSize: 12, fontWeight: 700,
+        }}>{marketMsg.kind === "err" ? "⚠ " : ""}{marketMsg.text}</div>
+      )}
+
+      {/* Items grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+        {items.map((item) => {
+          const cat = CATEGORY_META[item.category];
+          const isOwned = owned.includes(item.id);
+          const isBoost = item.category === "boost";
+          const isSlot = item.category === "slot";
+          const slotCount = isSlot ? countSlotItems(owned, item.id) : 0;
+          const boostExpiry = isBoost ? getBoostExpiry(boosts, item.id) : null;
+          const boostActive = isBoost && boostExpiry !== null;
+          const canBuy = wallet.balance >= item.price;
+          // permanent (не-stackable) items нельзя купить дважды
+          const blocked = !isBoost && !isSlot && isOwned;
+          return (
+            <div key={item.id} style={{
+              padding: 11, borderRadius: 8,
+              background: blocked || boostActive
+                ? "rgba(134,239,172,0.10)"
+                : "rgba(0,0,0,0.25)",
+              border: `1px solid ${blocked || boostActive ? "rgba(134,239,172,0.40)" : `${cat.color}55`}`,
+              display: "flex", flexDirection: "column" as const, gap: 6,
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start" as const, gap: 8 }}>
+                <span style={{ fontSize: 22 }}>{item.emoji}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, color: cat.color, letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+                    {cat.label}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "#fff", lineHeight: 1.2 }}>{item.name}</div>
+                </div>
+                {(blocked || boostActive) && (
+                  <span style={{
+                    padding: "2px 7px", borderRadius: 4,
+                    background: "rgba(134,239,172,0.25)", color: "#86efac",
+                    fontSize: 9, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" as const,
+                  }}>
+                    ✓ {boostActive ? `активно · ${fmtBoostRemaining(boostExpiry!)}` : "owned"}
+                  </span>
+                )}
+                {isSlot && slotCount > 0 && (
+                  <span style={{
+                    padding: "2px 7px", borderRadius: 4,
+                    background: "rgba(16,185,129,0.20)", color: "#86efac",
+                    fontSize: 9, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" as const,
+                  }}>
+                    ×{slotCount}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4, minHeight: 32 }}>{item.desc}</div>
+              <div style={{ display: "flex", justifyContent: "space-between" as const, alignItems: "center" as const, gap: 8 }}>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 13, fontWeight: 900, color: canBuy ? "#fde68a" : "#94a3b8" }}>
+                  ◆ {item.price.toFixed(2)} AEV
+                  {item.durationHours && (
+                    <span style={{ fontSize: 10, color: "#a5b4fc", fontWeight: 700, marginLeft: 6 }}>
+                      · {item.durationHours}h
+                    </span>
+                  )}
+                </span>
+                <button onClick={() => buy(item.id)}
+                  disabled={blocked || (boostActive && !canBuy) || !canBuy}
+                  style={{
+                    padding: "6px 14px", borderRadius: 5, border: "none",
+                    background: blocked
+                      ? "rgba(255,255,255,0.10)"
+                      : !canBuy
+                      ? "rgba(252,165,165,0.20)"
+                      : "linear-gradient(135deg, #fff, #e0e7ff)",
+                    color: blocked
+                      ? "#94a3b8"
+                      : !canBuy
+                      ? "#fca5a5"
+                      : "#4338ca",
+                    fontSize: 11, fontWeight: 900, letterSpacing: 0.3,
+                    cursor: blocked || !canBuy ? "default" : "pointer",
+                    whiteSpace: "nowrap" as const,
+                  }}>
+                  {blocked ? "✓ Owned" : !canBuy ? "Недостаточно" : (isBoost ? (boostActive ? "+ Продлить" : "⚡ Активировать") : (isSlot && slotCount > 0 ? "+ Ещё" : "🛒 Купить"))}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 10, opacity: 0.75, marginTop: 10, lineHeight: 1.5 }}>
+        Marketplace замыкает петлю эмиссии: AEV mint (Proof-of-Play / Compute / Stewardship / etc.) →
+        AEV spend здесь → unlock тем / бейджей / временных множителей / расширений slot'ов.
+        Boosts накапливаются (можно продлить); slots stackable (купи N раз — получи N×bonus); themes/badges/cosmetic — раз и навсегда.
+      </div>
     </section>
   );
 }

@@ -17,7 +17,7 @@ import {
   type Pair, type Position, type PairId, type LimitOrder, type ClosedPosition, type PriceAlert,
   type TimeframeMs, type DcaBot, type GridBot,
 } from "./marketSim";
-import { ldWallet, svWallet, sellAev, buyAev, recordPlay, type AEVWallet } from "../aev/aevToken";
+import { ldWallet, svWallet, sellAev, buyAev, recordPlay, ldActiveTheme, THEME_PALETTES, type AEVWallet, type ThemeId } from "../aev/aevToken";
 import {
   computePortfolioStats, computePairBreakdown, buildCalendar, fmtMs,
   type PortfolioStats, type PairBreakdown, type CalendarCell,
@@ -141,7 +141,8 @@ export default function QTradePage() {
   // AEV wallet (for AEV/USD spot conversion)
   const [aevWallet, setAevWallet] = useState<AEVWallet | null>(null);
   const [aevSpotQty, setAevSpotQty] = useState("");
-  useEffect(() => { setAevWallet(ldWallet()) }, []);
+  const [activeTheme, setActiveTheme] = useState<ThemeId>("default");
+  useEffect(() => { setAevWallet(ldWallet()); setActiveTheme(ldActiveTheme()); }, []);
   useEffect(() => { if (aevWallet) svWallet(aevWallet) }, [aevWallet]);
 
   // ─── Trading Journal ─────────────────────────────────────────────
@@ -320,6 +321,7 @@ export default function QTradePage() {
         case "aevion_qtrade_alerts_v1":     setAlerts(ldAlerts()); break;
         case "aevion_qtrade_bots_v1":       setBots(ldBots()); break;
         case "aevion_qtrade_grid_bots_v1":  setGridBots(ldGridBots()); break;
+        case "aevion_aev_active_theme_v1":  setActiveTheme(ldActiveTheme()); break;
       }
     };
     window.addEventListener("storage", onStorage);
@@ -720,14 +722,24 @@ export default function QTradePage() {
           marginBottom: 24,
           padding: 16,
           borderRadius: 12,
-          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
+          background: THEME_PALETTES[activeTheme].hero,
           color: "#fff",
-          boxShadow: "0 8px 24px rgba(15,23,42,0.18)",
+          boxShadow: `0 8px 24px ${THEME_PALETTES[activeTheme].glow}`,
+          transition: "background 0.4s, box-shadow 0.4s",
         }}
       >
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: "#22d3ee" }}>📊 Live Markets</span>
+            <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: THEME_PALETTES[activeTheme].accent }}>📊 Live Markets</span>
+            {activeTheme !== "default" && (
+              <span style={{
+                padding: "2px 8px", borderRadius: 999,
+                background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.20)",
+                fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "#fff", textTransform: "uppercase" as const,
+              }}>
+                🎨 {THEME_PALETTES[activeTheme].label}
+              </span>
+            )}
             <span style={{
               display: "inline-flex", alignItems: "center", gap: 5,
               padding: "2px 8px", borderRadius: 999,

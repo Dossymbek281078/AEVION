@@ -903,6 +903,12 @@ export default function QRightPage() {
                           style={{ display: "block" }}
                         />
                         <Link
+                          href={`/qright/object/${x.id}`}
+                          style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 6 }}
+                        >
+                          Public page →
+                        </Link>
+                        <Link
                           href={`/qright/badge/${x.id}`}
                           style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(13,148,136,0.3)", borderRadius: 6 }}
                         >

@@ -55,7 +55,12 @@ async function jsonFetch(method, path, { body, token } = {}) {
   } catch {
     data = null;
   }
-  return { status: res.status, ok: res.ok, data };
+  // Normalize headers to a plain object for case-insensitive lookups in steps.
+  const hdrs = {};
+  res.headers.forEach((v, k) => {
+    hdrs[k.toLowerCase()] = v;
+  });
+  return { status: res.status, ok: res.ok, data, headers: hdrs };
 }
 
 async function main() {
@@ -64,7 +69,7 @@ async function main() {
   console.log(`  EMAIL = ${EMAIL}`);
   console.log(`  ─────────────────────────────────────────────\n`);
 
-  // 1 — health
+  // 1 — health (production-grade shape: db.ok, counts, memory)
   try {
     const r = await jsonFetch("GET", "/api/qsign/v2/health");
     if (!r.ok) return fail("health", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
@@ -72,12 +77,32 @@ async function main() {
       return fail("health", `unexpected status ${r.data?.status}`);
     if (!r.data?.activeKeys?.hmac || !r.data?.activeKeys?.ed25519)
       return fail("health", "missing activeKeys");
+    if (!r.data?.db?.ok)
+      return fail("health", `db not ok: ${JSON.stringify(r.data?.db)}`);
+    if (typeof r.data?.counts?.signatures !== "number")
+      return fail("health", "counts.signatures missing");
+    if (!r.headers || !r.headers["x-request-id"])
+      return fail("health", "missing X-Request-Id response header");
     pass(
       "health",
-      `hmac=${r.data.activeKeys.hmac} ed25519=${r.data.activeKeys.ed25519}`,
+      `db=${r.data.db.latencyMs}ms hmac=${r.data.activeKeys.hmac} sigs=${r.data.counts.signatures} req=${r.headers["x-request-id"]}`,
     );
   } catch (e) {
     return fail("health", e?.message || String(e));
+  }
+
+  // 1b — openapi spec
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/openapi.json");
+    if (!r.ok) return fail("openapi", `HTTP ${r.status}`);
+    if (r.data?.info?.title !== "AEVION QSign v2")
+      return fail("openapi", `unexpected title ${r.data?.info?.title}`);
+    if (!r.data?.paths || typeof r.data.paths !== "object")
+      return fail("openapi", "missing paths");
+    const pathCount = Object.keys(r.data.paths).length;
+    if (pathCount < 15)
+      return fail("openapi", `expected >=15 paths, got ${pathCount}`);
+    pass("openapi", `v${r.data.info.version} paths=${pathCount}`);
   }
 
   // 2 — register (idempotent enough: re-registering same email fails,
@@ -220,6 +245,46 @@ async function main() {
     if (leakedKeys.length)
       return fail("recent", `leaked sensitive fields: ${leakedKeys.join(", ")}`);
     pass("recent", `includes signed id, no leaked fields`);
+  }
+
+  // 9d-1 — webhook CRUD lifecycle (no real receiver)
+  let smokeWebhookId = null;
+  {
+    // Create — point at a host that won't accept; we only verify shape, not delivery.
+    const r = await jsonFetch("POST", "/api/qsign/v2/webhooks", {
+      body: { url: "http://127.0.0.1:65535/qsign-smoke-sink", events: ["sign", "revoke"] },
+      token,
+    });
+    if (!r.ok) return fail("webhook create", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!r.data?.id || !r.data?.secret)
+      return fail("webhook create", "missing id or secret");
+    smokeWebhookId = r.data.id;
+    pass("webhook create", `id=${smokeWebhookId.slice(0, 8)} secret-len=${r.data.secret.length}`);
+  }
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/webhooks", { token });
+    if (!r.ok) return fail("webhook list", `HTTP ${r.status}`);
+    const ours = (r.data?.webhooks || []).find((w) => w.id === smokeWebhookId);
+    if (!ours) return fail("webhook list", "freshly created id not in list");
+    pass("webhook list", `total=${r.data.webhooks.length}`);
+  }
+  {
+    // Deliveries endpoint shape — may be empty if first delivery hasn't recorded yet.
+    const r = await jsonFetch(
+      "GET",
+      `/api/qsign/v2/webhooks/${smokeWebhookId}/deliveries`,
+      { token },
+    );
+    if (!r.ok) return fail("webhook deliveries", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!Array.isArray(r.data?.deliveries))
+      return fail("webhook deliveries", "deliveries not array");
+    pass("webhook deliveries", `total=${r.data.total}`);
+  }
+  {
+    const r = await jsonFetch("DELETE", `/api/qsign/v2/webhooks/${smokeWebhookId}`, { token });
+    if (!r.ok) return fail("webhook delete", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!r.data?.deleted) return fail("webhook delete", "not marked deleted");
+    pass("webhook delete", "ok");
   }
 
   // 9d — audit log (per-user)

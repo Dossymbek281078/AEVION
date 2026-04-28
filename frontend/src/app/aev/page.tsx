@@ -741,16 +741,16 @@ export default function AEVPage() {
 
         {/* ═══ G. PROOF-OF-NETWORK (engine G · live) ═══════════════ */}
         {network && (
-          <NetworkPanel wallet={wallet} setWallet={setWallet} network={network} setNetwork={setNetwork} />
+          <NetworkPanel wallet={wallet} setWallet={setWallet} network={network} setNetwork={setNetwork} owned={owned} />
         )}
 
         {/* ═══ E. PROOF-OF-MENTORSHIP (engine E · live) ════════════ */}
         {mentorship && (
-          <MentorshipPanel mentorship={mentorship} setMentorship={setMentorship} />
+          <MentorshipPanel mentorship={mentorship} setMentorship={setMentorship} owned={owned} />
         )}
 
         {/* ═══ D. PROOF-OF-CURATION (engine D · live) ══════════════ */}
-        <CurationWall wallet={wallet} setWallet={setWallet} pins={pins ?? []} setPins={setPins} />
+        <CurationWall wallet={wallet} setWallet={setWallet} pins={pins ?? []} setPins={setPins} owned={owned} />
 
         {/* ═══ H. PROOF-OF-INSIGHT (engine H · live) ═══════════════ */}
         {insight && (
@@ -1242,16 +1242,39 @@ function FutureEngines() {
 }
 
 // ─── E. Mentorship panel (engine E · live) ─────────────────────────
-function MentorshipPanel({ mentorship, setMentorship }: {
+function MentorshipPanel({ mentorship, setMentorship, owned }: {
   mentorship: MentorshipState;
   setMentorship: React.Dispatch<React.SetStateAction<MentorshipState | null>>;
+  owned: string[];
 }) {
   const [draftName, setDraftName] = useState("");
   const [draftRating, setDraftRating] = useState("");
 
+  // slot_mentor_5 stacks: каждое +5 студентов
+  const slotBonus = countSlotItems(owned, "slot_mentor_5") * 5;
+  const effectiveCap = MENTORSHIP.maxStudents + slotBonus;
+
   const addOne = () => {
+    if (mentorship.students.length >= effectiveCap) return;
     const r = Number(draftRating);
-    setMentorship((m) => (m ? addStudent(m, draftName || undefined, Number.isFinite(r) && r >= 800 ? r : undefined) : m));
+    setMentorship((m) => {
+      if (!m) return m;
+      // Bypass core cap when slot bonus active
+      if (m.students.length >= MENTORSHIP.maxStudents && m.students.length < effectiveCap) {
+        const fname = (draftName.trim() || MENTORSHIP.firstNames[Math.floor(Math.random() * MENTORSHIP.firstNames.length)]);
+        const rt = Number.isFinite(r) && r >= 800 ? r : MENTORSHIP.defaultStartRating;
+        const id = `stu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+        return {
+          ...m,
+          students: [{
+            id, name: fname, startRating: rt, rating: rt,
+            startTs: Date.now(), lastTickTs: Date.now(),
+            passedMilestones: [], earnedFromMe: 0,
+          }, ...m.students],
+        };
+      }
+      return addStudent(m, draftName || undefined, Number.isFinite(r) && r >= 800 ? r : undefined);
+    });
     setDraftName(""); setDraftRating("");
   };
 
@@ -1280,7 +1303,7 @@ function MentorshipPanel({ mentorship, setMentorship }: {
           color: "#065f46", fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
         }}>E · LIVE</span>
         <span style={{ fontSize: 11, opacity: 0.85 }}>
-          +{MENTORSHIP.perMilestoneAev} AEV каждые {MENTORSHIP.milestoneStep} рейтинга · cap {MENTORSHIP.maxStudents} студентов
+          +{MENTORSHIP.perMilestoneAev} AEV каждые {MENTORSHIP.milestoneStep} рейтинга · cap {effectiveCap} студентов{slotBonus > 0 ? ` (+${slotBonus} slot bonus)` : ""}
         </span>
       </div>
 
@@ -1289,7 +1312,7 @@ function MentorshipPanel({ mentorship, setMentorship }: {
         <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Студентов</div>
           <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>
-            {mentorship.students.length} / {MENTORSHIP.maxStudents}
+            {mentorship.students.length} / {effectiveCap}
           </div>
         </div>
         <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
@@ -1336,15 +1359,15 @@ function MentorshipPanel({ mentorship, setMentorship }: {
             color: "#fff", fontSize: 12, width: 130, fontFamily: "ui-monospace, monospace",
           }} />
         <button onClick={addOne}
-          disabled={mentorship.students.length >= MENTORSHIP.maxStudents}
+          disabled={mentorship.students.length >= effectiveCap}
           style={{
             padding: "7px 14px", borderRadius: 5, border: "none",
-            background: mentorship.students.length >= MENTORSHIP.maxStudents
+            background: mentorship.students.length >= effectiveCap
               ? "rgba(255,255,255,0.15)"
               : "linear-gradient(135deg, #fff, #d1fae5)",
-            color: mentorship.students.length >= MENTORSHIP.maxStudents ? "#94a3b8" : "#065f46",
+            color: mentorship.students.length >= effectiveCap ? "#94a3b8" : "#065f46",
             fontSize: 12, fontWeight: 800,
-            cursor: mentorship.students.length >= MENTORSHIP.maxStudents ? "default" : "pointer",
+            cursor: mentorship.students.length >= effectiveCap ? "default" : "pointer",
           }}>
           ➕ Принять
         </button>
@@ -1412,17 +1435,22 @@ function MentorshipPanel({ mentorship, setMentorship }: {
 }
 
 // ─── G. Network panel (engine G · live) ────────────────────────────
-function NetworkPanel({ wallet, setWallet, network, setNetwork }: {
+function NetworkPanel({ wallet, setWallet, network, setNetwork, owned }: {
   wallet: AEVWallet;
   setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
   network: NetworkState;
   setNetwork: React.Dispatch<React.SetStateAction<NetworkState | null>>;
+  owned: string[];
 }) {
   const [draftName, setDraftName] = useState("");
   const [copied, setCopied] = useState(false);
   const inviteUrl = typeof window !== "undefined"
     ? `${window.location.origin}/aev?ref=${network.myCode}`
     : `/aev?ref=${network.myCode}`;
+
+  // slot_invite_10 stacks: каждое +10 invitees
+  const slotBonus = countSlotItems(owned, "slot_invite_10") * 10;
+  const effectiveCap = NETWORK.maxInvites + slotBonus;
 
   const copyCode = () => {
     try {
@@ -1433,7 +1461,24 @@ function NetworkPanel({ wallet, setWallet, network, setNetwork }: {
   };
 
   const inviteOne = () => {
-    setNetwork((n) => (n ? simulateInviteJoin(n, draftName || undefined) : n));
+    if (network.invited.length >= effectiveCap) return;
+    setNetwork((n) => {
+      if (!n) return n;
+      // Bypass core cap when slot bonus active
+      if (n.invited.length >= NETWORK.maxInvites && n.invited.length < effectiveCap) {
+        const fname = draftName.trim() || NETWORK.firstNames[Math.floor(Math.random() * NETWORK.firstNames.length)];
+        const city = NETWORK.cities[Math.floor(Math.random() * NETWORK.cities.length)];
+        const id = `inv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+        return {
+          ...n,
+          invited: [{
+            id, name: fname, city,
+            joinedTs: Date.now(), qualityActions: 0, earnedFromMe: 0,
+          }, ...n.invited],
+        };
+      }
+      return simulateInviteJoin(n, draftName || undefined);
+    });
     setDraftName("");
   };
 
@@ -1465,7 +1510,7 @@ function NetworkPanel({ wallet, setWallet, network, setNetwork }: {
           color: "#0e7490", fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
         }}>G · LIVE</span>
         <span style={{ fontSize: 11, opacity: 0.85 }}>
-          {(NETWORK.royaltyPct * 100).toFixed(0)}% royalty downstream · cap {NETWORK.maxInvites} invitees
+          {(NETWORK.royaltyPct * 100).toFixed(0)}% royalty downstream · cap {effectiveCap} invitees{slotBonus > 0 ? ` (+${slotBonus} slot bonus)` : ""}
         </span>
       </div>
 
@@ -1504,7 +1549,7 @@ function NetworkPanel({ wallet, setWallet, network, setNetwork }: {
         <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, opacity: 0.85, textTransform: "uppercase" as const }}>Приглашено</div>
           <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace" }}>
-            {network.invited.length} / {NETWORK.maxInvites}
+            {network.invited.length} / {effectiveCap}
           </div>
         </div>
         <div style={{ padding: 10, borderRadius: 8, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)" }}>
@@ -1543,15 +1588,15 @@ function NetworkPanel({ wallet, setWallet, network, setNetwork }: {
             color: "#fff", fontSize: 12, flex: "1 1 220px", minWidth: 0,
           }} />
         <button onClick={inviteOne}
-          disabled={network.invited.length >= NETWORK.maxInvites}
+          disabled={network.invited.length >= effectiveCap}
           style={{
             padding: "7px 14px", borderRadius: 5, border: "none",
-            background: network.invited.length >= NETWORK.maxInvites
+            background: network.invited.length >= effectiveCap
               ? "rgba(255,255,255,0.15)"
               : "linear-gradient(135deg, #fff, #e0f2fe)",
-            color: network.invited.length >= NETWORK.maxInvites ? "#94a3b8" : "#0e7490",
+            color: network.invited.length >= effectiveCap ? "#94a3b8" : "#0e7490",
             fontSize: 12, fontWeight: 800,
-            cursor: network.invited.length >= NETWORK.maxInvites ? "default" : "pointer",
+            cursor: network.invited.length >= effectiveCap ? "default" : "pointer",
           }}>
           ➕ Invite
         </button>
@@ -1628,17 +1673,22 @@ const PIN_KIND_META: Record<PinKind, { emoji: string; label: string; color: stri
   guide:    { emoji: "📘", label: "Гайд / разбор",     color: "#6366f1" },
 };
 
-function CurationWall({ wallet, setWallet, pins, setPins }: {
+function CurationWall({ wallet, setWallet, pins, setPins, owned }: {
   wallet: AEVWallet;
   setWallet: React.Dispatch<React.SetStateAction<AEVWallet | null>>;
   pins: PinnedItem[];
   setPins: React.Dispatch<React.SetStateAction<PinnedItem[] | null>>;
+  owned: string[];
 }) {
   const [draftKind, setDraftKind] = useState<PinKind>("game");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftLink, setDraftLink] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // slot_curation_5 stacks: каждое +5 max pins
+  const slotBonus = countSlotItems(owned, "slot_curation_5") * 5;
+  const effectiveCap = CURATION.maxPins + slotBonus;
 
   const today = pinsToday(pins);
   const remaining = Math.max(0, CURATION.dailyPinLimit - today);
@@ -1647,6 +1697,11 @@ function CurationWall({ wallet, setWallet, pins, setPins }: {
 
   const submit = () => {
     setError(null);
+    if (pins.length >= effectiveCap) {
+      setError(`Cap ${effectiveCap} pin'ов исчерпан · купи slot expansion`);
+      setTimeout(() => setError(null), 4500);
+      return;
+    }
     const result = recordPin(wallet, pins, {
       kind: draftKind,
       title: draftTitle,
@@ -1659,7 +1714,8 @@ function CurationWall({ wallet, setWallet, pins, setPins }: {
       return;
     }
     setWallet(result.wallet);
-    setPins(result.pins);
+    // recordPin slices via CURATION.maxPins; для slot bonus сами держим до effectiveCap
+    setPins(result.pins.slice(0, effectiveCap));
     setDraftTitle(""); setDraftNote(""); setDraftLink("");
   };
 
@@ -1689,7 +1745,7 @@ function CurationWall({ wallet, setWallet, pins, setPins }: {
           color: "#fff", fontSize: 10, fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" as const,
         }}>D · LIVE</span>
         <span style={{ fontSize: 11, color: "#64748b" }}>
-          +{CURATION.perPinAev} AEV за pin · +{CURATION.upvoteBonusAev} AEV за upvote · cap {CURATION.maxPins}
+          +{CURATION.perPinAev} AEV за pin · +{CURATION.upvoteBonusAev} AEV за upvote · cap {effectiveCap}{slotBonus > 0 ? ` (+${slotBonus} slot bonus)` : ""}
         </span>
       </div>
 
@@ -1704,7 +1760,7 @@ function CurationWall({ wallet, setWallet, pins, setPins }: {
         <div style={{ padding: 10, borderRadius: 8, background: "#f0f9ff", border: "1px solid #bae6fd" }}>
           <div style={{ fontSize: 10, fontWeight: 800, color: "#0369a1", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Всего pin'ов</div>
           <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "ui-monospace, monospace", color: "#0c4a6e" }}>
-            {pins.length} / {CURATION.maxPins}
+            {pins.length} / {effectiveCap}
           </div>
         </div>
         <div style={{ padding: 10, borderRadius: 8, background: "#ecfdf5", border: "1px solid #86efac" }}>

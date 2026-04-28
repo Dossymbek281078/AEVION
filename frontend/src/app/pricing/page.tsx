@@ -1908,6 +1908,12 @@ export default function PricingPage() {
           >
             Security &amp; Compliance →
           </Link>
+          <Link
+            href="/pricing/refund-policy"
+            style={{ color: "#0d9488", fontWeight: 700, marginRight: 12 }}
+          >
+            Refund policy →
+          </Link>
           {tp("notes.docsApi")}{" "}
           <Link href="/" style={{ color: "#0d9488", fontWeight: 700 }}>
             /api/openapi.json

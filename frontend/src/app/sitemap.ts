@@ -20,6 +20,7 @@ const STATIC_ROUTES = [
   "/pricing/cases",
   "/pricing/compare",
   "/pricing/contact",
+  "/pricing/refund-policy",
   "/pricing/roadmap",
   "/pricing/security",
   "/privacy",

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "AEVION Bank — Leaderboard",
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function LeaderboardLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/leaderboard" name="Leaderboard" />
+      {children}
+    </>
+  );
 }

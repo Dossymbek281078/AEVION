@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Get started — AEVION Bank",
@@ -19,5 +20,10 @@ export const metadata: Metadata = {
 };
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/onboarding" name="Onboarding Tour" />
+      {children}
+    </>
+  );
 }

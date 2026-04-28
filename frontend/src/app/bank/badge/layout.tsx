@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "AEVION Bank — Trust Badge embed",
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function BadgeLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/badge" name="Trust Badge Embed" />
+      {children}
+    </>
+  );
 }

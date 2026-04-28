@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Billing calendar — AEVION Bank",
@@ -19,5 +20,10 @@ export const metadata: Metadata = {
 };
 
 export default function CalendarLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/calendar" name="Billing Calendar" />
+      {children}
+    </>
+  );
 }

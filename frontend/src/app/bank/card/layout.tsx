@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Wallet Card — AEVION Bank",
@@ -14,5 +15,10 @@ export const metadata: Metadata = {
 };
 
 export default function CardLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/card" name="Wallet Card" />
+      {children}
+    </>
+  );
 }

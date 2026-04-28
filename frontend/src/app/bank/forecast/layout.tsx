@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Wealth forecast — AEVION Bank",
@@ -19,5 +20,10 @@ export const metadata: Metadata = {
 };
 
 export default function ForecastLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/forecast" name="Wealth Forecast" />
+      {children}
+    </>
+  );
 }

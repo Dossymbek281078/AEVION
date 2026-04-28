@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "About AEVION Bank — wallet for the trust graph",
@@ -47,6 +48,7 @@ export default function AboutLayout({ children }: { children: React.ReactNode })
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
       />
+      <BreadcrumbsJsonLd path="/bank/about" name="About AEVION Bank" />
       {children}
     </>
   );

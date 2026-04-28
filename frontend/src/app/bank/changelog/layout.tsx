@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Changelog — AEVION Bank",
@@ -15,5 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default function ChangelogLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/changelog" name="Changelog" />
+      {children}
+    </>
+  );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Loyalty vault — AEVION Bank",
@@ -15,5 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default function LoyaltyLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/loyalty" name="Loyalty Vault" />
+      {children}
+    </>
+  );
 }

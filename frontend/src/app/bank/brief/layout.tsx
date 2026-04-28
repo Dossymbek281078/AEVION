@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Weekly brief — AEVION Bank",
@@ -15,5 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default function BriefLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <BreadcrumbsJsonLd path="/bank/brief" name="Weekly Brief" />
+      {children}
+    </>
+  );
 }

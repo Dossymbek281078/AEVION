@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
 
 export const metadata: Metadata = {
   title: "Trust Score — AEVION Bank",
@@ -41,6 +42,7 @@ export default function TrustLayout({ children }: { children: React.ReactNode })
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
       />
+      <BreadcrumbsJsonLd path="/bank/trust" name="Trust Score" />
       {children}
     </>
   );

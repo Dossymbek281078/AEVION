@@ -2848,10 +2848,30 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── Dashboard widgets ─── */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:SPACE[2]}}>
+          {/* ─── First-visit hint — гасится после 1-й партии или первого Chessy ─── */}
+          {savedGames.length===0&&chessy.lifetime===0&&<div className="cc-firstvisit">
+            <div style={{position:"relative",display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
+              <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>♟</div>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontSize:14,fontWeight:900,color:"#065f46",letterSpacing:0.2}}>Привет! Это твой первый визит 👋</div>
+                <div style={{fontSize:13,color:CC.text,marginTop:2,lineHeight:1.55}}>
+                  Начни с быстрой партии (любой уровень AI), задачи или знаменитой партии мастеров. Всё доступно одним кликом ниже.
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <Btn size="sm" variant="primary" onClick={()=>{sSetup(true);sTab("play")}}>▶ Сыграть</Btn>
+                <Btn size="sm" variant="secondary" onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}>♛ Master Games</Btn>
+                <Btn size="sm" variant="ghost" onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}>🧩 Задача</Btn>
+              </div>
+            </div>
+          </div>}
+
+          {/* ─── Section: Stats ─── */}
+          <div>
+            <div className="cc-section-h"><span>📊 Статистика</span></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:SPACE[2]}}>
             {/* Rating */}
-            <Card padding={SPACE[3]} tone="surface1">
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1">
               <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Rating</div>
               <div style={{fontSize:28,fontWeight:900,color:CC.gold,lineHeight:1.1,marginTop:2}}>{rat}</div>
               <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{rk.i} {rk.t}</div>
@@ -2893,7 +2913,7 @@ export default function CyberChessPage(){
             </Card>
 
             {/* Chessy */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
               style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",borderColor:"#fcd34d",cursor:"pointer"}}>
               <div style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Chessy</div>
               <div style={{display:"flex",alignItems:"baseline",gap:4,marginTop:2}}>
@@ -2906,7 +2926,7 @@ export default function CyberChessPage(){
             </Card>
 
             {/* Achievements */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>sShowShop(true)}
               style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",borderColor:"#c4b5fd",cursor:"pointer"}}>
               <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Достижения</div>
               <div style={{fontSize:26,fontWeight:900,color:CC.accent,lineHeight:1.1,marginTop:2}}>{achGot}<span style={{fontSize:14,color:CC.textDim}}>/{achTotal}</span></div>
@@ -2917,7 +2937,7 @@ export default function CyberChessPage(){
             </Card>
 
             {/* Win rate */}
-            <Card padding={SPACE[3]} tone="surface1">
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1">
               <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Win Rate</div>
               {totalGames>0?<>
                 <div style={{fontSize:28,fontWeight:900,color:winPct>=50?CC.brand:CC.danger,lineHeight:1.1,marginTop:2}}>{winPct}%</div>
@@ -2929,9 +2949,15 @@ export default function CyberChessPage(){
                 </div>
               </>:<div style={{fontSize:12,color:CC.textDim,marginTop:SPACE[2]}}>Пока нет игр</div>}
             </Card>
+            </div>
+          </div>
 
+          {/* ─── Section: Играть и учиться ─── */}
+          <div>
+            <div className="cc-section-h"><span>▶ Играть и учиться</span></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:SPACE[2]}}>
             {/* Quick Puzzle */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
               style={{background:"linear-gradient(135deg,#eff6ff,#f0fdf4)",borderColor:"#bfdbfe",cursor:"pointer"}}>
               <div style={{fontSize:10,color:CC.info,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Задачи</div>
               <div style={{fontSize:26,marginTop:2}}>🧩</div>
@@ -2939,43 +2965,40 @@ export default function CyberChessPage(){
               <div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Случайная →</div>
             </Card>
 
+            {/* Master Games (killer #17) */}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
+              style={{background:"linear-gradient(135deg,#fef9c3,#fde68a)",borderColor:"#facc15",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <div style={{fontSize:10,color:"#854d0e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Master Games</div>
+                <Badge tone="gold" size="xs">♛</Badge>
+              </div>
+              <div style={{fontSize:26,marginTop:2}}>♛</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Знаменитые партии · Угадай ход</div>
+              <div style={{fontSize:11,fontWeight:800,color:"#854d0e",marginTop:SPACE[2]}}>Изучать →</div>
+            </Card>
+
             {/* Coach */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sTab("coach")}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>sTab("coach")}
               style={{background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderColor:"#a7f3d0",cursor:"pointer"}}>
               <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>AI Coach</div>
               <div style={{fontSize:26,marginTop:2}}>🎓</div>
-              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Разбор</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Разбор партии</div>
               <div style={{fontSize:11,fontWeight:800,color:CC.brand,marginTop:SPACE[2]}}>Учиться →</div>
             </Card>
 
-            {/* Library / Analysis */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sTab("analysis")}
-              style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#d8b4fe",cursor:"pointer"}}>
-              <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Analysis</div>
-              <div style={{fontSize:26,marginTop:2}}>⚡</div>
-              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>MultiPV · SF</div>
-              <div style={{fontSize:11,fontWeight:800,color:CC.accent,marginTop:SPACE[2]}}>Анализ →</div>
-            </Card>
-
             {/* Coordinates Trainer (killer #13) */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}}
               style={{background:"linear-gradient(135deg,#fffbeb,#fef3c7)",borderColor:"#fcd34d",cursor:"pointer"}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <div style={{fontSize:10,color:"#b45309",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Coordinates</div>
-                <Badge tone="gold" size="xs">⚡ new</Badge>
-              </div>
+              <div style={{fontSize:10,color:"#b45309",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Coordinates</div>
               <div style={{fontSize:26,marginTop:2}}>🎯</div>
-              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Тапай клетки на скорость · 30 сек</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Клетки на скорость · 30 сек</div>
               <div style={{fontSize:11,fontWeight:800,color:"#b45309",marginTop:SPACE[2]}}>Тренировать →</div>
             </Card>
 
             {/* Personality Quiz (killer #14) */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}}
               style={{background:"linear-gradient(135deg,#fdf4ff,#fae8ff)",borderColor:"#e9d5ff",cursor:"pointer"}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <div style={{fontSize:10,color:"#a21caf",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Personality</div>
-                <Badge tone="accent" size="xs">🧠 new</Badge>
-              </div>
+              <div style={{fontSize:10,color:"#a21caf",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Personality</div>
               {savedQuizResult?<>
                 <div style={{fontSize:24,marginTop:2}}>{QUIZ_PLAYERS[savedQuizResult.result.topId].emoji}</div>
                 <div style={{fontSize:11,color:CC.text,fontWeight:800,marginTop:2}}>{QUIZ_PLAYERS[savedQuizResult.result.topId].name}</div>
@@ -2986,49 +3009,28 @@ export default function CyberChessPage(){
                 <div style={{fontSize:11,fontWeight:800,color:"#a21caf",marginTop:SPACE[2]}}>Пройти →</div>
               </>}
             </Card>
+            </div>
+          </div>
 
-            {/* Board Editor (killer #15) */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}}
-              style={{background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)",borderColor:"#7dd3fc",cursor:"pointer"}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <div style={{fontSize:10,color:"#0369a1",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Board Editor</div>
-                <Badge tone="info" size="xs">FEN</Badge>
-              </div>
-              <div style={{fontSize:26,marginTop:2}}>♛</div>
-              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Установи позицию · экспорт FEN</div>
-              <div style={{fontSize:11,fontWeight:800,color:"#0369a1",marginTop:SPACE[2]}}>Открыть →</div>
-            </Card>
-
+          {/* ─── Section: Инструменты ─── */}
+          <div>
+            <div className="cc-section-h"><span>🛠 Инструменты</span></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:SPACE[2]}}>
             {/* Insights v2 (killer #16) */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowInsights(true)}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>sShowInsights(true)}
               style={{background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",borderColor:"#6ee7b7",cursor:"pointer"}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <div style={{fontSize:10,color:"#047857",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Insights v2</div>
-                <Badge tone="brand" size="xs">📊 new</Badge>
-              </div>
+              <div style={{fontSize:10,color:"#047857",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Insights</div>
               <div style={{fontSize:26,marginTop:2}}>📊</div>
-              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{savedGames.length>0?`${savedGames.length} партий — глубокий анализ`:"Сыграй партии"}</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{savedGames.length>0?`${savedGames.length} партий — анализ`:"Сыграй партии"}</div>
               <div style={{fontSize:11,fontWeight:800,color:"#047857",marginTop:SPACE[2]}}>Открыть →</div>
             </Card>
 
-            {/* Master Games (killer #17) */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
-              style={{background:"linear-gradient(135deg,#fef9c3,#fde68a)",borderColor:"#facc15",cursor:"pointer"}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <div style={{fontSize:10,color:"#854d0e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Master Games</div>
-                <Badge tone="gold" size="xs">♛ new</Badge>
-              </div>
-              <div style={{fontSize:26,marginTop:2}}>♛</div>
-              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Знаменитые партии · Угадай ход</div>
-              <div style={{fontSize:11,fontWeight:800,color:"#854d0e",marginTop:SPACE[2]}}>Изучать →</div>
-            </Card>
-
             {/* Game DNA — персональные паттерны (killer #3) */}
-            <Card padding={SPACE[3]} tone="surface1" onClick={()=>sShowGameDna(true)}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>sShowGameDna(true)}
               style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",borderColor:"#93c5fd",cursor:"pointer",gridColumn:gameDna.insights.length>0&&savedGames.length>0?"span 2":"auto"}}>
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                 <div style={{fontSize:10,color:CC.info,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Game DNA</div>
-                <Badge tone="info" size="xs">🧬 new</Badge>
+                <Badge tone="info" size="xs">🧬</Badge>
               </div>
               {savedGames.length>0?<>
                 <div style={{fontSize:12,color:CC.text,marginTop:SPACE[2],lineHeight:1.5,fontWeight:600,minHeight:48,maxHeight:60,overflow:"hidden"}}>
@@ -3042,6 +3044,25 @@ export default function CyberChessPage(){
                 <div style={{fontSize:11,fontWeight:800,color:CC.info,marginTop:SPACE[2]}}>Разблокировать →</div>
               </>}
             </Card>
+
+            {/* Board Editor (killer #15) */}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}}
+              style={{background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)",borderColor:"#7dd3fc",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:"#0369a1",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Board Editor</div>
+              <div style={{fontSize:26,marginTop:2}}>♛</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>FEN · позиции</div>
+              <div style={{fontSize:11,fontWeight:800,color:"#0369a1",marginTop:SPACE[2]}}>Открыть →</div>
+            </Card>
+
+            {/* Library / Analysis */}
+            <Card className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={()=>sTab("analysis")}
+              style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#d8b4fe",cursor:"pointer"}}>
+              <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Analysis</div>
+              <div style={{fontSize:26,marginTop:2}}>⚡</div>
+              <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>Stockfish MultiPV</div>
+              <div style={{fontSize:11,fontWeight:800,color:CC.accent,marginTop:SPACE[2]}}>Анализ →</div>
+            </Card>
+            </div>
           </div>
 
           {/* ─── Game History ─── */}

@@ -106,25 +106,30 @@ export function Btn({ variant = "secondary", size = "md", full, loading, disable
    ═══════════════════════════════════════════════════════════ */
 
 export function Card({ children, padding = SPACE[4], radius = RADIUS.lg,
-  elevation = "sm", tone = "surface1", style, onClick }:
+  elevation = "sm", tone = "surface1", style, onClick, className }:
   { children: React.ReactNode; padding?: number; radius?: number;
     elevation?: "none"|"sm"|"md"|"lg"; tone?: "surface1"|"surface2"|"surface3"|"glass";
-    style?: React.CSSProperties; onClick?: () => void; }) {
+    style?: React.CSSProperties; onClick?: () => void; className?: string; }) {
   const bg = tone === "glass" ? COLOR.surfaceGlass :
              tone === "surface2" ? COLOR.surface2 :
              tone === "surface3" ? COLOR.surface3 : COLOR.surface1;
   const sh = elevation === "none" ? "none" :
              elevation === "lg" ? SHADOW.lg :
              elevation === "md" ? SHADOW.md : SHADOW.sm;
+  // When className is set (e.g. cc-launch-card), the CSS class owns hover/transition,
+  // so we skip the JS mouseenter/mouseleave inline transform handlers — otherwise
+  // the inline writes win and the CSS hover is dead.
+  const cssOwnsHover = !!className;
   return (
     <div
+      className={className}
       onClick={onClick}
-      onMouseEnter={onClick ? e => {
+      onMouseEnter={onClick && !cssOwnsHover ? e => {
         const el = e.currentTarget as HTMLDivElement;
         el.style.transform = "translateY(-2px)";
         el.style.boxShadow = SHADOW.md;
       } : undefined}
-      onMouseLeave={onClick ? e => {
+      onMouseLeave={onClick && !cssOwnsHover ? e => {
         const el = e.currentTarget as HTMLDivElement;
         el.style.transform = "";
         el.style.boxShadow = sh;
@@ -135,7 +140,7 @@ export function Card({ children, padding = SPACE[4], radius = RADIUS.lg,
         backdropFilter: tone === "glass" ? "blur(10px)" : undefined,
         WebkitBackdropFilter: tone === "glass" ? "blur(10px)" : undefined,
         cursor: onClick ? "pointer" : undefined,
-        transition: `box-shadow ${MOTION.base} ${MOTION.ease}, transform ${MOTION.base} ${MOTION.ease}`,
+        transition: cssOwnsHover ? undefined : `box-shadow ${MOTION.base} ${MOTION.ease}, transform ${MOTION.base} ${MOTION.ease}`,
         ...style,
       }}
     >

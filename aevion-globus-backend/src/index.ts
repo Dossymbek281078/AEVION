@@ -88,6 +88,14 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "List QRight (optional ?mine=1 + Bearer)" },
         post: { summary: "Create QRight object" },
       },
+      "/api/qright/objects/{id}": { get: { summary: "Get one QRight object (ETag/304)" } },
+      "/api/qright/objects.csv": { get: { summary: "Download QRight registry as CSV" } },
+      "/api/qright/embed/{id}": {
+        get: { summary: "Public sanitized JSON for embeds (CORS, ETag/304)" },
+      },
+      "/api/qright/badge/{id}.svg": {
+        get: { summary: "Embeddable SVG trust badge — ?theme=dark|light" },
+      },
       "/api/qsign/sign": { post: { summary: "[v1] Sign payload (HMAC, no persistence)" } },
       "/api/qsign/verify": { post: { summary: "[v1] Stateless verify" } },
       "/api/qsign/v2/health": { get: { summary: "[v2] QSign health + active kids" } },

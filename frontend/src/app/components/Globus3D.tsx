@@ -567,6 +567,7 @@ export default function Globus3D({
   /** Country name detected by globe-surface point-in-polygon (shown as floating badge). */
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const hoveredCountryRef = useRef<string | null>(null);
+  const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
 
   useEffect(() => {
     labelRef.current = label;
@@ -1508,6 +1509,10 @@ export default function Globus3D({
           if (!name) continue;
           presenceCount.set(name, (presenceCount.get(name) ?? 0) + 1);
         }
+        const sortedTop: Array<[string, number]> = [...presenceCount.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+        setTopCountries(sortedTop);
         for (const [name, count] of presenceCount) {
           const entry = countriesCache.find((c) => c.name === name);
           if (!entry) continue;
@@ -2611,6 +2616,61 @@ export default function Globus3D({
               <span style={{ fontWeight: 700 }}>{row.label}</span>
             </div>
           ))}
+
+          {topCountries.length > 0 ? (
+            <>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#7a8fb0",
+                  marginTop: 12,
+                  marginBottom: 6,
+                  borderTop: "1px solid rgba(120,160,220,0.16)",
+                  paddingTop: 10,
+                }}
+              >
+                Top countries
+              </div>
+              {topCountries.map(([name, count]) => (
+                <div
+                  key={name}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: 14,
+                    marginTop: 3,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#cbd5e1",
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 110,
+                    }}
+                  >
+                    {name}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#6cd6ff",
+                      fontWeight: 900,
+                    }}
+                  >
+                    {count}
+                  </span>
+                </div>
+              ))}
+            </>
+          ) : null}
         </div>
       ) : null}
 

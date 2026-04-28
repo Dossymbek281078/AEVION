@@ -100,6 +100,7 @@ export const RATE_CARD = {
     bureau_verify:          { aev: 1.0, label: "Bureau · бизнес-верификация" },
     multichat_handoff:      { aev: 0.15, label: "Multichat · корректный handoff между LLM" },
     qtrade_close_winning:   { aev: 0.4, label: "QTrade · закрыта прибыльная позиция" },
+    qtrade_dca_run:         { aev: 0.05, label: "QTrade · DCA bot tick" },
     qcore_run_complete:     { aev: 0.3, label: "QCoreAI · run агента завершился" },
   },
   compute: {

@@ -7,6 +7,7 @@ const PAIRS_KEY = "aevion_qtrade_pairs_v1";
 const LIMITS_KEY = "aevion_qtrade_limits_v1";
 const CLOSED_KEY = "aevion_qtrade_closed_v1";
 const ALERTS_KEY = "aevion_qtrade_alerts_v1";
+const BOTS_KEY = "aevion_qtrade_bots_v1";
 
 export type PairId = "AEV/USD" | "BTC/USD" | "ETH/USD" | "SOL/USD";
 
@@ -375,4 +376,118 @@ export function sparklinePath(history: number[], width = 100, height = 30): stri
   return history
     .map((p, i) => `${i === 0 ? "M" : "L"} ${(i * dx).toFixed(2)} ${(height - ((p - min) / range) * height).toFixed(2)}`)
     .join(" ");
+}
+
+// ─── DCA Bots — auto-trader ───────────────────────────────────────
+// Каждый bot покупает фиксированную сумму USD каждые N секунд по текущей
+// рыночной цене пары, строит average entry и считает unrealized PnL.
+// Стопится когда исчерпан budget. Auto-tick инициируется из page tick.
+
+export type BotRun = {
+  ts: number;
+  price: number;
+  qty: number;
+  spent: number;       // USD
+};
+
+export type DcaBot = {
+  id: string;
+  pair: PairId;
+  intervalSec: number;        // как часто покупать
+  amountUsd: number;          // сколько USD за tick
+  budgetUsd: number;          // 0 = unlimited (поедает infinity)
+  status: "active" | "paused" | "exhausted";
+  createdTs: number;
+  lastRunTs: number;          // 0 = ещё ни разу
+  runsCount: number;
+  spentUsd: number;
+  totalQty: number;
+  avgEntry: number;           // weighted-avg entry price
+  recent: BotRun[];           // последние 20 покупок
+};
+
+export function ldBots(): DcaBot[] {
+  try {
+    const s = typeof window !== "undefined" ? localStorage.getItem(BOTS_KEY) : null;
+    if (!s) return [];
+    const r = JSON.parse(s);
+    return Array.isArray(r) ? r as DcaBot[] : [];
+  } catch { return [] }
+}
+
+export function svBots(bs: DcaBot[]) {
+  try { localStorage.setItem(BOTS_KEY, JSON.stringify(bs.slice(0, 50))) } catch {}
+}
+
+export function makeBot(opts: {
+  pair: PairId;
+  intervalSec: number;
+  amountUsd: number;
+  budgetUsd: number;          // 0 = unlimited
+}): DcaBot {
+  return {
+    id: `bot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+    pair: opts.pair,
+    intervalSec: Math.max(5, Math.floor(opts.intervalSec)),
+    amountUsd: Math.max(1, opts.amountUsd),
+    budgetUsd: Math.max(0, opts.budgetUsd),
+    status: "active",
+    createdTs: Date.now(),
+    lastRunTs: 0,
+    runsCount: 0,
+    spentUsd: 0,
+    totalQty: 0,
+    avgEntry: 0,
+    recent: [],
+  };
+}
+
+// Tick a single bot if active + interval elapsed. Returns possibly-updated bot
+// + flag indicating whether a new run was performed (для AEV reward в page).
+export function tickBot(
+  bot: DcaBot,
+  currentPrice: number,
+  now = Date.now(),
+): { bot: DcaBot; ran: boolean } {
+  if (bot.status !== "active") return { bot, ran: false };
+  const elapsed = (now - bot.lastRunTs) / 1000;
+  if (bot.lastRunTs > 0 && elapsed < bot.intervalSec) return { bot, ran: false };
+  const remaining = bot.budgetUsd > 0 ? bot.budgetUsd - bot.spentUsd : Infinity;
+  if (remaining <= 0) return { bot: { ...bot, status: "exhausted" }, ran: false };
+  const spend = Math.min(bot.amountUsd, remaining);
+  if (spend <= 0) return { bot: { ...bot, status: "exhausted" }, ran: false };
+  if (currentPrice <= 0) return { bot, ran: false };
+  const qty = spend / currentPrice;
+  const newTotalQty = bot.totalQty + qty;
+  const newAvg = newTotalQty > 0
+    ? (bot.avgEntry * bot.totalQty + currentPrice * qty) / newTotalQty
+    : currentPrice;
+  const run: BotRun = { ts: now, price: currentPrice, qty, spent: spend };
+  const recent = [run, ...bot.recent].slice(0, 20);
+  const newSpent = bot.spentUsd + spend;
+  const exhausted = bot.budgetUsd > 0 && newSpent >= bot.budgetUsd;
+  return {
+    bot: {
+      ...bot,
+      lastRunTs: now,
+      runsCount: bot.runsCount + 1,
+      spentUsd: newSpent,
+      totalQty: newTotalQty,
+      avgEntry: newAvg,
+      recent,
+      status: exhausted ? "exhausted" : "active",
+    },
+    ran: true,
+  };
+}
+
+// Unrealized PnL for a bot's averaged DCA stack.
+export function botUnrealizedPnl(bot: DcaBot, currentPrice: number): number {
+  if (bot.totalQty <= 0) return 0;
+  return (currentPrice - bot.avgEntry) * bot.totalQty;
+}
+
+export function botUnrealizedPct(bot: DcaBot, currentPrice: number): number {
+  if (bot.avgEntry <= 0) return 0;
+  return ((currentPrice - bot.avgEntry) / bot.avgEntry) * 100;
 }

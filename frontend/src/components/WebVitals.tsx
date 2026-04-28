@@ -3,8 +3,8 @@
 import { useReportWebVitals } from "next/web-vitals";
 
 // Web Vitals reporter — собирает Core Web Vitals (CLS / FCP / LCP / FID / TTFB
-// / INP) и логирует в console. Production-ready hook для analytics:
-// заменить console.log на send-to-endpoint когда подключим backend.
+// / INP). В dev пишет в console с color-coded rating; в prod отправляет
+// beacon в /api/metrics (sendBeacon — не блокирует unload).
 
 type Metric = {
   id: string;
@@ -32,20 +32,36 @@ function fmtValue(name: string, value: number): string {
 export function WebVitals() {
   useReportWebVitals((metric: Metric) => {
     if (typeof window === "undefined") return;
-    if (process.env.NODE_ENV !== "production") return;
-    const color = metric.rating ? RATING_COLOR[metric.rating] : "#64748b";
-    const value = fmtValue(metric.name, metric.value);
-    // Single console.log с цветом для DevTools — лёгкий, не блокирует.
-    // eslint-disable-next-line no-console
-    console.log(
-      `%c[web-vitals] ${metric.name}%c ${value}${metric.rating ? ` · ${metric.rating}` : ""}`,
-      `color:${color};font-weight:bold`,
-      "color:inherit;font-weight:normal",
-    );
-    // Forward to backend через beacon API (если future endpoint появится)
-    // try {
-    //   navigator.sendBeacon("/api/metrics", JSON.stringify({ ...metric, ts: Date.now() }));
-    // } catch {}
+    if (process.env.NODE_ENV !== "production") {
+      const color = metric.rating ? RATING_COLOR[metric.rating] : "#64748b";
+      const value = fmtValue(metric.name, metric.value);
+      // eslint-disable-next-line no-console
+      console.log(
+        `%c[web-vitals] ${metric.name}%c ${value}${metric.rating ? ` · ${metric.rating}` : ""}`,
+        `color:${color};font-weight:bold`,
+        "color:inherit;font-weight:normal",
+      );
+      return;
+    }
+    try {
+      const body = JSON.stringify({
+        ...metric,
+        ts: Date.now(),
+        path: window.location?.pathname || "/",
+        ua: navigator.userAgent,
+      });
+      const sent = typeof navigator.sendBeacon === "function"
+        ? navigator.sendBeacon("/api/metrics", body)
+        : false;
+      if (!sent) {
+        fetch("/api/metrics", {
+          method: "POST",
+          keepalive: true,
+          headers: { "content-type": "application/json" },
+          body,
+        }).catch(() => {/* silent */});
+      }
+    } catch {/* silent */}
   });
   return null;
 }

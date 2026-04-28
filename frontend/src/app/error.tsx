@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportError } from "@/lib/reporter";
 
 export default function RootError({
   error,
@@ -12,6 +13,7 @@ export default function RootError({
   useEffect(() => {
     // eslint-disable-next-line no-console
     console.error("[App error]", error);
+    reportError(error, "root", { digest: error.digest });
   }, [error]);
 
   return (

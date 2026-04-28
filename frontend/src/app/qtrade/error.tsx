@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportError } from "@/lib/reporter";
 
 export default function QTradeError({
   error,
@@ -12,6 +13,7 @@ export default function QTradeError({
   useEffect(() => {
     // eslint-disable-next-line no-console
     console.error("[QTrade page error]", error);
+    reportError(error, "/qtrade", { digest: error.digest });
   }, [error]);
 
   return (

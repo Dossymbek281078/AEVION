@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportError } from "@/lib/reporter";
+
 // Last-resort error boundary: ловит errors в самом root layout.tsx
 // Должен включать собственные <html>/<body> (т.к. layout failed).
 
@@ -10,6 +13,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    reportError(error, "global", { digest: error.digest });
+  }, [error]);
+
   return (
     <html lang="ru">
       <body style={{

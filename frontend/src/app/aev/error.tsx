@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportError } from "@/lib/reporter";
 
 export default function AevError({
   error,
@@ -12,6 +13,7 @@ export default function AevError({
   useEffect(() => {
     // eslint-disable-next-line no-console
     console.error("[AEV page error]", error);
+    reportError(error, "/aev", { digest: error.digest });
   }, [error]);
 
   return (

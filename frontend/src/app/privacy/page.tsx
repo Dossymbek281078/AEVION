@@ -3,7 +3,21 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "AEVION platform privacy policy and data protection information.",
+  description:
+    "AEVION privacy policy: what we collect, how we store it, how Quantum Shield protects credentials, and how Trust Graph data flows. Updated for the GDPR / KZ Digital Sig framework.",
+  alternates: { canonical: "/privacy" },
+  openGraph: {
+    title: "AEVION Privacy Policy",
+    description: "What AEVION collects, how it's stored, who can access it.",
+    type: "article",
+    siteName: "AEVION",
+  },
+  twitter: {
+    card: "summary",
+    title: "AEVION Privacy Policy",
+    description: "Data handling at AEVION.",
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function PrivacyPage() {

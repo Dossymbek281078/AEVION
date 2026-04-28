@@ -360,11 +360,13 @@ function BankContent() {
             <RoyaltyStream />
             <ChessWinnings />
             <SpendingInsights accountId={account.id} operations={operations} />
-            <BudgetCaps
-              myAccountId={account.id}
-              operations={operations}
-              notify={notify}
-            />
+            <div id="bank-anchor-budget" style={{ scrollMarginTop: 20 }}>
+              <BudgetCaps
+                myAccountId={account.id}
+                operations={operations}
+                notify={notify}
+              />
+            </div>
             <SpendForecast myAccountId={account.id} operations={operations} />
             <div id="bank-anchor-statement" style={{ scrollMarginTop: 20 }}>
               <AutopilotStatement accountId={account.id} notify={notify} />

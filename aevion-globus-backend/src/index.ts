@@ -7,6 +7,7 @@ import cors from "cors";
 import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qtradeRouter } from "./routes/qtrade";
+import { qtradeOfflineRouter } from "./routes/qtradeoffline";
 import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
@@ -127,6 +128,7 @@ app.get("/api/openapi.json", (_req, res) => {
 // QRight — патентирование
 // ==========================
 app.use("/api/qtrade", qtradeRouter);
+app.use("/api/qtradeoffline", qtradeOfflineRouter);
 app.use("/api/qright", qrightRouter);
 
 // ==========================

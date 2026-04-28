@@ -107,6 +107,29 @@ export async function ensureQSignV2Tables(pool: PgPoolLike): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "QSignWebhook_active_idx" ON "QSignWebhook" ("active");`,
   );
 
+  /* Idempotency cache — `Idempotency-Key` header lookup keyed on
+   * (issuerUserId, key). Same key + same payload returns the cached
+   * signatureId; different payload yields 409. 24h TTL is enforced via
+   * createdAt at lookup time, expired rows are reclaimable for re-use. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignIdempotency" (
+      "id"             TEXT PRIMARY KEY,
+      "issuerUserId"   TEXT NOT NULL,
+      "idempotencyKey" TEXT NOT NULL,
+      "signatureId"    TEXT NOT NULL,
+      "payloadHash"    TEXT NOT NULL,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "QSignIdempotency_user_key_idx"
+       ON "QSignIdempotency" ("issuerUserId", "idempotencyKey");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignIdempotency_createdAt_idx"
+       ON "QSignIdempotency" ("createdAt");`,
+  );
+
   /* Per-attempt delivery log — used by GET /webhooks/:id/deliveries and to
    * help operators diagnose dead targets. One row per HTTP attempt; retries
    * produce multiple rows linked by webhookId + event time clustering. */

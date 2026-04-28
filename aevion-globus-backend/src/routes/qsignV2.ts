@@ -251,6 +251,84 @@ async function loadRevocation(signatureId: string) {
   return r.rows[0];
 }
 
+/* ───────── GET /metrics (Prometheus exposition) ─────────
+ * text/plain, consumable by Prometheus scrape jobs and Grafana directly.
+ * Cheap — same query plan as /health counts, runs in a single round trip.
+ * Public (no auth) — counts are already exposed via /stats and /health.
+ */
+qsignV2Router.get("/metrics", async (req, res) => {
+  try {
+    let dbLatencyMs = 0;
+    try {
+      const t0 = Date.now();
+      await pool.query("SELECT 1");
+      dbLatencyMs = Date.now() - t0;
+    } catch {
+      /* fall through with zero — better than 500 */
+    }
+    await ensureQSignV2Tables(pool);
+
+    const r = (await pool.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM "QSignSignature") AS sigs,
+         (SELECT COUNT(*)::int FROM "QSignSignature" WHERE "revokedAt" IS NOT NULL) AS revoked,
+         (SELECT COUNT(*)::int FROM "QSignKey") AS keys,
+         (SELECT COUNT(*)::int FROM "QSignKey" WHERE "status"='active') AS keys_active,
+         (SELECT COUNT(*)::int FROM "QSignWebhook" WHERE "active"=TRUE) AS webhooks_active,
+         (SELECT COUNT(*)::int FROM "QSignWebhookDelivery" WHERE "succeeded"=TRUE) AS deliveries_ok,
+         (SELECT COUNT(*)::int FROM "QSignWebhookDelivery" WHERE "succeeded"=FALSE) AS deliveries_failed`,
+    )) as any;
+    const c = r.rows?.[0] || {};
+
+    const mem = process.memoryUsage();
+    const uptimeSec = Math.round((Date.now() - PROCESS_STARTED_AT) / 1000);
+
+    const lines: string[] = [];
+    const out = (
+      name: string,
+      type: "counter" | "gauge",
+      help: string,
+      value: number | string,
+      labels?: string,
+    ) => {
+      lines.push(`# HELP ${name} ${help}`);
+      lines.push(`# TYPE ${name} ${type}`);
+      lines.push(`${name}${labels ?? ""} ${value}`);
+    };
+
+    out("qsign_signatures_total", "counter", "Total signatures created", c.sigs ?? 0);
+    out("qsign_signatures_revoked", "counter", "Total revocation records", c.revoked ?? 0);
+    out("qsign_keys_total", "gauge", "Keys in registry (active + retired)", c.keys ?? 0);
+    out("qsign_keys_active", "gauge", "Keys currently active for signing", c.keys_active ?? 0);
+    out("qsign_webhooks_active", "gauge", "Webhooks with active=true", c.webhooks_active ?? 0);
+    out(
+      "qsign_webhook_deliveries_total",
+      "counter",
+      "Webhook delivery attempts",
+      c.deliveries_ok ?? 0,
+      '{succeeded="true"}',
+    );
+    lines.push(
+      `qsign_webhook_deliveries_total{succeeded="false"} ${c.deliveries_failed ?? 0}`,
+    );
+    out(
+      "qsign_db_latency_seconds",
+      "gauge",
+      "Latency of SELECT 1 against the configured DB",
+      (dbLatencyMs / 1000).toFixed(4),
+    );
+    out("qsign_uptime_seconds", "gauge", "Process uptime in seconds", uptimeSec);
+    out("qsign_memory_rss_bytes", "gauge", "Resident set size in bytes", mem.rss);
+    out("qsign_memory_heap_used_bytes", "gauge", "V8 heap bytes in use", mem.heapUsed);
+
+    res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(lines.join("\n") + "\n");
+  } catch (e: any) {
+    errResp(req, res, 500, { error: "metrics_failed", details: e?.message }, e);
+  }
+});
+
 /* ───────── OpenAPI 3.0 spec ─────────
  * Static export of the contract for client SDK generators (Postman,
  * Stoplight, openapi-generator). Update lib/qsignV2/openapiSpec.ts when
@@ -634,6 +712,35 @@ qsignV2Router.get("/audit", async (req, res) => {
 
 /* ───────── POST /sign ───────── */
 
+const IDEMPOTENCY_TTL_HOURS = 24;
+
+/**
+ * Per-user idempotency lookup. Returns the existing signature row when the
+ * same (userId, key) seen within TTL hours and the canonical payload hash
+ * matches; null if no row or row is stale; throws 'mismatch' to caller via
+ * a tagged error for the 409 path.
+ */
+async function findIdempotentSignature(
+  userId: string,
+  key: string,
+  payloadHash: string,
+): Promise<{ status: "hit"; row: any } | { status: "mismatch"; existingHash: string } | null> {
+  const r = (await pool.query(
+    `SELECT i."signatureId", i."payloadHash", s.*
+     FROM "QSignIdempotency" i
+     JOIN "QSignSignature" s ON s."id" = i."signatureId"
+     WHERE i."issuerUserId" = $1 AND i."idempotencyKey" = $2
+       AND i."createdAt" >= NOW() - INTERVAL '${IDEMPOTENCY_TTL_HOURS} hours'`,
+    [userId, key],
+  )) as any;
+  const row = r.rows?.[0];
+  if (!row) return null;
+  if (row.payloadHash && row.payloadHash !== payloadHash) {
+    return { status: "mismatch", existingHash: row.payloadHash };
+  }
+  return { status: "hit", row };
+}
+
 qsignV2Router.post("/sign", signLimiter, async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
@@ -654,6 +761,69 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       payloadHash = sha256Hex(canonical);
     } catch (e: any) {
       return res.status(400).json({ error: "canonicalization failed", details: e?.message });
+    }
+
+    /* Idempotency-Key honors both `Idempotency-Key` (RFC standard form) and
+     * lowercase. Length-bound to keep DB index sane. Same user + same key +
+     * same payload returns the cached signature with `idempotent: replayed`;
+     * same key + DIFFERENT payload is a programming error → 409. */
+    const idemKeyRaw =
+      (req.headers["idempotency-key"] || req.headers["Idempotency-Key"]) as
+        | string
+        | undefined;
+    const idemKey =
+      typeof idemKeyRaw === "string" && /^[a-zA-Z0-9._:-]{8,128}$/.test(idemKeyRaw)
+        ? idemKeyRaw
+        : null;
+
+    if (idemKey) {
+      const cached = await findIdempotentSignature(auth.sub, idemKey, payloadHash);
+      if (cached && cached.status === "mismatch") {
+        return res.status(409).json({
+          error: "idempotency_key_payload_mismatch",
+          existingPayloadHash: cached.existingHash,
+          requestedPayloadHash: payloadHash,
+          hint: "this Idempotency-Key was previously used with a different payload — choose a fresh key",
+        });
+      }
+      if (cached && cached.status === "hit") {
+        const row = cached.row;
+        const dilithiumBlock = dilithiumPreviewFromRow(row) ?? dilithiumPreviewBlock(canonical);
+        const edPub = row.ed25519Kid ? (await getKeyByKid(row.ed25519Kid))?.publicKey : null;
+        return res.status(200).json({
+          id: row.id,
+          algoVersion: row.algoVersion || ALGO_VERSION,
+          canonicalization: CANONICALIZATION_SPEC,
+          payloadHash: row.payloadHash,
+          payloadCanonical: row.payloadCanonical,
+          hmac: { kid: row.hmacKid, algo: "HMAC-SHA256", signature: row.signatureHmac },
+          ed25519: row.ed25519Kid
+            ? {
+                kid: row.ed25519Kid,
+                algo: "Ed25519",
+                signature: row.signatureEd25519,
+                publicKey: edPub,
+              }
+            : null,
+          dilithium: dilithiumBlock,
+          issuer: { userId: row.issuerUserId, email: row.issuerEmail },
+          geo:
+            row.geoSource || row.geoCountry
+              ? {
+                  source: row.geoSource,
+                  country: row.geoCountry,
+                  city: row.geoCity,
+                  lat: row.geoLat,
+                  lng: row.geoLng,
+                }
+              : null,
+          createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
+          verifyUrl: `/api/qsign/v2/verify/${row.id}`,
+          publicUrl: `/qsign/verify/${row.id}`,
+          idempotent: "replayed",
+          requestId: reqId(req),
+        });
+      }
     }
 
     const hmacKey = await getActiveHmac();
@@ -697,6 +867,20 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       ],
     );
 
+    if (idemKey) {
+      try {
+        await pool.query(
+          `INSERT INTO "QSignIdempotency"
+             ("id","issuerUserId","idempotencyKey","signatureId","payloadHash")
+           VALUES ($1,$2,$3,$4,$5)`,
+          [crypto.randomUUID(), auth.sub, idemKey, id, payloadHash],
+        );
+      } catch {
+        /* unique-violation race — earlier request beat us; safe to ignore,
+         * the next call with the same key will hit the cached row. */
+      }
+    }
+
     fireWebhooksFor(auth.sub, "sign", {
       id,
       payloadHash,
@@ -723,6 +907,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
         publicKey: edKey.publicKeyHex,
       },
       dilithium: dilithiumPreview,
+      idempotent: idemKey ? "fresh" : null,
       issuer: { userId: auth.sub, email: auth.email },
       geo: geo.source
         ? {
@@ -1511,6 +1696,7 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       "webhooks",
       "audit",
       "openapi.json",
+      "metrics",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });
@@ -1781,6 +1967,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
       "webhooks",
       "audit",
       "openapi.json",
+      "metrics",
     ]);
     if (reserved.has(id)) {
       return res.status(404).json({ error: "not_found" });

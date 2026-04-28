@@ -202,6 +202,17 @@ export const QSIGN_V2_OPENAPI = {
         responses: { "200": { description: "OK" } },
       },
     },
+    "/metrics": {
+      get: {
+        tags: ["health"],
+        summary: "Prometheus exposition (text/plain)",
+        description:
+          "Scrape target for Prometheus / Grafana. Exposes signatures_total, " +
+          "signatures_revoked, keys_total, webhooks_active, webhook_deliveries_total{succeeded}, " +
+          "db_latency_seconds, uptime_seconds, memory_rss_bytes.",
+        responses: { "200": { description: "Prometheus exposition", content: { "text/plain": {} } } },
+      },
+    },
     "/stats": {
       get: {
         tags: ["metrics"],
@@ -223,19 +234,36 @@ export const QSIGN_V2_OPENAPI = {
       post: {
         tags: ["sign"],
         summary: "Sign a JSON payload",
-        description: "Persists signature; rate-limited at 60 req/min/IP. Returns RateLimit-* headers.",
+        description:
+          "Persists signature; rate-limited at 60 req/min/IP. Returns RateLimit-* headers. " +
+          "Pass `Idempotency-Key` header (8-128 chars) to make this safe under retry — same key " +
+          "+ same payload returns the cached signature with `idempotent: replayed` and 200 OK; " +
+          "same key + different payload → 409.",
         security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            schema: { type: "string", pattern: "^[a-zA-Z0-9._:-]{8,128}$" },
+          },
+        ],
         requestBody: {
           required: true,
           content: { "application/json": { schema: { $ref: "#/components/schemas/SignRequest" } } },
         },
         responses: {
+          "200": {
+            description: "Replayed (idempotent hit)",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/SignResponse" } } },
+          },
           "201": {
             description: "Created",
             content: { "application/json": { schema: { $ref: "#/components/schemas/SignResponse" } } },
           },
           "400": { description: "Invalid payload" },
           "401": { description: "Missing or invalid bearer" },
+          "409": { description: "idempotency_key_payload_mismatch" },
           "429": { description: "Rate limit exceeded" },
         },
       },

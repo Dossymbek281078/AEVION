@@ -369,6 +369,53 @@ export async function getRun(id: string): Promise<RunRow | null> {
   return (r.rows?.[0] as RunRow) || null;
 }
 
+/**
+ * Apply a refinement on top of an already-finished run: replaces finalContent,
+ * accumulates cost + duration. Used by POST /runs/:id/refine.
+ */
+export async function applyRefinement(opts: {
+  runId: string;
+  finalContent: string;
+  addCostUsd: number;
+  addDurationMs: number;
+}): Promise<RunRow | null> {
+  await ensureQCoreTables(pool);
+
+  if (!isDbReady()) {
+    const r = memRuns.get(opts.runId);
+    if (!r) return null;
+    r.finalContent = opts.finalContent;
+    r.totalCostUsd = (r.totalCostUsd ?? 0) + opts.addCostUsd;
+    r.totalDurationMs = (r.totalDurationMs ?? 0) + opts.addDurationMs;
+    return r;
+  }
+
+  const r = await pool.query(
+    `UPDATE "QCoreRun"
+       SET "finalContent"=$2,
+           "totalCostUsd"=COALESCE("totalCostUsd",0)+$3,
+           "totalDurationMs"=COALESCE("totalDurationMs",0)+$4
+     WHERE "id"=$1
+     RETURNING *`,
+    [opts.runId, opts.finalContent, opts.addCostUsd, opts.addDurationMs]
+  );
+  return (r.rows?.[0] as RunRow) || null;
+}
+
+/** Returns the highest ordering value for a run, or 0 if no messages. */
+export async function getMaxOrdering(runId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const list = memMessagesByRun.get(runId) || [];
+    return list.reduce((m, x) => Math.max(m, x.ordering), 0);
+  }
+  const r = await pool.query(
+    `SELECT COALESCE(MAX("ordering"), 0)::int AS max FROM "QCoreMessage" WHERE "runId"=$1`,
+    [runId]
+  );
+  return Number(r.rows?.[0]?.max ?? 0);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Messages
    ═══════════════════════════════════════════════════════════════════════ */

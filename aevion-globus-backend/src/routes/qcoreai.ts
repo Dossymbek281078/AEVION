@@ -18,12 +18,14 @@ import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { rateLimit } from "../lib/rateLimit";
 import { isWebhookConfigured, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
+  applyRefinement,
   buildHistoryContext,
   createRun,
   deleteSession,
   ensureSession,
   finishRun,
   getAnalytics,
+  getMaxOrdering,
   getRun,
   getRunByShareToken,
   getSession,
@@ -314,6 +316,142 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
     res.send(md);
   } catch (err: any) {
     res.status(500).json({ error: "export failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Refine final answer (single-pass non-streaming)
+   POST /api/qcoreai/runs/:id/refine
+   Body: { instruction: string, provider?: string, model?: string, temperature?: number }
+   Effect: appends a `role=final stage=refinement` message and updates the
+           run's finalContent + totalCostUsd + totalDurationMs.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const refineLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyPrefix: "qcore-refine",
+  message: "Too many refinements from this IP. Please retry in a minute.",
+});
+
+qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    if (run.status === "running") {
+      return res.status(409).json({ error: "run is still streaming — wait for it to finish" });
+    }
+    const baseFinal = run.finalContent;
+    if (!baseFinal || !baseFinal.trim()) {
+      return res.status(400).json({ error: "run has no final answer to refine" });
+    }
+
+    const instruction =
+      typeof req.body?.instruction === "string" ? req.body.instruction.trim().slice(0, 4000) : "";
+    if (!instruction) {
+      return res.status(400).json({ error: "instruction required" });
+    }
+
+    const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
+    const providerId = resolveProvider(requestedProvider);
+    if (providerId === "stub") {
+      return res.status(503).json({ error: "no AI provider configured" });
+    }
+    const provider = getProviders().find((p) => p.id === providerId)!;
+    const modelName =
+      typeof req.body?.model === "string" && req.body.model
+        ? req.body.model
+        : provider.defaultModel;
+    const temperature =
+      typeof req.body?.temperature === "number" ? req.body.temperature : 0.5;
+
+    const systemPrompt =
+      "You are refining a previously produced answer. Apply the user's instruction " +
+      "with surgical precision: keep correct content, rewrite or extend per the instruction, " +
+      "preserve formatting (headings, lists, tables, code blocks). Output ONLY the refined " +
+      "answer — no preamble, no meta commentary, no \"here is the refined version\" prefix.";
+    const userPrompt =
+      `Original task:\n${run.userInput}\n\n` +
+      `Current answer:\n${baseFinal}\n\n` +
+      `Refinement instruction:\n${instruction}`;
+
+    const startedAt = Date.now();
+    const result = await callProvider(
+      providerId,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      modelName,
+      temperature
+    );
+    const durationMs = Date.now() - startedAt;
+
+    const tokensIn =
+      typeof result.usage?.input_tokens === "number"
+        ? result.usage.input_tokens
+        : typeof result.usage?.prompt_tokens === "number"
+        ? result.usage.prompt_tokens
+        : typeof result.usage?.promptTokenCount === "number"
+        ? result.usage.promptTokenCount
+        : null;
+    const tokensOut =
+      typeof result.usage?.output_tokens === "number"
+        ? result.usage.output_tokens
+        : typeof result.usage?.completion_tokens === "number"
+        ? result.usage.completion_tokens
+        : typeof result.usage?.candidatesTokenCount === "number"
+        ? result.usage.candidatesTokenCount
+        : null;
+    const cost = costUsd(providerId, result.model || modelName, tokensIn ?? 0, tokensOut ?? 0);
+
+    const refinedContent = (result.reply || "").trim();
+    if (!refinedContent) {
+      return res.status(502).json({ error: "provider returned empty refinement" });
+    }
+
+    const ordering = (await getMaxOrdering(run.id)) + 1;
+    const message = await insertMessage({
+      runId: run.id,
+      role: "final",
+      stage: "refinement",
+      provider: providerId,
+      model: result.model || modelName,
+      content: refinedContent,
+      tokensIn,
+      tokensOut,
+      durationMs,
+      costUsd: cost,
+      ordering,
+    });
+
+    const updated = await applyRefinement({
+      runId: run.id,
+      finalContent: refinedContent,
+      addCostUsd: cost,
+      addDurationMs: durationMs,
+    });
+
+    res.json({
+      ok: true,
+      content: refinedContent,
+      provider: providerId,
+      model: result.model || modelName,
+      tokensIn,
+      tokensOut,
+      durationMs,
+      costUsd: cost,
+      runTotalCostUsd: updated?.totalCostUsd ?? null,
+      runTotalDurationMs: updated?.totalDurationMs ?? null,
+      messageId: message.id,
+    });
+  } catch (err: any) {
+    const msg = err?.message || "refine failed";
+    console.error("[QCoreAI] refine error:", msg);
+    res.status(500).json({ error: msg });
   }
 });
 

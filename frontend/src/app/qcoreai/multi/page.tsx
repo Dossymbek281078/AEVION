@@ -867,6 +867,37 @@ export default function QCoreMultiAgentPage() {
     }
   }, []);
 
+  /** Refine an already-finished run: server appends a `final/refinement` message
+      and returns the new finalContent + cumulative totals. */
+  const refineRun = useCallback(async (runId: string, instruction: string) => {
+    const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/refine`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...bearerHeader() },
+      body: JSON.stringify({ instruction }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    setRuns((prev) =>
+      prev.map((r) =>
+        r.id === runId
+          ? {
+              ...r,
+              finalContent: data.content,
+              totalCostUsd:
+                typeof data.runTotalCostUsd === "number" ? data.runTotalCostUsd : r.totalCostUsd,
+              totalDurationMs:
+                typeof data.runTotalDurationMs === "number"
+                  ? data.runTotalDurationMs
+                  : r.totalDurationMs,
+            }
+          : r
+      )
+    );
+    return data;
+  }, []);
+
   /** Restore a past run's config and load its prompt into the textarea so
       the user can tweak it before resending. The "Edit ✎" button. */
   const editAndResend = useCallback((run: RunState) => {
@@ -1686,6 +1717,7 @@ export default function QCoreMultiAgentPage() {
                     onEdit={() => editAndResend(run)}
                     onShare={() => shareRun(run.id)}
                     onUnshare={() => unshareRun(run.id)}
+                    onRefine={(instruction: string) => refineRun(run.id, instruction)}
                   />
                 ))
               )}
@@ -2119,6 +2151,7 @@ function RunCard({
   onEdit,
   onShare,
   onUnshare,
+  onRefine,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
@@ -2126,6 +2159,7 @@ function RunCard({
   onEdit?: () => void;
   onShare?: () => void;
   onUnshare?: () => void;
+  onRefine?: (instruction: string) => Promise<unknown>;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
@@ -2180,7 +2214,18 @@ function RunCard({
       )}
 
       {/* Final */}
-      {run.finalContent && <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />}
+      {run.finalContent && (
+        <FinalCard
+          content={run.finalContent}
+          runId={run.id}
+          stopped={run.status === "stopped"}
+          onRefine={
+            run.persisted && run.id && !run.id.startsWith("tmp_") && run.status !== "running"
+              ? onRefine
+              : undefined
+          }
+        />
+      )}
 
       {/* Error */}
       {run.error && !run.finalContent && (
@@ -2465,14 +2510,47 @@ function groupTurns(turns: AgentTurn[]): TurnGroup[] {
   return out;
 }
 
-function FinalCard({ content, runId, stopped }: { content: string; runId: string; stopped?: boolean }) {
+function FinalCard({
+  content,
+  runId,
+  stopped,
+  onRefine,
+}: {
+  content: string;
+  runId: string;
+  stopped?: boolean;
+  onRefine?: (instruction: string) => Promise<unknown>;
+}) {
   const [copied, setCopied] = useState(false);
+  const [refineOpen, setRefineOpen] = useState(false);
+  const [refineText, setRefineText] = useState("");
+  const [refineBusy, setRefineBusy] = useState(false);
+  const [refineError, setRefineError] = useState<string | null>(null);
+  const [refineFlash, setRefineFlash] = useState(false);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch { /* noop */ }
+  };
+  const submitRefine = async () => {
+    if (!onRefine) return;
+    const instruction = refineText.trim();
+    if (!instruction || refineBusy) return;
+    setRefineBusy(true);
+    setRefineError(null);
+    try {
+      await onRefine(instruction);
+      setRefineText("");
+      setRefineOpen(false);
+      setRefineFlash(true);
+      setTimeout(() => setRefineFlash(false), 1600);
+    } catch (e: any) {
+      setRefineError(e?.message || "Refine failed");
+    } finally {
+      setRefineBusy(false);
+    }
   };
   return (
     <div
@@ -2481,11 +2559,12 @@ function FinalCard({ content, runId, stopped }: { content: string; runId: string
         padding: "14px 16px",
         borderRadius: 14,
         background: "#fff",
-        border: `2px solid ${stopped ? "#f59e0b" : FINAL_STYLE.color}`,
+        border: `2px solid ${refineFlash ? "#10b981" : stopped ? "#f59e0b" : FINAL_STYLE.color}`,
         boxShadow: `0 4px 16px ${stopped ? "rgba(245,158,11,0.08)" : "rgba(124,58,237,0.08)"}`,
+        transition: "border-color 0.5s ease",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <span
           style={{
             width: 24, height: 24, borderRadius: 6,
@@ -2499,26 +2578,164 @@ function FinalCard({ content, runId, stopped }: { content: string; runId: string
         <span style={{ fontWeight: 800, fontSize: 13, color: stopped ? "#92400e" : "#581c87" }}>
           {stopped ? "Partial answer (stopped)" : "Final answer"}
         </span>
-        <button
-          onClick={copy}
-          style={{
-            marginLeft: "auto",
-            padding: "4px 10px",
-            borderRadius: 8,
-            border: "1px solid rgba(124,58,237,0.3)",
-            background: copied ? "rgba(124,58,237,0.12)" : "#fff",
-            color: "#6d28d9",
-            fontSize: 11,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
+        {refineFlash && (
+          <span
+            style={{
+              padding: "2px 8px", borderRadius: 999,
+              background: "rgba(16,185,129,0.12)", color: "#047857",
+              fontSize: 10, fontWeight: 800, border: "1px solid rgba(16,185,129,0.3)",
+            }}
+          >
+            REFINED
+          </span>
+        )}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          {onRefine && (
+            <button
+              onClick={() => {
+                setRefineOpen((v) => !v);
+                setRefineError(null);
+              }}
+              style={{
+                padding: "4px 10px",
+                borderRadius: 8,
+                border: `1px solid ${refineOpen ? "#0d9488" : "rgba(13,148,136,0.35)"}`,
+                background: refineOpen ? "rgba(13,148,136,0.12)" : "#fff",
+                color: "#0f766e",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+              title="Apply a one-pass refinement to this answer"
+            >
+              ✎ Refine
+            </button>
+          )}
+          <button
+            onClick={copy}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 8,
+              border: "1px solid rgba(124,58,237,0.3)",
+              background: copied ? "rgba(124,58,237,0.12)" : "#fff",
+              color: "#6d28d9",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </div>
       <div style={{ fontSize: 14, lineHeight: 1.6, color: "#0f172a" }}>
         <Markdown source={content} />
       </div>
+      {onRefine && refineOpen && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: "rgba(13,148,136,0.05)",
+            border: "1px solid rgba(13,148,136,0.25)",
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#0f766e", marginBottom: 6 }}>
+            Refinement instruction
+          </div>
+          <textarea
+            value={refineText}
+            onChange={(e) => setRefineText(e.target.value)}
+            placeholder="e.g. add a TL;DR at the top, drop the section about X, translate to Russian, keep only the table..."
+            disabled={refineBusy}
+            rows={3}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submitRefine();
+              }
+              if (e.key === "Escape") {
+                setRefineOpen(false);
+                setRefineError(null);
+              }
+            }}
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              fontSize: 13,
+              fontFamily: "inherit",
+              resize: "vertical",
+              boxSizing: "border-box",
+              outline: "none",
+            }}
+          />
+          {refineError && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "6px 10px",
+                borderRadius: 8,
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                color: "#991b1b",
+                fontSize: 11,
+              }}
+            >
+              {refineError}
+            </div>
+          )}
+          <div
+            style={{
+              marginTop: 8,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              onClick={submitRefine}
+              disabled={refineBusy || !refineText.trim()}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                background: refineBusy || !refineText.trim() ? "#94a3b8" : "#0d9488",
+                color: "#fff",
+                border: "none",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: refineBusy || !refineText.trim() ? "not-allowed" : "pointer",
+              }}
+            >
+              {refineBusy ? "Refining…" : "Apply refinement"}
+            </button>
+            <button
+              onClick={() => {
+                setRefineOpen(false);
+                setRefineError(null);
+              }}
+              disabled={refineBusy}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#475569",
+                border: "1px solid #cbd5e1",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: refineBusy ? "not-allowed" : "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <span style={{ fontSize: 11, color: "#94a3b8" }}>⌘/Ctrl + Enter to apply</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1266,6 +1266,61 @@ export default function Globus3D({
       earthGroup.add(borders);
     }
 
+    // Hovered-country outline — светящийся контур поверх borders, пересоздаётся при смене страны.
+    const countryOutlineGroup = new THREE.Group();
+    earthGroup.add(countryOutlineGroup);
+
+    const countryOutlineMat = new THREE.LineBasicMaterial({
+      color: 0x4cc1ff,
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+    });
+    countryOutlineMat.blending = THREE.AdditiveBlending;
+
+    const countryOutlineFillMat = new THREE.MeshBasicMaterial({
+      color: 0x4cc1ff,
+      transparent: true,
+      opacity: 0.08,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    countryOutlineFillMat.blending = THREE.AdditiveBlending;
+
+    let lastHighlightedCountry: string | null = null;
+    const setCountryHighlight = (countryName: string | null) => {
+      if (countryName === lastHighlightedCountry) return;
+      lastHighlightedCountry = countryName;
+      // Освобождаем прошлые линии страны.
+      while (countryOutlineGroup.children.length > 0) {
+        const child = countryOutlineGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        countryOutlineGroup.remove(child);
+        child.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const entry = countriesCache.find((c) => c.name === countryName);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 2) continue;
+        // Линия контура — чуть выше borders, чтобы не утонула.
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 0.95);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, countryOutlineMat);
+        line.renderOrder = 5;
+        countryOutlineGroup.add(line);
+      }
+    };
+
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     const markerMeshes: Array<{
@@ -1512,11 +1567,13 @@ export default function Globus3D({
           if (country !== hoveredCountryRef.current) {
             hoveredCountryRef.current = country;
             setHoveredCountry(country);
+            setCountryHighlight(country);
           }
         } else {
           if (hoveredCountryRef.current !== null) {
             hoveredCountryRef.current = null;
             setHoveredCountry(null);
+            setCountryHighlight(null);
           }
         }
         return;
@@ -1526,6 +1583,7 @@ export default function Globus3D({
       if (hoveredCountryRef.current !== null) {
         hoveredCountryRef.current = null;
         setHoveredCountry(null);
+        setCountryHighlight(null);
       }
 
       const top = intersects[0];
@@ -1654,6 +1712,7 @@ export default function Globus3D({
         if (hoveredCountryRef.current !== null) {
           hoveredCountryRef.current = null;
           setHoveredCountry(null);
+          setCountryHighlight(null);
         }
       }
     };
@@ -1702,6 +1761,12 @@ export default function Globus3D({
 
       // Облака чуть-чуть бегут всегда — оживляет сцену.
       cloudMesh.rotation.y += dt * 0.00004;
+
+      // Дыхание контура страны под курсором — синусоида 1.4с.
+      if (countryOutlineGroup.children.length > 0) {
+        const phase = (t % 1400) / 1400;
+        countryOutlineMat.opacity = 0.6 + 0.35 * Math.sin(phase * Math.PI * 2);
+      }
 
       // Прорисовка дуг от 0 до total за ARC_DRAW_MS (только при первом рендере).
       if (arcs.length > 0) {

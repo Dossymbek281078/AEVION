@@ -433,7 +433,9 @@ function BankContent() {
               />
             </div>
 
-            <BillingCalendar />
+            <div id="bank-anchor-calendar" style={{ scrollMarginTop: 20 }}>
+              <BillingCalendar />
+            </div>
 
             <div id="bank-anchor-recurring" style={{ scrollMarginTop: 20 }}>
               <RecurringPayments

@@ -31,7 +31,7 @@ const featureCards = [
     slug: "links",
     title: "Payment Links",
     description:
-      "Generate shareable payment links in seconds. Accept one-time or recurring payments from anyone, anywhere — no integration required.",
+      "Generate shareable payment links in seconds. Public /pay/[id] checkout works on any device — no integration required.",
     accent: "#0d9488",
     icon: "🔗",
   },
@@ -39,7 +39,7 @@ const featureCards = [
     slug: "methods",
     title: "Payment Methods",
     description:
-      "Cards, wallets, bank transfers, and AEC credits. A unified checkout experience across all payment rails — single API surface.",
+      "12 methods across cards, wallets, banks, crypto, and AEC. Unified checkout across every rail — single API surface.",
     accent: "#2563eb",
     icon: "💳",
   },
@@ -47,7 +47,7 @@ const featureCards = [
     slug: "webhooks",
     title: "Webhooks",
     description:
-      "Real-time event delivery for every payment lifecycle state. HMAC-signed payloads, automatic retries, and a full event log.",
+      "Real HMAC-SHA256 signed payloads with replay protection, automatic retries, and a full delivery audit log.",
     accent: "#7c3aed",
     icon: "⚡",
   },
@@ -55,23 +55,55 @@ const featureCards = [
     slug: "settlements",
     title: "Settlements",
     description:
-      "Daily or on-demand settlement to bank accounts and AEC wallets. Full audit trail with AEVION Bank integration and royalty hooks.",
+      "Daily or on-demand settlement to bank or AEC wallet. Royalty auto-split executes via AEVION Bank.",
     accent: "#059669",
     icon: "🏦",
+  },
+  {
+    slug: "subscriptions",
+    title: "Subscriptions",
+    description:
+      "Recurring billing with trials, smart-dunning retries (day 1/3/7), MRR + ARR tracking across 4 currencies.",
+    accent: "#0ea5e9",
+    icon: "🔁",
+  },
+  {
+    slug: "fraud",
+    title: "Fraud detection",
+    description:
+      "6-rule engine with QSign-stamped device fingerprint. Reviewer queue with one-click allow/block decisions.",
+    accent: "#dc2626",
+    icon: "🛡️",
+  },
+  {
+    slug: "compliance",
+    title: "Compliance",
+    description:
+      "KYC tier ladder, sanctions screening across 5 lists, multi-jurisdiction VAT/GST, downloadable Planet-anchored reports.",
+    accent: "#4338ca",
+    icon: "📋",
+  },
+  {
+    slug: "api",
+    title: "Developer API",
+    description:
+      "REST + JSON, idempotency keys, OpenAPI 3.1, Node + Python SDKs. Test/live API key management built in.",
+    accent: "#4f46e5",
+    icon: "⚙️",
   },
 ];
 
 const roadmapItems = [
-  { label: "Payment Links — create & share", status: "live" },
-  { label: "Payment Methods — unified checkout", status: "live" },
-  { label: "Webhooks — signed event delivery", status: "live" },
+  { label: "Payment Links — create, share & public /pay/[id] checkout", status: "live" },
+  { label: "Payment Methods — 12-rail unified checkout", status: "live" },
+  { label: "Webhooks — HMAC-SHA256 signed event delivery", status: "live" },
   { label: "Settlements — bank + AEC wallet", status: "live" },
   { label: "Royalty auto-split on settlement (AEVION Bank)", status: "live" },
   { label: "Multi-currency support (USD / EUR / KZT / AEC)", status: "live" },
-  { label: "Recurring billing & subscriptions", status: "planned" },
-  { label: "Fraud detection via QSign integrity checks", status: "planned" },
-  { label: "Planet compliance reports for payment flows", status: "planned" },
-  { label: "Developer SDK & OpenAPI spec", status: "planned" },
+  { label: "Recurring billing & subscriptions with smart dunning", status: "live" },
+  { label: "Fraud detection via 6-rule engine + QSign device fingerprint", status: "live" },
+  { label: "Planet compliance reports (KYC / sanctions / VAT-GST)", status: "live" },
+  { label: "Developer SDK + OpenAPI 3.1 + API key manager", status: "live" },
 ];
 
 export default function PaymentsPage() {
@@ -100,7 +132,7 @@ export default function PaymentsPage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Payments Rail · live
+            Payments Rail · v1 · 8 surfaces live
           </div>
 
           <h1
@@ -126,9 +158,10 @@ export default function PaymentsPage() {
             }}
           >
             The AEVION Payments Rail connects creators, IP holders, and
-            platforms through a single infrastructure layer — payment links,
-            method orchestration, webhook delivery, and settlement tied
-            natively to the trust graph.
+            platforms through a single infrastructure layer — links,
+            methods, webhooks, settlements, subscriptions, fraud,
+            compliance, and a developer API, tied natively to the trust
+            graph.
           </p>
 
           <div
@@ -137,8 +170,8 @@ export default function PaymentsPage() {
             <Link href="/payments/links" style={btnPrimary}>
               Create Payment Link →
             </Link>
-            <Link href="/payments/methods" style={btnGhost}>
-              Payment Methods
+            <Link href="/payments/api" style={btnGhost}>
+              Developer API
             </Link>
             <Link href="/bank" style={btnGhost}>
               AEVION Bank

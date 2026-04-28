@@ -126,6 +126,11 @@ export default function QTradePage() {
     });
   };
 
+  // ─── Position sizing calculator ──────────────────────────────────
+  const [psAccount, setPsAccount] = useState("10000");
+  const [psRisk, setPsRisk] = useState("1");
+  const [psStop, setPsStop] = useState("");
+
   // AEV wallet (for AEV/USD spot conversion)
   const [aevWallet, setAevWallet] = useState<AEVWallet | null>(null);
   const [aevSpotQty, setAevSpotQty] = useState("");
@@ -1240,6 +1245,90 @@ export default function QTradePage() {
         })()}
       </section>
       <style>{`@keyframes qt-pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+
+      {/* ═══ POSITION SIZING CALCULATOR ════════════════════════════ */}
+      {(() => {
+        const acct = Number(psAccount);
+        const risk = Number(psRisk);
+        const stop = Number(psStop);
+        const valid = Number.isFinite(acct) && acct > 0 && Number.isFinite(risk) && risk > 0 && Number.isFinite(stop) && stop > 0;
+        const maxLoss = valid ? (acct * risk) / 100 : null;
+        const posSize = valid ? maxLoss! / stop : null;
+        return (
+          <section style={{
+            marginBottom: 18, padding: 16, borderRadius: 12,
+            background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#fff",
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" as const, color: "#22d3ee", marginBottom: 12 }}>
+              🧮 Position Sizing Calculator
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
+                Account size ($)
+                <input
+                  type="number" min={1} step="any"
+                  value={psAccount} onChange={(e) => setPsAccount(e.target.value)}
+                  style={{
+                    width: 120, padding: "7px 10px", borderRadius: 6,
+                    border: "1px solid #334155", background: "#0f172a", color: "#fff",
+                    fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13,
+                  }}
+                />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
+                Risk %
+                <input
+                  type="number" min={0.01} max={100} step="any"
+                  value={psRisk} onChange={(e) => setPsRisk(e.target.value)}
+                  style={{
+                    width: 90, padding: "7px 10px", borderRadius: 6,
+                    border: "1px solid #334155", background: "#0f172a", color: "#fff",
+                    fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13,
+                  }}
+                />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
+                Stop-loss distance ($)
+                <input
+                  type="number" min={0.00001} step="any"
+                  value={psStop} onChange={(e) => setPsStop(e.target.value)}
+                  placeholder="e.g. 50"
+                  style={{
+                    width: 140, padding: "7px 10px", borderRadius: 6,
+                    border: "1px solid #334155", background: "#0f172a", color: "#fff",
+                    fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13,
+                  }}
+                />
+              </label>
+              {valid && posSize !== null && maxLoss !== null ? (
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", paddingBottom: 2 }}>
+                  <div style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(34,211,238,0.12)", border: "1px solid rgba(34,211,238,0.35)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: "#67e8f9", letterSpacing: 0.6, textTransform: "uppercase" as const }}>Position Size</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "#22d3ee", fontFamily: "ui-monospace, monospace" }}>
+                      {posSize >= 1 ? posSize.toFixed(4) : posSize.toFixed(6)} units
+                    </div>
+                  </div>
+                  <div style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(248,113,113,0.10)", border: "1px solid rgba(248,113,113,0.35)" }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: "#fca5a5", letterSpacing: 0.6, textTransform: "uppercase" as const }}>Max Loss</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "#f87171", fontFamily: "ui-monospace, monospace" }}>
+                      {fmtUsd(maxLoss)}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "#475569", paddingBottom: 4 }}>
+                  Введи все три поля, чтобы увидеть размер позиции
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 10, color: "#334155", marginTop: 8 }}>
+              Размер позиции = (account × risk%) / stop-distance. Только для симуляции.
+            </div>
+          </section>
+        );
+      })()}
 
       <div style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
         {[

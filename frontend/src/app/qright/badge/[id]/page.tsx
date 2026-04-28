@@ -129,7 +129,10 @@ export default function QRightBadgePage({
   <img src="${absoluteBadgeUrl}" alt="AEVION QRight verified" height="22" />
 </a>`;
 
-  const iframeSnippet = `<iframe src="${absoluteVerifyUrl}?embed=1" width="320" height="80" frameborder="0" style="border:0" loading="lazy" title="AEVION QRight verification"></iframe>`;
+  const iframeEmbedUrl = origin
+    ? `${origin}/qright/object/${id}?embed=1`
+    : `/qright/object/${id}?embed=1`;
+  const iframeSnippet = `<iframe src="${iframeEmbedUrl}" width="360" height="140" frameborder="0" style="border:0" loading="lazy" title="AEVION QRight verification"></iframe>`;
 
   const jsSnippet = `// Fetch verification status as JSON
 fetch("${absoluteEmbedUrl}")

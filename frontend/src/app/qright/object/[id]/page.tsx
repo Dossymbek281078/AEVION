@@ -47,7 +47,10 @@ async function getOrigin(): Promise<string> {
   return "";
 }
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
@@ -111,8 +114,10 @@ const mono: CSSProperties = {
   fontSize: 12,
 };
 
-export default async function QRightObjectPage({ params }: Props) {
+export default async function QRightObjectPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = (await searchParams) || {};
+  const isEmbed = sp.embed === "1" || sp.embed === "true";
   const data = await loadEmbed(id);
   const origin = await getOrigin();
 
@@ -166,6 +171,79 @@ export default async function QRightObjectPage({ params }: Props) {
   const isRevoked = data.status === "revoked";
   const accent = isRevoked ? "#dc2626" : "#0d9488";
   const accentBg = isRevoked ? "rgba(220,38,38,0.08)" : "rgba(13,148,136,0.08)";
+
+  if (isEmbed) {
+    // Compact iframe mode: no chrome, single card sized to fit a
+    // ~360x140 third-party embed slot. Click anywhere → opens full
+    // public page in a new tab.
+    return (
+      <main
+        style={{
+          minHeight: "100%",
+          padding: 8,
+          background: "transparent",
+          fontFamily: "system-ui, -apple-system, sans-serif",
+        }}
+      >
+        <a
+          href={`/qright/object/${id}`}
+          target="_blank"
+          rel="noopener"
+          style={{
+            display: "block",
+            textDecoration: "none",
+            border: `2px solid ${accent}`,
+            borderRadius: 12,
+            background: `linear-gradient(135deg, ${accentBg}, #fff)`,
+            padding: "12px 14px",
+            color: "#0f172a",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span
+              style={{
+                padding: "2px 8px",
+                borderRadius: 999,
+                background: accent,
+                color: "#fff",
+                fontSize: 9,
+                fontWeight: 900,
+                letterSpacing: "0.08em",
+              }}
+            >
+              {isRevoked ? "✕ REVOKED" : "✓ AEVION QRIGHT"}
+            </span>
+            {data.kind && (
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                {data.kind}
+              </span>
+            )}
+            {data.createdAt && (
+              <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: "auto" }}>
+                {new Date(data.createdAt).toISOString().slice(0, 10)}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.3, color: "#0f172a", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {data.title || "Untitled work"}
+          </div>
+          {data.contentHashPrefix && (
+            <div style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 10, color: "#64748b" }}>
+              SHA-256: {data.contentHashPrefix}…
+            </div>
+          )}
+          {isRevoked && data.revokeReason && (
+            <div style={{ marginTop: 4, fontSize: 11, color: "#7f1d1d" }}>
+              {data.revokeReason}
+            </div>
+          )}
+          <div style={{ marginTop: 6, fontSize: 10, color: accent, fontWeight: 700 }}>
+            View proof →
+          </div>
+        </a>
+      </main>
+    );
+  }
 
   return (
     <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "32px 16px" }}>

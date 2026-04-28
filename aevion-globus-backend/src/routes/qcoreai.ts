@@ -14,6 +14,7 @@ import {
   PipelineStrategy,
 } from "../services/qcoreai/orchestrator";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
+import { fetchQRightContext } from "../services/qcoreai/qrightContext";
 import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { rateLimit } from "../lib/rateLimit";
 import { isWebhookConfigured, notifyRunCompleted } from "../lib/qcoreWebhook";
@@ -635,6 +636,16 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       : null;
   const costCapUsd: number | null = requestedCap ?? envCap;
 
+  // Tool use lite — Analyst sees the caller's QRight objects (read-only).
+  const useQRightContext = req.body?.useQRightContext === true;
+  let qrightContextBlock = "";
+  if (useQRightContext && auth?.sub) {
+    qrightContextBlock = await fetchQRightContext(auth.sub, auth.email ?? null);
+  }
+  const orchestratorInput = qrightContextBlock
+    ? `${qrightContextBlock}\n---\n\n## User question\n\n${userInput}`
+    : userInput;
+
   let sessionId: string;
   let runId: string;
   try {
@@ -705,9 +716,13 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   let lastAgentContent: string | null = null;
   let totalCost = 0;
 
+  if (qrightContextBlock) {
+    send({ type: "tool_context", source: "qright", chars: qrightContextBlock.length });
+  }
+
   try {
     for await (const evt of runMultiAgent({
-      userInput,
+      userInput: orchestratorInput,
       strategy,
       overrides,
       maxRevisions,

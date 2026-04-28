@@ -71,6 +71,7 @@ type RunState = {
   status: "running" | "done" | "error" | "stopped" | "capped";
   costCapUsd?: number;
   tags?: string[];
+  toolContext?: { source: string; chars: number };
   startedAt: number;
   totalDurationMs?: number;
   totalCostUsd?: number;
@@ -143,6 +144,7 @@ type SSEPayload =
   | { type: "done"; totalDurationMs: number; totalCostUsd: number }
   | { type: "cost_cap_set"; costCapUsd: number }
   | { type: "cost_cap_hit"; costCapUsd: number; totalCostUsd: number; message: string }
+  | { type: "tool_context"; source: "qright"; chars: number }
   | { type: "sse_end" };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -327,6 +329,7 @@ export default function QCoreMultiAgentPage() {
     critic: { provider: "", model: "" },
   });
   const [maxRevisions, setMaxRevisions] = useState(1);
+  const [useQRightContext, setUseQRightContext] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [presets, setPresets] = useState<AgentPreset[]>([]);
@@ -732,6 +735,7 @@ export default function QCoreMultiAgentPage() {
           critic: useOverrides.critic,
         },
         ...(useCostCap !== undefined ? { costCapUsd: useCostCap } : {}),
+        ...(useQRightContext ? { useQRightContext: true } : {}),
       };
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
         method: "POST",
@@ -884,6 +888,17 @@ export default function QCoreMultiAgentPage() {
               )
             );
             break;
+          case "tool_context":
+            // Informational only — Analyst received an extra context block.
+            // The UI displays a chip below the user message via run.toolContext.
+            setRuns((prev) =>
+              prev.map((r) =>
+                r.id === realRunId
+                  ? { ...r, toolContext: { source: payload.source, chars: payload.chars } }
+                  : r
+              )
+            );
+            break;
           case "sse_end":
             break;
         }
@@ -907,7 +922,7 @@ export default function QCoreMultiAgentPage() {
       abortRef.current = null;
       setBusy(false);
     }
-  }, [input, busy, activeSessionId, maxRevisions, overrides, strategy, costCapInput]);
+  }, [input, busy, activeSessionId, maxRevisions, overrides, strategy, costCapInput, useQRightContext]);
 
   const stop = useCallback(() => {
     // Signal compare-all loop to stop firing more strategies.
@@ -1712,6 +1727,29 @@ export default function QCoreMultiAgentPage() {
                   </span>
                 </div>
               )}
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                  title="Prepend a read-only summary of the caller's QRight objects to the Analyst prompt. Auth required — anonymous calls ignore this flag."
+                >
+                  <input
+                    type="checkbox"
+                    checked={useQRightContext}
+                    onChange={(e) => setUseQRightContext(e.target.checked)}
+                    style={{ accentColor: "#0d9488", cursor: "pointer" }}
+                  />
+                  Tool: QRight context
+                </label>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                  Analyst sees a list of your QRight objects (read-only).
+                </span>
+              </div>
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 700 }}>Cost cap (USD):</span>
                 <input
@@ -2500,6 +2538,24 @@ function RunCard({
           {run.userInput}
         </div>
       </div>
+      {run.toolContext && (
+        <div style={{ marginBottom: 8, display: "flex", justifyContent: "flex-end" }}>
+          <span
+            title={`Analyst saw ${run.toolContext.chars} chars of ${run.toolContext.source} context`}
+            style={{
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "rgba(13,148,136,0.08)",
+              border: "1px solid rgba(13,148,136,0.3)",
+              color: "#0f766e",
+              fontSize: 10,
+              fontWeight: 700,
+            }}
+          >
+            🔧 tool: {run.toolContext.source} · {run.toolContext.chars} chars
+          </span>
+        </div>
+      )}
 
       {/* Agent turns (pair up parallel/debate writers) */}
       {grouped.map((item, i) =>

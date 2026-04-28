@@ -65,6 +65,21 @@
   - FinalCard рисует partial-orange border и для capped тоже (ранее
     только для stopped).
 
+### 1.6. — feat(qcore): tool use lite — Analyst sees QRight objects
+- **Backend** `services/qcoreai/qrightContext.ts` — `fetchQRightContext(userId, email)`
+  читает `QRightObject` напрямую через shared pool (read-only, не
+  трогаем qright роутер — per CLAUDE.md §1 spirit). Возвращает
+  markdown-блок до 25 объектов: name, kind, status, id, createdAt.
+  Best-effort: при отсутствии auth, пустой выборке, или DB error —
+  возвращает "" / "no objects" без crash'а.
+- **Route** /multi-agent body field `useQRightContext: boolean`. Если
+  true и есть auth, контекст-блок префиксуется к userInput перед
+  передачей в orchestrator. SSE event `tool_context` извещает UI.
+- **UI** — toggle "Tool: QRight context" в config bar (рядом с cost cap).
+  В run header чип `🔧 tool: qright · N chars` после старта.
+- 5 unit-тестов на helper (auth-required, DB-fail-graceful,
+  empty-result-message, full-format, both-predicates).
+
 ### 1.5. — feat(qcore): run tagging + per-user webhook URLs (V2)
 - **Run tagging**:
   - DDL: `QCoreRun.tags TEXT[] DEFAULT '{}'` + GIN index.
@@ -169,7 +184,7 @@
 | Backend `npm run build`                        | ✅ |
 | Frontend `next build --webpack`                | ✅ 26 routes |
 | `npm run verify` из корня worktree             | ✅ |
-| Backend `npm test` (vitest)                    | ✅ 67/67 passed (24 new QCore tests) |
+| Backend `npm test` (vitest)                    | ✅ 82/82 passed (39 new QCore tests) |
 | `/health` отдаёт `costCapDefaultUsd`           | ✅ (`null` без env, число с env) |
 | `scripts/qcore-smoke.sh` against local backend | ✅ (см. §6) |
 
@@ -194,10 +209,9 @@ PG для тестов. ~1 секунда runtime.
 
 ### Большое — следующая итерация
 
-- **Tool use** — Analyst читает QRight через существующий API. Только
-  read-only, требует cross-module scope (CLAUDE.md §1).
 - **WebSocket duplex / human-in-the-loop** — interrupt Writer мид-стримом,
-  inject guidance.
+  inject guidance. Требует ws-сервер + изменение orchestrator на pull
+  guidance signals между stages, включая stop-and-rethink семантику.
 
 ### Тех-долг — cosmetic
 

@@ -192,6 +192,44 @@ export default function DashboardPage() {
     };
   }, [links, subs, settlements, endpoints, deliveries, flagged, apiKeys, methodsState]);
 
+  const sparks = useMemo(() => {
+    const buckets = 12;
+    const bucketMs = 2 * 60 * 60 * 1000; // 2h per bucket → 24h window
+    const now = Date.now();
+    const windowStart = now - buckets * bucketMs;
+
+    function bucketize<T>(items: T[], at: (t: T) => number, weight: (t: T) => number): number[] {
+      const out = new Array(buckets).fill(0);
+      for (const it of items) {
+        const t = at(it);
+        if (t < windowStart || t > now) continue;
+        const idx = Math.min(buckets - 1, Math.floor((t - windowStart) / bucketMs));
+        out[idx] += weight(it);
+      }
+      return out;
+    }
+
+    return {
+      links: bucketize(links, (l) => l.createdAt, () => 1),
+      settlements: bucketize(
+        settlements.filter((s) => s.status === "paid"),
+        (s) => s.paidAt ?? 0,
+        (s) => toUsd(s.amount, s.currency)
+      ),
+      webhooksOk: bucketize(
+        deliveries.filter((d) => d.status === "delivered"),
+        (d) => d.at,
+        () => 1
+      ),
+      webhooksFail: bucketize(
+        deliveries.filter((d) => d.status === "failed"),
+        (d) => d.at,
+        () => 1
+      ),
+      fraud: bucketize(flagged, (t) => t.at, () => 1),
+    };
+  }, [links, settlements, deliveries, flagged]);
+
   const activity = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [];
     for (const l of links.slice(0, 12)) {
@@ -359,6 +397,7 @@ export default function DashboardPage() {
             value={`$${stats.settlePending.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
             sub={`Paid 7d: $${stats.settlePaid7d.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
             accent="#059669"
+            spark={sparks.settlements}
           />
           <KpiCard
             href="/payments/links"
@@ -366,6 +405,7 @@ export default function DashboardPage() {
             value={stats.linksActive.toString()}
             sub={`Open volume $${stats.linksOpenVolume.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
             accent="#0d9488"
+            spark={sparks.links}
           />
           <KpiCard
             href="/payments/webhooks"
@@ -373,6 +413,8 @@ export default function DashboardPage() {
             value={`${stats.webhookDelivered24h} ✓ / ${stats.webhookFailed24h} ✗`}
             sub={`${stats.webhookEndpointsActive} live endpoint${stats.webhookEndpointsActive === 1 ? "" : "s"}`}
             accent={stats.webhookFailed24h > 0 ? "#dc2626" : "#7c3aed"}
+            spark={sparks.webhooksOk}
+            sparkSecondary={sparks.webhooksFail}
           />
           <KpiCard
             href="/payments/fraud"
@@ -380,6 +422,7 @@ export default function DashboardPage() {
             value={stats.fraudReview.toString()}
             sub={`${stats.fraudBlocked24h} blocked 24h`}
             accent={stats.fraudReview > 0 ? "#f59e0b" : "#dc2626"}
+            spark={sparks.fraud}
           />
           <KpiCard
             href="/payments/methods"
@@ -619,12 +662,16 @@ function KpiCard({
   value,
   sub,
   accent,
+  spark,
+  sparkSecondary,
 }: {
   href: string;
   label: string;
   value: string;
   sub: string;
   accent: string;
+  spark?: number[];
+  sparkSecondary?: number[];
 }) {
   return (
     <Link
@@ -663,8 +710,68 @@ function KpiCard({
       >
         {value}
       </div>
+      {spark && (
+        <Sparkline data={spark} secondary={sparkSecondary} accent={accent} />
+      )}
       <div style={{ fontSize: 12, color: "#64748b" }}>{sub}</div>
     </Link>
+  );
+}
+
+function Sparkline({
+  data,
+  secondary,
+  accent,
+}: {
+  data: number[];
+  secondary?: number[];
+  accent: string;
+}) {
+  const w = 200;
+  const h = 32;
+  const pad = 2;
+  const all = secondary ? [...data, ...secondary] : data;
+  const max = Math.max(1, ...all);
+  function pathFor(arr: number[]) {
+    if (arr.length === 0) return "";
+    const stepX = (w - pad * 2) / Math.max(1, arr.length - 1);
+    return arr
+      .map((v, i) => {
+        const x = pad + i * stepX;
+        const y = h - pad - (v / max) * (h - pad * 2);
+        return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .join(" ");
+  }
+  const fillFor = (arr: number[]) => {
+    const p = pathFor(arr);
+    if (!p) return "";
+    const stepX = (w - pad * 2) / Math.max(1, arr.length - 1);
+    const lastX = pad + (arr.length - 1) * stepX;
+    return `${p} L ${lastX.toFixed(1)} ${h - pad} L ${pad} ${h - pad} Z`;
+  };
+  const total = data.reduce((acc, v) => acc + v, 0);
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      style={{
+        width: "100%",
+        height: 32,
+        display: "block",
+        opacity: total === 0 ? 0.35 : 1,
+      }}
+      aria-hidden="true"
+    >
+      {secondary && (
+        <>
+          <path d={fillFor(secondary)} fill={"#dc2626"} fillOpacity={0.06} />
+          <path d={pathFor(secondary)} fill="none" stroke="#dc2626" strokeWidth={1.5} />
+        </>
+      )}
+      <path d={fillFor(data)} fill={accent} fillOpacity={0.12} />
+      <path d={pathFor(data)} fill="none" stroke={accent} strokeWidth={1.6} />
+    </svg>
   );
 }
 

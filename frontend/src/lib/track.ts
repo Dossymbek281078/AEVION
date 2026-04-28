@@ -26,7 +26,8 @@ export type EventType =
   | "comparison_view"
   | "affiliate_apply"
   | "partner_apply"
-  | "edu_apply";
+  | "edu_apply"
+  | "ab_assigned";
 
 export interface TrackPayload {
   type: EventType;

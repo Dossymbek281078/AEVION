@@ -7,6 +7,7 @@ import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
+import { useABVariant } from "@/lib/abVariant";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -164,6 +165,8 @@ function availabilityBadge(a: ModulePrice["availability"]) {
 
 export default function PricingPage() {
   const tp = usePricingT();
+  const heroVariant = useABVariant("hero");
+  const heroPrefix = heroVariant === "A" ? "" : `${heroVariant}.`;
   const [data, setData] = useState<PricingPayload | null>(null);
   const [activePromos, setActivePromos] = useState<
     Array<{ code: string; description: string; kind: string; amount: number }>
@@ -284,11 +287,13 @@ export default function PricingPage() {
         if (!cancelled && j) setTrust(j);
       })
       .catch(() => {});
-    track({ type: "page_view", source: "pricing" });
+    track({ type: "page_view", source: "pricing", meta: { variant_hero: heroVariant } });
+    track({ type: "ab_assigned", source: "pricing", meta: { key: "hero", value: heroVariant } });
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroVariant]);
 
   const symbol = data?.currencies[currency].symbol ?? "$";
   const rate = data?.currencies[currency].rate ?? 1;
@@ -388,7 +393,7 @@ export default function PricingPage() {
             marginBottom: 16,
           }}
         >
-          {tp("hero.badge")}
+          {tp(`hero.${heroPrefix}badge`)}
         </div>
         <h1
           style={{
@@ -400,7 +405,7 @@ export default function PricingPage() {
             color: "#0f172a",
           }}
         >
-          {tp("hero.title")}
+          {tp(`hero.${heroPrefix}title`)}
         </h1>
         <p
           style={{
@@ -411,7 +416,7 @@ export default function PricingPage() {
             lineHeight: 1.5,
           }}
         >
-          {tp("hero.subtitle")}
+          {tp(`hero.${heroPrefix}subtitle`)}
         </p>
       </section>
 

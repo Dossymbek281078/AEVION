@@ -31,6 +31,7 @@ export type StrategyKind = "dca" | "grid" | "bnh";
 export type DcaConfig = {
   amountUsd: number;        // USD per buy
   intervalCandles: number;  // buy every N candles
+  trailingPct?: number;     // % retracement from peak price → sell all (0 = off)
 };
 
 export type GridConfig = {
@@ -85,15 +86,25 @@ function emptyResult(strategy: StrategyKind, error: string): BacktestResult {
   };
 }
 
-// DCA: buy fixed USD каждые intervalCandles при открытии candle.
+// DCA: buy fixed USD каждые intervalCandles при открытии candle. Опц.
+// trailingPct — после каждого buy/tick трекает peak цены; если цена retraces
+// >= trailingPct% от peak — sell всё qty (taker exit), freeze equity.
 function runDca(candles: Candle[], cfg: DcaConfig, fees: FeeConfig): BacktestResult {
   if (candles.length === 0) return emptyResult("dca", "no candles");
   const interval = Math.max(1, Math.floor(cfg.intervalCandles));
   const amount = Math.max(0.01, cfg.amountUsd);
-  let qty = 0, spent = 0, numBuys = 0;
+  const trailPct = cfg.trailingPct !== undefined && cfg.trailingPct > 0 ? cfg.trailingPct : 0;
+  let qty = 0, spent = 0, numBuys = 0, numSells = 0, realized = 0;
+  let peakPrice = 0;
+  let exitedTs: number | null = null;
+  let exitProceeds = 0;
   const equity: EquityPoint[] = [];
   for (let i = 0; i < candles.length; i++) {
     const c = candles[i];
+    if (exitedTs !== null) {
+      equity.push({ ts: c.ts, equity: exitProceeds, spent, realized, qty: 0 });
+      continue;
+    }
     if (i % interval === 0) {
       // Buy at open (taker — market-style DCA)
       const px = buyExecPrice(c.o, fees, true);
@@ -102,6 +113,22 @@ function runDca(candles: Candle[], cfg: DcaConfig, fees: FeeConfig): BacktestRes
         qty += usable / px;
         spent += amount;
         numBuys += 1;
+      }
+    }
+    // Update peak from candle high (наиболее благоприятная цена внутри бара)
+    if (c.h > peakPrice) peakPrice = c.h;
+    // Trailing exit check: если qty>0 и price retraced >= trailPct from peak
+    if (trailPct > 0 && qty > 0 && peakPrice > 0) {
+      const stop = peakPrice * (1 - trailPct / 100);
+      if (c.l <= stop) {
+        const exitPx = sellExecPrice(stop, fees, true);
+        const grossProceeds = qty * exitPx;
+        exitProceeds = netUsdAfterFee(grossProceeds, fees, "taker");
+        realized = exitProceeds - spent;
+        numSells = 1;
+        exitedTs = c.ts;
+        equity.push({ ts: c.ts, equity: exitProceeds, spent, realized, qty: 0 });
+        continue;
       }
     }
     // Mark equity at close
@@ -121,11 +148,12 @@ function runDca(candles: Candle[], cfg: DcaConfig, fees: FeeConfig): BacktestRes
       maxDdPct = (dd / denom) * 100;
     }
   }
+  const finalQty = exitedTs !== null ? 0 : qty;
   return {
     ok: true, strategy: "dca", equity,
-    totalSpent: spent, finalQty: qty, finalValue, realizedProfit: 0,
+    totalSpent: spent, finalQty, finalValue, realizedProfit: realized,
     totalReturn, maxDrawdown: maxDd, maxDrawdownPct: maxDdPct,
-    numTrades: numBuys, numBuys, numSells: 0,
+    numTrades: numBuys + numSells, numBuys, numSells,
   };
 }
 

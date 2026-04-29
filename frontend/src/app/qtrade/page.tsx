@@ -206,6 +206,7 @@ export default function QTradePage() {
   const [btPair, setBtPair] = useState<PairId>("BTC/USD");
   const [btDcaInterval, setBtDcaInterval] = useState("3");      // candles
   const [btDcaAmount, setBtDcaAmount] = useState("25");
+  const [btDcaTrail, setBtDcaTrail] = useState("");             // optional trailing exit %
   const [btGridLow, setBtGridLow] = useState("");
   const [btGridHigh, setBtGridHigh] = useState("");
   const [btGridCount, setBtGridCount] = useState("8");
@@ -2711,6 +2712,7 @@ export default function QTradePage() {
               cfg: {
                 amountUsd: Math.max(1, Number(btDcaAmount) || 0),
                 intervalCandles: Math.max(1, Math.floor(Number(btDcaInterval) || 1)),
+                trailingPct: btDcaTrail.trim() === "" ? undefined : Math.max(0, Number(btDcaTrail) || 0) || undefined,
               },
             }, fees);
             setBtResult(r);
@@ -2833,6 +2835,14 @@ export default function QTradePage() {
                     $ per buy
                     <input type="number" min={1} step="any" value={btDcaAmount} onChange={(e) => setBtDcaAmount(e.target.value)}
                       style={{ width: 90, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#d8b4fe", fontWeight: 700 }}>
+                    📉 Trailing exit %
+                    <input type="number" min={0} step="any" value={btDcaTrail} onChange={(e) => setBtDcaTrail(e.target.value)}
+                      placeholder="off"
+                      aria-label="Trailing exit percent for DCA backtest"
+                      title="Закрыть all qty при retrace на N% от peak. Пусто = держим до конца"
+                      style={{ width: 90, padding: "6px 10px", borderRadius: 5, border: "1px solid rgba(168,85,247,0.5)", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
                   </label>
                 </>
               )}

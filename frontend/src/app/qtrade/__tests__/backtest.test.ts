@@ -235,3 +235,48 @@ describe("backtest · BnH stop-loss / take-profit", () => {
     expect(last3[1]).toBeCloseTo(last3[2], 6);
   });
 });
+
+describe("backtest · DCA trailing exit", () => {
+  it("DCA без trailing — backwards compat (numSells=0, finalQty>0)", () => {
+    const candles = linearCandles(100, 110, 10);
+    const r = runBacktest(candles, { kind: "dca", cfg: { amountUsd: 25, intervalCandles: 2 } });
+    expect(r.numSells).toBe(0);
+    expect(r.finalQty).toBeGreaterThan(0);
+  });
+
+  it("DCA trailing fires after up-move then retrace", () => {
+    // Pump до 150 за 5 candles, потом dump до 100. Trailing 20% от peak 150 = 120.
+    const up = linearCandles(100, 150, 6);
+    const dn = linearCandles(150, 100, 6);
+    const candles = [...up, ...dn];
+    const r = runBacktest(candles, { kind: "dca", cfg: { amountUsd: 25, intervalCandles: 2, trailingPct: 20 } });
+    expect(r.numSells).toBe(1);
+    expect(r.finalQty).toBe(0);
+  });
+
+  it("DCA trailing tight 1% triggers быстро на любой dip", () => {
+    const candles = linearCandles(100, 99, 5);
+    const r = runBacktest(candles, { kind: "dca", cfg: { amountUsd: 25, intervalCandles: 1, trailingPct: 1 } });
+    expect(r.numSells).toBe(1);
+    expect(r.finalQty).toBe(0);
+  });
+
+  it("DCA equity замораживается после trailing exit", () => {
+    const up = linearCandles(100, 200, 5);
+    const dn = linearCandles(200, 100, 10);
+    const candles = [...up, ...dn];
+    const r = runBacktest(candles, { kind: "dca", cfg: { amountUsd: 25, intervalCandles: 1, trailingPct: 10 } });
+    if (r.numSells === 1) {
+      const last3 = r.equity.slice(-3).map((p) => p.equity);
+      expect(last3[0]).toBeCloseTo(last3[1], 6);
+      expect(last3[1]).toBeCloseTo(last3[2], 6);
+    }
+  });
+
+  it("DCA trailing не fires если price не возрастает достаточно", () => {
+    // Flat market with tiny noise — no up-move worth retracing
+    const candles = linearCandles(100, 100, 10);
+    const r = runBacktest(candles, { kind: "dca", cfg: { amountUsd: 25, intervalCandles: 2, trailingPct: 50 } });
+    expect(r.numSells).toBe(0);
+  });
+});

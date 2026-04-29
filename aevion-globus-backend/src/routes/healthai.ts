@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
+import { PrismaClient } from "@prisma/client";
 
 /**
  * HealthAI v1 — Personal AI Doctor MVP.
@@ -66,9 +67,224 @@ type DailyLog = {
   createdAt: string;
 };
 
-const profiles = new Map<string, HealthProfile>();
-const checks = new Map<string, SymptomCheck[]>();
-const logs = new Map<string, DailyLog[]>();
+const profilesMem = new Map<string, HealthProfile>();
+const checksMem = new Map<string, SymptomCheck[]>();
+const logsMem = new Map<string, DailyLog[]>();
+
+/**
+ * Hybrid store: Prisma если есть DATABASE_URL и таблицы доступны, иначе
+ * in-memory Maps. Init выполняется лениво при первом use, чтобы не
+ * падать на старте если БД ещё не готова.
+ */
+let prisma: PrismaClient | null = null;
+let useDb = false;
+let dbInitTried = false;
+
+async function ensureDb() {
+  if (dbInitTried) return;
+  dbInitTried = true;
+  if (!process.env.DATABASE_URL) {
+    console.log("[HealthAI] DATABASE_URL absent — in-memory mode");
+    return;
+  }
+  try {
+    const p = new PrismaClient();
+    await p.healthProfile.findFirst();
+    prisma = p;
+    useDb = true;
+    console.log("[HealthAI] Prisma persistence enabled");
+  } catch (e) {
+    console.warn(
+      "[HealthAI] Prisma init failed, fallback in-memory:",
+      e instanceof Error ? e.message : e,
+    );
+  }
+}
+void ensureDb();
+
+function rowToProfile(r: any): HealthProfile {
+  return {
+    id: r.id,
+    age: r.age,
+    sex: r.sex,
+    heightCm: r.heightCm,
+    weightKg: Number(r.weightKg),
+    conditions: r.conditions || [],
+    allergies: r.allergies || [],
+    medications: r.medications || [],
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    updatedAt:
+      r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+  };
+}
+
+function rowToCheck(r: any): SymptomCheck {
+  return {
+    id: r.id,
+    profileId: r.profileId,
+    symptoms: r.symptoms || [],
+    severity: r.severity,
+    durationH: Number(r.durationH),
+    notes: r.notes ?? undefined,
+    matched: typeof r.matched === "string" ? JSON.parse(r.matched) : r.matched,
+    generic: r.generic || "",
+    disclaimer: r.disclaimer || DISCLAIMER,
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+  };
+}
+
+function rowToLog(r: any): DailyLog {
+  return {
+    id: r.id,
+    profileId: r.profileId,
+    date: r.date,
+    sleepHours: r.sleepHours == null ? undefined : Number(r.sleepHours),
+    moodScore: r.moodScore ?? undefined,
+    weightKg: r.weightKg == null ? undefined : Number(r.weightKg),
+    waterL: r.waterL == null ? undefined : Number(r.waterL),
+    exerciseMin: r.exerciseMin ?? undefined,
+    notes: r.notes ?? undefined,
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+  };
+}
+
+const store = {
+  async getProfile(id: string): Promise<HealthProfile | null> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.healthProfile.findUnique({ where: { id } });
+      return r ? rowToProfile(r) : null;
+    }
+    return profilesMem.get(id) || null;
+  },
+  async upsertProfile(p: HealthProfile): Promise<HealthProfile> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.healthProfile.upsert({
+        where: { id: p.id },
+        update: {
+          age: p.age,
+          sex: p.sex,
+          heightCm: p.heightCm,
+          weightKg: p.weightKg,
+          conditions: p.conditions,
+          allergies: p.allergies,
+          medications: p.medications,
+        },
+        create: {
+          id: p.id,
+          age: p.age,
+          sex: p.sex,
+          heightCm: p.heightCm,
+          weightKg: p.weightKg,
+          conditions: p.conditions,
+          allergies: p.allergies,
+          medications: p.medications,
+        },
+      });
+      return rowToProfile(r);
+    }
+    profilesMem.set(p.id, p);
+    return p;
+  },
+  async getChecks(profileId: string, limit = 200): Promise<SymptomCheck[]> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.symptomCheck.findMany({
+        where: { profileId },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      return rows.map(rowToCheck);
+    }
+    return (checksMem.get(profileId) || []).slice(0, limit);
+  },
+  async addCheck(c: SymptomCheck): Promise<void> {
+    await ensureDb();
+    if (useDb && prisma) {
+      await prisma.symptomCheck.create({
+        data: {
+          id: c.id,
+          profileId: c.profileId,
+          symptoms: c.symptoms,
+          severity: c.severity,
+          durationH: c.durationH,
+          notes: c.notes,
+          matched: c.matched as any,
+          generic: c.generic,
+          disclaimer: c.disclaimer,
+        },
+      });
+      return;
+    }
+    const list = checksMem.get(c.profileId) || [];
+    list.unshift(c);
+    if (list.length > 200) list.length = 200;
+    checksMem.set(c.profileId, list);
+  },
+  async getLogs(profileId: string, limit = 365): Promise<DailyLog[]> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.healthDailyLog.findMany({
+        where: { profileId },
+        orderBy: { date: "desc" },
+        take: limit,
+      });
+      return rows.map(rowToLog);
+    }
+    return (logsMem.get(profileId) || []).slice(0, limit);
+  },
+  async upsertLog(l: DailyLog): Promise<DailyLog> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.healthDailyLog.upsert({
+        where: {
+          profileId_date: { profileId: l.profileId, date: l.date },
+        },
+        update: {
+          sleepHours: l.sleepHours,
+          moodScore: l.moodScore,
+          weightKg: l.weightKg,
+          waterL: l.waterL,
+          exerciseMin: l.exerciseMin,
+          notes: l.notes,
+        },
+        create: {
+          id: l.id,
+          profileId: l.profileId,
+          date: l.date,
+          sleepHours: l.sleepHours,
+          moodScore: l.moodScore,
+          weightKg: l.weightKg,
+          waterL: l.waterL,
+          exerciseMin: l.exerciseMin,
+          notes: l.notes,
+        },
+      });
+      return rowToLog(r);
+    }
+    const list = logsMem.get(l.profileId) || [];
+    const idx = list.findIndex((x) => x.date === l.date);
+    if (idx >= 0) list[idx] = l;
+    else list.unshift(l);
+    if (list.length > 365) list.length = 365;
+    logsMem.set(l.profileId, list);
+    return l;
+  },
+  async allProfileIdsWithLogs(): Promise<string[]> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.healthDailyLog.groupBy({
+        by: ["profileId"],
+      });
+      return rows.map((r) => r.profileId);
+    }
+    return Array.from(logsMem.keys());
+  },
+};
 
 const DISCLAIMER =
   "Это образовательный совет AI-помощника, а не медицинский диагноз. " +
@@ -229,20 +445,24 @@ function bmi(heightCm: number, weightKg: number): number {
   return Math.round((weightKg / (m * m)) * 10) / 10;
 }
 
-healthaiRouter.get("/health", (_req, res) => {
+healthaiRouter.get("/health", async (_req, res) => {
+  await ensureDb();
   res.json({
     status: "ok",
     service: "AEVION HealthAI",
-    profilesCount: profiles.size,
+    persistence: useDb ? "prisma" : "in-memory",
+    profilesCount: useDb && prisma
+      ? await prisma.healthProfile.count()
+      : profilesMem.size,
     rulesCount: ADVICE_RULES.length,
     timestamp: nowIso(),
   });
 });
 
-healthaiRouter.post("/profile", (req: Request, res: Response) => {
+healthaiRouter.post("/profile", async (req: Request, res: Response) => {
   const body = req.body || {};
   const id = body.id || newId("hp");
-  const existing = profiles.get(id);
+  const existing = await store.getProfile(id);
 
   const profile: HealthProfile = {
     id,
@@ -265,16 +485,16 @@ healthaiRouter.post("/profile", (req: Request, res: Response) => {
     updatedAt: nowIso(),
   };
 
-  profiles.set(id, profile);
+  const saved = await store.upsertProfile(profile);
   res.json({
-    profile,
-    bmi: bmi(profile.heightCm, profile.weightKg),
+    profile: saved,
+    bmi: bmi(saved.heightCm, saved.weightKg),
     isNew: !existing,
   });
 });
 
-healthaiRouter.get("/profile/:id", (req: Request, res: Response) => {
-  const profile = profiles.get(req.params.id);
+healthaiRouter.get("/profile/:id", async (req: Request, res: Response) => {
+  const profile = await store.getProfile(req.params.id);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   res.json({
     profile,
@@ -282,7 +502,7 @@ healthaiRouter.get("/profile/:id", (req: Request, res: Response) => {
   });
 });
 
-healthaiRouter.post("/check", (req: Request, res: Response) => {
+healthaiRouter.post("/check", async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
@@ -309,15 +529,11 @@ healthaiRouter.post("/check", (req: Request, res: Response) => {
     createdAt: nowIso(),
   };
 
-  const list = checks.get(body.profileId) || [];
-  list.unshift(check);
-  if (list.length > 200) list.length = 200;
-  checks.set(body.profileId, list);
-
+  await store.addCheck(check);
   res.json({ check });
 });
 
-healthaiRouter.post("/log", (req: Request, res: Response) => {
+healthaiRouter.post("/log", async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
@@ -345,27 +561,20 @@ healthaiRouter.post("/log", (req: Request, res: Response) => {
     createdAt: nowIso(),
   };
 
-  const list = logs.get(body.profileId) || [];
-  // Если за этот же date уже есть запись — заменяем (last wins).
-  const idx = list.findIndex((l) => l.date === date);
-  if (idx >= 0) list[idx] = log;
-  else list.unshift(log);
-  if (list.length > 365) list.length = 365;
-  logs.set(body.profileId, list);
-
-  res.json({ log });
+  const saved = await store.upsertLog(log);
+  res.json({ log: saved });
 });
 
-healthaiRouter.get("/history/:id", (req: Request, res: Response) => {
+healthaiRouter.get("/history/:id", async (req: Request, res: Response) => {
   const profileId = req.params.id;
-  const cks = checks.get(profileId) || [];
-  const lgs = logs.get(profileId) || [];
-  res.json({ checks: cks.slice(0, 20), logs: lgs.slice(0, 90) });
+  const cks = await store.getChecks(profileId, 20);
+  const lgs = await store.getLogs(profileId, 90);
+  res.json({ checks: cks, logs: lgs });
 });
 
-healthaiRouter.get("/trends/:id", (req: Request, res: Response) => {
+healthaiRouter.get("/trends/:id", async (req: Request, res: Response) => {
   const profileId = req.params.id;
-  const lgs = logs.get(profileId) || [];
+  const lgs = await store.getLogs(profileId);
   if (lgs.length === 0) {
     return res.json({
       avg7d: null,
@@ -442,7 +651,7 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
   }
-  const profile = profiles.get(body.profileId);
+  const profile = await store.getProfile(body.profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
   const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
@@ -537,7 +746,7 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
   }
 });
 
-healthaiRouter.post("/import", (req: Request, res: Response) => {
+healthaiRouter.post("/import", async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
@@ -553,7 +762,6 @@ healthaiRouter.post("/import", (req: Request, res: Response) => {
     return res.status(400).json({ error: "entries-empty" });
   }
 
-  const list = logs.get(body.profileId) || [];
   let imported = 0;
   for (const e of entries) {
     if (!e || typeof e !== "object") continue;
@@ -577,23 +785,19 @@ healthaiRouter.post("/import", (req: Request, res: Response) => {
       notes: `imported:${source}`,
       createdAt: nowIso(),
     };
-    const idx = list.findIndex((l) => l.date === date);
-    if (idx >= 0) list[idx] = log;
-    else list.unshift(log);
+    await store.upsertLog(log);
     imported++;
   }
-  if (list.length > 365) list.length = 365;
-  logs.set(body.profileId, list);
   res.json({ imported, source });
 });
 
-healthaiRouter.get("/risks/:id", (req: Request, res: Response) => {
+healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
   const profileId = req.params.id;
-  const profile = profiles.get(profileId);
+  const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
-  const lgs = logs.get(profileId) || [];
-  const cks = checks.get(profileId) || [];
+  const lgs = await store.getLogs(profileId);
+  const cks = await store.getChecks(profileId);
   const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
   const last7 = sorted.slice(-7);
   const last30 = sorted.slice(-30);
@@ -729,9 +933,11 @@ healthaiRouter.get("/risks/:id", (req: Request, res: Response) => {
   });
 });
 
-healthaiRouter.get("/leaderboard", (_req, res) => {
+healthaiRouter.get("/leaderboard", async (_req, res) => {
+  const ids = await store.allProfileIdsWithLogs();
   const board: Array<{ profileId: string; streak: number; logs: number }> = [];
-  for (const [profileId, lgs] of logs) {
+  for (const profileId of ids) {
+    const lgs = await store.getLogs(profileId);
     const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
     let streak = 0;
     let cur = 0;

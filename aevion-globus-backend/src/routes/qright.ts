@@ -728,6 +728,193 @@ qrightRouter.get("/admin/objects", async (req, res) => {
   }
 });
 
+// 🔹 Admin: CSV export of full registry (incl. revoke + fetch fields)
+//    Same status/q filters as /admin/objects so the operator can export
+//    exactly what's on screen. Auth via Bearer token in Authorization header.
+qrightRouter.get("/admin/objects.csv", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!isQRightAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+
+    const status = String(req.query.status || "all").toLowerCase();
+    const q = String(req.query.q || "").trim();
+
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (status === "active") conds.push(`"revokedAt" IS NULL`);
+    else if (status === "revoked") conds.push(`"revokedAt" IS NOT NULL`);
+    if (q.length >= 2) {
+      params.push(`%${q}%`);
+      conds.push(`("title" ILIKE $${params.length} OR "ownerEmail" ILIKE $${params.length})`);
+    }
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const result = await pool.query(
+      `SELECT id, title, kind, "contentHash", "ownerName", "ownerEmail", country, city,
+              "createdAt", "revokedAt", "revokeReasonCode", "revokeReason",
+              "embedFetches", "lastFetchedAt"
+       FROM "QRightObject"
+       ${where}
+       ORDER BY "createdAt" DESC`,
+      params
+    );
+
+    function csvField(value: unknown): string {
+      if (value === null || value === undefined) return "";
+      const s = value instanceof Date ? value.toISOString() : String(value);
+      if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    }
+
+    const columns = [
+      "id",
+      "title",
+      "kind",
+      "contentHash",
+      "ownerName",
+      "ownerEmail",
+      "country",
+      "city",
+      "createdAt",
+      "revokedAt",
+      "revokeReasonCode",
+      "revokeReason",
+      "embedFetches",
+      "lastFetchedAt",
+    ] as const;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const suffix = status === "all" ? "" : `-${status}`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="qright-admin${suffix}-${today}.csv"`
+    );
+    res.setHeader("Cache-Control", "no-store");
+
+    const header = columns.join(",");
+    const rows = result.rows.map((row: Record<string, unknown>) =>
+      columns.map((col) => csvField(row[col])).join(",")
+    );
+    res.send([header, ...rows].join("\r\n"));
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 Admin: bulk force-revoke (best-effort per-id)
+//    Body: { ids: string[], reasonCode: string, reason?: string }.
+//    Caps the batch at BULK_LIMIT to keep the SQL round-trip bounded and to
+//    avoid making this surface a takedown firehose. Returns a per-id summary
+//    so the UI can render which ids were already revoked vs missing.
+qrightRouter.post("/admin/revoke-bulk", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!isQRightAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+
+    const BULK_LIMIT = 200;
+    const idsRaw = Array.isArray(req.body?.ids) ? req.body.ids : null;
+    if (!idsRaw || idsRaw.length === 0) {
+      return res.status(400).json({ error: "ids must be a non-empty array" });
+    }
+    const ids = Array.from(
+      new Set(
+        idsRaw
+          .map((v: unknown) => (typeof v === "string" ? v.trim() : ""))
+          .filter((v: string) => v.length > 0)
+      )
+    ) as string[];
+    if (ids.length === 0) {
+      return res.status(400).json({ error: "ids must contain at least one non-empty string" });
+    }
+    if (ids.length > BULK_LIMIT) {
+      return res
+        .status(400)
+        .json({ error: `Too many ids — max ${BULK_LIMIT} per request`, received: ids.length });
+    }
+
+    const reason = String(req.body?.reason || "").slice(0, 500) || null;
+    const reasonCodeRaw = String(req.body?.reasonCode || "admin-takedown").trim();
+    if (!REVOKE_REASON_CODES.has(reasonCodeRaw)) {
+      return res.status(400).json({
+        error: "Unknown reasonCode",
+        allowed: Array.from(REVOKE_REASON_CODES),
+      });
+    }
+
+    // Snapshot existing rows so we can partition input ids into
+    // not_found / already_revoked / to_revoke without a second round-trip.
+    const existing = await pool.query(
+      `SELECT id, "revokedAt" FROM "QRightObject" WHERE id = ANY($1::text[])`,
+      [ids]
+    );
+    const existingMap = new Map<string, Date | string | null>();
+    for (const r of existing.rows as { id: string; revokedAt: Date | string | null }[]) {
+      existingMap.set(r.id, r.revokedAt);
+    }
+
+    const notFound: string[] = [];
+    const alreadyRevoked: string[] = [];
+    const toRevoke: string[] = [];
+    for (const id of ids) {
+      if (!existingMap.has(id)) notFound.push(id);
+      else if (existingMap.get(id)) alreadyRevoked.push(id);
+      else toRevoke.push(id);
+    }
+
+    let revokedRows: { id: string; revokedAt: Date | string }[] = [];
+    if (toRevoke.length > 0) {
+      const updated = await pool.query(
+        `UPDATE "QRightObject"
+         SET "revokedAt" = NOW(), "revokeReason" = $2, "revokeReasonCode" = $3
+         WHERE id = ANY($1::text[]) AND "revokedAt" IS NULL
+         RETURNING id, "revokedAt"`,
+        [toRevoke, reason, reasonCodeRaw]
+      );
+      revokedRows = updated.rows as { id: string; revokedAt: Date | string }[];
+    }
+
+    console.warn(
+      `[qright] admin bulk-revoke by=${auth?.email || auth?.sub} code=${reasonCodeRaw} ` +
+        `revoked=${revokedRows.length} already=${alreadyRevoked.length} missing=${notFound.length}`
+    );
+
+    res.json({
+      requested: ids.length,
+      revoked: revokedRows.map((r) => ({
+        id: r.id,
+        revokedAt: r.revokedAt instanceof Date ? r.revokedAt.toISOString() : r.revokedAt,
+      })),
+      alreadyRevoked,
+      notFound,
+      reasonCode: reasonCodeRaw,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
 // 🔹 Admin: force-revoke any object (regardless of ownership)
 //    Required for handling DMCA-style takedowns, fraudulent registrations,
 //    and dispute outcomes where the registrant is uncooperative.

@@ -74,6 +74,12 @@ export default function AdminQRightPage() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [series, setSeries] = useState<Record<string, { day: string; fetches: number }[]>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkCode, setBulkCode] = useState<string>("admin-takedown");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [csvBusy, setCsvBusy] = useState(false);
 
   const authHeaders = useCallback((): HeadersInit => {
     try {
@@ -114,6 +120,10 @@ export default function AdminQRightPage() {
       if (r.ok) {
         const data = await r.json();
         setItems(data.items || []);
+        // Reset bulk selection on every reload — selected ids may now be
+        // revoked or filtered out, and clearing is less surprising than
+        // silently dropping individual checkboxes.
+        setSelected(new Set());
       } else {
         showToast(`Load failed (${r.status})`, "error");
       }
@@ -158,6 +168,94 @@ export default function AdminQRightPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, whoami?.isAdmin]);
+
+  const selectableIds = items.filter((x) => !x.revokedAt).map((x) => x.id);
+  const allSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(selectableIds));
+  };
+
+  const exportCsv = async () => {
+    setCsvBusy(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("status", statusFilter);
+      if (q.trim().length >= 2) params.set("q", q.trim());
+      const r = await fetch(
+        apiUrl(`/api/qright/admin/objects.csv?${params.toString()}`),
+        { headers: authHeaders() }
+      );
+      if (!r.ok) {
+        showToast(`CSV export failed (${r.status})`, "error");
+        return;
+      }
+      const blob = await r.blob();
+      const dispo = r.headers.get("Content-Disposition") || "";
+      const m = /filename="?([^";]+)"?/.exec(dispo);
+      const filename =
+        m?.[1] || `qright-admin-${new Date().toISOString().slice(0, 10)}.csv`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      showToast(`CSV export failed: ${(e as Error).message}`, "error");
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
+  const submitBulk = async () => {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selected);
+      const r = await fetch(apiUrl("/api/qright/admin/revoke-bulk"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          ids,
+          reasonCode: bulkCode,
+          reason: bulkReason.trim() || undefined,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const revN = Array.isArray(data.revoked) ? data.revoked.length : 0;
+        const alrN = Array.isArray(data.alreadyRevoked) ? data.alreadyRevoked.length : 0;
+        const missN = Array.isArray(data.notFound) ? data.notFound.length : 0;
+        const parts = [`${revN} revoked`];
+        if (alrN) parts.push(`${alrN} already`);
+        if (missN) parts.push(`${missN} not found`);
+        showToast(`Bulk: ${parts.join(", ")}`, revN > 0 ? "success" : "info");
+        setBulkOpen(false);
+        setBulkReason("");
+        load();
+      } else {
+        showToast(`Bulk revoke failed: ${data.error || r.status}`, "error");
+      }
+    } catch (e) {
+      showToast(`Bulk revoke failed: ${(e as Error).message}`, "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const submit = async () => {
     if (!target) return;
@@ -256,7 +354,84 @@ export default function AdminQRightPage() {
                 >
                   Reload
                 </button>
+                <button
+                  onClick={exportCsv}
+                  disabled={csvBusy}
+                  title="Download current view as CSV"
+                  style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontSize: 12, fontWeight: 800, cursor: csvBusy ? "not-allowed" : "pointer", opacity: csvBusy ? 0.7 : 1 }}
+                >
+                  {csvBusy ? "Exporting…" : "Export CSV"}
+                </button>
               </div>
+
+              {selectableIds.length > 0 && (
+                <div
+                  style={{
+                    ...card,
+                    marginBottom: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    background: selected.size > 0 ? "rgba(13,148,136,0.06)" : "#fff",
+                    borderColor: selected.size > 0 ? "rgba(13,148,136,0.35)" : "rgba(15,23,42,0.1)",
+                    position: "sticky",
+                    top: 8,
+                    zIndex: 5,
+                  }}
+                >
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      aria-label="Select all visible active rows"
+                    />
+                    {allSelected ? "All selected" : `Select all ${selectableIds.length} active`}
+                  </label>
+                  <span style={{ fontSize: 12, color: "#475569" }}>
+                    {selected.size} selected
+                  </span>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    onClick={() => setSelected(new Set())}
+                    disabled={selected.size === 0}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      color: "#475569",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: selected.size === 0 ? "not-allowed" : "pointer",
+                      opacity: selected.size === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBulkCode("admin-takedown");
+                      setBulkReason("");
+                      setBulkOpen(true);
+                    }}
+                    disabled={selected.size === 0}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: 6,
+                      border: "none",
+                      background: selected.size === 0 ? "#cbd5e1" : "#dc2626",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      cursor: selected.size === 0 ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Force-revoke {selected.size || ""} →
+                  </button>
+                </div>
+              )}
 
               {loading ? (
                 <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Loading…</div>
@@ -276,6 +451,15 @@ export default function AdminQRightPage() {
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                          {!isRev && (
+                            <input
+                              type="checkbox"
+                              checked={selected.has(x.id)}
+                              onChange={() => toggleOne(x.id)}
+                              aria-label={`Select ${x.title}`}
+                              style={{ marginTop: 4, cursor: "pointer", flexShrink: 0 }}
+                            />
+                          )}
                           <div style={{ flex: "1 1 320px", minWidth: 0 }}>
                             <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
                               <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" }}>
@@ -394,6 +578,64 @@ export default function AdminQRightPage() {
                 style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 13, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.7 : 1 }}
               >
                 {busy ? "Revoking…" : "Force-revoke"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !bulkBusy) setBulkOpen(false);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}
+        >
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 520, boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 4 }}>
+              Bulk force-revoke
+            </div>
+            <div style={{ fontSize: 13, color: "#475569", marginBottom: 14 }}>
+              <strong>{selected.size}</strong> object{selected.size === 1 ? "" : "s"} selected.<br />
+              <span style={{ color: "#7f1d1d" }}>
+                This action is logged. The same reason code and detail will be applied to every object. Already-revoked rows are skipped.
+              </span>
+            </div>
+            <label style={{ ...labelStyle, display: "block", marginBottom: 6 }}>Reason code</label>
+            <select
+              value={bulkCode}
+              onChange={(e) => setBulkCode(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, marginBottom: 12 }}
+            >
+              {ADMIN_REASON_CODES.map((c) => (
+                <option key={c} value={c}>
+                  {REVOKE_REASON_LABELS[c] || c}
+                </option>
+              ))}
+            </select>
+            <label style={{ ...labelStyle, display: "block", marginBottom: 6 }}>Public detail (≤ 500)</label>
+            <textarea
+              value={bulkReason}
+              onChange={(e) => setBulkReason(e.target.value.slice(0, 500))}
+              rows={3}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, marginBottom: 14, resize: "vertical", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setBulkOpen(false)}
+                disabled={bulkBusy}
+                style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontWeight: 700, fontSize: 13, cursor: bulkBusy ? "not-allowed" : "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitBulk}
+                disabled={bulkBusy || selected.size === 0}
+                style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 13, cursor: bulkBusy ? "not-allowed" : "pointer", opacity: bulkBusy ? 0.7 : 1 }}
+              >
+                {bulkBusy ? "Revoking…" : `Force-revoke ${selected.size}`}
               </button>
             </div>
           </div>

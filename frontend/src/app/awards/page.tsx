@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   },
 };
 
+// Forces per-request render so cookies() in getServerT() resolves correctly
+// (otherwise SSG runs the page with no request scope and the i18n boundary
+// fails to hydrate translations from the "use client" module).
+export const dynamic = "force-dynamic";
+
 type StatsPayload = {
   eligibleParticipants?: number;
   distinctVotersAllTime?: number;

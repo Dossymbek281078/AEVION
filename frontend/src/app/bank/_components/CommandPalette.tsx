@@ -218,6 +218,28 @@ export function CommandPalette({
         },
       },
       {
+        id: "diag.auditLog",
+        section: actionsSection,
+        icon: "✎",
+        label: "Open compliance audit log",
+        hint: "/bank/audit-log — unified ledger with filters + CSV/JSON/print export",
+        keywords: ["audit", "compliance", "ledger", "regulator", "auditor", "export", "filter", "report"],
+        run: () => {
+          window.location.href = "/bank/audit-log";
+        },
+      },
+      {
+        id: "diag.healthBoard",
+        section: actionsSection,
+        icon: "♡",
+        label: "Open diagnostics health board",
+        hint: "/bank/diagnostics — endpoint probes, latency, auth + env fingerprint",
+        keywords: ["diagnostics", "health", "ops", "latency", "probe", "monitoring", "status", "uptime"],
+        run: () => {
+          window.location.href = "/bank/diagnostics";
+        },
+      },
+      {
         id: "nav.portal",
         section: navSection,
         icon: "↗",

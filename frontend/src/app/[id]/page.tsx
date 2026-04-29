@@ -35,6 +35,11 @@ const DEDICATED_ROUTES: Record<string, string> = {
   auth: "/auth",
 };
 
+// Forces per-request render so cookies()/headers() in getServerT() resolve
+// correctly. Without this, SSG runs the catch-all without request scope and
+// the i18n client-module boundary leaves translations undefined.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({
   params,
 }: {

@@ -540,6 +540,42 @@ function BankContent() {
             <div id="bank-anchor-audit-unified" style={{ scrollMarginTop: 20 }}>
               <UnifiedAuditFeed accountId={account.id} operations={operations} notify={notify} />
             </div>
+            <div
+              style={{
+                margin: "12px 0 18px",
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.5 }}>
+                <strong style={{ color: "#fff" }}>Compliance-grade view:</strong>{" "}
+                full ledger with filters, summary stats and CSV / JSON / print export — for
+                regulators, auditors and partners.
+              </div>
+              <a
+                href="/bank/audit-log"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.10)",
+                  color: "#fff",
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                  border: "1px solid rgba(255,255,255,0.16)",
+                }}
+              >
+                Open audit log →
+              </a>
+            </div>
             <AuditPanel notify={notify} />
             <DeviceManagement accountId={account.id} notify={notify} />
             <SnapshotExport account={account} operations={operations} notify={notify} />

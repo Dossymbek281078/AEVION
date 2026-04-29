@@ -65,6 +65,14 @@ interface RecentEvent {
   value?: number;
 }
 
+type FunnelType = "page_view" | "cta_click" | "lead_submit" | "checkout_start" | "checkout_success";
+
+interface ByVariantPayload {
+  keys: string[];
+  windowHours: number;
+  variants: Record<string, Record<string, Record<FunnelType, number>>>;
+}
+
 const TAB_META: Record<Tab, { label: string; color: string }> = {
   overview: { label: "Обзор", color: "#0d9488" },
   leads: { label: "Sales-лиды", color: "#0ea5e9" },
@@ -89,6 +97,7 @@ export default function PricingAdminPage() {
   const [counts, setCounts] = useState({ leads: 0, affiliate: 0, partners: 0, edu: 0, newsletter: 0 });
   const [summary, setSummary] = useState<EventsSummary | null>(null);
   const [events, setEvents] = useState<RecentEvent[]>([]);
+  const [byVariant, setByVariant] = useState<ByVariantPayload | null>(null);
   const [hours, setHours] = useState(24);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +163,7 @@ export default function PricingAdminPage() {
     setNewsletter([]);
     setSummary(null);
     setEvents([]);
+    setByVariant(null);
   }
 
   async function loadAll() {
@@ -170,6 +180,7 @@ export default function PricingAdminPage() {
         nlR,
         summaryR,
         eventsR,
+        byVariantR,
       ] = await Promise.all([
         fetch(apiUrl("/api/pricing/leads") + "?limit=100", { headers }),
         fetch(apiUrl("/api/pricing/applications") + "?kind=affiliate&limit=100", { headers }),
@@ -178,9 +189,10 @@ export default function PricingAdminPage() {
         fetch(apiUrl("/api/pricing/newsletter/list") + "?limit=100", { headers }),
         fetch(apiUrl("/api/pricing/events/summary") + `?hours=${hours}`, { headers }),
         fetch(apiUrl("/api/pricing/events/recent") + "?limit=50", { headers }),
+        fetch(apiUrl("/api/pricing/events/by-variant") + `?hours=${hours}`, { headers }),
       ]);
 
-      const responses = [leadsR, affR, prtR, eduR, nlR, summaryR, eventsR];
+      const responses = [leadsR, affR, prtR, eduR, nlR, summaryR, eventsR, byVariantR];
       if (responses.some((r) => r.status === 401)) {
         logout();
         setError("Сессия истекла или токен сменился");
@@ -194,6 +206,7 @@ export default function PricingAdminPage() {
       const nlJ = await nlR.json();
       const summaryJ = await summaryR.json();
       const eventsJ = await eventsR.json();
+      const byVariantJ = byVariantR.ok ? ((await byVariantR.json()) as ByVariantPayload) : null;
 
       setLeads(leadsJ.items ?? []);
       setAffiliate(affJ.items ?? []);
@@ -209,6 +222,7 @@ export default function PricingAdminPage() {
       });
       setSummary(summaryJ);
       setEvents(eventsJ.items ?? []);
+      setByVariant(byVariantJ);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -471,6 +485,23 @@ export default function PricingAdminPage() {
               <Breakdown title="По tier" data={summary.byTier} />
               <Breakdown title="По индустриям" data={summary.byIndustry} />
               <Breakdown title="По источникам" data={summary.bySource} />
+            </section>
+          )}
+
+          {byVariant && byVariant.keys.length > 0 && (
+            <section style={{ marginBottom: 32 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 4, letterSpacing: "-0.02em" }}>
+                A/B конверсия
+              </h2>
+              <p style={{ fontSize: 12, color: "#64748b", margin: 0, marginBottom: 12 }}>
+                Воронка page_view → cta_click → lead_submit / checkout_start → checkout_success в разрезе вариантов.
+                Окно: последние {byVariant.windowHours}ч.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 16 }}>
+                {byVariant.keys.map((k) => (
+                  <ABFunnelCard key={k} variantKey={k} data={byVariant.variants[k] ?? {}} />
+                ))}
+              </div>
             </section>
           )}
 
@@ -923,6 +954,83 @@ function Breakdown({ title, data }: { title: string; data: Record<string, number
             </span>
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+function ABFunnelCard({
+  variantKey,
+  data,
+}: {
+  variantKey: string;
+  data: Record<string, Record<FunnelType, number>>;
+}) {
+  const variants = Object.keys(data).sort();
+  const FUNNEL: { key: FunnelType; label: string; color: string }[] = [
+    { key: "page_view", label: "Page views", color: "#0ea5e9" },
+    { key: "cta_click", label: "CTA clicks", color: "#7c3aed" },
+    { key: "lead_submit", label: "Leads", color: "#be185d" },
+    { key: "checkout_start", label: "Checkout start", color: "#f59e0b" },
+    { key: "checkout_success", label: "Checkout ✓", color: "#0d9488" },
+  ];
+
+  function rate(num: number, den: number): string {
+    if (den === 0) return "—";
+    return `${((num / den) * 100).toFixed(1)}%`;
+  }
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid rgba(15,23,42,0.08)",
+        borderRadius: 12,
+        padding: 16,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: "0.06em" }}>
+          ВАРИАНТ: {variantKey.toUpperCase()}
+        </div>
+        <div style={{ fontSize: 10, color: "#94a3b8" }}>n = {variants.length}</div>
+      </div>
+      {variants.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#94a3b8" }}>Нет данных за окно.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc" }}>
+                <th style={{ ...th, fontSize: 10 }}>Variant</th>
+                {FUNNEL.map((f) => (
+                  <th key={f.key} style={{ ...th, fontSize: 10, color: f.color }}>
+                    {f.label}
+                  </th>
+                ))}
+                <th style={{ ...th, fontSize: 10 }}>CR view→success</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variants.map((v, i) => {
+                const c = data[v];
+                return (
+                  <tr key={v} style={{ borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)" }}>
+                    <td style={{ ...td, fontWeight: 800, fontFamily: "ui-monospace, monospace" }}>{v}</td>
+                    {FUNNEL.map((f) => (
+                      <td key={f.key} style={{ ...td, fontFamily: "ui-monospace, monospace" }}>
+                        {c[f.key] ?? 0}
+                      </td>
+                    ))}
+                    <td style={{ ...td, fontWeight: 800, color: "#0d9488" }}>
+                      {rate(c.checkout_success ?? 0, c.page_view ?? 0)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -48,6 +48,10 @@ const ALLOWED_TYPES = new Set([
   "industry_view",
   "faq_open",
   "comparison_view",
+  "affiliate_apply",
+  "partner_apply",
+  "edu_apply",
+  "ab_assigned",
 ]);
 
 function rateLimitKey(ip: string) {
@@ -246,4 +250,91 @@ eventsRouter.get("/recent", (req, res) => {
     }
   }
   res.json({ items, total: lines.length });
+});
+
+/**
+ * GET /api/pricing/events/by-variant
+ * Конверсии в разрезе A/B-вариантов. Защищён ADMIN_TOKEN.
+ *
+ * Группирует события по `meta.variant_<key>` и считает воронку:
+ * page_view → cta_click → lead_submit / checkout_start → checkout_success.
+ *
+ * Параметры:
+ *   - hours (1..720, default 168) — окно
+ *   - keys (csv, default "hero,tierCards") — какие variant-ключи группировать
+ */
+eventsRouter.get("/by-variant", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (required) {
+    const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+    if (got !== required) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+  }
+
+  const sinceHours = Math.min(Math.max(parseInt(String(req.query.hours ?? "168"), 10), 1), 720);
+  const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
+  const keys = (typeof req.query.keys === "string" ? req.query.keys : "hero,tierCards")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
+  const FUNNEL_TYPES = [
+    "page_view",
+    "cta_click",
+    "lead_submit",
+    "checkout_start",
+    "checkout_success",
+  ] as const;
+
+  type FunnelCounts = Record<typeof FUNNEL_TYPES[number], number>;
+
+  function emptyCounts(): FunnelCounts {
+    return {
+      page_view: 0,
+      cta_click: 0,
+      lead_submit: 0,
+      checkout_start: 0,
+      checkout_success: 0,
+    };
+  }
+
+  const result: Record<string, Record<string, FunnelCounts>> = {};
+  for (const k of keys) result[k] = {};
+
+  if (!existsSync(EVENTS_FILE)) {
+    return res.json({ keys, windowHours: sinceHours, variants: result });
+  }
+
+  let content = "";
+  try {
+    content = readFileSync(EVENTS_FILE, "utf8");
+  } catch (e) {
+    console.error("[events/by-variant] read failed", e);
+    return res.status(500).json({ error: "read_error" });
+  }
+
+  const lines = content.split("\n").filter((l) => l.trim().length > 0);
+
+  for (const line of lines) {
+    let ev: AnalyticsEvent;
+    try {
+      ev = JSON.parse(line) as AnalyticsEvent;
+    } catch {
+      continue;
+    }
+    if (!ev.ts || new Date(ev.ts).getTime() < sinceMs) continue;
+    if (!FUNNEL_TYPES.includes(ev.type as typeof FUNNEL_TYPES[number])) continue;
+    if (!ev.meta || typeof ev.meta !== "object") continue;
+
+    for (const k of keys) {
+      const v = ev.meta[`variant_${k}`];
+      if (typeof v !== "string" || v.length === 0) continue;
+      if (!result[k][v]) result[k][v] = emptyCounts();
+      result[k][v][ev.type as typeof FUNNEL_TYPES[number]] += 1;
+    }
+  }
+
+  res.json({ keys, windowHours: sinceHours, variants: result });
 });

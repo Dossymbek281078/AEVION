@@ -15,12 +15,13 @@ import { useEffect, useState } from "react";
  * могла агрегировать конверсии по варианту.
  */
 
-export type ABKey = "hero";
+export type ABKey = "hero" | "tierCards";
 export type ABValue = "A" | "B" | "C";
 
-const VARIANT_KEYS: ABKey[] = ["hero"];
+const VARIANT_KEYS: ABKey[] = ["hero", "tierCards"];
 const DEFAULT_VARIANTS: Record<ABKey, ABValue> = {
   hero: "A",
+  tierCards: "A",
 };
 
 const COOKIE_PREFIX = "aevion_ab_";

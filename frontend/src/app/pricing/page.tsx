@@ -167,6 +167,7 @@ export default function PricingPage() {
   const tp = usePricingT();
   const heroVariant = useABVariant("hero");
   const heroPrefix = heroVariant === "A" ? "" : `${heroVariant}.`;
+  const tierCardsVariant = useABVariant("tierCards");
   const [data, setData] = useState<PricingPayload | null>(null);
   const [activePromos, setActivePromos] = useState<
     Array<{ code: string; description: string; kind: string; amount: number }>
@@ -227,7 +228,13 @@ export default function PricingPage() {
       type: "checkout_start",
       tier: opts.tierId,
       source: "pricing",
-      meta: { period: opts.period ?? "monthly", seats: opts.seats ?? 1, modules: (opts.modules ?? []).length },
+      meta: {
+        period: opts.period ?? "monthly",
+        seats: opts.seats ?? 1,
+        modules: (opts.modules ?? []).length,
+        variant_hero: heroVariant,
+        variant_tierCards: tierCardsVariant,
+      },
     });
     try {
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
@@ -287,13 +294,18 @@ export default function PricingPage() {
         if (!cancelled && j) setTrust(j);
       })
       .catch(() => {});
-    track({ type: "page_view", source: "pricing", meta: { variant_hero: heroVariant } });
+    track({
+      type: "page_view",
+      source: "pricing",
+      meta: { variant_hero: heroVariant, variant_tierCards: tierCardsVariant },
+    });
     track({ type: "ab_assigned", source: "pricing", meta: { key: "hero", value: heroVariant } });
+    track({ type: "ab_assigned", source: "pricing", meta: { key: "tierCards", value: tierCardsVariant } });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heroVariant]);
+  }, [heroVariant, tierCardsVariant]);
 
   const symbol = data?.currencies[currency].symbol ?? "$";
   const rate = data?.currencies[currency].rate ?? 1;
@@ -594,7 +606,16 @@ export default function PricingPage() {
         }}
       >
         {data.tiers.map((tier) => {
-          const isHighlight = !!tier.highlight;
+          // A/B/C variant for tier-cards:
+          //   A — no highlight (control)
+          //   B — highlight Pro
+          //   C — highlight Business
+          const isHighlight =
+            tierCardsVariant === "A"
+              ? false
+              : tierCardsVariant === "B"
+                ? tier.id === "pro"
+                : tier.id === "business";
           const showPrice =
             period === "annual" ? tier.priceAnnualPerMonth : tier.priceMonthly;
           return (

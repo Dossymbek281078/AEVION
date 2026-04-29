@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerT } from "@/lib/i18n-server";
 import { launchedModules } from "@/data/pitchModel";
 import { HubLeaderboard } from "./_components/HubLeaderboard";
 
@@ -38,34 +39,8 @@ async function readStats(productKeyPrefix?: string): Promise<StatsPayload | null
   }
 }
 
-const PIPELINE: Array<{ step: string; title: string; body: string; color: string }> = [
-  {
-    step: "01",
-    title: "QRight registers authorship",
-    body: "SHA-256 hash + HMAC seal + Quantum Shield sharding before the work ever leaves your hands.",
-    color: "#7dd3fc",
-  },
-  {
-    step: "02",
-    title: "Awards submission",
-    body: "Pick the track (Music or Film), attach the registry id, drop the file. One form, one click.",
-    color: "#c4b5fd",
-  },
-  {
-    step: "03",
-    title: "Planet validators vote",
-    body: "Quorum of eligible participants reviews the artifact. Compliance certificate is issued on quorum pass.",
-    color: "#5eead4",
-  },
-  {
-    step: "04",
-    title: "Bank AEC payout",
-    body: "Winners receive AEC straight into their AEVION Bank wallet — no off-platform settlement required.",
-    color: "#fde68a",
-  },
-];
-
 export default async function AwardsHomePage() {
+  const { t, lang } = await getServerT();
   const [globalStats, musicStats, filmStats] = await Promise.all([
     readStats(),
     readStats("aevion_award_music"),
@@ -89,14 +64,21 @@ export default async function AwardsHomePage() {
     "/planet?type=movie&preset=film&productKey=aevion_award_film_v1&title=AEVION%20Film%20Awards%20Submission";
 
   const heroStats: Array<{ label: string; value: string | number; hint: string }> = [
-    { label: "Submissions", value: totalSubmissions || "—", hint: "Music + Film tracks" },
-    { label: "Certified", value: totalCertified || certifiedAll || "—", hint: "Quorum-passed works" },
-    { label: "Validators", value: voters || y || "—", hint: "Planet participant network" },
-    { label: "Tracks live", value: 2, hint: "AI music · AI film" },
+    { label: t("awardsHub.stat.submissions"), value: totalSubmissions || "—", hint: t("awardsHub.stat.submissions.hint") },
+    { label: t("awardsHub.stat.certified"), value: totalCertified || certifiedAll || "—", hint: t("awardsHub.stat.certified.hint") },
+    { label: t("awardsHub.stat.validators"), value: voters || y || "—", hint: t("awardsHub.stat.validators.hint") },
+    { label: t("awardsHub.stat.tracks"), value: 2, hint: t("awardsHub.stat.tracks.hint") },
+  ];
+
+  const pipeline: Array<{ step: string; titleKey: string; bodyKey: string; color: string }> = [
+    { step: "01", titleKey: "awardsHub.pipeline.s1.title", bodyKey: "awardsHub.pipeline.s1.body", color: "#7dd3fc" },
+    { step: "02", titleKey: "awardsHub.pipeline.s2.title", bodyKey: "awardsHub.pipeline.s2.body", color: "#c4b5fd" },
+    { step: "03", titleKey: "awardsHub.pipeline.s3.title", bodyKey: "awardsHub.pipeline.s3.body", color: "#5eead4" },
+    { step: "04", titleKey: "awardsHub.pipeline.s4.title", bodyKey: "awardsHub.pipeline.s4.body", color: "#fde68a" },
   ];
 
   return (
-    <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
+    <div lang={lang} style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
       <section
         style={{
           position: "relative",
@@ -121,7 +103,7 @@ export default async function AwardsHomePage() {
               marginBottom: 16,
             }}
           >
-            AEVION Awards · hub
+            {t("awardsHub.kicker")}
           </p>
           <h1
             style={{
@@ -136,10 +118,10 @@ export default async function AwardsHomePage() {
               backgroundClip: "text",
             }}
           >
-            Creative awards
+            {t("awardsHub.h1.line1")}
             <br />
             <span style={{ fontSize: "0.55em", fontWeight: 800, letterSpacing: "-0.02em" }}>
-              on a real validator network — with AEC payout
+              {t("awardsHub.h1.line2")}
             </span>
           </h1>
           <p
@@ -151,9 +133,7 @@ export default async function AwardsHomePage() {
               margin: 0,
             }}
           >
-            Two tracks live today — Music (the AI-music wave) and Film (the AI-film wave).
-            Authorship is registered in QRight, validated by the Planet quorum, and winners receive AEC straight into AEVION Bank.
-            One trust pipeline, no opaque jury.
+            {t("awardsHub.subtitle")}
           </p>
 
           <div
@@ -201,7 +181,7 @@ export default async function AwardsHomePage() {
                 boxShadow: "0 8px 32px rgba(124,58,237,0.35)",
               }}
             >
-              Music Awards →
+              {t("awardsHub.cta.music")}
             </Link>
             <Link
               href="/awards/film"
@@ -217,7 +197,7 @@ export default async function AwardsHomePage() {
                 boxShadow: "0 8px 32px rgba(180,83,9,0.35)",
               }}
             >
-              Film Awards →
+              {t("awardsHub.cta.film")}
             </Link>
             <Link
               href="/planet"
@@ -233,7 +213,7 @@ export default async function AwardsHomePage() {
                 fontSize: 16,
               }}
             >
-              Planet validators
+              {t("awardsHub.cta.planet")}
             </Link>
           </div>
         </div>
@@ -252,17 +232,16 @@ export default async function AwardsHomePage() {
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#5eead4", marginBottom: 10, textTransform: "uppercase" }}>
-            Why a creative award on a trust layer
+            {t("awardsHub.why.kicker")}
           </div>
           <h2 style={{ fontSize: 26, fontWeight: 900, margin: "0 0 14px", color: "#fff", letterSpacing: "-0.02em" }}>
-            Authorship, quorum, payout — all on the same pipeline
+            {t("awardsHub.why.h2")}
           </h2>
           <p style={{ fontSize: 16, lineHeight: 1.7, color: "#cbd5e1", margin: "0 0 16px" }}>
-            {m?.problem ??
-              "AI-generated music and film have no home in the traditional awards landscape. Independent creators need recognition pathways tied directly to revenue."}
+            {m?.problem ?? t("awardsHub.why.problemFallback")}
           </p>
           <p style={{ fontSize: 15, lineHeight: 1.7, color: "#cbd5e1", margin: 0 }}>
-            Every Awards record is a Trust Graph trifecta: a QRight registration, a Planet validator vote, and a Bank inflow. Winners do not just get a trophy — they get a defensible certificate, a public profile and a balance.
+            {t("awardsHub.why.body")}
           </p>
         </section>
 
@@ -277,10 +256,10 @@ export default async function AwardsHomePage() {
               textTransform: "uppercase",
             }}
           >
-            How it works · 4-step pipeline
+            {t("awardsHub.pipeline.kicker")}
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
-            {PIPELINE.map((p) => (
+            {pipeline.map((p) => (
               <article
                 key={p.step}
                 style={{
@@ -291,8 +270,8 @@ export default async function AwardsHomePage() {
                 }}
               >
                 <div style={{ fontSize: 11, fontWeight: 900, color: p.color, letterSpacing: "0.18em" }}>{p.step}</div>
-                <h3 style={{ margin: "8px 0 8px", fontSize: 16, fontWeight: 800, color: "#f8fafc" }}>{p.title}</h3>
-                <p style={{ margin: 0, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>{p.body}</p>
+                <h3 style={{ margin: "8px 0 8px", fontSize: 16, fontWeight: 800, color: "#f8fafc" }}>{t(p.titleKey)}</h3>
+                <p style={{ margin: 0, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>{t(p.bodyKey)}</p>
               </article>
             ))}
           </div>
@@ -311,7 +290,7 @@ export default async function AwardsHomePage() {
               textTransform: "uppercase",
             }}
           >
-            Two tracks live now
+            {t("awardsHub.tracks.kicker")}
           </h2>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
@@ -324,16 +303,16 @@ export default async function AwardsHomePage() {
               }}
             >
               <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                <h3 style={{ margin: 0, fontWeight: 900, color: "#f8fafc", fontSize: 22 }}>AEVION Music Awards</h3>
+                <h3 style={{ margin: 0, fontWeight: 900, color: "#f8fafc", fontSize: 22 }}>{t("awardsHub.tracks.music.title")}</h3>
                 <span style={{ fontSize: 11, fontWeight: 800, color: "#c4b5fd", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  Wave 1 · live
+                  {t("awardsHub.tracks.music.tag")}
                 </span>
               </div>
               <p style={{ margin: "8px 0 0", lineHeight: 1.6, fontSize: 14, color: "#ddd6fe" }}>
-                The AI-music wave: tracks, samples, generative compositions and digital sound. Like the Grammys — for AI and digital music.
+                {t("awardsHub.tracks.music.body")}
               </p>
               <div style={{ marginTop: 14, fontSize: 13, color: "#ddd6fe" }}>
-                Submissions: <strong>{musicSubmissions}</strong> · Certified: <strong>{musicCertified}</strong>
+                {t("awardsHub.tracks.row.subs")} <strong>{musicSubmissions}</strong> · {t("awardsHub.tracks.row.cert")} <strong>{musicCertified}</strong>
               </div>
               <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 10 }}>
                 <Link
@@ -349,7 +328,7 @@ export default async function AwardsHomePage() {
                     fontSize: 13,
                   }}
                 >
-                  Open music showcase →
+                  {t("awardsHub.tracks.btn.music")}
                 </Link>
                 <Link
                   href={musicSubmitHref}
@@ -365,7 +344,7 @@ export default async function AwardsHomePage() {
                     fontSize: 13,
                   }}
                 >
-                  Submit to Planet →
+                  {t("awardsHub.tracks.btn.submit")}
                 </Link>
               </div>
             </section>
@@ -379,16 +358,16 @@ export default async function AwardsHomePage() {
               }}
             >
               <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                <h3 style={{ margin: 0, fontWeight: 900, color: "#f8fafc", fontSize: 22 }}>AEVION Film Awards</h3>
+                <h3 style={{ margin: 0, fontWeight: 900, color: "#f8fafc", fontSize: 22 }}>{t("awardsHub.tracks.film.title")}</h3>
                 <span style={{ fontSize: 11, fontWeight: 800, color: "#fde68a", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  Next wave · live
+                  {t("awardsHub.tracks.film.tag")}
                 </span>
               </div>
               <p style={{ margin: "8px 0 0", lineHeight: 1.6, fontSize: 14, color: "#fde68a" }}>
-                The AI-film wave: short films, video, animation, generative cinema. Like the Oscars — for AI and digital film.
+                {t("awardsHub.tracks.film.body")}
               </p>
               <div style={{ marginTop: 14, fontSize: 13, color: "#fde68a" }}>
-                Submissions: <strong>{filmSubmissions}</strong> · Certified: <strong>{filmCertified}</strong>
+                {t("awardsHub.tracks.row.subs")} <strong>{filmSubmissions}</strong> · {t("awardsHub.tracks.row.cert")} <strong>{filmCertified}</strong>
               </div>
               <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 10 }}>
                 <Link
@@ -404,7 +383,7 @@ export default async function AwardsHomePage() {
                     fontSize: 13,
                   }}
                 >
-                  Open film showcase →
+                  {t("awardsHub.tracks.btn.film")}
                 </Link>
                 <Link
                   href={filmSubmitHref}
@@ -420,7 +399,7 @@ export default async function AwardsHomePage() {
                     fontSize: 13,
                   }}
                 >
-                  Submit to Planet →
+                  {t("awardsHub.tracks.btn.submit")}
                 </Link>
               </div>
             </section>
@@ -437,8 +416,8 @@ export default async function AwardsHomePage() {
               color: "#cbd5e1",
             }}
           >
-            Planet participants with active symbol (quorum <strong>Y</strong>): <strong>{y}</strong>
-            {voters ? <> · Distinct voters all-time: <strong>{voters}</strong></> : null}
+            {t("awardsHub.quorum.before")} <strong>Y</strong>{t("awardsHub.quorum.after")} <strong>{y}</strong>
+            {voters ? <> · {t("awardsHub.quorum.voters")} <strong>{voters}</strong></> : null}
           </div>
         </section>
 
@@ -451,7 +430,7 @@ export default async function AwardsHomePage() {
           }}
         >
           <p style={{ color: "#94a3b8", fontSize: 15, lineHeight: 1.6, marginBottom: 20 }}>
-            Awards are the marketing engine for the trust pipeline: every winner is a case study + a recurring user across QRight, Bank and Planet.
+            {t("awardsHub.footer.body")}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
             <Link
@@ -468,7 +447,7 @@ export default async function AwardsHomePage() {
                 fontSize: 15,
               }}
             >
-              Investor pitch →
+              {t("awardsHub.footer.btn.pitch")}
             </Link>
             <Link
               href="/demo"
@@ -484,7 +463,7 @@ export default async function AwardsHomePage() {
                 fontSize: 15,
               }}
             >
-              Live demo →
+              {t("awardsHub.footer.btn.demo")}
             </Link>
             <Link
               href="/qright"
@@ -500,7 +479,7 @@ export default async function AwardsHomePage() {
                 boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
               }}
             >
-              Register authorship in QRight →
+              {t("awardsHub.footer.btn.qright")}
             </Link>
           </div>
         </footer>

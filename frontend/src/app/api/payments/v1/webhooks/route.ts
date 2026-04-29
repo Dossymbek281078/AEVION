@@ -20,6 +20,10 @@ const ALLOWED_EVENTS = [
   "payment.refunded",
   "settlement.scheduled",
   "settlement.paid",
+  "dispute.created",
+  "dispute.under_review",
+  "dispute.won",
+  "dispute.lost",
 ];
 
 export async function GET(req: NextRequest) {

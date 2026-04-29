@@ -9,7 +9,11 @@ type EventType =
   | "payment.failed"
   | "payment.refunded"
   | "settlement.scheduled"
-  | "settlement.paid";
+  | "settlement.paid"
+  | "dispute.created"
+  | "dispute.under_review"
+  | "dispute.won"
+  | "dispute.lost";
 
 type WebhookEndpoint = {
   id: string;
@@ -64,6 +68,10 @@ const EVENTS: { id: EventType; label: string; color: string }[] = [
   { id: "payment.refunded", label: "payment.refunded", color: "#f59e0b" },
   { id: "settlement.scheduled", label: "settlement.scheduled", color: "#2563eb" },
   { id: "settlement.paid", label: "settlement.paid", color: "#7c3aed" },
+  { id: "dispute.created", label: "dispute.created", color: "#b91c1c" },
+  { id: "dispute.under_review", label: "dispute.under_review", color: "#1e3a8a" },
+  { id: "dispute.won", label: "dispute.won", color: "#15803d" },
+  { id: "dispute.lost", label: "dispute.lost", color: "#7f1d1d" },
 ];
 
 const DEFAULT_EVENTS: EventType[] = [

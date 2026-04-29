@@ -123,6 +123,14 @@ const featureCards = [
     accent: "#475569",
     icon: "🧾",
   },
+  {
+    slug: "disputes",
+    title: "Disputes",
+    description:
+      "Open chargebacks against any paid link. 5-state lifecycle (needs_response → under_review → won/lost), 7-day SLA, webhook fanout via the retry queue.",
+    accent: "#b91c1c",
+    icon: "⚖",
+  },
 ];
 
 const roadmapItems = [
@@ -147,6 +155,8 @@ const roadmapItems = [
   { label: "Printable receipts /r/[id] with method + last4 + print CSS", status: "live" },
   { label: "Rate limiter (60/min per API key) with X-RateLimit-* headers", status: "live" },
   { label: "Audit log with KV persistence + viewer (filter, autorefresh)", status: "live" },
+  { label: "Webhook retry queue with exp backoff (10s→6h, 6 attempts) + Vercel cron", status: "live" },
+  { label: "Disputes endpoint + UI surface (5-state lifecycle, webhook fanout)", status: "live" },
 ];
 
 export default function PaymentsPage() {
@@ -175,7 +185,7 @@ export default function PaymentsPage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Payments Rail · v1.3 · 12 surfaces · audit + receipts + rate limit
+            Payments Rail · v1.4 · 13 surfaces · disputes + retry queue + cron
           </div>
 
           <h1

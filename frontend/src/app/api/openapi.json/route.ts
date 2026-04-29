@@ -50,6 +50,10 @@ const SPEC = {
           "payment.refunded",
           "settlement.scheduled",
           "settlement.paid",
+          "dispute.created",
+          "dispute.under_review",
+          "dispute.won",
+          "dispute.lost",
         ],
       },
       Error: {
@@ -261,6 +265,67 @@ const SPEC = {
             description: "Optional. Defaults to remaining refundable amount.",
           },
           reason: { type: "string" },
+        },
+      },
+      Dispute: {
+        type: "object",
+        required: ["id", "link_id", "amount", "currency", "reason", "status", "due_by", "created"],
+        properties: {
+          id: { type: "string", example: "dp_q9w2k4abc" },
+          link_id: { type: "string" },
+          amount: { type: "number" },
+          currency: { type: "string" },
+          reason: {
+            type: "string",
+            enum: [
+              "fraudulent",
+              "product_not_received",
+              "product_unacceptable",
+              "duplicate",
+              "credit_not_processed",
+              "customer_signature_missing",
+              "general",
+            ],
+          },
+          status: {
+            type: "string",
+            enum: [
+              "warning_needs_response",
+              "under_review",
+              "won",
+              "lost",
+              "charge_refunded",
+            ],
+          },
+          evidence_url: { type: ["string", "null"] },
+          evidence_text: { type: ["string", "null"] },
+          due_by: { type: "integer" },
+          created: { type: "integer" },
+          updated: { type: "integer" },
+        },
+      },
+      DisputeCreate: {
+        type: "object",
+        required: ["link_id", "reason"],
+        properties: {
+          link_id: { type: "string" },
+          reason: { type: "string" },
+          amount: { type: "number" },
+          evidence_url: { type: "string" },
+          evidence_text: { type: "string" },
+          due_by: { type: "integer" },
+        },
+      },
+      DisputeAction: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: {
+            type: "string",
+            enum: ["respond", "resolve_won", "resolve_lost"],
+          },
+          evidence_url: { type: "string" },
+          evidence_text: { type: "string" },
         },
       },
       AuditEntry: {
@@ -520,6 +585,115 @@ const SPEC = {
           "409": {
             description:
               "Link is not paid, already fully refunded, or amount exceeds remaining.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+        },
+      },
+    },
+    "/v1/disputes": {
+      get: {
+        summary: "List disputes",
+        operationId: "listDisputes",
+        parameters: [
+          { name: "status", in: "query", schema: { type: "string" } },
+          { name: "link_id", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Disputes list.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/List" } },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        summary: "Open a dispute",
+        operationId: "createDispute",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DisputeCreate" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Dispute opened. Fires dispute.created webhook.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Dispute" } },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": {
+            description: "Link not found.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+        },
+      },
+    },
+    "/v1/disputes/{id}": {
+      get: {
+        summary: "Retrieve a dispute",
+        operationId: "getDispute",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "The dispute.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Dispute" } },
+            },
+          },
+          "404": {
+            description: "Dispute not found.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        summary: "Transition a dispute (respond / resolve_won / resolve_lost)",
+        operationId: "transitionDispute",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DisputeAction" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated dispute.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Dispute" } },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": {
+            description: "Dispute not found.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+          "409": {
+            description: "Illegal state transition.",
             content: {
               "application/json": { schema: { $ref: "#/components/schemas/Error" } },
             },

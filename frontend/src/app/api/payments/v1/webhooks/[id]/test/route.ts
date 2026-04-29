@@ -18,6 +18,10 @@ const ALLOWED_EVENTS = new Set([
   "payment.refunded",
   "settlement.scheduled",
   "settlement.paid",
+  "dispute.created",
+  "dispute.under_review",
+  "dispute.won",
+  "dispute.lost",
 ]);
 
 function samplePayload(event: string) {

@@ -3229,6 +3229,35 @@ function RunCard({
                     >
                       🔗 Public
                     </a>
+                    <button
+                      onClick={async () => {
+                        const origin = typeof window !== "undefined" ? window.location.origin : "";
+                        const snippet =
+                          `<iframe\n` +
+                          `  src="${origin}/qcoreai/embed/${run.shareToken}?theme=light"\n` +
+                          `  width="100%"\n` +
+                          `  height="520"\n` +
+                          `  frameborder="0"\n` +
+                          `  loading="lazy"\n` +
+                          `  title="QCoreAI run"\n` +
+                          `  style="border:1px solid rgba(15,23,42,0.1); border-radius:14px;"\n` +
+                          `></iframe>`;
+                        try {
+                          await navigator.clipboard.writeText(snippet);
+                          alert("Iframe snippet copied!\n\nTip: pass ?theme=dark&compact=1 to render minimal/dark.");
+                        } catch {
+                          window.prompt("Copy this iframe snippet:", snippet);
+                        }
+                      }}
+                      title="Copy embed iframe snippet to clipboard"
+                      style={{
+                        padding: "5px 10px", borderRadius: 8,
+                        background: "rgba(13,148,136,0.08)", border: "1px solid rgba(13,148,136,0.3)",
+                        color: "#0f766e", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      &lt;/&gt; Embed
+                    </button>
                     {onUnshare && (
                       <button
                         onClick={onUnshare}

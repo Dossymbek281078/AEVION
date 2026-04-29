@@ -407,6 +407,26 @@ code {
   }
 }
 
+/* ── Global a11y focus ring ───────────────────────────── */
+/* All keyboard-focused interactive controls get a visible accent ring,
+   regardless of their inline-styled background. Drop-in for default outline. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Skip mouse-focus halos so visual styling stays clean on click. */
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* Safe-area insets for iOS / notched devices */
 @supports (padding: max(0px)) {
   .cc-safe-bottom {

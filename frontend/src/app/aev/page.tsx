@@ -1736,6 +1736,7 @@ function NetworkPanel({ wallet, setWallet, network, setNetwork, owned }: {
                 </span>
                 <div style={{ display: "flex", gap: 4 }}>
                   <button onClick={() => triggerActivityFor(u.id)} title="Манально дернуть quality action"
+                    aria-label={`Дернуть quality action для ${u.name}`}
                     style={{
                       padding: "4px 8px", borderRadius: 4,
                       border: "1px solid rgba(134,239,172,0.5)", background: "rgba(134,239,172,0.15)",
@@ -2173,6 +2174,7 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
                   +{q.earned.toFixed(3)}
                 </span>
                 <button onClick={() => triggerOne(q.id)} title="Триггернуть cache-hit (демо)"
+                  aria-label="Триггернуть cache-hit для этого вопроса"
                   style={{
                     padding: "5px 9px", borderRadius: 5, border: "1px solid #fde047", background: "#fefce8",
                     color: "#854d0e", fontSize: 11, fontWeight: 800, cursor: "pointer",

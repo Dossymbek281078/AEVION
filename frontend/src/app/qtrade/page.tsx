@@ -2120,7 +2120,7 @@ export default function QTradePage() {
                           }}>
                           {b.status === "active" ? "⏸ Pause" : b.status === "paused" ? "▶ Resume" : "✓ Done"}
                         </button>
-                        <button onClick={() => deleteBot(b.id)} title="Удалить bot"
+                        <button onClick={() => deleteBot(b.id)} title="Удалить bot" aria-label={`Удалить DCA bot ${b.pair}`}
                           style={{
                             padding: "6px 10px", borderRadius: 5,
                             border: "1px solid rgba(252,165,165,0.4)", background: "rgba(252,165,165,0.10)",
@@ -2393,13 +2393,14 @@ export default function QTradePage() {
                           <button onClick={() => stopGrid(g.id)}
                             disabled={g.status === "stopped"}
                             title="Остановить (без удаления)"
+                            aria-label={`Остановить grid bot ${g.pair}`}
                             style={{
                               padding: "6px 8px", borderRadius: 5,
                               border: "1px solid rgba(253,224,71,0.40)", background: "rgba(253,224,71,0.10)",
                               color: g.status === "stopped" ? "#64748b" : "#fde68a",
                               fontSize: 11, fontWeight: 800, cursor: g.status === "stopped" ? "default" : "pointer",
                             }}>⏹</button>
-                          <button onClick={() => deleteGrid(g.id)} title="Удалить grid bot"
+                          <button onClick={() => deleteGrid(g.id)} title="Удалить grid bot" aria-label={`Удалить grid bot ${g.pair}`}
                             style={{
                               padding: "6px 8px", borderRadius: 5,
                               border: "1px solid rgba(252,165,165,0.40)", background: "rgba(252,165,165,0.10)",

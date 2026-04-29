@@ -10379,6 +10379,160 @@ Object.assign(translations.en, AWARDS_PORTAL_EXTRA_EN);
 Object.assign(translations.ru, AWARDS_PORTAL_EXTRA_RU);
 Object.assign(translations.kk, AWARDS_PORTAL_EXTRA_KK);
 
+const AWARDS_TRACK_PANEL_EXTRA_EN: Record<string, string> = {
+  "awardsTrack.label.music": "Music",
+  "awardsTrack.label.film": "Film",
+
+  "awardsTrack.toast.requiredFields": "Title, author and media URL are required.",
+  "awardsTrack.toast.submitted": "Submitted \"{title}\" — pending Planet validation.",
+  "awardsTrack.toast.resetConfirm": "Reset all locally-stored {label} submissions and votes? This cannot be undone.",
+  "awardsTrack.toast.resetDone": "Local {label} submissions reset.",
+
+  "awardsTrack.form.kicker.before": "Submit your work · ",
+  "awardsTrack.form.h2.before": "Add a ",
+  "awardsTrack.form.h2.after": " entry",
+  "awardsTrack.form.intro": "Demo mode — backend submission endpoint coming in next sprint. Entries are saved to your browser only.",
+
+  "awardsTrack.form.title.label": "Title *",
+  "awardsTrack.form.title.placeholder": "e.g. Aurora Bloom",
+  "awardsTrack.form.author.label.music": "Author / band *",
+  "awardsTrack.form.author.label.film": "Author / studio *",
+  "awardsTrack.form.author.placeholder.music": "e.g. NEU.WAV",
+  "awardsTrack.form.author.placeholder.film": "e.g. Studio Halberd",
+  "awardsTrack.form.media.label": "Media URL *",
+  "awardsTrack.form.media.placeholder": "https:// IPFS, YouTube, SoundCloud…",
+  "awardsTrack.form.year.label": "Year",
+  "awardsTrack.form.genre.label": "Genre",
+  "awardsTrack.form.desc.label": "Description (optional)",
+  "awardsTrack.form.desc.placeholder": "One or two sentences about the work.",
+  "awardsTrack.form.submit": "Submit work →",
+  "awardsTrack.form.localEntries": "Local entries:",
+
+  "awardsTrack.payout.kicker": "AEC payout",
+  "awardsTrack.payout.aria": "AEC payout schedule",
+  "awardsTrack.payout.text.before": "Top-3 finishers receive AEC payouts:",
+  "awardsTrack.payout.first": "1st = {n} AEC",
+  "awardsTrack.payout.second": "2nd = {n} AEC",
+  "awardsTrack.payout.third": "3rd = {n} AEC",
+  "awardsTrack.payout.text.after": ", settled to your AEVION Bank wallet.",
+
+  "awardsTrack.lb.h2": "Submitted works",
+  "awardsTrack.lb.totalSorted": "{n} total · sorted by votes",
+  "awardsTrack.lb.empty": "No submissions yet — be the first.",
+  "awardsTrack.lb.rank1": "Rank #1",
+  "awardsTrack.lb.rank2": "Rank #2",
+  "awardsTrack.lb.rank3": "Rank #3",
+  "awardsTrack.lb.demoSeed": "demo seed",
+  "awardsTrack.lb.votes": "votes",
+  "awardsTrack.lb.vote": "Vote",
+  "awardsTrack.lb.voted": "Voted ✓",
+  "awardsTrack.lb.reset": "Reset all local votes (admin / testing)",
+};
+
+const AWARDS_TRACK_PANEL_EXTRA_RU: Record<string, string> = {
+  "awardsTrack.label.music": "Музыка",
+  "awardsTrack.label.film": "Кино",
+
+  "awardsTrack.toast.requiredFields": "Название, автор и ссылка на медиа обязательны.",
+  "awardsTrack.toast.submitted": "Заявка \"{title}\" принята — ожидает валидации Planet.",
+  "awardsTrack.toast.resetConfirm": "Сбросить все локально сохранённые заявки и голоса ({label})? Действие необратимо.",
+  "awardsTrack.toast.resetDone": "Локальные заявки сброшены ({label}).",
+
+  "awardsTrack.form.kicker.before": "Подайте работу · ",
+  "awardsTrack.form.h2.before": "Новая заявка — ",
+  "awardsTrack.form.h2.after": "",
+  "awardsTrack.form.intro": "Демо-режим — backend-эндпойнт подачи появится в следующем спринте. Заявки сохраняются только в вашем браузере.",
+
+  "awardsTrack.form.title.label": "Название *",
+  "awardsTrack.form.title.placeholder": "например, Aurora Bloom",
+  "awardsTrack.form.author.label.music": "Автор / группа *",
+  "awardsTrack.form.author.label.film": "Автор / студия *",
+  "awardsTrack.form.author.placeholder.music": "например, NEU.WAV",
+  "awardsTrack.form.author.placeholder.film": "например, Studio Halberd",
+  "awardsTrack.form.media.label": "Ссылка на медиа *",
+  "awardsTrack.form.media.placeholder": "https:// IPFS, YouTube, SoundCloud…",
+  "awardsTrack.form.year.label": "Год",
+  "awardsTrack.form.genre.label": "Жанр",
+  "awardsTrack.form.desc.label": "Описание (опционально)",
+  "awardsTrack.form.desc.placeholder": "Одно-два предложения о работе.",
+  "awardsTrack.form.submit": "Отправить работу →",
+  "awardsTrack.form.localEntries": "Локальных записей:",
+
+  "awardsTrack.payout.kicker": "Выплата AEC",
+  "awardsTrack.payout.aria": "Расписание выплат AEC",
+  "awardsTrack.payout.text.before": "Топ-3 получают выплаты в AEC:",
+  "awardsTrack.payout.first": "1-е = {n} AEC",
+  "awardsTrack.payout.second": "2-е = {n} AEC",
+  "awardsTrack.payout.third": "3-е = {n} AEC",
+  "awardsTrack.payout.text.after": ", зачисление прямо в кошелёк AEVION Bank.",
+
+  "awardsTrack.lb.h2": "Заявки",
+  "awardsTrack.lb.totalSorted": "Всего: {n} · сортировка по голосам",
+  "awardsTrack.lb.empty": "Заявок пока нет — будьте первым.",
+  "awardsTrack.lb.rank1": "1-е место",
+  "awardsTrack.lb.rank2": "2-е место",
+  "awardsTrack.lb.rank3": "3-е место",
+  "awardsTrack.lb.demoSeed": "демо-сид",
+  "awardsTrack.lb.votes": "голосов",
+  "awardsTrack.lb.vote": "Голосовать",
+  "awardsTrack.lb.voted": "Голос отдан ✓",
+  "awardsTrack.lb.reset": "Сбросить все локальные голоса (админ / тест)",
+};
+
+const AWARDS_TRACK_PANEL_EXTRA_KK: Record<string, string> = {
+  "awardsTrack.label.music": "Музыка",
+  "awardsTrack.label.film": "Кино",
+
+  "awardsTrack.toast.requiredFields": "Атау, автор және медиа сілтемесі міндетті.",
+  "awardsTrack.toast.submitted": "\"{title}\" өтінімі қабылданды — Planet валидациясын күтуде.",
+  "awardsTrack.toast.resetConfirm": "Жергілікті сақталған барлық өтінімдер мен дауыстарды ({label}) тазалау керек пе? Әрекет қайтарылмайды.",
+  "awardsTrack.toast.resetDone": "Жергілікті өтінімдер тазаланды ({label}).",
+
+  "awardsTrack.form.kicker.before": "Жұмысты жіберіңіз · ",
+  "awardsTrack.form.h2.before": "Жаңа өтінім — ",
+  "awardsTrack.form.h2.after": "",
+  "awardsTrack.form.intro": "Демо-режим — өтінім backend-эндпойнті келесі спринтте келеді. Өтінімдер тек браузерде сақталады.",
+
+  "awardsTrack.form.title.label": "Атауы *",
+  "awardsTrack.form.title.placeholder": "мысалы, Aurora Bloom",
+  "awardsTrack.form.author.label.music": "Автор / топ *",
+  "awardsTrack.form.author.label.film": "Автор / студия *",
+  "awardsTrack.form.author.placeholder.music": "мысалы, NEU.WAV",
+  "awardsTrack.form.author.placeholder.film": "мысалы, Studio Halberd",
+  "awardsTrack.form.media.label": "Медиа сілтемесі *",
+  "awardsTrack.form.media.placeholder": "https:// IPFS, YouTube, SoundCloud…",
+  "awardsTrack.form.year.label": "Жыл",
+  "awardsTrack.form.genre.label": "Жанр",
+  "awardsTrack.form.desc.label": "Сипаттама (қалауыңыз бойынша)",
+  "awardsTrack.form.desc.placeholder": "Жұмыс туралы бір-екі сөйлем.",
+  "awardsTrack.form.submit": "Жұмысты жіберу →",
+  "awardsTrack.form.localEntries": "Жергілікті жазбалар:",
+
+  "awardsTrack.payout.kicker": "AEC төлемі",
+  "awardsTrack.payout.aria": "AEC төлем кестесі",
+  "awardsTrack.payout.text.before": "Топ-3 AEC төлемін алады:",
+  "awardsTrack.payout.first": "1-орын = {n} AEC",
+  "awardsTrack.payout.second": "2-орын = {n} AEC",
+  "awardsTrack.payout.third": "3-орын = {n} AEC",
+  "awardsTrack.payout.text.after": ", тікелей AEVION Bank әмиянына түседі.",
+
+  "awardsTrack.lb.h2": "Жіберілген жұмыстар",
+  "awardsTrack.lb.totalSorted": "Барлығы: {n} · дауыс бойынша сұрыпталған",
+  "awardsTrack.lb.empty": "Әзірге өтінімдер жоқ — алғашқы болыңыз.",
+  "awardsTrack.lb.rank1": "1-орын",
+  "awardsTrack.lb.rank2": "2-орын",
+  "awardsTrack.lb.rank3": "3-орын",
+  "awardsTrack.lb.demoSeed": "демо-сид",
+  "awardsTrack.lb.votes": "дауыс",
+  "awardsTrack.lb.vote": "Дауыс беру",
+  "awardsTrack.lb.voted": "Дауыс берілді ✓",
+  "awardsTrack.lb.reset": "Барлық жергілікті дауыстарды тазалау (админ / тест)",
+};
+
+Object.assign(translations.en, AWARDS_TRACK_PANEL_EXTRA_EN);
+Object.assign(translations.ru, AWARDS_TRACK_PANEL_EXTRA_RU);
+Object.assign(translations.kk, AWARDS_TRACK_PANEL_EXTRA_KK);
+
 function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;
   let r = s;

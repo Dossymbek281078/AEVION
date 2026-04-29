@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
   AEC_PAYOUTS,
   AwardSubmission,
@@ -51,17 +52,18 @@ const FILM_THEME: Theme = {
   formBorder: "rgba(251,191,36,0.3)",
 };
 
-const MEDAL_COLORS: Record<number, { ring: string; bg: string; label: string }> = {
-  0: { ring: "#fde047", bg: "rgba(253,224,71,0.12)", label: "Rank #1" },
-  1: { ring: "#cbd5e1", bg: "rgba(203,213,225,0.10)", label: "Rank #2" },
-  2: { ring: "#d97706", bg: "rgba(217,119,6,0.12)", label: "Rank #3" },
+const MEDAL_COLORS: Record<number, { ring: string; bg: string; labelKey: string }> = {
+  0: { ring: "#fde047", bg: "rgba(253,224,71,0.12)", labelKey: "awardsTrack.lb.rank1" },
+  1: { ring: "#cbd5e1", bg: "rgba(203,213,225,0.10)", labelKey: "awardsTrack.lb.rank2" },
+  2: { ring: "#d97706", bg: "rgba(217,119,6,0.12)", labelKey: "awardsTrack.lb.rank3" },
 };
 
 type Toast = { kind: "success" | "error"; text: string } | null;
 
 export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
+  const { t } = useI18n();
   const theme = track === "music" ? MUSIC_THEME : FILM_THEME;
-  const trackLabel = track === "music" ? "Music" : "Film";
+  const trackLabel = track === "music" ? t("awardsTrack.label.music") : t("awardsTrack.label.film");
   const currentYear = new Date().getFullYear();
 
   const [items, setItems] = useState<AwardSubmission[]>([]);
@@ -102,7 +104,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !author.trim() || !mediaUrl.trim()) {
-      setToast({ kind: "error", text: "Title, author and media URL are required." });
+      setToast({ kind: "error", text: t("awardsTrack.toast.requiredFields") });
       return;
     }
     const yr = Number.isFinite(year) ? Math.max(1900, Math.min(2100, Math.floor(year))) : currentYear;
@@ -115,7 +117,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
       year: yr,
       genre,
     });
-    setToast({ kind: "success", text: `Submitted "${sub.title}" — pending Planet validation.` });
+    setToast({ kind: "success", text: t("awardsTrack.toast.submitted", { title: sub.title }) });
     setTitle("");
     setAuthor("");
     setDescription("");
@@ -135,13 +137,11 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
 
   function handleReset() {
     if (!hydrated) return;
-    const ok = window.confirm(
-      `Reset all locally-stored ${trackLabel.toLowerCase()} submissions and votes? This cannot be undone.`
-    );
+    const ok = window.confirm(t("awardsTrack.toast.resetConfirm", { label: trackLabel.toLowerCase() }));
     if (!ok) return;
     resetTrack(track);
     refresh();
-    setToast({ kind: "success", text: `Local ${trackLabel.toLowerCase()} submissions reset.` });
+    setToast({ kind: "success", text: t("awardsTrack.toast.resetDone", { label: trackLabel.toLowerCase() }) });
   }
 
   const userCount = items.filter((x) => !x.seeded).length;
@@ -176,7 +176,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
               marginBottom: 8,
             }}
           >
-            Submit your work · {trackLabel}
+            {t("awardsTrack.form.kicker.before")}{trackLabel}
           </div>
           <h2
             id={`submit-${track}-heading`}
@@ -188,7 +188,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
               letterSpacing: "-0.02em",
             }}
           >
-            Add a {trackLabel.toLowerCase()} entry
+            {t("awardsTrack.form.h2.before")}{trackLabel.toLowerCase()}{t("awardsTrack.form.h2.after")}
           </h2>
           <p
             style={{
@@ -198,8 +198,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
               lineHeight: 1.55,
             }}
           >
-            Demo mode — backend submission endpoint coming in next sprint. Entries are saved to
-            your browser only.
+            {t("awardsTrack.form.intro")}
           </p>
 
           <form
@@ -210,37 +209,37 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
               gap: 12,
             }}
           >
-            <Field label="Title *">
+            <Field label={t("awardsTrack.form.title.label")}>
               <input
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Aurora Bloom"
+                placeholder={t("awardsTrack.form.title.placeholder")}
                 style={inputStyle(theme)}
               />
             </Field>
-            <Field label={track === "music" ? "Author / band *" : "Author / studio *"}>
+            <Field label={track === "music" ? t("awardsTrack.form.author.label.music") : t("awardsTrack.form.author.label.film")}>
               <input
                 type="text"
                 required
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
-                placeholder={track === "music" ? "e.g. NEU.WAV" : "e.g. Studio Halberd"}
+                placeholder={track === "music" ? t("awardsTrack.form.author.placeholder.music") : t("awardsTrack.form.author.placeholder.film")}
                 style={inputStyle(theme)}
               />
             </Field>
-            <Field label="Media URL *">
+            <Field label={t("awardsTrack.form.media.label")}>
               <input
                 type="url"
                 required
                 value={mediaUrl}
                 onChange={(e) => setMediaUrl(e.target.value)}
-                placeholder="https:// IPFS, YouTube, SoundCloud…"
+                placeholder={t("awardsTrack.form.media.placeholder")}
                 style={inputStyle(theme)}
               />
             </Field>
-            <Field label="Year">
+            <Field label={t("awardsTrack.form.year.label")}>
               <input
                 type="number"
                 min={1900}
@@ -250,7 +249,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                 style={inputStyle(theme)}
               />
             </Field>
-            <Field label="Genre">
+            <Field label={t("awardsTrack.form.genre.label")}>
               <select
                 value={genre}
                 onChange={(e) => setGenre(e.target.value)}
@@ -263,11 +262,11 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                 ))}
               </select>
             </Field>
-            <Field label="Description (optional)" full>
+            <Field label={t("awardsTrack.form.desc.label")} full>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="One or two sentences about the work."
+                placeholder={t("awardsTrack.form.desc.placeholder")}
                 rows={3}
                 style={{ ...inputStyle(theme), resize: "vertical", minHeight: 70 }}
               />
@@ -289,10 +288,10 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                   boxShadow: `0 8px 28px ${theme.border}`,
                 }}
               >
-                Submit work →
+                {t("awardsTrack.form.submit")}
               </button>
               <span style={{ fontSize: 12, color: "#94a3b8" }}>
-                Local entries: <strong style={{ color: theme.accent }}>{userCount}</strong>
+                {t("awardsTrack.form.localEntries")} <strong style={{ color: theme.accent }}>{userCount}</strong>
               </span>
             </div>
           </form>
@@ -335,7 +334,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
             alignItems: "center",
             gap: 14,
           }}
-          aria-label="AEC payout schedule"
+          aria-label={t("awardsTrack.payout.aria")}
         >
           <div
             style={{
@@ -346,14 +345,13 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
               textTransform: "uppercase",
             }}
           >
-            AEC payout
+            {t("awardsTrack.payout.kicker")}
           </div>
           <div style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.5, flex: "1 1 320px" }}>
-            Top-3 finishers receive AEC payouts:{" "}
-            <strong style={{ color: "#fde047" }}>1st = {AEC_PAYOUTS.first} AEC</strong>,{" "}
-            <strong style={{ color: "#cbd5e1" }}>2nd = {AEC_PAYOUTS.second} AEC</strong>,{" "}
-            <strong style={{ color: "#d97706" }}>3rd = {AEC_PAYOUTS.third} AEC</strong>, settled
-            to your AEVION Bank wallet.
+            {t("awardsTrack.payout.text.before")}{" "}
+            <strong style={{ color: "#fde047" }}>{t("awardsTrack.payout.first", { n: AEC_PAYOUTS.first })}</strong>,{" "}
+            <strong style={{ color: "#cbd5e1" }}>{t("awardsTrack.payout.second", { n: AEC_PAYOUTS.second })}</strong>,{" "}
+            <strong style={{ color: "#d97706" }}>{t("awardsTrack.payout.third", { n: AEC_PAYOUTS.third })}</strong>{t("awardsTrack.payout.text.after")}
           </div>
         </section>
 
@@ -379,10 +377,10 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                 letterSpacing: "-0.02em",
               }}
             >
-              Submitted works
+              {t("awardsTrack.lb.h2")}
             </h2>
             <div style={{ fontSize: 12, color: "#94a3b8" }}>
-              {items.length} total · sorted by votes
+              {t("awardsTrack.lb.totalSorted", { n: items.length })}
             </div>
           </div>
 
@@ -398,7 +396,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                 textAlign: "center",
               }}
             >
-              No submissions yet — be the first.
+              {t("awardsTrack.lb.empty")}
             </div>
           ) : null}
 
@@ -448,7 +446,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                         border: `1px solid ${medal.ring}`,
                       }}
                     >
-                      {medal.label}
+                      {t(medal.labelKey)}
                     </div>
                   ) : (
                     <div
@@ -532,7 +530,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                           letterSpacing: "0.05em",
                         }}
                       >
-                        demo seed
+                        {t("awardsTrack.lb.demoSeed")}
                       </span>
                     ) : null}
                   </div>
@@ -577,7 +575,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                     >
                       {sub.votes}
                       <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                        votes
+                        {t("awardsTrack.lb.votes")}
                       </span>
                     </div>
                     <button
@@ -598,7 +596,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                         opacity: alreadyVoted ? 0.7 : 1,
                       }}
                     >
-                      {alreadyVoted ? "Voted ✓" : "Vote"}
+                      {alreadyVoted ? t("awardsTrack.lb.voted") : t("awardsTrack.lb.vote")}
                     </button>
                   </div>
                 </article>
@@ -622,7 +620,7 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
                 padding: 0,
               }}
             >
-              Reset all local votes (admin / testing)
+              {t("awardsTrack.lb.reset")}
             </button>
           </div>
         </section>

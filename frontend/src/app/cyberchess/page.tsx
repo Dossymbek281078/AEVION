@@ -714,6 +714,7 @@ export default function CyberChessPage(){
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
+  const moveListScrollRef=useRef<HTMLDivElement>(null);
   const fPz=PUZZLES.filter(p=>{
     // Category filter
     if(pzCategory==="tactics"&&p.goal!=="Best move")return false;
@@ -1689,6 +1690,20 @@ export default function CyberChessPage(){
     if(pzSolvedCount===50)unlockAch("puzzles_50",150,"50 пазлов решено");
     if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
   },[pzSolvedCount,unlockAch]);
+
+  /* ── Move list auto-scroll к browseIdx ── */
+  useEffect(()=>{
+    const cont=moveListScrollRef.current;if(!cont)return;
+    if(hist.length===0)return;
+    const idx=browseIdx<0?Math.floor((hist.length-1)/2):Math.floor(browseIdx/2);
+    const target=cont.querySelector(`[data-pair-idx="${idx}"]`) as HTMLElement|null;
+    if(!target)return;
+    const cR=cont.getBoundingClientRect();
+    const tR=target.getBoundingClientRect();
+    if(tR.top<cR.top||tR.bottom>cR.bottom){
+      target.scrollIntoView({block:"nearest",behavior:"smooth"});
+    }
+  },[browseIdx,hist.length]);
 
   /* ── Move slide animation: после каждого реального хода (lm change)
      запускаем floating piece от from к to. Хард-таймаут 180ms — потом
@@ -4239,19 +4254,20 @@ export default function CyberChessPage(){
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
               </div>}
             </div>
-            <div style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0"}}>
+            <div ref={moveListScrollRef} style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
               {hist.length?<div style={{display:"grid",gridTemplateColumns:"36px 1fr 1fr",fontSize:13,fontFamily:"monospace"}}>
                 {Array.from({length:Math.ceil(hist.length/2)}).map((_,i)=>{
                   const white=hist[i*2],black=hist[i*2+1];
                   const wIdx=i*2,bIdx=i*2+1;
                   const wIsBrowsed=browseIdx===wIdx||(browseIdx<0&&wIdx===hist.length-1);
                   const bIsBrowsed=browseIdx===bIdx||(browseIdx<0&&bIdx===hist.length-1);
+                  const isActivePair=wIsBrowsed||bIsBrowsed;
                   const wEval=analysis[wIdx];const bEval=analysis[bIdx];
                   const wQ=wEval?.quality;const bQ=bEval?.quality;
                   const qIcon=(q?:string)=>q==="blunder"?"??":q==="mistake"?"?":q==="inacc"?"?!":q==="great"?"!":"";
                   const qColor=(q?:string)=>q==="blunder"?T.danger:q==="mistake"?"#ea580c":q==="inacc"?"#ca8a04":q==="great"?T.accent:"";
                   return <React.Fragment key={i}>
-                    <span style={{color:T.dim,fontWeight:700,textAlign:"center",padding:"5px 0",background:"#fafafa",borderRight:`1px solid ${T.border}`,fontSize:12}}>{i+1}</span>
+                    <span data-pair-idx={i} data-active={isActivePair?"1":undefined} style={{color:T.dim,fontWeight:700,textAlign:"center",padding:"5px 0",background:isActivePair?"rgba(5,150,105,0.10)":"#fafafa",borderRight:`1px solid ${T.border}`,fontSize:12}}>{i+1}</span>
                     <span onClick={()=>white&&(()=>{const g=new Chess(fenHist[wIdx+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(wIdx);sLm(null);sSel(null);sVm(new Set());})()} style={{color:T.text,fontWeight:600,padding:"5px 10px",background:wIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:wIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span>{white||""}{wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3}}>{qIcon(wQ)}</span>}</span>
                       {wEval&&<span style={{fontSize:10,color:wEval.cp>0?T.accent:wEval.cp<0?T.danger:T.dim,fontWeight:700}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}

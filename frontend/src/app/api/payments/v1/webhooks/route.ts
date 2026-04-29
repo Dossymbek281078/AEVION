@@ -11,6 +11,7 @@ import {
   withCors,
   type ApiWebhook,
 } from "../_lib";
+import { logAudit } from "../_audit";
 
 const ALLOWED_EVENTS = [
   "checkout.created",
@@ -79,6 +80,10 @@ export async function POST(req: NextRequest) {
   }
   store.webhooks.set(id, wh);
   idem.cleanup();
+  void logAudit(req, "webhook.registered", id, {
+    url: wh.url,
+    events: wh.events,
+  });
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

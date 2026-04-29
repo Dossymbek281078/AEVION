@@ -12,6 +12,7 @@ import {
   type ApiLink,
   type Currency,
 } from "../_lib";
+import { logAudit } from "../_audit";
 
 const ALLOWED_CURRENCIES: Currency[] = ["USD", "EUR", "KZT", "AEC"];
 
@@ -92,6 +93,11 @@ export async function POST(req: NextRequest) {
   }
   store.links.set(id, link);
   idem.cleanup();
+  void logAudit(req, "link.created", id, {
+    amount: link.amount,
+    currency: link.currency,
+    settlement: link.settlement,
+  });
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

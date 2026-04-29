@@ -115,6 +115,14 @@ const featureCards = [
     accent: "#ea580c",
     icon: "↩",
   },
+  {
+    slug: "audit",
+    title: "Audit log",
+    description:
+      "Append-only log of every state-changing API call — actor key prefix, IP, UA, target id. Filterable, KV-persisted, 5s auto-refresh.",
+    accent: "#475569",
+    icon: "🧾",
+  },
 ];
 
 const roadmapItems = [
@@ -136,6 +144,9 @@ const roadmapItems = [
   { label: "/api/health probe + live /payments/status monitor", status: "live" },
   { label: "Persistence adapter (Vercel KV-aware, memory fallback)", status: "live" },
   { label: "Refunds API + UI with webhook fanout (payment.refunded)", status: "live" },
+  { label: "Printable receipts /r/[id] with method + last4 + print CSS", status: "live" },
+  { label: "Rate limiter (60/min per API key) with X-RateLimit-* headers", status: "live" },
+  { label: "Audit log with KV persistence + viewer (filter, autorefresh)", status: "live" },
 ];
 
 export default function PaymentsPage() {
@@ -164,7 +175,7 @@ export default function PaymentsPage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Payments Rail · v1.3 · 11 surfaces · refunds + KV-ready persistence
+            Payments Rail · v1.3 · 12 surfaces · audit + receipts + rate limit
           </div>
 
           <h1

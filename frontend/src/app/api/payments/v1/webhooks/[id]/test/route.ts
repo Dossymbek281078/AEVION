@@ -9,6 +9,7 @@ import {
   store,
   withCors,
 } from "../../../_lib";
+import { logAudit } from "../../../_audit";
 
 const ALLOWED_EVENTS = new Set([
   "checkout.created",
@@ -100,6 +101,13 @@ export async function POST(
   }
 
   const durationMs = Date.now() - startedAt;
+
+  void logAudit(req, "webhook.test_fired", ep.id, {
+    event,
+    delivered: success,
+    http_code: httpCode,
+    duration_ms: durationMs,
+  });
 
   return attachRateHeaders(
     withCors(

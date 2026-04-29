@@ -12,6 +12,7 @@ import {
   type ApiLink,
 } from "../_lib";
 import { kvList, kvPush } from "../_persist";
+import { logAudit } from "../_audit";
 
 const REFUNDS_KEY = "refunds.v1";
 const REFUND_LIST_CAP = 500;
@@ -129,6 +130,13 @@ export async function POST(req: NextRequest) {
   };
 
   await kvPush(REFUNDS_KEY, refund, REFUND_LIST_CAP);
+
+  void logAudit(req, "refund.issued", refund.id, {
+    link_id: refund.link_id,
+    amount: refund.amount,
+    currency: refund.currency,
+    reason: refund.reason,
+  });
 
   // fire & forget webhooks
   void fanoutRefundWebhook(refund, getOrigin(req));

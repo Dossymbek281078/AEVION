@@ -12,6 +12,7 @@ import {
   type ApiCheckout,
   type Currency,
 } from "../_lib";
+import { logAudit } from "../_audit";
 
 const ALLOWED_CURRENCIES: Currency[] = ["USD", "EUR", "KZT", "AEC"];
 
@@ -78,6 +79,10 @@ export async function POST(req: NextRequest) {
   }
   store.checkouts.set(id, checkout);
   idem.cleanup();
+  void logAudit(req, "checkout.created", id, {
+    amount: checkout.amount,
+    currency: checkout.currency,
+  });
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

@@ -263,6 +263,23 @@ const SPEC = {
           reason: { type: "string" },
         },
       },
+      AuditEntry: {
+        type: "object",
+        required: ["id", "at", "action", "actor_prefix"],
+        properties: {
+          id: { type: "string" },
+          at: { type: "integer", description: "Unix milliseconds" },
+          action: { type: "string", example: "link.created" },
+          target_id: { type: ["string", "null"] },
+          actor_prefix: {
+            type: "string",
+            description: "First 12 chars of the API key, masked.",
+          },
+          ip: { type: ["string", "null"] },
+          ua: { type: ["string", "null"] },
+          meta: { type: ["object", "null"], additionalProperties: true },
+        },
+      },
     },
     responses: {
       Unauthorized: {
@@ -507,6 +524,26 @@ const SPEC = {
               "application/json": { schema: { $ref: "#/components/schemas/Error" } },
             },
           },
+        },
+      },
+    },
+    "/v1/audit": {
+      get: {
+        summary: "Read audit log",
+        operationId: "listAudit",
+        parameters: [
+          { name: "action", in: "query", schema: { type: "string" } },
+          { name: "target_id", in: "query", schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 100 } },
+        ],
+        responses: {
+          "200": {
+            description: "Audit entries (newest first).",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/List" } },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
     },

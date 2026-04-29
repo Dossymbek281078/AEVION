@@ -11,6 +11,7 @@ import {
   type ApiSubscription,
   type Currency,
 } from "../_lib";
+import { logAudit } from "../_audit";
 
 const ALLOWED_CURRENCIES: Currency[] = ["USD", "EUR", "KZT", "AEC"];
 const ALLOWED_INTERVALS: ApiSubscription["interval"][] = [
@@ -108,6 +109,12 @@ export async function POST(req: NextRequest) {
   }
   store.subscriptions.set(id, sub);
   idem.cleanup();
+  void logAudit(req, "subscription.created", id, {
+    customer: sub.customer,
+    plan_name: sub.plan_name,
+    interval: sub.interval,
+    trial_days: sub.trial_days,
+  });
   return attachRateHeaders(
     withCors(
       new Response(responseBody, {

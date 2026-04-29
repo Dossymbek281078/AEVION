@@ -605,6 +605,27 @@ export default function BankSmokePage() {
             }}
           >
             <span style={{ fontWeight: 800 }}>All 11 steps passed.</span>
+            {(() => {
+              const totalMs = steps.reduce((acc, s) => acc + (s.ms ?? 0), 0);
+              const seconds = (totalMs / 1000).toFixed(2);
+              return (
+                <span
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    background: "rgba(6,95,70,0.18)",
+                    fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    color: "#065f46",
+                  }}
+                  title={`Sum of measured step latencies: ${totalMs.toFixed(0)} ms`}
+                >
+                  {seconds}s total
+                </span>
+              );
+            })()}
             <span>The signed transfer is now in your local audit log.</span>
             <Link
               href={`/bank/receipt/${encodeURIComponent(transferId)}`}

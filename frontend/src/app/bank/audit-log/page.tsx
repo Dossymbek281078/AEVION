@@ -73,14 +73,31 @@ function downloadBlob(name: string, mime: string, content: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+function readQueryFilters(): { kind: Kind; from: string; to: string; search: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const kindRaw = sp.get("kind");
+    const kind: Kind = kindRaw === "topup" || kindRaw === "transfer" || kindRaw === "all" ? kindRaw : "all";
+    const from = sp.get("from") || todayPlus(-30);
+    const to = sp.get("to") || todayPlus(0);
+    const search = sp.get("q") || "";
+    return { kind, from, to, search };
+  } catch {
+    return null;
+  }
+}
+
 export default function AuditLogPage() {
   const { token, me, checked } = useAuthMe();
   const { account, operations, loading } = useBank(me, () => void 0);
   const [signatures, setSignatures] = useState<SignedOperation[]>([]);
-  const [kind, setKind] = useState<Kind>("all");
-  const [from, setFrom] = useState<string>(todayPlus(-30));
-  const [to, setTo] = useState<string>(todayPlus(0));
-  const [search, setSearch] = useState<string>("");
+  const initial = typeof window !== "undefined" ? readQueryFilters() : null;
+  const [kind, setKind] = useState<Kind>(initial?.kind ?? "all");
+  const [from, setFrom] = useState<string>(initial?.from ?? todayPlus(-30));
+  const [to, setTo] = useState<string>(initial?.to ?? todayPlus(0));
+  const [search, setSearch] = useState<string>(initial?.search ?? "");
+  const [shareCopied, setShareCopied] = useState<boolean>(false);
 
   useEffect(() => {
     setSignatures(loadSignatures());
@@ -96,6 +113,37 @@ export default function AuditLogPage() {
       }
     };
   }, []);
+
+  // Mirror filter state into the URL so a shared link reproduces the same view.
+  // We use replaceState (no history pollution) and skip if nothing changed.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const set = (k: string, v: string, def?: string) => {
+      if (v && v !== def) sp.set(k, v);
+      else sp.delete(k);
+    };
+    set("kind", kind, "all");
+    set("from", from, todayPlus(-30));
+    set("to", to, todayPlus(0));
+    set("q", search.trim());
+    const next = sp.toString();
+    const url = window.location.pathname + (next ? `?${next}` : "");
+    if (url !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, "", url);
+    }
+  }, [kind, from, to, search]);
+
+  const copyShareLink = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1800);
+    } catch {
+      /* clipboard blocked — silent */
+    }
+  };
 
   const rows: Row[] = useMemo(() => {
     if (!account) return [];
@@ -472,6 +520,26 @@ export default function AuditLogPage() {
             }}
           >
             ⎙ Print
+          </button>
+          <button
+            type="button"
+            onClick={copyShareLink}
+            title="Copy a shareable URL that reproduces the current filters"
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.18)",
+              background: shareCopied ? "rgba(16,185,129,0.12)" : "#fff",
+              color: shareCopied ? "#065f46" : "#0f172a",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              transition: "background 200ms ease, color 200ms ease",
+            }}
+          >
+            {shareCopied ? "✓ Copied" : "↗ Share link"}
           </button>
         </div>
 

@@ -8,6 +8,12 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { InfoTip } from "@/components/InfoTip";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
+import { Sparkline } from "@/components/Sparkline";
+import { useI18n } from "@/lib/i18n";
+import {
+  OWNER_REVOKE_REASON_CODES,
+  revokeReasonLabel,
+} from "@/lib/qrightRevokeReasons";
 import {
   exportAuthorKeyBackup,
   getOrCreateAuthorKey,
@@ -93,6 +99,9 @@ type RightObject = {
   createdAt: string;
   country?: string;
   city?: string;
+  revokedAt?: string | null;
+  revokeReason?: string | null;
+  revokeReasonCode?: string | null;
 };
 
 const KIND_OPTIONS = [
@@ -109,6 +118,7 @@ type Step = "form" | "processing" | "done";
 
 export default function QRightPage() {
   const { showToast } = useToast();
+  const { lang } = useI18n();
   const TOKEN_KEY = "aevion_auth_token_v1";
 
   const [step, setStep] = useState<Step>("form");
@@ -127,12 +137,76 @@ export default function QRightPage() {
   const [showRegistry, setShowRegistry] = useState(false);
   const [items, setItems] = useState<RightObject[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [registryScope, setRegistryScope] = useState<"all" | "mine">("all");
+  const [registryQuery, setRegistryQuery] = useState("");
+  const [hasAuth, setHasAuth] = useState(false);
+  const [revokingObj, setRevokingObj] = useState<RightObject | null>(null);
+  const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
+  const [revokeText, setRevokeText] = useState<string>("");
+  const [revokeBusy, setRevokeBusy] = useState(false);
+  const [stats, setStats] = useState<
+    Record<
+      string,
+      {
+        embedFetches: number;
+        lastFetchedAt: string | null;
+        series: { day: string; fetches: number }[];
+        topSources: { host: string; fetches: number }[];
+      }
+    >
+  >({});
+  useEffect(() => {
+    try {
+      setHasAuth(!!localStorage.getItem(TOKEN_KEY));
+    } catch {}
+  }, []);
 
   const [showTour, setShowTour] = useState(false);
   useEffect(() => {
     try {
       if (!localStorage.getItem(TOUR_KEY)) setShowTour(true);
     } catch {}
+  }, []);
+
+  /* ── Outgoing webhooks (owner) ── */
+  type WebhookRow = {
+    id: string;
+    url: string;
+    secretPrefix: string;
+    createdAt: string;
+    lastDeliveredAt: string | null;
+    lastFailedAt: string | null;
+    lastError: string | null;
+  };
+  const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
+  const [whUrl, setWhUrl] = useState("");
+  const [whBusy, setWhBusy] = useState(false);
+  const [newWebhookSecret, setNewWebhookSecret] = useState<
+    { id: string; url: string; secret: string } | null
+  >(null);
+
+  /* ── Live transparency tile (homepage) ── */
+  const [transparency, setTransparency] = useState<{
+    registered: number;
+    active: number;
+    revoked: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/api/qright/transparency"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.totals) return;
+        setTransparency({
+          registered: Number(data.totals.registered) || 0,
+          active: Number(data.totals.active) || 0,
+          revoked: Number(data.totals.revoked) || 0,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const dismissTour = () => {
     setShowTour(false);
@@ -323,16 +397,173 @@ export default function QRightPage() {
     }
   };
 
-  const loadRegistry = async () => {
+  const loadRegistry = async (
+    overrideScope?: "all" | "mine",
+    overrideQuery?: string
+  ) => {
+    const scope = overrideScope ?? registryScope;
+    const query = (overrideQuery ?? registryQuery).trim();
     setLoadingItems(true);
     try {
-      const res = await fetch(apiUrl("/api/qright/objects"), { headers: { ...authHeaders() } });
+      const path =
+        query.length >= 2
+          ? `/api/qright/objects/search?q=${encodeURIComponent(query)}`
+          : scope === "mine"
+          ? "/api/qright/objects?mine=1"
+          : "/api/qright/objects";
+      const res = await fetch(apiUrl(path), { headers: { ...authHeaders() } });
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);
+      } else if (scope === "mine" && res.status === 401) {
+        showToast("Sign in to see your works", "error");
       }
     } catch {}
     setLoadingItems(false);
+  };
+
+  // Lazy-load fetch counters when scope=mine — only useful to the owner.
+  useEffect(() => {
+    if (registryScope !== "mine" || items.length === 0) return;
+    let cancelled = false;
+    const headers = authHeaders();
+    if (!Object.keys(headers).length) return;
+    Promise.all(
+      items.map(async (it) => {
+        if (stats[it.id]) return null;
+        try {
+          const r = await fetch(apiUrl(`/api/qright/objects/${encodeURIComponent(it.id)}/stats`), {
+            headers,
+          });
+          if (!r.ok) return null;
+          const data = await r.json();
+          return [
+            it.id,
+            {
+              embedFetches: data.embedFetches || 0,
+              lastFetchedAt: data.lastFetchedAt || null,
+              series: (data.series?.points || []) as { day: string; fetches: number }[],
+              topSources: (data.topSources?.hosts || []) as { host: string; fetches: number }[],
+            },
+          ] as const;
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<
+        string,
+        {
+          embedFetches: number;
+          lastFetchedAt: string | null;
+          series: { day: string; fetches: number }[];
+          topSources: { host: string; fetches: number }[];
+        }
+      > = {};
+      for (const r of results) if (r) next[r[0]] = r[1];
+      if (Object.keys(next).length) setStats((prev) => ({ ...prev, ...next }));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, registryScope]);
+
+  const startRevoke = (obj: RightObject) => {
+    setRevokingObj(obj);
+    setRevokeCode("withdrawn");
+    setRevokeText("");
+  };
+
+  const loadWebhooks = async () => {
+    if (!hasAuth) return;
+    try {
+      const r = await fetch(apiUrl("/api/qright/webhooks"), { headers: authHeaders() });
+      if (r.ok) {
+        const data = await r.json();
+        setWebhooks(data.items || []);
+      }
+    } catch {
+      // Silent — webhooks panel is supplementary.
+    }
+  };
+
+  useEffect(() => {
+    if (registryScope === "mine" && hasAuth) loadWebhooks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registryScope, hasAuth]);
+
+  const addWebhook = async () => {
+    const url = whUrl.trim();
+    if (!url) return;
+    setWhBusy(true);
+    try {
+      const r = await fetch(apiUrl("/api/qright/webhooks"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ url }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setWhUrl("");
+        setNewWebhookSecret({ id: data.id, url: data.url, secret: data.secret });
+        loadWebhooks();
+      } else {
+        showToast(`Webhook add failed: ${data.error || r.status}`, "error");
+      }
+    } catch (e) {
+      showToast(`Webhook add failed: ${(e as Error).message}`, "error");
+    } finally {
+      setWhBusy(false);
+    }
+  };
+
+  const deleteWebhook = async (id: string) => {
+    if (!window.confirm("Delete this webhook? Receivers will stop getting revoke events.")) return;
+    try {
+      const r = await fetch(apiUrl(`/api/qright/webhooks/${encodeURIComponent(id)}`), {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (r.ok) {
+        setWebhooks((prev) => prev.filter((w) => w.id !== id));
+      } else {
+        showToast(`Webhook delete failed (${r.status})`, "error");
+      }
+    } catch (e) {
+      showToast(`Webhook delete failed: ${(e as Error).message}`, "error");
+    }
+  };
+
+  const submitRevoke = async () => {
+    if (!revokingObj) return;
+    setRevokeBusy(true);
+    try {
+      const res = await fetch(
+        apiUrl(`/api/qright/revoke/${encodeURIComponent(revokingObj.id)}`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            reasonCode: revokeCode,
+            reason: revokeText.trim() || undefined,
+          }),
+        }
+      );
+      if (res.ok) {
+        showToast("Revoked. Embeds flip red within ~5 min.", "success");
+        setRevokingObj(null);
+        await loadRegistry();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(`Revoke failed: ${data.error || res.status}`, "error");
+      }
+    } catch (e) {
+      showToast(`Revoke failed: ${(e as Error).message}`, "error");
+    } finally {
+      setRevokeBusy(false);
+    }
   };
 
   const reset = () => {
@@ -352,10 +583,10 @@ export default function QRightPage() {
   };
 
   const PROCESSING_STEPS = [
-    { label: "Registering in QRight...", icon: "📋" },
-    { label: "Signing with HMAC-SHA256...", icon: "🔏" },
-    { label: "Creating Quantum Shield...", icon: "🛡️" },
-    { label: "Protection complete!", icon: "✅" },
+    { label: "Hashing canonical content (SHA-256)...", icon: "📋" },
+    { label: "Co-signing with AEVION + your browser key...", icon: "🔏" },
+    { label: "Splitting key, anchoring to Bitcoin...", icon: "🛡️" },
+    { label: "Forever-verifiable certificate ready", icon: "✅" },
   ];
 
   return (
@@ -370,24 +601,65 @@ export default function QRightPage() {
               <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>🛡️</div>
               <div>
                 <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>Protect Your Work</h1>
-                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>QRight · QSign · Quantum Shield — all in one click</p>
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>One click. Four cryptographic layers. Forever-verifiable.</p>
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 14, opacity: 0.75, lineHeight: 1.6, maxWidth: 600 }}>
-              Register your intellectual property, sign it cryptographically, and protect it with military-grade Quantum Shield — automatically.
+              Register your work and walk away with a self-contained proof bundle — verifiable against Bitcoin and Ed25519 even if AEVION disappears tomorrow.
             </p>
           </div>
         </div>
+
+        {/* ── Live transparency tile ── */}
+        {transparency && transparency.registered > 0 && (
+          <Link
+            href="/qright/transparency"
+            aria-label="Open public transparency report"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 14,
+              padding: "12px 16px",
+              marginBottom: 18,
+              borderRadius: 14,
+              border: "1px solid rgba(13,148,136,0.2)",
+              background: "linear-gradient(135deg, rgba(13,148,136,0.06), rgba(6,182,212,0.04))",
+              textDecoration: "none",
+              color: "inherit",
+            }}
+          >
+            <span style={{ fontSize: 18 }} aria-hidden>📊</span>
+            <span style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Live registry
+              </span>
+              <span style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
+                <strong style={{ color: "#0d9488" }}>{transparency.registered.toLocaleString()}</strong> registered ·{" "}
+                <strong>{transparency.active.toLocaleString()}</strong> active
+                {transparency.revoked > 0 && (
+                  <>
+                    {" · "}
+                    <strong style={{ color: "#dc2626" }}>{transparency.revoked.toLocaleString()}</strong> revoked
+                  </>
+                )}
+              </span>
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#0d9488" }}>
+              Public report →
+            </span>
+          </Link>
+        )}
 
         {/* ── Step: FORM ── */}
         {step === "form" && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
               {[
-                { n: "1", title: "Describe", desc: "Tell us about your work", color: "#0d9488", tip: null },
-                { n: "2", title: "Register", desc: "SHA-256 hash in QRight", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },
-                { n: "3", title: "Sign", desc: "HMAC-SHA256 signature", color: "#8b5cf6", tip: { name: "HMAC-SHA256", text: "A tamper-detection signature using AEVION's secret key. Anyone verifying later re-derives it from the certificate fields and confirms nothing was changed." } },
-                { n: "4", title: "Shield", desc: "Ed25519 + Shamir SSS", color: "#f59e0b", tip: { name: "Ed25519 + Shamir", text: "We sign with Ed25519 (a public-key signature anyone can verify) and split the private key into 3 Shamir shards. Any 2 of 3 reconstruct it; AEVION never holds 2." } },
+                { n: "1", title: "Describe", desc: "Title and details", color: "#0d9488", tip: null },
+                { n: "2", title: "Fingerprint", desc: "Tamper-evident SHA-256", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },
+                { n: "3", title: "Co-sign", desc: "AEVION + your browser key", color: "#8b5cf6", tip: { name: "Hybrid signing", text: "AEVION signs with HMAC-SHA256 (server-side) and your browser adds a second Ed25519 signature with a key only you hold. Even total platform compromise cannot forge a certificate in your name." } },
+                { n: "4", title: "Anchor", desc: "Distributed key + Bitcoin", color: "#f59e0b", tip: { name: "Quantum Shield + OTS", text: "The Ed25519 private key is split into 3 Shamir shards across independent locations (any 2 reconstruct, AEVION never holds 2). The content hash is also submitted to OpenTimestamps and confirmed in a Bitcoin block — a trust anchor we don't control." } },
               ].map((s) => (
                 <div key={s.n} style={{ textAlign: "center", padding: "14px 8px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                   <div style={{ width: 32, height: 32, borderRadius: "50%", background: s.color, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, marginBottom: 6 }} aria-label={`Step ${s.n}`}>{s.n}</div>
@@ -403,7 +675,7 @@ export default function QRightPage() {
             {/* Author identity panel — your client-side keypair */}
             {cosignSupported === false && (
               <div role="alert" style={{ borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", padding: "12px 16px", marginBottom: 14, fontSize: 12, color: "#991b1b" }}>
-                Your browser does not support Ed25519 in WebCrypto. Co-signing is disabled — your work will still be protected by AEVION&apos;s 3-layer stack, but without the user-held key layer.
+                Your browser doesn&apos;t support Ed25519 in WebCrypto, so the author co-signature layer is disabled. The other three layers (SHA-256, HMAC, and Shamir-Ed25519) still apply — but for forge-resistance against an AEVION breach, open this page in an up-to-date Chromium or Firefox.
               </div>
             )}
             {keyError && (
@@ -470,9 +742,9 @@ export default function QRightPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, fontWeight: 900, color: "#0f766e", marginBottom: 4 }}>First time? Start here.</div>
                     <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.55 }}>
-                      Fill the <b>title</b> and <b>description</b> below — that is enough. Pick the work type, then press
+                      Fill <b>title</b> and <b>description</b>, pick the type, press
                       <span style={{ display: "inline-block", margin: "0 4px", padding: "1px 8px", borderRadius: 6, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 11 }}>🛡️ Protect My Work</span>.
-                      You get a certificate, an author shard to save offline, and a public verify URL — all in one click.
+                      You walk away with: a public verify URL, a downloadable PDF, an Author Shard you store offline, and a Verification Bundle that works even if AEVION goes dark. Save the bundle and the shard — that&apos;s the part we cannot do for you.
                     </div>
                   </div>
                   <button
@@ -531,7 +803,7 @@ export default function QRightPage() {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What is it? What makes it unique? The more detail, the stronger the protection."
+                  placeholder="What is it? What makes it identifiable as yours? Anything you write here becomes part of the signed certificate."
                   rows={4}
                   aria-label="Description of the work"
                   aria-required="true"
@@ -598,8 +870,12 @@ export default function QRightPage() {
           <div>
             <div style={{ textAlign: "center", padding: "32px 20px", marginBottom: 24, borderRadius: 16, background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(13,148,136,0.06))", border: "1px solid rgba(16,185,129,0.2)" }}>
               <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>Your Work is Protected!</div>
-              <div style={{ fontSize: 14, color: "#475569" }}>{result.message}</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>Protected. Provable. Permanent.</div>
+              <div style={{ fontSize: 14, color: "#475569" }}>
+                {result.cosign?.present
+                  ? "Four cryptographic layers active — including a co-signature only you can produce."
+                  : "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519."}
+              </div>
             </div>
 
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 20 }}>
@@ -745,7 +1021,7 @@ export default function QRightPage() {
                         CID: {result.witness.cid}
                       </div>
                       <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                        Anyone can fetch this shard and verify its integrity against the CID. No trust in AEVION required.
+                        Content-addressed: anyone can fetch this shard and verify the bytes match the CID. Pair it with your Author Shard to recover without AEVION.
                       </div>
                     </div>
                   )}
@@ -764,13 +1040,16 @@ export default function QRightPage() {
                 <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>What to do next</div>
               </div>
               <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 8, fontSize: 12, color: "#0f172a", lineHeight: 1.6 }}>
+                <li>
+                  <b>Download the Verification Bundle</b> — a single <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code> file containing every cryptographic proof. Drop it into <a href="/verify-offline" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}>/verify-offline</a> on any machine, any year, no AEVION required. <em>This is the proof that survives us.</em>
+                </li>
                 {result.authorShard && (
                   <li>
-                    <b>Save your Author Shard</b> (orange panel above) — download the JSON and store it offline. AEVION does not keep a copy.
+                    <b>Save your Author Shard</b> (orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.
                   </li>
                 )}
                 <li>
-                  <b>Share the verify link</b> with anyone — they will see the public certificate and every integrity check.
+                  <b>Share the verify link</b> — the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.
                   <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", fontSize: 11, fontFamily: "monospace", color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <span style={{ wordBreak: "break-all" as const }}>{typeof window !== "undefined" ? `${window.location.origin}/verify/${result.certificate.id}` : `/verify/${result.certificate.id}`}</span>
                     <button
@@ -783,16 +1062,13 @@ export default function QRightPage() {
                   </div>
                 </li>
                 <li>
-                  <b>Download the PDF</b> for paper records — court-ready printout with QR code linking back to the verify page.
+                  <b>Print the PDF</b> for paper records — court-ready, with a QR code back to the live verify page.
                 </li>
                 {result.witness && (
                   <li>
-                    <b>Even if AEVION goes down</b>, your Author Shard + the public Witness Shard (CID above) are enough to reconstruct the proof.
+                    <b>Pin the Witness Shard</b> — its CID is content-addressed, so anyone can independently fetch and verify it. Combined with your Author Shard, that&apos;s 2 of 3 — recovery without AEVION.
                   </li>
                 )}
-                <li>
-                  <b>Download the Verification Bundle</b> — a single <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code> with every proof needed to verify this certificate <em>without</em> AEVION. Drop it into <a href="/verify-offline" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}>/verify-offline</a> any time, on any machine, even years from now.
-                </li>
               </ol>
             </div>
 
@@ -828,6 +1104,13 @@ export default function QRightPage() {
               >
                 ⭐ Upgrade to Verified ($19)
               </Link>
+              <Link
+                href={`/qright/badge/${result.qright.id}`}
+                style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                title="Get an embeddable trust badge for your site"
+              >
+                🔖 Embed Badge
+              </Link>
               <button
                 onClick={reset}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}
@@ -861,14 +1144,73 @@ export default function QRightPage() {
 
           {showRegistry && (
             <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 12 }}>
+                <input
+                  type="search"
+                  placeholder="Search by title (≥ 2 chars)…"
+                  value={registryQuery}
+                  onChange={(e) => {
+                    setRegistryQuery(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") loadRegistry(registryScope, registryQuery);
+                  }}
+                  onBlur={() => loadRegistry(registryScope, registryQuery)}
+                  style={{
+                    flex: "1 1 240px",
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(15,23,42,0.15)",
+                    fontSize: 13,
+                    color: "#0f172a",
+                    background: "#fff",
+                  }}
+                />
+                {hasAuth && (
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: "#f1f5f9", borderRadius: 8 }}>
+                    {(["all", "mine"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          setRegistryScope(s);
+                          setRegistryQuery("");
+                          loadRegistry(s, "");
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 6,
+                          border: "none",
+                          background: registryScope === s ? "#0f172a" : "transparent",
+                          color: registryScope === s ? "#fff" : "#475569",
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {s === "mine" ? "Mine" : "All"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {loadingItems ? (
                 <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Loading registry...</div>
               ) : items.length === 0 ? (
-                <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>No records yet. Protect your first work above!</div>
+                <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>
+                  {registryQuery.trim().length >= 2
+                    ? `No matches for "${registryQuery.trim()}".`
+                    : registryScope === "mine"
+                    ? "You have no protected works yet."
+                    : "No records yet. Protect your first work above!"}
+                </div>
               ) : (
                 <div style={{ display: "grid", gap: 10 }}>
-                  {items.map((x) => (
-                    <div key={x.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: 14, background: "#fff" }}>
+                  {items.map((x) => {
+                    const isRevoked = !!x.revokedAt;
+                    const showRevokeBtn = registryScope === "mine" && !isRevoked;
+                    return (
+                    <div key={x.id} style={{ border: `1px solid ${isRevoked ? "rgba(220,38,38,0.25)" : "rgba(15,23,42,0.08)"}`, borderRadius: 12, padding: 14, background: isRevoked ? "rgba(254,242,242,0.5)" : "#fff" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                         <div>
                           <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
@@ -877,20 +1219,313 @@ export default function QRightPage() {
                           </div>
                           <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{x.title}</div>
                         </div>
-                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" }}>✓ REGISTERED</span>
+                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: isRevoked ? "rgba(220,38,38,0.1)" : "rgba(16,185,129,0.1)", color: isRevoked ? "#dc2626" : "#059669", whiteSpace: "nowrap" }}>
+                          {isRevoked ? "✕ REVOKED" : "✓ REGISTERED"}
+                        </span>
                       </div>
                       <div style={{ marginTop: 6, fontSize: 12, color: "#475569" }}>{x.description.slice(0, 120)}{x.description.length > 120 ? "..." : ""}</div>
+                      {isRevoked && (x.revokeReasonCode || x.revokeReason) && (
+                        <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "rgba(220,38,38,0.06)", fontSize: 11, color: "#7f1d1d" }}>
+                          {x.revokeReasonCode && (
+                            <strong style={{ marginRight: 6 }}>{revokeReasonLabel(x.revokeReasonCode, lang)}:</strong>
+                          )}
+                          {x.revokeReason || (x.revokeReasonCode ? "no further detail" : "")}
+                        </div>
+                      )}
                       <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "#f8fafc", fontSize: 10, fontFamily: "monospace", color: "#64748b", wordBreak: "break-all" }}>
                         SHA-256: {x.contentHash}
                       </div>
+                      {registryScope === "mine" && stats[x.id] && (
+                        <>
+                          <div style={{ marginTop: 6, fontSize: 11, color: "#64748b", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                            <span>👁 {stats[x.id].embedFetches.toLocaleString()} fetches</span>
+                            {stats[x.id].series.length > 0 && (
+                              <Sparkline points={stats[x.id].series} width={140} height={24} />
+                            )}
+                            {stats[x.id].lastFetchedAt && (
+                              <span style={{ color: "#94a3b8" }}>· last {new Date(stats[x.id].lastFetchedAt!).toLocaleString()}</span>
+                            )}
+                          </div>
+                          {stats[x.id].topSources.length > 0 && (
+                            <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                              <span style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                Top sources (30d)
+                              </span>
+                              {stats[x.id].topSources.slice(0, 5).map((s) => (
+                                <span
+                                  key={s.host}
+                                  title={`${s.host} — ${s.fetches.toLocaleString()} fetches`}
+                                  style={{
+                                    fontSize: 10,
+                                    fontFamily: "monospace",
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    background: s.host === "(direct)" ? "rgba(148,163,184,0.15)" : "rgba(13,148,136,0.1)",
+                                    color: s.host === "(direct)" ? "#475569" : "#0d9488",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {s.host} · {s.fetches.toLocaleString()}
+                                </span>
+                              ))}
+                              {stats[x.id].topSources.length > 5 && (
+                                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>
+                                  +{stats[x.id].topSources.length - 5} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={apiUrl(`/api/qright/badge/${x.id}.svg`)}
+                          alt={`AEVION QRight badge — ${x.title}`}
+                          height={22}
+                          style={{ display: "block" }}
+                        />
+                        <Link
+                          href={`/qright/object/${x.id}`}
+                          style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 6 }}
+                        >
+                          Public page →
+                        </Link>
+                        <Link
+                          href={`/qright/badge/${x.id}`}
+                          style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(13,148,136,0.3)", borderRadius: 6 }}
+                        >
+                          Get embed code →
+                        </Link>
+                        {showRevokeBtn && (
+                          <button
+                            onClick={() => startRevoke(x)}
+                            style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "transparent", padding: "4px 10px", border: "1px solid rgba(220,38,38,0.4)", borderRadius: 6, cursor: "pointer" }}
+                            title="Mark as revoked — embeds and badges flip red"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  ))}
+                  );
+                  })}
+                </div>
+              )}
+
+              {registryScope === "mine" && hasAuth && (
+                <div style={{ marginTop: 24, padding: 16, borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 900, color: "#0f172a" }}>
+                      🔔 Outgoing webhooks
+                    </h3>
+                    <span style={{ fontSize: 11, color: "#64748b" }}>
+                      Get notified when one of your objects is revoked. Up to 10 endpoints.
+                    </span>
+                  </div>
+                  <div style={{ marginBottom: 10, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
+                    Each delivery is signed with HMAC-SHA256 in the{" "}
+                    <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, fontSize: 10 }}>
+                      X-AEVION-Signature
+                    </code>{" "}
+                    header. Verify by recomputing{" "}
+                    <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, fontSize: 10 }}>
+                      hmac(secret, body)
+                    </code>{" "}
+                    on your endpoint.
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                    <input
+                      type="url"
+                      value={whUrl}
+                      onChange={(e) => setWhUrl(e.target.value)}
+                      placeholder="https://your-site.example/qright/revoked"
+                      style={{ flex: "1 1 320px", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13 }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") addWebhook();
+                      }}
+                    />
+                    <button
+                      onClick={addWebhook}
+                      disabled={whBusy || !whUrl.trim() || webhooks.length >= 10}
+                      style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: webhooks.length >= 10 ? "#cbd5e1" : "#0d9488", color: "#fff", fontSize: 12, fontWeight: 800, cursor: whBusy || !whUrl.trim() || webhooks.length >= 10 ? "not-allowed" : "pointer" }}
+                    >
+                      {whBusy ? "Adding…" : "Add"}
+                    </button>
+                  </div>
+                  {webhooks.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>
+                      No webhooks yet. Add one above.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {webhooks.map((w) => {
+                        const ok = !!w.lastDeliveredAt && !w.lastFailedAt;
+                        const failed =
+                          !!w.lastFailedAt &&
+                          (!w.lastDeliveredAt ||
+                            new Date(w.lastFailedAt).getTime() > new Date(w.lastDeliveredAt).getTime());
+                        return (
+                          <div
+                            key={w.id}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              border: "1px solid rgba(15,23,42,0.08)",
+                              background: failed ? "rgba(254,242,242,0.5)" : "#f8fafc",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <span style={{ fontSize: 14 }} aria-hidden>
+                              {failed ? "⚠️" : ok ? "✅" : "•"}
+                            </span>
+                            <code style={{ fontSize: 11, fontFamily: "monospace", color: "#0f172a", wordBreak: "break-all", flex: "1 1 240px" }}>
+                              {w.url}
+                            </code>
+                            <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>
+                              {w.secretPrefix}…
+                            </span>
+                            {w.lastDeliveredAt && (
+                              <span style={{ fontSize: 10, color: "#059669" }}>
+                                ✓ {new Date(w.lastDeliveredAt).toLocaleString()}
+                              </span>
+                            )}
+                            {failed && (
+                              <span style={{ fontSize: 10, color: "#dc2626" }} title={w.lastError || ""}>
+                                ✗ {w.lastError || "failed"}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => deleteWebhook(w.id)}
+                              style={{ marginLeft: "auto", padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.4)", background: "transparent", color: "#dc2626", fontSize: 10, fontWeight: 800, cursor: "pointer" }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
         </div>
       </ProductPageShell>
+
+      {revokingObj && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setRevokingObj(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}
+        >
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 480, boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 4 }}>
+              Revoke registration
+            </div>
+            <div style={{ fontSize: 13, color: "#475569", marginBottom: 16 }}>
+              <strong>{revokingObj.title}</strong>
+              <br />
+              This is public — embeds and badges flip red. The record stays for transparency.
+            </div>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+              Reason
+            </label>
+            <select
+              value={revokeCode}
+              onChange={(e) => setRevokeCode(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, color: "#0f172a", background: "#fff", marginBottom: 12 }}
+            >
+              {OWNER_REVOKE_REASON_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {revokeReasonLabel(code, lang)}
+                </option>
+              ))}
+            </select>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+              Optional details (public, ≤ 500 chars)
+            </label>
+            <textarea
+              value={revokeText}
+              onChange={(e) => setRevokeText(e.target.value.slice(0, 500))}
+              rows={3}
+              placeholder="Visible on the public revocation banner."
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, color: "#0f172a", background: "#fff", marginBottom: 16, resize: "vertical", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setRevokingObj(null)}
+                disabled={revokeBusy}
+                style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontWeight: 700, fontSize: 13, cursor: revokeBusy ? "not-allowed" : "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRevoke}
+                disabled={revokeBusy}
+                style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 13, cursor: revokeBusy ? "not-allowed" : "pointer", opacity: revokeBusy ? 0.7 : 1 }}
+              >
+                {revokeBusy ? "Revoking…" : "Revoke"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newWebhookSecret && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}
+        >
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 520, boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 4 }}>
+              🔑 Webhook secret
+            </div>
+            <div style={{ fontSize: 13, color: "#475569", marginBottom: 14 }}>
+              Save this secret on your endpoint <strong>now</strong> — it will not be shown again.
+              Lose it and you must delete + re-create the webhook.
+            </div>
+            <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              URL
+            </div>
+            <code style={{ display: "block", padding: "8px 10px", background: "#f1f5f9", borderRadius: 8, fontSize: 12, fontFamily: "monospace", marginBottom: 14, wordBreak: "break-all", color: "#0f172a" }}>
+              {newWebhookSecret.url}
+            </code>
+            <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Secret (HMAC-SHA256 key)
+            </div>
+            <code style={{ display: "block", padding: "10px 12px", background: "#0f172a", color: "#5eead4", borderRadius: 8, fontSize: 13, fontFamily: "monospace", marginBottom: 14, wordBreak: "break-all" }}>
+              {newWebhookSecret.secret}
+            </code>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(newWebhookSecret.secret).then(
+                    () => showToast("Secret copied to clipboard", "success"),
+                    () => showToast("Copy failed — select & copy manually", "error")
+                  );
+                }}
+                style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(13,148,136,0.4)", background: "#fff", color: "#0d9488", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+              >
+                Copy secret
+              </button>
+              <button
+                onClick={() => setNewWebhookSecret(null)}
+                style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+              >
+                I saved it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

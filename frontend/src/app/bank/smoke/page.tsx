@@ -598,14 +598,14 @@ export default function BankSmokePage() {
               background: "linear-gradient(135deg, rgba(209,250,229,0.55), rgba(167,243,208,0.40))",
               display: "flex",
               flexWrap: "wrap",
-              gap: 12,
+              gap: 10,
               alignItems: "center",
               fontSize: 13,
               color: "#065f46",
             }}
           >
             <span style={{ fontWeight: 800 }}>All 11 steps passed.</span>
-            <span>The signed transfer is now in your local audit log — open the printable receipt:</span>
+            <span>The signed transfer is now in your local audit log.</span>
             <Link
               href={`/bank/receipt/${encodeURIComponent(transferId)}`}
               style={{
@@ -621,6 +621,40 @@ export default function BankSmokePage() {
               }}
             >
               View receipt →
+            </Link>
+            <Link
+              href="/bank/audit-log"
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                background: "rgba(6,95,70,0.10)",
+                color: "#065f46",
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                textDecoration: "none",
+                border: "1px solid rgba(6,95,70,0.30)",
+              }}
+            >
+              Audit log →
+            </Link>
+            <Link
+              href="/bank/diagnostics"
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                background: "rgba(6,95,70,0.10)",
+                color: "#065f46",
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                textDecoration: "none",
+                border: "1px solid rgba(6,95,70,0.30)",
+              }}
+            >
+              Diagnostics →
             </Link>
           </div>
         ) : null}

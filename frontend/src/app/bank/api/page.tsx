@@ -242,6 +242,36 @@ export default function BankApiDocsPage() {
           >
             ✦ Investor walk-through
           </Link>
+          <Link
+            href="/bank/diagnostics"
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.15)",
+              background: "rgba(15,23,42,0.04)",
+              color: "#0f172a",
+              fontSize: 12,
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            ♡ Diagnostics
+          </Link>
+          <Link
+            href="/bank/audit-log"
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.15)",
+              background: "rgba(15,23,42,0.04)",
+              color: "#0f172a",
+              fontSize: 12,
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            ✎ Audit log
+          </Link>
         </div>
       </header>
 

@@ -7,6 +7,7 @@ import cors from "cors";
 import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qsignV2Router } from "./routes/qsignV2";
+import { startWebhookWorker } from "./lib/qsignV2/webhooks";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
@@ -215,4 +216,6 @@ app.use(
 
 app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
+  // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
+  startWebhookWorker();
 });

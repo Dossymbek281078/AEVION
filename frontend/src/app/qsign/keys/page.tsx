@@ -307,56 +307,264 @@ export default function QSignKeysPage() {
           </div>
         ) : null}
 
-        {/* Rotation docs */}
-        <div
-          style={{
-            marginTop: 24,
-            border: "1px solid rgba(15,23,42,0.08)",
-            borderRadius: 14,
-            padding: 18,
-            background: "rgba(15,23,42,0.02)",
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 800,
-              fontSize: 14,
-              marginBottom: 8,
-              color: "#0f172a",
-            }}
-          >
-            Rotate a key (admin)
-          </div>
-          <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.7 }}>
-            <p style={{ margin: "0 0 8px" }}>
-              Rotation demotes the current active key to <code>retired</code> and makes the
-              new one active. Retired keys continue to verify historical signatures forever.
-            </p>
-            <pre
-              style={{
-                ...mono,
-                background: "#0f172a",
-                color: "#e2e8f0",
-                padding: 12,
-                borderRadius: 10,
-                margin: "6px 0 0",
-                overflow: "auto",
-                fontSize: 11,
-                lineHeight: 1.5,
-              }}
-            >{`curl -X POST $BASE/api/qsign/v2/keys/rotate \\
-  -H "Authorization: Bearer $ADMIN_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"algo":"Ed25519","notes":"quarterly rotation"}'`}</pre>
-            <p style={{ margin: "10px 0 0", fontSize: 12, color: "#64748b" }}>
-              For Ed25519 you must supply either <code>body.publicKey</code> (64-hex) or set
-              <code> env[secretRef]</code> to a 64-hex seed before calling — otherwise the
-              rotation refuses to create a silent ephemeral key.
-            </p>
-          </div>
-        </div>
+        {/* Rotation form (admin) */}
+        <RotationForm onRotated={load} />
       </ProductPageShell>
     </main>
+  );
+}
+
+function RotationForm({ onRotated }: { onRotated: () => void }) {
+  const { showToast } = useToast();
+  const [token, setToken] = useState<string>("");
+  const [algo, setAlgo] = useState<"HMAC-SHA256" | "Ed25519">("Ed25519");
+  const [notes, setNotes] = useState<string>("");
+  const [publicKey, setPublicKey] = useState<string>("");
+  const [secretRef, setSecretRef] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [lastResult, setLastResult] = useState<{
+    ok: boolean;
+    message: string;
+    response?: any;
+  } | null>(null);
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("qsign-admin-token");
+      if (cached) setToken(cached);
+    } catch {}
+  }, []);
+
+  const submit = async () => {
+    if (!token.trim()) {
+      showToast("Admin token required", "error");
+      return;
+    }
+    if (algo === "Ed25519" && !publicKey.trim() && !secretRef.trim()) {
+      showToast("Ed25519: provide publicKey OR secretRef", "error");
+      return;
+    }
+    if (publicKey.trim() && !/^[0-9a-fA-F]{64}$/.test(publicKey.trim())) {
+      showToast("publicKey must be 64-hex", "error");
+      return;
+    }
+    setBusy(true);
+    setLastResult(null);
+    try {
+      try {
+        localStorage.setItem("qsign-admin-token", token.trim());
+      } catch {}
+      const body: any = { algo };
+      if (notes.trim()) body.notes = notes.trim();
+      if (publicKey.trim()) body.publicKey = publicKey.trim().toLowerCase();
+      if (secretRef.trim()) body.secretRef = secretRef.trim();
+      const res = await fetch(apiUrl("/api/qsign/v2/keys/rotate"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token.trim()}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setLastResult({
+          ok: false,
+          message: `HTTP ${res.status}: ${json?.error || "rotate failed"}`,
+          response: json,
+        });
+        showToast("Rotation failed", "error");
+        return;
+      }
+      setLastResult({
+        ok: true,
+        message: `New active kid: ${json?.newActive?.kid || "—"}`,
+        response: json,
+      });
+      showToast("Key rotated", "success");
+      setNotes("");
+      setPublicKey("");
+      setSecretRef("");
+      onRotated();
+    } catch (e: any) {
+      setLastResult({ ok: false, message: e?.message || String(e) });
+      showToast("Rotation failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fieldStyle: CSSProperties = {
+    width: "100%",
+    padding: "8px 10px",
+    border: "1px solid rgba(15,23,42,0.15)",
+    borderRadius: 8,
+    fontSize: 13,
+    background: "#fff",
+    color: "#0f172a",
+  };
+  const labelStyle: CSSProperties = {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    marginBottom: 4,
+    display: "block",
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 24,
+        border: "1px solid rgba(15,23,42,0.08)",
+        borderRadius: 14,
+        padding: 18,
+        background: "rgba(15,23,42,0.02)",
+      }}
+    >
+      <div
+        style={{
+          fontWeight: 800,
+          fontSize: 14,
+          marginBottom: 6,
+          color: "#0f172a",
+        }}
+      >
+        Rotate a key (admin)
+      </div>
+      <p style={{ margin: "0 0 14px", fontSize: 12, color: "#475569", lineHeight: 1.55 }}>
+        Demotes the current active key to <code>retired</code> and makes the new one active.
+        Retired keys verify historical signatures forever. Token is cached in localStorage —
+        clear browser data after use on shared machines.
+      </p>
+
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr" }}>
+        <div>
+          <label style={labelStyle}>Admin bearer token</label>
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="eyJhbGciOiJI…"
+            style={fieldStyle}
+            spellCheck={false}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "180px 1fr",
+            alignItems: "end",
+          }}
+        >
+          <div>
+            <label style={labelStyle}>Algorithm</label>
+            <select
+              value={algo}
+              onChange={(e) => setAlgo(e.target.value as any)}
+              style={fieldStyle}
+            >
+              <option value="Ed25519">Ed25519</option>
+              <option value="HMAC-SHA256">HMAC-SHA256</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Notes (optional)</label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="quarterly rotation"
+              style={fieldStyle}
+              maxLength={200}
+            />
+          </div>
+        </div>
+
+        {algo === "Ed25519" ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: "1fr 1fr",
+            }}
+          >
+            <div>
+              <label style={labelStyle}>publicKey (64-hex, optional)</label>
+              <input
+                type="text"
+                value={publicKey}
+                onChange={(e) => setPublicKey(e.target.value)}
+                placeholder="6193b01667e4266dfbb70fc5…"
+                style={{ ...fieldStyle, fontFamily: "monospace", fontSize: 11 }}
+                spellCheck={false}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>secretRef (env var name, optional)</label>
+              <input
+                type="text"
+                value={secretRef}
+                onChange={(e) => setSecretRef(e.target.value)}
+                placeholder="QSIGN_ED25519_V2_PRIVATE"
+                style={{ ...fieldStyle, fontFamily: "monospace", fontSize: 11 }}
+                spellCheck={false}
+              />
+            </div>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                fontSize: 11,
+                color: "#64748b",
+              }}
+            >
+              For Ed25519 you must provide one of these — backend refuses silent ephemeral
+              keys. <code>publicKey</code> registers an externally-generated keypair;{" "}
+              <code>secretRef</code> tells backend which env var holds the private seed.
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "#64748b" }}>
+            HMAC-SHA256 rotation reads the new shared secret from{" "}
+            <code>QSIGN_HMAC_V&lt;N+1&gt;_SECRET</code> by default (or whatever{" "}
+            <code>secretRef</code> you supply).
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
+          <button
+            onClick={submit}
+            disabled={busy}
+            style={{
+              padding: "9px 16px",
+              borderRadius: 8,
+              border: "none",
+              background: busy ? "#94a3b8" : "#0f172a",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: busy ? "default" : "pointer",
+            }}
+          >
+            {busy ? "Rotating…" : `Rotate ${algo} key`}
+          </button>
+          {lastResult ? (
+            <span
+              style={{
+                fontSize: 12,
+                color: lastResult.ok ? "#047857" : "#b91c1c",
+              }}
+            >
+              {lastResult.ok ? "✓ " : "✗ "}
+              {lastResult.message}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 

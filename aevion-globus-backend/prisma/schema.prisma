@@ -153,3 +153,19 @@ model QSignRevocation {
   revokerUserId     String?
   revokedAt         DateTime @default(now())
 }
+
+model QSignWebhook {
+  id          String    @id @default(uuid())
+  ownerUserId String                                    // owner of subscription; only events on their own sigs fire
+  url         String                                    // delivery target — must be https in prod, http in dev
+  secret      String                                    // HMAC-SHA256 over body, sent in X-QSign-Signature header
+  events      String                                    // comma-separated subset of "sign,revoke"
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  lastFiredAt DateTime?
+  lastStatus  Int?
+  lastError   String?
+
+  @@index([ownerUserId])
+  @@index([active])
+}

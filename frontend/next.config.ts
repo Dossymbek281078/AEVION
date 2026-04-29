@@ -43,6 +43,17 @@ const nextConfig: NextConfig = {
           { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
         ],
       },
+      {
+        // QSign embed widget — must be embeddable cross-origin in any iframe.
+        // Disable COOP/COEP isolation here and allow framing from anywhere.
+        source: "/qsign/embed/:path*",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+        ],
+      },
     ];
   },
 

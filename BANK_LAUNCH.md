@@ -4,7 +4,13 @@
 
 This file lists every concrete step needed to flip AEVION Bank from "feature-complete dev branch" to "live on aevion.app". Skim this before any prod push.
 
-**Branch state at this writing:** `bank-payment-layer` is **207 commits ahead** of `main` (PR #5 open). 43 indexable bank sub-routes (incl. `/bank/smoke`). Build green. All 18 wallet widgets are live, plus 14 standalone widget pages, plus the test-environment infrastructure shipped 2026-04-29 (smoke runner, StatusPill, TestModeBanner, PreflightBanner, QuickDemoControls, InvestorModeAutorun, idempotency keys).
+**Branch state at this writing:** `bank-payment-layer` is **212 commits ahead** of `main` (PR #5 open). 43+ indexable bank sub-routes plus three operations surfaces (`/bank/smoke`, `/bank/audit-log`, `/bank/diagnostics`). Build green. All 18 wallet widgets are live, plus 14 standalone widget pages, plus the test-environment infrastructure (smoke runner, StatusPill, TestModeBanner, PreflightBanner, QuickDemoControls, InvestorModeAutorun, idempotency keys) and the compliance/ops trio (audit-log + diagnostics + smoke).
+
+## Operations surfaces (all noindex'd)
+
+- **`/bank/smoke`** — 11-step live E2E runner. Writes to backend (registers a smoke user, top-ups, transfers, signs). Use for pre-release validation. `?auto=1` runs on load.
+- **`/bank/audit-log`** — read-only compliance ledger combining `/api/qtrade/operations` with local QSign signatures. Filters (kind / date / search), summary stats, CSV / JSON / print export. For regulators, auditors and partners.
+- **`/bank/diagnostics`** — read-only health board. Five endpoint probes with latency, auth state, local signature summary, environment fingerprint. Safe to run on every page load. For engineers and on-call.
 
 ## Test environment one-URL demo
 
@@ -32,9 +38,11 @@ Live: https://aevion.app · API: https://api.aevion.app · Status: https://statu
 
 - [ ] `npm run verify` from `aevion-core/` returns green (backend `tsc` + frontend `next build`)
 - [ ] All 43+ bank routes render server-side without TypeScript errors
-- [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`, `/bank/budget`, `/bank/calendar`, `/bank/subscriptions`, `/bank/forecast`, `/bank/changelog`, `/bank/smoke`
+- [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`, `/bank/budget`, `/bank/calendar`, `/bank/subscriptions`, `/bank/forecast`, `/bank/changelog`, `/bank/smoke`, `/bank/audit-log`, `/bank/diagnostics`
 - [ ] `/bank/smoke?auto=1` shows 11/11 green against staging in ≤7s
 - [ ] `/bank?investor=1` provisions a demo + redirects to smoke + completes without errors
+- [ ] `/bank/diagnostics` shows all five probes OK with avg latency under 250 ms p50
+- [ ] `/bank/audit-log` renders filtered + paginated rows; CSV / JSON / Print all download / open
 - [ ] `/api/qtrade/accounts`, `/transfers`, `/operations` resolve under 200ms p95 in staging
 - [ ] `/api/qtrade/{topup,transfer}` enforce `Idempotency-Key` (replay test passes)
 - [ ] QSign sign + verify round-trips on staging within 100ms p95

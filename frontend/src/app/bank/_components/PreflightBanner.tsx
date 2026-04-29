@@ -112,6 +112,23 @@ export function PreflightBanner() {
             </Link>
           ) : null}
           <Link
+            href="/bank/diagnostics"
+            style={{
+              padding: "6px 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(127,29,29,0.3)",
+              background: "transparent",
+              color: "#7f1d1d",
+              fontSize: 12,
+              fontWeight: 800,
+              textDecoration: "none",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            View diagnostics →
+          </Link>
+          <Link
             href="/bank/smoke?auto=1"
             style={{
               padding: "6px 12px",

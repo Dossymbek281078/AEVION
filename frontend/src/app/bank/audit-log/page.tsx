@@ -258,12 +258,58 @@ export default function AuditLogPage() {
         <Wave1Nav />
 
         <header style={{ marginTop: 14, marginBottom: 18 }}>
-          <Link
-            href="/bank"
-            style={{ fontSize: 12, color: "#475569", textDecoration: "none", fontWeight: 700 }}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
           >
-            ← Back to Bank
-          </Link>
+            <Link
+              href="/bank"
+              style={{ fontSize: 12, color: "#475569", textDecoration: "none", fontWeight: 700 }}
+            >
+              ← Back to Bank
+            </Link>
+            <nav
+              aria-label="Operations surfaces"
+              className="audit-log-nav"
+              style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+            >
+              <Link
+                href="/bank/diagnostics"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: "rgba(15,23,42,0.06)",
+                  color: "#0f172a",
+                  textDecoration: "none",
+                  border: "1px solid rgba(15,23,42,0.10)",
+                }}
+              >
+                ♡ Diagnostics
+              </Link>
+              <Link
+                href="/bank/smoke"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: "rgba(15,23,42,0.06)",
+                  color: "#0f172a",
+                  textDecoration: "none",
+                  border: "1px solid rgba(15,23,42,0.10)",
+                }}
+              >
+                ✦ Smoke runner
+              </Link>
+            </nav>
+          </div>
           <h1 style={{ fontSize: 30, fontWeight: 900, margin: "8px 0 6px", letterSpacing: "-0.02em" }}>
             Audit log
           </h1>

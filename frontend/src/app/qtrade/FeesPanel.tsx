@@ -5,13 +5,15 @@
 // market open / close в page.tsx (state не shared, так что hooks не нужны).
 
 import { useEffect, useState } from "react";
-import { ldFees, svFees, DEFAULT_FEES, type FeeConfig } from "./fees";
+import { ldFees, svFees, DEFAULT_FEES, todayRealizedPnl, type FeeConfig } from "./fees";
+import { fmtUsd, type ClosedPosition } from "./marketSim";
 
 type Props = {
   onChange?: (cfg: FeeConfig) => void;
+  closed?: ClosedPosition[];
 };
 
-export default function FeesPanel({ onChange }: Props) {
+export default function FeesPanel({ onChange, closed = [] }: Props) {
   const [cfg, setCfg] = useState<FeeConfig>(DEFAULT_FEES);
   const [open, setOpen] = useState(false);
 
@@ -25,6 +27,12 @@ export default function FeesPanel({ onChange }: Props) {
   }, [cfg, onChange]);
 
   const reset = () => setCfg(DEFAULT_FEES);
+
+  const cap = cfg.dailyLossLimitUsd ?? 0;
+  const todayPnl = todayRealizedPnl(closed);
+  const usagePct = cap > 0 && todayPnl < 0 ? Math.min(100, (-todayPnl / cap) * 100) : 0;
+  const usageColor = usagePct >= 100 ? "#f87171" : usagePct >= 75 ? "#fbbf24" : "#86efac";
+  const showRisk = cfg.enabled && cap > 0;
 
   const summary = cfg.enabled
     ? `M ${(cfg.makerBps / 100).toFixed(2)}% · T ${(cfg.takerBps / 100).toFixed(2)}% · Slip ${(cfg.slippageBps / 100).toFixed(2)}%`
@@ -78,8 +86,56 @@ export default function FeesPanel({ onChange }: Props) {
         >
           {summary}
         </span>
+        {showRisk && (
+          <span
+            style={{
+              marginLeft: 6,
+              padding: "2px 8px",
+              borderRadius: 999,
+              fontSize: 10,
+              fontWeight: 800,
+              color: usageColor,
+              background: `${usageColor}1f`,
+              border: `1px solid ${usageColor}66`,
+            }}
+            title={`Сегодня: ${todayPnl >= 0 ? "+" : ""}${fmtUsd(todayPnl)} · cap ${fmtUsd(cap)}`}
+          >
+            🛡 {todayPnl >= 0 ? "+" : ""}{fmtUsd(todayPnl)} · {usagePct.toFixed(0)}%
+          </span>
+        )}
         <span style={{ marginLeft: "auto", fontSize: 13, color: "#64748b" }}>{open ? "▾" : "▸"}</span>
       </div>
+
+      {showRisk && (
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }} aria-label="Daily loss usage">
+          <div
+            style={{
+              position: "relative",
+              height: 6,
+              borderRadius: 3,
+              background: "rgba(148,163,184,0.18)",
+              overflow: "hidden",
+            }}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(usagePct)}
+          >
+            <div
+              style={{
+                width: `${usagePct}%`,
+                height: "100%",
+                background: usageColor,
+                transition: "width 0.3s, background 0.3s",
+              }}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: "#94a3b8", display: "flex", justifyContent: "space-between" }}>
+            <span>Today: {todayPnl >= 0 ? "+" : ""}{fmtUsd(todayPnl)}</span>
+            <span>Cap: {fmtUsd(cap)} · usage {usagePct.toFixed(0)}%</span>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>

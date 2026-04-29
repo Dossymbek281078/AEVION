@@ -774,7 +774,7 @@ export default function QTradePage() {
         — клиентский localStorage.
       </div>
 
-      <FeesPanel />
+      <FeesPanel closed={closedPositions} />
 
       {/* ═══ LIVE MARKETS ══════════════════════════════════════════ */}
       <section

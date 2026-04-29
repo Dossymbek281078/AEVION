@@ -427,6 +427,9 @@ export default function CyberChessPage(){
   const[rushBestStreak,sRushBestStreak]=useState(0);
   const[rushBest,sRushBest]=useState(()=>{try{return parseInt(localStorage.getItem("aevion_puzzle_rush_best_v1")||"0")||0}catch{return 0}});
   const[rushResult,sRushResult]=useState<null|{score:number;streak:number;best:number;chessy:number;isNewBest:boolean}>(null);
+  // Rush duration в секундах — юзер сам выбирает 1.5 / 3 / 5 / 10 / custom
+  const[rushDuration,sRushDuration]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_rush_duration_v1")||"180");return v>=30&&v<=1800?v:180}catch{return 180}});
+  useEffect(()=>{try{localStorage.setItem("aevion_rush_duration_v1",String(rushDuration))}catch{}},[rushDuration]);
   // Multi-dimensional filters
   const[pzFilterGoal,sPzFilterGoal]=useState<string>("all"); // all, Mate, Best move
   const[pzFilterMate,sPzFilterMate]=useState<number>(0); // 0=any, 1=M1, 2=M2, 3=M3...
@@ -2180,9 +2183,9 @@ export default function CyberChessPage(){
     if(tab!=="puzzles")return;
     if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false)}
     else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false)}
-    else if(pzMode==="rush"){sPzTimeLeft(90);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
+    else if(pzMode==="rush"){sPzTimeLeft(rushDuration);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
     else {sPzTimeLeft(0);sRushActive(false)}
-  },[pzMode,tab]);
+  },[pzMode,tab,rushDuration]);
 
   // Rush end-of-session detection — fire only once per session
   useEffect(()=>{
@@ -4300,7 +4303,7 @@ export default function CyberChessPage(){
 
             {/* ── Mode Selector ── */}
             <Card padding={SPACE[2]} tone="surface1">
-              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?"+1..+3с per solve":pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":""}/>
+              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":""}/>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1]}}>
                 {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
@@ -4316,6 +4319,30 @@ export default function CyberChessPage(){
                   </button>;
                 })}
               </div>
+              {/* Rush duration selector — виден только когда выбран Rush */}
+              {pzMode==="rush"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
+                  {([[90,"1:30"],[180,"3 мин"],[300,"5 мин"],[600,"10 мин"]] as const).map(([sec,label])=>{
+                    const active=rushDuration===sec;
+                    return <button key={sec} onClick={()=>{sRushDuration(sec);if(rushActive){sPzTimeLeft(sec);sRushScore(0);sRushStreak(0);sRushBestStreak(0)}}}
+                      style={{padding:"6px 4px",borderRadius:RADIUS.sm,
+                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
+                        fontSize:11,fontWeight:800,cursor:"pointer",
+                        transition:`all ${MOTION.fast} ${MOTION.ease}`}}>{label}</button>;
+                  })}
+                  <input type="number" min={30} max={1800} step={30}
+                    value={[90,180,300,600].includes(rushDuration)?"":rushDuration}
+                    onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=1800)sRushDuration(v)}}
+                    placeholder="свой"
+                    title="Custom (30-1800 сек)"
+                    style={{padding:"6px 4px",borderRadius:RADIUS.sm,
+                      border:![90,180,300,600].includes(rushDuration)?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                      background:CC.surface1,color:CC.text,fontSize:11,fontWeight:800,textAlign:"center",
+                      width:"100%",outline:"none"}}/>
+                </div>
+              </div>}
             </Card>
 
             {/* ── Collapsible Filters ── */}

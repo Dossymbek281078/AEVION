@@ -92,8 +92,10 @@ type SearchHit = {
   startedAt: string;
   totalCostUsd: number | null;
   preview: string;
-  matched: "input" | "final" | "title";
+  matched: "input" | "final" | "title" | "tag";
 };
+
+type TagCount = { tag: string; count: number };
 
 type SessionSummary = {
   id: string;
@@ -355,6 +357,8 @@ export default function QCoreMultiAgentPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<SearchHit[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
+  // Top tags across the user's runs — chip strip beneath search.
+  const [topTags, setTopTags] = useState<TagCount[]>([]);
   // Per-user webhook settings panel.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [userWebhook, setUserWebhookState] = useState<{
@@ -1133,6 +1137,23 @@ export default function QCoreMultiAgentPage() {
     }
   }, []);
 
+  /** Fetch the user's most-used tags for the sidebar chip strip. */
+  const loadTopTags = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/tags?limit=20`), {
+        headers: bearerHeader(),
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.items)) setTopTags(data.items);
+    } catch { /* ignore */ }
+  }, []);
+
+  /* ── Load tag chip strip on mount ── */
+  useEffect(() => {
+    void loadTopTags();
+  }, [loadTopTags]);
+
   /** Replace a run's tags. Persists via PATCH and updates local state. */
   const updateRunTags = useCallback(async (runId: string, tags: string[]) => {
     const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/tags`), {
@@ -1145,8 +1166,10 @@ export default function QCoreMultiAgentPage() {
     setRuns((prev) =>
       prev.map((r) => (r.id === runId ? { ...r, tags: data.tags || [] } : r))
     );
+    // Refresh chip strip — the top-tags ranking just shifted.
+    void loadTopTags();
     return data.tags as string[];
-  }, []);
+  }, [loadTopTags]);
 
   /** Refine an already-finished run: server appends a `final/refinement` message
       and returns the new finalContent + cumulative totals. */
@@ -2055,6 +2078,55 @@ export default function QCoreMultiAgentPage() {
                 </button>
               )}
             </div>
+            {topTags.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 4,
+                  marginBottom: 10,
+                  paddingBottom: 8,
+                  borderBottom: "1px dashed rgba(15,23,42,0.08)",
+                }}
+              >
+                {topTags.slice(0, 12).map((t) => {
+                  const active = searchQuery.trim().toLowerCase() === t.tag.toLowerCase();
+                  return (
+                    <button
+                      key={t.tag}
+                      type="button"
+                      onClick={() => setSearchQuery(active ? "" : t.tag)}
+                      title={`${t.count} run${t.count === 1 ? "" : "s"} tagged "${t.tag}"`}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1px solid #0f766e"
+                          : "1px solid rgba(13,148,136,0.25)",
+                        background: active ? "#0f766e" : "rgba(13,148,136,0.06)",
+                        color: active ? "#fff" : "#0f766e",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {t.tag}
+                      <span
+                        style={{
+                          marginLeft: 4,
+                          opacity: 0.6,
+                          fontWeight: 500,
+                          fontSize: 9,
+                        }}
+                      >
+                        {t.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {searchQuery.trim() && (
               <div style={{ marginBottom: 12 }}>
                 <div

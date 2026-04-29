@@ -448,6 +448,53 @@ export async function setRunTags(
   return (r.rows?.[0] as RunRow) || null;
 }
 
+/**
+ * Returns the user's most-used tags with counts. Powers the sidebar tag-filter
+ * chip strip in /qcoreai/multi. Read-only; safe to call frequently.
+ */
+export async function getTopUserTags(
+  userId: string | null,
+  limit = 20
+): Promise<Array<{ tag: string; count: number }>> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+
+  if (!isDbReady()) {
+    const sessionIds = new Set(
+      Array.from(memSessions.values())
+        .filter((s) => (userId ? s.userId === userId : s.userId == null))
+        .map((s) => s.id)
+    );
+    const counts = new Map<string, number>();
+    for (const r of memRuns.values()) {
+      if (!sessionIds.has(r.sessionId)) continue;
+      for (const t of r.tags || []) {
+        counts.set(t, (counts.get(t) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, lim)
+      .map(([tag, count]) => ({ tag, count }));
+  }
+
+  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const params: any[] = userId ? [userId, lim] : [lim];
+  const limParam = userId ? `$2` : `$1`;
+  const r = await pool.query(
+    `SELECT t AS tag, COUNT(*)::int AS count
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id" = r."sessionId",
+            unnest(r."tags") AS t
+      WHERE ${userPredicate}
+      GROUP BY t
+      ORDER BY count DESC, t ASC
+      LIMIT ${limParam}`,
+    params
+  );
+  return r.rows.map((row: any) => ({ tag: String(row.tag), count: Number(row.count) }));
+}
+
 /** Returns the highest ordering value for a run, or 0 if no messages. */
 export async function getMaxOrdering(runId: string): Promise<number> {
   await ensureQCoreTables(pool);

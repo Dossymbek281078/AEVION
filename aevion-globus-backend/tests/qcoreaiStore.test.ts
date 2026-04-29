@@ -19,6 +19,7 @@ import {
   getRun,
   getRunByShareToken,
   getSession,
+  getTopUserTags,
   getUserWebhook,
   getUserWebhookForRun,
   insertMessage,
@@ -251,6 +252,37 @@ describe("QCoreAI store (in-memory mode)", () => {
 
     // Anonymous shouldn't see this user's run
     expect(await searchRuns(null, "broken", 10)).toEqual([]);
+  });
+
+  test("getTopUserTags ranks by usage, isolates per user, respects limit", async () => {
+    const u = u1();
+    const stranger = u1();
+
+    const mkRun = async (owner: string, tags: string[]) => {
+      const sess = await createSession({ userId: owner, title: "T" });
+      const run = await createRun({ sessionId: sess.id, userInput: "x" });
+      await finishRun(run.id, "done", { finalContent: "y" });
+      await setRunTags(run.id, owner, tags);
+    };
+
+    await mkRun(u, ["urgent", "draft"]);
+    await mkRun(u, ["urgent", "investor"]);
+    await mkRun(u, ["urgent"]);
+    await mkRun(u, ["draft"]);
+    await mkRun(stranger, ["urgent", "stranger-only"]);
+
+    const top = await getTopUserTags(u, 10);
+    const map = Object.fromEntries(top.map((t) => [t.tag, t.count]));
+    expect(map["urgent"]).toBe(3);
+    expect(map["draft"]).toBe(2);
+    expect(map["investor"]).toBe(1);
+    expect(map["stranger-only"]).toBeUndefined();
+    // Sorted by count desc
+    expect(top[0].tag).toBe("urgent");
+
+    // Limit honored
+    const capped = await getTopUserTags(u, 2);
+    expect(capped.length).toBe(2);
   });
 
   test("user webhook upsert + read + delete", async () => {

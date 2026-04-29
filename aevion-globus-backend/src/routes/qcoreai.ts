@@ -32,6 +32,7 @@ import {
   getRunByShareToken,
   getSession,
   getSessionPublic,
+  getTopUserTags,
   getUserWebhook,
   getUserWebhookForRun,
   insertMessage,
@@ -206,6 +207,22 @@ qcoreaiRouter.delete("/sessions/:id", async (req, res) => {
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: "delete session failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/tags?limit=20
+ * Top tags across the caller's runs, sorted by usage. Powers the sidebar
+ * chip-picker — a one-click shortcut into /search?q=<tag>.
+ */
+qcoreaiRouter.get("/tags", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const items = await getTopUserTags(auth?.sub ?? null, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list tags failed", details: err?.message });
   }
 });
 

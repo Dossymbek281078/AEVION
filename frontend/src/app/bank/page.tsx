@@ -41,6 +41,7 @@ import { EcosystemPulse } from "./_components/EcosystemPulse";
 import { FinancialCopilot } from "./_components/FinancialCopilot";
 import { HelpMenu } from "./_components/HelpMenu";
 import { MobileTabBar } from "./_components/MobileTabBar";
+import { InvestorModeAutorun } from "./_components/InvestorModeAutorun";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
 import { PreflightBanner } from "./_components/PreflightBanner";
@@ -161,6 +162,7 @@ function BankContent() {
       <ThemeToggle />
       <BackendStatus />
       <PreflightBanner />
+      <InvestorModeAutorun />
       <CommandPalette
         accountId={account?.id ?? null}
         hasWallet={hasWallet}

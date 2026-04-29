@@ -1,16 +1,16 @@
 # AEVION Bank — Production Launch Checklist
 
-> Last updated: 2026-04-29 (late). Maintainer: Bank track. Target: smooth zero-surprise prod cutover.
+> Last updated: 2026-04-29 (very late — backend gaps closed). Maintainer: Bank track. Target: smooth zero-surprise prod cutover.
 
 This file lists every concrete step needed to flip AEVION Bank from "feature-complete dev branch" to "live on aevion.app". Skim this before any prod push.
 
-**Branch state at this writing:** `bank-payment-layer` is **212 commits ahead** of `main` (PR #5 open). 43+ indexable bank sub-routes plus three operations surfaces (`/bank/smoke`, `/bank/audit-log`, `/bank/diagnostics`). Build green. All 18 wallet widgets are live, plus 14 standalone widget pages, plus the test-environment infrastructure (smoke runner, StatusPill, TestModeBanner, PreflightBanner, QuickDemoControls, InvestorModeAutorun, idempotency keys) and the compliance/ops trio (audit-log + diagnostics + smoke).
+**Branch state at this writing:** `bank-payment-layer` is **219 commits ahead** of `main` (PR #5 open). 43+ indexable bank sub-routes plus three operations surfaces. Build green. All 18 wallet widgets are live, plus 14 standalone widget pages, plus the test-environment infrastructure and the compliance/ops trio. **Previously open backend gaps (JWT middleware, pagination, idempotency, email lookup, ecosystem/royalties/cyberchess endpoints) were all closed in this same session.**
 
 ## Operations surfaces (all noindex'd)
 
-- **`/bank/smoke`** — 11-step live E2E runner. Writes to backend (registers a smoke user, top-ups, transfers, signs). Use for pre-release validation. `?auto=1` runs on load.
+- **`/bank/smoke`** — 14-step live E2E runner (was 11; expanded to cover ecosystem/royalties/chess endpoints). Writes to backend (registers a smoke user, top-ups, transfers, signs). Use for pre-release validation. `?auto=1` runs on load.
 - **`/bank/audit-log`** — read-only compliance ledger combining `/api/qtrade/operations` with local QSign signatures. Filters (kind / date / search), summary stats, CSV / JSON / print export. For regulators, auditors and partners.
-- **`/bank/diagnostics`** — read-only health board. Five endpoint probes with latency, auth state, local signature summary, environment fingerprint. Safe to run on every page load. For engineers and on-call.
+- **`/bank/diagnostics`** — read-only health board. Nine endpoint probes (was five; expanded to cover ecosystem/royalties/chess) with latency, auth state, local signature summary, environment fingerprint. Safe to run on every page load. For engineers and on-call.
 
 ## Test environment one-URL demo
 
@@ -18,7 +18,7 @@ For investor walk-throughs use a single URL:
 
 > **`https://aevion.app/bank?investor=1`**
 
-It registers a fresh demo user, redirects to `/bank/smoke?auto=1`, runs all 11 wired endpoints (auth → accounts → topup → transfer → sign → verify) live and lands on a printable signed receipt. The yellow `pre-license test mode` ribbon stays visible throughout for legal cover. See §1 below for the matching pre-merge gates.
+It registers a fresh demo user, redirects to `/bank/smoke?auto=1`, runs all 14 wired endpoints (auth → accounts → topup → transfer → sign → verify → ecosystem → royalties → chess) live and lands on a printable signed receipt. The yellow `pre-license test mode` ribbon stays visible throughout for legal cover. See §1 below for the matching pre-merge gates.
 
 ---
 
@@ -39,9 +39,9 @@ Live: https://aevion.app · API: https://api.aevion.app · Status: https://statu
 - [ ] `npm run verify` from `aevion-core/` returns green (backend `tsc` + frontend `next build`)
 - [ ] All 43+ bank routes render server-side without TypeScript errors
 - [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`, `/bank/budget`, `/bank/calendar`, `/bank/subscriptions`, `/bank/forecast`, `/bank/changelog`, `/bank/smoke`, `/bank/audit-log`, `/bank/diagnostics`
-- [ ] `/bank/smoke?auto=1` shows 11/11 green against staging in ≤7s
+- [ ] `/bank/smoke?auto=1` shows 14/14 green against staging in ≤8s
 - [ ] `/bank?investor=1` provisions a demo + redirects to smoke + completes without errors
-- [ ] `/bank/diagnostics` shows all five probes OK with avg latency under 250 ms p50
+- [ ] `/bank/diagnostics` shows all nine probes OK with avg latency under 250 ms p50
 - [ ] `/bank/audit-log` renders filtered + paginated rows; CSV / JSON / Print all download / open
 - [ ] `/api/qtrade/accounts`, `/transfers`, `/operations` resolve under 200ms p95 in staging
 - [ ] `/api/qtrade/{topup,transfer}` enforce `Idempotency-Key` (replay test passes)
@@ -125,9 +125,11 @@ Run these in order. Each should take <5 seconds.
 
 ## 9. Post-launch (week 1)
 
-- [ ] Migrate mock-zone modules: QRight royalties → real `/api/qright/royalties`
-- [ ] CyberChess winnings → real `/api/cyberchess/results`
-- [ ] Planet bonuses → real `/api/planet/payouts`
+- [x] ~~Migrate mock-zone modules: QRight royalties → real `/api/qright/royalties`~~ — endpoint shipped 2026-04-29; UI auto-flips MOCK → PARTIAL via live probe
+- [x] ~~CyberChess winnings → real `/api/cyberchess/results`~~ — endpoint shipped 2026-04-29; UI auto-flips MOCK → PARTIAL via live probe
+- [ ] Planet bonuses → real `/api/planet/payouts` (only stream still mocked)
+- [ ] Wire actual webhook callers: rights body POSTs to `/api/qright/royalties/verify-webhook` (X-QRight-Secret), tournament service POSTs to `/api/cyberchess/tournament-finalized` (X-CyberChess-Secret) — endpoints ready, partners not yet integrated
+- [ ] Move ecosystem ledger from in-memory to Postgres before any traffic that matters
 - [ ] Lift hardcoded `aevion.app` from sample env to env var-driven
 - [ ] Compose post-mortem doc if any incidents fired
 

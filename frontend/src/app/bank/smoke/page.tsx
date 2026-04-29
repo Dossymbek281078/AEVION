@@ -11,7 +11,7 @@
  *    investor / regulator / engineer can click Run and watch every
  *    contract-bound endpoint actually fire against the configured backend.
  *
- * Steps (11):
+ * Steps (14):
  *   1. GET /api/health                       — server alive
  *   2. (auth) reuse stored token OR register a fresh smoke_<ts>@aevion.test
  *   3. GET /api/auth/me                      — token resolves to a user
@@ -23,6 +23,9 @@
  *   9. POST /api/qtrade/transfer (1 AEC)     — primary → alt
  *  10. POST /api/qsign/sign  on transfer     — signature returned
  *  11. POST /api/qsign/verify on signature   — verifier accepts it
+ *  12. GET /api/ecosystem/earnings           — aggregator alive
+ *  13. GET /api/qright/royalties             — royalty stream alive
+ *  14. GET /api/cyberchess/results           — chess prizes feed alive
  *
  * Each step records latency, http status, and a one-line detail.
  * State is kept in component memory only (token reused via TOKEN_KEY for steps).
@@ -62,6 +65,9 @@ const INITIAL_STEPS: Step[] = [
   { key: "transfer", label: "POST /api/qtrade/transfer (1 AEC primary → alt)", status: "pending" },
   { key: "sign", label: "POST /api/qsign/sign on transfer", status: "pending" },
   { key: "verify", label: "POST /api/qsign/verify (must accept)", status: "pending" },
+  { key: "earnings", label: "GET /api/ecosystem/earnings", status: "pending" },
+  { key: "royalties", label: "GET /api/qright/royalties", status: "pending" },
+  { key: "chessResults", label: "GET /api/cyberchess/results", status: "pending" },
 ];
 
 function readToken(): string {
@@ -400,6 +406,53 @@ export default function BankSmokePage() {
       } catch (e: any) {
         failAndStop("verify", `network: ${e?.message || "unknown"}`);
       }
+      if (cancelRef.current) return;
+
+      // 12. ecosystem earnings
+      update("earnings", { status: "running" });
+      try {
+        const { res, data, ms } = await fetchJson("/api/ecosystem/earnings", { token: ctx.token });
+        if (res.ok && data?.totals) {
+          update("earnings", {
+            status: "pass",
+            ms,
+            http: res.status,
+            detail: `totals.all=${data.totals.all ?? 0} AEC across ${Array.isArray(data.perSource) ? data.perSource.length : 0} sources`,
+          });
+        } else {
+          failAndStop("earnings", data?.error || `earnings failed ${res.status}`, res.status);
+        }
+      } catch (e: any) {
+        failAndStop("earnings", `network: ${e?.message || "unknown"}`);
+      }
+      if (cancelRef.current) return;
+
+      // 13. qright royalties
+      update("royalties", { status: "running" });
+      try {
+        const { res, data, ms } = await fetchJson("/api/qright/royalties", { token: ctx.token });
+        if (res.ok && Array.isArray(data?.items)) {
+          update("royalties", { status: "pass", ms, http: res.status, detail: `${data.items.length} royalty events` });
+        } else {
+          failAndStop("royalties", data?.error || `royalties failed ${res.status}`, res.status);
+        }
+      } catch (e: any) {
+        failAndStop("royalties", `network: ${e?.message || "unknown"}`);
+      }
+      if (cancelRef.current) return;
+
+      // 14. cyberchess results
+      update("chessResults", { status: "running" });
+      try {
+        const { res, data, ms } = await fetchJson("/api/cyberchess/results", { token: ctx.token });
+        if (res.ok && Array.isArray(data?.items)) {
+          update("chessResults", { status: "pass", ms, http: res.status, detail: `${data.items.length} chess prizes` });
+        } else {
+          failAndStop("chessResults", data?.error || `chess results failed ${res.status}`, res.status);
+        }
+      } catch (e: any) {
+        failAndStop("chessResults", `network: ${e?.message || "unknown"}`);
+      }
     } finally {
       setTotalMs(Math.round(performance.now() - t0));
       setCompletedAt(new Date().toISOString());
@@ -604,7 +657,7 @@ export default function BankSmokePage() {
               color: "#065f46",
             }}
           >
-            <span style={{ fontWeight: 800 }}>All 11 steps passed.</span>
+            <span style={{ fontWeight: 800 }}>All {steps.length} steps passed.</span>
             {(() => {
               const totalMs = steps.reduce((acc, s) => acc + (s.ms ?? 0), 0);
               const seconds = (totalMs / 1000).toFixed(2);

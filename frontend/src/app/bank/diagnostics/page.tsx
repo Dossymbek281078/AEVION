@@ -49,6 +49,10 @@ const INITIAL_PROBES: Probe[] = [
   { key: "accounts", label: "Accounts list", path: "/api/qtrade/accounts", needsAuth: true, ok2xxOnly: true, status: "pending" },
   { key: "operations", label: "Operations feed", path: "/api/qtrade/operations", needsAuth: true, ok2xxOnly: true, status: "pending" },
   { key: "summary", label: "Account summary", path: "/api/qtrade/summary", needsAuth: true, ok2xxOnly: true, status: "pending" },
+  { key: "earnings", label: "Ecosystem earnings", path: "/api/ecosystem/earnings", needsAuth: true, ok2xxOnly: true, status: "pending" },
+  { key: "royalties", label: "QRight royalties", path: "/api/qright/royalties", needsAuth: true, ok2xxOnly: true, status: "pending" },
+  { key: "chessResults", label: "CyberChess results", path: "/api/cyberchess/results", needsAuth: true, ok2xxOnly: true, status: "pending" },
+  { key: "chessUpcoming", label: "CyberChess upcoming", path: "/api/cyberchess/upcoming", needsAuth: false, status: "pending" },
 ];
 
 function readToken(): string {

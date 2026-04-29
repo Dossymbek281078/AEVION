@@ -524,6 +524,11 @@ export default function Globus3D({
   /** Setter для selected-country fill+outline (живёт в Three.js scope). */
   const selectedCountryVizRef = useRef<((name: string | null) => void) | null>(null);
 
+  /** Setter для ecosystem-arcs от маркеров в выбранной стране к их «сородичам». */
+  const ecosystemArcsRef = useRef<
+    ((name: string | null, allMarkers: Marker[]) => void) | null
+  >(null);
+
   /** Texture loading progress — albedo / normal / specular / clouds / night. */
   const TEX_TOTAL = 5;
   const [texLoaded, setTexLoaded] = useState(0);
@@ -1466,6 +1471,74 @@ export default function Globus3D({
     };
 
     selectedCountryVizRef.current = setSelectedCountryViz;
+
+    // Ecosystem arcs — динамические дуги от маркеров выбранной страны к их
+    // «сородичам» в других странах (top-3 ближайших одной категории).
+    const ecosystemArcsGroup = new THREE.Group();
+    earthGroup.add(ecosystemArcsGroup);
+
+    const setEcosystemArcs = (
+      countryName: string | null,
+      allMarkers: Marker[],
+    ) => {
+      while (ecosystemArcsGroup.children.length > 0) {
+        const ch = ecosystemArcsGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+          material?: { dispose?: () => void };
+        };
+        ecosystemArcsGroup.remove(ch);
+        ch.geometry?.dispose?.();
+        ch.material?.dispose?.();
+      }
+      if (!countryName) return;
+
+      const inCountry = allMarkers.filter((m) => m.country === countryName);
+      if (inCountry.length === 0) return;
+      const others = allMarkers.filter((m) => m.country !== countryName);
+      if (others.length === 0) return;
+
+      const links: Array<{ a: Marker; b: Marker; color: number }> = [];
+      for (const a of inCountry) {
+        const sameCat = others.filter((b) => b.category === a.category);
+        if (sameCat.length === 0) continue;
+        const sorted = sameCat
+          .map((b) => ({
+            b,
+            d: Math.hypot(
+              a.lat - b.lat,
+              (a.lon - b.lon) * Math.cos((a.lat * Math.PI) / 180),
+            ),
+          }))
+          .sort((p, q) => p.d - q.d)
+          .slice(0, 3);
+        for (const { b } of sorted) links.push({ a, b, color: a.color });
+      }
+
+      for (const link of links) {
+        const pa = geoFromLatLon(link.a.lat, link.a.lon, radius + 1.5);
+        const pb = geoFromLatLon(link.b.lat, link.b.lon, radius + 1.5);
+        const start = new THREE.Vector3(pa.x, pa.y, pa.z);
+        const end = new THREE.Vector3(pb.x, pb.y, pb.z);
+        const midDir = start.clone().add(end).normalize();
+        const lift = 1.18 + Math.min(0.4, start.distanceTo(end) / (radius * 4));
+        const control = midDir.multiplyScalar(radius * lift);
+        const curve = new THREE.QuadraticBezierCurve3(start, control, end);
+        const points = curve.getPoints(48);
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const mat = new THREE.LineBasicMaterial({
+          color: link.color,
+          transparent: true,
+          opacity: 0.55,
+          depthTest: false,
+        });
+        mat.blending = THREE.AdditiveBlending;
+        const line = new THREE.Line(geo, mat);
+        line.renderOrder = 7;
+        ecosystemArcsGroup.add(line);
+      }
+    };
+
+    ecosystemArcsRef.current = setEcosystemArcs;
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -2513,6 +2586,11 @@ export default function Globus3D({
   useEffect(() => {
     selectedCountryVizRef.current?.(selectedCountry);
   }, [selectedCountry]);
+
+  /** Ecosystem arcs от выбранной страны к маркерам той же категории в других странах. */
+  useEffect(() => {
+    ecosystemArcsRef.current?.(selectedCountry, markers);
+  }, [selectedCountry, markers]);
 
   /** URL ?country=Russia — deep-link на конкретную страну (mount-only). */
   useEffect(() => {

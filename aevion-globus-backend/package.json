@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-cjs-shims.js",
     "start": "node dist/index.js",
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
@@ -17,6 +17,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@noble/post-quantum": "^0.6.1",
     "@prisma/client": "^7.2.0",
     "@sentry/node": "^9.47.1",
     "@types/geoip-lite": "^1.4.4",

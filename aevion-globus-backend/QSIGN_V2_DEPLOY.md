@@ -224,7 +224,43 @@ new tables/columns in place is safe (older code ignores `signatureDilithium`,
 
 ---
 
-## 11. Sentry (optional, opt-in via env)
+## 11. Real ML-DSA-65 / Dilithium (optional, opt-in via env)
+
+By default the Dilithium block is **preview mode** — a deterministic
+SHA-512 fingerprint of `canonical||kid` reserves the API surface but is
+not a real PQ signature. To activate **real ML-DSA-65 (FIPS 204)**
+signatures, set:
+
+```
+QSIGN_DILITHIUM_V1_SEED=<64-hex-char seed>
+```
+
+Generate one:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Backed by `@noble/post-quantum` — pure-JS, MIT-licensed, audited
+implementation. Performance: ~5 ms per signature, ~3 ms per verify on a
+typical Railway container. Signature size ~3.3 KB (6618 hex chars).
+
+The kid changes between modes:
+- preview → `qsign-dilithium-mldsa65-preview-v1` (128 hex chars in `digest`)
+- real    → `qsign-dilithium-mldsa65-v1` (~6618 hex in `signature` + `publicKey`)
+
+Verification auto-detects mode by signature length, so historical
+preview rows continue to verify correctly after the operator turns on
+real ML-DSA. The transition is one-way: don't unset
+`QSIGN_DILITHIUM_V1_SEED` once real-mode rows exist or those rows will
+verify as "unknown mode".
+
+⚠️ **Save the seed in your password manager.** Losing it means losing
+the ability to verify any real-mode signatures (the public key is
+derived deterministically from the seed).
+
+---
+
+## 12. Sentry (optional, opt-in via env)
 
 Set `SENTRY_DSN` in Railway → backend container → Variables. The QSign v2
 error path (`errResp` for any 5xx) forwards to Sentry with structured tags:
@@ -249,7 +285,7 @@ defaults:
 
 ---
 
-## 12. Publishing the SDKs to npm
+## 13. Publishing the SDKs to npm
 
 Both SDK packages live in `aevion-globus-backend/sdk/`:
 - `@aevion/qsign-client` — REST client, version 2.0.0

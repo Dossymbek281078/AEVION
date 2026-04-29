@@ -457,6 +457,21 @@ export default function ReceiptPage() {
         >
           {t("receipt.action.viewStatement")}
         </Link>
+        <Link
+          href={`/bank/audit-log?q=${encodeURIComponent(id)}`}
+          style={{
+            padding: "10px 18px",
+            borderRadius: 10,
+            background: "#fff",
+            color: "#0f172a",
+            fontSize: 13,
+            fontWeight: 800,
+            border: "1px solid rgba(15,23,42,0.14)",
+            textDecoration: "none",
+          }}
+        >
+          ✎ Open in audit log
+        </Link>
       </div>
     </main>
   );

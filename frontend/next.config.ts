@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 import { withSentryConfig } from "@sentry/nextjs";
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
 
 // Прокси API на бэкенд: браузер бьёт в same-origin `/api-backend/...` → без CORS.
 // В проде задайте BACKEND_PROXY_TARGET на сборке (URL без завершающего слэша).
@@ -47,6 +52,7 @@ const nextConfig: NextConfig = {
 
 // Sentry wrapper. Без NEXT_PUBLIC_SENTRY_DSN init/upload не выполняются,
 // но wrapper резервирует hooks для server/edge instrumentation.
-export default withSentryConfig(nextConfig, {
+// Bundle analyzer (ANALYZE=true npm run build) — outermost wrap.
+export default withBundleAnalyzer(withSentryConfig(nextConfig, {
   silent: true,
-});
+}));

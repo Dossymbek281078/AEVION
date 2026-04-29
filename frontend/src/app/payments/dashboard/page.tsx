@@ -625,6 +625,7 @@ export default function DashboardPage() {
                 { href: "/payments/fraud", label: "Fraud detection", emoji: "🛡️" },
                 { href: "/payments/compliance", label: "Compliance", emoji: "📋" },
                 { href: "/payments/api", label: "Developer API", emoji: "⚙️" },
+                { href: "/payments/status", label: "Status", emoji: "🟢" },
               ].map((n) => (
                 <Link
                   key={n.href}

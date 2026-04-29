@@ -95,9 +95,17 @@ const featureCards = [
     slug: "dashboard",
     title: "Dashboard",
     description:
-      "Live overview across every surface — MRR, settlements, fraud queue, webhook health, links, and a unified activity feed.",
+      "Live overview across every surface with sparklines — MRR, settlements, fraud, webhook health, links, and a unified activity feed.",
     accent: "#0d9488",
     icon: "📊",
+  },
+  {
+    slug: "status",
+    title: "Status",
+    description:
+      "Live health checks against /api/health and every public endpoint, refreshed every 30s. Uptime, latency, and surface counts.",
+    accent: "#10b981",
+    icon: "🟢",
   },
 ];
 
@@ -114,7 +122,11 @@ const roadmapItems = [
   { label: "Developer SDK + OpenAPI 3.1 + API key manager", status: "live" },
   { label: "Real /api/payments/v1 routes (links / checkout / subs / webhooks / settlements)", status: "live" },
   { label: "OpenAPI 3.1 spec served at /api/openapi.json", status: "live" },
-  { label: "Cross-surface dashboard with live activity feed", status: "live" },
+  { label: "Cross-surface dashboard with live activity feed + sparklines", status: "live" },
+  { label: "Cross-device payment links (server mirror + public /api/pay/[id])", status: "live" },
+  { label: "Server-side webhook delivery via node:crypto HMAC", status: "live" },
+  { label: "/api/health probe + live /payments/status monitor", status: "live" },
+  { label: "Vercel KV / Postgres persistence (replace in-memory store)", status: "planned" },
 ];
 
 export default function PaymentsPage() {
@@ -143,7 +155,7 @@ export default function PaymentsPage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Payments Rail · v1 · 9 surfaces · live API
+            Payments Rail · v1.2 · 10 surfaces · live API + cross-device
           </div>
 
           <h1

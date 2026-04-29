@@ -41,6 +41,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/payments/compliance",
     "/payments/api",
     "/payments/dashboard",
+    "/payments/status",
   ].map((p) => ({
     url: `${BASE}${p}`,
     lastModified: now,

@@ -10533,6 +10533,268 @@ Object.assign(translations.en, AWARDS_TRACK_PANEL_EXTRA_EN);
 Object.assign(translations.ru, AWARDS_TRACK_PANEL_EXTRA_RU);
 Object.assign(translations.kk, AWARDS_TRACK_PANEL_EXTRA_KK);
 
+const PLANET_ARTIFACT_EXTRA_EN: Record<string, string> = {
+  "planetArt.toast.needLogin": "Sign in required: /auth",
+  "planetArt.toast.needLoginOwner": "Sign in required (artifact owner only)",
+  "planetArt.toast.needLoginShort": "Sign in required",
+  "planetArt.toast.invalidRating": "Invalid rating",
+  "planetArt.toast.voteAccepted": "Vote accepted. Your public symbol: {sym}",
+  "planetArt.toast.voteError": "Vote error",
+  "planetArt.toast.snapshotOk": "Season snapshot fixed. rootHash: {hash}",
+  "planetArt.toast.snapshotError": "Snapshot error",
+  "planetArt.toast.linkCopied": "Link copied",
+  "planetArt.toast.linkCopyFail": "Could not copy (clipboard permission required)",
+  "planetArt.toast.proofLoaded": "Merkle proof loaded",
+  "planetArt.toast.proofError": "Proof error",
+
+  "planetArt.invalidId": "Invalid id",
+  "planetArt.nav.planet": "← Planet lab",
+  "planetArt.nav.awards": "Awards hub",
+  "planetArt.btn.copyLink": "Copy link",
+
+  "planetArt.h1": "Public artifact showcase",
+  "planetArt.intro": "Visible to everyone only after the certificate (compliance passed). Votes are shown by CodeSymbol — no email or name. The season snapshot fixes a Merkle root for proof.",
+
+  "planetArt.anchor.summary": "Summary",
+  "planetArt.anchor.voting": "Voting",
+  "planetArt.anchor.season": "Season",
+  "planetArt.anchor.snapshot": "Snapshot",
+
+  "planetArt.quick.label": "Quick action:",
+  "planetArt.quick.score": "Score",
+  "planetArt.btn.vote": "Vote",
+  "planetArt.btn.toFull": "To full section →",
+
+  "planetArt.summary.versionIdLabel": "artifactVersionId",
+  "planetArt.summary.evidenceRootLabel": "evidenceRoot",
+  "planetArt.summary.lineageBefore": "Previous version (resubmission):",
+
+  "planetArt.cert.title": "Certificate (public payload)",
+
+  "planetArt.stats.title": "Planet participants (for \"X of Y\")",
+  "planetArt.stats.eligibleBefore": "(active CodeSymbol):",
+  "planetArt.stats.distinctVoters": "Unique voters (all time):",
+  "planetArt.stats.source": "Metrics from",
+  "planetArt.stats.sourceTail": "— see",
+
+  "planetArt.voteStats.title": "Vote statistics",
+  "planetArt.voteStats.count": "Votes:",
+  "planetArt.voteStats.avg": "average:",
+  "planetArt.voteStats.coverage": "Voting coverage: {n} of {y} ({p}%)",
+
+  "planetArt.cats.title": "Votes by category",
+  "planetArt.cats.topNomination": "Top nomination",
+  "planetArt.cats.cardCount": "Votes:",
+  "planetArt.cats.cardAvg": "Average:",
+  "planetArt.cats.col.label": "Nomination",
+  "planetArt.cats.col.id": "categoryId",
+  "planetArt.cats.col.count": "Votes",
+  "planetArt.cats.col.avg": "Average",
+
+  "planetArt.compliance.title": "Compliance summary (public)",
+  "planetArt.compliance.subtitle": "Plagiarism / license summary for the showcase; the full validator list is below if needed.",
+
+  "planetArt.voting.title": "Voting (in-system)",
+  "planetArt.voting.codeSymbol.before": "Your current CodeSymbol:",
+  "planetArt.voting.codeSymbol.empty": "— (sign in and refresh the page)",
+  "planetArt.voting.nominationsBefore": "Nominations for type",
+  "planetArt.voting.nominationsAfter": "(stable categoryId for awards).",
+  "planetArt.voting.scoreLabel": "Score 1–5:",
+  "planetArt.voting.nominationLabel": "Nomination:",
+  "planetArt.btn.castVote": "Cast vote",
+  "planetArt.btn.toShowcase": "To award showcase",
+
+  "planetArt.season.title": "Season & snapshot (artifact owner)",
+  "planetArt.season.placeholder": "season id",
+  "planetArt.btn.finalizeSnapshot": "Fix vote snapshot",
+  "planetArt.btn.myProof": "My Merkle proof",
+
+  "planetArt.votesList.title": "Votes (CodeSymbol only)",
+  "planetArt.votesList.col.codeSymbol": "CodeSymbol",
+  "planetArt.votesList.col.score": "Score",
+  "planetArt.votesList.col.category": "Category",
+  "planetArt.votesList.col.leaf": "leafHash",
+
+  "planetArt.validators.summary": "All validators (raw JSON)",
+  "planetArt.snapshotLast.title": "Latest snapshot",
+};
+
+const PLANET_ARTIFACT_EXTRA_RU: Record<string, string> = {
+  "planetArt.toast.needLogin": "Нужен вход: /auth",
+  "planetArt.toast.needLoginOwner": "Нужен вход (только владелец артефакта)",
+  "planetArt.toast.needLoginShort": "Нужен вход",
+  "planetArt.toast.invalidRating": "Некорректная оценка",
+  "planetArt.toast.voteAccepted": "Голос принят. Ваш публичный символ: {sym}",
+  "planetArt.toast.voteError": "Ошибка голосования",
+  "planetArt.toast.snapshotOk": "Снапшот сезона зафиксирован. rootHash: {hash}",
+  "planetArt.toast.snapshotError": "Ошибка снапшота",
+  "planetArt.toast.linkCopied": "Ссылка скопирована",
+  "planetArt.toast.linkCopyFail": "Не удалось скопировать (нужно разрешение на буфер)",
+  "planetArt.toast.proofLoaded": "Merkle-proof загружен",
+  "planetArt.toast.proofError": "Ошибка proof",
+
+  "planetArt.invalidId": "Некорректный id",
+  "planetArt.nav.planet": "← Planet lab",
+  "planetArt.nav.awards": "Awards hub",
+  "planetArt.btn.copyLink": "Скопировать ссылку",
+
+  "planetArt.h1": "Публичная витрина артефакта",
+  "planetArt.intro": "Видно всем только после получения сертификата (compliance passed). Голоса показываются по CodeSymbol — без email и имени. Снапшот сезона фиксирует Merkle root для проверки.",
+
+  "planetArt.anchor.summary": "Сводка",
+  "planetArt.anchor.voting": "Голосование",
+  "planetArt.anchor.season": "Сезон",
+  "planetArt.anchor.snapshot": "Снапшот",
+
+  "planetArt.quick.label": "Быстрое действие:",
+  "planetArt.quick.score": "Оценка",
+  "planetArt.btn.vote": "Голос",
+  "planetArt.btn.toFull": "К полному блоку →",
+
+  "planetArt.summary.versionIdLabel": "artifactVersionId",
+  "planetArt.summary.evidenceRootLabel": "evidenceRoot",
+  "planetArt.summary.lineageBefore": "Предыдущая версия (пересдача):",
+
+  "planetArt.cert.title": "Сертификат (публичный payload)",
+
+  "planetArt.stats.title": "Участники Planet (для «X из Y»)",
+  "planetArt.stats.eligibleBefore": "(активный CodeSymbol):",
+  "planetArt.stats.distinctVoters": "Уникальных голосовавших (всё время):",
+  "planetArt.stats.source": "Метрики из",
+  "planetArt.stats.sourceTail": "— см.",
+
+  "planetArt.voteStats.title": "Статистика голосов",
+  "planetArt.voteStats.count": "Голосов:",
+  "planetArt.voteStats.avg": "среднее:",
+  "planetArt.voteStats.coverage": "Coverage голосования: {n} из {y} ({p}%)",
+
+  "planetArt.cats.title": "Голоса по номинациям",
+  "planetArt.cats.topNomination": "Топ номинация",
+  "planetArt.cats.cardCount": "Голосов:",
+  "planetArt.cats.cardAvg": "Среднее:",
+  "planetArt.cats.col.label": "Номинация",
+  "planetArt.cats.col.id": "categoryId",
+  "planetArt.cats.col.count": "Голосов",
+  "planetArt.cats.col.avg": "Среднее",
+
+  "planetArt.compliance.title": "Краткий compliance-отчёт (публично)",
+  "planetArt.compliance.subtitle": "Плагиат / лицензия — сжато для витрины; полный список валидаторов ниже при необходимости.",
+
+  "planetArt.voting.title": "Голосование (внутри системы)",
+  "planetArt.voting.codeSymbol.before": "Ваш текущий CodeSymbol:",
+  "planetArt.voting.codeSymbol.empty": "— (войдите и обновите страницу)",
+  "planetArt.voting.nominationsBefore": "Номинации для типа",
+  "planetArt.voting.nominationsAfter": "(стабильные categoryId для премий).",
+  "planetArt.voting.scoreLabel": "Оценка 1–5:",
+  "planetArt.voting.nominationLabel": "Номинация:",
+  "planetArt.btn.castVote": "Проголосовать",
+  "planetArt.btn.toShowcase": "К витрине премии",
+
+  "planetArt.season.title": "Сезон и снапшот (владелец артефакта)",
+  "planetArt.season.placeholder": "season id",
+  "planetArt.btn.finalizeSnapshot": "Зафиксировать снапшот голосов",
+  "planetArt.btn.myProof": "Мой Merkle-proof",
+
+  "planetArt.votesList.title": "Голоса (только CodeSymbol)",
+  "planetArt.votesList.col.codeSymbol": "CodeSymbol",
+  "planetArt.votesList.col.score": "Оценка",
+  "planetArt.votesList.col.category": "Категория",
+  "planetArt.votesList.col.leaf": "leafHash",
+
+  "planetArt.validators.summary": "Все валидаторы (raw JSON)",
+  "planetArt.snapshotLast.title": "Последний снапшот",
+};
+
+const PLANET_ARTIFACT_EXTRA_KK: Record<string, string> = {
+  "planetArt.toast.needLogin": "Кіру қажет: /auth",
+  "planetArt.toast.needLoginOwner": "Кіру қажет (тек артефакт иесі үшін)",
+  "planetArt.toast.needLoginShort": "Кіру қажет",
+  "planetArt.toast.invalidRating": "Жарамсыз баға",
+  "planetArt.toast.voteAccepted": "Дауыс қабылданды. Сіздің жария символыңыз: {sym}",
+  "planetArt.toast.voteError": "Дауыс беру қатесі",
+  "planetArt.toast.snapshotOk": "Маусым снапшоты бекітілді. rootHash: {hash}",
+  "planetArt.toast.snapshotError": "Снапшот қатесі",
+  "planetArt.toast.linkCopied": "Сілтеме көшірілді",
+  "planetArt.toast.linkCopyFail": "Көшіру мүмкін болмады (буферге рұқсат қажет)",
+  "planetArt.toast.proofLoaded": "Merkle-proof жүктелді",
+  "planetArt.toast.proofError": "Proof қатесі",
+
+  "planetArt.invalidId": "Жарамсыз id",
+  "planetArt.nav.planet": "← Planet lab",
+  "planetArt.nav.awards": "Awards хабы",
+  "planetArt.btn.copyLink": "Сілтемені көшіру",
+
+  "planetArt.h1": "Артефакттың жария витринасы",
+  "planetArt.intro": "Сертификат (compliance passed) алғаннан кейін ғана барлығына көрінеді. Дауыстар CodeSymbol арқылы көрсетіледі — email және атсыз. Маусым снапшоты тексеру үшін Merkle root-ты бекітеді.",
+
+  "planetArt.anchor.summary": "Қысқаша",
+  "planetArt.anchor.voting": "Дауыс беру",
+  "planetArt.anchor.season": "Маусым",
+  "planetArt.anchor.snapshot": "Снапшот",
+
+  "planetArt.quick.label": "Жылдам әрекет:",
+  "planetArt.quick.score": "Баға",
+  "planetArt.btn.vote": "Дауыс",
+  "planetArt.btn.toFull": "Толық блокқа →",
+
+  "planetArt.summary.versionIdLabel": "artifactVersionId",
+  "planetArt.summary.evidenceRootLabel": "evidenceRoot",
+  "planetArt.summary.lineageBefore": "Алдыңғы нұсқа (қайта жіберу):",
+
+  "planetArt.cert.title": "Сертификат (жария payload)",
+
+  "planetArt.stats.title": "Planet қатысушылары («X-тен Y» үшін)",
+  "planetArt.stats.eligibleBefore": "(белсенді CodeSymbol):",
+  "planetArt.stats.distinctVoters": "Бірегей дауыс берушілер (барлық уақытта):",
+  "planetArt.stats.source": "Метрикалар:",
+  "planetArt.stats.sourceTail": "— қара:",
+
+  "planetArt.voteStats.title": "Дауыс статистикасы",
+  "planetArt.voteStats.count": "Дауыс:",
+  "planetArt.voteStats.avg": "орташа:",
+  "planetArt.voteStats.coverage": "Coverage: {n} / {y} ({p}%)",
+
+  "planetArt.cats.title": "Номинациялар бойынша дауыстар",
+  "planetArt.cats.topNomination": "Топ номинация",
+  "planetArt.cats.cardCount": "Дауыс:",
+  "planetArt.cats.cardAvg": "Орташа:",
+  "planetArt.cats.col.label": "Номинация",
+  "planetArt.cats.col.id": "categoryId",
+  "planetArt.cats.col.count": "Дауыс",
+  "planetArt.cats.col.avg": "Орташа",
+
+  "planetArt.compliance.title": "Қысқа compliance-есеп (жария)",
+  "planetArt.compliance.subtitle": "Плагиат / лицензия — витрина үшін қысқа; қажет болса валидаторлардың толық тізімі төменде.",
+
+  "planetArt.voting.title": "Дауыс беру (жүйе ішінде)",
+  "planetArt.voting.codeSymbol.before": "Сіздің ағымдағы CodeSymbol-ыңыз:",
+  "planetArt.voting.codeSymbol.empty": "— (кіріп, бетті жаңартыңыз)",
+  "planetArt.voting.nominationsBefore": "Түрі үшін номинациялар",
+  "planetArt.voting.nominationsAfter": "(сыйлықтарға тұрақты categoryId).",
+  "planetArt.voting.scoreLabel": "Баға 1–5:",
+  "planetArt.voting.nominationLabel": "Номинация:",
+  "planetArt.btn.castVote": "Дауыс беру",
+  "planetArt.btn.toShowcase": "Сыйлық витринасына",
+
+  "planetArt.season.title": "Маусым және снапшот (артефакт иесі)",
+  "planetArt.season.placeholder": "season id",
+  "planetArt.btn.finalizeSnapshot": "Дауыс снапшотын бекіту",
+  "planetArt.btn.myProof": "Менің Merkle-proof",
+
+  "planetArt.votesList.title": "Дауыстар (тек CodeSymbol)",
+  "planetArt.votesList.col.codeSymbol": "CodeSymbol",
+  "planetArt.votesList.col.score": "Баға",
+  "planetArt.votesList.col.category": "Санат",
+  "planetArt.votesList.col.leaf": "leafHash",
+
+  "planetArt.validators.summary": "Барлық валидаторлар (raw JSON)",
+  "planetArt.snapshotLast.title": "Соңғы снапшот",
+};
+
+Object.assign(translations.en, PLANET_ARTIFACT_EXTRA_EN);
+Object.assign(translations.ru, PLANET_ARTIFACT_EXTRA_RU);
+Object.assign(translations.kk, PLANET_ARTIFACT_EXTRA_KK);
+
 function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;
   let r = s;

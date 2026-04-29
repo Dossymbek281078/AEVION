@@ -18,6 +18,7 @@ import {
 import type { QSignVerifyResult } from "../lib/qsignV2/types";
 import { fireWebhooksFor } from "../lib/qsignV2/webhooks";
 import { QSIGN_V2_OPENAPI } from "../lib/qsignV2/openapiSpec";
+import { captureException as captureToSentry } from "../lib/qsignV2/sentry";
 
 /* ───────── rate limits ─────────
  * Per-IP token-bucket style windows guarding the two expensive write paths.
@@ -114,6 +115,15 @@ function errResp(
   const id = reqId(req);
   if (err !== undefined) {
     console.error(`[qsign v2] [req=${id}] ${body.error || "error"}`, err);
+    if (status >= 500) {
+      captureToSentry(err, {
+        requestId: id,
+        errorCode: typeof body.error === "string" ? body.error : "unknown",
+        path: req.originalUrl || req.url,
+        method: req.method,
+        status,
+      });
+    }
   }
   res.status(status).json({ ...body, requestId: id });
 }

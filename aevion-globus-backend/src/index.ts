@@ -8,6 +8,7 @@ import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qsignV2Router } from "./routes/qsignV2";
 import { startWebhookWorker } from "./lib/qsignV2/webhooks";
+import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
@@ -213,6 +214,10 @@ app.use(
     res.status(500).json({ error: "internal_error" });
   },
 );
+
+// QSign v2 — Sentry init (no-op when SENTRY_DSN unset). Must run before
+// the listener binds so any startup failures are captured too.
+initSentry();
 
 app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);

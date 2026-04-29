@@ -2066,6 +2066,7 @@ export default function CyberChessPage(){
   const dragRef=useRef<{from:Square;sx:number;sy:number;active:boolean;pid:number}|null>(null);
   const recentDragRef=useRef<number>(0);
   const[ghost,sGhost]=useState<{from:Square;x:number;y:number}|null>(null);
+  const[dragHover,sDragHover]=useState<Square|null>(null);
   const sqFromPoint=(x:number,y:number):Square|null=>{
     if(typeof document==="undefined")return null;
     const els=document.elementsFromPoint(x,y) as HTMLElement[];
@@ -2088,7 +2089,8 @@ export default function CyberChessPage(){
   const onBoardMove=(e:React.PointerEvent)=>{
     const d=dragRef.current;if(!d||d.pid!==e.pointerId)return;
     const dx=e.clientX-d.sx,dy=e.clientY-d.sy;
-    if(!d.active&&Math.hypot(dx,dy)>5){
+    // Threshold 3px — snappier activation (touch и мышь чувствительнее).
+    if(!d.active&&Math.hypot(dx,dy)>3){
       d.active=true;
       const p=game.get(d.from);const isMyTurn=tab==="analysis"||game.turn()===pCol;
       if(p&&isMyTurn){
@@ -2096,10 +2098,15 @@ export default function CyberChessPage(){
         sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:d.from,verbose:true}),dicePieceType):game.moves({square:d.from,verbose:true})).map(m=>m.to)));
       }else if(p&&on){sPmSel(d.from);}
     }
-    if(d.active)sGhost({from:d.from,x:e.clientX,y:e.clientY});
+    if(d.active){
+      sGhost({from:d.from,x:e.clientX,y:e.clientY});
+      // Hover halo — подсвечиваем cell под курсором (lichess-style).
+      const hover=sqFromPoint(e.clientX,e.clientY);
+      sDragHover(hover&&hover!==d.from?hover:null);
+    }
   };
   const onBoardUp=(e:React.PointerEvent)=>{
-    const d=dragRef.current;dragRef.current=null;sGhost(null);
+    const d=dragRef.current;dragRef.current=null;sGhost(null);sDragHover(null);
     try{(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);}catch{}
     if(!d||!d.active)return;
     recentDragRef.current=Date.now();
@@ -2125,7 +2132,7 @@ export default function CyberChessPage(){
       else exec(f,to);
     }else{sSel(null);sVm(new Set());}
   };
-  const onBoardCancel=(_e:React.PointerEvent)=>{dragRef.current=null;sGhost(null);};
+  const onBoardCancel=(_e:React.PointerEvent)=>{dragRef.current=null;sGhost(null);sDragHover(null);};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;
     // Determine starting FEN based on variant
@@ -3508,6 +3515,15 @@ export default function CyberChessPage(){
                   isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
                   pmIdx={pmToIdx.get(sq)}/>;
               }))}
+              {/* Hover halo — кольцо на cell под курсором во время drag (lichess-style) */}
+              {dragHover&&(()=>{
+                const hf=FILES.indexOf(dragHover[0]);
+                const hr=8-parseInt(dragHover[1]);
+                const hc=flip?7-hf:hf;const hrr=flip?7-hr:hr;
+                const isLegal=vm.has(dragHover);
+                const ringCol=isLegal?"#10b981":"#94a3b8";
+                return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
+              })()}
               {/* Ghost piece following pointer during drag */}
               {ghost&&(()=>{const gp=game.get(ghost.from);if(!gp)return null;return <div style={{position:"fixed",left:ghost.x,top:ghost.y,width:"clamp(60px,9vw,90px)",height:"clamp(60px,9vw,90px)",transform:"translate(-50%,-50%) scale(1.05)",pointerEvents:"none",zIndex:1000,filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.45))"}}><Piece type={gp.type} color={gp.color}/></div>;})()}
 

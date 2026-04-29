@@ -432,6 +432,111 @@ healthaiRouter.get("/trends/:id", (req: Request, res: Response) => {
   });
 });
 
+/**
+ * LLM-augmented advice — fallback когда rule-base молчит. Системный промпт
+ * с safety guardrails (не диагноз, не лекарства, urgent → скорая). Если
+ * ANTHROPIC_API_KEY не настроен — вернёт 503.
+ */
+healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.profileId || typeof body.profileId !== "string") {
+    return res.status(400).json({ error: "profileId-required" });
+  }
+  const profile = profiles.get(body.profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
+  if (symptoms.length === 0) {
+    return res.status(400).json({ error: "symptoms-empty" });
+  }
+  const lang =
+    body.lang === "en" || body.lang === "ru" ? body.lang : "ru";
+
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "llm-not-configured",
+      hint: "Set ANTHROPIC_API_KEY in env to enable LLM-augmented advice.",
+    });
+  }
+
+  const profileLine = `Возраст: ${profile.age || "?"}, пол: ${profile.sex}, рост: ${profile.heightCm || "?"}см, вес: ${profile.weightKg || "?"}кг.`;
+  const conditionsLine = profile.conditions.length
+    ? `Хронические: ${profile.conditions.join(", ")}.`
+    : "";
+  const allergiesLine = profile.allergies.length
+    ? `Аллергии: ${profile.allergies.join(", ")}.`
+    : "";
+  const medsLine = profile.medications.length
+    ? `Лекарства: ${profile.medications.join(", ")}.`
+    : "";
+
+  const systemPrompt =
+    lang === "en"
+      ? `You are AEVION HealthAI — an educational health assistant. STRICT RULES:
+1. NEVER provide a medical diagnosis.
+2. NEVER recommend specific medications or dosages.
+3. If symptoms suggest URGENT condition (chest pain, stroke signs, severe shortness of breath, sudden severe pain, suicidal ideation) — say so clearly and recommend emergency services.
+4. Otherwise: 2-4 short paragraphs of self-care + clear marker when to see a doctor.
+5. Plain language, no jargon. Reference the user's profile only if relevant.
+6. End with disclaimer: "Это не медицинский диагноз — при сомнениях обратитесь к врачу."`
+      : `Ты — AEVION HealthAI, образовательный AI-помощник по здоровью. ЖЁСТКИЕ ПРАВИЛА:
+1. НИКОГДА не ставь диагноз.
+2. НИКОГДА не рекомендуй конкретные лекарства и дозировки.
+3. Если симптомы указывают на СРОЧНОЕ состояние (боль в груди, признаки инсульта, тяжёлая одышка, внезапная острая боль, суицидальные мысли) — прямо скажи об этом и направь к скорой.
+4. Иначе: 2-4 коротких абзаца с self-care советами + ясный маркер когда обращаться к врачу.
+5. Простой язык, без жаргона. Ссылайся на профиль пациента только если это релевантно.
+6. Закончи дисклеймером: "Это не медицинский диагноз — при сомнениях обратитесь к врачу."`;
+
+  const userPrompt =
+    lang === "en"
+      ? `Patient profile: ${profileLine} ${conditionsLine} ${allergiesLine} ${medsLine}\nSymptoms: ${symptoms.join("; ")}.\nDuration: ${body.durationH || "?"}h. Severity: ${body.severity || "?"}/10.${body.notes ? `\nNotes: ${body.notes}` : ""}\n\nGive structured advice.`
+      : `Профиль пациента: ${profileLine} ${conditionsLine} ${allergiesLine} ${medsLine}\nСимптомы: ${symptoms.join("; ")}.\nДлительность: ${body.durationH || "?"}ч. Тяжесть: ${body.severity || "?"}/10.${body.notes ? `\nЗаметки: ${body.notes}` : ""}\n\nДай структурированный совет.`;
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        temperature: 0.4,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+    const data = (await r.json()) as {
+      content?: Array<{ text?: string }>;
+      error?: { message?: string };
+    };
+    if (!r.ok) {
+      return res.status(502).json({
+        error: "llm-failed",
+        detail: data.error?.message || `status ${r.status}`,
+      });
+    }
+    const reply =
+      data.content?.map((b) => b.text || "").join("").trim() || "";
+    if (!reply) {
+      return res.status(502).json({ error: "llm-empty-reply" });
+    }
+    res.json({
+      advice: reply,
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      disclaimer: DISCLAIMER,
+    });
+  } catch (e: any) {
+    return res
+      .status(502)
+      .json({ error: "llm-fetch-failed", detail: String(e?.message || e) });
+  }
+});
+
 healthaiRouter.post("/import", (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {

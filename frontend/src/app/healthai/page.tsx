@@ -65,6 +65,17 @@ const STR: Record<string, Record<Lang, string>> = {
   wearables_apple: { en: "🍎 Apple Health (demo)", ru: "🍎 Apple Health (демо)" },
   wearables_google: { en: "❤ Google Fit (demo)", ru: "❤ Google Fit (демо)" },
   toast_imported_n: { en: "Imported {n} days ✓", ru: "Импортировано {n} дней ✓" },
+  btn_llm_advice: {
+    en: "🧠 Deeper AI analysis",
+    ru: "🧠 Глубокий AI-анализ",
+  },
+  llm_loading: { en: "Thinking…", ru: "Анализирую…" },
+  llm_not_configured: {
+    en: "LLM is not configured on the server (set ANTHROPIC_API_KEY).",
+    ru: "LLM не настроен на сервере (нужен ANTHROPIC_API_KEY).",
+  },
+  llm_failed: { en: "AI request failed", ru: "Запрос к AI не удался" },
+  llm_card_title: { en: "AI deep analysis", ru: "Глубокий AI-анализ" },
   hist_subtitle: { en: "{c} checks · {l} logs", ru: "{c} чеков · {l} логов" },
   field_age: { en: "Age", ru: "Возраст" },
   field_sex: { en: "Sex", ru: "Пол" },
@@ -317,6 +328,8 @@ export default function HealthAIPage() {
   const [durationH, setDurationH] = useState("");
   const [checkNotes, setCheckNotes] = useState("");
   const [lastCheck, setLastCheck] = useState<Check | null>(null);
+  const [llmAdvice, setLlmAdvice] = useState<string | null>(null);
+  const [llmBusy, setLlmBusy] = useState(false);
 
   // Log draft
   const [logSleep, setLogSleep] = useState("");
@@ -484,6 +497,7 @@ export default function HealthAIPage() {
         return;
       }
       setLastCheck(j.check);
+      setLlmAdvice(null);
       setChecks((prev) => [j.check, ...prev].slice(0, 30));
       // Сбрасываем форму, оставляя severity на 5.
       setSymptomsText("");
@@ -491,6 +505,38 @@ export default function HealthAIPage() {
       setCheckNotes("");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const runLlmCheck = async () => {
+    if (!profileIdRef.current || !lastCheck) return;
+    setLlmBusy(true);
+    setLlmAdvice(null);
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/check-llm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: profileIdRef.current,
+          symptoms: lastCheck.symptoms,
+          severity: lastCheck.severity,
+          durationH: lastCheck.durationH,
+          notes: lastCheck.notes,
+          lang,
+        }),
+      });
+      const j = await r.json();
+      if (r.status === 503) {
+        showToast(t("llm_not_configured", lang));
+        return;
+      }
+      if (!r.ok || !j.advice) {
+        showToast(t("llm_failed", lang));
+        return;
+      }
+      setLlmAdvice(j.advice);
+    } finally {
+      setLlmBusy(false);
     }
   };
 
@@ -941,7 +987,45 @@ export default function HealthAIPage() {
               </div>
             </Card>
 
-            {lastCheck ? <CheckCard check={lastCheck} lang={lang} /> : null}
+            {lastCheck ? (
+              <>
+                <CheckCard check={lastCheck} lang={lang} />
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  <button
+                    type="button"
+                    onClick={runLlmCheck}
+                    disabled={llmBusy}
+                    style={{
+                      ...primaryBtn,
+                      background:
+                        "linear-gradient(180deg, #a855f7 0%, #7e22ce 100%)",
+                      borderColor: "rgba(196,181,253,0.55)",
+                      color: "#fff",
+                    }}
+                  >
+                    {llmBusy ? t("llm_loading", lang) : t("btn_llm_advice", lang)}
+                  </button>
+                </div>
+                {llmAdvice ? (
+                  <Card>
+                    <CardHeader
+                      title={t("llm_card_title", lang)}
+                      subtitle="claude-haiku-4.5"
+                    />
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#cbd5e1",
+                        lineHeight: 1.6,
+                        whiteSpace: "pre-wrap" as const,
+                      }}
+                    >
+                      {llmAdvice}
+                    </div>
+                  </Card>
+                ) : null}
+              </>
+            ) : null}
           </>
         ) : null}
 

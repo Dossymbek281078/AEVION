@@ -517,6 +517,9 @@ export default function Globus3D({
     if (!timeLapse) timeLapseOffsetRef.current = 0;
   }, [timeLapse]);
 
+  /** Canvas ref для PNG snapshot. */
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   /** Texture loading progress — albedo / normal / specular / clouds / night. */
   const TEX_TOTAL = 5;
   const [texLoaded, setTexLoaded] = useState(0);
@@ -917,6 +920,7 @@ export default function Globus3D({
       alpha: true,
       powerPreference: "high-performance",
       failIfMajorPerformanceCaveat: false,
+      preserveDrawingBuffer: true,
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -929,6 +933,7 @@ export default function Globus3D({
     canvas.style.height = "100%";
     canvas.style.verticalAlign = "top";
     el.appendChild(canvas);
+    canvasRef.current = canvas;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 2000);
@@ -2449,6 +2454,32 @@ export default function Globus3D({
       { timeout: 6000, maximumAge: 5 * 60 * 1000 },
     );
   };
+  const snapshotPng = () => {
+    const c = canvasRef.current;
+    if (!c) return;
+    try {
+      c.toBlob((blob) => {
+        if (!blob) {
+          setShareToast("failed");
+          window.setTimeout(() => setShareToast(null), 2200);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        a.href = url;
+        a.download = `aevion-globus-${stamp}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, "image/png");
+    } catch {
+      setShareToast("failed");
+      window.setTimeout(() => setShareToast(null), 2200);
+    }
+  };
+
   const randomCountry = () => {
     const counts: Record<string, number> = {};
     for (const m of markers) counts[m.country] = (counts[m.country] || 0) + 1;
@@ -3181,6 +3212,15 @@ export default function Globus3D({
             }}
           >
             {timeLapse ? "⏸" : "⏱"}
+          </button>
+          <button
+            type="button"
+            title="Download PNG snapshot"
+            aria-label="Download PNG snapshot"
+            onClick={snapshotPng}
+            style={ctrlBtn}
+          >
+            📷
           </button>
         </div>
       ) : null}

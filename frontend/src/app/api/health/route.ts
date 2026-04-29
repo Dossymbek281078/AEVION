@@ -1,4 +1,5 @@
 import { store } from "../payments/v1/_lib";
+import { kvBackend } from "../payments/v1/_persist";
 
 const STARTED_AT = Date.now();
 
@@ -32,9 +33,10 @@ export function GET() {
       iso: new Date(now).toISOString(),
       uptime_ms: uptimeMs,
       uptime_human: formatUptime(uptimeMs),
-      version: "v1.2",
+      version: "v1.3",
       runtime: typeof process !== "undefined" ? process.version : "edge",
       memory_rss_mb: memUsed,
+      persistence: kvBackend(),
       surfaces,
     },
     {

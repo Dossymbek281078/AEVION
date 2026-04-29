@@ -1614,14 +1614,14 @@ export default function CyberChessPage(){
     if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
   },[pzSolvedCount,unlockAch]);
 
-  /* ── Premove trigger — микрозадача, чтобы не блокировать паинт; без pms в deps,
-     pmsRef читаем напрямую → нет каскада re-render'ов, если sPms(rest) обновил массив. ── */
+  /* ── Premove trigger — синхронно после render'а, без rAF. rAF добавлял
+     лишний кадр (~16ms) задержки; премув должен срабатывать сразу как
+     пришла очередь юзера. ── */
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(game.turn()!==pCol)return;
     if(pmsRef.current.length===0)return;
-    const id=requestAnimationFrame(()=>doPremoveRef.current());
-    return()=>cancelAnimationFrame(id);
+    doPremoveRef.current();
   },[bk,over,on,tab,pCol,pms.length]);
 
   /* ── AI turn trigger ── */
@@ -3194,7 +3194,46 @@ export default function CyberChessPage(){
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
-            <div onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel} style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none"}}>
+            <div onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel}
+              onClick={e=>{
+                if(Date.now()-recentDragRef.current<150)return;
+                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
+                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq)return;
+                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
+                if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();
+                click(sq);
+              }}
+              onMouseDown={e=>{
+                if(e.button!==2)return;
+                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
+                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq)return;
+                rcStartRef.current=sq;e.preventDefault();
+              }}
+              onMouseUp={e=>{
+                if(e.button!==2)return;
+                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
+                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq)return;
+                const start=rcStartRef.current;rcStartRef.current=null;
+                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
+                if(!annotActive||!start)return;
+                const col=annotColor(e);
+                if(start===sq){
+                  sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
+                }else{
+                  sArrows(a=>{const i=a.findIndex(x=>x.from===start&&x.to===sq&&x.c===col);if(i>=0)return a.filter((_,j)=>j!==i);return [...a,{from:start,to:sq,c:col}]});
+                }
+              }}
+              onContextMenu={e=>{
+                e.preventDefault();e.stopPropagation();
+                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
+                if(annotActive)return;
+                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
+                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq){if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null);return;}
+                const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
+                if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
+                if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
+              }}
+              style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none"}}>
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
                 const tm:ThreatMap=computeThreatMap(bd as any);
@@ -3230,40 +3269,28 @@ export default function CyberChessPage(){
                   })}
                 </svg>;
               })()}
-              {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
-                const realP=game.get(sq);
-                const isShadow=pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color);
-                const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
-                let bg=lt?bT.light:bT.dark;
-                if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                // Annotation mode: when the game is finished OR we're in analysis/coach (viewer mode),
-                // right-click draws arrows & highlights. During a live play game, right-click still
-                // removes premoves as before.
+              {(()=>{
+                // Pre-compute for всех 64 cells один раз — annotActive, isOwnPieceCursor.
+                // Все handlers через event delegation на parent — отказывается от 256
+                // inline closures на каждый render.
                 const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
-                const isDragOrigin=ghost?.from===sq;
-                return<div key={sq} data-sq={sq} onClick={()=>{if(Date.now()-recentDragRef.current<150)return;if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();click(sq)}} onMouseDown={e=>{if(e.button===2){rcStartRef.current=sq;e.preventDefault()}}} onMouseUp={e=>{
-                  if(e.button!==2)return;
-                  const start=rcStartRef.current;rcStartRef.current=null;
-                  if(!annotActive)return;
-                  if(!start)return;
-                  const col=annotColor(e);
-                  if(start===sq){
-                    sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
-                  }else{
-                    sArrows(a=>{const i=a.findIndex(x=>x.from===start&&x.to===sq&&x.c===col);if(i>=0)return a.filter((_,j)=>j!==i);return [...a,{from:start,to:sq,c:col}]});
-                  }
-                }} onContextMenu={e=>{e.preventDefault();e.stopPropagation();
-                  if(annotActive)return;
-                  const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
-                  if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
-                  if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
-                }}
-                  className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
-                  style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
-                  {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
-                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
-                  {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
-                </div>}))}
+                return rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
+                  const realP=game.get(sq);
+                  const isShadow=pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color);
+                  const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
+                  let bg=lt?bT.light:bT.dark;
+                  if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
+                  const isDragOrigin=ghost?.from===sq;
+                  void annotActive;
+                  return <div key={sq} data-sq={sq}
+                    className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
+                    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
+                    {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
+                    {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
+                    {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
+                  </div>;
+                }));
+              })()}
               {/* Ghost piece following pointer during drag */}
               {ghost&&(()=>{const gp=game.get(ghost.from);if(!gp)return null;return <div style={{position:"fixed",left:ghost.x,top:ghost.y,width:"clamp(60px,9vw,90px)",height:"clamp(60px,9vw,90px)",transform:"translate(-50%,-50%) scale(1.05)",pointerEvents:"none",zIndex:1000,filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.45))"}}><Piece type={gp.type} color={gp.color}/></div>;})()}
             </div>

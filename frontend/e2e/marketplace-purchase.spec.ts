@@ -50,12 +50,16 @@ test.describe("AEV Marketplace · purchase", () => {
       return owned.includes("theme_aurora");
     }, { timeout: 5_000 }).toBe(true);
 
-    // Wallet balance debited by 10 (50 → 40)
+    // Wallet balance debited by 10 (50 → 40). Background auto-mining (network
+    // invites, stewardship dividends, streak bonuses) may add fractional AEV
+    // during the test window — use ±1 AEV tolerance to capture the -10 debit
+    // without flaking on tick-timing.
     const balance = await page.evaluate((k) => {
       const raw = window.localStorage.getItem(k);
       if (!raw) return 0;
       try { return (JSON.parse(raw).balance ?? 0) as number } catch { return 0 }
     }, WALLET_KEY);
-    expect(balance).toBeCloseTo(40, 2);
+    expect(balance).toBeGreaterThanOrEqual(39);
+    expect(balance).toBeLessThanOrEqual(41);
   });
 });

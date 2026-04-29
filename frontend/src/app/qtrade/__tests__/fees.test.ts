@@ -12,6 +12,7 @@ import {
   closeWithFees,
   todayRealizedPnl,
   dailyLossExceeded,
+  feesForPair,
   __FEES_INTERNAL,
   type FeeConfig,
 } from "../fees";
@@ -230,5 +231,32 @@ describe("fees · todayRealizedPnl + dailyLossExceeded", () => {
       { exitTs: yesterdayMid, realizedPnl: -1000 },
       { exitTs: now, realizedPnl: -10 },
     ], cfg, now)).toBe(false);
+  });
+});
+
+describe("fees · feesForPair (per-pair promo overrides)", () => {
+  it("returns config unchanged when fees disabled", () => {
+    const cfg = { ...enabledCfg, enabled: false };
+    expect(feesForPair("AEV/USD", cfg)).toBe(cfg);
+    expect(feesForPair("BTC/USD", cfg)).toBe(cfg);
+  });
+
+  it("returns config unchanged for pairs without promo", () => {
+    const out = feesForPair("BTC/USD", enabledCfg);
+    expect(out).toEqual(enabledCfg);
+  });
+
+  it("AEV/USD promo overrides makerBps to 0 when fees enabled", () => {
+    const out = feesForPair("AEV/USD", enabledCfg);
+    expect(out.enabled).toBe(true);
+    expect(out.makerBps).toBe(0);
+    expect(out.takerBps).toBe(enabledCfg.takerBps);   // unchanged
+    expect(out.slippageBps).toBe(enabledCfg.slippageBps); // unchanged
+  });
+
+  it("AEV/USD limit fill (maker) ⇒ zero fee with promo", () => {
+    const promoCfg = feesForPair("AEV/USD", enabledCfg);
+    expect(tradeFee(10_000, "maker", promoCfg)).toBe(0);
+    expect(tradeFee(10_000, "taker", promoCfg)).toBeCloseTo(10, 6); // taker still 10 bps
   });
 });

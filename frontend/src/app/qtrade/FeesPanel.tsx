@@ -180,6 +180,22 @@ export default function FeesPanel({ onChange, closed = [] }: Props) {
             />
           </div>
 
+          {cfg.enabled && (
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 6,
+                background: "rgba(168,85,247,0.12)",
+                border: "1px solid rgba(168,85,247,0.40)",
+                color: "#d8b4fe",
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              ✨ Promo: <strong>AEV/USD</strong> maker fee = <strong>0%</strong> (native pair)
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: "#94a3b8" }}>
             <button
               onClick={reset}

@@ -23,7 +23,7 @@ import {
   type PortfolioStats, type PairBreakdown, type CalendarCell,
 } from "./analytics";
 import { runBacktest, type BacktestResult, type StrategyKind } from "./backtest";
-import { ldFees, slipEntryPrice, closeWithFees, dailyLossExceeded } from "./fees";
+import { ldFees, slipEntryPrice, closeWithFees, dailyLossExceeded, feesForPair } from "./fees";
 import FeesPanel from "./FeesPanel";
 import { downloadTradesCsv } from "./csv";
 
@@ -313,8 +313,9 @@ export default function QTradePage() {
           if (triggered.length === 0) return prevPos;
           const fees = ldFees();
           const newClosed: ClosedPosition[] = triggered.map(({ pos, price }) => {
-            // Bracket exit = market = taker; entryMode наследуется с позиции
-            const r = closeWithFees(pos, price, fees, "taker", pos.entryMode ?? "taker");
+            // Bracket exit = market = taker; entryMode наследуется с позиции;
+            // пара берёт свой override (AEV/USD = 0% maker promo).
+            const r = closeWithFees(pos, price, feesForPair(pos.pair, fees), "taker", pos.entryMode ?? "taker");
             return { ...buildClosed(pos, r.exitPrice), realizedPnl: r.realizedPnl, realizedPct: r.realizedPct };
           });
           setClosedPositions((cs) => [...newClosed, ...cs].slice(0, 200));
@@ -498,7 +499,8 @@ export default function QTradePage() {
     }
     if (orderType === "market") {
       const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      const fillPrice = slipEntryPrice(cur.price, side, fees);
+      const pairFees = feesForPair(pid, fees);
+      const fillPrice = slipEntryPrice(cur.price, side, pairFees);
       const pos: Position = { id, pair: pid, side, qty: q, entryPrice: fillPrice, entryTs: Date.now(), entryMode: "taker" };
       setPositions((prev) => [pos, ...prev]);
       setTradeMsg(`✓ ${side === "long" ? "Long" : "Short"} ${q} ${cur.symbol} @ ${fmtUsd(fillPrice)}`);
@@ -611,8 +613,9 @@ export default function QTradePage() {
       if (!target) return prev;
       const cur = pairById.get(target.pair);
       if (!cur) return prev;
-      // Manual close = market exit = taker; entryMode из позиции (legacy ⇒ taker)
-      const r = closeWithFees(target, cur.price, ldFees(), "taker", target.entryMode ?? "taker");
+      // Manual close = market exit = taker; entryMode из позиции (legacy ⇒ taker);
+      // пара получает promo override (AEV/USD = 0% maker).
+      const r = closeWithFees(target, cur.price, feesForPair(target.pair, ldFees()), "taker", target.entryMode ?? "taker");
       const closed: ClosedPosition = {
         ...buildClosed(target, r.exitPrice),
         realizedPnl: r.realizedPnl,

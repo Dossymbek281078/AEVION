@@ -3,9 +3,17 @@
 // (maker 0.04%, taker 0.10%, slippage 0.05%). LocalStorage-backed config так,
 // что юзер может настроить под свой брокерский профиль.
 
+import type { PairId } from "./marketSim";
+
 const FEES_KEY = "aevion_qtrade_fees_v1";
 
 export type FeeMode = "maker" | "taker";
+
+// AEV/USD promo: native pair даёт 0% maker fee — стимул использовать
+// AEV liquidity. Применяется только когда global fees.enabled=true.
+const PAIR_PROMOS: Partial<Record<PairId, Partial<Pick<FeeConfig, "makerBps" | "takerBps" | "slippageBps">>>> = {
+  "AEV/USD": { makerBps: 0 },
+};
 
 export type FeeConfig = {
   enabled: boolean;
@@ -141,6 +149,16 @@ export function closeWithFees(
   const netPnl = applyClosedFees(rawPnl, target.entryPrice, exitPrice, target.qty, entryMode, exitMode, cfg);
   const realizedPct = ((exitPrice - target.entryPrice) / target.entryPrice) * 100 * direction;
   return { exitPrice, realizedPnl: netPnl, realizedPct };
+}
+
+// Effective FeeConfig for a specific trading pair. Applies pair-specific promo
+// rate overrides on top of the global config. When fees.enabled is false —
+// returns the config unchanged (promos are no-op when fees are off).
+export function feesForPair(pair: PairId, cfg: FeeConfig = ldFees()): FeeConfig {
+  if (!cfg.enabled) return cfg;
+  const promo = PAIR_PROMOS[pair];
+  if (!promo) return cfg;
+  return { ...cfg, ...promo };
 }
 
 // Daily loss guard: returns sum of realized P&L for closes WHERE exitTs falls

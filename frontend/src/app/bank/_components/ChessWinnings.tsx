@@ -16,6 +16,7 @@ import { formatRelative } from "../_lib/format";
 import { Sparkline } from "./primitives";
 import { SkeletonBlock } from "./Skeleton";
 import { StatusPill } from "./StatusPill";
+import { useLiveProbe } from "../_lib/liveProbe";
 
 function placeBadge(place: number) {
   const palette: Record<number, { bg: string; fg: string; label: string }> = {
@@ -110,6 +111,7 @@ export function ChessWinnings() {
   const { t } = useI18n();
   const { chess: data } = useEcosystemData();
   const { code } = useCurrency();
+  const probe = useLiveProbe("/api/cyberchess/results");
 
   const peakPos = useMemo(() => {
     if (!data || data.ratingSeries.length === 0) return -1;
@@ -193,8 +195,12 @@ export function ChessWinnings() {
             {t("cw.title")}
           </h2>
           <StatusPill
-            kind="mock"
-            reason="Awaiting /api/cyberchess/{results,upcoming} + tournament.finalized webhook. Results & rating are simulated."
+            kind={probe.alive ? "partial" : "mock"}
+            reason={
+              probe.alive
+                ? `/api/cyberchess/results is live (${probe.count ?? 0} prizes). Rating series + projections still simulated until tournament-finalized webhook fires.`
+                : "Awaiting /api/cyberchess/{results,upcoming} + tournament.finalized webhook. Results & rating are simulated."
+            }
           />
         </div>
         <div

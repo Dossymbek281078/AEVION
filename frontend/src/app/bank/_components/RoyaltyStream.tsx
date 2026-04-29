@@ -16,6 +16,7 @@ import {
 } from "../_lib/royalties";
 import { SkeletonBlock } from "./Skeleton";
 import { StatusPill } from "./StatusPill";
+import { useLiveProbe } from "../_lib/liveProbe";
 
 function usePrefersReducedMotion(): boolean {
   const [prm, setPrm] = useState<boolean>(false);
@@ -112,6 +113,7 @@ export function RoyaltyStream() {
   const prm = usePrefersReducedMotion();
   const { code } = useCurrency();
   const tickRef = useRef<number | null>(null);
+  const probe = useLiveProbe("/api/qright/royalties");
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -226,8 +228,12 @@ export function RoyaltyStream() {
             {t("rs.title")}
           </h2>
           <StatusPill
-            kind="mock"
-            reason="Awaiting /api/qright/royalties + verify webhook → qtrade transfer. Events shown are simulated."
+            kind={probe.alive ? "partial" : "mock"}
+            reason={
+              probe.alive
+                ? `/api/qright/royalties is live (${probe.count ?? 0} events). Stream below blends real events with deterministic simulation until webhooks fire.`
+                : "Awaiting /api/qright/royalties + verify webhook → qtrade transfer. Events shown are simulated."
+            }
           />
         </div>
         <button

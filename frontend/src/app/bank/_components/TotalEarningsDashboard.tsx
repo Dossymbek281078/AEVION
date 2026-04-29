@@ -17,6 +17,7 @@ import { Sparkline } from "./primitives";
 import { SkeletonBlock } from "./Skeleton";
 import { InfoTooltip } from "./InfoTooltip";
 import { StatusPill } from "./StatusPill";
+import { useLiveProbe } from "../_lib/liveProbe";
 import { useI18n } from "@/lib/i18n";
 
 type Period = "30d" | "90d" | "365d";
@@ -33,6 +34,7 @@ export function TotalEarningsDashboard() {
   const { ecosystem: summary } = useEcosystemData();
   const [period, setPeriod] = useState<Period>("30d");
   const { code } = useCurrency();
+  const probe = useLiveProbe("/api/ecosystem/earnings", "perSource");
 
   const days = PERIOD_DAYS[period];
   const totals = useMemo(() => (summary ? periodTotals(summary.daily, days) : null), [summary, days]);
@@ -110,8 +112,12 @@ export function TotalEarningsDashboard() {
               <span>{t("te.title")}</span>
             </InfoTooltip>
             <StatusPill
-              kind="partial"
-              reason="Banking stream is live (real qtrade operations). QRight / CyberChess / Planet streams use seeded ecosystem data until /api/ecosystem/earnings exists."
+              kind={probe.alive ? "live" : "partial"}
+              reason={
+                probe.alive
+                  ? `Banking stream live + /api/ecosystem/earnings live (${probe.count ?? 0} sources tracked). Seeded data fills the gap until QRight / CyberChess / Planet webhooks populate the ledger.`
+                  : "Banking stream is live (real qtrade operations). QRight / CyberChess / Planet streams use seeded ecosystem data until /api/ecosystem/earnings exists."
+              }
             />
           </h2>
         </div>

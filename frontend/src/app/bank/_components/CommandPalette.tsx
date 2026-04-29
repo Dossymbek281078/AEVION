@@ -180,17 +180,41 @@ export function CommandPalette({
       );
     }
 
-    a.push({
-      id: "nav.portal",
-      section: navSection,
-      icon: "↗",
-      label: t("palette.nav.portal.label"),
-      hint: t("palette.nav.portal.hint"),
-      keywords: ["home", "root", "exit"],
-      run: () => {
-        window.location.href = "/";
+    a.push(
+      {
+        id: "diag.smoke",
+        section: actionsSection,
+        icon: "✦",
+        label: "Run live backend smoke test",
+        hint: "Open /bank/smoke and auto-run all 11 wired endpoints",
+        keywords: ["smoke", "test", "diag", "diagnostic", "health", "backend", "wiring", "live", "e2e"],
+        run: () => {
+          window.location.href = "/bank/smoke?auto=1";
+        },
       },
-    });
+      {
+        id: "diag.smoke.manual",
+        section: actionsSection,
+        icon: "▦",
+        label: "Open backend smoke runner (manual)",
+        hint: "/bank/smoke — review endpoints + Run on demand",
+        keywords: ["smoke", "test", "backend", "diag", "manual"],
+        run: () => {
+          window.location.href = "/bank/smoke";
+        },
+      },
+      {
+        id: "nav.portal",
+        section: navSection,
+        icon: "↗",
+        label: t("palette.nav.portal.label"),
+        hint: t("palette.nav.portal.hint"),
+        keywords: ["home", "root", "exit"],
+        run: () => {
+          window.location.href = "/";
+        },
+      },
+    );
 
     return a;
   }, [hasWallet, code, demoActive, switchCurrency, relaunchTour, toggleDemo, t]);

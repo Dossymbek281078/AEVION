@@ -108,7 +108,113 @@ async function ensureQRightTable() {
     `CREATE INDEX IF NOT EXISTS "QRightAuditLog_target_idx" ON "QRightAuditLog" ("targetId");`
   );
 
+  // Owner-configured outgoing webhooks. Fired when one of the owner's
+  // objects is revoked (owner action OR admin force-revoke), so a
+  // third-party site embedding the badge can auto-remove it.
+  // secret is the HMAC signing key; we never display it after creation.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QRightWebhook" (
+      "id" TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "url" TEXT NOT NULL,
+      "secret" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "lastDeliveredAt" TIMESTAMPTZ,
+      "lastFailedAt" TIMESTAMPTZ,
+      "lastError" TEXT
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QRightWebhook_owner_idx" ON "QRightWebhook" ("ownerUserId");`
+  );
+
   ensuredTable = true;
+}
+
+// Fan out a revoke event to every webhook registered by the object's owner.
+// Best-effort, fire-and-forget — a slow or 5xx webhook target must not block
+// the revoke response. Each delivery is signed with HMAC-SHA256 of the raw
+// JSON body using the webhook's per-row secret; receivers verify by recomputing
+// the same HMAC. We update lastDeliveredAt / lastFailedAt so owners can see
+// which targets are healthy in their UI.
+//
+// `revokedBy` distinguishes owner.revoke from admin force-revoke so the
+// receiving site can show provenance to its users.
+function triggerRevokeWebhooks(
+  objectId: string,
+  payload: {
+    revokedAt: string;
+    reasonCode: string | null;
+    reason: string | null;
+    revokedBy: "owner" | "admin";
+  }
+): void {
+  pool
+    .query(
+      `SELECT w."id", w."url", w."secret"
+       FROM "QRightWebhook" w
+       INNER JOIN "QRightObject" o
+         ON o."ownerUserId" = w."ownerUserId" AND o."ownerUserId" IS NOT NULL
+       WHERE o."id" = $1`,
+      [objectId]
+    )
+    .then(async (result: { rows: { id: string; url: string; secret: string }[] }) => {
+      for (const wh of result.rows) {
+        const body = JSON.stringify({
+          event: "qright.object.revoked",
+          objectId,
+          revokedAt: payload.revokedAt,
+          reasonCode: payload.reasonCode,
+          reason: payload.reason,
+          revokedBy: payload.revokedBy,
+          deliveredAt: new Date().toISOString(),
+        });
+        const sig = crypto.createHmac("sha256", wh.secret).update(body).digest("hex");
+        try {
+          // 5s timeout so a hanging endpoint doesn't tie up the connection
+          // pool for one of the per-DB workers.
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 5000);
+          const r = await fetch(wh.url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": "AEVION-QRight-Webhook/1.0",
+              "X-AEVION-Event": "qright.object.revoked",
+              "X-AEVION-Signature": `sha256=${sig}`,
+            },
+            body,
+            signal: ctrl.signal,
+          });
+          clearTimeout(t);
+          if (r.ok) {
+            pool
+              .query(
+                `UPDATE "QRightWebhook" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
+                [wh.id]
+              )
+              .catch(() => {});
+          } else {
+            pool
+              .query(
+                `UPDATE "QRightWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
+                [wh.id, `HTTP ${r.status}`]
+              )
+              .catch(() => {});
+          }
+        } catch (err) {
+          pool
+            .query(
+              `UPDATE "QRightWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
+              [wh.id, (err as Error).message.slice(0, 500)]
+            )
+            .catch(() => {});
+        }
+      }
+    })
+    .catch((err: Error) => {
+      console.warn(`[qright] webhook fanout failed for ${objectId}:`, err.message);
+    });
 }
 
 // Append an audit row. Fire-and-forget like the counter bumps — the underlying
@@ -1020,6 +1126,14 @@ qrightRouter.post("/admin/revoke-bulk", async (req, res) => {
       alreadyRevoked,
       notFound,
     });
+    for (const r of revokedRows) {
+      triggerRevokeWebhooks(r.id, {
+        revokedAt: r.revokedAt instanceof Date ? r.revokedAt.toISOString() : r.revokedAt,
+        reasonCode: reasonCodeRaw,
+        reason,
+        revokedBy: "admin",
+      });
+    }
 
     res.json({
       requested: ids.length,
@@ -1089,6 +1203,15 @@ qrightRouter.post("/admin/revoke/:id", async (req, res) => {
     recordAudit(actor, "admin.revoke", id, {
       reasonCode: reasonCodeRaw,
       reason,
+    });
+    triggerRevokeWebhooks(id, {
+      revokedAt:
+        updated.rows[0].revokedAt instanceof Date
+          ? updated.rows[0].revokedAt.toISOString()
+          : updated.rows[0].revokedAt,
+      reasonCode: reasonCodeRaw,
+      reason,
+      revokedBy: "admin",
     });
 
     res.json({
@@ -1313,6 +1436,15 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
       reasonCode,
       reason,
     });
+    triggerRevokeWebhooks(id, {
+      revokedAt:
+        updated.rows[0].revokedAt instanceof Date
+          ? updated.rows[0].revokedAt.toISOString()
+          : updated.rows[0].revokedAt,
+      reasonCode,
+      reason,
+      revokedBy: "owner",
+    });
 
     res.json({
       id: updated.rows[0].id,
@@ -1328,5 +1460,129 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
       name: err.name,
       details: err.message,
     });
+  }
+});
+
+// 🔹 Owner: list my webhooks. Secret is intentionally redacted on read —
+//    we only show "secretPrefix" so the owner can recognize the row.
+qrightRouter.get("/webhooks", async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "Bearer token required" });
+
+    const result = await pool.query(
+      `SELECT "id", "url", "secret", "createdAt", "lastDeliveredAt", "lastFailedAt", "lastError"
+       FROM "QRightWebhook"
+       WHERE "ownerUserId" = $1
+       ORDER BY "createdAt" DESC`,
+      [auth.sub]
+    );
+    res.json({
+      total: result.rowCount,
+      items: result.rows.map(
+        (r: {
+          id: string;
+          url: string;
+          secret: string;
+          createdAt: Date | string;
+          lastDeliveredAt: Date | string | null;
+          lastFailedAt: Date | string | null;
+          lastError: string | null;
+        }) => ({
+          id: r.id,
+          url: r.url,
+          secretPrefix: r.secret.slice(0, 6),
+          createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+          lastDeliveredAt:
+            r.lastDeliveredAt instanceof Date
+              ? r.lastDeliveredAt.toISOString()
+              : r.lastDeliveredAt,
+          lastFailedAt:
+            r.lastFailedAt instanceof Date ? r.lastFailedAt.toISOString() : r.lastFailedAt,
+          lastError: r.lastError,
+        })
+      ),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 Owner: register a webhook. Secret is generated server-side (32 hex chars)
+//    and returned ONCE in the response — receivers store it to verify the
+//    HMAC-SHA256 signature on incoming events. Subsequent /webhooks reads
+//    only show secretPrefix; lose the secret → delete + re-create.
+qrightRouter.post("/webhooks", async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "Bearer token required" });
+
+    const url = String(req.body?.url || "").trim();
+    if (!url) return res.status(400).json({ error: "url required" });
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return res.status(400).json({ error: "url must be a valid absolute URL" });
+    }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return res.status(400).json({ error: "url must be http:// or https://" });
+    }
+    if (url.length > 500) {
+      return res.status(400).json({ error: "url too long (max 500 chars)" });
+    }
+
+    // Cap webhooks per owner so a runaway integration can't fan out
+    // hundreds of POSTs per revoke event.
+    const count = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM "QRightWebhook" WHERE "ownerUserId" = $1`,
+      [auth.sub]
+    );
+    if ((count.rows[0]?.n || 0) >= 10) {
+      return res.status(400).json({ error: "Webhook limit reached (10 per owner)" });
+    }
+
+    const id = crypto.randomUUID();
+    const secret = crypto.randomBytes(16).toString("hex");
+    await pool.query(
+      `INSERT INTO "QRightWebhook" ("id", "ownerUserId", "url", "secret")
+       VALUES ($1, $2, $3, $4)`,
+      [id, auth.sub, url, secret]
+    );
+
+    res.status(201).json({
+      id,
+      url,
+      secret,
+      createdAt: new Date().toISOString(),
+      hint: "Store the secret now — it will not be shown again. Verify deliveries by recomputing HMAC-SHA256(secret, requestBody) and comparing against the X-AEVION-Signature header.",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 Owner: delete a webhook. 404 if it doesn't belong to the caller —
+//    we treat "not found" and "not yours" identically so a third party
+//    can't probe webhook IDs.
+qrightRouter.delete("/webhooks/:id", async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "Bearer token required" });
+
+    const id = String(req.params.id);
+    const result = await pool.query(
+      `DELETE FROM "QRightWebhook" WHERE "id" = $1 AND "ownerUserId" = $2`,
+      [id, auth.sub]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    res.json({ id, deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });

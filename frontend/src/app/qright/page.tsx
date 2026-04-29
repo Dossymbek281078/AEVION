@@ -168,6 +168,23 @@ export default function QRightPage() {
     } catch {}
   }, []);
 
+  /* ── Outgoing webhooks (owner) ── */
+  type WebhookRow = {
+    id: string;
+    url: string;
+    secretPrefix: string;
+    createdAt: string;
+    lastDeliveredAt: string | null;
+    lastFailedAt: string | null;
+    lastError: string | null;
+  };
+  const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
+  const [whUrl, setWhUrl] = useState("");
+  const [whBusy, setWhBusy] = useState(false);
+  const [newWebhookSecret, setNewWebhookSecret] = useState<
+    { id: string; url: string; secret: string } | null
+  >(null);
+
   /* ── Live transparency tile (homepage) ── */
   const [transparency, setTransparency] = useState<{
     registered: number;
@@ -457,6 +474,66 @@ export default function QRightPage() {
     setRevokingObj(obj);
     setRevokeCode("withdrawn");
     setRevokeText("");
+  };
+
+  const loadWebhooks = async () => {
+    if (!hasAuth) return;
+    try {
+      const r = await fetch(apiUrl("/api/qright/webhooks"), { headers: authHeaders() });
+      if (r.ok) {
+        const data = await r.json();
+        setWebhooks(data.items || []);
+      }
+    } catch {
+      // Silent — webhooks panel is supplementary.
+    }
+  };
+
+  useEffect(() => {
+    if (registryScope === "mine" && hasAuth) loadWebhooks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registryScope, hasAuth]);
+
+  const addWebhook = async () => {
+    const url = whUrl.trim();
+    if (!url) return;
+    setWhBusy(true);
+    try {
+      const r = await fetch(apiUrl("/api/qright/webhooks"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ url }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setWhUrl("");
+        setNewWebhookSecret({ id: data.id, url: data.url, secret: data.secret });
+        loadWebhooks();
+      } else {
+        showToast(`Webhook add failed: ${data.error || r.status}`, "error");
+      }
+    } catch (e) {
+      showToast(`Webhook add failed: ${(e as Error).message}`, "error");
+    } finally {
+      setWhBusy(false);
+    }
+  };
+
+  const deleteWebhook = async (id: string) => {
+    if (!window.confirm("Delete this webhook? Receivers will stop getting revoke events.")) return;
+    try {
+      const r = await fetch(apiUrl(`/api/qright/webhooks/${encodeURIComponent(id)}`), {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (r.ok) {
+        setWebhooks((prev) => prev.filter((w) => w.id !== id));
+      } else {
+        showToast(`Webhook delete failed (${r.status})`, "error");
+      }
+    } catch (e) {
+      showToast(`Webhook delete failed: ${(e as Error).message}`, "error");
+    }
   };
 
   const submitRevoke = async () => {
@@ -1235,6 +1312,105 @@ export default function QRightPage() {
                   })}
                 </div>
               )}
+
+              {registryScope === "mine" && hasAuth && (
+                <div style={{ marginTop: 24, padding: 16, borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 900, color: "#0f172a" }}>
+                      🔔 Outgoing webhooks
+                    </h3>
+                    <span style={{ fontSize: 11, color: "#64748b" }}>
+                      Get notified when one of your objects is revoked. Up to 10 endpoints.
+                    </span>
+                  </div>
+                  <div style={{ marginBottom: 10, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
+                    Each delivery is signed with HMAC-SHA256 in the{" "}
+                    <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, fontSize: 10 }}>
+                      X-AEVION-Signature
+                    </code>{" "}
+                    header. Verify by recomputing{" "}
+                    <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, fontSize: 10 }}>
+                      hmac(secret, body)
+                    </code>{" "}
+                    on your endpoint.
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                    <input
+                      type="url"
+                      value={whUrl}
+                      onChange={(e) => setWhUrl(e.target.value)}
+                      placeholder="https://your-site.example/qright/revoked"
+                      style={{ flex: "1 1 320px", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13 }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") addWebhook();
+                      }}
+                    />
+                    <button
+                      onClick={addWebhook}
+                      disabled={whBusy || !whUrl.trim() || webhooks.length >= 10}
+                      style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: webhooks.length >= 10 ? "#cbd5e1" : "#0d9488", color: "#fff", fontSize: 12, fontWeight: 800, cursor: whBusy || !whUrl.trim() || webhooks.length >= 10 ? "not-allowed" : "pointer" }}
+                    >
+                      {whBusy ? "Adding…" : "Add"}
+                    </button>
+                  </div>
+                  {webhooks.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>
+                      No webhooks yet. Add one above.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {webhooks.map((w) => {
+                        const ok = !!w.lastDeliveredAt && !w.lastFailedAt;
+                        const failed =
+                          !!w.lastFailedAt &&
+                          (!w.lastDeliveredAt ||
+                            new Date(w.lastFailedAt).getTime() > new Date(w.lastDeliveredAt).getTime());
+                        return (
+                          <div
+                            key={w.id}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              border: "1px solid rgba(15,23,42,0.08)",
+                              background: failed ? "rgba(254,242,242,0.5)" : "#f8fafc",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <span style={{ fontSize: 14 }} aria-hidden>
+                              {failed ? "⚠️" : ok ? "✅" : "•"}
+                            </span>
+                            <code style={{ fontSize: 11, fontFamily: "monospace", color: "#0f172a", wordBreak: "break-all", flex: "1 1 240px" }}>
+                              {w.url}
+                            </code>
+                            <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>
+                              {w.secretPrefix}…
+                            </span>
+                            {w.lastDeliveredAt && (
+                              <span style={{ fontSize: 10, color: "#059669" }}>
+                                ✓ {new Date(w.lastDeliveredAt).toLocaleString()}
+                              </span>
+                            )}
+                            {failed && (
+                              <span style={{ fontSize: 10, color: "#dc2626" }} title={w.lastError || ""}>
+                                ✗ {w.lastError || "failed"}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => deleteWebhook(w.id)}
+                              style={{ marginLeft: "auto", padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.4)", background: "transparent", color: "#dc2626", fontSize: 10, fontWeight: 800, cursor: "pointer" }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1296,6 +1472,55 @@ export default function QRightPage() {
                 style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 13, cursor: revokeBusy ? "not-allowed" : "pointer", opacity: revokeBusy ? 0.7 : 1 }}
               >
                 {revokeBusy ? "Revoking…" : "Revoke"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newWebhookSecret && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}
+        >
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 520, boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 4 }}>
+              🔑 Webhook secret
+            </div>
+            <div style={{ fontSize: 13, color: "#475569", marginBottom: 14 }}>
+              Save this secret on your endpoint <strong>now</strong> — it will not be shown again.
+              Lose it and you must delete + re-create the webhook.
+            </div>
+            <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              URL
+            </div>
+            <code style={{ display: "block", padding: "8px 10px", background: "#f1f5f9", borderRadius: 8, fontSize: 12, fontFamily: "monospace", marginBottom: 14, wordBreak: "break-all", color: "#0f172a" }}>
+              {newWebhookSecret.url}
+            </code>
+            <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Secret (HMAC-SHA256 key)
+            </div>
+            <code style={{ display: "block", padding: "10px 12px", background: "#0f172a", color: "#5eead4", borderRadius: 8, fontSize: 13, fontFamily: "monospace", marginBottom: 14, wordBreak: "break-all" }}>
+              {newWebhookSecret.secret}
+            </code>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(newWebhookSecret.secret).then(
+                    () => showToast("Secret copied to clipboard", "success"),
+                    () => showToast("Copy failed — select & copy manually", "error")
+                  );
+                }}
+                style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(13,148,136,0.4)", background: "#fff", color: "#0d9488", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+              >
+                Copy secret
+              </button>
+              <button
+                onClick={() => setNewWebhookSecret(null)}
+                style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+              >
+                I saved it
               </button>
             </div>
           </div>

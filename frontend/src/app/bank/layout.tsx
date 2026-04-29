@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { TestModeBanner } from "./_components/TestModeBanner";
 
 export const metadata: Metadata = {
   title: "AEVION Bank — wallet · royalties · trust-gated credit",
@@ -67,7 +68,10 @@ export default function BankLayout({ children }: { children: React.ReactNode }) 
           border-radius: 6px;
         }
       `}</style>
-      <div data-bank-route>{children}</div>
+      <div data-bank-route>
+        <TestModeBanner />
+        {children}
+      </div>
     </>
   );
 }

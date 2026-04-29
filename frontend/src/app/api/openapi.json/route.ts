@@ -229,6 +229,40 @@ const SPEC = {
           has_more: { type: "boolean" },
         },
       },
+      Refund: {
+        type: "object",
+        required: ["id", "link_id", "amount", "currency", "reason", "status", "created"],
+        properties: {
+          id: { type: "string", example: "rfd_q9w2k4abc" },
+          link_id: { type: "string", example: "pl_q9w2k47abc" },
+          amount: { type: "number" },
+          currency: { type: "string" },
+          reason: {
+            type: "string",
+            enum: [
+              "requested_by_customer",
+              "duplicate",
+              "fraudulent",
+              "product_unacceptable",
+              "goodwill",
+            ],
+          },
+          status: { type: "string", enum: ["succeeded"] },
+          created: { type: "integer" },
+        },
+      },
+      RefundCreate: {
+        type: "object",
+        required: ["link_id"],
+        properties: {
+          link_id: { type: "string" },
+          amount: {
+            type: "number",
+            description: "Optional. Defaults to remaining refundable amount.",
+          },
+          reason: { type: "string" },
+        },
+      },
     },
     responses: {
       Unauthorized: {
@@ -419,6 +453,60 @@ const SPEC = {
           },
           "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/v1/refunds": {
+      get: {
+        summary: "List refunds",
+        operationId: "listRefunds",
+        parameters: [
+          { name: "link_id", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Refunds list.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/List" } },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        summary: "Issue a refund",
+        operationId: "createRefund",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RefundCreate" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Refund succeeded. Fires payment.refunded webhook.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Refund" } },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": {
+            description: "Link not found.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+          "409": {
+            description:
+              "Link is not paid, already fully refunded, or amount exceeds remaining.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
         },
       },
     },

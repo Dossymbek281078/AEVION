@@ -1,0 +1,178 @@
+import type { NextRequest } from "next/server";
+import {
+  authError,
+  badRequest,
+  checkIdempotency,
+  genId,
+  getOrigin,
+  readJson,
+  signHmac,
+  store,
+  withCors,
+  type ApiLink,
+} from "../_lib";
+import { kvList, kvPush } from "../_persist";
+
+const REFUNDS_KEY = "refunds.v1";
+const REFUND_LIST_CAP = 500;
+
+type ApiRefund = {
+  id: string;
+  link_id: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  status: "succeeded";
+  created: number;
+};
+
+export async function GET(req: NextRequest) {
+  const auth = authError(req);
+  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+
+  const url = new URL(req.url);
+  const linkId = url.searchParams.get("link_id");
+
+  const items = await kvList<ApiRefund>(REFUNDS_KEY);
+  const filtered = linkId ? items.filter((r) => r.link_id === linkId) : items;
+
+  return withCors(
+    Response.json({
+      object: "list",
+      count: filtered.length,
+      data: filtered.slice(0, 100),
+    })
+  );
+}
+
+export async function POST(req: NextRequest) {
+  const auth = authError(req);
+  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+
+  const raw = await req.text();
+  const idem = checkIdempotency(req, raw);
+  if (idem.hit) {
+    return withCors(
+      new Response(idem.cachedBody, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+  }
+
+  let body: { link_id?: string; amount?: number; reason?: string } | null = null;
+  try {
+    body = raw ? JSON.parse(raw) : null;
+  } catch {
+    return withCors(badRequest("Invalid JSON body."));
+  }
+  if (!body?.link_id) {
+    return withCors(badRequest("link_id is required."));
+  }
+
+  const link: ApiLink | undefined = store.links.get(body.link_id);
+  if (!link) {
+    return withCors(badRequest(`No payment link found for id ${body.link_id}.`, 404));
+  }
+  if (link.status !== "paid") {
+    return withCors(
+      badRequest(`Cannot refund a link with status "${link.status}".`, 409)
+    );
+  }
+
+  const prior = await kvList<ApiRefund>(REFUNDS_KEY);
+  const refundedSoFar = prior
+    .filter((r) => r.link_id === link.id)
+    .reduce((acc, r) => acc + r.amount, 0);
+  const remaining = link.amount - refundedSoFar;
+  if (remaining <= 0) {
+    return withCors(badRequest("Link has already been fully refunded.", 409));
+  }
+
+  const requested = body.amount && body.amount > 0 ? body.amount : remaining;
+  if (requested > remaining + 1e-9) {
+    return withCors(
+      badRequest(
+        `Requested amount ${requested} exceeds remaining refundable ${remaining}.`,
+        409
+      )
+    );
+  }
+
+  const refund: ApiRefund = {
+    id: genId("rfd"),
+    link_id: link.id,
+    amount: requested,
+    currency: link.currency,
+    reason: (body.reason || "requested_by_customer").slice(0, 120),
+    status: "succeeded",
+    created: Date.now(),
+  };
+
+  await kvPush(REFUNDS_KEY, refund, REFUND_LIST_CAP);
+
+  // fire & forget webhooks
+  void fanoutRefundWebhook(refund, getOrigin(req));
+
+  const responseBody = JSON.stringify(refund);
+  idem.cleanup?.();
+  return withCors(
+    new Response(responseBody, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  );
+}
+
+async function fanoutRefundWebhook(refund: ApiRefund, origin: string) {
+  const enabled = Array.from(store.webhooks.values()).filter(
+    (w) => w.enabled && w.events.includes("payment.refunded")
+  );
+  if (enabled.length === 0) return;
+
+  const payload = {
+    id: genId("evt"),
+    type: "payment.refunded",
+    created: Math.floor(Date.now() / 1000),
+    data: {
+      refund_id: refund.id,
+      link_id: refund.link_id,
+      amount: refund.amount,
+      currency: refund.currency,
+      reason: refund.reason,
+    },
+  };
+  const body = JSON.stringify(payload);
+  const ts = Math.floor(Date.now() / 1000);
+
+  await Promise.allSettled(
+    enabled.map(async (w) => {
+      const sig = signHmac(w.secret, `${ts}.${body}`);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      try {
+        await fetch(w.url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-aevion-signature": sig,
+            "x-aevion-timestamp": String(ts),
+            "x-aevion-event": "payment.refunded",
+            "x-aevion-webhook": w.id,
+            "user-agent": `AEVION-Payments/1.3 (+${origin})`,
+          },
+          body,
+          signal: ctrl.signal,
+        });
+      } catch {
+        // swallow — delivery best effort, retries are TODO v1.4
+      } finally {
+        clearTimeout(timer);
+      }
+    })
+  );
+}
+
+export function OPTIONS() {
+  return withCors(new Response(null, { status: 204 }));
+}

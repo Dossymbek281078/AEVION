@@ -107,6 +107,14 @@ const featureCards = [
     accent: "#10b981",
     icon: "🟢",
   },
+  {
+    slug: "refunds",
+    title: "Refunds",
+    description:
+      "Issue partial or full refunds against any paid link. payment.refunded webhook fans out via HMAC. Idempotent, audit-trailed.",
+    accent: "#ea580c",
+    icon: "↩",
+  },
 ];
 
 const roadmapItems = [
@@ -126,7 +134,8 @@ const roadmapItems = [
   { label: "Cross-device payment links (server mirror + public /api/pay/[id])", status: "live" },
   { label: "Server-side webhook delivery via node:crypto HMAC", status: "live" },
   { label: "/api/health probe + live /payments/status monitor", status: "live" },
-  { label: "Vercel KV / Postgres persistence (replace in-memory store)", status: "planned" },
+  { label: "Persistence adapter (Vercel KV-aware, memory fallback)", status: "live" },
+  { label: "Refunds API + UI with webhook fanout (payment.refunded)", status: "live" },
 ];
 
 export default function PaymentsPage() {
@@ -155,7 +164,7 @@ export default function PaymentsPage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            Payments Rail · v1.2 · 10 surfaces · live API + cross-device
+            Payments Rail · v1.3 · 11 surfaces · refunds + KV-ready persistence
           </div>
 
           <h1

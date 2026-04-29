@@ -1,5 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
+import rateLimit from "express-rate-limit";
+import jwt from "jsonwebtoken";
+import { getJwtSecret } from "../lib/authJwt";
 import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 
 // AEV wallet + append-only ledger backend. MVP storage via jsonFileStore
@@ -15,6 +18,46 @@ import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 //  GET  /api/aev/stats                      — global aggregates (lifetime, ledger size)
 
 export const aevRouter = Router();
+
+// ── Rate limits ────────────────────────────────────────────────────
+// Per-IP throttle on write paths; reads (snapshot/ledger/stats) stay
+// open. windowMs=60s aligned with QSign limiter conventions.
+
+const writeLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "rate_limit_exceeded", limit: "60 writes per minute per IP" },
+});
+
+const syncLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "rate_limit_exceeded", limit: "30 syncs per minute per IP" },
+});
+
+// ── JWT auth binding (optional) ────────────────────────────────────
+// If a Bearer token is present and valid, returns its sub (userId).
+// Returns null on missing or malformed; caller decides if anonymous
+// access is acceptable for the route.
+function readUserIdFromBearer(req: Request): string | null {
+  const header = req.headers?.authorization;
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice(7);
+  try {
+    const decoded = jwt.verify(token, getJwtSecret());
+    if (typeof decoded === "object" && decoded !== null && "sub" in decoded) {
+      const sub = (decoded as { sub: unknown }).sub;
+      return typeof sub === "string" ? sub : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // Flat filename — jsonFileStore mkdirs only top-level AEVION_DATA_DIR;
 // subdirectories aren't autocreated.
@@ -109,17 +152,28 @@ aevRouter.get("/wallet/:deviceId", async (req: Request, res: Response) => {
 // Idempotent upsert. Frontend periodically pushes its localStorage
 // snapshot — server takes max() of monotonic counters to converge
 // with offline mints (last-writer-wins на balance/modes).
-aevRouter.post("/wallet/:deviceId/sync", async (req: Request, res: Response) => {
+//
+// Auth-binding: если wallet ранее был привязан к userId (через
+// authed sync/mint/spend), последующие writes с НЕсовпадающим userId
+// или anonymous Bearer-less попыткой → 403 ownership_mismatch. Это
+// блокирует takeover чужого deviceId через подделку.
+aevRouter.post("/wallet/:deviceId/sync", syncLimiter, async (req: Request, res: Response) => {
   const deviceId = sanitizeDeviceId(req.params.deviceId);
   if (!deviceId) return res.status(400).json({ error: "invalid_device_id" });
   const body = req.body ?? {};
 
   const wallets = await loadWallets();
   const existing = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
+  const bearerUserId = readUserIdFromBearer(req);
+
+  // Anti-takeover: bound wallet → must present matching Bearer
+  if (existing.userId && existing.userId !== bearerUserId) {
+    return res.status(403).json({ error: "ownership_mismatch" });
+  }
 
   const merged: WalletRecord = {
     ...existing,
-    userId: typeof body.userId === "string" ? body.userId : existing.userId,
+    userId: bearerUserId ?? existing.userId,
     balance: Number.isFinite(body.balance) ? Number(body.balance) : existing.balance,
     lifetimeMined: Math.max(existing.lifetimeMined, Number(body.lifetimeMined) || 0),
     lifetimeSpent: Math.max(existing.lifetimeSpent, Number(body.lifetimeSpent) || 0),
@@ -140,7 +194,7 @@ aevRouter.post("/wallet/:deviceId/sync", async (req: Request, res: Response) => 
 });
 
 // ── POST /api/aev/wallet/:deviceId/mint ────────────────────────────
-aevRouter.post("/wallet/:deviceId/mint", async (req: Request, res: Response) => {
+aevRouter.post("/wallet/:deviceId/mint", writeLimiter, async (req: Request, res: Response) => {
   const deviceId = sanitizeDeviceId(req.params.deviceId);
   if (!deviceId) return res.status(400).json({ error: "invalid_device_id" });
   const amount = clampAmount(req.body?.amount);
@@ -148,6 +202,11 @@ aevRouter.post("/wallet/:deviceId/mint", async (req: Request, res: Response) => 
 
   const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
   const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
+  const bearerUserId = readUserIdFromBearer(req);
+  if (w.userId && w.userId !== bearerUserId) {
+    return res.status(403).json({ error: "ownership_mismatch" });
+  }
+  if (!w.userId && bearerUserId) w.userId = bearerUserId;
   w.balance = Math.round((w.balance + amount) * 1_000_000) / 1_000_000;
   w.lifetimeMined = Math.round((w.lifetimeMined + amount) * 1_000_000) / 1_000_000;
   w.globalSupplyMined = Math.round((w.globalSupplyMined + amount) * 1_000_000) / 1_000_000;
@@ -175,7 +234,7 @@ aevRouter.post("/wallet/:deviceId/mint", async (req: Request, res: Response) => 
 });
 
 // ── POST /api/aev/wallet/:deviceId/spend ───────────────────────────
-aevRouter.post("/wallet/:deviceId/spend", async (req: Request, res: Response) => {
+aevRouter.post("/wallet/:deviceId/spend", writeLimiter, async (req: Request, res: Response) => {
   const deviceId = sanitizeDeviceId(req.params.deviceId);
   if (!deviceId) return res.status(400).json({ error: "invalid_device_id" });
   const amount = clampAmount(req.body?.amount);
@@ -184,6 +243,11 @@ aevRouter.post("/wallet/:deviceId/spend", async (req: Request, res: Response) =>
   const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
   const w = wallets[deviceId];
   if (!w) return res.status(404).json({ error: "not_found", deviceId });
+  const bearerUserId = readUserIdFromBearer(req);
+  if (w.userId && w.userId !== bearerUserId) {
+    return res.status(403).json({ error: "ownership_mismatch" });
+  }
+  if (!w.userId && bearerUserId) w.userId = bearerUserId;
   if (w.balance < amount) return res.status(409).json({ error: "insufficient_funds", balance: w.balance, requested: amount });
 
   w.balance = Math.round((w.balance - amount) * 1_000_000) / 1_000_000;

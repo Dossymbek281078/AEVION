@@ -57,6 +57,14 @@ const STR: Record<string, Record<Lang, string>> = {
     ru: "Добавьте логи для отображения трендов",
   },
   card_history_title: { en: "History", ru: "История" },
+  wearables_title: { en: "Connect wearables", ru: "Подключить устройства" },
+  wearables_subtitle: {
+    en: "Demo import: fills 7 fake daily entries to preview trends. Real OAuth coming in v2.",
+    ru: "Демо-импорт: 7 фейковых дней для демонстрации трендов. Реальная OAuth-интеграция — в v2.",
+  },
+  wearables_apple: { en: "🍎 Apple Health (demo)", ru: "🍎 Apple Health (демо)" },
+  wearables_google: { en: "❤ Google Fit (demo)", ru: "❤ Google Fit (демо)" },
+  toast_imported_n: { en: "Imported {n} days ✓", ru: "Импортировано {n} дней ✓" },
   hist_subtitle: { en: "{c} checks · {l} logs", ru: "{c} чеков · {l} логов" },
   field_age: { en: "Age", ru: "Возраст" },
   field_sex: { en: "Sex", ru: "Пол" },
@@ -486,6 +494,57 @@ export default function HealthAIPage() {
     }
   };
 
+  const importWearables = async (source: "apple-health" | "google-fit") => {
+    if (!profileIdRef.current) {
+      showToast(t("toast_no_profile", lang));
+      setTab("profile");
+      return;
+    }
+    setBusy(true);
+    try {
+      const today = new Date();
+      const entries: Array<{
+        date: string;
+        sleepHours: number;
+        moodScore: number;
+        weightKg?: number;
+        waterL: number;
+        exerciseMin: number;
+      }> = [];
+      const baseWeight = profile?.weightKg && profile.weightKg > 30 ? profile.weightKg : 70;
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const date = d.toISOString().slice(0, 10);
+        entries.push({
+          date,
+          sleepHours: Math.round((6 + Math.random() * 3) * 2) / 2,
+          moodScore: 4 + Math.floor(Math.random() * 6),
+          weightKg: Math.round((baseWeight + (Math.random() - 0.5) * 1.5) * 10) / 10,
+          waterL: Math.round((1.2 + Math.random() * 1.8) * 10) / 10,
+          exerciseMin: Math.floor(Math.random() * 60) * 5,
+        });
+      }
+      const r = await fetch(`${BACKEND}/api/healthai/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId: profileIdRef.current, source, entries }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        showToast(t("toast_log_failed", lang));
+        return;
+      }
+      showToast(t("toast_imported_n", lang, { n: j.imported || 0 }));
+      // Полная перезагрузка истории/трендов/рисков.
+      void loadHistory(profileIdRef.current);
+      void loadTrends(profileIdRef.current);
+      void loadRisks(profileIdRef.current);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submitLog = async () => {
     if (!profileIdRef.current) {
       showToast(t("toast_no_profile", lang));
@@ -787,6 +846,43 @@ export default function HealthAIPage() {
             <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
               <button type="button" onClick={saveProfile} disabled={busy} style={primaryBtn}>
                 {profile ? t("btn_update_profile", lang) : t("btn_create_profile", lang)}
+              </button>
+            </div>
+          </Card>
+        ) : null}
+
+        {tab === "profile" && profile ? (
+          <Card>
+            <CardHeader
+              title={t("wearables_title", lang)}
+              subtitle={t("wearables_subtitle", lang)}
+            />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => importWearables("apple-health")}
+                disabled={busy}
+                style={{
+                  ...primaryBtn,
+                  background: "linear-gradient(180deg, #f87171 0%, #dc2626 100%)",
+                  borderColor: "rgba(248,113,113,0.55)",
+                  color: "#fff",
+                }}
+              >
+                {t("wearables_apple", lang)}
+              </button>
+              <button
+                type="button"
+                onClick={() => importWearables("google-fit")}
+                disabled={busy}
+                style={{
+                  ...primaryBtn,
+                  background: "linear-gradient(180deg, #60a5fa 0%, #2563eb 100%)",
+                  borderColor: "rgba(96,165,250,0.55)",
+                  color: "#fff",
+                }}
+              >
+                {t("wearables_google", lang)}
               </button>
             </div>
           </Card>

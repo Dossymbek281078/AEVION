@@ -432,6 +432,56 @@ healthaiRouter.get("/trends/:id", (req: Request, res: Response) => {
   });
 });
 
+healthaiRouter.post("/import", (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.profileId || typeof body.profileId !== "string") {
+    return res.status(400).json({ error: "profileId-required" });
+  }
+  const source =
+    body.source === "apple-health" ||
+    body.source === "google-fit" ||
+    body.source === "manual"
+      ? body.source
+      : "manual";
+  const entries = Array.isArray(body.entries) ? body.entries : [];
+  if (entries.length === 0) {
+    return res.status(400).json({ error: "entries-empty" });
+  }
+
+  const list = logs.get(body.profileId) || [];
+  let imported = 0;
+  for (const e of entries) {
+    if (!e || typeof e !== "object") continue;
+    const date =
+      typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date)
+        ? e.date
+        : null;
+    if (!date) continue;
+    const log: DailyLog = {
+      id: newId("log"),
+      profileId: body.profileId,
+      date,
+      sleepHours: e.sleepHours != null ? Number(e.sleepHours) : undefined,
+      moodScore:
+        e.moodScore != null
+          ? Math.max(1, Math.min(10, Number(e.moodScore)))
+          : undefined,
+      weightKg: e.weightKg != null ? Number(e.weightKg) : undefined,
+      waterL: e.waterL != null ? Number(e.waterL) : undefined,
+      exerciseMin: e.exerciseMin != null ? Number(e.exerciseMin) : undefined,
+      notes: `imported:${source}`,
+      createdAt: nowIso(),
+    };
+    const idx = list.findIndex((l) => l.date === date);
+    if (idx >= 0) list[idx] = log;
+    else list.unshift(log);
+    imported++;
+  }
+  if (list.length > 365) list.length = 365;
+  logs.set(body.profileId, list);
+  res.json({ imported, source });
+});
+
 healthaiRouter.get("/risks/:id", (req: Request, res: Response) => {
   const profileId = req.params.id;
   const profile = profiles.get(profileId);

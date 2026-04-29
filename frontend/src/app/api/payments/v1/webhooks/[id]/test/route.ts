@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import {
-  authError,
+  attachRateHeaders,
   badRequest,
+  gateRequest,
   genId,
   readJson,
   signHmac,
@@ -32,24 +33,30 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
-  const auth = authError(req);
-  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+  const gate = gateRequest(req, { limit: 30 });
+  if (!gate.ok) return gate.response;
 
   const { id } = await ctx.params;
   const ep = store.webhooks.get(id);
   if (!ep) {
-    return withCors(
-      Response.json(
-        {
-          error: { type: "not_found", message: `No webhook with id ${id}.` },
-        },
-        { status: 404 }
-      )
+    return attachRateHeaders(
+      withCors(
+        Response.json(
+          {
+            error: { type: "not_found", message: `No webhook with id ${id}.` },
+          },
+          { status: 404 }
+        )
+      ),
+      gate.rateHeaders
     );
   }
   if (!ep.enabled) {
-    return withCors(
-      badRequest("Webhook is paused. Resume it before firing test events.")
+    return attachRateHeaders(
+      withCors(
+        badRequest("Webhook is paused. Resume it before firing test events.")
+      ),
+      gate.rateHeaders
     );
   }
 
@@ -94,23 +101,26 @@ export async function POST(
 
   const durationMs = Date.now() - startedAt;
 
-  return withCors(
-    Response.json(
-      {
-        id: genId("att"),
-        webhook_id: ep.id,
-        event,
-        delivered: success,
-        http_code: httpCode,
-        duration_ms: durationMs,
-        timestamp: ts,
-        signature,
-        url: ep.url,
-        error,
-        payload,
-      },
-      { status: success ? 200 : 502 }
-    )
+  return attachRateHeaders(
+    withCors(
+      Response.json(
+        {
+          id: genId("att"),
+          webhook_id: ep.id,
+          event,
+          delivered: success,
+          http_code: httpCode,
+          duration_ms: durationMs,
+          timestamp: ts,
+          signature,
+          url: ep.url,
+          error,
+          payload,
+        },
+        { status: success ? 200 : 502 }
+      )
+    ),
+    gate.rateHeaders
   );
 }
 

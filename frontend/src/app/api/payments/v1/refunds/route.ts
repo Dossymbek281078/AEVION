@@ -1,11 +1,11 @@
 import type { NextRequest } from "next/server";
 import {
-  authError,
+  attachRateHeaders,
   badRequest,
   checkIdempotency,
+  gateRequest,
   genId,
   getOrigin,
-  readJson,
   signHmac,
   store,
   withCors,
@@ -27,8 +27,8 @@ type ApiRefund = {
 };
 
 export async function GET(req: NextRequest) {
-  const auth = authError(req);
-  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+  const gate = gateRequest(req);
+  if (!gate.ok) return gate.response;
 
   const url = new URL(req.url);
   const linkId = url.searchParams.get("link_id");
@@ -36,27 +36,33 @@ export async function GET(req: NextRequest) {
   const items = await kvList<ApiRefund>(REFUNDS_KEY);
   const filtered = linkId ? items.filter((r) => r.link_id === linkId) : items;
 
-  return withCors(
-    Response.json({
-      object: "list",
-      count: filtered.length,
-      data: filtered.slice(0, 100),
-    })
+  return attachRateHeaders(
+    withCors(
+      Response.json({
+        object: "list",
+        count: filtered.length,
+        data: filtered.slice(0, 100),
+      })
+    ),
+    gate.rateHeaders
   );
 }
 
 export async function POST(req: NextRequest) {
-  const auth = authError(req);
-  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+  const gate = gateRequest(req);
+  if (!gate.ok) return gate.response;
 
   const raw = await req.text();
   const idem = checkIdempotency(req, raw);
   if (idem.hit) {
-    return withCors(
-      new Response(idem.cachedBody, {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.cachedBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      ),
+      gate.rateHeaders
     );
   }
 
@@ -67,16 +73,23 @@ export async function POST(req: NextRequest) {
     return withCors(badRequest("Invalid JSON body."));
   }
   if (!body?.link_id) {
-    return withCors(badRequest("link_id is required."));
+    return attachRateHeaders(
+      withCors(badRequest("link_id is required.")),
+      gate.rateHeaders
+    );
   }
 
   const link: ApiLink | undefined = store.links.get(body.link_id);
   if (!link) {
-    return withCors(badRequest(`No payment link found for id ${body.link_id}.`, 404));
+    return attachRateHeaders(
+      withCors(badRequest(`No payment link found for id ${body.link_id}.`, 404)),
+      gate.rateHeaders
+    );
   }
   if (link.status !== "paid") {
-    return withCors(
-      badRequest(`Cannot refund a link with status "${link.status}".`, 409)
+    return attachRateHeaders(
+      withCors(badRequest(`Cannot refund a link with status "${link.status}".`, 409)),
+      gate.rateHeaders
     );
   }
 
@@ -86,16 +99,22 @@ export async function POST(req: NextRequest) {
     .reduce((acc, r) => acc + r.amount, 0);
   const remaining = link.amount - refundedSoFar;
   if (remaining <= 0) {
-    return withCors(badRequest("Link has already been fully refunded.", 409));
+    return attachRateHeaders(
+      withCors(badRequest("Link has already been fully refunded.", 409)),
+      gate.rateHeaders
+    );
   }
 
   const requested = body.amount && body.amount > 0 ? body.amount : remaining;
   if (requested > remaining + 1e-9) {
-    return withCors(
-      badRequest(
-        `Requested amount ${requested} exceeds remaining refundable ${remaining}.`,
-        409
-      )
+    return attachRateHeaders(
+      withCors(
+        badRequest(
+          `Requested amount ${requested} exceeds remaining refundable ${remaining}.`,
+          409
+        )
+      ),
+      gate.rateHeaders
     );
   }
 
@@ -116,11 +135,14 @@ export async function POST(req: NextRequest) {
 
   const responseBody = JSON.stringify(refund);
   idem.cleanup?.();
-  return withCors(
-    new Response(responseBody, {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    })
+  return attachRateHeaders(
+    withCors(
+      new Response(responseBody, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    ),
+    gate.rateHeaders
   );
 }
 

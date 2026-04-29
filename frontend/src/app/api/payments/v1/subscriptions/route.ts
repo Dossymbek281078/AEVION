@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import {
-  authError,
+  attachRateHeaders,
   badRequest,
   checkIdempotency,
+  gateRequest,
   genId,
   readJson,
   store,
@@ -21,17 +22,20 @@ const ALLOWED_INTERVALS: ApiSubscription["interval"][] = [
 const INTERVAL_DAYS = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
 
 export async function GET(req: NextRequest) {
-  const auth = authError(req);
-  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+  const gate = gateRequest(req);
+  if (!gate.ok) return gate.response;
   const data = Array.from(store.subscriptions.values()).sort(
     (a, b) => b.created - a.created
   );
-  return withCors(Response.json({ data, has_more: false }));
+  return attachRateHeaders(
+    withCors(Response.json({ data, has_more: false })),
+    gate.rateHeaders
+  );
 }
 
 export async function POST(req: NextRequest) {
-  const auth = authError(req);
-  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+  const gate = gateRequest(req);
+  if (!gate.ok) return gate.response;
 
   const body = await readJson<{
     customer?: unknown;
@@ -92,20 +96,26 @@ export async function POST(req: NextRequest) {
   const responseBody = JSON.stringify(sub);
   const idem = checkIdempotency(req, responseBody);
   if (idem.hit) {
-    return withCors(
-      new Response(idem.cachedBody, {
-        status: 200,
-        headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-      })
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.cachedBody, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
     );
   }
   store.subscriptions.set(id, sub);
   idem.cleanup();
-  return withCors(
-    new Response(responseBody, {
-      status: 201,
-      headers: { "content-type": "application/json" },
-    })
+  return attachRateHeaders(
+    withCors(
+      new Response(responseBody, {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      })
+    ),
+    gate.rateHeaders
   );
 }
 

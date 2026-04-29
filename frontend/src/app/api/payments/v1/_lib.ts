@@ -244,3 +244,94 @@ export async function readJson<T = unknown>(req: NextRequest): Promise<T | null>
     return null;
   }
 }
+
+type RateBucket = { count: number; resetAt: number };
+const rateBuckets = (() => {
+  const g = globalThis as unknown as { __aevionPayRate?: Map<string, RateBucket> };
+  if (!g.__aevionPayRate) g.__aevionPayRate = new Map();
+  return g.__aevionPayRate;
+})();
+
+const DEFAULT_RATE_LIMIT = 60;
+const DEFAULT_RATE_WINDOW_MS = 60 * 1000;
+
+export function enforceRate(
+  req: NextRequest,
+  limit = DEFAULT_RATE_LIMIT,
+  windowMs = DEFAULT_RATE_WINDOW_MS
+):
+  | { ok: true; headers: Record<string, string> }
+  | { ok: false; response: Response } {
+  const auth = req.headers.get("authorization") ?? "";
+  const m = auth.match(/^Bearer\s+(\S+)$/i);
+  // No bearer token? Auth check will reject anyway, skip rate accounting.
+  if (!m) return { ok: true, headers: {} };
+  const key = m[1];
+  const now = Date.now();
+  let bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + windowMs };
+  }
+  bucket.count += 1;
+  rateBuckets.set(key, bucket);
+
+  // Periodic GC
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets.entries()) {
+      if (v.resetAt <= now) rateBuckets.delete(k);
+    }
+  }
+
+  const remaining = Math.max(0, limit - bucket.count);
+  const resetSec = Math.ceil((bucket.resetAt - now) / 1000);
+  const headers: Record<string, string> = {
+    "x-ratelimit-limit": String(limit),
+    "x-ratelimit-remaining": String(remaining),
+    "x-ratelimit-reset": String(resetSec),
+  };
+  if (bucket.count > limit) {
+    return {
+      ok: false,
+      response: withCors(
+        Response.json(
+          {
+            error: {
+              type: "rate_limit_error",
+              message: `Rate limit exceeded: ${limit} requests per ${Math.round(
+                windowMs / 1000
+              )}s. Try again in ${resetSec}s.`,
+            },
+          },
+          {
+            status: 429,
+            headers: { ...headers, "retry-after": String(resetSec) },
+          }
+        )
+      ),
+    };
+  }
+  return { ok: true, headers };
+}
+
+export function attachRateHeaders(res: Response, headers: Record<string, string>) {
+  for (const [k, v] of Object.entries(headers)) res.headers.set(k, v);
+  return res;
+}
+
+export function gateRequest(
+  req: NextRequest,
+  opts?: { limit?: number; windowMs?: number }
+):
+  | { ok: false; response: Response }
+  | { ok: true; rateHeaders: Record<string, string> } {
+  const auth = authError(req);
+  if (auth) {
+    return {
+      ok: false,
+      response: withCors(Response.json(auth.body, { status: auth.code })),
+    };
+  }
+  const rl = enforceRate(req, opts?.limit, opts?.windowMs);
+  if (!rl.ok) return { ok: false, response: rl.response };
+  return { ok: true, rateHeaders: rl.headers };
+}

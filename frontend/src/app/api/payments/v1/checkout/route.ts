@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import {
-  authError,
+  attachRateHeaders,
   badRequest,
   checkIdempotency,
+  gateRequest,
   genId,
   getOrigin,
   readJson,
@@ -15,8 +16,8 @@ import {
 const ALLOWED_CURRENCIES: Currency[] = ["USD", "EUR", "KZT", "AEC"];
 
 export async function POST(req: NextRequest) {
-  const auth = authError(req);
-  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+  const gate = gateRequest(req);
+  if (!gate.ok) return gate.response;
 
   const body = await readJson<{
     amount?: unknown;
@@ -65,20 +66,26 @@ export async function POST(req: NextRequest) {
   const responseBody = JSON.stringify(checkout);
   const idem = checkIdempotency(req, responseBody);
   if (idem.hit) {
-    return withCors(
-      new Response(idem.cachedBody, {
-        status: 200,
-        headers: { "content-type": "application/json", "idempotent-replayed": "true" },
-      })
+    return attachRateHeaders(
+      withCors(
+        new Response(idem.cachedBody, {
+          status: 200,
+          headers: { "content-type": "application/json", "idempotent-replayed": "true" },
+        })
+      ),
+      gate.rateHeaders
     );
   }
   store.checkouts.set(id, checkout);
   idem.cleanup();
-  return withCors(
-    new Response(responseBody, {
-      status: 201,
-      headers: { "content-type": "application/json" },
-    })
+  return attachRateHeaders(
+    withCors(
+      new Response(responseBody, {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      })
+    ),
+    gate.rateHeaders
   );
 }
 

@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { authError, store, withCors } from "../_lib";
+import { attachRateHeaders, gateRequest, store, withCors } from "../_lib";
 
 export async function GET(req: NextRequest) {
-  const auth = authError(req);
-  if (auth) return withCors(Response.json(auth.body, { status: auth.code }));
+  const gate = gateRequest(req);
+  if (!gate.ok) return gate.response;
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const currency = searchParams.get("currency");
@@ -14,7 +14,12 @@ export async function GET(req: NextRequest) {
   );
   if (status) data = data.filter((s) => s.status === status);
   if (currency) data = data.filter((s) => s.currency === currency);
-  return withCors(Response.json({ data: data.slice(0, limit), has_more: data.length > limit }));
+  return attachRateHeaders(
+    withCors(
+      Response.json({ data: data.slice(0, limit), has_more: data.length > limit })
+    ),
+    gate.rateHeaders
+  );
 }
 
 export function OPTIONS() {

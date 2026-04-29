@@ -327,6 +327,35 @@ function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarPr
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Memoized Board Cell — рендерится 64 раза каждый рендер board'а.
+   React.memo + примитивные props → 60+ cells skip re-render когда ход
+   меняет состояние только 2-4 cells.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type CellProps={
+  sq:Square;
+  pieceType:"p"|"n"|"b"|"r"|"q"|"k"|null;
+  pieceColor:"w"|"b"|null;
+  bg:string;
+  cursor:"grab"|"default";
+  iS:boolean;iV:boolean;iCk:boolean;iPM:boolean;iPS:boolean;
+  iL:boolean;isShadow:boolean;isAnimDest:boolean;isDragOrigin:boolean;
+  pmIdx?:number;
+};
+
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,pmIdx}:CellProps){
+  void iPM;
+  const hasPiece=pieceType&&pieceColor;
+  return <div data-sq={sq}
+    className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
+    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.15s"}}>
+    {iV&&!hasPiece&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
+    {hasPiece&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
+    {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
+  </div>;
+});
+
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
@@ -3414,29 +3443,22 @@ export default function CyberChessPage(){
                   })}
                 </svg>;
               })()}
-              {(()=>{
-                // Pre-compute for всех 64 cells один раз — annotActive, isOwnPieceCursor.
-                // Все handlers через event delegation на parent — отказывается от 256
-                // inline closures на каждый render.
-                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
-                return rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
-                  const realP=game.get(sq);
-                  const isShadow=pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color);
-                  const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=lm&&(lm.from===sq||lm.to===sq),iCk=chk&&p?.type==="k"&&p.color===game.turn(),iPM=pmSet.has(sq),iPS=pmSel===sq;
-                  let bg=lt?bT.light:bT.dark;
-                  if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                  const isDragOrigin=ghost?.from===sq;
-                  const isAnimDest=moveAnim?.to===sq;
-                  void annotActive;
-                  return <div key={sq} data-sq={sq}
-                    className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
-                    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
-                    {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
-                    {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
-                    {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
-                  </div>;
-                }));
-              })()}
+              {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
+                const realP=game.get(sq);
+                const isShadow=!!(pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color));
+                const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=!!(lm&&(lm.from===sq||lm.to===sq)),iCk=!!(chk&&p?.type==="k"&&p.color===game.turn()),iPM=pmSet.has(sq),iPS=pmSel===sq;
+                let bg=lt?bT.light:bT.dark;
+                if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
+                const isDragOrigin=ghost?.from===sq;
+                const isAnimDest=moveAnim?.to===sq;
+                return <Cell key={sq} sq={sq}
+                  pieceType={(p?.type as any)||null}
+                  pieceColor={(p?.color as any)||null}
+                  bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}
+                  iS={iS} iV={iV} iCk={iCk} iPM={iPM} iPS={iPS} iL={iL}
+                  isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
+                  pmIdx={pmToIdx.get(sq)}/>;
+              }))}
               {/* Ghost piece following pointer during drag */}
               {ghost&&(()=>{const gp=game.get(ghost.from);if(!gp)return null;return <div style={{position:"fixed",left:ghost.x,top:ghost.y,width:"clamp(60px,9vw,90px)",height:"clamp(60px,9vw,90px)",transform:"translate(-50%,-50%) scale(1.05)",pointerEvents:"none",zIndex:1000,filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.45))"}}><Piece type={gp.type} color={gp.color}/></div>;})()}
 

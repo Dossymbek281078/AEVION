@@ -1158,7 +1158,21 @@ export default function CyberChessPage(){
     try{mv=game.move({from,to,promotion:pr||"q"});}catch{return false;}
     if(!mv)return false;
     if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(game.isCheck())snd("check");else snd("move");
-    if(mv.captured){const cc=pc(mv.captured,mv.color==="w"?"b":"w");if(mv.color===pCol)sCapB(x=>[...x,cc]);else sCapW(x=>[...x,cc])}
+    if(mv.captured){
+      const cc=pc(mv.captured,mv.color==="w"?"b":"w");
+      if(mv.color===pCol)sCapB(x=>[...x,cc]);else sCapW(x=>[...x,cc]);
+      // Trigger capture animation на cell взятия. En-passant: cell на оригинальном rank пешки.
+      const capColor=mv.color==="w"?"b":"w";
+      let capSq:Square=mv.to;
+      if(mv.flags?.includes("e")){
+        // En-passant — captured pawn was on rank ahead/behind 'to'
+        const r=parseInt(mv.to[1]);
+        const epR=mv.color==="w"?r-1:r+1;
+        capSq=`${mv.to[0]}${epR}` as Square;
+      }
+      sCapAnim({sq:capSq,piece:{type:mv.captured,color:capColor},key:Date.now()});
+      window.setTimeout(()=>sCapAnim(null),220);
+    }
     if(mv.color===pCol)pT.addInc();else aT.addInc();
     sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
     if(game.isGameOver()){
@@ -1748,6 +1762,8 @@ export default function CyberChessPage(){
   const[moveAnim,sMoveAnim]=useState<{from:Square;to:Square;piece:{type:any;color:any};key:number}|null>(null);
   const moveAnimElRef=useRef<HTMLDivElement|null>(null);
   const lmKeyRef=useRef("");
+  // Capture animation: захваченная фигура коротко fade+shrink на cell взятия (lichess-style).
+  const[capAnim,sCapAnim]=useState<{sq:Square;piece:{type:any;color:any};key:number}|null>(null);
   useEffect(()=>{
     if(!lm||!lm.from||!lm.to||lm.from===lm.to)return;
     const key=`${lm.from}-${lm.to}-${bk}`;
@@ -3522,6 +3538,17 @@ export default function CyberChessPage(){
                   isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
                   pmIdx={pmToIdx.get(sq)}/>;
               }))}
+              {/* Capture animation — захваченная фигура pop+fade на cell взятия */}
+              {capAnim&&(()=>{
+                const cf=FILES.indexOf(capAnim.sq[0]);
+                const cr=8-parseInt(capAnim.sq[1]);
+                const cc=flip?7-cf:cf;const crr=flip?7-cr:cr;
+                return <div key={capAnim.key} style={{position:"absolute",left:`${cc*12.5}%`,top:`${crr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:7,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <div style={{width:"88%",height:"88%",animation:"cc-capture-pop 220ms cubic-bezier(0.4,0,0.2,1) forwards"}}>
+                    <Piece type={capAnim.piece.type} color={capAnim.piece.color}/>
+                  </div>
+                </div>;
+              })()}
               {/* Hover halo — кольцо на cell под курсором во время drag (lichess-style) */}
               {dragHover&&(()=>{
                 const hf=FILES.indexOf(dragHover[0]);

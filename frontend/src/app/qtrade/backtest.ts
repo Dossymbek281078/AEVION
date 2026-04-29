@@ -1,7 +1,30 @@
 // Backtester — applies a trading strategy to historical OHLC candles
 // (Pair.candles[]) and produces equity curve + summary metrics.
+//
+// Optional fees & slippage: pass a FeeConfig (or omit для idealised fills).
+// DCA / BnH = taker (market-style buys); Grid = maker (passive level fills,
+// no slippage but maker fee applied symmetrically on buy + sell).
 
 import type { Candle } from "./marketSim";
+import { DEFAULT_FEES, slipPrice, tradeFee, type FeeConfig } from "./fees";
+
+// USD-per-unit purchase price after slippage. Buys = worse-up.
+function buyExecPrice(rawPrice: number, fees: FeeConfig, taker: boolean): number {
+  if (!fees.enabled) return rawPrice;
+  return taker ? slipPrice(rawPrice, "worse-up", fees) : rawPrice;
+}
+
+// USD-per-unit sale price after slippage. Sells = worse-down.
+function sellExecPrice(rawPrice: number, fees: FeeConfig, taker: boolean): number {
+  if (!fees.enabled) return rawPrice;
+  return taker ? slipPrice(rawPrice, "worse-down", fees) : rawPrice;
+}
+
+// Apply maker/taker fee to a notional, returning the post-fee USD value.
+function netUsdAfterFee(notional: number, fees: FeeConfig, mode: "maker" | "taker"): number {
+  if (!fees.enabled) return notional;
+  return notional - tradeFee(notional, mode, fees);
+}
 
 export type StrategyKind = "dca" | "grid" | "bnh";
 
@@ -61,7 +84,7 @@ function emptyResult(strategy: StrategyKind, error: string): BacktestResult {
 }
 
 // DCA: buy fixed USD каждые intervalCandles при открытии candle.
-function runDca(candles: Candle[], cfg: DcaConfig): BacktestResult {
+function runDca(candles: Candle[], cfg: DcaConfig, fees: FeeConfig): BacktestResult {
   if (candles.length === 0) return emptyResult("dca", "no candles");
   const interval = Math.max(1, Math.floor(cfg.intervalCandles));
   const amount = Math.max(0.01, cfg.amountUsd);
@@ -70,10 +93,11 @@ function runDca(candles: Candle[], cfg: DcaConfig): BacktestResult {
   for (let i = 0; i < candles.length; i++) {
     const c = candles[i];
     if (i % interval === 0) {
-      // Buy at open
-      const px = c.o;
+      // Buy at open (taker — market-style DCA)
+      const px = buyExecPrice(c.o, fees, true);
       if (px > 0) {
-        qty += amount / px;
+        const usable = netUsdAfterFee(amount, fees, "taker");
+        qty += usable / px;
         spent += amount;
         numBuys += 1;
       }
@@ -104,7 +128,7 @@ function runDca(candles: Candle[], cfg: DcaConfig): BacktestResult {
 }
 
 // Grid: simulate buy/sell-cross на каждой candle (high/low проверка).
-function runGrid(candles: Candle[], cfg: GridConfig): BacktestResult {
+function runGrid(candles: Candle[], cfg: GridConfig, fees: FeeConfig): BacktestResult {
   if (candles.length === 0) return emptyResult("grid", "no candles");
   if (cfg.lowPrice <= 0 || cfg.highPrice <= cfg.lowPrice) return emptyResult("grid", "invalid range");
   if (cfg.gridCount < 2) return emptyResult("grid", "need ≥2 levels");
@@ -125,8 +149,10 @@ function runGrid(candles: Candle[], cfg: GridConfig): BacktestResult {
       if (!lvl.filled) {
         // Buy if low <= level.price (price touched/dropped below this rung)
         if (c.l <= lvl.price && c.h >= 0) {
-          const px = lvl.price; // assume fill at level
-          lvl.qty = amount / px;
+          // Grid buys = passive limit fills = maker. No slip; maker fee applied.
+          const px = buyExecPrice(lvl.price, fees, false);
+          const usable = netUsdAfterFee(amount, fees, "maker");
+          lvl.qty = usable / px;
           lvl.entry = px;
           lvl.filled = true;
           qty += lvl.qty;
@@ -134,14 +160,14 @@ function runGrid(candles: Candle[], cfg: GridConfig): BacktestResult {
           numBuys += 1;
         }
       } else {
-        // Sell at next-higher rung
-        const sellPrice = i + 1 < levels.length ? levels[i + 1].price : lvl.price * 1.02;
-        if (c.h >= sellPrice) {
-          const profit = lvl.qty * (sellPrice - lvl.entry);
-          realized += profit;
-          spent -= amount; // deduct (или treat realized отдельно). Не вычитать из spent — это запутает return;
-          // Actually: keep spent (total invested), grid releases capital but для simple return мы используем realized profit
-          spent += amount; // restore
+        // Sell at next-higher rung (passive limit = maker)
+        const rawSellPrice = i + 1 < levels.length ? levels[i + 1].price : lvl.price * 1.02;
+        if (c.h >= rawSellPrice) {
+          const sellPrice = sellExecPrice(rawSellPrice, fees, false);
+          const grossProceeds = lvl.qty * sellPrice;
+          const netProceeds = netUsdAfterFee(grossProceeds, fees, "maker");
+          // Realized = net proceeds − original USD invested into this rung
+          realized += netProceeds - amount;
           qty -= lvl.qty;
           lvl.qty = 0;
           lvl.entry = 0;
@@ -178,12 +204,14 @@ function runGrid(candles: Candle[], cfg: GridConfig): BacktestResult {
 }
 
 // Buy-and-hold: одна покупка на open[0], держим до close[last].
-function runBnh(candles: Candle[], cfg: BnHConfig): BacktestResult {
+function runBnh(candles: Candle[], cfg: BnHConfig, fees: FeeConfig): BacktestResult {
   if (candles.length === 0) return emptyResult("bnh", "no candles");
   const total = Math.max(0.01, cfg.totalUsd);
-  const startPx = candles[0].o;
-  if (startPx <= 0) return emptyResult("bnh", "invalid start price");
-  const qty = total / startPx;
+  const rawStart = candles[0].o;
+  if (rawStart <= 0) return emptyResult("bnh", "invalid start price");
+  const startPx = buyExecPrice(rawStart, fees, true);
+  const usable = netUsdAfterFee(total, fees, "taker");
+  const qty = usable / startPx;
   const equity: EquityPoint[] = candles.map((c) => ({
     ts: c.ts,
     equity: qty * c.c,
@@ -211,10 +239,14 @@ function runBnh(candles: Candle[], cfg: BnHConfig): BacktestResult {
   };
 }
 
-export function runBacktest(candles: Candle[], strategy: StrategyConfig): BacktestResult {
+export function runBacktest(
+  candles: Candle[],
+  strategy: StrategyConfig,
+  fees: FeeConfig = DEFAULT_FEES,
+): BacktestResult {
   switch (strategy.kind) {
-    case "dca":  return runDca(candles, strategy.cfg);
-    case "grid": return runGrid(candles, strategy.cfg);
-    case "bnh":  return runBnh(candles, strategy.cfg);
+    case "dca":  return runDca(candles, strategy.cfg, fees);
+    case "grid": return runGrid(candles, strategy.cfg, fees);
+    case "bnh":  return runBnh(candles, strategy.cfg, fees);
   }
 }

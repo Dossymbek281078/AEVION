@@ -2520,6 +2520,7 @@ export default function QTradePage() {
             setBtResult({ ok: false, error: "Нет candles на паре — подожди пока накопятся", strategy: btStrategy, equity: [], totalSpent: 0, finalQty: 0, finalValue: 0, realizedProfit: 0, totalReturn: 0, maxDrawdown: 0, maxDrawdownPct: 0, numTrades: 0, numBuys: 0, numSells: 0 });
             return;
           }
+          const fees = ldFees();
           if (btStrategy === "dca") {
             const r = runBacktest(candles, {
               kind: "dca",
@@ -2527,7 +2528,7 @@ export default function QTradePage() {
                 amountUsd: Math.max(1, Number(btDcaAmount) || 0),
                 intervalCandles: Math.max(1, Math.floor(Number(btDcaInterval) || 1)),
               },
-            });
+            }, fees);
             setBtResult(r);
           } else if (btStrategy === "grid") {
             const r = runBacktest(candles, {
@@ -2538,13 +2539,13 @@ export default function QTradePage() {
                 gridCount: Math.max(2, Math.min(60, Math.floor(Number(btGridCount) || 0))),
                 amountUsdPerLevel: Math.max(1, Number(btGridAmount) || 0),
               },
-            });
+            }, fees);
             setBtResult(r);
           } else {
             const r = runBacktest(candles, {
               kind: "bnh",
               cfg: { totalUsd: Math.max(1, Number(btBnhTotal) || 0) },
-            });
+            }, fees);
             setBtResult(r);
           }
         };

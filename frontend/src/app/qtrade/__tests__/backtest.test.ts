@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { runBacktest } from "../backtest";
+import { DEFAULT_FEES, type FeeConfig } from "../fees";
 import type { Candle } from "../marketSim";
 
 const linearCandles = (start: number, end: number, n: number): Candle[] => {
@@ -130,5 +131,63 @@ describe("runBacktest · Grid", () => {
     const candles = oscillatingCandles(80, 120, 50);
     const r = runBacktest(candles, { kind: "grid", cfg: { lowPrice: 85, highPrice: 115, gridCount: 5, amountUsdPerLevel: 25 } });
     expect(r.equity).toHaveLength(50);
+  });
+});
+
+describe("backtest · fee-aware execution", () => {
+  const enabledFees: FeeConfig = {
+    enabled: true,
+    makerBps: 10,
+    takerBps: 25,
+    slippageBps: 20,
+    dailyLossLimitUsd: 0,
+  };
+
+  it("DCA: with fees disabled returns same finalQty as default", () => {
+    const candles = linearCandles(100, 100, 10);
+    const cfg = { kind: "dca" as const, cfg: { amountUsd: 10, intervalCandles: 1 } };
+    const noFees = runBacktest(candles, cfg);
+    const explicitOff = runBacktest(candles, cfg, { ...DEFAULT_FEES, enabled: false });
+    expect(noFees.finalQty).toBeCloseTo(explicitOff.finalQty, 6);
+  });
+
+  it("DCA: enabled fees reduce finalQty (slip + fee = less coins per USD)", () => {
+    const candles = linearCandles(100, 100, 10);
+    const cfg = { kind: "dca" as const, cfg: { amountUsd: 10, intervalCandles: 1 } };
+    const idealised = runBacktest(candles, cfg);
+    const realistic = runBacktest(candles, cfg, enabledFees);
+    expect(realistic.finalQty).toBeLessThan(idealised.finalQty);
+    // spent (USD invested) should be identical — fee comes out of coins not USD
+    expect(realistic.totalSpent).toBeCloseTo(idealised.totalSpent, 6);
+  });
+
+  it("BnH: enabled fees reduce finalValue at equilibrium price", () => {
+    const candles = linearCandles(100, 100, 10);
+    const cfg = { kind: "bnh" as const, cfg: { totalUsd: 100 } };
+    const idealised = runBacktest(candles, cfg);
+    const realistic = runBacktest(candles, cfg, enabledFees);
+    expect(realistic.finalQty).toBeLessThan(idealised.finalQty);
+    // Idealised flat market = exactly break-even; with fees → loss
+    expect(idealised.totalReturn).toBeCloseTo(0, 4);
+    expect(realistic.totalReturn).toBeLessThan(0);
+  });
+
+  it("Grid: enabled fees reduce realizedProfit на каждом цикле", () => {
+    const candles = oscillatingCandles(80, 120, 50);
+    const cfg = { kind: "grid" as const, cfg: { lowPrice: 85, highPrice: 115, gridCount: 5, amountUsdPerLevel: 25 } };
+    const idealised = runBacktest(candles, cfg);
+    const realistic = runBacktest(candles, cfg, enabledFees);
+    if (idealised.numSells > 0) {
+      expect(realistic.realizedProfit).toBeLessThan(idealised.realizedProfit);
+    }
+  });
+
+  it("Grid: numBuys/numSells unchanged by fee toggle (fees не fill events)", () => {
+    const candles = oscillatingCandles(80, 120, 50);
+    const cfg = { kind: "grid" as const, cfg: { lowPrice: 85, highPrice: 115, gridCount: 5, amountUsdPerLevel: 25 } };
+    const idealised = runBacktest(candles, cfg);
+    const realistic = runBacktest(candles, cfg, enabledFees);
+    expect(realistic.numBuys).toBe(idealised.numBuys);
+    expect(realistic.numSells).toBe(idealised.numSells);
   });
 });

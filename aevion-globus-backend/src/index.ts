@@ -90,6 +90,35 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "List QRight (optional ?mine=1 + Bearer)" },
         post: { summary: "Create QRight object" },
       },
+      "/api/qright/objects/{id}": { get: { summary: "Get one QRight object (ETag/304)" } },
+      "/api/qright/objects/{id}/stats": {
+        get: { summary: "Owner-only fetch counter + revoke metadata (Bearer required)" },
+      },
+      "/api/qright/objects.csv": { get: { summary: "Download QRight registry as CSV" } },
+      "/api/qright/objects/search": {
+        get: { summary: "Search by title (ILIKE), optional ?kind, ?limit≤50" },
+      },
+      "/api/qright/embed/{id}": {
+        get: { summary: "Public sanitized JSON for embeds (CORS, ETag/304)" },
+      },
+      "/api/qright/badge/{id}.svg": {
+        get: { summary: "Embeddable SVG trust badge — ?theme=dark|light, red on revoke" },
+      },
+      "/api/qright/revoke/{id}": {
+        post: { summary: "Revoke a QRight object (owner only, Bearer required)" },
+      },
+      "/api/qright/admin/objects": {
+        get: { summary: "Admin: list all (filters: status, q, limit)" },
+      },
+      "/api/qright/admin/revoke/{id}": {
+        post: { summary: "Admin: force-revoke any object regardless of ownership" },
+      },
+      "/api/qright/admin/whoami": {
+        get: { summary: "Probe — returns isAdmin for the current Bearer" },
+      },
+      "/api/qright/transparency": {
+        get: { summary: "Public aggregate counts (totals, by-reason-code, by-kind) — no PII" },
+      },
       "/api/qsign/sign": { post: { summary: "[v1] Sign payload (HMAC, no persistence)" } },
       "/api/qsign/verify": { post: { summary: "[v1] Stateless verify" } },
       "/api/qsign/v2/health": { get: { summary: "[v2] QSign health + active kids" } },

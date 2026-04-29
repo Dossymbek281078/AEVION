@@ -43,6 +43,7 @@ import { HelpMenu } from "./_components/HelpMenu";
 import { MobileTabBar } from "./_components/MobileTabBar";
 import { OnboardingTour } from "./_components/OnboardingTour";
 import { PeerStanding } from "./_components/PeerStanding";
+import { PreflightBanner } from "./_components/PreflightBanner";
 import { QuickActionsFloater } from "./_components/QuickActionsFloater";
 import { ReferralsPanel } from "./_components/ReferralsPanel";
 import { RoundUpStash } from "./_components/RoundUpStash";
@@ -159,6 +160,7 @@ function BankContent() {
       <ThemeStyles />
       <ThemeToggle />
       <BackendStatus />
+      <PreflightBanner />
       <CommandPalette
         accountId={account?.id ?? null}
         hasWallet={hasWallet}

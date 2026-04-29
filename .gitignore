@@ -48,3 +48,5 @@ frontend/public/puzzles-report.json
 *_backup.tsx
 *_backup.ts
 page_v*_backup.*
+# Claude Code local settings
+.claude/

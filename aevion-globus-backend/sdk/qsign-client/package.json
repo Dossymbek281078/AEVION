@@ -1,0 +1,48 @@
+{
+  "name": "@aevion/qsign-client",
+  "version": "2.0.0",
+  "description": "TypeScript client for AEVION QSign v2 — sign, verify, revoke, audit, webhooks.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.ts",
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "aevion",
+    "qsign",
+    "signature",
+    "hmac",
+    "ed25519",
+    "rfc8785",
+    "post-quantum",
+    "dilithium"
+  ],
+  "homepage": "https://aevion.com/qsign",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "aevion-globus-backend/sdk/qsign-client"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck",
+    "build:esm": "tsc index.ts --declaration --target es2020 --module es2020 --strict --skipLibCheck --outDir esm"
+  }
+}

@@ -6,6 +6,7 @@ on:
     branches: [main, master, develop]
   pull_request:
     branches: [main, master, develop]
+  workflow_dispatch:
 
 jobs:
   backend:
@@ -23,6 +24,7 @@ jobs:
           cache-dependency-path: aevion-globus-backend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm test
 
   frontend:
     name: Frontend (next build)

@@ -19,18 +19,155 @@ model QRightObject {
   city         String?
   createdAt    DateTime @default(now())
 }
+
 model QuantumShield {
-  id          String   @id @default(uuid())
-  objectId    String?
-  objectTitle String?
-  algorithm   String   @default("Shamir's Secret Sharing + Ed25519")
-  threshold   Int      @default(2)
-  totalShards Int      @default(3)
-  shards      String
-  signature   String?
-  publicKey   String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  objectId       String?
+  objectTitle    String?
+  algorithm      String   @default("Shamir's Secret Sharing + Ed25519")
+  threshold      Int      @default(2)
+  totalShards    Int      @default(3)
+  shards         String
+  signature      String?
+  publicKey      String?
+  status         String   @default("active")
+  legacy         Boolean  @default(false)
+  hmacKeyVersion Int      @default(1) @map("hmac_key_version")
+  createdAt      DateTime @default(now())
+}
+
+/// QCoreAI multi-agent persistence.
+/// NOTE: runtime uses raw SQL via pg Pool (see lib/ensureQCoreTables.ts).
+/// This schema block documents the shape for tooling / future migrations.
+
+model QCoreSession {
+  id        String   @id @default(uuid())
+  userId    String?
+  title     String   @default("New session")
+  mode      String   @default("multi-agent")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model QCoreRun {
+  id              String    @id @default(uuid())
+  sessionId       String
+  userInput       String
+  status          String    @default("pending")
+  error           String?
+  agentConfig     Json?
+  strategy        String?
+  finalContent    String?
+  totalDurationMs Int?
+  totalCostUsd    Float?
+  shareToken      String?   @unique
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+
+  @@index([sessionId, startedAt(sort: Desc)])
+}
+
+model QCoreMessage {
+  id         String   @id @default(uuid())
+  runId      String
+  role       String
+  stage      String?
+  instance   String?
+  provider   String?
+  model      String?
+  content    String
+  tokensIn   Int?
+  tokensOut  Int?
+  durationMs Int?
+  costUsd    Float?
+  ordering   Int
+  createdAt  DateTime @default(now())
+
+  @@index([runId, ordering])
+}
+
+/// Per-user webhook config for run.completed deliveries. One row per JWT sub.
+/// URL is mandatory; secret is optional (HMAC-SHA256 of the body when present).
+/// Falls back to env QCORE_WEBHOOK_URL when no row exists for the run's user.
+model QCoreUserWebhook {
+  userId    String   @id
+  url       String
+  secret    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =====================================================================
+// QSign v2 — Unique Digital Signature Platform
+// RFC 8785 (JCS) canonicalization + HMAC-SHA256 + Ed25519 (hook: Dilithium3 in v2.1)
+// Rotation: overlap window via status + retiredAt, kid-scoped verification.
+// Keys stored as references to env vars (secretRef) for MVP. KMS adapter — v2.2+.
+// =====================================================================
+
+model QSignKey {
+  id         String    @id @default(uuid())
+  kid        String    @unique                         // stable public identifier, e.g. "qsign-hmac-v1"
+  algo       String                                    // "HMAC-SHA256" | "Ed25519"
+  publicKey  String?                                   // hex-encoded Ed25519 public key; null for HMAC
+  secretRef  String                                    // env var name resolved at runtime
+  status     String    @default("active")              // "active" | "retired"
+  notes      String?
+  createdAt  DateTime  @default(now())
+  retiredAt  DateTime?
+
+  @@index([status])
+}
+
+model QSignSignature {
+  id                 String    @id @default(uuid())
+  hmacKid            String
+  ed25519Kid         String?
+  payloadCanonical   String                             // RFC 8785 JCS stringified payload
+  payloadHash        String                             // sha256 hex of payloadCanonical
+  signatureHmac      String
+  signatureEd25519   String?
+  signatureDilithium String?                            // placeholder for v2.1
+  algoVersion        String    @default("qsign-v2.0")
+  issuerUserId       String?
+  issuerEmail        String?
+  geoLat             Float?
+  geoLng             Float?
+  geoSource          String?                            // "ip" | "gps" | null
+  geoCountry         String?
+  geoCity            String?
+  createdAt          DateTime  @default(now())
+  revokedAt          DateTime?
+
+  @@index([payloadHash])
+  @@index([issuerUserId])
+  @@index([createdAt])
+}
+
+model QSignRevocation {
+  id                String   @id @default(uuid())
+  signatureId       String   @unique
+  reason            String
+  causalSignatureId String?
+  revokerUserId     String?
+  revokedAt         DateTime @default(now())
+}
+
+model QSignWebhook {
+  id          String    @id @default(uuid())
+  ownerUserId String                                    // owner of subscription; only events on their own sigs fire
+  url         String                                    // delivery target — must be https in prod, http in dev
+  secret      String                                    // HMAC-SHA256 over body, sent in X-QSign-Signature header
+  events      String                                    // comma-separated subset of "sign,revoke"
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  lastFiredAt DateTime?
+  lastStatus  Int?
+  lastError   String?
+
+  @@index([ownerUserId])
+  @@index([active])
 }
 
 // ── AEV native token ─────────────────────────────────────────────────

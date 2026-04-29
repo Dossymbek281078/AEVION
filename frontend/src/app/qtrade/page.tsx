@@ -211,6 +211,8 @@ export default function QTradePage() {
   const [btGridCount, setBtGridCount] = useState("8");
   const [btGridAmount, setBtGridAmount] = useState("25");
   const [btBnhTotal, setBtBnhTotal] = useState("1000");
+  const [btBnhSL, setBtBnhSL] = useState(""); // optional stop-loss %
+  const [btBnhTP, setBtBnhTP] = useState(""); // optional take-profit %
   const [btResult, setBtResult] = useState<BacktestResult | null>(null);
 
   // ─── Grid Bot ────────────────────────────────────────────────────
@@ -2726,7 +2728,11 @@ export default function QTradePage() {
           } else {
             const r = runBacktest(candles, {
               kind: "bnh",
-              cfg: { totalUsd: Math.max(1, Number(btBnhTotal) || 0) },
+              cfg: {
+                totalUsd: Math.max(1, Number(btBnhTotal) || 0),
+                stopLossPct: btBnhSL.trim() === "" ? undefined : Math.max(0, Number(btBnhSL) || 0) || undefined,
+                takeProfitPct: btBnhTP.trim() === "" ? undefined : Math.max(0, Number(btBnhTP) || 0) || undefined,
+              },
             }, fees);
             setBtResult(r);
           }
@@ -2863,11 +2869,27 @@ export default function QTradePage() {
                 </>
               )}
               {btStrategy === "bnh" && (
-                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
-                  Total invest ($)
-                  <input type="number" min={1} step="any" value={btBnhTotal} onChange={(e) => setBtBnhTotal(e.target.value)}
-                    style={{ width: 110, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
-                </label>
+                <>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#c4b5fd", fontWeight: 700 }}>
+                    Total invest ($)
+                    <input type="number" min={1} step="any" value={btBnhTotal} onChange={(e) => setBtBnhTotal(e.target.value)}
+                      style={{ width: 110, padding: "6px 10px", borderRadius: 5, border: "1px solid #4c1d95", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#fca5a5", fontWeight: 700 }}>
+                    Stop-loss %
+                    <input type="number" min={0} step="any" value={btBnhSL} onChange={(e) => setBtBnhSL(e.target.value)}
+                      placeholder="off"
+                      aria-label="Stop-loss percent for BnH backtest"
+                      style={{ width: 90, padding: "6px 10px", borderRadius: 5, border: "1px solid rgba(220,38,38,0.5)", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#86efac", fontWeight: 700 }}>
+                    Take-profit %
+                    <input type="number" min={0} step="any" value={btBnhTP} onChange={(e) => setBtBnhTP(e.target.value)}
+                      placeholder="off"
+                      aria-label="Take-profit percent for BnH backtest"
+                      style={{ width: 90, padding: "6px 10px", borderRadius: 5, border: "1px solid rgba(34,197,94,0.5)", background: "#1e1b4b", color: "#fff", fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 13 }} />
+                  </label>
+                </>
               )}
               <button onClick={runBt}
                 disabled={candleCount < 2}

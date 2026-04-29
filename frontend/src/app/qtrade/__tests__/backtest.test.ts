@@ -191,3 +191,47 @@ describe("backtest · fee-aware execution", () => {
     expect(realistic.numSells).toBe(idealised.numSells);
   });
 });
+
+describe("backtest · BnH stop-loss / take-profit", () => {
+  it("BnH без SL/TP — backwards compatible (numSells=0, finalQty>0)", () => {
+    const candles = linearCandles(100, 110, 10);
+    const r = runBacktest(candles, { kind: "bnh", cfg: { totalUsd: 100 } });
+    expect(r.numSells).toBe(0);
+    expect(r.finalQty).toBeGreaterThan(0);
+  });
+
+  it("BnH SL hit — exits when price drops X% from entry", () => {
+    // Linear drop from 100 to 80 over 10 candles. SL = 10% (=> trigger at 90).
+    const candles = linearCandles(100, 80, 10);
+    const r = runBacktest(candles, { kind: "bnh", cfg: { totalUsd: 100, stopLossPct: 10 } });
+    expect(r.numSells).toBe(1);
+    expect(r.finalQty).toBe(0);
+    expect(r.realizedProfit).toBeLessThan(0); // -10% loss + fees-free здесь
+  });
+
+  it("BnH TP hit — exits early at +X% profit", () => {
+    const candles = linearCandles(100, 130, 10);
+    const r = runBacktest(candles, { kind: "bnh", cfg: { totalUsd: 100, takeProfitPct: 20 } });
+    expect(r.numSells).toBe(1);
+    expect(r.finalQty).toBe(0);
+    expect(r.realizedProfit).toBeGreaterThan(0);
+  });
+
+  it("BnH no trigger — same as plain BnH if neither SL nor TP hit", () => {
+    const candles = linearCandles(100, 105, 10);
+    // SL=20% (-20 to 80) + TP=20% (+20 to 120) — neither hit
+    const plain = runBacktest(candles, { kind: "bnh", cfg: { totalUsd: 100 } });
+    const guarded = runBacktest(candles, { kind: "bnh", cfg: { totalUsd: 100, stopLossPct: 20, takeProfitPct: 20 } });
+    expect(guarded.finalQty).toBeCloseTo(plain.finalQty, 6);
+    expect(guarded.numSells).toBe(0);
+  });
+
+  it("BnH equity курва — после exit equity замораживается на exitProceeds", () => {
+    const candles = linearCandles(100, 80, 10);
+    const r = runBacktest(candles, { kind: "bnh", cfg: { totalUsd: 100, stopLossPct: 10 } });
+    // After SL hit, equity must be flat across remaining candles
+    const last3 = r.equity.slice(-3).map((p) => p.equity);
+    expect(last3[0]).toBeCloseTo(last3[1], 6);
+    expect(last3[1]).toBeCloseTo(last3[2], 6);
+  });
+});

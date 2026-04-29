@@ -42,6 +42,8 @@ export type GridConfig = {
 
 export type BnHConfig = {
   totalUsd: number;         // одна покупка на старте
+  stopLossPct?: number;     // % drop from entry → close all (e.g. 10 = -10%)
+  takeProfitPct?: number;   // % rise from entry → close all (e.g. 25 = +25%)
 };
 
 export type StrategyConfig =
@@ -203,7 +205,9 @@ function runGrid(candles: Candle[], cfg: GridConfig, fees: FeeConfig): BacktestR
   };
 }
 
-// Buy-and-hold: одна покупка на open[0], держим до close[last].
+// Buy-and-hold: одна покупка на open[0], держим до close[last]. С опц.
+// stopLossPct / takeProfitPct закрываемся раньше при срабатывании триггера —
+// remaining equity замораживается на exit price (с применением sell-fee).
 function runBnh(candles: Candle[], cfg: BnHConfig, fees: FeeConfig): BacktestResult {
   if (candles.length === 0) return emptyResult("bnh", "no candles");
   const total = Math.max(0.01, cfg.totalUsd);
@@ -212,13 +216,43 @@ function runBnh(candles: Candle[], cfg: BnHConfig, fees: FeeConfig): BacktestRes
   const startPx = buyExecPrice(rawStart, fees, true);
   const usable = netUsdAfterFee(total, fees, "taker");
   const qty = usable / startPx;
-  const equity: EquityPoint[] = candles.map((c) => ({
-    ts: c.ts,
-    equity: qty * c.c,
-    spent: total,
-    realized: 0,
-    qty,
-  }));
+
+  // SL / TP уровни относительно ENTRY price (post-slip startPx)
+  const slPx = cfg.stopLossPct !== undefined && cfg.stopLossPct > 0
+    ? startPx * (1 - cfg.stopLossPct / 100) : null;
+  const tpPx = cfg.takeProfitPct !== undefined && cfg.takeProfitPct > 0
+    ? startPx * (1 + cfg.takeProfitPct / 100) : null;
+
+  const equity: EquityPoint[] = [];
+  let exitedTs: number | null = null;
+  let exitProceeds = 0;
+  let numSells = 0;
+  let realized = 0;
+
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
+    if (exitedTs !== null) {
+      // Already exited — equity static, qty = 0
+      equity.push({ ts: c.ts, equity: exitProceeds, spent: total, realized, qty: 0 });
+      continue;
+    }
+    // Check intra-candle hit: SL via low, TP via high
+    let exitRaw: number | null = null;
+    if (slPx !== null && c.l <= slPx) exitRaw = slPx;
+    if (tpPx !== null && c.h >= tpPx) exitRaw = exitRaw === null ? tpPx : Math.min(exitRaw, tpPx); // safer pick (worst case)
+    if (exitRaw !== null) {
+      const exitPx = sellExecPrice(exitRaw, fees, true);
+      const grossProceeds = qty * exitPx;
+      exitProceeds = netUsdAfterFee(grossProceeds, fees, "taker");
+      realized = exitProceeds - total;
+      numSells = 1;
+      exitedTs = c.ts;
+      equity.push({ ts: c.ts, equity: exitProceeds, spent: total, realized, qty: 0 });
+    } else {
+      equity.push({ ts: c.ts, equity: qty * c.c, spent: total, realized: 0, qty });
+    }
+  }
+
   const finalValue = equity[equity.length - 1].equity;
   const totalReturn = ((finalValue - total) / total) * 100;
   let peak = -Infinity, maxDd = 0, maxDdPct = 0;
@@ -231,11 +265,12 @@ function runBnh(candles: Candle[], cfg: BnHConfig, fees: FeeConfig): BacktestRes
       maxDdPct = (dd / Math.max(total, 1)) * 100;
     }
   }
+  const finalQty = exitedTs !== null ? 0 : qty;
   return {
     ok: true, strategy: "bnh", equity,
-    totalSpent: total, finalQty: qty, finalValue, realizedProfit: 0,
+    totalSpent: total, finalQty, finalValue, realizedProfit: realized,
     totalReturn, maxDrawdown: maxDd, maxDrawdownPct: maxDdPct,
-    numTrades: 1, numBuys: 1, numSells: 0,
+    numTrades: 1 + numSells, numBuys: 1, numSells,
   };
 }
 

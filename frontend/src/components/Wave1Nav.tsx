@@ -47,7 +47,9 @@ function AevPill({ variant }: { variant: "light" | "dark" }) {
 export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
   const sep = variant === "dark" ? "rgba(148,163,184,0.5)" : "#cbd5e1";
   const link = variant === "dark" ? "#e2e8f0" : "#334155";
-  const globus = variant === "dark" ? "#5eead4" : "#0d9488";
+  // Teal-700 (#0f766e) on slate-50 (#f8fafc) ≈ 5.5:1 — passes WCAG 2 AA.
+  // Was teal-600 (#0d9488) ≈ 3.57:1 (axe-core flagged).
+  const globus = variant === "dark" ? "#5eead4" : "#0f766e";
   const demoLink = variant === "dark" ? "#5eead4" : "#0f766e";
   const shield = variant === "dark" ? "#7dd3fc" : "#0369a1";
   return (

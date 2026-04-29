@@ -43,10 +43,19 @@ export type Position = {
   stopLoss?: number;     // абсолютная цена; long — закрытие если price ≤ SL; short — если price ≥ SL
   takeProfit?: number;   // абсолютная цена; long — закрытие если price ≥ TP; short — если price ≤ TP
   entryMode?: "maker" | "taker"; // taker — market open; maker — limit fill. undefined ⇒ taker (legacy)
+  maxHoldMs?: number;    // time-stop: auto-close после N мс с entryTs. undefined / ≤0 ⇒ нет лимита
 };
 
-// Returns "tp" / "sl" / null — какой триггер сработал у позиции при текущей цене.
-export function checkBracketHit(p: Position, price: number): "tp" | "sl" | null {
+// Returns "tp" / "sl" / "ts" / null. "ts" = time-stop fired — Position
+// held longer than maxHoldMs. Time-stop wins ties с price-bracket если оба
+// триггера сработали в одном тике (защита: time guarantees бесконечно
+// открытая позиция не висит).
+export type BracketReason = "tp" | "sl" | "ts";
+
+export function checkBracketHit(p: Position, price: number, now: number = Date.now()): BracketReason | null {
+  if (p.maxHoldMs !== undefined && p.maxHoldMs > 0 && now - p.entryTs >= p.maxHoldMs) {
+    return "ts";
+  }
   if (p.side === "long") {
     if (p.takeProfit !== undefined && price >= p.takeProfit) return "tp";
     if (p.stopLoss !== undefined && price <= p.stopLoss) return "sl";

@@ -129,6 +129,7 @@ export default function QTradePage() {
   const [bracketEditId, setBracketEditId] = useState<string | null>(null);
   const [bracketSL, setBracketSL] = useState("");
   const [bracketTP, setBracketTP] = useState("");
+  const [bracketTSMin, setBracketTSMin] = useState(""); // time-stop в минутах
 
   // Watchlist + active pair persistence
   const [watchlist, setWatchlist] = useState<Set<PairId>>(new Set());
@@ -297,11 +298,11 @@ export default function QTradePage() {
           svLimits(remaining);
           return remaining;
         });
-        // Check SL/TP brackets on open positions
+        // Check SL/TP/TS brackets on open positions
         setPositions((prevPos) => {
           if (prevPos.length === 0) return prevPos;
           const stillOpen: Position[] = [];
-          const triggered: { pos: Position; reason: "tp" | "sl"; price: number }[] = [];
+          const triggered: { pos: Position; reason: "tp" | "sl" | "ts"; price: number }[] = [];
           for (const pos of prevPos) {
             const pair = next.find((x) => x.id === pos.pair);
             if (!pair) { stillOpen.push(pos); continue; }
@@ -330,8 +331,9 @@ export default function QTradePage() {
             });
           }
           const t = triggered[0];
+          const reasonLabel = t.reason === "tp" ? "🎯 TP" : t.reason === "sl" ? "🛑 SL" : "⏱ Time-stop";
           setTradeMsg(
-            `${t.reason === "tp" ? "🎯 TP" : "🛑 SL"} hit · ${t.pos.side === "long" ? "Long" : "Short"} ${t.pos.qty} ${t.pos.pair.split("/")[0]} @ ${fmtUsd(t.price)}` +
+            `${reasonLabel} hit · ${t.pos.side === "long" ? "Long" : "Short"} ${t.pos.qty} ${t.pos.pair.split("/")[0]} @ ${fmtUsd(t.price)}` +
             (newClosed[0].realizedPnl >= 0 ? ` · +${fmtUsd(newClosed[0].realizedPnl)}` : ` · ${fmtUsd(newClosed[0].realizedPnl)}`),
           );
           setTimeout(() => setTradeMsg(null), 3500);
@@ -537,13 +539,17 @@ export default function QTradePage() {
     setBracketEditId(pos.id);
     setBracketSL(pos.stopLoss !== undefined ? String(pos.stopLoss) : "");
     setBracketTP(pos.takeProfit !== undefined ? String(pos.takeProfit) : "");
+    setBracketTSMin(pos.maxHoldMs !== undefined && pos.maxHoldMs > 0 ? String(Math.round(pos.maxHoldMs / 60_000)) : "");
   };
 
   const saveBrackets = (posId: string) => {
     const sl = bracketSL.trim() === "" ? undefined : Number(bracketSL);
     const tp = bracketTP.trim() === "" ? undefined : Number(bracketTP);
+    const tsMin = bracketTSMin.trim() === "" ? undefined : Number(bracketTSMin);
     if (sl !== undefined && (!Number.isFinite(sl) || sl <= 0)) { setTradeMsg("SL: положительная цена"); return; }
     if (tp !== undefined && (!Number.isFinite(tp) || tp <= 0)) { setTradeMsg("TP: положительная цена"); return; }
+    if (tsMin !== undefined && (!Number.isFinite(tsMin) || tsMin <= 0)) { setTradeMsg("Time-stop: положительные минуты"); return; }
+    const maxHoldMs = tsMin !== undefined ? Math.round(tsMin * 60_000) : undefined;
     setPositions((prev) => prev.map((p) => {
       if (p.id !== posId) return p;
       const cur = pairById.get(p.pair);
@@ -556,7 +562,7 @@ export default function QTradePage() {
         if (sl !== undefined && sl <= px) { setTradeMsg(`SL должен быть выше текущей ${fmtUsd(px)} для short`); return p; }
         if (tp !== undefined && tp >= px) { setTradeMsg(`TP должен быть ниже текущей ${fmtUsd(px)} для short`); return p; }
       }
-      return { ...p, stopLoss: sl, takeProfit: tp };
+      return { ...p, stopLoss: sl, takeProfit: tp, maxHoldMs };
     }));
     setBracketEditId(null);
     setTradeMsg("✓ Brackets сохранены");
@@ -564,7 +570,7 @@ export default function QTradePage() {
   };
 
   const clearBrackets = (posId: string) => {
-    setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, stopLoss: undefined, takeProfit: undefined } : p));
+    setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, stopLoss: undefined, takeProfit: undefined, maxHoldMs: undefined } : p));
     setBracketEditId(null);
   };
 
@@ -1281,6 +1287,8 @@ export default function QTradePage() {
                 const editing = bracketEditId === pos.id;
                 const hasSL = pos.stopLoss !== undefined;
                 const hasTP = pos.takeProfit !== undefined;
+                const hasTS = pos.maxHoldMs !== undefined && pos.maxHoldMs > 0;
+                const tsRemainingMin = hasTS ? Math.max(0, (pos.maxHoldMs! - (Date.now() - pos.entryTs)) / 60_000) : 0;
                 return (
                   <div key={pos.id} style={{
                     padding: "8px 12px", borderRadius: 8,
@@ -1329,9 +1337,9 @@ export default function QTradePage() {
                         Close
                       </button>
                     </div>
-                    {/* SL/TP chips (display when set, not editing) */}
-                    {!editing && (hasSL || hasTP) && (
-                      <div style={{ display: "flex", gap: 6, fontSize: 11, fontFamily: "ui-monospace, monospace" }}>
+                    {/* SL/TP/TS chips (display when set, not editing) */}
+                    {!editing && (hasSL || hasTP || hasTS) && (
+                      <div style={{ display: "flex", gap: 6, fontSize: 11, fontFamily: "ui-monospace, monospace", flexWrap: "wrap" as const }}>
                         {hasSL && (
                           <span style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(220,38,38,0.18)", color: "#fca5a5", fontWeight: 700 }}>
                             🛑 SL {fmtUsd(pos.stopLoss!)}
@@ -1340,6 +1348,14 @@ export default function QTradePage() {
                         {hasTP && (
                           <span style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(34,197,94,0.18)", color: "#86efac", fontWeight: 700 }}>
                             🎯 TP {fmtUsd(pos.takeProfit!)}
+                          </span>
+                        )}
+                        {hasTS && (
+                          <span
+                            style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(251,191,36,0.18)", color: "#fde68a", fontWeight: 700 }}
+                            title={`Auto-close через ${tsRemainingMin.toFixed(1)} мин`}
+                          >
+                            ⏱ TS {tsRemainingMin >= 1 ? `${Math.round(tsRemainingMin)}m` : `${Math.round(tsRemainingMin * 60)}s`}
                           </span>
                         )}
                       </div>
@@ -1368,6 +1384,20 @@ export default function QTradePage() {
                           style={{
                             width: 110, padding: "4px 8px", borderRadius: 4,
                             border: "1px solid rgba(34,197,94,0.5)", background: "#0f172a", color: "#fff",
+                            fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 12,
+                          }}
+                        />
+                        <span style={{ fontSize: 10, fontWeight: 800, color: "#fde68a", letterSpacing: 0.5, textTransform: "uppercase" as const }}>⏱ TS min</span>
+                        <input
+                          value={bracketTSMin}
+                          onChange={(e) => setBracketTSMin(e.target.value)}
+                          type="number" min={0} step={1}
+                          placeholder="auto-close"
+                          aria-label="Time-stop in minutes"
+                          title="Авто-закрытие через N минут после entry. Пусто = нет лимита"
+                          style={{
+                            width: 90, padding: "4px 8px", borderRadius: 4,
+                            border: "1px solid rgba(251,191,36,0.5)", background: "#0f172a", color: "#fff",
                             fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 12,
                           }}
                         />

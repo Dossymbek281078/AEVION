@@ -101,6 +101,30 @@ describe("checkBracketHit", () => {
     const p = mkPosition();
     expect(checkBracketHit(p, 200)).toBeNull();
   });
+
+  it("time-stop: returns 'ts' when held longer than maxHoldMs", () => {
+    const entryTs = 1000;
+    const p = mkPosition({ entryTs, maxHoldMs: 60_000 }); // 1 min
+    expect(checkBracketHit(p, 100, entryTs + 59_999)).toBeNull();
+    expect(checkBracketHit(p, 100, entryTs + 60_000)).toBe("ts");
+    expect(checkBracketHit(p, 100, entryTs + 120_000)).toBe("ts");
+  });
+
+  it("time-stop: maxHoldMs <= 0 disables it", () => {
+    const entryTs = 1000;
+    const p = mkPosition({ entryTs, maxHoldMs: 0 });
+    expect(checkBracketHit(p, 100, entryTs + 999_999_999)).toBeNull();
+  });
+
+  it("time-stop wins over price-bracket on a simultaneous tick", () => {
+    const entryTs = 1000;
+    const p = mkPosition({
+      side: "long", entryPrice: 100, takeProfit: 110, stopLoss: 90,
+      entryTs, maxHoldMs: 60_000,
+    });
+    // price hits TP AND time-stop in the same tick → should report "ts" (early exit guard)
+    expect(checkBracketHit(p, 110, entryTs + 60_000)).toBe("ts");
+  });
 });
 
 describe("checkLimitFills", () => {

@@ -1,6 +1,9 @@
 // Lightweight client-side error reporter. Sends payload to /api/errors via
-// sendBeacon (non-blocking) with fetch fallback. Drop-in replaceable by Sentry
-// SDK later — keeps surfaces (reportError) stable.
+// sendBeacon (non-blocking) with fetch fallback. Если NEXT_PUBLIC_SENTRY_DSN
+// задан — дополнительно зеркалим в Sentry.captureException() (init из
+// sentry.client.config.ts уже выполнен глобально).
+
+import * as Sentry from "@sentry/nextjs";
 
 export type ErrorReport = {
   message: string;
@@ -12,6 +15,8 @@ export type ErrorReport = {
   ua?: string;
   buildId?: string;
 };
+
+const SENTRY_ENABLED = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
 
 export function reportError(
   err: unknown,
@@ -41,6 +46,17 @@ export function reportError(
         headers: { "content-type": "application/json" },
         body,
       }).catch(() => {/* silent */});
+    }
+
+    if (SENTRY_ENABLED) {
+      try {
+        Sentry.withScope((s) => {
+          s.setTag("scope", scope);
+          if (payload.digest) s.setTag("digest", payload.digest);
+          if (payload.path) s.setTag("path", payload.path);
+          Sentry.captureException(errObj ?? new Error(payload.message));
+        });
+      } catch {/* never throw from reporter */}
     }
   } catch {
     // never throw from reporter

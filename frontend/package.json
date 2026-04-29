@@ -14,6 +14,7 @@
     "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.50.0",
     "chess.js": "^1.4.0",
     "next": "16.0.10",
     "react": "19.2.1",

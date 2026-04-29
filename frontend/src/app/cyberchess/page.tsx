@@ -1781,7 +1781,20 @@ export default function CyberChessPage(){
     if(openingDrill)return; // Opening Trainer plays bot moves from script
     if(game.turn()===pCol)return;
     sThink(true);
-    const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;const delay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
+    const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;
+    const rawDelay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
+    // ── Premove-friendly pacing: AI должен дать юзеру время поставить
+    // премувы. Floor зависит от time-control: на Bullet короче, на Rapid+
+    // дольше. Каждый уже стоящий premove уменьшает требуемое окно.
+    const premovesNow=pmsRef.current.length;
+    const isBullet=tc.ini>0&&tc.ini<=60;
+    const isBlitz=tc.ini>60&&tc.ini<=300;
+    const baseFloor=isBullet?300:isBlitz?420:520;
+    const perPremoveSlot=isBullet?240:isBlitz?320:400;
+    const targetSlots=5;
+    const slotsLeft=Math.max(0,targetSlots-premovesNow);
+    const premoveFloor=baseFloor+slotsLeft*perPremoveSlot;
+    const delay=Math.max(rawDelay,premoveFloor);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece
@@ -2082,7 +2095,9 @@ export default function CyberChessPage(){
     const to=sqFromPoint(e.clientX,e.clientY);if(!to||to===d.from)return;
     const f=d.from;
     if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){
-      if(pms.length>=pmLim)return;
+      // ВАЖНО: используем pmsRef (live) а не pms (snapshot) — между быстрыми
+      // последовательными drag-premove'ами state может ещё не успеть закоммититься.
+      if(pmsRef.current.length>=pmLim)return;
       const p=game.get(f);const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
       if(p?.type==="p"&&to[1]===promoRank)pre.pr="q";
       sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return;

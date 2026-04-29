@@ -1782,7 +1782,6 @@ export default function CyberChessPage(){
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
-    console.log("[CC click]",sq,"sel=",sel,"vm.has=",vm.has(sq),"turn=",game.turn(),"pCol=",pCol,"on=",on,"over=",over,"think=",think);
     // ── BOARD EDITOR MODE (Coach tab) ──
     if(editorMode){
       try{
@@ -1834,7 +1833,6 @@ export default function CyberChessPage(){
         const pre:Pre={from:curPmSel,to:sq};
         const promoRank=pCol==="w"?"8":"1";
         if(selPiece?.type==="p"&&sq[1]===promoRank)pre.pr="q";
-        console.log("[premove] queued",curPmSel+"→"+sq+(pre.pr?"="+pre.pr:""));
         sPms(v=>[...v,pre]);
         sPmSel(null);
         snd("premove");
@@ -1884,20 +1882,62 @@ export default function CyberChessPage(){
     if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}
   },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab,editorMode,editorPiece,editorTurn,showToast]);
 
-  /* ── Drag ── */
-  const dRef=useRef<Square|null>(null);
-  const dS=(sq:Square)=>{
-    const p=game.get(sq);const side=tab==="analysis"?game.turn():pCol;
-    console.log("[CC dragstart]",sq,"piece=",p,"side=",side,"turn=",game.turn(),"pCol=",pCol,"over=",over,"on=",on);
-    if(p?.color===side&&!over){dRef.current=sq;if(tab==="analysis"||game.turn()===pCol){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}else sPmSel(sq)}
-    else console.log("[CC dragstart] BLOCKED — piece not mine or game over");
+  /* ── Pointer-events drag (replaces unreliable HTML5 drag) ── */
+  const dragRef=useRef<{from:Square;sx:number;sy:number;active:boolean;pid:number}|null>(null);
+  const recentDragRef=useRef<number>(0);
+  const[ghost,sGhost]=useState<{from:Square;x:number;y:number}|null>(null);
+  const sqFromPoint=(x:number,y:number):Square|null=>{
+    if(typeof document==="undefined")return null;
+    const els=document.elementsFromPoint(x,y) as HTMLElement[];
+    for(const el of els){
+      const cell=el.closest?.("[data-sq]") as HTMLElement|null;
+      if(cell){const v=cell.getAttribute("data-sq");if(v)return v as Square;}
+    }
+    return null;
   };
-  const dD=(sq:Square)=>{
-    console.log("[CC drop]",sq,"dRef=",dRef.current,"vm.has=",vm.has(sq),"turn=",game.turn(),"pCol=",pCol);
-    if(!dRef.current)return;const f=dRef.current;dRef.current=null;
-    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){if(pms.length>=pmLim)return;const p=game.get(f);const pre:Pre={from:f,to:sq};const promoRank=pCol==="w"?"8":"1";if(p?.type==="p"&&sq[1]===promoRank)pre.pr="q";console.log("[CC drop] premove queued",f,"→",sq);sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return}
-    if(vm.has(sq)){const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8"))sPromo({from:f,to:sq});else{console.log("[CC drop] exec move",f,"→",sq);exec(f,sq)}}else{console.log("[CC drop] illegal target — clearing sel");sSel(null);sVm(new Set())}
+  const onBoardDown=(e:React.PointerEvent)=>{
+    if(e.button!==0)return;
+    const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
+    const p=game.get(sq);
+    const side=tab==="analysis"?game.turn():pCol;
+    const canDrag=!!p&&(tab==="analysis"?true:p.color===side)&&!over;
+    if(!canDrag)return;
+    dragRef.current={from:sq,sx:e.clientX,sy:e.clientY,active:false,pid:e.pointerId};
+    try{(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);}catch{}
   };
+  const onBoardMove=(e:React.PointerEvent)=>{
+    const d=dragRef.current;if(!d||d.pid!==e.pointerId)return;
+    const dx=e.clientX-d.sx,dy=e.clientY-d.sy;
+    if(!d.active&&Math.hypot(dx,dy)>5){
+      d.active=true;
+      const p=game.get(d.from);const isMyTurn=tab==="analysis"||game.turn()===pCol;
+      if(p&&isMyTurn){
+        sSel(d.from);
+        sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:d.from,verbose:true}),dicePieceType):game.moves({square:d.from,verbose:true})).map(m=>m.to)));
+      }else if(p&&on){sPmSel(d.from);}
+    }
+    if(d.active)sGhost({from:d.from,x:e.clientX,y:e.clientY});
+  };
+  const onBoardUp=(e:React.PointerEvent)=>{
+    const d=dragRef.current;dragRef.current=null;sGhost(null);
+    try{(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);}catch{}
+    if(!d||!d.active)return;
+    recentDragRef.current=Date.now();
+    const to=sqFromPoint(e.clientX,e.clientY);if(!to||to===d.from)return;
+    const f=d.from;
+    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){
+      if(pms.length>=pmLim)return;
+      const p=game.get(f);const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
+      if(p?.type==="p"&&to[1]===promoRank)pre.pr="q";
+      sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return;
+    }
+    if(vm.has(to)){
+      const mp=game.get(f);
+      if(mp?.type==="p"&&(to[1]==="1"||to[1]==="8"))sPromo({from:f,to});
+      else exec(f,to);
+    }else{sSel(null);sVm(new Set());}
+  };
+  const onBoardCancel=(_e:React.PointerEvent)=>{dragRef.current=null;sGhost(null);};
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;
     // Determine starting FEN based on variant
@@ -3205,7 +3245,7 @@ export default function CyberChessPage(){
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative"}}>
+            <div onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel} style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none"}}>
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
                 const tm:ThreatMap=computeThreatMap(bd as any);
@@ -3251,32 +3291,32 @@ export default function CyberChessPage(){
                 // right-click draws arrows & highlights. During a live play game, right-click still
                 // removes premoves as before.
                 const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
-                return<div key={sq} onClick={()=>{console.log("[CC cell onClick]",sq);if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();click(sq)}} onMouseDown={e=>{if(e.button===2){rcStartRef.current=sq;e.preventDefault()}else if(e.button===0)console.log("[CC cell mousedown LMB]",sq,"draggable=",!!p&&(tab==="analysis"?true:p.color===pCol)&&!over)}} onMouseUp={e=>{
+                const isDragOrigin=ghost?.from===sq;
+                return<div key={sq} data-sq={sq} onClick={()=>{if(Date.now()-recentDragRef.current<150)return;if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();click(sq)}} onMouseDown={e=>{if(e.button===2){rcStartRef.current=sq;e.preventDefault()}}} onMouseUp={e=>{
                   if(e.button!==2)return;
                   const start=rcStartRef.current;rcStartRef.current=null;
                   if(!annotActive)return;
                   if(!start)return;
                   const col=annotColor(e);
                   if(start===sq){
-                    // Toggle highlight on this square
                     sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
                   }else{
-                    // Arrow from start → sq; toggle if exact same arrow exists
                     sArrows(a=>{const i=a.findIndex(x=>x.from===start&&x.to===sq&&x.c===col);if(i>=0)return a.filter((_,j)=>j!==i);return [...a,{from:start,to:sq,c:col}]});
                   }
                 }} onContextMenu={e=>{e.preventDefault();e.stopPropagation();
-                  if(annotActive)return; // annotations already handled on mouseUp
-                  // Play mode: remove premove at this square (either from or to)
+                  if(annotActive)return;
                   const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
                   if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
                   if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
-                }} onDragStart={()=>dS(sq)} onDragOver={e=>e.preventDefault()} onDrop={()=>dD(sq)} draggable={!!p&&(tab==="analysis"?true:p.color===pCol)&&!over}
+                }}
                   className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
-                  style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",userSelect:"none",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
-                  {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)"}}/>}
-                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isShadow?0.55:1,transition:"transform 0.12s, opacity 0.15s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
+                  style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
+                  {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
+                  {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
                   {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
                 </div>}))}
+              {/* Ghost piece following pointer during drag */}
+              {ghost&&(()=>{const gp=game.get(ghost.from);if(!gp)return null;return <div style={{position:"fixed",left:ghost.x,top:ghost.y,width:"clamp(60px,9vw,90px)",height:"clamp(60px,9vw,90px)",transform:"translate(-50%,-50%) scale(1.05)",pointerEvents:"none",zIndex:1000,filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.45))"}}><Piece type={gp.type} color={gp.color}/></div>;})()}
             </div>
           </div>
           <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>

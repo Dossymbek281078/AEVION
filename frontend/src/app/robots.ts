@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/pay/"],
+        disallow: ["/api/", "/pay/", "/r/"],
       },
     ],
     sitemap: "https://aevion.app/sitemap.xml",

@@ -15,6 +15,8 @@ export type ApiLink = {
   created: number;
   url: string;
   paid_at: number | null;
+  paid_method?: string;
+  paid_last4?: string;
 };
 
 export type ApiCheckout = {

@@ -25,6 +25,8 @@ export async function GET(
       settlement: link.settlement,
       status: link.status,
       paid_at: link.paid_at,
+      paid_method: link.paid_method ?? null,
+      paid_last4: link.paid_last4 ?? null,
     })
   );
 }
@@ -59,11 +61,15 @@ export async function POST(
 
   const body = (await req.json().catch(() => null)) as {
     method?: string;
+    last4?: string;
   } | null;
   const method = body?.method ?? "card";
+  const last4 = body?.last4 && /^\d{4}$/.test(body.last4) ? body.last4 : undefined;
 
   link.status = "paid";
   link.paid_at = Math.floor(Date.now() / 1000);
+  link.paid_method = method;
+  if (last4) link.paid_last4 = last4;
   store.links.set(id, link);
 
   return withCors(
@@ -71,6 +77,7 @@ export async function POST(
       id: link.id,
       status: "paid",
       method,
+      last4: last4 ?? null,
       paid_at: link.paid_at,
     })
   );

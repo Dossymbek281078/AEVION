@@ -169,10 +169,12 @@ export default function PayPage({
     } catch {
       // ignore
     }
+    const digits = card.number.replace(/\D/g, "");
+    const last4 = digits.length >= 4 ? digits.slice(-4) : undefined;
     void fetch(`${window.location.origin}/api/pay/${link.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method }),
+      body: JSON.stringify({ method, last4 }),
     }).catch(() => undefined);
   }
 
@@ -300,9 +302,22 @@ export default function PayPage({
           <div style={amountBoxStyle}>
             {formatAmount(link.amount, link.currency)}
           </div>
-          <Link href={`/pay/${id}`} style={primaryBtn}>
-            Done
-          </Link>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href={`/r/${id}`} style={primaryBtn}>
+              View receipt
+            </Link>
+            <Link
+              href={`/pay/${id}`}
+              style={{
+                ...primaryBtn,
+                background: "#fff",
+                color: "#0f172a",
+                border: "1px solid rgba(15,23,42,0.18)",
+              }}
+            >
+              Done
+            </Link>
+          </div>
         </Card>
       </Shell>
     );

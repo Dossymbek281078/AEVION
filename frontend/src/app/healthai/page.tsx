@@ -79,6 +79,21 @@ type Trends = {
   streak: number;
 };
 
+type Risk = {
+  code: string;
+  severity: "low" | "medium" | "high";
+  title: string;
+  detail: string;
+};
+
+type RisksResp = {
+  risks: Risk[];
+  summary: { total: number; high: number; medium: number; low: number };
+  bmi: number;
+  avgSleep7d: number | null;
+  avgMood7d: number | null;
+};
+
 const URGENCY_COLOR: Record<Match["urgency"], string> = {
   "self-care": "#5eead4",
   consult: "#fbbf24",
@@ -112,6 +127,7 @@ export default function HealthAIPage() {
   const [checks, setChecks] = useState<Check[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
   const [trends, setTrends] = useState<Trends | null>(null);
+  const [risks, setRisks] = useState<RisksResp | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -165,6 +181,15 @@ export default function HealthAIPage() {
     } catch {}
   }, []);
 
+  const loadRisks = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/risks/${profileId}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      setRisks(j);
+    } catch {}
+  }, []);
+
   const loadProfile = useCallback(
     async (id: string) => {
       try {
@@ -201,6 +226,7 @@ export default function HealthAIPage() {
           if (ok) {
             loadHistory(stored);
             loadTrends(stored);
+            loadRisks(stored);
             setTab("check");
           }
         });
@@ -210,7 +236,7 @@ export default function HealthAIPage() {
         setTab(t);
       }
     } catch {}
-  }, [loadProfile, loadHistory, loadTrends]);
+  }, [loadProfile, loadHistory, loadTrends, loadRisks]);
 
   useEffect(() => {
     try {
@@ -328,8 +354,9 @@ export default function HealthAIPage() {
         const filtered = prev.filter((l) => l.date !== j.log.date);
         return [j.log, ...filtered].slice(0, 90);
       });
-      // Освежаем тренды.
+      // Освежаем тренды и риски.
       void loadTrends(profileIdRef.current);
+      void loadRisks(profileIdRef.current);
       showToast("Logged ✓");
       setLogSleep("");
       setLogWeight("");
@@ -704,6 +731,42 @@ export default function HealthAIPage() {
                   : "Add daily logs to see trends"
               }
             />
+            {risks && risks.risks.length > 0 ? (
+              <div style={{ marginBottom: 14 }}>
+                <h3 style={sectionTitle}>
+                  Risk indicators
+                  {risks.summary.high > 0 ? (
+                    <span style={{ color: "#f87171", marginLeft: 8 }}>
+                      · {risks.summary.high} high
+                    </span>
+                  ) : null}
+                  {risks.summary.medium > 0 ? (
+                    <span style={{ color: "#fbbf24", marginLeft: 8 }}>
+                      · {risks.summary.medium} medium
+                    </span>
+                  ) : null}
+                </h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {risks.risks.map((r) => (
+                    <RiskCard key={r.code} risk={r} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {risks && risks.risks.length === 0 ? (
+              <div
+                style={{
+                  ...emptyStyle,
+                  background: "rgba(94,234,212,0.06)",
+                  color: "#5eead4",
+                  fontStyle: "normal",
+                  border: "1px solid rgba(94,234,212,0.25)",
+                  marginBottom: 14,
+                }}
+              >
+                ✓ No active risk flags. Keep up the wellness routine.
+              </div>
+            ) : null}
             {!trends || trends.series.length === 0 ? (
               <div style={emptyStyle}>No data yet. Add at least one log to see trends.</div>
             ) : (
@@ -955,6 +1018,55 @@ function Stat({
           {value == null ? "—" : value}
         </span>
         <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 4 }}>{value == null ? "" : unit}</span>
+      </div>
+    </div>
+  );
+}
+
+const RISK_COLOR: Record<Risk["severity"], string> = {
+  low: "#a5b4fc",
+  medium: "#fbbf24",
+  high: "#f87171",
+};
+
+const RISK_LABEL: Record<Risk["severity"], string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+function RiskCard({ risk }: { risk: Risk }) {
+  const c = RISK_COLOR[risk.severity];
+  return (
+    <div
+      style={{
+        padding: 12,
+        borderRadius: 10,
+        background: `${c}10`,
+        border: `1px solid ${c}55`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: c,
+            background: `${c}22`,
+            padding: "2px 8px",
+            borderRadius: 999,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+          }}
+        >
+          {RISK_LABEL[risk.severity]}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f8" }}>
+          {risk.title}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.55 }}>
+        {risk.detail}
       </div>
     </div>
   );

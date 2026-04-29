@@ -432,6 +432,148 @@ healthaiRouter.get("/trends/:id", (req: Request, res: Response) => {
   });
 });
 
+healthaiRouter.get("/risks/:id", (req: Request, res: Response) => {
+  const profileId = req.params.id;
+  const profile = profiles.get(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const lgs = logs.get(profileId) || [];
+  const cks = checks.get(profileId) || [];
+  const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last7 = sorted.slice(-7);
+  const last30 = sorted.slice(-30);
+
+  const avg = (rows: DailyLog[], pick: (l: DailyLog) => number | undefined) => {
+    const vals = rows.map(pick).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  };
+
+  type RiskFlag = {
+    code: string;
+    severity: "low" | "medium" | "high";
+    title: string;
+    detail: string;
+  };
+  const risks: RiskFlag[] = [];
+
+  const bmiVal = bmi(profile.heightCm, profile.weightKg);
+  if (bmiVal >= 30) {
+    risks.push({
+      code: "bmi-obese",
+      severity: "high",
+      title: "BMI в зоне ожирения",
+      detail: `BMI ${bmiVal} — рекомендована консультация терапевта/эндокринолога. План питания + регулярная активность 150+ мин/неделю.`,
+    });
+  } else if (bmiVal >= 27) {
+    risks.push({
+      code: "bmi-overweight",
+      severity: "medium",
+      title: "BMI выше нормы",
+      detail: `BMI ${bmiVal} — увеличьте суточную активность, контроль порций. Цель: 0.5-1кг/мес снижение.`,
+    });
+  } else if (bmiVal > 0 && bmiVal < 18.5) {
+    risks.push({
+      code: "bmi-underweight",
+      severity: "medium",
+      title: "BMI ниже нормы",
+      detail: `BMI ${bmiVal} — повышенная утомляемость, ослабленный иммунитет. Проверьте уровень железа, ферритина, B12.`,
+    });
+  }
+
+  const avgSleep7 = avg(last7, (l) => l.sleepHours);
+  if (avgSleep7 != null && avgSleep7 < 6.5 && last7.length >= 4) {
+    risks.push({
+      code: "sleep-deficit",
+      severity: avgSleep7 < 5.5 ? "high" : "medium",
+      title: "Хронический недосып",
+      detail: `Средний сон ${avgSleep7.toFixed(1)}ч за 7 дней (норма 7-9ч). Недосып повышает риски гипертонии, диабета, депрессии.`,
+    });
+  }
+
+  const avgMood7 = avg(last7, (l) => l.moodScore);
+  if (avgMood7 != null && avgMood7 < 5 && last7.length >= 3) {
+    risks.push({
+      code: "mood-low",
+      severity: avgMood7 < 3.5 ? "high" : "medium",
+      title: "Сниженное настроение",
+      detail: `Средний mood ${avgMood7.toFixed(1)}/10 за 7 дней. Если состояние сохраняется >2 недель — обратитесь к психотерапевту.`,
+    });
+  }
+
+  // Weight trend (за 30 дней разница >= 3kg в любую сторону = flag).
+  const weightSeries = last30
+    .map((l) => l.weightKg)
+    .filter((v): v is number => v != null);
+  if (weightSeries.length >= 4) {
+    const first = weightSeries[0];
+    const lastW = weightSeries[weightSeries.length - 1];
+    const diff = lastW - first;
+    if (Math.abs(diff) >= 3) {
+      risks.push({
+        code: diff > 0 ? "weight-rising" : "weight-falling",
+        severity: Math.abs(diff) >= 5 ? "medium" : "low",
+        title: diff > 0 ? "Резкий набор веса" : "Резкая потеря веса",
+        detail: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}кг за последние 30 дней. ${
+          diff > 0
+            ? "Если без сознательной программы — проверьте щитовидную, кортизол, диабет."
+            : "Если без диеты — потеря >5% веса требует обследования (онкомаркеры, ЖКТ, эндокринная система)."
+        }`,
+      });
+    }
+  }
+
+  // Streak broken — последняя запись >3 дней назад.
+  if (sorted.length > 0) {
+    const lastDate = new Date(sorted[sorted.length - 1].date + "T00:00:00Z");
+    const daysSince = Math.floor(
+      (Date.now() - lastDate.getTime()) / (24 * 3600 * 1000),
+    );
+    if (daysSince > 3) {
+      risks.push({
+        code: "tracking-gap",
+        severity: "low",
+        title: "Перерыв в логировании",
+        detail: `${daysSince} дней без записи. Регулярный wellness log усиливает выводы трендов.`,
+      });
+    }
+  }
+
+  // Recent urgent symptom check (за 7 дней).
+  const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const recentUrgent = cks.find(
+    (c) =>
+      new Date(c.createdAt).getTime() >= sevenDaysAgo &&
+      c.matched.some((m) => m.urgency === "urgent"),
+  );
+  if (recentUrgent) {
+    risks.push({
+      code: "recent-urgent-symptom",
+      severity: "high",
+      title: "Недавний urgent-симптом",
+      detail: `Symptom-check от ${new Date(recentUrgent.createdAt).toLocaleDateString()} содержал признаки, требующие срочной помощи. Проконтролируйте, что обращение к врачу состоялось.`,
+    });
+  }
+
+  // Сортировка по severity (high → low).
+  const order = { high: 0, medium: 1, low: 2 };
+  risks.sort((a, b) => order[a.severity] - order[b.severity]);
+
+  res.json({
+    risks,
+    summary: {
+      total: risks.length,
+      high: risks.filter((r) => r.severity === "high").length,
+      medium: risks.filter((r) => r.severity === "medium").length,
+      low: risks.filter((r) => r.severity === "low").length,
+    },
+    bmi: bmiVal,
+    avgSleep7d: avgSleep7,
+    avgMood7d: avgMood7,
+    disclaimer: DISCLAIMER,
+  });
+});
+
 healthaiRouter.get("/leaderboard", (_req, res) => {
   const board: Array<{ profileId: string; streak: number; logs: number }> = [];
   for (const [profileId, lgs] of logs) {

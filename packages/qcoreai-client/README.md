@@ -55,6 +55,32 @@ Every event matches the server's `OrchestratorEvent` union — see `src/index.ts
 - `run_complete` `{ finalContent, status, totalCostUsd, totalDurationMs }`
 - `error` `{ message }`
 
+## WebSocket duplex (mid-run guidance on the same connection)
+
+```ts
+const session = client.runWS({
+  input: "Plan a 30-day onboarding for a B2B SaaS",
+  strategy: "debate",
+});
+
+// Steer mid-run from a separate event handler:
+setTimeout(() => session.interject("Add a TL;DR section at the top"), 3000);
+
+for await (const evt of session.events) {
+  if (evt.type === "chunk") process.stdout.write(evt.text);
+  if (evt.type === "guidance_applied") console.log("\n[steered]", evt.text);
+}
+```
+
+In Node 22+ `WebSocket` is a global. For older Node:
+
+```ts
+import { WebSocket } from "ws";
+const session = client.runWS({ input: "...", WebSocketImpl: WebSocket as any });
+```
+
+Server endpoint: `/api/qcoreai/ws`. Auth via `?token=<JWT>`. Rate limit 30 upgrades / minute / IP. 64 KB max message size, 8 pending guidance × 4 KB.
+
 ## Refining a run
 
 ```ts
@@ -80,6 +106,29 @@ const top = await client.topTags(15);
 ```ts
 const series = await client.timeseries(30);
 // series: [{ date: "2026-04-22", runs: 4, costUsd: 0.123 }, ...]
+```
+
+## Agent marketplace
+
+```ts
+// 1. Publish a preset.
+const { id } = await client.sharePreset({
+  name: "Investor pitch lineup",
+  description: "Sequential — Sonnet writer + Haiku critic",
+  strategy: "sequential",
+  overrides: { writer: { provider: "anthropic", model: "claude-sonnet-4-20250514" } },
+});
+
+// 2. Browse what others have published.
+const top = await client.browsePresets();
+const pitchPresets = await client.browsePresets("investor");
+
+// 3. Import to bump the importCount + use locally.
+const imported = await client.importPreset(top[0].id);
+console.log("Got preset:", imported.name, imported.strategy, imported.overrides);
+
+// 4. (Owner) delete one of your shared presets.
+await client.deletePreset(id);
 ```
 
 ## Per-user webhooks
@@ -126,6 +175,11 @@ app.post("/qcore-webhook", express.raw({ type: "*/*" }), async (req, res) => {
 |---|---|---|
 | `runSync(opts)` | `POST /api/qcoreai/multi-agent` | Buffers stream into `RunSyncResult` |
 | `runStream(opts)` | `POST /api/qcoreai/multi-agent` | Async generator of `OrchestratorEvent` |
+| `runWS(opts)` | `WS /api/qcoreai/ws` | Duplex: events + `interject(text)` + `stop()` |
+| `sharePreset(opts)` | `POST /api/qcoreai/presets/share` | Auth, returns `{ id }` |
+| `browsePresets(query?, limit?)` | `GET /api/qcoreai/presets/public` | Public catalog |
+| `importPreset(id)` | `POST /api/qcoreai/presets/:id/import` | Bumps importCount |
+| `deletePreset(id)` | `DELETE /api/qcoreai/presets/:id` | Owner-only |
 | `refine(runId, instruction, opts?)` | `POST /api/qcoreai/runs/:id/refine` | One-pass surgical edit |
 | `setTags(runId, tags)` | `PATCH /api/qcoreai/runs/:id/tags` | Owner-only, normalized 16x32 |
 | `search(query, limit?)` | `GET /api/qcoreai/search?q=` | Substring + tag match |

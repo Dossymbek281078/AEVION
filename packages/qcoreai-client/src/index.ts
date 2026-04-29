@@ -241,6 +241,100 @@ export class QCoreClient {
     }
   }
 
+  /**
+   * Open a WebSocket duplex run. Yields the same OrchestratorEvent stream
+   * as `runStream`, but lets the caller `interject` mid-run guidance on
+   * the same connection. Server endpoint: `/api/qcoreai/ws`.
+   *
+   * Requires `globalThis.WebSocket` (Node 22+ has it natively; older Node
+   * needs the `ws` package — pass it via `opts.WebSocketImpl`). Browsers
+   * have it always.
+   *
+   * @example
+   * ```ts
+   * const session = client.runWS({ input: "Plan a 30-day onboarding", strategy: "debate" });
+   * setTimeout(() => session.interject("Add a TL;DR"), 3000);
+   * for await (const evt of session.events) {
+   *   if (evt.type === "chunk") process.stdout.write(evt.text);
+   * }
+   * ```
+   */
+  runWS(opts: RunOptions & { WebSocketImpl?: typeof WebSocket }): {
+    events: AsyncGenerator<OrchestratorEvent>;
+    interject: (text: string) => void;
+    stop: () => void;
+    close: () => void;
+  } {
+    const WS: any = opts.WebSocketImpl || (globalThis as any).WebSocket;
+    if (!WS) {
+      throw new Error("@aevion/qcoreai-client: no WebSocket implementation. Pass WebSocketImpl in opts (e.g. `import { WebSocket } from 'ws'`).");
+    }
+    const wsUrl = (this.baseUrl.replace(/^http/, "ws")) +
+      "/api/qcoreai/ws" +
+      (this.token ? `?token=${encodeURIComponent(this.token)}` : "");
+    const ws = new WS(wsUrl);
+
+    const queue: OrchestratorEvent[] = [];
+    let resolveNext: (() => void) | null = null;
+    let closed = false;
+    let openSent = false;
+
+    const startMsg = {
+      type: "start",
+      input: opts.input,
+      strategy: opts.strategy || "sequential",
+      overrides: opts.overrides,
+      maxRevisions: opts.maxRevisions,
+      sessionId: opts.sessionId,
+      maxCostUsd: opts.maxCostUsd,
+    };
+
+    ws.addEventListener("open", () => {
+      openSent = true;
+      ws.send(JSON.stringify(startMsg));
+    });
+    ws.addEventListener("message", (ev: MessageEvent) => {
+      try {
+        const evt = JSON.parse(typeof ev.data === "string" ? ev.data : "") as OrchestratorEvent;
+        queue.push(evt);
+      } catch { /* ignore non-JSON */ }
+      if (resolveNext) { resolveNext(); resolveNext = null; }
+    });
+    const finish = () => {
+      closed = true;
+      if (resolveNext) { resolveNext(); resolveNext = null; }
+    };
+    ws.addEventListener("close", finish);
+    ws.addEventListener("error", finish);
+
+    const events = (async function* (): AsyncGenerator<OrchestratorEvent> {
+      while (!closed || queue.length > 0) {
+        if (queue.length > 0) {
+          yield queue.shift() as OrchestratorEvent;
+          continue;
+        }
+        if (closed) break;
+        await new Promise<void>((r) => { resolveNext = r; });
+      }
+    })();
+
+    return {
+      events,
+      interject: (text: string) => {
+        if (ws.readyState !== 1) return;
+        ws.send(JSON.stringify({ type: "interject", text }));
+      },
+      stop: () => {
+        if (ws.readyState !== 1) return;
+        ws.send(JSON.stringify({ type: "stop" }));
+      },
+      close: () => {
+        try { ws.close(); } catch { /* ignore */ }
+        finish();
+      },
+    };
+  }
+
   /** One-pass surgical edit on top of an already-finished run. */
   async refine(runId: string, instruction: string, opts?: { provider?: string; model?: string; temperature?: number }): Promise<{
     content: string;
@@ -315,6 +409,67 @@ export class QCoreClient {
     });
     if (!res.ok) throw new Error(`setUserWebhook failed: ${await safeError(res)}`);
     return await res.json();
+  }
+
+  /** Agent marketplace — publish a saved preset to the public catalog. */
+  async sharePreset(opts: {
+    name: string;
+    description?: string;
+    strategy?: Strategy;
+    overrides?: Record<string, AgentOverride>;
+    isPublic?: boolean;
+  }): Promise<{ id: string; importCount: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/presets/share`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`sharePreset failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return { id: data.preset?.id, importCount: data.preset?.importCount ?? 0 };
+  }
+
+  /** Browse public presets, optional substring filter. */
+  async browsePresets(query?: string, limit = 30): Promise<Array<{
+    id: string;
+    ownerUserId: string;
+    name: string;
+    description: string | null;
+    strategy: string;
+    overrides: any;
+    importCount: number;
+    createdAt: string;
+    updatedAt: string;
+  }>> {
+    const url = query
+      ? this.url(`/api/qcoreai/presets/public?q=${encodeURIComponent(query)}&limit=${limit}`)
+      : this.url(`/api/qcoreai/presets/public?limit=${limit}`);
+    const res = await this.fetchImpl(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`browsePresets failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Import a public preset — bumps importCount, returns the preset row. */
+  async importPreset(id: string): Promise<{
+    id: string; name: string; strategy: string; overrides: any; description: string | null;
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/presets/${encodeURIComponent(id)}/import`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`importPreset failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.preset;
+  }
+
+  /** Owner-only delete on a shared preset. */
+  async deletePreset(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/presets/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deletePreset failed: ${await safeError(res)}`);
   }
 
   /** Disable the user's webhook. */

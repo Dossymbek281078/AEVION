@@ -1,10 +1,18 @@
 # AEVION Bank — Production Launch Checklist
 
-> Last updated: 2026-04-28 (late). Maintainer: Bank track. Target: smooth zero-surprise prod cutover.
+> Last updated: 2026-04-29 (late). Maintainer: Bank track. Target: smooth zero-surprise prod cutover.
 
 This file lists every concrete step needed to flip AEVION Bank from "feature-complete dev branch" to "live on aevion.app". Skim this before any prod push.
 
-**Branch state at this writing:** `bank-payment-layer` is **164 commits ahead** of `main` (PR #5 open). 42 indexable bank sub-routes. Build green. All 18 wallet widgets are live, plus 14 standalone widget pages added on 2026-04-28.
+**Branch state at this writing:** `bank-payment-layer` is **207 commits ahead** of `main` (PR #5 open). 43 indexable bank sub-routes (incl. `/bank/smoke`). Build green. All 18 wallet widgets are live, plus 14 standalone widget pages, plus the test-environment infrastructure shipped 2026-04-29 (smoke runner, StatusPill, TestModeBanner, PreflightBanner, QuickDemoControls, InvestorModeAutorun, idempotency keys).
+
+## Test environment one-URL demo
+
+For investor walk-throughs use a single URL:
+
+> **`https://aevion.app/bank?investor=1`**
+
+It registers a fresh demo user, redirects to `/bank/smoke?auto=1`, runs all 11 wired endpoints (auth → accounts → topup → transfer → sign → verify) live and lands on a printable signed receipt. The yellow `pre-license test mode` ribbon stays visible throughout for legal cover. See §1 below for the matching pre-merge gates.
 
 ---
 
@@ -23,11 +31,15 @@ Live: https://aevion.app · API: https://api.aevion.app · Status: https://statu
 ## 1. Pre-merge gates (block if red)
 
 - [ ] `npm run verify` from `aevion-core/` returns green (backend `tsc` + frontend `next build`)
-- [ ] All 42+ bank routes render server-side without TypeScript errors
-- [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`, `/bank/budget`, `/bank/calendar`, `/bank/subscriptions`, `/bank/forecast`, `/bank/changelog`
+- [ ] All 43+ bank routes render server-side without TypeScript errors
+- [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`, `/bank/budget`, `/bank/calendar`, `/bank/subscriptions`, `/bank/forecast`, `/bank/changelog`, `/bank/smoke`
+- [ ] `/bank/smoke?auto=1` shows 11/11 green against staging in ≤7s
+- [ ] `/bank?investor=1` provisions a demo + redirects to smoke + completes without errors
 - [ ] `/api/qtrade/accounts`, `/transfers`, `/operations` resolve under 200ms p95 in staging
+- [ ] `/api/qtrade/{topup,transfer}` enforce `Idempotency-Key` (replay test passes)
 - [ ] QSign sign + verify round-trips on staging within 100ms p95
 - [ ] No 401/403 from `/api/auth/me` while logged in
+- [ ] `NEXT_PUBLIC_BANK_MODE=production` set so the yellow test-mode ribbon is hidden in prod (or kept visible if shipping pre-license)
 
 ## 2. Backend prep (separate session, but fronted track owns the audit)
 

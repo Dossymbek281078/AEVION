@@ -212,8 +212,62 @@ export default function BankApiDocsPage() {
           >
             {t("api.openapi.cta")}
           </a>
+          <Link
+            href="/bank/smoke?auto=1"
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              border: "1px solid rgba(124,58,237,0.40)",
+              background: "linear-gradient(135deg, rgba(124,58,237,0.10), rgba(14,165,233,0.10))",
+              color: "#4c1d95",
+              fontSize: 12,
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            ▶ Run live smoke test
+          </Link>
+          <Link
+            href="/bank?investor=1"
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              border: "1px solid rgba(94,234,212,0.45)",
+              background: "linear-gradient(135deg, rgba(94,234,212,0.12), rgba(13,148,136,0.10))",
+              color: "#0f766e",
+              fontSize: 12,
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            ✦ Investor walk-through
+          </Link>
         </div>
       </header>
+
+      <aside
+        style={{
+          background: "linear-gradient(135deg, rgba(124,58,237,0.06), rgba(14,165,233,0.05))",
+          border: "1px solid rgba(124,58,237,0.25)",
+          borderRadius: 14,
+          padding: "14px 16px",
+          marginBottom: 18,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          alignItems: "center",
+          fontSize: 13,
+          color: "#1e1b4b",
+        }}
+      >
+        <span style={{ fontSize: 18 }} aria-hidden="true">✦</span>
+        <span style={{ flex: 1, minWidth: 280, lineHeight: 1.55 }}>
+          <strong>Live demo in 30 seconds.</strong>{" "}
+          Open <code style={{ background: "rgba(15,23,42,0.05)", padding: "1px 6px", borderRadius: 4 }}>/bank?investor=1</code> to
+          auto-provision a demo account, run the 11-step smoke runner, and land on a printable
+          signed receipt — no signup required, all calls hit the same endpoints documented below.
+        </span>
+      </aside>
 
       <section
         style={{

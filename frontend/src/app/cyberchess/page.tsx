@@ -9,6 +9,7 @@ import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledge";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
+import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
@@ -4800,6 +4801,45 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>}
+
+          {tab==="coach"&&!editorMode&&(()=>{
+            const detail=detectPhase(game.fen(),hist.length);
+            const phaseSym=detail.phase==="opening"?SYM.play:detail.phase==="endgame"?SYM.endgame:SYM.coach;
+            const tips=PHASE_TIPS[detail.phase];
+            return <div style={{borderRadius:RADIUS.lg,background:`linear-gradient(135deg,#fff,${phaseSym.bg})`,border:`1px solid ${phaseSym.color}33`,padding:SPACE[3],marginBottom:SPACE[3],boxShadow:SHADOW.sm}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
+                <span style={{width:36,height:36,borderRadius:"50%",background:phaseSym.gradient,color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:`0 4px 12px ${phaseSym.ring}`,flexShrink:0}}>
+                  <phaseSym.icon size={20} color="#fff"/>
+                </span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:10,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:phaseSym.color}}>Фаза партии</div>
+                  <div style={{fontSize:16,fontWeight:900,color:CC.text,lineHeight:1.2}}>{detail.label}</div>
+                  <div style={{fontSize:11,color:CC.textDim,marginTop:1}}>{detail.reason}</div>
+                </div>
+              </div>
+              <div style={{fontSize:12,color:CC.text,lineHeight:1.55,marginBottom:SPACE[2]}}>{tips.intro}</div>
+              <details style={{borderTop:`1px dashed ${phaseSym.color}33`,paddingTop:SPACE[2]}}>
+                <summary style={{cursor:"pointer",fontSize:11,fontWeight:800,color:phaseSym.color,letterSpacing:0.3,outline:"none",listStyle:"none"}}>
+                  ▾ Принципы для этой стадии ({tips.tips.length})
+                </summary>
+                <div style={{marginTop:SPACE[2],display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+                  {tips.tips.map((t,i)=><div key={i} style={{display:"flex",gap:SPACE[2]}}>
+                    <span style={{
+                      flexShrink:0,width:22,height:22,borderRadius:"50%",
+                      background:t.priority===1?phaseSym.gradient:t.priority===2?phaseSym.bg:CC.surface3,
+                      color:t.priority===1?"#fff":phaseSym.color,
+                      display:"inline-flex",alignItems:"center",justifyContent:"center",
+                      fontSize:10,fontWeight:900,
+                    }}>{i+1}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:800,color:CC.text,lineHeight:1.3}}>{t.title}</div>
+                      <div style={{fontSize:11,color:CC.textDim,lineHeight:1.5,marginTop:1}}>{t.body}</div>
+                    </div>
+                  </div>)}
+                </div>
+              </details>
+            </div>;
+          })()}
 
           {tab==="coach"&&!editorMode&&coachAIEnabled&&<AiCoach
             fen={game.fen()}

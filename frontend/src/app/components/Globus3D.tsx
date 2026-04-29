@@ -508,6 +508,15 @@ export default function Globus3D({
     tourRef.current = tour;
   }, [tour]);
 
+  /** Time-lapse: ускоренный sun cycle (1 час за 1 реальную секунду = 3600x). */
+  const [timeLapse, setTimeLapse] = useState(false);
+  const timeLapseRef = useRef(false);
+  const timeLapseOffsetRef = useRef(0);
+  useEffect(() => {
+    timeLapseRef.current = timeLapse;
+    if (!timeLapse) timeLapseOffsetRef.current = 0;
+  }, [timeLapse]);
+
   /** Texture loading progress — albedo / normal / specular / clouds / night. */
   const TEX_TOTAL = 5;
   const [texLoaded, setTexLoaded] = useState(0);
@@ -1847,11 +1856,15 @@ export default function Globus3D({
       // Облака чуть-чуть бегут всегда — оживляет сцену.
       cloudMesh.rotation.y += dt * 0.00004;
 
-      // Dynamic sun: пересчитываем sunDir по реальному UTC раз в ~250мс,
-      // чтобы day/night terminator плавно следовал за реальным временем.
-      if (t - lastSunUpdate > 250) {
+      // Dynamic sun: пересчитываем sunDir по реальному UTC раз в ~250мс
+      // (или каждые 50мс в time-lapse — иначе дёргается).
+      if (timeLapseRef.current) {
+        timeLapseOffsetRef.current += dt * 3600;
+      }
+      const sunInterval = timeLapseRef.current ? 50 : 250;
+      if (t - lastSunUpdate > sunInterval) {
         lastSunUpdate = t;
-        const now = new Date();
+        const now = new Date(Date.now() + timeLapseOffsetRef.current);
         const utcH =
           now.getUTCHours() +
           now.getUTCMinutes() / 60 +
@@ -3155,6 +3168,19 @@ export default function Globus3D({
             style={ctrlBtn}
           >
             🎲
+          </button>
+          <button
+            type="button"
+            title={timeLapse ? "Stop time-lapse" : "Time-lapse (1h / sec)"}
+            aria-label={timeLapse ? "Stop time-lapse" : "Time-lapse"}
+            onClick={() => setTimeLapse((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: timeLapse ? "rgba(245,158,11,0.85)" : ctrlBtn.background,
+              borderColor: timeLapse ? "rgba(253,224,71,0.6)" : ctrlBtn.border as string,
+            }}
+          >
+            {timeLapse ? "⏸" : "⏱"}
           </button>
         </div>
       ) : null}

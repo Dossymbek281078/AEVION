@@ -1,29 +1,28 @@
 import { Router, type Request } from "express";
 import { requireAuth } from "../lib/authJwt";
+import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 
 export const ecosystemRouter = Router();
 
 ecosystemRouter.use(requireAuth);
 
 // ----------------------------------------------------------------------------
-// In-memory ecosystem ledger.
+// Persisted ecosystem ledger.
 //
-// Three separate ledgers, all keyed by user email:
-//   - royaltyEvents: per-product royalty payouts (qright)
-//   - chessPrizes:   tournament prize awards (cyberchess)
-//   - planetCerts:   one-off rewards for a certified Planet artifact (planet)
+// Three separate ledgers, all keyed by user email, all stored together in
+// ecosystem.json (atomic write via jsonFileStore). Load-once on first access,
+// persist-after-mutation in the same chain pattern qtrade uses.
 //
-// /api/ecosystem/earnings rolls these up into one summary the bank UI can
-// render directly. Items here represent *credited* events — i.e. the user
-// has already received the AEC. Webhook routes (in cyberchess.ts and the
-// royalties sub-router below) are what append entries to these arrays.
+// Why one file: the three arrays naturally aggregate into the single
+// /earnings response, so co-locating their persistence keeps a snapshot
+// representation consistent for backups + diff inspection.
 // ----------------------------------------------------------------------------
 
 export type RoyaltyEvent = {
   id: string;
   email: string;
   productKey: string;
-  period: string; // ISO date or "2026-Q1"
+  period: string;
   amount: number;
   paidAt: string;
   transferId: string | null;
@@ -53,6 +52,53 @@ export type PlanetCert = {
 export const royaltyEvents: RoyaltyEvent[] = [];
 export const chessPrizes: ChessPrize[] = [];
 export const planetCerts: PlanetCert[] = [];
+
+const STORE_REL = "ecosystem.json";
+
+let loaded = false;
+let loading: Promise<void> | null = null;
+
+export async function ensureEcosystemLoaded(): Promise<void> {
+  if (loaded) return;
+  if (!loading) {
+    loading = (async () => {
+      const data = await readJsonFile<{
+        royaltyEvents?: RoyaltyEvent[];
+        chessPrizes?: ChessPrize[];
+        planetCerts?: PlanetCert[];
+      }>(STORE_REL, { royaltyEvents: [], chessPrizes: [], planetCerts: [] });
+      const r = Array.isArray(data.royaltyEvents) ? data.royaltyEvents : [];
+      const c = Array.isArray(data.chessPrizes) ? data.chessPrizes : [];
+      const p = Array.isArray(data.planetCerts) ? data.planetCerts : [];
+      royaltyEvents.splice(0, royaltyEvents.length, ...r);
+      chessPrizes.splice(0, chessPrizes.length, ...c);
+      planetCerts.splice(0, planetCerts.length, ...p);
+      loaded = true;
+    })();
+  }
+  await loading;
+}
+
+let persistChain: Promise<void> = Promise.resolve();
+
+export function scheduleEcosystemPersist(): void {
+  const snapshot = {
+    royaltyEvents: [...royaltyEvents],
+    chessPrizes: [...chessPrizes],
+    planetCerts: [...planetCerts],
+  };
+  persistChain = persistChain
+    .then(() => writeJsonFile(STORE_REL, snapshot))
+    .catch((err) => {
+      console.error("[ecosystem] persist failed", err);
+    });
+}
+
+ecosystemRouter.use((_req, _res, next) => {
+  ensureEcosystemLoaded()
+    .then(() => next())
+    .catch(next);
+});
 
 function ownerEmail(req: Request): string {
   return req.auth?.email ?? "";

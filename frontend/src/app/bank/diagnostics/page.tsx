@@ -53,6 +53,7 @@ const INITIAL_PROBES: Probe[] = [
   { key: "royalties", label: "QRight royalties", path: "/api/qright/royalties", needsAuth: true, ok2xxOnly: true, status: "pending" },
   { key: "chessResults", label: "CyberChess results", path: "/api/cyberchess/results", needsAuth: true, ok2xxOnly: true, status: "pending" },
   { key: "chessUpcoming", label: "CyberChess upcoming", path: "/api/cyberchess/upcoming", needsAuth: false, status: "pending" },
+  { key: "planetPayouts", label: "Planet payouts", path: "/api/planet/payouts", needsAuth: true, ok2xxOnly: true, status: "pending" },
 ];
 
 function readToken(): string {

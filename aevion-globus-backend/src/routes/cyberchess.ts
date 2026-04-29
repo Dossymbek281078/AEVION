@@ -1,7 +1,12 @@
 import { Router, type Request } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
-import { chessPrizes, type ChessPrize } from "./ecosystem";
+import {
+  chessPrizes,
+  ensureEcosystemLoaded,
+  scheduleEcosystemPersist,
+  type ChessPrize,
+} from "./ecosystem";
 
 // /api/cyberchess/* — three test-mode endpoints the bank UI reads to render
 // ChessWinnings live instead of mocked. In production these will be proxied
@@ -14,7 +19,8 @@ function ownerEmail(req: Request): string {
 }
 
 // Read-only endpoints — auth required, scoped to caller.
-cyberchessRouter.get("/results", requireAuth, (req, res) => {
+cyberchessRouter.get("/results", requireAuth, async (req, res) => {
+  await ensureEcosystemLoaded();
   const email = ownerEmail(req);
   const items = chessPrizes
     .filter((x) => x.email === email)
@@ -60,12 +66,13 @@ cyberchessRouter.get("/upcoming", (_req, res) => {
 // Idempotent on (tournamentId, place, email).
 const WEBHOOK_SECRET = process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook";
 
-cyberchessRouter.post("/tournament-finalized", (req, res) => {
+cyberchessRouter.post("/tournament-finalized", async (req, res) => {
   const provided = req.headers["x-cyberchess-secret"];
   const tokenStr = Array.isArray(provided) ? provided[0] : provided;
   if (!tokenStr || tokenStr !== WEBHOOK_SECRET) {
     return res.status(401).json({ error: "invalid webhook secret" });
   }
+  await ensureEcosystemLoaded();
 
   const { tournamentId, podium } = req.body || {};
   if (typeof tournamentId !== "string" || !Array.isArray(podium)) {
@@ -112,6 +119,8 @@ cyberchessRouter.post("/tournament-finalized", (req, res) => {
   // Drop the tournament from upcoming once finalized.
   const idx = upcomingTournaments.findIndex((x) => x.id === tournamentId);
   if (idx >= 0) upcomingTournaments.splice(idx, 1);
+
+  if (recorded.length > 0) scheduleEcosystemPersist();
 
   res.status(201).json({
     tournamentId,

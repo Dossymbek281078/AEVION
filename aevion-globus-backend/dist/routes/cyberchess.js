@@ -14,7 +14,8 @@ function ownerEmail(req) {
     return req.auth?.email ?? "";
 }
 // Read-only endpoints — auth required, scoped to caller.
-exports.cyberchessRouter.get("/results", authJwt_1.requireAuth, (req, res) => {
+exports.cyberchessRouter.get("/results", authJwt_1.requireAuth, async (req, res) => {
+    await (0, ecosystem_1.ensureEcosystemLoaded)();
     const email = ownerEmail(req);
     const items = ecosystem_1.chessPrizes
         .filter((x) => x.email === email)
@@ -49,12 +50,13 @@ exports.cyberchessRouter.get("/upcoming", (_req, res) => {
 // Validates a shared secret, then appends a ChessPrize per podium spot.
 // Idempotent on (tournamentId, place, email).
 const WEBHOOK_SECRET = process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook";
-exports.cyberchessRouter.post("/tournament-finalized", (req, res) => {
+exports.cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     const provided = req.headers["x-cyberchess-secret"];
     const tokenStr = Array.isArray(provided) ? provided[0] : provided;
     if (!tokenStr || tokenStr !== WEBHOOK_SECRET) {
         return res.status(401).json({ error: "invalid webhook secret" });
     }
+    await (0, ecosystem_1.ensureEcosystemLoaded)();
     const { tournamentId, podium } = req.body || {};
     if (typeof tournamentId !== "string" || !Array.isArray(podium)) {
         return res
@@ -94,6 +96,8 @@ exports.cyberchessRouter.post("/tournament-finalized", (req, res) => {
     const idx = upcomingTournaments.findIndex((x) => x.id === tournamentId);
     if (idx >= 0)
         upcomingTournaments.splice(idx, 1);
+    if (recorded.length > 0)
+        (0, ecosystem_1.scheduleEcosystemPersist)();
     res.status(201).json({
         tournamentId,
         recorded,

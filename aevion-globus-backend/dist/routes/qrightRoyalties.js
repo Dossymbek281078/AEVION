@@ -17,7 +17,8 @@ exports.qrightRoyaltiesRouter = (0, express_1.Router)();
 function ownerEmail(req) {
     return req.auth?.email ?? "";
 }
-exports.qrightRoyaltiesRouter.get("/royalties", authJwt_1.requireAuth, (req, res) => {
+exports.qrightRoyaltiesRouter.get("/royalties", authJwt_1.requireAuth, async (req, res) => {
+    await (0, ecosystem_1.ensureEcosystemLoaded)();
     const email = ownerEmail(req);
     const items = ecosystem_1.royaltyEvents
         .filter((x) => x.email === email)
@@ -29,12 +30,13 @@ exports.qrightRoyaltiesRouter.get("/royalties", authJwt_1.requireAuth, (req, res
 // QRIGHT_WEBHOOK_SECRET; falls back to a dev value so tests work locally.
 const WEBHOOK_SECRET = process.env.QRIGHT_WEBHOOK_SECRET || "dev-qright-webhook";
 const seenWebhookIds = new Set();
-exports.qrightRoyaltiesRouter.post("/royalties/verify-webhook", (req, res) => {
+exports.qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     const provided = req.headers["x-qright-secret"];
     const tokenStr = Array.isArray(provided) ? provided[0] : provided;
     if (!tokenStr || tokenStr !== WEBHOOK_SECRET) {
         return res.status(401).json({ error: "invalid webhook secret" });
     }
+    await (0, ecosystem_1.ensureEcosystemLoaded)();
     const { eventId, email, productKey, period, amount } = req.body || {};
     if (typeof eventId !== "string" ||
         typeof email !== "string" ||
@@ -69,6 +71,7 @@ exports.qrightRoyaltiesRouter.post("/royalties/verify-webhook", (req, res) => {
     };
     ecosystem_1.royaltyEvents.push(ev);
     seenWebhookIds.add(eventId);
+    (0, ecosystem_1.scheduleEcosystemPersist)();
     res.status(201).json({
         replayed: false,
         id: ev.id,

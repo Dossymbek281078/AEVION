@@ -5,8 +5,14 @@ import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
+import { rateLimit } from "../lib/rateLimit";
 
 export const authRouter = Router();
+
+// 10 register attempts per minute per IP, refilled gradually.
+// Login gets a more relaxed bucket (legitimate password retries are common).
+const registerLimiter = rateLimit({ capacity: 10, refillPerSec: 10 / 60 });
+const loginLimiter = rateLimit({ capacity: 30, refillPerSec: 30 / 60 });
 
 const pool = getPool();
 
@@ -41,7 +47,7 @@ function requireAuth(req: any, res: any) {
 // ======================
 // Register
 // ======================
-authRouter.post("/register", async (req, res) => {
+authRouter.post("/register", registerLimiter, async (req, res) => {
   try {
     await ensureUsersTable(pool);
 
@@ -92,7 +98,7 @@ authRouter.post("/register", async (req, res) => {
 // ======================
 // Login
 // ======================
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", loginLimiter, async (req, res) => {
   try {
     await ensureUsersTable(pool);
 

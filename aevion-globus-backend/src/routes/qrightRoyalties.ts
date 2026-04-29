@@ -1,7 +1,12 @@
 import { Router, type Request } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
-import { royaltyEvents, type RoyaltyEvent } from "./ecosystem";
+import {
+  ensureEcosystemLoaded,
+  royaltyEvents,
+  scheduleEcosystemPersist,
+  type RoyaltyEvent,
+} from "./ecosystem";
 
 // Sub-router intended to be mounted at /api/qright (so it lives under the
 // existing namespace alongside the legacy QRight authorship endpoints).
@@ -17,7 +22,8 @@ function ownerEmail(req: Request): string {
   return req.auth?.email ?? "";
 }
 
-qrightRoyaltiesRouter.get("/royalties", requireAuth, (req, res) => {
+qrightRoyaltiesRouter.get("/royalties", requireAuth, async (req, res) => {
+  await ensureEcosystemLoaded();
   const email = ownerEmail(req);
   const items = royaltyEvents
     .filter((x) => x.email === email)
@@ -32,12 +38,13 @@ const WEBHOOK_SECRET = process.env.QRIGHT_WEBHOOK_SECRET || "dev-qright-webhook"
 
 const seenWebhookIds = new Set<string>();
 
-qrightRoyaltiesRouter.post("/royalties/verify-webhook", (req, res) => {
+qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
   const provided = req.headers["x-qright-secret"];
   const tokenStr = Array.isArray(provided) ? provided[0] : provided;
   if (!tokenStr || tokenStr !== WEBHOOK_SECRET) {
     return res.status(401).json({ error: "invalid webhook secret" });
   }
+  await ensureEcosystemLoaded();
 
   const { eventId, email, productKey, period, amount } = req.body || {};
   if (
@@ -79,6 +86,7 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", (req, res) => {
   };
   royaltyEvents.push(ev);
   seenWebhookIds.add(eventId);
+  scheduleEcosystemPersist();
 
   res.status(201).json({
     replayed: false,

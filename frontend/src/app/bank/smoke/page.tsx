@@ -11,7 +11,7 @@
  *    investor / regulator / engineer can click Run and watch every
  *    contract-bound endpoint actually fire against the configured backend.
  *
- * Steps (14):
+ * Steps (15):
  *   1. GET /api/health                       — server alive
  *   2. (auth) reuse stored token OR register a fresh smoke_<ts>@aevion.test
  *   3. GET /api/auth/me                      — token resolves to a user
@@ -26,6 +26,7 @@
  *  12. GET /api/ecosystem/earnings           — aggregator alive
  *  13. GET /api/qright/royalties             — royalty stream alive
  *  14. GET /api/cyberchess/results           — chess prizes feed alive
+ *  15. GET /api/planet/payouts                — planet cert payouts alive
  *
  * Each step records latency, http status, and a one-line detail.
  * State is kept in component memory only (token reused via TOKEN_KEY for steps).
@@ -68,6 +69,7 @@ const INITIAL_STEPS: Step[] = [
   { key: "earnings", label: "GET /api/ecosystem/earnings", status: "pending" },
   { key: "royalties", label: "GET /api/qright/royalties", status: "pending" },
   { key: "chessResults", label: "GET /api/cyberchess/results", status: "pending" },
+  { key: "planetPayouts", label: "GET /api/planet/payouts", status: "pending" },
 ];
 
 function readToken(): string {
@@ -452,6 +454,20 @@ export default function BankSmokePage() {
         }
       } catch (e: any) {
         failAndStop("chessResults", `network: ${e?.message || "unknown"}`);
+      }
+      if (cancelRef.current) return;
+
+      // 15. planet payouts
+      update("planetPayouts", { status: "running" });
+      try {
+        const { res, data, ms } = await fetchJson("/api/planet/payouts", { token: ctx.token });
+        if (res.ok && Array.isArray(data?.items)) {
+          update("planetPayouts", { status: "pass", ms, http: res.status, detail: `${data.items.length} planet certs` });
+        } else {
+          failAndStop("planetPayouts", data?.error || `planet payouts failed ${res.status}`, res.status);
+        }
+      } catch (e: any) {
+        failAndStop("planetPayouts", `network: ${e?.message || "unknown"}`);
       }
     } finally {
       setTotalMs(Math.round(performance.now() - t0));

@@ -17,6 +17,8 @@ import { coachRouter } from "./routes/coach";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { cyberchessRouter } from "./routes/cyberchess";
+import { planetPayoutsRouter } from "./routes/planetPayouts";
+import { openapiSpec } from "./lib/openapiSpec";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -71,66 +73,10 @@ app.use("/api/modules", modulesRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
 
-/** Минимальная машиночитаемая карта API для ускорения интеграций */
+/** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,
+ *  summary-only for legacy globus / qsign. See lib/openapiSpec.ts. */
 app.get("/api/openapi.json", (_req, res) => {
-  res.json({
-    openapi: "3.1.0",
-    info: {
-      title: "AEVION Globus Backend",
-      version: "0.2.0",
-    },
-    paths: {
-      "/health": { get: { summary: "Service health" } },
-      "/api/globus/projects": { get: { summary: "All Globus projects + runtime" } },
-      "/api/globus/projects/{id}": { get: { summary: "Single project + runtime" } },
-      "/api/modules/status": { get: { summary: "Modules dashboard payload" } },
-      "/api/modules/{id}/health": { get: { summary: "Per-module health stub" } },
-      "/api/qright/objects": {
-        get: { summary: "List QRight (optional ?mine=1 + Bearer)" },
-        post: { summary: "Create QRight object" },
-      },
-      "/api/qsign/sign": { post: { summary: "Sign payload" } },
-      "/api/qsign/verify": { post: { summary: "Verify signature" } },
-      "/api/auth/register": { post: {} },
-      "/api/auth/login": { post: {} },
-      "/api/auth/me": { get: {} },
-      "/api/qcoreai/chat": { post: { summary: "Chat (OpenAI or stub)" } },
-      "/api/qcoreai/health": { get: { summary: "QCoreAI config probe" } },
-      "/api/planet/stats": {
-        get: {
-          summary: "Planet public stats (participants Y, votes, optional productKeyPrefix scope)",
-        },
-      },
-      "/api/planet/artifacts/recent": {
-        get: {
-          summary:
-            "Recent certified artifact versions (optional productKeyPrefix, artifactType, limit 1..50, sort=created|rating|votes)",
-        },
-      },
-      "/api/planet/artifacts/{artifactVersionId}/public": {
-        get: { summary: "Public artifact + votes + voteStatsByCategory" },
-      },
-      "/api/qtrade/accounts": {
-        get: { summary: "List accounts (persisted)" },
-        post: { summary: "Create account" },
-      },
-      "/api/qtrade/accounts.csv": { get: { summary: "Download accounts snapshot as CSV" } },
-      "/api/qtrade/transfers": { get: { summary: "Transfer history" } },
-      "/api/qtrade/transfers.csv": { get: { summary: "Download transfer history as CSV" } },
-      "/api/qtrade/operations": { get: { summary: "Operation history (topup + transfer)" } },
-      "/api/qtrade/operations.csv": { get: { summary: "Download operation history as CSV" } },
-      "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
-      "/api/qtrade/topup": { post: { summary: "Top up balance" } },
-      "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
-      "/api/qtrade/accounts/lookup": { get: { summary: "Resolve email → primary accountId (auth)" } },
-      "/api/ecosystem/earnings": { get: { summary: "Aggregated earnings across qright/cyberchess/planet (auth)" } },
-      "/api/qright/royalties": { get: { summary: "Paid royalties for caller (auth)" } },
-      "/api/qright/royalties/verify-webhook": { post: { summary: "External rights body webhook (X-QRight-Secret)" } },
-      "/api/cyberchess/results": { get: { summary: "Recent tournament prize wins for caller (auth)" } },
-      "/api/cyberchess/upcoming": { get: { summary: "Public list of upcoming tournaments" } },
-      "/api/cyberchess/tournament-finalized": { post: { summary: "Tournament finalized webhook (X-CyberChess-Secret)" } },
-    },
-  });
+  res.json(openapiSpec);
 });
 
 // ==========================
@@ -161,6 +107,7 @@ app.use("/api/auth", authRouter);
 // Planet / Compliance / Evidence / Certificate
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
+app.use("/api/planet", planetPayoutsRouter);
 
 app.use(
   (

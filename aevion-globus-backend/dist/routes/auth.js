@@ -11,7 +11,12 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const authJwt_1 = require("../lib/authJwt");
 const ensureUsersTable_1 = require("../lib/ensureUsersTable");
 const dbPool_1 = require("../lib/dbPool");
+const rateLimit_1 = require("../lib/rateLimit");
 exports.authRouter = (0, express_1.Router)();
+// 10 register attempts per minute per IP, refilled gradually.
+// Login gets a more relaxed bucket (legitimate password retries are common).
+const registerLimiter = (0, rateLimit_1.rateLimit)({ capacity: 10, refillPerSec: 10 / 60 });
+const loginLimiter = (0, rateLimit_1.rateLimit)({ capacity: 30, refillPerSec: 30 / 60 });
 const pool = (0, dbPool_1.getPool)();
 function signToken(payload) {
     const secret = (0, authJwt_1.getJwtSecret)();
@@ -37,7 +42,7 @@ function requireAuth(req, res) {
 // ======================
 // Register
 // ======================
-exports.authRouter.post("/register", async (req, res) => {
+exports.authRouter.post("/register", registerLimiter, async (req, res) => {
     try {
         await (0, ensureUsersTable_1.ensureUsersTable)(pool);
         const { email, password, name } = req.body || {};
@@ -78,7 +83,7 @@ exports.authRouter.post("/register", async (req, res) => {
 // ======================
 // Login
 // ======================
-exports.authRouter.post("/login", async (req, res) => {
+exports.authRouter.post("/login", loginLimiter, async (req, res) => {
     try {
         await (0, ensureUsersTable_1.ensureUsersTable)(pool);
         const { email, password } = req.body || {};

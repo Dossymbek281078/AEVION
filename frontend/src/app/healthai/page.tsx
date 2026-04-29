@@ -76,6 +76,19 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   llm_failed: { en: "AI request failed", ru: "Запрос к AI не удался" },
   llm_card_title: { en: "AI deep analysis", ru: "Глубокий AI-анализ" },
+  btn_print_report: {
+    en: "🖨 Print report (PDF)",
+    ru: "🖨 Печать отчёта (PDF)",
+  },
+  btn_export_json: { en: "⤓ Export JSON", ru: "⤓ Экспорт JSON" },
+  export_section_title: {
+    en: "Doctor report",
+    ru: "Отчёт для врача",
+  },
+  export_section_subtitle: {
+    en: "Print-friendly summary or raw JSON dump for backup",
+    ru: "Печатный отчёт или JSON-выгрузка для бэкапа",
+  },
   hist_subtitle: { en: "{c} checks · {l} logs", ru: "{c} чеков · {l} логов" },
   field_age: { en: "Age", ru: "Возраст" },
   field_sex: { en: "Sex", ru: "Пол" },
@@ -893,6 +906,46 @@ export default function HealthAIPage() {
               <button type="button" onClick={saveProfile} disabled={busy} style={primaryBtn}>
                 {profile ? t("btn_update_profile", lang) : t("btn_create_profile", lang)}
               </button>
+            </div>
+          </Card>
+        ) : null}
+
+        {tab === "profile" && profile ? (
+          <Card>
+            <CardHeader
+              title={t("export_section_title", lang)}
+              subtitle={t("export_section_subtitle", lang)}
+            />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <a
+                href={`/healthai/report?id=${encodeURIComponent(profile.id)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  ...primaryBtn,
+                  background: "linear-gradient(180deg, #14b8a6 0%, #0d9488 100%)",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                {t("btn_print_report", lang)}
+              </a>
+              <a
+                href={`${BACKEND}/api/healthai/export/${encodeURIComponent(profile.id)}`}
+                download
+                style={{
+                  ...primaryBtn,
+                  background: "rgba(120,160,220,0.18)",
+                  borderColor: "rgba(120,160,220,0.45)",
+                  color: "#cbd5e1",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                {t("btn_export_json", lang)}
+              </a>
             </div>
           </Card>
         ) : null}

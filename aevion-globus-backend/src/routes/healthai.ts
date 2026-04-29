@@ -933,6 +933,27 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
   });
 });
 
+/** Полный экспорт профиля для врача (или для backup). */
+healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
+  const profileId = req.params.id;
+  const profile = await store.getProfile(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  const cks = await store.getChecks(profileId);
+  const lgs = await store.getLogs(profileId);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="aevion-healthai-${profileId}.json"`,
+  );
+  res.json({
+    exportedAt: nowIso(),
+    profile,
+    bmi: bmi(profile.heightCm, profile.weightKg),
+    symptomChecks: cks,
+    dailyLogs: lgs,
+    disclaimer: DISCLAIMER,
+  });
+});
+
 healthaiRouter.get("/leaderboard", async (_req, res) => {
   const ids = await store.allProfileIdsWithLogs();
   const board: Array<{ profileId: string; streak: number; logs: number }> = [];

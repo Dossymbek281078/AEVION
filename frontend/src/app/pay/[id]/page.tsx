@@ -71,6 +71,7 @@ export default function PayPage({
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const [picked, setPicked] = useState<string | null>(null);
   const [card, setCard] = useState({ number: "", exp: "", cvc: "" });
+  const [payerEmail, setPayerEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -171,10 +172,15 @@ export default function PayPage({
     }
     const digits = card.number.replace(/\D/g, "");
     const last4 = digits.length >= 4 ? digits.slice(-4) : undefined;
+    const trimmedEmail = payerEmail.trim();
+    const payer_email =
+      trimmedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)
+        ? trimmedEmail
+        : undefined;
     void fetch(`${window.location.origin}/api/pay/${link.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method, last4 }),
+      body: JSON.stringify({ method, last4, payer_email }),
     }).catch(() => undefined);
   }
 
@@ -555,6 +561,23 @@ export default function PayPage({
               be notified once funds arrive.
             </div>
           )}
+
+          <div>
+            <label style={labelStyle}>Email for receipt (optional)</label>
+            <input
+              type="email"
+              value={payerEmail}
+              onChange={(e) => setPayerEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={inputStyle}
+              disabled={processing}
+              autoComplete="email"
+            />
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+              We&apos;ll email a printable receipt + a link to{" "}
+              <code>/r/{id}</code> after capture.
+            </div>
+          </div>
 
           {error && (
             <div

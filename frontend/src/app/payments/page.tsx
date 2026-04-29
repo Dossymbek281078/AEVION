@@ -157,6 +157,7 @@ const roadmapItems = [
   { label: "Audit log with KV persistence + viewer (filter, autorefresh)", status: "live" },
   { label: "Webhook retry queue with exp backoff (10s→6h, 6 attempts) + Vercel cron", status: "live" },
   { label: "Disputes endpoint + UI surface (5-state lifecycle, webhook fanout)", status: "live" },
+  { label: "Email receipts via Resend (auto-sent on capture if payer_email + RESEND_API_KEY)", status: "live" },
 ];
 
 export default function PaymentsPage() {

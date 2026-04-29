@@ -735,6 +735,157 @@ function analyticsFromMemory(userId: string | null, scope: "mine" | "anonymous")
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Agent marketplace — shared presets (V4-E)
+
+   Lets a user publish their saved agent preset (strategy + per-role
+   provider/model) so others can browse and import it into their personal
+   localStorage presets bar. Owner-only delete. Read-only browse for the
+   public — auth required only to publish, delete, or import (so we can
+   bump importCount per user).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type SharedPresetRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  strategy: string;
+  overrides: any;
+  isPublic: boolean;
+  importCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memSharedPresets = new Map<string, SharedPresetRow>();
+
+export async function createSharedPreset(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  strategy?: string;
+  overrides?: any;
+  isPublic?: boolean;
+}): Promise<SharedPresetRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (opts.name || "").trim().slice(0, 80);
+  if (!name) throw new Error("preset name required");
+  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
+  const strategy = opts.strategy === "parallel" || opts.strategy === "debate" ? opts.strategy : "sequential";
+  const overrides = opts.overrides && typeof opts.overrides === "object" ? opts.overrides : {};
+  const isPublic = opts.isPublic !== false;
+
+  if (!isDbReady()) {
+    const row: SharedPresetRow = {
+      id,
+      ownerUserId: opts.ownerUserId,
+      name,
+      description,
+      strategy,
+      overrides,
+      isPublic,
+      importCount: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memSharedPresets.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreSharedPreset"
+       ("id","ownerUserId","name","description","strategy","overrides","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)
+     RETURNING *`,
+    [id, opts.ownerUserId, name, description, strategy, JSON.stringify(overrides), isPublic]
+  );
+  return r.rows[0] as SharedPresetRow;
+}
+
+export async function listPublicSharedPresets(query?: string, limit = 30): Promise<SharedPresetRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  const q = (query || "").trim();
+
+  if (!isDbReady()) {
+    let rows = Array.from(memSharedPresets.values()).filter((p) => p.isPublic);
+    if (q) {
+      const ql = q.toLowerCase();
+      rows = rows.filter(
+        (p) => p.name.toLowerCase().includes(ql) || (p.description || "").toLowerCase().includes(ql)
+      );
+    }
+    rows.sort(
+      (a, b) =>
+        b.importCount - a.importCount || b.updatedAt.localeCompare(a.updatedAt)
+    );
+    return rows.slice(0, lim);
+  }
+
+  if (q) {
+    const r = await pool.query(
+      `SELECT * FROM "QCoreSharedPreset"
+        WHERE "isPublic" = TRUE
+          AND ("name" ILIKE $1 OR "description" ILIKE $1)
+        ORDER BY "importCount" DESC, "updatedAt" DESC
+        LIMIT $2`,
+      [`%${q}%`, lim]
+    );
+    return r.rows as SharedPresetRow[];
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreSharedPreset"
+      WHERE "isPublic" = TRUE
+      ORDER BY "importCount" DESC, "updatedAt" DESC
+      LIMIT $1`,
+    [lim]
+  );
+  return r.rows as SharedPresetRow[];
+}
+
+export async function getSharedPreset(id: string): Promise<SharedPresetRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memSharedPresets.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreSharedPreset" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as SharedPresetRow) || null;
+}
+
+export async function importSharedPreset(id: string): Promise<SharedPresetRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const p = memSharedPresets.get(id);
+    if (!p || !p.isPublic) return null;
+    p.importCount += 1;
+    p.updatedAt = nowIso();
+    return p;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreSharedPreset"
+        SET "importCount" = "importCount" + 1,
+            "updatedAt"   = NOW()
+      WHERE "id"=$1 AND "isPublic"=TRUE
+      RETURNING *`,
+    [id]
+  );
+  return (r.rows?.[0] as SharedPresetRow) || null;
+}
+
+export async function deleteSharedPreset(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const p = memSharedPresets.get(id);
+    if (!p || p.ownerUserId !== userId) return false;
+    memSharedPresets.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreSharedPreset" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Refinement / search / tagging extras
    ═══════════════════════════════════════════════════════════════════════ */
 

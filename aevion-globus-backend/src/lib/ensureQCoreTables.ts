@@ -131,6 +131,31 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
 
+  // Agent marketplace — community-shared presets. Owner can publish, others
+  // can browse and import to their personal localStorage presets bar.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSharedPreset" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT TRUE,
+      "importCount" INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreSharedPreset_public_imports_idx"
+      ON "QCoreSharedPreset" ("isPublic", "importCount" DESC, "updatedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreSharedPreset_owner_idx"
+      ON "QCoreSharedPreset" ("ownerUserId");
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

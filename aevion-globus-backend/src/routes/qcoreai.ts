@@ -32,7 +32,9 @@ import {
   applyRefinement,
   buildHistoryContext,
   createRun,
+  createSharedPreset,
   deleteSession,
+  deleteSharedPreset,
   ensureSession,
   finishRun,
   getAnalytics,
@@ -42,9 +44,12 @@ import {
   getRunByShareToken,
   getSession,
   getSessionPublic,
+  getSharedPreset,
   getTopUserTags,
+  importSharedPreset,
   insertMessage,
   listMessages,
+  listPublicSharedPresets,
   listRuns,
   listSessions,
   renameSession,
@@ -559,6 +564,86 @@ qcoreaiRouter.patch("/runs/:id/tags", async (req, res) => {
     res.json({ ok: true, tags: updated.tags ?? [] });
   } catch (err: any) {
     res.status(500).json({ error: "set tags failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Agent marketplace — V4-E
+   - POST   /presets/share        (auth)  — publish a preset
+   - GET    /presets/public       (none)  — browse, optional ?q= search
+   - GET    /presets/:id          (none)  — fetch one
+   - POST   /presets/:id/import   (none)  — bumps importCount, returns the preset
+   - DELETE /presets/:id          (auth)  — owner-only
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/presets/share", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, strategy, overrides, isPublic } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "name required" });
+    }
+    const preset = await createSharedPreset({
+      ownerUserId: auth.sub,
+      name,
+      description: typeof description === "string" ? description : null,
+      strategy: typeof strategy === "string" ? strategy : "sequential",
+      overrides: overrides && typeof overrides === "object" ? overrides : {},
+      isPublic: isPublic !== false,
+    });
+    res.json({ ok: true, preset });
+  } catch (err: any) {
+    res.status(500).json({ error: "share preset failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/presets/public", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim().slice(0, 80);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const items = await listPublicSharedPresets(q, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public presets failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/presets/:id", async (req, res) => {
+  try {
+    const p = await getSharedPreset(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "preset not found" });
+    if (!p.isPublic) {
+      const auth = verifyBearerOptional(req);
+      if (!auth?.sub || auth.sub !== p.ownerUserId) {
+        return res.status(404).json({ error: "preset not found" });
+      }
+    }
+    res.json({ preset: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "get preset failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/presets/:id/import", async (req, res) => {
+  try {
+    const p = await importSharedPreset(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "preset not found or not public" });
+    res.json({ ok: true, preset: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "import preset failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/presets/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteSharedPreset(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "preset not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete preset failed", details: err?.message });
   }
 });
 

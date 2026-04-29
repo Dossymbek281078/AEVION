@@ -331,6 +331,21 @@ export default function QCoreMultiAgentPage() {
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
+  // V4-E agent marketplace
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const [marketplacePresets, setMarketplacePresets] = useState<Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    strategy: string;
+    overrides: any;
+    importCount: number;
+    updatedAt: string;
+  }>>([]);
+  const [marketplaceQuery, setMarketplaceQuery] = useState("");
+  const [marketplaceBusy, setMarketplaceBusy] = useState(false);
+  const [marketplaceShareFor, setMarketplaceShareFor] = useState<string | null>(null);
+  const [marketplaceShareDesc, setMarketplaceShareDesc] = useState("");
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   // Per-user webhook config (auth-required). null = not loaded yet,
   // undefined = loaded but user has no webhook set.
@@ -587,6 +602,77 @@ export default function QCoreMultiAgentPage() {
   const deletePreset = useCallback((id: string) => {
     persistPresets(presets.filter((p) => p.id !== id));
   }, [presets, persistPresets]);
+
+  /* ── V4-E Agent marketplace ── */
+  const loadMarketplace = useCallback(async (q?: string) => {
+    setMarketplaceBusy(true);
+    try {
+      const url = q
+        ? apiUrl(`/api/qcoreai/presets/public?q=${encodeURIComponent(q)}`)
+        : apiUrl(`/api/qcoreai/presets/public`);
+      const res = await fetch(url, { headers: bearerHeader() });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.items)) setMarketplacePresets(data.items);
+    } catch { /* ignore */ } finally {
+      setMarketplaceBusy(false);
+    }
+  }, []);
+
+  const importMarketplacePreset = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/presets/${encodeURIComponent(id)}/import`), {
+        method: "POST",
+        headers: bearerHeader(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.preset) throw new Error(data?.error || "import failed");
+      const p = data.preset;
+      // Add to localStorage presets — generate new local id, suffix collisions.
+      const existingNames = new Set(presets.map((x) => x.name));
+      let name = p.name;
+      let n = 2;
+      while (existingNames.has(name)) name = `${p.name} (${n++})`;
+      const next: AgentPreset[] = [
+        ...presets,
+        {
+          id: crypto.randomUUID(),
+          name,
+          strategy: (p.strategy === "parallel" || p.strategy === "debate" ? p.strategy : "sequential") as Strategy,
+          overrides: (p.overrides && typeof p.overrides === "object" ? p.overrides : {}) as AgentPreset["overrides"],
+          maxRevisions: typeof p.maxRevisions === "number" ? p.maxRevisions : 1,
+        },
+      ];
+      persistPresets(next);
+      // Refresh the list (importCount bumped server-side).
+      void loadMarketplace(marketplaceQuery);
+    } catch (e: any) {
+      setGlobalError(e?.message || "import failed");
+    }
+  }, [presets, persistPresets, marketplaceQuery, loadMarketplace]);
+
+  const sharePresetToMarketplace = useCallback(async (preset: AgentPreset, description: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/presets/share`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({
+          name: preset.name,
+          description: description.trim() || null,
+          strategy: preset.strategy,
+          overrides: preset.overrides,
+          isPublic: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setMarketplaceShareFor(null);
+      setMarketplaceShareDesc("");
+      // Refresh to show our new entry.
+      if (marketplaceOpen) void loadMarketplace(marketplaceQuery);
+    } catch (e: any) {
+      setGlobalError(e?.message || "share failed");
+    }
+  }, [marketplaceOpen, marketplaceQuery, loadMarketplace]);
 
   /* ── Auto-scroll on new chunks (only if user is at the bottom) ── */
   useEffect(() => {
@@ -1545,6 +1631,25 @@ export default function QCoreMultiAgentPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => { setMarketplaceShareFor(p.id); setMarketplaceShareDesc(""); }}
+                    aria-label={`Share preset ${p.name}`}
+                    title="Share to community marketplace"
+                    style={{
+                      border: "none",
+                      borderLeft: "1px solid rgba(255,255,255,0.15)",
+                      background: "transparent",
+                      color: "rgba(13,148,136,0.85)",
+                      padding: "0 7px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      lineHeight: 1,
+                      fontWeight: 700,
+                    }}
+                  >
+                    🌐
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => deletePreset(p.id)}
                     aria-label={`Delete preset ${p.name}`}
                     title="Delete preset"
@@ -1640,7 +1745,220 @@ export default function QCoreMultiAgentPage() {
                   + Save current
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !marketplaceOpen;
+                  setMarketplaceOpen(next);
+                  if (next && marketplacePresets.length === 0) void loadMarketplace();
+                }}
+                title="Browse community-shared agent presets"
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 8,
+                  border: marketplaceOpen
+                    ? "1px solid rgba(13,148,136,0.7)"
+                    : "1px dashed rgba(13,148,136,0.5)",
+                  background: marketplaceOpen ? "rgba(13,148,136,0.2)" : "transparent",
+                  color: "rgba(13,148,136,0.95)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🌐 Browse community
+              </button>
             </div>
+
+            {/* Share-preset modal-ish row — appears when user clicks 🌐 on a saved preset */}
+            {marketplaceShareFor && (() => {
+              const p = presets.find((x) => x.id === marketplaceShareFor);
+              if (!p) return null;
+              return (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 10,
+                    background: "rgba(13,148,136,0.12)",
+                    border: "1px solid rgba(13,148,136,0.4)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    color: "#e2e8f0",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>
+                    Share preset <span style={{ color: "#5eead4" }}>{p.name}</span> to community
+                  </div>
+                  <textarea
+                    value={marketplaceShareDesc}
+                    onChange={(e) => setMarketplaceShareDesc(e.target.value)}
+                    placeholder="Optional description: when to use this preset, model rationale, etc."
+                    maxLength={400}
+                    rows={2}
+                    style={{
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.95)",
+                      color: "#0f172a",
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      outline: "none",
+                      resize: "vertical",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button
+                      onClick={() => sharePresetToMarketplace(p, marketplaceShareDesc)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "#0d9488",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Share publicly
+                    </button>
+                    <button
+                      onClick={() => { setMarketplaceShareFor(null); setMarketplaceShareDesc(""); }}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "transparent",
+                        color: "rgba(255,255,255,0.7)",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <span style={{ fontSize: 10, color: "rgba(226,232,240,0.6)" }}>
+                      Auth required. Public until you delete it.
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Browse community panel */}
+            {marketplaceOpen && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "rgba(15,23,42,0.4)",
+                  border: "1px solid rgba(13,148,136,0.3)",
+                  color: "#e2e8f0",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                  <input
+                    type="search"
+                    value={marketplaceQuery}
+                    onChange={(e) => {
+                      setMarketplaceQuery(e.target.value);
+                      // Debounced via simple timeout — recreate on keystroke.
+                      window.clearTimeout((window as any).__qcoreMarketTimer);
+                      (window as any).__qcoreMarketTimer = window.setTimeout(
+                        () => loadMarketplace(e.target.value),
+                        250
+                      );
+                    }}
+                    placeholder="Search community presets…"
+                    style={{
+                      flex: 1,
+                      padding: "5px 10px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.95)",
+                      color: "#0f172a",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      outline: "none",
+                    }}
+                  />
+                  <span style={{ fontSize: 11, color: "rgba(226,232,240,0.6)" }}>
+                    {marketplaceBusy ? "…" : `${marketplacePresets.length} preset${marketplacePresets.length === 1 ? "" : "s"}`}
+                  </span>
+                </div>
+                {marketplacePresets.length === 0 && !marketplaceBusy ? (
+                  <div style={{ fontSize: 12, color: "rgba(226,232,240,0.5)", padding: "12px 4px", fontStyle: "italic" }}>
+                    No public presets yet. Be the first — save a lineup, click 🌐 to share.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+                    {marketplacePresets.map((mp) => (
+                      <div
+                        key={mp.id}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "rgba(15,23,42,0.5)",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 700, fontSize: 12, color: "#fff" }}>{mp.name}</span>
+                            <span
+                              style={{
+                                fontSize: 9,
+                                fontWeight: 700,
+                                padding: "1px 6px",
+                                borderRadius: 999,
+                                background: "rgba(13,148,136,0.2)",
+                                color: "#5eead4",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {mp.strategy}
+                            </span>
+                            <span style={{ fontSize: 10, color: "rgba(226,232,240,0.5)" }}>
+                              ↑ {mp.importCount}
+                            </span>
+                          </div>
+                          {mp.description && (
+                            <div style={{ marginTop: 3, fontSize: 11, color: "rgba(226,232,240,0.7)", lineHeight: 1.4 }}>
+                              {mp.description}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => importMarketplacePreset(mp.id)}
+                          title="Import to your saved presets"
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(13,148,136,0.5)",
+                            background: "rgba(13,148,136,0.2)",
+                            color: "#5eead4",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ↓ Import
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {configOpen && (

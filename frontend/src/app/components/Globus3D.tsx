@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { feature as topoFeature } from "topojson-client";
 import countriesData from "world-atlas/countries-110m.json";
+import earcut from "earcut";
 
 type Project = {
   id: string;
@@ -519,6 +520,9 @@ export default function Globus3D({
 
   /** Canvas ref для PNG snapshot. */
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  /** Setter для selected-country fill+outline (живёт в Three.js scope). */
+  const selectedCountryVizRef = useRef<((name: string | null) => void) | null>(null);
 
   /** Texture loading progress — albedo / normal / specular / clouds / night. */
   const TEX_TOTAL = 5;
@@ -1367,6 +1371,101 @@ export default function Globus3D({
         countryOutlineGroup.add(line);
       }
     };
+
+    // Selected-country visualization — постоянная заливка + жирный outline.
+    const selectedCountryGroup = new THREE.Group();
+    earthGroup.add(selectedCountryGroup);
+
+    const selectedFillMat = new THREE.MeshBasicMaterial({
+      color: 0x4cc1ff,
+      transparent: true,
+      opacity: 0.22,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    selectedFillMat.blending = THREE.AdditiveBlending;
+
+    const selectedOutlineMat = new THREE.LineBasicMaterial({
+      color: 0x9be9ff,
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+    });
+    selectedOutlineMat.blending = THREE.AdditiveBlending;
+
+    const setSelectedCountryViz = (countryName: string | null) => {
+      while (selectedCountryGroup.children.length > 0) {
+        const ch = selectedCountryGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        selectedCountryGroup.remove(ch);
+        ch.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const entry = countriesCache.find((c) => c.name === countryName);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 4) continue;
+
+        // Skip polygons crossing 180° meridian — earcut в lon/lat 2D не поймёт wrap.
+        let wraps = false;
+        for (let i = 1; i < ring.length; i++) {
+          if (Math.abs(ring[i][0] - ring[i - 1][0]) > 180) {
+            wraps = true;
+            break;
+          }
+        }
+
+        // Жирный outline — всегда (даже для wrap-стран).
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 1.05);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, selectedOutlineMat);
+        line.renderOrder = 6;
+        selectedCountryGroup.add(line);
+
+        if (wraps) continue;
+
+        // Triangulated fill — earcut over [lon,lat,...] flat.
+        const flat: number[] = [];
+        for (const [lon, lat] of ring) flat.push(lon, lat);
+        const indices = earcut(flat, undefined, 2);
+        if (indices.length === 0) continue;
+
+        const vCount = flat.length / 2;
+        const positions = new Float32Array(vCount * 3);
+        for (let i = 0; i < vCount; i++) {
+          const lon = flat[i * 2];
+          const lat = flat[i * 2 + 1];
+          const p = geoFromLatLon(lat, lon, radius + 0.5);
+          positions[i * 3] = p.x;
+          positions[i * 3 + 1] = p.y;
+          positions[i * 3 + 2] = p.z;
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geom.setIndex(
+          new THREE.BufferAttribute(
+            vCount > 65535 ? new Uint32Array(indices) : new Uint16Array(indices),
+            1,
+          ),
+        );
+
+        const mesh = new THREE.Mesh(geom, selectedFillMat);
+        mesh.renderOrder = 4;
+        selectedCountryGroup.add(mesh);
+      }
+    };
+
+    selectedCountryVizRef.current = setSelectedCountryViz;
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -2408,6 +2507,11 @@ export default function Globus3D({
     const dist = Math.max(180, Math.min(280, 160 + spread * 3));
     flyToLatLon(centerLat, centerLon, dist);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCountry]);
+
+  /** Selected-country fill+outline на самом глобусе. */
+  useEffect(() => {
+    selectedCountryVizRef.current?.(selectedCountry);
   }, [selectedCountry]);
 
   /** URL ?country=Russia — deep-link на конкретную страну (mount-only). */

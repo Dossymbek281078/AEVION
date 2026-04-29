@@ -16,8 +16,10 @@ import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 
 export const aevRouter = Router();
 
-const WALLETS_FILE = "aev/wallets.json";
-const LEDGER_FILE = "aev/ledger.json";
+// Flat filename — jsonFileStore mkdirs only top-level AEVION_DATA_DIR;
+// subdirectories aren't autocreated.
+const WALLETS_FILE = "aev_wallets.json";
+const LEDGER_FILE = "aev_ledger.json";
 
 type WalletRecord = {
   deviceId: string;

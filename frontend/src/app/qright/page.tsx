@@ -160,6 +160,30 @@ export default function QRightPage() {
       if (!localStorage.getItem(TOUR_KEY)) setShowTour(true);
     } catch {}
   }, []);
+
+  /* ── Live transparency tile (homepage) ── */
+  const [transparency, setTransparency] = useState<{
+    registered: number;
+    active: number;
+    revoked: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/api/qright/transparency"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.totals) return;
+        setTransparency({
+          registered: Number(data.totals.registered) || 0,
+          active: Number(data.totals.active) || 0,
+          revoked: Number(data.totals.revoked) || 0,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const dismissTour = () => {
     setShowTour(false);
     try {
@@ -492,6 +516,47 @@ export default function QRightPage() {
             </p>
           </div>
         </div>
+
+        {/* ── Live transparency tile ── */}
+        {transparency && transparency.registered > 0 && (
+          <Link
+            href="/qright/transparency"
+            aria-label="Open public transparency report"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 14,
+              padding: "12px 16px",
+              marginBottom: 18,
+              borderRadius: 14,
+              border: "1px solid rgba(13,148,136,0.2)",
+              background: "linear-gradient(135deg, rgba(13,148,136,0.06), rgba(6,182,212,0.04))",
+              textDecoration: "none",
+              color: "inherit",
+            }}
+          >
+            <span style={{ fontSize: 18 }} aria-hidden>📊</span>
+            <span style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Live registry
+              </span>
+              <span style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
+                <strong style={{ color: "#0d9488" }}>{transparency.registered.toLocaleString()}</strong> registered ·{" "}
+                <strong>{transparency.active.toLocaleString()}</strong> active
+                {transparency.revoked > 0 && (
+                  <>
+                    {" · "}
+                    <strong style={{ color: "#dc2626" }}>{transparency.revoked.toLocaleString()}</strong> revoked
+                  </>
+                )}
+              </span>
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#0d9488" }}>
+              Public report →
+            </span>
+          </Link>
+        )}
 
         {/* ── Step: FORM ── */}
         {step === "form" && (

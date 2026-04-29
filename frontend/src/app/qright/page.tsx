@@ -9,6 +9,11 @@ import { InfoTip } from "@/components/InfoTip";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { Sparkline } from "@/components/Sparkline";
+import { useI18n } from "@/lib/i18n";
+import {
+  OWNER_REVOKE_REASON_CODES,
+  revokeReasonLabel,
+} from "@/lib/qrightRevokeReasons";
 import {
   exportAuthorKeyBackup,
   getOrCreateAuthorKey,
@@ -99,15 +104,6 @@ type RightObject = {
   revokeReasonCode?: string | null;
 };
 
-const REVOKE_REASON_LABELS: Record<string, string> = {
-  "license-conflict": "License conflict",
-  withdrawn: "Withdrawn by author",
-  dispute: "Disputed authorship",
-  mistake: "Registered by mistake",
-  superseded: "Superseded by new version",
-  other: "Other (free text)",
-};
-
 const KIND_OPTIONS = [
   { value: "music", label: "Music / Audio", icon: "🎵" },
   { value: "code", label: "Code / Software", icon: "💻" },
@@ -122,6 +118,7 @@ type Step = "form" | "processing" | "done";
 
 export default function QRightPage() {
   const { showToast } = useToast();
+  const { lang } = useI18n();
   const TOKEN_KEY = "aevion_auth_token_v1";
 
   const [step, setStep] = useState<Step>("form");
@@ -1153,7 +1150,7 @@ export default function QRightPage() {
                       {isRevoked && (x.revokeReasonCode || x.revokeReason) && (
                         <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "rgba(220,38,38,0.06)", fontSize: 11, color: "#7f1d1d" }}>
                           {x.revokeReasonCode && (
-                            <strong style={{ marginRight: 6 }}>{REVOKE_REASON_LABELS[x.revokeReasonCode] || x.revokeReasonCode}:</strong>
+                            <strong style={{ marginRight: 6 }}>{revokeReasonLabel(x.revokeReasonCode, lang)}:</strong>
                           )}
                           {x.revokeReason || (x.revokeReasonCode ? "no further detail" : "")}
                         </div>
@@ -1269,9 +1266,9 @@ export default function QRightPage() {
               onChange={(e) => setRevokeCode(e.target.value)}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, color: "#0f172a", background: "#fff", marginBottom: 12 }}
             >
-              {Object.entries(REVOKE_REASON_LABELS).map(([code, label]) => (
+              {OWNER_REVOKE_REASON_CODES.map((code) => (
                 <option key={code} value={code}>
-                  {label}
+                  {revokeReasonLabel(code, lang)}
                 </option>
               ))}
             </select>

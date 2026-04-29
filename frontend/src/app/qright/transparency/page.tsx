@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { revokeReasonLabel } from "@/lib/qrightRevokeReasons";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 300;
@@ -17,17 +18,6 @@ type TransparencyView = {
   };
   revokesByReasonCode: { code: string; count: number }[];
   registrationsByKind: { kind: string; count: number }[];
-};
-
-const REVOKE_REASON_LABELS: Record<string, string> = {
-  "license-conflict": "License conflict",
-  withdrawn: "Withdrawn by author",
-  dispute: "Disputed authorship",
-  mistake: "Registered by mistake",
-  superseded: "Superseded by new version",
-  other: "Other",
-  "admin-takedown": "Admin takedown",
-  unspecified: "Reason unspecified",
 };
 
 async function loadTransparency(): Promise<TransparencyView | null> {
@@ -183,7 +173,7 @@ export default async function QRightTransparencyPage() {
               {data.revokesByReasonCode.map((r) => (
                 <Bar
                   key={r.code}
-                  label={REVOKE_REASON_LABELS[r.code] || r.code}
+                  label={revokeReasonLabel(r.code)}
                   count={r.count}
                   total={totalRevokes}
                   accent="#dc2626"

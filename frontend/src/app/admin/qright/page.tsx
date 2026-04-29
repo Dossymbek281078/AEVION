@@ -8,26 +8,13 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { Sparkline } from "@/components/Sparkline";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
+import {
+  ADMIN_REVOKE_REASON_CODES,
+  revokeReasonLabel,
+} from "@/lib/qrightRevokeReasons";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
-
-const REVOKE_REASON_LABELS: Record<string, string> = {
-  "license-conflict": "License conflict",
-  withdrawn: "Withdrawn by author",
-  dispute: "Disputed authorship",
-  mistake: "Registered by mistake",
-  superseded: "Superseded by new version",
-  other: "Other",
-  "admin-takedown": "Admin takedown",
-};
-
-const ADMIN_REASON_CODES = [
-  "admin-takedown",
-  "dispute",
-  "license-conflict",
-  "mistake",
-  "other",
-];
 
 type AdminRow = {
   id: string;
@@ -63,6 +50,7 @@ const labelStyle: CSSProperties = {
 
 export default function AdminQRightPage() {
   const { showToast } = useToast();
+  const { lang } = useI18n();
   const [hasToken, setHasToken] = useState(false);
   const [whoami, setWhoami] = useState<{ isAdmin: boolean; email: string | null } | null>(null);
   const [items, setItems] = useState<AdminRow[]>([]);
@@ -521,7 +509,7 @@ export default function AdminQRightPage() {
                             </div>
                             {isRev && (
                               <div style={{ marginTop: 6, padding: "6px 8px", borderRadius: 6, background: "rgba(220,38,38,0.06)", fontSize: 11, color: "#7f1d1d" }}>
-                                <strong>{x.revokeReasonCode ? REVOKE_REASON_LABELS[x.revokeReasonCode] || x.revokeReasonCode : "Revoked"}:</strong>{" "}
+                                <strong>{revokeReasonLabel(x.revokeReasonCode, lang)}:</strong>{" "}
                                 {x.revokeReason || "no further detail"}{" "}
                                 <span style={{ color: "#94a3b8" }}>· {x.revokedAt ? new Date(x.revokedAt).toLocaleString() : ""}</span>
                               </div>
@@ -656,9 +644,9 @@ export default function AdminQRightPage() {
               onChange={(e) => setCode(e.target.value)}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, marginBottom: 12 }}
             >
-              {ADMIN_REASON_CODES.map((c) => (
+              {ADMIN_REVOKE_REASON_CODES.map((c) => (
                 <option key={c} value={c}>
-                  {REVOKE_REASON_LABELS[c] || c}
+                  {revokeReasonLabel(c, lang)}
                 </option>
               ))}
             </select>
@@ -714,9 +702,9 @@ export default function AdminQRightPage() {
               onChange={(e) => setBulkCode(e.target.value)}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, marginBottom: 12 }}
             >
-              {ADMIN_REASON_CODES.map((c) => (
+              {ADMIN_REVOKE_REASON_CODES.map((c) => (
                 <option key={c} value={c}>
-                  {REVOKE_REASON_LABELS[c] || c}
+                  {revokeReasonLabel(c, lang)}
                 </option>
               ))}
             </select>

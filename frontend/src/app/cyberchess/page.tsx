@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledge";
+import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
@@ -2482,32 +2483,38 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Tabs */}
-      {!streamerMode&&<div style={{marginBottom:14,display:"flex",justifyContent:"flex-start"}}>
-        <UiTabs<"play"|"puzzles"|"analysis"|"coach">
-          variant="segment"
-          size="md"
-          value={tab}
-          onChange={(t)=>{
-            const fromPuzzle=tab==="puzzles"&&pzCurrent;
-            sTab(t);
-            if(t==="play")sSetup(true);
-            else if(t==="puzzles"){sOver(null);ldPz(0);}
-            else if(t==="coach"){
-              const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
-            }
-            else if(t==="analysis"&&fromPuzzle){
-              const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
-            }
-          }}
-          tabs={[
-            {value:"play",label:"Play",icon:<Icon.Play width={14} height={14}/>},
-            {value:"puzzles",label:"Puzzles",icon:<Icon.Target width={14} height={14}/>},
-            {value:"analysis",label:"Analysis",icon:<span style={{fontSize:13}}>⚡</span>},
-            {value:"coach",label:"Coach",icon:<span style={{fontSize:13}}>🎓</span>},
-          ]}
-        />
-      </div>}
+      {/* Identity tab nav — pill-bar с цветовыми маркерами раздела */}
+      {!streamerMode&&(()=>{
+        const switchTab=(t:"play"|"puzzles"|"analysis"|"coach")=>{
+          const fromPuzzle=tab==="puzzles"&&pzCurrent;
+          sTab(t);
+          if(t==="play")sSetup(true);
+          else if(t==="puzzles"){sOver(null);ldPz(0);}
+          else if(t==="coach"){
+            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
+          }
+          else if(t==="analysis"&&fromPuzzle){
+            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
+          }
+        };
+        const subBy:Record<string,string>={
+          play:"Партии · AI · Hotseat · Варианты",
+          puzzles:`${PUZZLES.length.toLocaleString()} тактических задач`,
+          analysis:"Stockfish · MultiPV · «угадай ход»",
+          coach:"AI-разбор · база знаний · 45 тем"
+        };
+        const sym=tab==="puzzles"?SYM.puzzle:tab==="analysis"?SYM.analysis:tab==="coach"?SYM.coach:SYM.play;
+        return <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            <SymTab sym={SYM.play}     active={tab==="play"}     onClick={()=>switchTab("play")}/>
+            <SymTab sym={SYM.puzzle}   active={tab==="puzzles"}  onClick={()=>switchTab("puzzles")} count={PUZZLES.length}/>
+            <SymTab sym={SYM.coach}    active={tab==="coach"}    onClick={()=>switchTab("coach")}/>
+            <SymTab sym={SYM.analysis} active={tab==="analysis"} onClick={()=>switchTab("analysis")}/>
+          </div>
+          <div style={{flex:1}}/>
+          <SymCrest sym={sym} subtitle={subBy[tab]}/>
+        </div>;
+      })()}
 
       {/* LAUNCHPAD DASHBOARD */}
       {setup&&tab==="play"&&!streamerMode&&(()=>{
@@ -2937,23 +2944,47 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── First-visit hint — гасится после 1-й сохранённой партии ─── */}
-          {savedGames.length===0&&<div className="cc-firstvisit">
-            <div style={{position:"relative",display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
-              <div style={{fontSize:34,lineHeight:1,flexShrink:0}}>♟</div>
-              <div style={{flex:1,minWidth:200}}>
-                <div style={{fontSize:14,fontWeight:900,color:"#065f46",letterSpacing:0.2}}>Привет! Это твой первый визит 👋</div>
-                <div style={{fontSize:13,color:CC.text,marginTop:2,lineHeight:1.55}}>
-                  Начни с быстрой партии (любой уровень AI), задачи или знаменитой партии мастеров. Всё доступно одним кликом ниже.
+          {/* ─── HERO: главный блок «с чего начать» ─── */}
+          {(()=>{
+            const hero=[
+              {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"AI любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
+              {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${PUZZLES.length.toLocaleString()} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+              {sym:SYM.masters,title:"Изучить классику",sub:"Партии чемпионов · режим «угадай ход»",cta:"Открыть",onClick:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
+            ];
+            return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:SPACE[2]}}>
+              {hero.map((h,i)=><button key={i} onClick={h.onClick} className="cc-hero-card" style={{
+                position:"relative",overflow:"hidden",
+                padding:"18px 18px 16px",
+                border:`1px solid ${h.sym.color}33`,
+                borderRadius:RADIUS.lg,
+                background:`linear-gradient(135deg, #fff 0%, ${h.sym.bg} 120%)`,
+                cursor:"pointer",textAlign:"left",
+                boxShadow:SHADOW.sm,
+                transition:`transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.base} ${MOTION.ease}, border-color ${MOTION.base} ${MOTION.ease}`,
+              }}
+              onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="translateY(-2px)";el.style.boxShadow=SHADOW.md;el.style.borderColor=`${h.sym.color}66`}}
+              onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="";el.style.boxShadow=SHADOW.sm;el.style.borderColor=`${h.sym.color}33`}}>
+                {/* Декоративный знак справа сверху */}
+                <div style={{position:"absolute",top:-16,right:-16,width:96,height:96,borderRadius:"50%",background:h.sym.gradient,opacity:0.13,filter:"blur(2px)"}}/>
+                <div style={{position:"relative",display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                  <span style={{
+                    width:42,height:42,borderRadius:"50%",
+                    background:h.sym.gradient,color:"#fff",
+                    display:"inline-flex",alignItems:"center",justifyContent:"center",
+                    boxShadow:`0 8px 20px ${h.sym.ring}`,
+                  }}>
+                    <h.sym.icon size={22} color="#fff"/>
+                  </span>
+                  <div style={{fontSize:10,fontWeight:900,letterSpacing:1.5,color:h.sym.color,textTransform:"uppercase" as const}}>{h.sym.short}</div>
                 </div>
-              </div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                <Btn size="sm" variant="primary" onClick={()=>{sSetup(true);sTab("play")}}>▶ Сыграть</Btn>
-                <Btn size="sm" variant="secondary" onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}>♛ Master Games</Btn>
-                <Btn size="sm" variant="ghost" onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}>🧩 Задача</Btn>
-              </div>
-            </div>
-          </div>}
+                <div style={{position:"relative",fontSize:16,fontWeight:900,color:CC.text,lineHeight:1.2}}>{h.title}</div>
+                <div style={{position:"relative",fontSize:12,color:CC.textDim,marginTop:4,lineHeight:1.45}}>{h.sub}</div>
+                <div style={{position:"relative",marginTop:14,display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:h.sym.color}}>
+                  {h.cta} <span style={{fontSize:14}}>›</span>
+                </div>
+              </button>)}
+            </div>;
+          })()}
 
           {/* ─── Stats strip — горизонтальная компактная полоса ─── */}
           <Card padding={0} tone="surface1" elevation="sm">
@@ -3023,47 +3054,45 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── Главные действия — 5 одинаковых tiles ─── */}
+          {/* ─── Тренажёры и инструменты ─── */}
           <div>
-            <div className="cc-section-h"><span>Играть и учиться</span></div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:SPACE[2]}}>
-              {[
-                {label:"Сыграть",emoji:"▶",sub:"AI · Hotseat · Варианты",col:CC.brand,onClick:()=>{sSetup(true);sTab("play")}},
-                {label:"Задачи",emoji:"🧩",sub:`${PUZZLES.length} puzzles`,col:CC.info,onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-                {label:"Master Games",emoji:"♛",sub:"Знаменитые партии",col:"#854d0e",onClick:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
-                {label:"AI Coach",emoji:"🎓",sub:"Разбор и тренировка",col:CC.brand,onClick:()=>sTab("coach")},
-                {label:"Analysis",emoji:"⚡",sub:"Stockfish · MultiPV",col:CC.accent,onClick:()=>sTab("analysis")},
-              ].map((t,i)=><Card key={i} className="cc-launch-card" padding={SPACE[3]} tone="surface1" onClick={t.onClick} style={{cursor:"pointer"}}>
-                <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                  <div style={{fontSize:24,lineHeight:1,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:RADIUS.md,background:`${t.col}1a`,color:t.col}}>{t.emoji}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.2}}>{t.label}</div>
-                    <div style={{fontSize:11,color:CC.textDim,marginTop:2,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.sub}</div>
-                  </div>
-                </div>
-              </Card>)}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:SPACE[2]}}>
+              <SymBadge sym="training" size="md"/>
+              <span style={{fontSize:11,color:CC.textMute,fontWeight:600}}>{savedGames.length>0?`${savedGames.length} партий в истории`:"Сыграй чтобы открыть статистику"}</span>
             </div>
-          </div>
-
-          {/* ─── Тренажёры и инструменты — компактный ряд ─── */}
-          <div>
-            <div className="cc-section-h"><span>Тренажёры</span></div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:SPACE[2]}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:SPACE[2]}}>
               {[
-                {label:"Coordinates",emoji:"🎯",sub:"30 сек на скорость",onClick:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
-                {label:"Personality",emoji:savedQuizResult?QUIZ_PLAYERS[savedQuizResult.result.topId].emoji:"🧠",sub:savedQuizResult?QUIZ_PLAYERS[savedQuizResult.result.topId].name:"10 вопросов",onClick:()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}},
-                {label:"Game DNA",emoji:"🧬",sub:savedGames.length>0&&gameDna.insights.length>0?`${gameDna.insights.length} инсайтов`:"Сыграй 5+ партий",onClick:()=>sShowGameDna(true)},
-                {label:"Insights",emoji:"📊",sub:savedGames.length>0?`${savedGames.length} партий`:"Сыграй партии",onClick:()=>sShowInsights(true)},
-                {label:"Board Editor",emoji:"♛",sub:"FEN · позиции",onClick:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},
-              ].map((t,i)=><Card key={i} className="cc-launch-card" padding={SPACE[2]} tone="surface1" onClick={t.onClick} style={{cursor:"pointer"}}>
+                {sym:SYM.training,label:"Координаты",sub:"30 сек на скорость",onClick:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
+                {sym:SYM.coach,label:"Личность",sub:savedQuizResult?QUIZ_PLAYERS[savedQuizResult.result.topId].name:"10 вопросов · твой стиль",onClick:()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}},
+                {sym:SYM.analysis,label:"Game DNA",sub:savedGames.length>0&&gameDna.insights.length>0?`${gameDna.insights.length} инсайтов`:"Сыграй 5+ партий",onClick:()=>sShowGameDna(true)},
+                {sym:SYM.tools,label:"Insights",sub:savedGames.length>0?`Анализ ${savedGames.length} партий`:"Сыграй партии",onClick:()=>sShowInsights(true)},
+                {sym:SYM.knowledge,label:"Editor",sub:"FEN · ручная расстановка",onClick:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},
+                {sym:SYM.endgame,label:"Эндшпиль",sub:"6 базовых техник",onClick:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
+                {sym:SYM.tournament,label:"Турниры",sub:"Свисс / Round-Robin",onClick:()=>sShowTournament(true)},
+                {sym:SYM.variants,label:"Варианты",sub:"Fischer 960 · Atomic · KotH +9",onClick:()=>sShowVariants(true)},
+              ].map((t,i)=><button key={i} onClick={t.onClick} className="cc-launch-card" style={{
+                padding:`${SPACE[3]}px ${SPACE[3]}px`,
+                background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,
+                cursor:"pointer",textAlign:"left",
+                transition:`transform ${MOTION.fast} ${MOTION.ease}, border-color ${MOTION.base} ${MOTION.ease}, box-shadow ${MOTION.base} ${MOTION.ease}`,
+              }}
+              onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.borderColor=`${t.sym.color}55`;el.style.boxShadow=SHADOW.sm}}
+              onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.borderColor=CC.border;el.style.boxShadow="none"}}>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                  <div style={{fontSize:18,lineHeight:1,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:RADIUS.md,background:CC.surface2}}>{t.emoji}</div>
+                  <span style={{
+                    width:32,height:32,borderRadius:RADIUS.md,
+                    background:t.sym.bg,color:t.sym.color,
+                    display:"inline-flex",alignItems:"center",justifyContent:"center",
+                    flexShrink:0,
+                  }}>
+                    <t.sym.icon size={18} color={t.sym.color}/>
+                  </span>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:800,color:CC.text,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.label}</div>
+                    <div style={{fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.label}</div>
                     <div style={{fontSize:10,color:CC.textDim,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.sub}</div>
                   </div>
                 </div>
-              </Card>)}
+              </button>)}
             </div>
           </div>
 

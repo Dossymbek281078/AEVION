@@ -22,7 +22,7 @@ export default function PrivacyPage() {
           <p>Your data is used to: provide platform services, verify intellectual property claims, process transactions, prevent fraud, and improve the platform. Compliance data (hashes, signatures) is stored for verification purposes.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>3. Data Security</h2>
-          <p>We use industry-standard encryption, Quantum Shield cryptographic protection (Ed25519 + Shamir Secret Sharing), and secure infrastructure. Your passwords are hashed and never stored in plain text.</p>
+          <p>We use industry-standard encryption and Quantum Shield cryptographic protection: every QRight certificate carries an Ed25519 signature whose private key is split via 2-of-3 Shamir Secret Sharing across independent locations, so AEVION never holds enough of the key to forge or recover it alone. Modern certificates also carry a co-signature held only in your browser and an OpenTimestamps proof anchored in a Bitcoin block — meaning a downloaded verification bundle remains mathematically valid even if AEVION ceases operations. Passwords are hashed and never stored in plain text.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>4. Trust Graph</h2>
           <p>Your public Trust Graph (verification history, voting participation, compliance records) is visible to other users as part of the reputation system. Private data (email, financial details) is never exposed through the Trust Graph.</p>
@@ -46,7 +46,7 @@ export default function PrivacyPage() {
           <p>You have the right to: access your data, correct inaccurate data, request deletion of your account, export your data, and withdraw consent. Contact yahiin1978@gmail.com to exercise these rights.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>8. Data Retention</h2>
-          <p>Account data is retained while your account is active. IP registration records and compliance certificates are retained permanently as part of the evidence trail (this is the core value proposition). Financial records are retained as required by applicable law.</p>
+          <p>Account data is retained while your account is active. IP registration records and compliance certificates are retained permanently as part of the evidence trail — this is the core value proposition. Note that even outside our retention, a Verification Bundle you downloaded remains independently checkable: SHA-256, Ed25519, and the Bitcoin-anchored timestamp are the trust anchors, not our database. Financial records are retained as required by applicable law.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>9. Contact</h2>
           <p>Data Protection Officer: yahiin1978@gmail.com. AEVION, Astana, Kazakhstan.</p>

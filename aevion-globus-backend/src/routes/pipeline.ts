@@ -638,8 +638,9 @@ pipelineRouter.post("/protect", async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message:
-        "Your work is now protected with 3-layer cryptographic security and legal backing",
+      message: cosign
+        ? "Protected. 4 cryptographic layers active (incl. your browser-held author key) + Bitcoin anchor + international legal basis."
+        : "Protected. 3 cryptographic layers active + Bitcoin anchor + international legal basis.",
       qright: {
         id: objectId,
         title,
@@ -665,11 +666,11 @@ pipelineRouter.post("/protect", async (req, res) => {
         shieldId,
         shard: shards[0],
         warning:
-          "Download and store this shard safely. AEVION does NOT keep a copy. With this shard + AEVION vault (or + public witness) you can reconstruct the proof independently. Without this shard, reconstruction requires BOTH AEVION vault AND the public witness.",
+          "Save this shard offline (downloads, USB, password manager) — AEVION never keeps a copy. With your shard plus either the AEVION vault or the public Witness Shard you can reconstruct the proof independently of AEVION. Without it, recovery falls back to the AEVION vault + public Witness — which works, but requires us to be online.",
         recoveryPaths: [
-          "authorShard + AEVION vault",
-          "authorShard + public witness",
-          "AEVION vault + public witness (fallback if author loses shard)",
+          "Your Author Shard + AEVION vault — offline recovery, only AEVION needed for one shard",
+          "Your Author Shard + public Witness Shard — full recovery without AEVION at all",
+          "AEVION vault + public Witness Shard — fallback if you lose your Author Shard",
         ],
       },
       vaultShard: {

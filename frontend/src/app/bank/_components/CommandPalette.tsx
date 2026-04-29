@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { operationsCsvUrl } from "../_lib/api";
 import { clearDemoSeed, hasDemoSeed, seedDemo } from "../_lib/demoSeed";
 import { useCurrency } from "../_lib/CurrencyContext";
 import { CURRENCIES, type CurrencyCode } from "../_lib/currency";
@@ -177,6 +178,19 @@ export function CommandPalette({
       a.push(
         { id: "action.tour", section: actionsSection, icon: "↻", label: t("palette.action.tour.label"), hint: t("palette.action.tour.hint"), keywords: ["onboarding", "guide", "help"], run: relaunchTour },
         { id: "action.demo", section: actionsSection, icon: demoActive ? "✗" : "⟡", label: demoActive ? t("palette.action.demo.clear.label") : t("palette.action.demo.load.label"), hint: demoActive ? t("palette.action.demo.clear.hint") : t("palette.action.demo.load.hint"), keywords: ["seed", "mock", "sample"], run: toggleDemo },
+        {
+          id: "action.exportCsv",
+          section: actionsSection,
+          icon: "↓",
+          label: "Export operations as CSV",
+          hint: "Download /api/qtrade/operations.csv (live ledger snapshot)",
+          keywords: ["csv", "export", "download", "operations", "ledger", "report"],
+          run: () => {
+            const url = operationsCsvUrl();
+            window.open(url, "_blank", "noopener,noreferrer");
+            notify("Operations CSV opened — check your downloads", "info");
+          },
+        },
       );
     }
 

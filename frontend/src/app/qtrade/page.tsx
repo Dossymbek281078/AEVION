@@ -3080,6 +3080,7 @@ export default function QTradePage() {
             <select
               value={topupAccount}
               onChange={(e) => setTopupAccount(e.target.value)}
+              aria-label="Top-up target account"
               style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
             >
               <option value="">Account</option>
@@ -3120,6 +3121,7 @@ export default function QTradePage() {
             <select
               value={from}
               onChange={(e) => setFrom(e.target.value)}
+              aria-label="Transfer from account"
               style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
             >
               <option value="">From account</option>
@@ -3133,6 +3135,7 @@ export default function QTradePage() {
             <select
               value={to}
               onChange={(e) => setTo(e.target.value)}
+              aria-label="Transfer to account"
               style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
             >
               <option value="">To account</option>

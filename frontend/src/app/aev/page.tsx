@@ -508,6 +508,7 @@ export default function AEVPage() {
                     <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>{meta.label}</div>
                   </div>
                   <button onClick={() => toggleMode(mode)} aria-pressed={on}
+                    aria-label={`${on ? "Disable" : "Enable"} ${meta.label} mining mode`}
                     style={{
                       width: 44, height: 24, borderRadius: 12,
                       background: on ? meta.color : "#cbd5e1",
@@ -1882,6 +1883,7 @@ function CurationWall({ wallet, setWallet, pins, setPins, owned }: {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" as const }}>
             <label style={{ fontSize: 11, fontWeight: 800, color: "#475569", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Тип</label>
             <select value={draftKind} onChange={(e) => setDraftKind(e.target.value as PinKind)}
+              aria-label="Pin kind"
               style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }}>
               {(Object.keys(PIN_KIND_META) as PinKind[]).map((k) => (
                 <option key={k} value={k}>{PIN_KIND_META[k].emoji} {PIN_KIND_META[k].label}</option>
@@ -2076,6 +2078,7 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" as const }}>
             <label style={{ fontSize: 11, fontWeight: 800, color: "#475569", letterSpacing: 0.5, textTransform: "uppercase" as const }}>Тема</label>
             <select value={draftTopic} onChange={(e) => setDraftTopic(e.target.value as InsightTopic)}
+              aria-label="Insight topic"
               style={{ padding: "7px 10px", borderRadius: 5, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }}>
               {INSIGHT.topics.map((t) => (
                 <option key={t} value={t}>{TOPIC_META[t].emoji} {TOPIC_META[t].label}</option>

@@ -1018,7 +1018,12 @@ export default function CyberChessPage(){
       if(attemptUci===expectedUci||attemptUci.slice(0,4)===expectedUci.slice(0,4)){
         // Execute user's correct move
         let mv;try{mv=game.move({from,to,promotion:pr||"q"});}catch{mv=null}
-        if(mv){sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1)}
+        if(!mv){
+          // Move object was null — позиция/ход рассинхронизирован. Не идём дальше.
+          showToast("Ошибка: ход не выполнен. Перезагрузи задачу.","error");
+          return false;
+        }
+        sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);
         // Multi-move puzzle: play opponent response + user follow-up from sol[]
         if(pzCurrent.sol.length>1){
           // sol[1] is opponent's response — play it immediately (no think)

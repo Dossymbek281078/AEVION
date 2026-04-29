@@ -1098,7 +1098,7 @@ export default function CyberChessPage(){
                 }
               }
             }catch{}
-          },100); // fast response, no thinking delay
+          },280); // ждём пока закончится slide-animation хода юзера (160ms) + ~100ms на восприятие
         }else{
           // Single-move puzzle — solved
           sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");
@@ -4983,6 +4983,7 @@ export default function CyberChessPage(){
             evalMate={evalMate}
             opening={currentOpening}
             playerColor={pCol}
+            phaseLabel={detectPhase(game.fen(),hist.length).label}
             visible={true}
             onClose={()=>sTab("play")}
             runEngine={runEnginePromise}

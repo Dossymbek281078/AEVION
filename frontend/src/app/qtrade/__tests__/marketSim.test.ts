@@ -18,6 +18,7 @@ import {
   gridFilledCount,
   trailingStopPrice,
   updateTrailingPeak,
+  ocoCancellations,
   fmtUsd,
   fmtPct,
   type Position,
@@ -427,5 +428,47 @@ describe("formatters", () => {
     expect(fmtPct(1.234)).toBe("+1.23%");
     expect(fmtPct(-1.234)).toBe("-1.23%");
     expect(fmtPct(NaN)).toBe("—");
+  });
+});
+
+describe("ocoCancellations", () => {
+  const mk = (id: string, ocoGroupId?: string): LimitOrder => ({
+    id, pair: "BTC/USD", side: "long", qty: 1, triggerPrice: 100, createdTs: 0, ocoGroupId,
+  });
+
+  it("returns empty when no orders filled", () => {
+    expect(ocoCancellations([mk("a", "g1"), mk("b", "g1")], [])).toEqual(new Set());
+  });
+
+  it("returns empty when filled orders have no ocoGroupId", () => {
+    expect(ocoCancellations([mk("a"), mk("b")], ["a"])).toEqual(new Set());
+  });
+
+  it("cancels siblings in the same group", () => {
+    const orders = [mk("a", "g1"), mk("b", "g1"), mk("c", "g2")];
+    expect(ocoCancellations(orders, ["a"])).toEqual(new Set(["b"]));
+  });
+
+  it("does not cancel filled orders themselves", () => {
+    const orders = [mk("a", "g1"), mk("b", "g1")];
+    const out = ocoCancellations(orders, ["a"]);
+    expect(out.has("a")).toBe(false);
+    expect(out.has("b")).toBe(true);
+  });
+
+  it("multiple groups: only filled-group siblings cancelled", () => {
+    const orders = [mk("a", "g1"), mk("b", "g1"), mk("c", "g2"), mk("d", "g2")];
+    expect(ocoCancellations(orders, ["a"])).toEqual(new Set(["b"]));
+    expect(ocoCancellations(orders, ["c"])).toEqual(new Set(["d"]));
+  });
+
+  it("filling both siblings — siblings excluded from cancel set", () => {
+    const orders = [mk("a", "g1"), mk("b", "g1")];
+    expect(ocoCancellations(orders, ["a", "b"])).toEqual(new Set());
+  });
+
+  it("standalone limit (no group) is not cancelled by sibling fill", () => {
+    const orders = [mk("a", "g1"), mk("b", "g1"), mk("c")];
+    expect(ocoCancellations(orders, ["a"])).toEqual(new Set(["b"]));
   });
 });

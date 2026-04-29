@@ -285,6 +285,8 @@ export function fmtPct(n: number): string {
 
 // ─── Limit orders ─────────────────────────────────────────────────
 // Stop / Limit orders that auto-fill when the simulated price crosses the trigger.
+// Optional ocoGroupId — все ордера с тем же ID — One-Cancels-Other:
+// fill одного автоматически отменяет всех братьев в группе.
 export type LimitOrder = {
   id: string;
   pair: PairId;
@@ -292,6 +294,7 @@ export type LimitOrder = {
   qty: number;
   triggerPrice: number;  // execute at-or-better
   createdTs: number;
+  ocoGroupId?: string;   // OCO group — fill одного cancels остальных в той же группе
 };
 
 export function ldLimits(): LimitOrder[] {
@@ -319,6 +322,25 @@ export function checkLimitFills(orders: LimitOrder[], pair: Pair): string[] {
     else if (o.side === "short" && pair.price >= o.triggerPrice) filled.push(o.id);
   }
   return filled;
+}
+
+// OCO cancel: returns set of order IDs that are auto-cancelled because their
+// ocoGroupId matched an order that just filled. Filled orders themselves are
+// not included here (they're consumed separately).
+export function ocoCancellations(orders: LimitOrder[], filledIds: string[]): Set<string> {
+  if (filledIds.length === 0) return new Set();
+  const filledSet = new Set(filledIds);
+  const triggeredGroups = new Set<string>();
+  for (const o of orders) {
+    if (filledSet.has(o.id) && o.ocoGroupId) triggeredGroups.add(o.ocoGroupId);
+  }
+  if (triggeredGroups.size === 0) return new Set();
+  const cancelled = new Set<string>();
+  for (const o of orders) {
+    if (filledSet.has(o.id)) continue;
+    if (o.ocoGroupId && triggeredGroups.has(o.ocoGroupId)) cancelled.add(o.id);
+  }
+  return cancelled;
 }
 
 // ─── Price alerts ─────────────────────────────────────────────────

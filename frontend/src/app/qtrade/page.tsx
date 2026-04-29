@@ -6,7 +6,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import {
   ldPairs, svPairs, ldPositions, svPositions,
-  ldLimits, svLimits, checkLimitFills, buildOrderBook,
+  ldLimits, svLimits, checkLimitFills, ocoCancellations, buildOrderBook,
   ldClosed, svClosed, buildClosed, checkBracketHit, updateTrailingPeak,
   ldAlerts, svAlerts, checkAlertHits,
   tickPair, catchupPair, unrealizedPnl, unrealizedPct,
@@ -125,6 +125,9 @@ export default function QTradePage() {
   const [orderQty, setOrderQty] = useState("1");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [limitPrice, setLimitPrice] = useState("");
+  // OCO bracket inputs (один qty + 2 цены — long-limit ниже / short-limit выше)
+  const [ocoLowPrice, setOcoLowPrice] = useState("");
+  const [ocoHighPrice, setOcoHighPrice] = useState("");
   const [tradeMsg, setTradeMsg] = useState<string | null>(null);
   const [bracketEditId, setBracketEditId] = useState<string | null>(null);
   const [bracketSL, setBracketSL] = useState("");
@@ -276,24 +279,33 @@ export default function QTradePage() {
             for (const id2 of checkLimitFills(prevLimits, p)) fillIds.add(id2);
           }
           if (fillIds.size === 0) return prevLimits;
+          // OCO: cancel siblings of filled orders that share ocoGroupId
+          const ocoCancelled = ocoCancellations(prevLimits, Array.from(fillIds));
           // Convert filled limit orders into positions
           const newPositions: Position[] = [];
           const remaining: LimitOrder[] = [];
           for (const o of prevLimits) {
-            if (!fillIds.has(o.id)) { remaining.push(o); continue; }
-            const pair = next.find((x) => x.id === o.pair);
-            if (!pair) { remaining.push(o); continue; }
-            newPositions.push({
-              id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-              pair: o.pair, side: o.side, qty: o.qty,
-              entryPrice: pair.price, entryTs: Date.now(),
-              entryMode: "maker",
-            });
+            if (fillIds.has(o.id)) {
+              const pair = next.find((x) => x.id === o.pair);
+              if (!pair) { remaining.push(o); continue; }
+              newPositions.push({
+                id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+                pair: o.pair, side: o.side, qty: o.qty,
+                entryPrice: pair.price, entryTs: Date.now(),
+                entryMode: "maker",
+              });
+            } else if (ocoCancelled.has(o.id)) {
+              // dropped — OCO sibling was filled
+              continue;
+            } else {
+              remaining.push(o);
+            }
           }
           if (newPositions.length > 0) {
             setPositions((pp) => [...newPositions, ...pp]);
             const f = newPositions[0];
-            setTradeMsg(`⚡ Limit filled · ${f.side === "long" ? "Long" : "Short"} ${f.qty} ${f.pair.split("/")[0]} @ ${fmtUsd(f.entryPrice)}`);
+            const ocoSuffix = ocoCancelled.size > 0 ? ` · OCO cancelled ${ocoCancelled.size}` : "";
+            setTradeMsg(`⚡ Limit filled · ${f.side === "long" ? "Long" : "Short"} ${f.qty} ${f.pair.split("/")[0]} @ ${fmtUsd(f.entryPrice)}${ocoSuffix}`);
             setTimeout(() => setTradeMsg(null), 3000);
           }
           svLimits(remaining);
@@ -535,6 +547,45 @@ export default function QTradePage() {
     setLimits((prev) => [order, ...prev]);
     setTradeMsg(`📌 Limit ${side === "long" ? "long" : "short"} ${q} ${cur.symbol} @ ${fmtUsd(trigger)}`);
     setTimeout(() => setTradeMsg(null), 2400);
+  };
+
+  // OCO bracket: ставим long-limit ниже + short-limit выше с одним ocoGroupId.
+  // Fill одного отменяет другой. Хороший exit-bracket для уже открытой позиции
+  // (manual SL/TP через limits) или straddle-entry.
+  const submitOcoBracket = (pid: PairId) => {
+    const cur = pairById.get(pid);
+    if (!cur) return;
+    const q = Number(orderQty);
+    if (!Number.isFinite(q) || q <= 0) {
+      setTradeMsg("Введи положительное количество");
+      return;
+    }
+    const fees = ldFees();
+    if (fees.enabled && dailyLossExceeded(closedPositions, fees)) {
+      setTradeMsg(`🛑 Daily-loss limit достигнут — OCO заблокирован`);
+      setTimeout(() => setTradeMsg(null), 3500);
+      return;
+    }
+    const lo = Number(ocoLowPrice);
+    const hi = Number(ocoHighPrice);
+    if (!Number.isFinite(lo) || lo <= 0 || !Number.isFinite(hi) || hi <= 0) {
+      setTradeMsg("Введи обе цены OCO (low + high)");
+      return;
+    }
+    if (lo >= cur.price) { setTradeMsg(`OCO low должна быть ниже текущей ${fmtUsd(cur.price)}`); return; }
+    if (hi <= cur.price) { setTradeMsg(`OCO high должна быть выше текущей ${fmtUsd(cur.price)}`); return; }
+    const groupId = `oco-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const longOrder: LimitOrder = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}-l`,
+      pair: pid, side: "long", qty: q, triggerPrice: lo, createdTs: Date.now(), ocoGroupId: groupId,
+    };
+    const shortOrder: LimitOrder = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}-s`,
+      pair: pid, side: "short", qty: q, triggerPrice: hi, createdTs: Date.now(), ocoGroupId: groupId,
+    };
+    setLimits((prev) => [longOrder, shortOrder, ...prev]);
+    setTradeMsg(`📍 OCO ${q} ${cur.symbol} · long @ ${fmtUsd(lo)} / short @ ${fmtUsd(hi)}`);
+    setTimeout(() => setTradeMsg(null), 2800);
   };
 
   const cancelLimit = (id: string) => {
@@ -1116,6 +1167,54 @@ export default function QTradePage() {
                     ▼ {orderType === "market" ? "SHORT @ market" : "SHORT @ limit"}
                   </button>
                 </div>
+                {/* OCO bracket: paired long-limit (low) + short-limit (high), fill cancels sibling */}
+                <details style={{ marginTop: 10 }}>
+                  <summary
+                    style={{
+                      cursor: "pointer", fontSize: 11, fontWeight: 800, color: "#a5b4fc",
+                      letterSpacing: 0.5, textTransform: "uppercase", padding: "4px 0",
+                    }}
+                  >
+                    📍 OCO bracket — long-low / short-high (fill cancels sibling)
+                  </summary>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" as const, marginTop: 6 }}>
+                    <input
+                      value={ocoLowPrice}
+                      onChange={(e) => setOcoLowPrice(e.target.value)}
+                      type="number" min={0} step="any"
+                      placeholder={`< ${fmtUsd(p.price)}`}
+                      aria-label={`OCO low price for ${p.id}`}
+                      style={{
+                        width: 110, padding: "5px 8px", borderRadius: 4,
+                        border: "1px solid rgba(34,197,94,0.4)", background: "#0f172a", color: "#fff",
+                        fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 700,
+                      }}
+                    />
+                    <span style={{ fontSize: 11, color: "#64748b" }}>/</span>
+                    <input
+                      value={ocoHighPrice}
+                      onChange={(e) => setOcoHighPrice(e.target.value)}
+                      type="number" min={0} step="any"
+                      placeholder={`> ${fmtUsd(p.price)}`}
+                      aria-label={`OCO high price for ${p.id}`}
+                      style={{
+                        width: 110, padding: "5px 8px", borderRadius: 4,
+                        border: "1px solid rgba(220,38,38,0.4)", background: "#0f172a", color: "#fff",
+                        fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 700,
+                      }}
+                    />
+                    <button
+                      onClick={() => submitOcoBracket(p.id)}
+                      style={{
+                        padding: "5px 12px", borderRadius: 5, border: "none",
+                        background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff",
+                        fontSize: 11, fontWeight: 800, cursor: "pointer",
+                      }}
+                    >
+                      📍 Place OCO
+                    </button>
+                  </div>
+                </details>
                 {tradeMsg && (
                   <div style={{ marginTop: 10, fontSize: 12, color: "#86efac", fontWeight: 700 }}>{tradeMsg}</div>
                 )}
@@ -1267,6 +1366,14 @@ export default function QTradePage() {
                       {cur && (
                         <span style={{ marginLeft: 8, color: Math.abs(distance) < 0.5 ? "#fbbf24" : "#64748b", fontSize: 11, fontWeight: 700 }}>
                           ({distance >= 0 ? "+" : ""}{distance.toFixed(2)}% от рынка)
+                        </span>
+                      )}
+                      {o.ocoGroupId && (
+                        <span
+                          style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 999, background: "rgba(99,102,241,0.18)", color: "#a5b4fc", fontSize: 10, fontWeight: 800, letterSpacing: 0.4 }}
+                          title="OCO bracket — fill any sibling cancels этот"
+                        >
+                          📍 OCO
                         </span>
                       )}
                     </span>

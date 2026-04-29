@@ -31,7 +31,9 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 const STORAGE_KEY = "aevion_lang_v1";
 
-const translations: Record<Lang, Record<string, string>> = {
+export const LANG_COOKIE = "aevion_lang_v1";
+
+export const translations: Record<Lang, Record<string, string>> = {
   en: {
     /* Nav & global */
     "nav.demo": "Ecosystem demo",
@@ -10795,7 +10797,7 @@ Object.assign(translations.en, PLANET_ARTIFACT_EXTRA_EN);
 Object.assign(translations.ru, PLANET_ARTIFACT_EXTRA_RU);
 Object.assign(translations.kk, PLANET_ARTIFACT_EXTRA_KK);
 
-function interpolate(s: string, vars?: Record<string, string | number>): string {
+export function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;
   let r = s;
   for (const [k, v] of Object.entries(vars)) {
@@ -10841,6 +10843,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem(STORAGE_KEY, l); } catch {}
     if (typeof document !== "undefined") {
       document.documentElement.lang = l;
+      // Mirror choice into a cookie so SSR pages render with the right language
+      // on the next request — without this the user sees EN on cold loads of
+      // /awards / /[id] / /pitch even after picking RU/KK in the client UI.
+      try {
+        document.cookie = `${LANG_COOKIE}=${l}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+      } catch {}
     }
   }, []);
 

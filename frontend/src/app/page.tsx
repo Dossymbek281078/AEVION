@@ -231,6 +231,7 @@ export default function HomePage() {
       qtradeoffline: "/qtrade",
       qcoreai: "/qcoreai",
       "multichat-engine": "/multichat-engine",
+      healthai: "/healthai",
     }),
     []
   );

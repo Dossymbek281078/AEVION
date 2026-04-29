@@ -119,4 +119,25 @@ export function applyClosedFees(
   return rawPnl - roundTripFee(entryPrice, exitPrice, qty, entryMode, exitMode, cfg);
 }
 
+// One-shot close: returns slipped exit price + net pnl + net pct.
+// `target` carries entry context. When fees disabled — exit/pnl identical
+// to наивный (exitPrice − entryPrice) × qty × side-direction.
+export type CloseInput = { entryPrice: number; side: "long" | "short"; qty: number };
+export type CloseResult = { exitPrice: number; realizedPnl: number; realizedPct: number };
+
+export function closeWithFees(
+  target: CloseInput,
+  rawExitPrice: number,
+  cfg: FeeConfig = ldFees(),
+  exitMode: FeeMode = "taker",
+  entryMode: FeeMode = "taker",
+): CloseResult {
+  const exitPrice = slipExitPrice(rawExitPrice, target.side, cfg);
+  const direction = target.side === "long" ? 1 : -1;
+  const rawPnl = (exitPrice - target.entryPrice) * target.qty * direction;
+  const netPnl = applyClosedFees(rawPnl, target.entryPrice, exitPrice, target.qty, entryMode, exitMode, cfg);
+  const realizedPct = ((exitPrice - target.entryPrice) / target.entryPrice) * 100 * direction;
+  return { exitPrice, realizedPnl: netPnl, realizedPct };
+}
+
 export const __FEES_INTERNAL = { FEES_KEY, sanitize, FEE_BOUNDS };

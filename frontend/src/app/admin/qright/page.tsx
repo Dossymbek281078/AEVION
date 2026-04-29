@@ -80,6 +80,17 @@ export default function AdminQRightPage() {
   const [bulkReason, setBulkReason] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [csvBusy, setCsvBusy] = useState(false);
+  const [audit, setAudit] = useState<
+    {
+      id: string;
+      actor: string | null;
+      action: string;
+      targetId: string | null;
+      payload: Record<string, unknown> | null;
+      at: string;
+    }[]
+  >([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   const authHeaders = useCallback((): HeadersInit => {
     try {
@@ -221,6 +232,28 @@ export default function AdminQRightPage() {
     }
   };
 
+  const loadAudit = useCallback(async () => {
+    if (!whoami?.isAdmin) return;
+    setAuditLoading(true);
+    try {
+      const r = await fetch(apiUrl("/api/qright/admin/audit?limit=50"), {
+        headers: authHeaders(),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        setAudit(data.items || []);
+      }
+    } catch {
+      // Silent — audit is supplementary; failure shouldn't block the page.
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [whoami, authHeaders]);
+
+  useEffect(() => {
+    if (whoami?.isAdmin) loadAudit();
+  }, [whoami, loadAudit]);
+
   const submitBulk = async () => {
     if (selected.size === 0) return;
     setBulkBusy(true);
@@ -247,6 +280,7 @@ export default function AdminQRightPage() {
         setBulkOpen(false);
         setBulkReason("");
         load();
+        loadAudit();
       } else {
         showToast(`Bulk revoke failed: ${data.error || r.status}`, "error");
       }
@@ -271,6 +305,7 @@ export default function AdminQRightPage() {
         setTarget(null);
         setReason("");
         load();
+        loadAudit();
       } else {
         const data = await r.json().catch(() => ({}));
         showToast(`Revoke failed: ${data.error || r.status}`, "error");
@@ -514,6 +549,76 @@ export default function AdminQRightPage() {
                             )}
                           </div>
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ marginTop: 28, marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 900, color: "#0f172a", margin: 0 }}>
+                  Audit log
+                </h2>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                  Last 50 privileged actions, newest first
+                </span>
+                <div style={{ flex: 1 }} />
+                <button
+                  onClick={loadAudit}
+                  disabled={auditLoading}
+                  style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontSize: 11, fontWeight: 700, cursor: auditLoading ? "not-allowed" : "pointer" }}
+                >
+                  {auditLoading ? "Loading…" : "Refresh"}
+                </button>
+              </div>
+              {audit.length === 0 ? (
+                <div style={{ padding: 16, textAlign: "center", color: "#94a3b8", fontSize: 12, ...card }}>
+                  {auditLoading ? "Loading…" : "No audit events yet."}
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {audit.map((row) => {
+                    const isAdmin = row.action.startsWith("admin.");
+                    return (
+                      <div
+                        key={row.id}
+                        style={{
+                          ...card,
+                          padding: "10px 12px",
+                          borderColor: isAdmin ? "rgba(220,38,38,0.2)" : "rgba(15,23,42,0.08)",
+                          background: isAdmin ? "rgba(254,242,242,0.4)" : "#fff",
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 11 }}>
+                          <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: isAdmin ? "rgba(220,38,38,0.1)" : "rgba(13,148,136,0.1)", color: isAdmin ? "#dc2626" : "#0d9488", textTransform: "uppercase", fontFamily: "monospace" }}>
+                            {row.action}
+                          </span>
+                          <span style={{ color: "#475569", fontWeight: 700 }}>
+                            {row.actor || "—"}
+                          </span>
+                          {row.targetId && (
+                            <Link
+                              href={`/qright/object/${row.targetId}`}
+                              target="_blank"
+                              style={{ color: "#0d9488", textDecoration: "none", fontFamily: "monospace", fontSize: 10 }}
+                            >
+                              {row.targetId.slice(0, 8)}…
+                            </Link>
+                          )}
+                          <span style={{ marginLeft: "auto", color: "#94a3b8" }}>
+                            {new Date(row.at).toLocaleString()}
+                          </span>
+                        </div>
+                        {row.payload && Object.keys(row.payload).length > 0 && (
+                          <details style={{ marginTop: 6 }}>
+                            <summary style={{ fontSize: 10, color: "#64748b", cursor: "pointer", fontWeight: 700 }}>
+                              payload
+                            </summary>
+                            <pre style={{ margin: "6px 0 0", fontSize: 10, fontFamily: "monospace", color: "#475569", background: "#f8fafc", padding: 8, borderRadius: 6, overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                              {JSON.stringify(row.payload, null, 2)}
+                            </pre>
+                          </details>
+                        )}
                       </div>
                     );
                   })}

@@ -84,7 +84,52 @@ async function ensureQRightTable() {
     `CREATE INDEX IF NOT EXISTS "QRightFetchSource_obj_day_idx" ON "QRightFetchSource" ("objectId", "day");`
   );
 
+  // Persistent audit log — admin-visible, append-only history of
+  // privileged actions (revoke, admin-takedown, bulk-revoke).
+  // payload is JSONB so we can store reasonCode + reason + counts
+  // without growing the column list every time we add a new action.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QRightAuditLog" (
+      "id" TEXT PRIMARY KEY,
+      "actor" TEXT,
+      "action" TEXT NOT NULL,
+      "targetId" TEXT,
+      "payload" JSONB,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QRightAuditLog_at_idx" ON "QRightAuditLog" ("at" DESC);`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QRightAuditLog_action_idx" ON "QRightAuditLog" ("action");`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QRightAuditLog_target_idx" ON "QRightAuditLog" ("targetId");`
+  );
+
   ensuredTable = true;
+}
+
+// Append an audit row. Fire-and-forget like the counter bumps — the underlying
+// admin/owner action must succeed even if the audit insert hits a transient DB
+// error. We still log to console as a tail-grep fallback so an audit gap is
+// never invisible.
+function recordAudit(
+  actor: string | null,
+  action: string,
+  targetId: string | null,
+  payload: Record<string, unknown> | null
+): void {
+  pool
+    .query(
+      `INSERT INTO "QRightAuditLog" ("id", "actor", "action", "targetId", "payload")
+       VALUES ($1, $2, $3, $4, $5)`,
+      [crypto.randomUUID(), actor, action, targetId, payload ? JSON.stringify(payload) : null]
+    )
+    .catch((err: Error) => {
+      console.warn(`[qright] audit insert failed action=${action}:`, err.message);
+    });
 }
 
 // Extract a privacy-safe bucket key from the Referer header.
@@ -962,10 +1007,19 @@ qrightRouter.post("/admin/revoke-bulk", async (req, res) => {
       revokedRows = updated.rows as { id: string; revokedAt: Date | string }[];
     }
 
+    const actor = auth?.email || auth?.sub || null;
     console.warn(
-      `[qright] admin bulk-revoke by=${auth?.email || auth?.sub} code=${reasonCodeRaw} ` +
+      `[qright] admin bulk-revoke by=${actor} code=${reasonCodeRaw} ` +
         `revoked=${revokedRows.length} already=${alreadyRevoked.length} missing=${notFound.length}`
     );
+    recordAudit(actor, "admin.bulk-revoke", null, {
+      reasonCode: reasonCodeRaw,
+      reason,
+      requested: ids.length,
+      revokedIds: revokedRows.map((r) => r.id),
+      alreadyRevoked,
+      notFound,
+    });
 
     res.json({
       requested: ids.length,
@@ -1028,9 +1082,14 @@ qrightRouter.post("/admin/revoke/:id", async (req, res) => {
       [id, reason, reasonCodeRaw]
     );
 
+    const actor = auth?.email || auth?.sub || null;
     console.warn(
-      `[qright] admin force-revoke id=${id} by=${auth?.email || auth?.sub} code=${reasonCodeRaw}`
+      `[qright] admin force-revoke id=${id} by=${actor} code=${reasonCodeRaw}`
     );
+    recordAudit(actor, "admin.revoke", id, {
+      reasonCode: reasonCodeRaw,
+      reason,
+    });
 
     res.json({
       id: updated.rows[0].id,
@@ -1120,6 +1179,69 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
   }
 });
 
+// 🔹 Admin: read audit log — paginated, filterable by action / targetId.
+//    Append-only; no delete endpoint — audit history is the point.
+qrightRouter.get("/admin/audit", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!isQRightAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+
+    const limitRaw = parseInt(String(req.query.limit || "100"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 100;
+    const action = String(req.query.action || "").trim();
+    const targetId = String(req.query.targetId || "").trim();
+
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (action) {
+      params.push(action);
+      conds.push(`"action" = $${params.length}`);
+    }
+    if (targetId) {
+      params.push(targetId);
+      conds.push(`"targetId" = $${params.length}`);
+    }
+    params.push(limit);
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const result = await pool.query(
+      `SELECT id, actor, action, "targetId", payload, at
+       FROM "QRightAuditLog"
+       ${where}
+       ORDER BY "at" DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      total: result.rowCount,
+      filter: { action: action || null, targetId: targetId || null, limit },
+      items: result.rows.map(
+        (r: { id: string; actor: string | null; action: string; targetId: string | null; payload: unknown; at: Date | string }) => ({
+          id: r.id,
+          actor: r.actor,
+          action: r.action,
+          targetId: r.targetId,
+          payload: r.payload,
+          at: r.at instanceof Date ? r.at.toISOString() : r.at,
+        })
+      ),
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
 // 🔹 Admin probe — lets the frontend /admin/qright check role without leaking data
 qrightRouter.get("/admin/whoami", async (req, res) => {
   const auth = verifyBearerOptional(req);
@@ -1186,6 +1308,11 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
        RETURNING id, "revokedAt", "revokeReason", "revokeReasonCode"`,
       [id, reason, reasonCode]
     );
+
+    recordAudit(auth.email || auth.sub || null, "owner.revoke", id, {
+      reasonCode,
+      reason,
+    });
 
     res.json({
       id: updated.rows[0].id,

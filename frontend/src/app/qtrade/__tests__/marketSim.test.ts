@@ -16,6 +16,8 @@ import {
   makeGridBot,
   tickGridBot,
   gridFilledCount,
+  trailingStopPrice,
+  updateTrailingPeak,
   fmtUsd,
   fmtPct,
   type Position,
@@ -124,6 +126,67 @@ describe("checkBracketHit", () => {
     });
     // price hits TP AND time-stop in the same tick → should report "ts" (early exit guard)
     expect(checkBracketHit(p, 110, entryTs + 60_000)).toBe("ts");
+  });
+});
+
+describe("trailingStopPrice + updateTrailingPeak", () => {
+  it("returns null when trailingPct/peak missing or invalid", () => {
+    expect(trailingStopPrice(mkPosition())).toBeNull();
+    expect(trailingStopPrice(mkPosition({ trailingPct: 5 }))).toBeNull();
+    expect(trailingStopPrice(mkPosition({ trailingPct: 5, trailingPeak: 0 }))).toBeNull();
+    expect(trailingStopPrice(mkPosition({ trailingPct: 0, trailingPeak: 100 }))).toBeNull();
+  });
+
+  it("long: stop = peak × (1 − pct/100)", () => {
+    const p = mkPosition({ side: "long", trailingPct: 5, trailingPeak: 100 });
+    expect(trailingStopPrice(p)).toBeCloseTo(95, 6);
+  });
+
+  it("short: stop = peak × (1 + pct/100)", () => {
+    const p = mkPosition({ side: "short", trailingPct: 5, trailingPeak: 100 });
+    expect(trailingStopPrice(p)).toBeCloseTo(105, 6);
+  });
+
+  it("updateTrailingPeak: long bumps peak when price exceeds", () => {
+    const p = mkPosition({ side: "long", entryPrice: 100, trailingPct: 5, trailingPeak: 100 });
+    expect(updateTrailingPeak(p, 105).trailingPeak).toBe(105);
+    expect(updateTrailingPeak(p, 95).trailingPeak).toBe(100); // unchanged
+  });
+
+  it("updateTrailingPeak: short bumps peak (downward) when price drops", () => {
+    const p = mkPosition({ side: "short", entryPrice: 100, trailingPct: 5, trailingPeak: 100 });
+    expect(updateTrailingPeak(p, 90).trailingPeak).toBe(90);
+    expect(updateTrailingPeak(p, 110).trailingPeak).toBe(100); // unchanged
+  });
+
+  it("updateTrailingPeak: no-op when trailingPct missing", () => {
+    const p = mkPosition({ side: "long", entryPrice: 100 });
+    expect(updateTrailingPeak(p, 200)).toBe(p);
+  });
+
+  it("checkBracketHit: long trailing fires when price retraces below stop", () => {
+    const p = mkPosition({ side: "long", entryPrice: 100, trailingPct: 5, trailingPeak: 110, entryTs: 0 });
+    // stop = 110 × 0.95 = 104.5
+    expect(checkBracketHit(p, 105, 1000)).toBeNull();
+    expect(checkBracketHit(p, 104.5, 1000)).toBe("tr");
+    expect(checkBracketHit(p, 100, 1000)).toBe("tr");
+  });
+
+  it("checkBracketHit: short trailing fires when price rallies above stop", () => {
+    const p = mkPosition({ side: "short", entryPrice: 100, trailingPct: 5, trailingPeak: 90, entryTs: 0 });
+    // stop = 90 × 1.05 = 94.5
+    expect(checkBracketHit(p, 94, 1000)).toBeNull();
+    expect(checkBracketHit(p, 94.5, 1000)).toBe("tr");
+    expect(checkBracketHit(p, 100, 1000)).toBe("tr");
+  });
+
+  it("checkBracketHit: trailing wins over fixed SL/TP when both fire", () => {
+    // Long: peak 110, trail 5% → stop 104.5. Also fixed SL=90, TP=130. Price 102 hits trail-only.
+    const p = mkPosition({ side: "long", entryPrice: 100, takeProfit: 130, stopLoss: 90, trailingPct: 5, trailingPeak: 110, entryTs: 0 });
+    expect(checkBracketHit(p, 102, 1000)).toBe("tr");
+    // Edge: price 130 — TP fires too, но trailing проверяется первым в коде (precedence)
+    // peak не updated (вход с 110 hardcoded), trail-stop = 104.5 < 130, trail НЕ fires в long на восходящем движении
+    expect(checkBracketHit(p, 130, 1000)).toBe("tp");
   });
 });
 

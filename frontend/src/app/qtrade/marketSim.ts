@@ -44,17 +44,49 @@ export type Position = {
   takeProfit?: number;   // абсолютная цена; long — закрытие если price ≥ TP; short — если price ≤ TP
   entryMode?: "maker" | "taker"; // taker — market open; maker — limit fill. undefined ⇒ taker (legacy)
   maxHoldMs?: number;    // time-stop: auto-close после N мс с entryTs. undefined / ≤0 ⇒ нет лимита
+  trailingPct?: number;  // trailing-stop offset в %. Long: stop = peak × (1 − pct/100); short: peak × (1 + pct/100)
+  trailingPeak?: number; // максимальная (long) / минимальная (short) цена с открытия — обновляется на каждом тике
 };
 
-// Returns "tp" / "sl" / "ts" / null. "ts" = time-stop fired — Position
-// held longer than maxHoldMs. Time-stop wins ties с price-bracket если оба
-// триггера сработали в одном тике (защита: time guarantees бесконечно
-// открытая позиция не висит).
-export type BracketReason = "tp" | "sl" | "ts";
+// Returns "tp" / "sl" / "ts" / "tr" / null.
+// - "ts" = time-stop fired (held longer than maxHoldMs)
+// - "tr" = trailing-stop fired (price retraced from peak by trailingPct)
+// Precedence: time-stop → trailing-stop → take-profit → stop-loss. Time + trailing
+// guarantee bounded exposure even when no fixed SL/TP set.
+export type BracketReason = "tp" | "sl" | "ts" | "tr";
+
+// Effective trailing-stop price for the current peak. Returns null when
+// trailingPct/trailingPeak отсутствуют или невалидны.
+export function trailingStopPrice(p: Position): number | null {
+  const pct = p.trailingPct;
+  const peak = p.trailingPeak;
+  if (pct === undefined || pct <= 0) return null;
+  if (peak === undefined || !Number.isFinite(peak) || peak <= 0) return null;
+  return p.side === "long"
+    ? peak * (1 - pct / 100)
+    : peak * (1 + pct / 100);
+}
+
+// Update trailingPeak в зависимости от стороны: long трекает максимум,
+// short — минимум. Returns same instance если ничего не изменилось.
+export function updateTrailingPeak(p: Position, currentPrice: number): Position {
+  if (p.trailingPct === undefined || p.trailingPct <= 0) return p;
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return p;
+  const seed = p.trailingPeak ?? p.entryPrice;
+  if (p.side === "long" && currentPrice > seed) return { ...p, trailingPeak: currentPrice };
+  if (p.side === "short" && currentPrice < seed) return { ...p, trailingPeak: currentPrice };
+  if (p.trailingPeak === undefined) return { ...p, trailingPeak: seed };
+  return p;
+}
 
 export function checkBracketHit(p: Position, price: number, now: number = Date.now()): BracketReason | null {
   if (p.maxHoldMs !== undefined && p.maxHoldMs > 0 && now - p.entryTs >= p.maxHoldMs) {
     return "ts";
+  }
+  const trailStop = trailingStopPrice(p);
+  if (trailStop !== null) {
+    if (p.side === "long" && price <= trailStop) return "tr";
+    if (p.side === "short" && price >= trailStop) return "tr";
   }
   if (p.side === "long") {
     if (p.takeProfit !== undefined && price >= p.takeProfit) return "tp";

@@ -7,7 +7,7 @@ import { apiUrl } from "@/lib/apiBase";
 import {
   ldPairs, svPairs, ldPositions, svPositions,
   ldLimits, svLimits, checkLimitFills, buildOrderBook,
-  ldClosed, svClosed, buildClosed, checkBracketHit,
+  ldClosed, svClosed, buildClosed, checkBracketHit, updateTrailingPeak,
   ldAlerts, svAlerts, checkAlertHits,
   tickPair, catchupPair, unrealizedPnl, unrealizedPct,
   fmtUsd, fmtPct, sparklinePath,
@@ -130,6 +130,7 @@ export default function QTradePage() {
   const [bracketSL, setBracketSL] = useState("");
   const [bracketTP, setBracketTP] = useState("");
   const [bracketTSMin, setBracketTSMin] = useState(""); // time-stop в минутах
+  const [bracketTrailPct, setBracketTrailPct] = useState(""); // trailing-stop offset %
 
   // Watchlist + active pair persistence
   const [watchlist, setWatchlist] = useState<Set<PairId>>(new Set());
@@ -298,14 +299,15 @@ export default function QTradePage() {
           svLimits(remaining);
           return remaining;
         });
-        // Check SL/TP/TS brackets on open positions
+        // Check SL/TP/TS/TR brackets on open positions; update trailing peak first
         setPositions((prevPos) => {
           if (prevPos.length === 0) return prevPos;
           const stillOpen: Position[] = [];
-          const triggered: { pos: Position; reason: "tp" | "sl" | "ts"; price: number }[] = [];
-          for (const pos of prevPos) {
-            const pair = next.find((x) => x.id === pos.pair);
-            if (!pair) { stillOpen.push(pos); continue; }
+          const triggered: { pos: Position; reason: "tp" | "sl" | "ts" | "tr"; price: number }[] = [];
+          for (const rawPos of prevPos) {
+            const pair = next.find((x) => x.id === rawPos.pair);
+            if (!pair) { stillOpen.push(rawPos); continue; }
+            const pos = updateTrailingPeak(rawPos, pair.price);
             const hit = checkBracketHit(pos, pair.price);
             if (hit) triggered.push({ pos, reason: hit, price: pair.price });
             else stillOpen.push(pos);
@@ -332,7 +334,11 @@ export default function QTradePage() {
             });
           }
           const t = triggered[0];
-          const reasonLabel = t.reason === "tp" ? "🎯 TP" : t.reason === "sl" ? "🛑 SL" : "⏱ Time-stop";
+          const reasonLabel =
+            t.reason === "tp" ? "🎯 TP"
+            : t.reason === "sl" ? "🛑 SL"
+            : t.reason === "ts" ? "⏱ Time-stop"
+            : "📉 Trailing";
           setTradeMsg(
             `${reasonLabel} hit · ${t.pos.side === "long" ? "Long" : "Short"} ${t.pos.qty} ${t.pos.pair.split("/")[0]} @ ${fmtUsd(t.price)}` +
             (newClosed[0].realizedPnl >= 0 ? ` · +${fmtUsd(newClosed[0].realizedPnl)}` : ` · ${fmtUsd(newClosed[0].realizedPnl)}`),
@@ -542,15 +548,21 @@ export default function QTradePage() {
     setBracketSL(pos.stopLoss !== undefined ? String(pos.stopLoss) : "");
     setBracketTP(pos.takeProfit !== undefined ? String(pos.takeProfit) : "");
     setBracketTSMin(pos.maxHoldMs !== undefined && pos.maxHoldMs > 0 ? String(Math.round(pos.maxHoldMs / 60_000)) : "");
+    setBracketTrailPct(pos.trailingPct !== undefined && pos.trailingPct > 0 ? String(pos.trailingPct) : "");
   };
 
   const saveBrackets = (posId: string) => {
     const sl = bracketSL.trim() === "" ? undefined : Number(bracketSL);
     const tp = bracketTP.trim() === "" ? undefined : Number(bracketTP);
     const tsMin = bracketTSMin.trim() === "" ? undefined : Number(bracketTSMin);
+    const trailPct = bracketTrailPct.trim() === "" ? undefined : Number(bracketTrailPct);
     if (sl !== undefined && (!Number.isFinite(sl) || sl <= 0)) { setTradeMsg("SL: положительная цена"); return; }
     if (tp !== undefined && (!Number.isFinite(tp) || tp <= 0)) { setTradeMsg("TP: положительная цена"); return; }
     if (tsMin !== undefined && (!Number.isFinite(tsMin) || tsMin <= 0)) { setTradeMsg("Time-stop: положительные минуты"); return; }
+    if (trailPct !== undefined && (!Number.isFinite(trailPct) || trailPct <= 0 || trailPct >= 100)) {
+      setTradeMsg("Trailing: процент в (0, 100)");
+      return;
+    }
     const maxHoldMs = tsMin !== undefined ? Math.round(tsMin * 60_000) : undefined;
     setPositions((prev) => prev.map((p) => {
       if (p.id !== posId) return p;
@@ -564,7 +576,9 @@ export default function QTradePage() {
         if (sl !== undefined && sl <= px) { setTradeMsg(`SL должен быть выше текущей ${fmtUsd(px)} для short`); return p; }
         if (tp !== undefined && tp >= px) { setTradeMsg(`TP должен быть ниже текущей ${fmtUsd(px)} для short`); return p; }
       }
-      return { ...p, stopLoss: sl, takeProfit: tp, maxHoldMs };
+      // Reset trailing peak when toggling on/off — иначе стартуем с current price
+      const trailingPeak = trailPct !== undefined ? px : undefined;
+      return { ...p, stopLoss: sl, takeProfit: tp, maxHoldMs, trailingPct: trailPct, trailingPeak };
     }));
     setBracketEditId(null);
     setTradeMsg("✓ Brackets сохранены");
@@ -572,7 +586,7 @@ export default function QTradePage() {
   };
 
   const clearBrackets = (posId: string) => {
-    setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, stopLoss: undefined, takeProfit: undefined, maxHoldMs: undefined } : p));
+    setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, stopLoss: undefined, takeProfit: undefined, maxHoldMs: undefined, trailingPct: undefined, trailingPeak: undefined } : p));
     setBracketEditId(null);
   };
 
@@ -1292,6 +1306,12 @@ export default function QTradePage() {
                 const hasTP = pos.takeProfit !== undefined;
                 const hasTS = pos.maxHoldMs !== undefined && pos.maxHoldMs > 0;
                 const tsRemainingMin = hasTS ? Math.max(0, (pos.maxHoldMs! - (Date.now() - pos.entryTs)) / 60_000) : 0;
+                const hasTR = pos.trailingPct !== undefined && pos.trailingPct > 0;
+                const trStop = hasTR && pos.trailingPeak
+                  ? (pos.side === "long"
+                      ? pos.trailingPeak * (1 - pos.trailingPct! / 100)
+                      : pos.trailingPeak * (1 + pos.trailingPct! / 100))
+                  : null;
                 return (
                   <div key={pos.id} style={{
                     padding: "8px 12px", borderRadius: 8,
@@ -1340,8 +1360,8 @@ export default function QTradePage() {
                         Close
                       </button>
                     </div>
-                    {/* SL/TP/TS chips (display when set, not editing) */}
-                    {!editing && (hasSL || hasTP || hasTS) && (
+                    {/* SL/TP/TS/TR chips (display when set, not editing) */}
+                    {!editing && (hasSL || hasTP || hasTS || hasTR) && (
                       <div style={{ display: "flex", gap: 6, fontSize: 11, fontFamily: "ui-monospace, monospace", flexWrap: "wrap" as const }}>
                         {hasSL && (
                           <span style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(220,38,38,0.18)", color: "#fca5a5", fontWeight: 700 }}>
@@ -1359,6 +1379,14 @@ export default function QTradePage() {
                             title={`Auto-close через ${tsRemainingMin.toFixed(1)} мин`}
                           >
                             ⏱ TS {tsRemainingMin >= 1 ? `${Math.round(tsRemainingMin)}m` : `${Math.round(tsRemainingMin * 60)}s`}
+                          </span>
+                        )}
+                        {hasTR && trStop !== null && (
+                          <span
+                            style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(168,85,247,0.18)", color: "#d8b4fe", fontWeight: 700 }}
+                            title={`Trail ${pos.trailingPct}% от peak ${fmtUsd(pos.trailingPeak!)} → exit ${fmtUsd(trStop)}`}
+                          >
+                            📉 TR {pos.trailingPct}% @ {fmtUsd(trStop)}
                           </span>
                         )}
                       </div>
@@ -1401,6 +1429,20 @@ export default function QTradePage() {
                           style={{
                             width: 90, padding: "4px 8px", borderRadius: 4,
                             border: "1px solid rgba(251,191,36,0.5)", background: "#0f172a", color: "#fff",
+                            fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 12,
+                          }}
+                        />
+                        <span style={{ fontSize: 10, fontWeight: 800, color: "#d8b4fe", letterSpacing: 0.5, textTransform: "uppercase" as const }}>📉 TR %</span>
+                        <input
+                          value={bracketTrailPct}
+                          onChange={(e) => setBracketTrailPct(e.target.value)}
+                          type="number" min={0} max={100} step="any"
+                          placeholder="trail"
+                          aria-label="Trailing-stop percent"
+                          title="Trailing stop: stop = peak ∓ N% (защищает прибыль). Пусто = выкл"
+                          style={{
+                            width: 80, padding: "4px 8px", borderRadius: 4,
+                            border: "1px solid rgba(168,85,247,0.5)", background: "#0f172a", color: "#fff",
                             fontFamily: "ui-monospace, monospace", fontWeight: 700, fontSize: 12,
                           }}
                         />

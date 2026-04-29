@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { getApiBase } from "@/lib/apiBase";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
 
@@ -18,7 +19,9 @@ const STATIC_ROUTES = [
   "/planet",
   "/pricing",
   "/pricing/affiliate",
+  "/pricing/affiliate-dashboard",
   "/pricing/api-pricing",
+  "/pricing/calculator/embed",
   "/pricing/cases",
   "/pricing/changelog",
   "/pricing/compare",
@@ -28,6 +31,7 @@ const STATIC_ROUTES = [
   "/pricing/integrations",
   "/pricing/migrations",
   "/pricing/partners",
+  "/pricing/partners-portal",
   "/pricing/refund-policy",
   "/pricing/roadmap",
   "/pricing/security",
@@ -40,7 +44,18 @@ const STATIC_ROUTES = [
   "/terms",
 ];
 
-export default function sitemap(): MetadataRoute.Sitemap {
+async function fetchCaseIds(): Promise<string[]> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/pricing/cases`, { cache: "no-store" });
+    if (!r.ok) return [];
+    const j = (await r.json()) as { items?: Array<{ id: string }> };
+    return (j.items ?? []).map((c) => c.id).filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((path) => ({
@@ -65,5 +80,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
-  return [...staticEntries, ...tierEntries, ...industryEntries];
+  const caseIds = await fetchCaseIds();
+  const caseEntries: MetadataRoute.Sitemap = caseIds.map((id) => ({
+    url: `${BASE_URL}/pricing/cases/${id}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.75,
+  }));
+
+  return [...staticEntries, ...tierEntries, ...industryEntries, ...caseEntries];
 }

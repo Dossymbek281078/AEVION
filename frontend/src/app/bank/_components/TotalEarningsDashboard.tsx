@@ -16,6 +16,7 @@ import { Legend, PieChart, StackedAreaChart, type StackedSeries } from "./charts
 import { Sparkline } from "./primitives";
 import { SkeletonBlock } from "./Skeleton";
 import { InfoTooltip } from "./InfoTooltip";
+import { StatusPill } from "./StatusPill";
 import { useI18n } from "@/lib/i18n";
 
 type Period = "30d" | "90d" | "365d";
@@ -104,10 +105,14 @@ export function TotalEarningsDashboard() {
           >
             {t("te.eyebrow")}
           </div>
-          <h2 id="total-earnings-heading" style={{ fontSize: 18, fontWeight: 900, margin: 0, color: "#0f172a" }}>
+          <h2 id="total-earnings-heading" style={{ fontSize: 18, fontWeight: 900, margin: 0, color: "#0f172a", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <InfoTooltip text={t("tip.totalEarnings")} side="bottom">
               <span>{t("te.title")}</span>
             </InfoTooltip>
+            <StatusPill
+              kind="partial"
+              reason="Banking stream is live (real qtrade operations). QRight / CyberChess / Planet streams use seeded ecosystem data until /api/ecosystem/earnings exists."
+            />
           </h2>
         </div>
         <div role="group" aria-label={t("te.period.aria")} style={{ display: "flex", gap: 4 }}>

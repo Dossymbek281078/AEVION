@@ -15,6 +15,7 @@ import {
   type RoyaltyEvent,
 } from "../_lib/royalties";
 import { SkeletonBlock } from "./Skeleton";
+import { StatusPill } from "./StatusPill";
 
 function usePrefersReducedMotion(): boolean {
   const [prm, setPrm] = useState<boolean>(false);
@@ -224,6 +225,10 @@ export function RoyaltyStream() {
           >
             {t("rs.title")}
           </h2>
+          <StatusPill
+            kind="mock"
+            reason="Awaiting /api/qright/royalties + verify webhook → qtrade transfer. Events shown are simulated."
+          />
         </div>
         <button
           onClick={() => setPaused((p) => !p)}

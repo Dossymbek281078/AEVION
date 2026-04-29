@@ -15,6 +15,7 @@ import { useEcosystemData } from "../_lib/EcosystemDataContext";
 import { formatRelative } from "../_lib/format";
 import { Sparkline } from "./primitives";
 import { SkeletonBlock } from "./Skeleton";
+import { StatusPill } from "./StatusPill";
 
 function placeBadge(place: number) {
   const palette: Record<number, { bg: string; fg: string; label: string }> = {
@@ -191,6 +192,10 @@ export function ChessWinnings() {
           >
             {t("cw.title")}
           </h2>
+          <StatusPill
+            kind="mock"
+            reason="Awaiting /api/cyberchess/{results,upcoming} + tournament.finalized webhook. Results & rating are simulated."
+          />
         </div>
         <div
           style={{

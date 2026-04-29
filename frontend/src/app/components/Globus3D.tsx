@@ -529,6 +529,25 @@ export default function Globus3D({
     ((name: string | null, allMarkers: Marker[]) => void) | null
   >(null);
 
+  /** Minimap dot — direct DOM update из RAF tick без React re-render. */
+  const minimapDotRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let raf: number;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const dot = minimapDotRef.current;
+      if (!dot) return;
+      const yaw = yawRef.current;
+      const pitch = pitchRef.current;
+      const r = 26; // half of minimap radius (px)
+      const x = Math.sin(yaw) * Math.cos(pitch) * r;
+      const y = -Math.sin(pitch) * r;
+      dot.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   /** Texture loading progress — albedo / normal / specular / clouds / night. */
   const TEX_TOTAL = 5;
   const [texLoaded, setTexLoaded] = useState(0);
@@ -3287,6 +3306,59 @@ export default function Globus3D({
               ) : null}
             </div>
           )}
+        </div>
+      ) : null}
+
+      {!initError && !isNarrow ? (
+        <div
+          aria-label="View compass minimap"
+          title="Camera angle indicator"
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: 14,
+            width: 64,
+            height: 64,
+            zIndex: 5,
+            pointerEvents: "none",
+          }}
+        >
+          <svg
+            viewBox="-32 -32 64 64"
+            width={64}
+            height={64}
+            style={{ display: "block" }}
+          >
+            <circle
+              cx={0}
+              cy={0}
+              r={28}
+              fill="rgba(12,18,32,0.72)"
+              stroke="rgba(108,214,255,0.45)"
+              strokeWidth={1}
+            />
+            <line x1={-28} x2={28} y1={0} y2={0} stroke="rgba(108,214,255,0.18)" strokeWidth={0.6} />
+            <line x1={0} x2={0} y1={-28} y2={28} stroke="rgba(108,214,255,0.18)" strokeWidth={0.6} />
+            <ellipse cx={0} cy={0} rx={28} ry={11} fill="none" stroke="rgba(108,214,255,0.22)" strokeWidth={0.6} />
+            <ellipse cx={0} cy={0} rx={11} ry={28} fill="none" stroke="rgba(108,214,255,0.22)" strokeWidth={0.6} />
+            <text x={0} y={-30} fill="#94a3b8" fontSize={6} fontWeight={700} textAnchor="middle">N</text>
+          </svg>
+          <div
+            style={{
+              position: "absolute",
+              left: 32,
+              top: 32,
+              width: 6,
+              height: 6,
+              marginLeft: -3,
+              marginTop: -3,
+              borderRadius: 3,
+              background: "#5eead4",
+              boxShadow: "0 0 8px rgba(94,234,212,0.9), 0 0 14px rgba(94,234,212,0.5)",
+              transition: "transform 60ms linear",
+            }}
+            ref={minimapDotRef}
+          />
         </div>
       ) : null}
 

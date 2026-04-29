@@ -1783,17 +1783,21 @@ export default function CyberChessPage(){
     sThink(true);
     const tcMul=tc.ini<=0?1:tc.ini<=60?0.3:tc.ini<=180?0.5:tc.ini<=300?0.7:tc.ini<=600?1:tc.ini<=900?1.5:2;
     const rawDelay=lv.thinkMs*tcMul*(0.7+Math.random()*0.6);
-    // ── Premove-friendly pacing: AI должен дать юзеру время поставить
-    // премувы. Floor зависит от time-control: на Bullet короче, на Rapid+
-    // дольше. Каждый уже стоящий premove уменьшает требуемое окно.
+    // ── Premove-friendly pacing: AI обязан дать юзеру время поставить
+    // премувы. Floor зависит от time-control: Bullet короче, Rapid+ дольше.
+    // Каждый уже стоящий premove уменьшает требуемое окно (slot занят).
+    // Хочешь играть быстрее — ставь премувы заранее.
     const premovesNow=pmsRef.current.length;
     const isBullet=tc.ini>0&&tc.ini<=60;
     const isBlitz=tc.ini>60&&tc.ini<=300;
-    const baseFloor=isBullet?300:isBlitz?420:520;
-    const perPremoveSlot=isBullet?240:isBlitz?320:400;
+    const baseFloor=isBullet?500:isBlitz?700:900;
+    const perPremoveSlot=isBullet?280:isBlitz?380:480;
     const targetSlots=5;
     const slotsLeft=Math.max(0,targetSlots-premovesNow);
     const premoveFloor=baseFloor+slotsLeft*perPremoveSlot;
+    // Bullet 0pm: 500+5×280 = 1900ms · 5pm: 500ms
+    // Blitz  0pm: 700+5×380 = 2600ms · 5pm: 700ms
+    // Rapid  0pm: 900+5×480 = 3300ms · 5pm: 900ms
     const delay=Math.max(rawDelay,premoveFloor);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
@@ -1936,7 +1940,7 @@ export default function CyberChessPage(){
         // Only apply if the board is still on the same position we asked about.
         try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any)}catch{}
         sThink(false);
-      }),Math.max(800,delay));
+      }),delay);
       return()=>clearTimeout(t);
     }
     const t=setTimeout(()=>{
@@ -2095,14 +2099,20 @@ export default function CyberChessPage(){
     const to=sqFromPoint(e.clientX,e.clientY);if(!to||to===d.from)return;
     const f=d.from;
     if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){
-      // ВАЖНО: используем pmsRef (live) а не pms (snapshot) — между быстрыми
-      // последовательными drag-premove'ами state может ещё не успеть закоммититься.
       if(pmsRef.current.length>=pmLim)return;
       const p=game.get(f);const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
       if(p?.type==="p"&&to[1]===promoRank)pre.pr="q";
       sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return;
     }
-    if(vm.has(to)){
+    // КРИТИЧНО: vm — это state из закрытия предыдущего render'а. setSel/setVm в
+    // pointermove ещё не закоммичены в момент pointerup (между двумя event handlers
+    // в одном tick React не успевает rerender'ить). Поэтому пересчитываем легальные
+    // ходы из game напрямую — единственный надёжный источник истины.
+    const legal=(variant==="diceblade"&&dicePieceType
+      ?filterMovesByDice(game.moves({square:f,verbose:true}),dicePieceType)
+      :game.moves({square:f,verbose:true}));
+    const matched=legal.find(m=>m.to===to);
+    if(matched){
       const mp=game.get(f);
       if(mp?.type==="p"&&(to[1]==="1"||to[1]==="8"))sPromo({from:f,to});
       else exec(f,to);
@@ -2840,6 +2850,23 @@ export default function CyberChessPage(){
                     <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>один экран</span>
                   </div>
                 </Btn>
+              </div>
+
+              {/* Premove queue limit — лимит сколько премувов можно поставить в очередь */}
+              <div style={{marginTop:SPACE[3],padding:`${SPACE[2]}px ${SPACE[3]}px`,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`,display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
+                <span style={{fontSize:11,fontWeight:900,letterSpacing:1.2,color:CC.textDim,textTransform:"uppercase" as const,whiteSpace:"nowrap"}}>⚡ Очередь премувов</span>
+                <div style={{display:"flex",gap:4}}>
+                  {[3,5,10,20].map(n=><button key={n} onClick={()=>sPmLim(n)}
+                    style={{padding:"5px 12px",borderRadius:RADIUS.sm,fontSize:12,fontWeight:800,
+                      border:pmLim===n?`2px solid ${CC.info}`:`1px solid ${CC.border}`,
+                      background:pmLim===n?CC.infoSoft:CC.surface1,
+                      color:pmLim===n?CC.info:CC.textDim,cursor:"pointer"}}>{n}</button>)}
+                </div>
+                <span style={{fontSize:11,color:CC.textMute,fontWeight:600}}>или</span>
+                <input type="range" min={1} max={20} value={pmLim}
+                  onChange={e=>sPmLim(+e.target.value)}
+                  style={{flex:1,minWidth:120,maxWidth:200,accentColor:CC.info}}/>
+                <span style={{fontSize:13,fontWeight:900,color:CC.info,fontFamily:"ui-monospace,monospace",minWidth:24,textAlign:"right"}}>{pmLim}</span>
               </div>
             </div>
 

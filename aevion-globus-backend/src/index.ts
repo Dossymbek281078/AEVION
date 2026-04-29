@@ -18,6 +18,7 @@ import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { aevRouter } from "./routes/aev";
+import { buildRouter } from "./routes/build";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -204,6 +205,31 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/aev/wallet/{deviceId}/spend": { post: { summary: "Append spend entry, debit balance, credit lifetimeSpent" } },
       "/api/aev/ledger/{deviceId}": { get: { summary: "Append-only ledger tail (?limit=1..1000, default 100, newest first)" } },
       "/api/aev/stats": { get: { summary: "Global AEV aggregates (wallets, totalMined/Spent/Balance, capRemaining of 21M)" } },
+      "/api/build/health": { get: { summary: "QBuild health + enum dictionaries" } },
+      "/api/build/users/me": { get: { summary: "Current user + build profile" } },
+      "/api/build/profiles": { post: { summary: "Upsert own build profile" } },
+      "/api/build/profiles/{id}": { get: { summary: "Public profile by userId" } },
+      "/api/build/projects": {
+        get: { summary: "List projects (?status=&q=&mine=1&limit=)" },
+        post: { summary: "Create project (Bearer required)" },
+      },
+      "/api/build/projects/{id}": {
+        get: { summary: "Project + vacancies + files + client" },
+        patch: { summary: "Update project (owner or admin)" },
+      },
+      "/api/build/vacancies": { post: { summary: "Create vacancy (project owner only)" } },
+      "/api/build/vacancies/by-project/{id}": { get: { summary: "Vacancies for a project" } },
+      "/api/build/vacancies/{id}": { get: { summary: "Vacancy detail + project link" } },
+      "/api/build/applications": { post: { summary: "Apply to vacancy (Bearer required)" } },
+      "/api/build/applications/my": { get: { summary: "My applications" } },
+      "/api/build/applications/by-vacancy/{id}": { get: { summary: "Vacancy applications (owner only)" } },
+      "/api/build/applications/{id}": { patch: { summary: "Accept/reject application (owner only)" } },
+      "/api/build/messages": {
+        get: { summary: "Inbox summary (latest msg per peer)" },
+        post: { summary: "Send DM" },
+      },
+      "/api/build/messages/{userId}": { get: { summary: "Full thread between current user and peer" } },
+      "/api/build/files/upload": { post: { summary: "Register externally-uploaded file (project owner only)" } },
     },
   });
 });
@@ -227,6 +253,7 @@ app.use("/api/qsign", qsignRouter);
 app.use("/api/quantum-shield", quantumShieldRouter);
 app.use("/api/pipeline", pipelineRouter);
 app.use("/api/bureau", bureauRouter);
+app.use("/api/build", buildRouter);
 app.use("/api/coach", coachRouter);
 // ==========================
 // Auth

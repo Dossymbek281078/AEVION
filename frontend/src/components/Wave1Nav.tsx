@@ -1,6 +1,8 @@
 ﻿"use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ldFees, todayRealizedPnl } from "@/app/qtrade/fees";
+import { ldClosed } from "@/app/qtrade/marketSim";
 type Props = {
   hidePlanet?: boolean;
   variant?: "light" | "dark";
@@ -44,6 +46,68 @@ function AevPill({ variant }: { variant: "light" | "dark" }) {
   );
 }
 
+// Risk pill — sticky daily-loss usage indicator. Видна только когда юзер
+// явно включил fees + cap. Кликабельная → /qtrade. Хёрбит то же самое
+// колор-tier что в FeesPanel: green <75% / amber 75-99% / red ≥100%.
+function RiskPill({ variant }: { variant: "light" | "dark" }) {
+  const [data, setData] = useState<{ enabled: boolean; cap: number; today: number } | null>(null);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const fees = ldFees();
+        const cap = fees.dailyLossLimitUsd ?? 0;
+        if (!fees.enabled || cap <= 0) {
+          setData({ enabled: false, cap: 0, today: 0 });
+          return;
+        }
+        const closed = ldClosed();
+        setData({ enabled: true, cap, today: todayRealizedPnl(closed) });
+      } catch { setData(null); }
+    };
+    read();
+    const id = setInterval(read, 4000);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "aevion_qtrade_fees_v1" || e.key === "aevion_qtrade_closed_v1") read();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => { clearInterval(id); window.removeEventListener("storage", onStorage); };
+  }, []);
+  if (!data || !data.enabled) return null;
+  const usagePct = data.today < 0 ? Math.min(100, (-data.today / data.cap) * 100) : 0;
+  const dark = variant === "dark";
+  const tier = usagePct >= 100 ? "red" : usagePct >= 75 ? "amber" : "green";
+  // Both light + dark — high-contrast colors for a11y.
+  const colors: Record<typeof tier, { fg: string; bg: string; border: string }> = dark
+    ? {
+        green: { fg: "#86efac", bg: "rgba(34,197,94,0.18)", border: "rgba(34,197,94,0.45)" },
+        amber: { fg: "#fde68a", bg: "rgba(251,191,36,0.18)", border: "rgba(251,191,36,0.45)" },
+        red: { fg: "#fca5a5", bg: "rgba(220,38,38,0.18)", border: "rgba(220,38,38,0.50)" },
+      }
+    : {
+        green: { fg: "#15803d", bg: "rgba(34,197,94,0.10)", border: "#86efac" },
+        amber: { fg: "#a16207", bg: "rgba(251,191,36,0.12)", border: "#fde68a" },
+        red: { fg: "#b91c1c", bg: "rgba(220,38,38,0.10)", border: "#fca5a5" },
+      };
+  const c = colors[tier];
+  const sign = data.today >= 0 ? "+" : "";
+  return (
+    <Link
+      href="/qtrade"
+      title={`Daily P&L ${sign}$${data.today.toFixed(2)} · cap $${data.cap.toFixed(0)} · usage ${usagePct.toFixed(0)}%`}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        padding: "2px 9px", borderRadius: 999,
+        background: c.bg, border: `1px solid ${c.border}`, color: c.fg,
+        fontWeight: 800, fontSize: 12, textDecoration: "none",
+        fontFamily: "ui-monospace, SFMono-Regular, monospace",
+      }}
+    >
+      <span aria-hidden>🛡</span>
+      <span>{sign}${data.today.toFixed(2)} · {usagePct.toFixed(0)}%</span>
+    </Link>
+  );
+}
+
 export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
   const sep = variant === "dark" ? "rgba(148,163,184,0.5)" : "#cbd5e1";
   const link = variant === "dark" ? "#e2e8f0" : "#334155";
@@ -72,6 +136,7 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/qtrade" style={{ color: link, fontWeight: 600 }}>QTrade</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
       <AevPill variant={variant} />
+      <RiskPill variant={variant} />
       {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
     </nav>
   );

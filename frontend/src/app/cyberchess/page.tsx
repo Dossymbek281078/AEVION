@@ -1758,7 +1758,8 @@ export default function CyberChessPage(){
     const el=moveAnimElRef.current;if(!el)return;
     // force reflow
     void el.offsetWidth;
-    el.style.transition="transform 160ms cubic-bezier(0.34,1.56,0.64,1)";
+    // Pure ease-out без overshoot — фигура «приземляется» плавно, без bounce-эффекта.
+    el.style.transition="transform 140ms cubic-bezier(0.22,0.61,0.36,1)";
     el.style.transform="translate(0,0)";
   },[moveAnim?.key]);
 
@@ -3387,22 +3388,22 @@ export default function CyberChessPage(){
             <div onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel}
               onClick={e=>{
                 if(Date.now()-recentDragRef.current<150)return;
-                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
-                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq)return;
+                // ВАЖНО: после setPointerCapture(parent) click event target = parent,
+                // не cell. closest вверх не найдёт data-sq. Используем elementFromPoint
+                // по координатам клика — это ловит cell под курсором независимо от capture.
+                const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
                 const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
                 if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();
                 click(sq);
               }}
               onMouseDown={e=>{
                 if(e.button!==2)return;
-                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
-                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq)return;
+                const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
                 rcStartRef.current=sq;e.preventDefault();
               }}
               onMouseUp={e=>{
                 if(e.button!==2)return;
-                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
-                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq)return;
+                const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
                 const start=rcStartRef.current;rcStartRef.current=null;
                 const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
                 if(!annotActive||!start)return;
@@ -3417,8 +3418,8 @@ export default function CyberChessPage(){
                 e.preventDefault();e.stopPropagation();
                 const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
                 if(annotActive)return;
-                const cell=(e.target as HTMLElement).closest?.("[data-sq]") as HTMLElement|null;
-                const sq=cell?.getAttribute("data-sq") as Square|undefined;if(!sq){if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null);return;}
+                const sq=sqFromPoint(e.clientX,e.clientY);
+                if(!sq){if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null);return;}
                 const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
                 if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
                 if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}

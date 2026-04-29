@@ -23,6 +23,8 @@
 import { cookies, headers } from "next/headers";
 import { LANG_COOKIE, interpolate, translations, type Lang } from "./i18n";
 
+export type { Lang } from "./i18n";
+
 function isLang(x: unknown): x is Lang {
   return x === "en" || x === "ru" || x === "kk";
 }

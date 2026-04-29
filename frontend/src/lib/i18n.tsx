@@ -10951,6 +10951,97 @@ Object.assign(translations.en, AWARDS_HUB_EXTRA_EN);
 Object.assign(translations.ru, AWARDS_HUB_EXTRA_RU);
 Object.assign(translations.kk, AWARDS_HUB_EXTRA_KK);
 
+const MODULE_PAGE_EXTRA_EN: Record<string, string> = {
+  "modulePage.fail.h1": "Node card temporarily unavailable",
+  "modulePage.fail.body": "Failed to load module data from the Globus API{status}. Make sure the backend is running (port 4001), or open the home page — the node list loads through the same pipeline.",
+  "modulePage.fail.idLabel": "id:",
+  "modulePage.back": "Back to Globus",
+  "modulePage.runtimeLabel": "runtime:",
+  "modulePage.location.title": "Location (Globus)",
+  "modulePage.future.title": "Future realization place",
+  "modulePage.future.value": "Construction Portal",
+  "modulePage.btn.openModule": "Open module",
+  "modulePage.btn.qrightPrefill": "Create a QRight record at this location",
+  "modulePage.noDedicated": "A dedicated MVP page for this module is in progress — the AEVION pipeline below provides meaningful steps (identity → registry → signature → bureau).",
+  "modulePage.pipeline.title": "Acceleration: same meaningful pipeline for all 27 modules",
+  "modulePage.pipeline.auth.label": "Auth",
+  "modulePage.pipeline.auth.body": "set owner for QRight and future registries.",
+  "modulePage.pipeline.qright.label": "QRight",
+  "modulePage.pipeline.qright.body": "product/idea card linked to a Globus location.",
+  "modulePage.pipeline.qsign.label": "QSign",
+  "modulePage.pipeline.qsign.body": "pre-built module JSON; HMAC signature in one click.",
+  "modulePage.pipeline.bureau.label": "IP Bureau",
+  "modulePage.pipeline.bureau.body": "sign registry object with location context (deep link).",
+  "modulePage.planet.title": "Planet Compliance",
+  "modulePage.planet.body": "Submit this module artifact to Planet — get a compliance certificate, public card and community voting from ecosystem participants.",
+  "modulePage.planet.btn.submit": "Submit artifact to Planet →",
+  "modulePage.planet.btn.lab": "Open Planet lab",
+  "modulePage.planet.btn.awards": "AEVION Awards",
+  "modulePage.footer.priority": "priority:",
+};
+
+const MODULE_PAGE_EXTRA_RU: Record<string, string> = {
+  "modulePage.fail.h1": "Карточка модуля временно недоступна",
+  "modulePage.fail.body": "Не удалось получить данные модуля из Globus API{status}. Убедитесь, что backend запущен (порт 4001), либо откройте главную — список узлов грузится по тому же пайплайну.",
+  "modulePage.fail.idLabel": "id:",
+  "modulePage.back": "К Globus",
+  "modulePage.runtimeLabel": "runtime:",
+  "modulePage.location.title": "Локация (Globus)",
+  "modulePage.future.title": "Место будущей реализации",
+  "modulePage.future.value": "Construction Portal",
+  "modulePage.btn.openModule": "Открыть модуль",
+  "modulePage.btn.qrightPrefill": "Создать QRight-запись для этой локации",
+  "modulePage.noDedicated": "Отдельная MVP-страница для этого модуля в работе — пайплайн AEVION ниже даёт осмысленные шаги (identity → registry → signature → bureau).",
+  "modulePage.pipeline.title": "Ускорение: один осмысленный пайплайн для всех 27 модулей",
+  "modulePage.pipeline.auth.label": "Auth",
+  "modulePage.pipeline.auth.body": "задать владельца для QRight и будущих реестров.",
+  "modulePage.pipeline.qright.label": "QRight",
+  "modulePage.pipeline.qright.body": "карточка продукта / идеи, привязанная к локации Globus.",
+  "modulePage.pipeline.qsign.label": "QSign",
+  "modulePage.pipeline.qsign.body": "готовый JSON модуля; HMAC-подпись одним кликом.",
+  "modulePage.pipeline.bureau.label": "IP Bureau",
+  "modulePage.pipeline.bureau.body": "подписать объект реестра с контекстом локации (deep link).",
+  "modulePage.planet.title": "Planet Compliance",
+  "modulePage.planet.body": "Отправьте артефакт модуля в Planet — получите сертификат compliance, публичную карточку и голосование участников экосистемы.",
+  "modulePage.planet.btn.submit": "Отправить артефакт в Planet →",
+  "modulePage.planet.btn.lab": "Открыть Planet lab",
+  "modulePage.planet.btn.awards": "AEVION Awards",
+  "modulePage.footer.priority": "приоритет:",
+};
+
+const MODULE_PAGE_EXTRA_KK: Record<string, string> = {
+  "modulePage.fail.h1": "Модуль карточкасы уақытша қолжетімсіз",
+  "modulePage.fail.body": "Globus API-дан модуль деректерін алу мүмкін болмады{status}. Backend іске қосылғанына көз жеткізіңіз (порт 4001) немесе бас бетті ашыңыз — түйіндер тізімі сол құбыр арқылы жүктеледі.",
+  "modulePage.fail.idLabel": "id:",
+  "modulePage.back": "Globus-қа",
+  "modulePage.runtimeLabel": "runtime:",
+  "modulePage.location.title": "Орналасуы (Globus)",
+  "modulePage.future.title": "Болашақ іске асу орны",
+  "modulePage.future.value": "Construction Portal",
+  "modulePage.btn.openModule": "Модульді ашу",
+  "modulePage.btn.qrightPrefill": "Осы локация үшін QRight жазбасын жасау",
+  "modulePage.noDedicated": "Бұл модуль үшін бөлек MVP бет дайындалуда — төмендегі AEVION құбыры мағыналы қадамдарды береді (identity → registry → signature → bureau).",
+  "modulePage.pipeline.title": "Жеделдету: 27 модуль үшін бір мағыналы құбыр",
+  "modulePage.pipeline.auth.label": "Auth",
+  "modulePage.pipeline.auth.body": "QRight және болашақ реестрлер үшін иесін орнату.",
+  "modulePage.pipeline.qright.label": "QRight",
+  "modulePage.pipeline.qright.body": "Globus локациясымен байланысқан өнім / идея карточкасы.",
+  "modulePage.pipeline.qsign.label": "QSign",
+  "modulePage.pipeline.qsign.body": "дайын модуль JSON-ы; бір кликпен HMAC қолтаңбасы.",
+  "modulePage.pipeline.bureau.label": "IP Bureau",
+  "modulePage.pipeline.bureau.body": "локация контекстімен реестр объектіне қол қою (deep link).",
+  "modulePage.planet.title": "Planet Compliance",
+  "modulePage.planet.body": "Модуль артефактын Planet-ке жіберіңіз — compliance сертификатын, жария карточканы және экожүйе мүшелерінің дауысын алыңыз.",
+  "modulePage.planet.btn.submit": "Артефактты Planet-ке жіберу →",
+  "modulePage.planet.btn.lab": "Planet lab ашу",
+  "modulePage.planet.btn.awards": "AEVION Awards",
+  "modulePage.footer.priority": "басымдық:",
+};
+
+Object.assign(translations.en, MODULE_PAGE_EXTRA_EN);
+Object.assign(translations.ru, MODULE_PAGE_EXTRA_RU);
+Object.assign(translations.kk, MODULE_PAGE_EXTRA_KK);
+
 export function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;
   let r = s;

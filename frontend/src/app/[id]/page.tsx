@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { getServerT, tServer, type Lang as ServerLang } from "@/lib/i18n-server";
 
 type ModuleRuntime = {
   tier: string;
@@ -64,19 +65,19 @@ export async function generateMetadata({
   }
 }
 
-function ProjectFetchFailed({ id, status }: { id: string; status?: number }) {
+function ProjectFetchFailed({ id, status, lang }: { id: string; status?: number; lang: ServerLang }) {
+  const t = (k: string, v?: Record<string, string | number>) => tServer(lang, k, v);
+  const statusFragment = status != null ? ` (HTTP ${status})` : "";
   return (
     <main>
       <ProductPageShell maxWidth={980}>
         <Wave1Nav />
-        <h1 style={{ fontSize: 24, marginTop: 8 }}>Node card temporarily unavailable</h1>
+        <h1 style={{ fontSize: 24, marginTop: 8 }}>{t("modulePage.fail.h1")}</h1>
         <p style={{ color: "#555", lineHeight: 1.6, maxWidth: 560 }}>
-          Failed to get module data from Globus API
-          {status != null ? ` (HTTP ${status})` : ""}. Make sure backend is running (port 4001), andли
-          open the home page — node list loads via the same pipeline.
+          {t("modulePage.fail.body", { status: statusFragment })}
         </p>
         <p style={{ fontSize: 13, color: "#777" }}>
-          id: <code>{id}</code>
+          {t("modulePage.fail.idLabel")} <code>{id}</code>
         </p>
         <Link
           href="/"
@@ -91,7 +92,7 @@ function ProjectFetchFailed({ id, status }: { id: string; status?: number }) {
             fontWeight: 650,
           }}
         >
-          Back to Globus
+          {t("modulePage.back")}
         </Link>
       </ProductPageShell>
     </main>
@@ -109,6 +110,8 @@ export default async function ProjectByIdPage({
 }) {
   const p = (await Promise.resolve(params)) as { id: string };
   const id = p.id;
+
+  const { t, lang } = await getServerT();
 
   const sp = (await Promise.resolve(searchParams)) as
     | { [key: string]: string | string[] | undefined }
@@ -131,17 +134,17 @@ export default async function ProjectByIdPage({
       signal: AbortSignal.timeout(20_000),
     });
   } catch {
-    return <ProjectFetchFailed id={id} />;
+    return <ProjectFetchFailed id={id} lang={lang} />;
   }
 
   if (res.status === 404) notFound();
-  if (!res.ok) return <ProjectFetchFailed id={id} status={res.status} />;
+  if (!res.ok) return <ProjectFetchFailed id={id} status={res.status} lang={lang} />;
 
   let project: GlobusProject;
   try {
     project = (await res.json()) as GlobusProject;
   } catch {
-    return <ProjectFetchFailed id={id} />;
+    return <ProjectFetchFailed id={id} lang={lang} />;
   }
 
   const specialLinks: Record<string, string> = {
@@ -190,14 +193,14 @@ export default async function ProjectByIdPage({
   })();
 
   return (
-    <main>
+    <main lang={lang}>
       <ProductPageShell maxWidth={980}>
       <Wave1Nav />
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 12, color: "#666" }}>
             {project.code} • {project.kind} • {project.status}
-            {project.runtime?.tier ? ` • runtime: ${project.runtime.tier}` : ""}
+            {project.runtime?.tier ? ` • ${t("modulePage.runtimeLabel")} ${project.runtime.tier}` : ""}
           </div>
           {project.runtime?.hint ? (
             <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{project.runtime.hint}</div>
@@ -218,7 +221,7 @@ export default async function ProjectByIdPage({
             alignSelf: "flex-start",
           }}
         >
-          Back to Globus
+          {t("modulePage.back")}
         </Link>
       </div>
 
@@ -229,14 +232,14 @@ export default async function ProjectByIdPage({
 
         <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
           <div style={{ border: "1px solid rgba(0,0,0,0.08)", padding: 12, borderRadius: 12, minWidth: 220 }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Location (Globus)</div>
+            <div style={{ fontSize: 12, color: "#666" }}>{t("modulePage.location.title")}</div>
             <div style={{ fontWeight: 800, marginTop: 6 }}>
               {city || country ? `${city || "—"}${country ? `, ${country}` : ""}` : "—"}
             </div>
           </div>
           <div style={{ border: "1px solid rgba(0,0,0,0.08)", padding: 12, borderRadius: 12, minWidth: 220 }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Future realization place</div>
-            <div style={{ fontWeight: 800, marginTop: 6 }}>Construction Portal</div>
+            <div style={{ fontSize: 12, color: "#666" }}>{t("modulePage.future.title")}</div>
+            <div style={{ fontWeight: 800, marginTop: 6 }}>{t("modulePage.future.value")}</div>
           </div>
         </div>
 
@@ -254,12 +257,11 @@ export default async function ProjectByIdPage({
                 background: "rgba(0,0,0,0.03)",
               }}
             >
-              Open module
+              {t("modulePage.btn.openModule")}
             </Link>
           ) : (
             <div style={{ color: "#666", fontSize: 13, maxWidth: 520, lineHeight: 1.6 }}>
-              A dedicated MVP page for this module is in progress — the AEVION pipeline below provides
-              meaningful steps (identity → registry → signature → bureau).
+              {t("modulePage.noDedicated")}
             </div>
           )}
 
@@ -275,7 +277,7 @@ export default async function ProjectByIdPage({
               background: "rgba(0,0,0,0.03)",
             }}
           >
-            Create a QRight record at this location
+            {t("modulePage.btn.qrightPrefill")}
           </Link>
         </div>
 
@@ -289,36 +291,36 @@ export default async function ProjectByIdPage({
           }}
         >
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10, color: "#024" }}>
-            Acceleration: same meaningful pipeline for all 27 modules
+            {t("modulePage.pipeline.title")}
           </div>
           <ol style={{ margin: 0, paddingLeft: 18, color: "#333", fontSize: 13, lineHeight: 1.65 }}>
             <li style={{ marginBottom: 8 }}>
               <Link href="/auth" style={{ fontWeight: 650, color: "#024" }}>
-                Auth
+                {t("modulePage.pipeline.auth.label")}
               </Link>
               {" — "}
-              set owner for QRight and future registries.
+              {t("modulePage.pipeline.auth.body")}
             </li>
             <li style={{ marginBottom: 8 }}>
               <Link href={qrightPrefill} style={{ fontWeight: 650, color: "#024" }}>
-                QRight
+                {t("modulePage.pipeline.qright.label")}
               </Link>
               {" — "}
-              product/idea card linked to Globus location.
+              {t("modulePage.pipeline.qright.body")}
             </li>
             <li style={{ marginBottom: 8 }}>
               <Link href={qsignPrefill} style={{ fontWeight: 650, color: "#024" }}>
-                QSign
+                {t("modulePage.pipeline.qsign.label")}
               </Link>
               {" — "}
-              pre-built module JSON; HMAC signature in one click.
+              {t("modulePage.pipeline.qsign.body")}
             </li>
             <li>
               <Link href={bureauPrefill} style={{ fontWeight: 650, color: "#024" }}>
-                IP Bureau
+                {t("modulePage.pipeline.bureau.label")}
               </Link>
               {" — "}
-              sign registry object with location context (deep link).
+              {t("modulePage.pipeline.bureau.body")}
             </li>
           </ol>
         </div>
@@ -335,12 +337,11 @@ export default async function ProjectByIdPage({
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <span style={{ fontSize: 18 }}>🌍</span>
             <div style={{ fontWeight: 800, fontSize: 14, color: "#0f766e" }}>
-              Planet Compliance
+              {t("modulePage.planet.title")}
             </div>
           </div>
           <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, marginBottom: 12 }}>
-            Submit this module artifact to Planet — get a compliance certificate,
-            public card and community voting from ecosystem participants.
+            {t("modulePage.planet.body")}
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link
@@ -356,7 +357,7 @@ export default async function ProjectByIdPage({
                 textDecoration: "none",
               }}
             >
-              Submit artifact to Planet →
+              {t("modulePage.planet.btn.submit")}
             </Link>
             <Link
               href="/planet"
@@ -371,7 +372,7 @@ export default async function ProjectByIdPage({
                 textDecoration: "none",
               }}
             >
-              Open Planet lab
+              {t("modulePage.planet.btn.lab")}
             </Link>
             <Link
               href="/awards"
@@ -386,7 +387,7 @@ export default async function ProjectByIdPage({
                 textDecoration: "none",
               }}
             >
-              AEVION Awards
+              {t("modulePage.planet.btn.awards")}
             </Link>
           </div>
         </div>
@@ -394,7 +395,7 @@ export default async function ProjectByIdPage({
         <hr style={{ margin: "16px 0", borderColor: "rgba(0,0,0,0.08)" }} />
 
         <div style={{ fontSize: 12, color: "#666" }}>
-          id: {project.id} • priority: {project.priority}
+          id: {project.id} • {t("modulePage.footer.priority")} {project.priority}
         </div>
       </div>
       </ProductPageShell>

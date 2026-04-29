@@ -6,6 +6,12 @@
   "outputDirectory": "frontend/.next",
   "devCommand": "cd frontend && npm run dev",
   "regions": ["iad1", "fra1"],
+  "crons": [
+    {
+      "path": "/api/payments/v1/webhooks/process",
+      "schedule": "*/1 * * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/api/openapi.json",

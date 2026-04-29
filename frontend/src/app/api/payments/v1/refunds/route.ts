@@ -13,6 +13,7 @@ import {
 } from "../_lib";
 import { kvList, kvPush } from "../_persist";
 import { logAudit } from "../_audit";
+import { enqueueAttempt } from "../_webhook_queue";
 
 const REFUNDS_KEY = "refunds.v1";
 const REFUND_LIST_CAP = 500;
@@ -180,8 +181,9 @@ async function fanoutRefundWebhook(refund: ApiRefund, origin: string) {
       const sig = signHmac(w.secret, `${ts}.${body}`);
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 4000);
+      let delivered = false;
       try {
-        await fetch(w.url, {
+        const r = await fetch(w.url, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -189,15 +191,30 @@ async function fanoutRefundWebhook(refund: ApiRefund, origin: string) {
             "x-aevion-timestamp": String(ts),
             "x-aevion-event": "payment.refunded",
             "x-aevion-webhook": w.id,
-            "user-agent": `AEVION-Payments/1.3 (+${origin})`,
+            "user-agent": `AEVION-Payments/1.4 (+${origin})`,
           },
           body,
           signal: ctrl.signal,
         });
+        delivered = r.status >= 200 && r.status < 300;
       } catch {
-        // swallow — delivery best effort, retries are TODO v1.4
+        delivered = false;
       } finally {
         clearTimeout(timer);
+      }
+      if (!delivered) {
+        try {
+          await enqueueAttempt({
+            webhook_id: w.id,
+            webhook_url: w.url,
+            webhook_secret: w.secret,
+            event: "payment.refunded",
+            payload: body,
+            immediate: false,
+          });
+        } catch {
+          // queue write failed — give up silently
+        }
       }
     })
   );

@@ -527,6 +527,52 @@ const SPEC = {
         },
       },
     },
+    "/v1/webhooks/process": {
+      get: {
+        summary: "Read webhook delivery queue stats",
+        operationId: "readWebhookQueue",
+        parameters: [
+          {
+            name: "include",
+            in: "query",
+            schema: { type: "string", enum: ["data"] },
+            description: "Set to `data` to return up to 100 queued attempts.",
+          },
+          {
+            name: "run",
+            in: "query",
+            schema: { type: "string", enum: ["1"] },
+            description: "Set to 1 to flush due retries inline.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Queue stats; data optional.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    stats: {
+                      type: "object",
+                      properties: {
+                        total: { type: "integer" },
+                        pending: { type: "integer" },
+                        delivered: { type: "integer" },
+                        failed: { type: "integer" },
+                        next_due_in_sec: { type: ["integer", "null"] },
+                      },
+                    },
+                    data: { type: "array", items: {} },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
     "/v1/audit": {
       get: {
         summary: "Read audit log",

@@ -13,5 +13,6 @@ data/subscriptions.jsonl
 data/affiliate.jsonl
 data/partners.jsonl
 data/edu.jsonl
+data/partner-deals.jsonl
 
 /src/generated/prisma

@@ -1690,6 +1690,34 @@ export default function CyberChessPage(){
     if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
   },[pzSolvedCount,unlockAch]);
 
+  /* ── Move slide animation: после каждого реального хода (lm change)
+     запускаем floating piece от from к to. Хард-таймаут 180ms — потом
+     убираем floating, фигура остаётся на dest cell. ── */
+  const[moveAnim,sMoveAnim]=useState<{from:Square;to:Square;piece:{type:any;color:any};key:number}|null>(null);
+  const moveAnimElRef=useRef<HTMLDivElement|null>(null);
+  const lmKeyRef=useRef("");
+  useEffect(()=>{
+    if(!lm||!lm.from||!lm.to||lm.from===lm.to)return;
+    const key=`${lm.from}-${lm.to}-${bk}`;
+    if(lmKeyRef.current===key)return;
+    lmKeyRef.current=key;
+    const pc=game.get(lm.to as Square);
+    if(!pc)return;
+    sMoveAnim({from:lm.from as Square,to:lm.to as Square,piece:pc,key:Date.now()});
+    const id=window.setTimeout(()=>sMoveAnim(null),180);
+    return()=>window.clearTimeout(id);
+  },[bk,lm,game]);
+  // После mount floating piece — trigger transition через рефлоу, чтобы
+  // initial transform (from→to negative offset) уехал в 0,0.
+  useEffect(()=>{
+    if(!moveAnim)return;
+    const el=moveAnimElRef.current;if(!el)return;
+    // force reflow
+    void el.offsetWidth;
+    el.style.transition="transform 160ms cubic-bezier(0.34,1.56,0.64,1)";
+    el.style.transform="translate(0,0)";
+  },[moveAnim?.key]);
+
   /* ── Premove trigger — синхронно после render'а, без rAF. rAF добавлял
      лишний кадр (~16ms) задержки; премув должен срабатывать сразу как
      пришла очередь юзера. ── */
@@ -3357,18 +3385,45 @@ export default function CyberChessPage(){
                   let bg=lt?bT.light:bT.dark;
                   if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                   const isDragOrigin=ghost?.from===sq;
+                  const isAnimDest=moveAnim?.to===sq;
                   void annotActive;
                   return <div key={sq} data-sq={sq}
                     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
                     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor:!over&&p?.color===pCol?"grab":"default",position:"relative",lineHeight:1,transition:"background 0.15s"}}>
                     {iV&&!p&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
-                    {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
+                    {p&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={p.type} color={p.color}/></div>}
                     {pmToIdx.get(sq)!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:T.blue,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmToIdx.get(sq)}</div>}
                   </div>;
                 }));
               })()}
               {/* Ghost piece following pointer during drag */}
               {ghost&&(()=>{const gp=game.get(ghost.from);if(!gp)return null;return <div style={{position:"fixed",left:ghost.x,top:ghost.y,width:"clamp(60px,9vw,90px)",height:"clamp(60px,9vw,90px)",transform:"translate(-50%,-50%) scale(1.05)",pointerEvents:"none",zIndex:1000,filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.45))"}}><Piece type={gp.type} color={gp.color}/></div>;})()}
+
+              {/* Move slide animation — летящая фигура поверх board */}
+              {moveAnim&&(()=>{
+                const fromF=FILES.indexOf(moveAnim.from[0]);
+                const fromR=8-parseInt(moveAnim.from[1]);
+                const toF=FILES.indexOf(moveAnim.to[0]);
+                const toR=8-parseInt(moveAnim.to[1]);
+                const fc=flip?7-fromF:fromF;
+                const fr=flip?7-fromR:fromR;
+                const tc=flip?7-toF:toF;
+                const tr=flip?7-toR:toR;
+                const dx=(fc-tc)*100,dy=(fr-tr)*100;
+                return <div ref={moveAnimElRef} key={moveAnim.key} style={{
+                  position:"absolute",
+                  left:`${tc*12.5}%`,top:`${tr*12.5}%`,
+                  width:"12.5%",height:"12.5%",
+                  transform:`translate(${dx}%,${dy}%)`,
+                  transition:"transform 0ms",
+                  pointerEvents:"none",zIndex:6,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                }}>
+                  <div style={{width:"88%",height:"88%",filter:"drop-shadow(0 6px 12px rgba(0,0,0,0.32))"}}>
+                    <Piece type={moveAnim.piece.type} color={moveAnim.piece.color}/>
+                  </div>
+                </div>;
+              })()}
 
               {/* Keyboard SAN input — плавающая плашка с буфером */}
               {sanBuf&&<div style={{

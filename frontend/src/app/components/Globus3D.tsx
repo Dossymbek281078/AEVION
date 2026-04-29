@@ -2436,6 +2436,17 @@ export default function Globus3D({
       { timeout: 6000, maximumAge: 5 * 60 * 1000 },
     );
   };
+  const randomCountry = () => {
+    const counts: Record<string, number> = {};
+    for (const m of markers) counts[m.country] = (counts[m.country] || 0) + 1;
+    const eligible = Object.keys(counts).filter((c) => c && c !== "World");
+    if (eligible.length === 0) return;
+    const pool = eligible.filter((c) => c !== selectedCountry);
+    const list = pool.length > 0 ? pool : eligible;
+    const pick = list[Math.floor(Math.random() * list.length)];
+    setSelectedCountry(pick);
+  };
+
   const shareView = async () => {
     if (typeof window === "undefined") return;
     try {
@@ -2905,12 +2916,72 @@ export default function Globus3D({
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               marginTop: 6,
-              marginBottom: 8,
+              marginBottom: 6,
+              display: "flex",
+              alignItems: "baseline",
+              gap: 6,
             }}
           >
-            {selectedCountryMarkers.length}{" "}
-            {selectedCountryMarkers.length === 1 ? "node" : "nodes"}
+            <span>
+              {selectedCountryMarkers.length}{" "}
+              {selectedCountryMarkers.length === 1 ? "node" : "nodes"}
+            </span>
+            {selectedCountryMarkers.length > 0 && markers.length > 0 ? (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: "#94a3b8",
+                  fontWeight: 600,
+                  letterSpacing: "0.04em",
+                  textTransform: "none",
+                }}
+              >
+                · {((selectedCountryMarkers.length / markers.length) * 100).toFixed(1)}% of ecosystem
+              </span>
+            ) : null}
           </div>
+
+          {selectedCountryMarkers.length > 0 ? (
+            <div
+              aria-label="Category breakdown"
+              style={{
+                display: "flex",
+                gap: 2,
+                height: 5,
+                borderRadius: 3,
+                overflow: "hidden",
+                background: "rgba(20,28,46,0.6)",
+                marginBottom: 10,
+              }}
+            >
+              {(["focus", "award", "product", "infra", "qright"] as const).map(
+                (cat) => {
+                  const n = selectedCountryMarkers.filter(
+                    (m) => m.category === cat,
+                  ).length;
+                  if (n === 0) return null;
+                  const colors: Record<string, string> = {
+                    focus: "#fbbf24",
+                    award: "#e879f9",
+                    product: "#7dd3fc",
+                    infra: "#94a3b8",
+                    qright: "#34d399",
+                  };
+                  return (
+                    <div
+                      key={cat}
+                      title={`${cat}: ${n}`}
+                      style={{
+                        flex: n,
+                        background: colors[cat],
+                        opacity: 0.85,
+                      }}
+                    />
+                  );
+                },
+              )}
+            </div>
+          ) : null}
 
           {selectedCountryMarkers.length === 0 ? (
             <div
@@ -3075,6 +3146,15 @@ export default function Globus3D({
             style={ctrlBtn}
           >
             ⌖
+          </button>
+          <button
+            type="button"
+            title="Random country"
+            aria-label="Random country"
+            onClick={randomCountry}
+            style={ctrlBtn}
+          >
+            🎲
           </button>
         </div>
       ) : null}

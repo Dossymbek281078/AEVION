@@ -23,7 +23,7 @@ import {
   type PortfolioStats, type PairBreakdown, type CalendarCell,
 } from "./analytics";
 import { runBacktest, type BacktestResult, type StrategyKind } from "./backtest";
-import { ldFees, slipEntryPrice, closeWithFees } from "./fees";
+import { ldFees, slipEntryPrice, closeWithFees, dailyLossExceeded } from "./fees";
 import FeesPanel from "./FeesPanel";
 
 type Account = {
@@ -284,6 +284,7 @@ export default function QTradePage() {
               id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
               pair: o.pair, side: o.side, qty: o.qty,
               entryPrice: pair.price, entryTs: Date.now(),
+              entryMode: "maker",
             });
           }
           if (newPositions.length > 0) {
@@ -310,7 +311,8 @@ export default function QTradePage() {
           if (triggered.length === 0) return prevPos;
           const fees = ldFees();
           const newClosed: ClosedPosition[] = triggered.map(({ pos, price }) => {
-            const r = closeWithFees(pos, price, fees);
+            // Bracket exit = market = taker; entryMode наследуется с позиции
+            const r = closeWithFees(pos, price, fees, "taker", pos.entryMode ?? "taker");
             return { ...buildClosed(pos, r.exitPrice), realizedPnl: r.realizedPnl, realizedPct: r.realizedPct };
           });
           setClosedPositions((cs) => [...newClosed, ...cs].slice(0, 200));
@@ -485,10 +487,16 @@ export default function QTradePage() {
       setTradeMsg("Введи положительное количество");
       return;
     }
+    const fees = ldFees();
+    if (fees.enabled && dailyLossExceeded(closedPositions, fees)) {
+      setTradeMsg(`🛑 Daily-loss limit ${fmtUsd(fees.dailyLossLimitUsd ?? 0)} достигнут — новые ордера заблокированы`);
+      setTimeout(() => setTradeMsg(null), 3500);
+      return;
+    }
     if (orderType === "market") {
       const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      const fillPrice = slipEntryPrice(cur.price, side, ldFees());
-      const pos: Position = { id, pair: pid, side, qty: q, entryPrice: fillPrice, entryTs: Date.now() };
+      const fillPrice = slipEntryPrice(cur.price, side, fees);
+      const pos: Position = { id, pair: pid, side, qty: q, entryPrice: fillPrice, entryTs: Date.now(), entryMode: "taker" };
       setPositions((prev) => [pos, ...prev]);
       setTradeMsg(`✓ ${side === "long" ? "Long" : "Short"} ${q} ${cur.symbol} @ ${fmtUsd(fillPrice)}`);
       setTimeout(() => setTradeMsg(null), 2400);
@@ -596,7 +604,8 @@ export default function QTradePage() {
       if (!target) return prev;
       const cur = pairById.get(target.pair);
       if (!cur) return prev;
-      const r = closeWithFees(target, cur.price, ldFees());
+      // Manual close = market exit = taker; entryMode из позиции (legacy ⇒ taker)
+      const r = closeWithFees(target, cur.price, ldFees(), "taker", target.entryMode ?? "taker");
       const closed: ClosedPosition = {
         ...buildClosed(target, r.exitPrice),
         realizedPnl: r.realizedPnl,

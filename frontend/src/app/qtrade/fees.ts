@@ -12,6 +12,7 @@ export type FeeConfig = {
   makerBps: number;        // basis points (1 bps = 0.01%) для лимитных ордеров (passive fill)
   takerBps: number;        // bps для маркет ордеров (aggressive fill)
   slippageBps: number;     // bps от цены — entry/exit slip (sym., ухудшает цену)
+  dailyLossLimitUsd?: number; // 0 / undefined = disabled. Опц. cap дневного убытка
 };
 
 export const DEFAULT_FEES: FeeConfig = {
@@ -19,6 +20,7 @@ export const DEFAULT_FEES: FeeConfig = {
   makerBps: 4,             // 0.04%
   takerBps: 10,            // 0.10%
   slippageBps: 5,          // 0.05%
+  dailyLossLimitUsd: 0,    // 0 = no cap
 };
 
 const FEE_BOUNDS = { min: 0, max: 10_000 };  // 100% upper cap
@@ -35,6 +37,7 @@ function sanitize(raw: unknown): FeeConfig {
     makerBps: Number.isFinite(r.makerBps) ? clamp(Number(r.makerBps), FEE_BOUNDS.min, FEE_BOUNDS.max) : DEFAULT_FEES.makerBps,
     takerBps: Number.isFinite(r.takerBps) ? clamp(Number(r.takerBps), FEE_BOUNDS.min, FEE_BOUNDS.max) : DEFAULT_FEES.takerBps,
     slippageBps: Number.isFinite(r.slippageBps) ? clamp(Number(r.slippageBps), FEE_BOUNDS.min, FEE_BOUNDS.max) : DEFAULT_FEES.slippageBps,
+    dailyLossLimitUsd: Number.isFinite(r.dailyLossLimitUsd) ? Math.max(0, Number(r.dailyLossLimitUsd)) : 0,
   };
 }
 
@@ -138,6 +141,38 @@ export function closeWithFees(
   const netPnl = applyClosedFees(rawPnl, target.entryPrice, exitPrice, target.qty, entryMode, exitMode, cfg);
   const realizedPct = ((exitPrice - target.entryPrice) / target.entryPrice) * 100 * direction;
   return { exitPrice, realizedPnl: netPnl, realizedPct };
+}
+
+// Daily loss guard: returns sum of realized P&L for closes WHERE exitTs falls
+// within today's local-day boundary. Negative numbers = loss accumulated.
+export type DailyLossInput = { exitTs: number; realizedPnl: number };
+
+export function todayRealizedPnl(closed: DailyLossInput[], now: number = Date.now()): number {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  let sum = 0;
+  for (const c of closed) {
+    if (c.exitTs >= startMs && c.exitTs <= endMs && Number.isFinite(c.realizedPnl)) {
+      sum += c.realizedPnl;
+    }
+  }
+  return sum;
+}
+
+// True ⇒ today's loss already met or exceeded the configured cap.
+export function dailyLossExceeded(
+  closed: DailyLossInput[],
+  cfg: FeeConfig = ldFees(),
+  now: number = Date.now(),
+): boolean {
+  const cap = cfg.dailyLossLimitUsd ?? 0;
+  if (!Number.isFinite(cap) || cap <= 0) return false;
+  const today = todayRealizedPnl(closed, now);
+  return today <= -cap;
 }
 
 export const __FEES_INTERNAL = { FEES_KEY, sanitize, FEE_BOUNDS };

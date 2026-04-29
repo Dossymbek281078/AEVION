@@ -115,6 +115,13 @@ export default function FeesPanel({ onChange }: Props) {
               onChange={(n) => setCfg((c) => ({ ...c, slippageBps: n }))}
               disabled={!cfg.enabled}
             />
+            <FeeInput
+              label="Daily-loss USD"
+              hint="0 = без лимита"
+              value={cfg.dailyLossLimitUsd ?? 0}
+              onChange={(n) => setCfg((c) => ({ ...c, dailyLossLimitUsd: n }))}
+              disabled={!cfg.enabled}
+            />
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: "#94a3b8" }}>

@@ -10,6 +10,8 @@ import {
   roundTripFee,
   applyClosedFees,
   closeWithFees,
+  todayRealizedPnl,
+  dailyLossExceeded,
   __FEES_INTERNAL,
   type FeeConfig,
 } from "../fees";
@@ -19,6 +21,7 @@ const enabledCfg: FeeConfig = {
   makerBps: 4,    // 0.04%
   takerBps: 10,   // 0.10%
   slippageBps: 5, // 0.05%
+  dailyLossLimitUsd: 0,
 };
 
 describe("fees · ldFees / svFees", () => {
@@ -178,5 +181,54 @@ describe("fees · closeWithFees", () => {
     // raw loss: (90 × (1-slip) - 100) × 2 ≈ -20.09
     // fees deducted further → even more negative
     expect(r.realizedPnl).toBeLessThan(-20);
+  });
+});
+
+describe("fees · todayRealizedPnl + dailyLossExceeded", () => {
+  // Pin "now" to noon UTC so day-window math is deterministic
+  const now = new Date(2026, 3, 29, 12, 0, 0).getTime();
+  const dayStart = new Date(2026, 3, 29, 0, 0, 0).getTime();
+  const yesterdayMid = new Date(2026, 3, 28, 12, 0, 0).getTime();
+
+  it("excludes closes outside today's window", () => {
+    expect(todayRealizedPnl([
+      { exitTs: yesterdayMid, realizedPnl: -100 },
+      { exitTs: dayStart - 1, realizedPnl: -50 },
+    ], now)).toBe(0);
+  });
+
+  it("sums today's realized P&L", () => {
+    expect(todayRealizedPnl([
+      { exitTs: now, realizedPnl: 5 },
+      { exitTs: now - 60_000, realizedPnl: -8 },
+      { exitTs: yesterdayMid, realizedPnl: -1000 }, // ignored
+    ], now)).toBeCloseTo(-3, 6);
+  });
+
+  it("ignores non-finite pnl entries", () => {
+    expect(todayRealizedPnl([
+      { exitTs: now, realizedPnl: NaN },
+      { exitTs: now, realizedPnl: 7 },
+    ], now)).toBe(7);
+  });
+
+  it("dailyLossExceeded false when cap is 0 / undefined", () => {
+    const cfg: FeeConfig = { ...DEFAULT_FEES, dailyLossLimitUsd: 0 };
+    expect(dailyLossExceeded([{ exitTs: now, realizedPnl: -9999 }], cfg, now)).toBe(false);
+  });
+
+  it("dailyLossExceeded true when today's loss ≥ cap", () => {
+    const cfg: FeeConfig = { ...DEFAULT_FEES, dailyLossLimitUsd: 100 };
+    expect(dailyLossExceeded([{ exitTs: now, realizedPnl: -101 }], cfg, now)).toBe(true);
+    expect(dailyLossExceeded([{ exitTs: now, realizedPnl: -100 }], cfg, now)).toBe(true);
+    expect(dailyLossExceeded([{ exitTs: now, realizedPnl: -99 }], cfg, now)).toBe(false);
+  });
+
+  it("dailyLossExceeded ignores yesterday's losses", () => {
+    const cfg: FeeConfig = { ...DEFAULT_FEES, dailyLossLimitUsd: 50 };
+    expect(dailyLossExceeded([
+      { exitTs: yesterdayMid, realizedPnl: -1000 },
+      { exitTs: now, realizedPnl: -10 },
+    ], cfg, now)).toBe(false);
   });
 });

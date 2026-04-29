@@ -42,6 +42,7 @@ export type Position = {
   entryTs: number;
   stopLoss?: number;     // абсолютная цена; long — закрытие если price ≤ SL; short — если price ≥ SL
   takeProfit?: number;   // абсолютная цена; long — закрытие если price ≥ TP; short — если price ≤ TP
+  entryMode?: "maker" | "taker"; // taker — market open; maker — limit fill. undefined ⇒ taker (legacy)
 };
 
 // Returns "tp" / "sl" / null — какой триггер сработал у позиции при текущей цене.

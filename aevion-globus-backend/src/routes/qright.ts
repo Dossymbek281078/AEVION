@@ -68,12 +68,54 @@ async function ensureQRightTable() {
     `CREATE INDEX IF NOT EXISTS "QRightFetchDaily_day_idx" ON "QRightFetchDaily" ("day");`
   );
 
+  // Per-source bucket — tracks which third-party hostnames are loading the
+  // embed/badge for an object. Privacy: hostname only (no path, no query,
+  // no IP, no UA). Direct fetches with no Referer collapse to "(direct)".
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QRightFetchSource" (
+      "objectId" TEXT NOT NULL,
+      "sourceHost" TEXT NOT NULL,
+      "day" DATE NOT NULL,
+      "fetches" BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY ("objectId", "sourceHost", "day")
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QRightFetchSource_obj_day_idx" ON "QRightFetchSource" ("objectId", "day");`
+  );
+
   ensuredTable = true;
+}
+
+// Extract a privacy-safe bucket key from the Referer header.
+// We keep only the hostname (no path, no query, no port, no protocol)
+// and lowercase + strip leading "www." so example.com and www.example.com
+// share a row. Anything that doesn't parse → "(direct)".
+function refererHost(req: { headers: Record<string, string | string[] | undefined> }): string {
+  const raw = req.headers["referer"] || req.headers["referrer"];
+  const ref = Array.isArray(raw) ? raw[0] : raw;
+  if (!ref || typeof ref !== "string") return "(direct)";
+  try {
+    const u = new URL(ref);
+    let host = u.hostname.toLowerCase();
+    if (host.startsWith("www.")) host = host.slice(4);
+    if (!host) return "(direct)";
+    // Defensive cap — a malformed/abusive Referer with a 2 KB hostname
+    // shouldn't be allowed to bloat the row.
+    return host.slice(0, 253);
+  } catch {
+    return "(direct)";
+  }
 }
 
 // Best-effort counter bump — fire-and-forget. Errors here must never break
 // the embed/badge response, since these endpoints are loaded by third parties.
-function bumpFetchCounter(id: string): void {
+// Bumps three counters in parallel: total on QRightObject, daily bucket on
+// QRightFetchDaily, and per-source-host bucket on QRightFetchSource.
+function bumpEmbedCounters(
+  req: { headers: Record<string, string | string[] | undefined> },
+  id: string
+): void {
   pool
     .query(
       `UPDATE "QRightObject"
@@ -93,6 +135,18 @@ function bumpFetchCounter(id: string): void {
     )
     .catch((err: Error) => {
       console.warn(`[qright] daily counter bump failed for ${id}:`, err.message);
+    });
+  const host = refererHost(req);
+  pool
+    .query(
+      `INSERT INTO "QRightFetchSource" ("objectId", "sourceHost", "day", "fetches")
+       VALUES ($1, $2, CURRENT_DATE, 1)
+       ON CONFLICT ("objectId", "sourceHost", "day")
+       DO UPDATE SET "fetches" = "QRightFetchSource"."fetches" + 1`,
+      [id, host]
+    )
+    .catch((err: Error) => {
+      console.warn(`[qright] source counter bump failed for ${id}:`, err.message);
     });
 }
 
@@ -268,13 +322,24 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
     const daysRaw = parseInt(String(req.query.days || "30"), 10);
     const days = Number.isFinite(daysRaw) ? Math.max(7, Math.min(180, daysRaw)) : 30;
 
-    const series = await pool.query(
-      `SELECT to_char("day", 'YYYY-MM-DD') AS day, "fetches"::bigint AS fetches
-       FROM "QRightFetchDaily"
-       WHERE "objectId" = $1 AND "day" >= CURRENT_DATE - $2::int
-       ORDER BY "day" ASC`,
-      [id, days]
-    );
+    const [series, sources] = await Promise.all([
+      pool.query(
+        `SELECT to_char("day", 'YYYY-MM-DD') AS day, "fetches"::bigint AS fetches
+         FROM "QRightFetchDaily"
+         WHERE "objectId" = $1 AND "day" >= CURRENT_DATE - $2::int
+         ORDER BY "day" ASC`,
+        [id, days]
+      ),
+      pool.query(
+        `SELECT "sourceHost" AS host, SUM("fetches")::bigint AS fetches
+         FROM "QRightFetchSource"
+         WHERE "objectId" = $1 AND "day" >= CURRENT_DATE - $2::int
+         GROUP BY 1
+         ORDER BY 2 DESC
+         LIMIT 20`,
+        [id, days]
+      ),
+    ]);
 
     res.json({
       id: row.id,
@@ -291,6 +356,13 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
         days,
         points: series.rows.map((r: { day: string; fetches: string }) => ({
           day: r.day,
+          fetches: Number(r.fetches) || 0,
+        })),
+      },
+      topSources: {
+        days,
+        hosts: sources.rows.map((r: { host: string; fetches: string }) => ({
+          host: r.host,
           fetches: Number(r.fetches) || 0,
         })),
       },
@@ -463,7 +535,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       return res.status(304).end();
     }
 
-    bumpFetchCounter(row.id);
+    bumpEmbedCounters(req, row.id);
     res.setHeader("ETag", etag);
     res.setHeader("Cache-Control", "public, max-age=120");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -582,7 +654,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
 
     const dateLabel = createdAt.toISOString().slice(0, 10);
 
-    bumpFetchCounter(row.id);
+    bumpEmbedCounters(req, row.id);
 
     if (row.revokedAt) {
       // Revoked: keep the badge so the third-party site doesn't 404, but

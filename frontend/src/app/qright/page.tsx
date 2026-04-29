@@ -147,7 +147,17 @@ export default function QRightPage() {
   const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
   const [revokeText, setRevokeText] = useState<string>("");
   const [revokeBusy, setRevokeBusy] = useState(false);
-  const [stats, setStats] = useState<Record<string, { embedFetches: number; lastFetchedAt: string | null; series: { day: string; fetches: number }[] }>>({});
+  const [stats, setStats] = useState<
+    Record<
+      string,
+      {
+        embedFetches: number;
+        lastFetchedAt: string | null;
+        series: { day: string; fetches: number }[];
+        topSources: { host: string; fetches: number }[];
+      }
+    >
+  >({});
   useEffect(() => {
     try {
       setHasAuth(!!localStorage.getItem(TOKEN_KEY));
@@ -419,6 +429,7 @@ export default function QRightPage() {
               embedFetches: data.embedFetches || 0,
               lastFetchedAt: data.lastFetchedAt || null,
               series: (data.series?.points || []) as { day: string; fetches: number }[],
+              topSources: (data.topSources?.hosts || []) as { host: string; fetches: number }[],
             },
           ] as const;
         } catch {
@@ -427,7 +438,15 @@ export default function QRightPage() {
       })
     ).then((results) => {
       if (cancelled) return;
-      const next: Record<string, { embedFetches: number; lastFetchedAt: string | null; series: { day: string; fetches: number }[] }> = {};
+      const next: Record<
+        string,
+        {
+          embedFetches: number;
+          lastFetchedAt: string | null;
+          series: { day: string; fetches: number }[];
+          topSources: { host: string; fetches: number }[];
+        }
+      > = {};
       for (const r of results) if (r) next[r[0]] = r[1];
       if (Object.keys(next).length) setStats((prev) => ({ ...prev, ...next }));
     });
@@ -1143,15 +1162,46 @@ export default function QRightPage() {
                         SHA-256: {x.contentHash}
                       </div>
                       {registryScope === "mine" && stats[x.id] && (
-                        <div style={{ marginTop: 6, fontSize: 11, color: "#64748b", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                          <span>👁 {stats[x.id].embedFetches.toLocaleString()} fetches</span>
-                          {stats[x.id].series.length > 0 && (
-                            <Sparkline points={stats[x.id].series} width={140} height={24} />
+                        <>
+                          <div style={{ marginTop: 6, fontSize: 11, color: "#64748b", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                            <span>👁 {stats[x.id].embedFetches.toLocaleString()} fetches</span>
+                            {stats[x.id].series.length > 0 && (
+                              <Sparkline points={stats[x.id].series} width={140} height={24} />
+                            )}
+                            {stats[x.id].lastFetchedAt && (
+                              <span style={{ color: "#94a3b8" }}>· last {new Date(stats[x.id].lastFetchedAt!).toLocaleString()}</span>
+                            )}
+                          </div>
+                          {stats[x.id].topSources.length > 0 && (
+                            <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                              <span style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                Top sources (30d)
+                              </span>
+                              {stats[x.id].topSources.slice(0, 5).map((s) => (
+                                <span
+                                  key={s.host}
+                                  title={`${s.host} — ${s.fetches.toLocaleString()} fetches`}
+                                  style={{
+                                    fontSize: 10,
+                                    fontFamily: "monospace",
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    background: s.host === "(direct)" ? "rgba(148,163,184,0.15)" : "rgba(13,148,136,0.1)",
+                                    color: s.host === "(direct)" ? "#475569" : "#0d9488",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {s.host} · {s.fetches.toLocaleString()}
+                                </span>
+                              ))}
+                              {stats[x.id].topSources.length > 5 && (
+                                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>
+                                  +{stats[x.id].topSources.length - 5} more
+                                </span>
+                              )}
+                            </div>
                           )}
-                          {stats[x.id].lastFetchedAt && (
-                            <span style={{ color: "#94a3b8" }}>· last {new Date(stats[x.id].lastFetchedAt!).toLocaleString()}</span>
-                          )}
-                        </div>
+                        </>
                       )}
                       <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}

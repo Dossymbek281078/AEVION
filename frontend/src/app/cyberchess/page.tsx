@@ -7,6 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
+import CoachKnowledge from "./CoachKnowledge";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
@@ -370,6 +371,7 @@ export default function CyberChessPage(){
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
   const[coachAIEnabled,sCoachAIEnabled]=useState(true);
+  const[showKnowledge,sShowKnowledge]=useState(false);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
@@ -4526,6 +4528,8 @@ export default function CyberChessPage(){
                 }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🔤 FEN</button>
 
                 <button onClick={()=>{sEditorMode(true)}} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>✏️ Расставить вручную</button>
+
+                <button onClick={()=>sShowKnowledge(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #a7f3d0`,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#065f46",textAlign:"left"}}>📚 База знаний</button>
               </div>
             </div>
             {/* Combined AI Toggle + Level selector */}
@@ -4635,6 +4639,20 @@ export default function CyberChessPage(){
             runEngine={runEnginePromise}
             quickEval={quickEvalPromise}
           />}
+
+          <CoachKnowledge
+            visible={showKnowledge}
+            onClose={()=>sShowKnowledge(false)}
+            onLoadPosition={(fen,hint)=>{
+              try{
+                const g=new Chess(fen);
+                setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
+                sShowKnowledge(false);
+                if(hint)showToast(hint,"info");
+                else showToast("Позиция загружена","success");
+              }catch{showToast("Неверная позиция","error")}
+            }}
+          />
 
           {tab==="play"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:13,color:T.dim}}>{s.l}</div></div>)}

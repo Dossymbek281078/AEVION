@@ -1,16 +1,19 @@
 // Persistence adapter for Payments Rail.
 //
 // Two backends:
-//   1. "kv"     — Vercel KV (Upstash REST). Activated when both
-//                 KV_REST_API_URL and KV_REST_API_TOKEN env vars are set.
+//   1. "kv"     — Upstash Redis REST (used by Vercel KV and the Upstash
+//                 marketplace integration). Activated when EITHER pair of
+//                 env vars is present:
+//                   • KV_REST_API_URL + KV_REST_API_TOKEN          (Vercel KV)
+//                   • UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+//                                                                  (Upstash)
 //   2. "memory" — globalThis Map (default). Survives warm starts on the same
-//                 serverless instance, lost on cold start. Same behavior as
-//                 the legacy `store` exported from _lib.ts.
+//                 serverless instance, lost on cold start.
 //
 // Wire-up on Vercel:
-//   1. Vercel dashboard → Storage → Create Database → KV
-//   2. Connect to project → env vars KV_REST_API_URL + KV_REST_API_TOKEN
-//      are auto-injected. No code change needed.
+//   1. Project → Storage → Create Database → pick "Upstash" (Redis).
+//   2. Click "Connect to Project". Env vars are auto-injected.
+//   3. Vercel re-deploys; /api/health flips persistence to "kv".
 
 type KvBackend = "kv" | "memory";
 
@@ -22,16 +25,23 @@ const memMap = (() => {
   return g.__aevionPayKv;
 })();
 
+function creds(): { url: string; tok: string } | null {
+  const url =
+    process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const tok =
+    process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && tok) return { url, tok };
+  return null;
+}
+
 function backend(): KvBackend {
-  const url = process.env.KV_REST_API_URL;
-  const tok = process.env.KV_REST_API_TOKEN;
-  return url && tok ? "kv" : "memory";
+  return creds() ? "kv" : "memory";
 }
 
 async function kvFetch(path: string[], init?: RequestInit): Promise<unknown> {
-  const url = process.env.KV_REST_API_URL;
-  const tok = process.env.KV_REST_API_TOKEN;
-  if (!url || !tok) throw new Error("kv-not-configured");
+  const c = creds();
+  if (!c) throw new Error("kv-not-configured");
+  const { url, tok } = c;
   const r = await fetch(`${url}/${path.map(encodeURIComponent).join("/")}`, {
     ...init,
     headers: {

@@ -16,22 +16,23 @@ After deploy you should be able to hit:
 - `https://<project>.vercel.app/api/health` — should report `{"status":"ok","persistence":"memory"}`
 - `https://<project>.vercel.app/api/openapi.json` — OpenAPI 3.1 spec
 
-## 2. KV provisioning (production persistence)
+## 2. Persistence provisioning (production)
 
-In-memory backend resets on every cold start. To make refunds, audit log, and idempotency cache durable:
+In-memory backend resets on every cold start. To make refunds, audit log, and idempotency cache durable, provision Upstash Redis (Vercel removed the standalone "KV" option — Upstash was its underlying provider).
 
-1. Vercel dashboard → your project → **Storage** tab → **Create Database** → **KV**.
+1. Vercel dashboard → your project → **Storage** tab → **Create Database** → **Upstash** (Redis).
 2. Region: pick one matching your `vercel.json` regions (`iad1` or `fra1`).
-3. **Connect to Project**. The two env vars are auto-injected:
-   - `KV_REST_API_URL`
-   - `KV_REST_API_TOKEN`
+3. **Connect to Project**. The Upstash integration auto-injects:
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+   (If you use the legacy Vercel KV path, the names are `KV_REST_API_URL` / `KV_REST_API_TOKEN`.)
 4. Vercel auto-redeploys. Verify on `/api/health`:
    ```
    { "persistence": "kv", ... }
    ```
    If it still says `memory`, the env vars didn't reach the runtime — re-check the Storage connection.
 
-No code changes needed — `_persist.ts` detects the env at request time.
+No code changes needed — `_persist.ts` detects either pair of env vars at request time.
 
 ## 3. GitHub auto-deploy
 

@@ -25,6 +25,7 @@ import {
 import { runBacktest, type BacktestResult, type StrategyKind } from "./backtest";
 import { ldFees, slipEntryPrice, closeWithFees, dailyLossExceeded } from "./fees";
 import FeesPanel from "./FeesPanel";
+import { downloadTradesCsv } from "./csv";
 
 type Account = {
   id: string;
@@ -1617,7 +1618,7 @@ export default function QTradePage() {
                     </span>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 14, fontSize: 12, color: "#cbd5e1", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 14, fontSize: 12, color: "#cbd5e1", flexWrap: "wrap", alignItems: "center" }}>
                   <span>Closed: <strong style={{ color: "#fff" }}>{total}</strong></span>
                   <span>Winrate: <strong style={{ color: winrate >= 55 ? "#22c55e" : winrate >= 40 ? "#fbbf24" : "#f87171" }}>{winrate.toFixed(1)}%</strong> ({wins}W {losses}L)</span>
                   <span>Realized P&L: <strong style={{ color: realizedSum > 0 ? "#22c55e" : realizedSum < 0 ? "#f87171" : "#cbd5e1" }}>{realizedSum >= 0 ? "+" : ""}{fmtUsd(realizedSum)}</strong></span>
@@ -1625,6 +1626,23 @@ export default function QTradePage() {
                   <span>Max DD: <strong style={{ color: maxDD > 0 ? "#fca5a5" : "#cbd5e1" }}>{fmtUsd(-maxDD)}</strong></span>
                   {best && best.realizedPnl > 0 && <span style={{ color: "#86efac" }}>Best <strong>+{fmtUsd(best.realizedPnl)}</strong></span>}
                   {worst && worst.realizedPnl < 0 && <span style={{ color: "#fca5a5" }}>Worst <strong>{fmtUsd(worst.realizedPnl)}</strong></span>}
+                  <button
+                    onClick={() => {
+                      const ok = downloadTradesCsv(filtered);
+                      if (!ok) setTradeMsg("Нет сделок для экспорта");
+                    }}
+                    aria-label="Export closed trades as CSV"
+                    title="Экспорт сделок в CSV (ISO timestamps + UTF-8 BOM)"
+                    style={{
+                      padding: "4px 10px", borderRadius: 6,
+                      border: "1px solid rgba(34,211,238,0.4)",
+                      background: "rgba(34,211,238,0.10)",
+                      color: "#67e8f9", fontSize: 11, fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    📥 Export CSV
+                  </button>
                 </div>
               </div>
 

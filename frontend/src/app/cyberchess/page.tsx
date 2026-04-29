@@ -1248,6 +1248,78 @@ export default function CyberChessPage(){
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel,hist.length,fenHist,browseIdx,promo,exec]);
 
+  /* ── Keyboard SAN input — печатай ход прямо с клавиатуры (lichess-стиль)
+     Поддержка: e4, Nf3, Bxf7+, O-O, O-O-O, e8=Q, Nbd7, Rae1, etc.
+     Только когда твой ход в Play/Coach/Analysis. Backspace — стереть.
+     Esc — очистить. ── */
+  const[sanBuf,sSanBuf]=useState("");
+  const[sanFlash,sSanFlash]=useState<"err"|null>(null);
+  const sanBufClearTimer=useRef<number|null>(null);
+  useEffect(()=>{
+    const isMyTurn=()=>{
+      if(tab==="analysis"||hotseat)return true;
+      if(tab==="puzzles"&&pzCurrent)return true;
+      return on&&!over&&game.turn()===pCol;
+    };
+    const h=(e:KeyboardEvent)=>{
+      const target=e.target as HTMLElement|null;
+      if(target&&(target.tagName==="INPUT"||target.tagName==="TEXTAREA"||target.tagName==="SELECT"||target.isContentEditable))return;
+      if(promo)return;
+      if(!isMyTurn())return;
+      // Backspace — стереть последний символ
+      if(e.key==="Backspace"&&sanBuf){e.preventDefault();sSanBuf(b=>b.slice(0,-1));return}
+      // Escape — очистить буфер (если есть, иначе fallthrough к premove clear)
+      if(e.key==="Escape"&&sanBuf){e.preventDefault();sSanBuf("");return}
+      // SAN-significant chars: a-h, 1-8, NBRQK, x, +, #, =, O/0, -
+      if(e.key.length!==1)return;
+      if(e.ctrlKey||e.metaKey||e.altKey)return;
+      const ch=e.key;
+      const allow=/^[a-hNBRQKxX+#=Oo01-8\-]$/.test(ch);
+      if(!allow)return;
+      e.preventDefault();
+      // Normalize 0 → O for castling (0-0 vs O-O)
+      const norm=ch==="0"?"O":ch;
+      sSanBuf(prev=>{
+        const candidate=(prev+norm).slice(0,8);
+        // Try to execute SAN — chess.js понимает любую корректную нотацию
+        const probe=new Chess(game.fen());
+        try{
+          const mv=probe.move(candidate);
+          if(mv){
+            // Execute via main path (handles puzzle/coach/analysis modes too)
+            if(tab==="puzzles"&&pzCurrent){
+              exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+            }else{
+              exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+            }
+            return "";
+          }
+        }catch{}
+        // Не валидный полный ход. Это префикс легального?
+        const sans=game.moves();
+        const lc=candidate.toLowerCase();
+        const isPrefix=sans.some(s=>s.toLowerCase().startsWith(lc));
+        if(!isPrefix){
+          // Возможно юзер начал новый ход — попробуем оставить только последний символ
+          const tail=norm;
+          const tailIsPrefix=sans.some(s=>s.toLowerCase().startsWith(tail.toLowerCase()));
+          if(tailIsPrefix)return tail;
+          // Совсем мимо — флэш ошибки и сбросим
+          sSanFlash("err");
+          if(sanBufClearTimer.current)window.clearTimeout(sanBufClearTimer.current);
+          sanBufClearTimer.current=window.setTimeout(()=>{sSanBuf("");sSanFlash(null);sanBufClearTimer.current=null},900);
+          return candidate;
+        }
+        // Префикс — ждём ещё символов
+        return candidate;
+      });
+    };
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[game,tab,on,over,pCol,hotseat,pzCurrent,promo,sanBuf,exec]);
+  // Очистка буфера когда меняется ход / состояние
+  useEffect(()=>{sSanBuf("");sSanFlash(null)},[bk,tab]);
+
   /* ── Rival learning — after each encounter, adapt profile and save ── */
   const rivalLearnedRef=useRef<string|null>(null);
   useEffect(()=>{
@@ -3293,6 +3365,21 @@ export default function CyberChessPage(){
               })()}
               {/* Ghost piece following pointer during drag */}
               {ghost&&(()=>{const gp=game.get(ghost.from);if(!gp)return null;return <div style={{position:"fixed",left:ghost.x,top:ghost.y,width:"clamp(60px,9vw,90px)",height:"clamp(60px,9vw,90px)",transform:"translate(-50%,-50%) scale(1.05)",pointerEvents:"none",zIndex:1000,filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.45))"}}><Piece type={gp.type} color={gp.color}/></div>;})()}
+
+              {/* Keyboard SAN input — плавающая плашка с буфером */}
+              {sanBuf&&<div style={{
+                position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",
+                padding:"6px 14px",borderRadius:999,
+                background:sanFlash==="err"?"rgba(220,38,38,0.92)":"rgba(15,23,42,0.92)",
+                color:"#fff",fontSize:13,fontWeight:900,fontFamily:"ui-monospace, SFMono-Regular, monospace",
+                letterSpacing:1,zIndex:6,pointerEvents:"none",
+                boxShadow:"0 8px 22px rgba(0,0,0,0.35)",
+                border:`1px solid ${sanFlash==="err"?"#fca5a5":"rgba(255,255,255,0.18)"}`,
+                whiteSpace:"nowrap",
+              }}>
+                <span style={{opacity:0.7,fontSize:10,fontWeight:700,marginRight:6,letterSpacing:0.5}}>⌨ ХОД</span>
+                {sanBuf}<span style={{opacity:0.6,animation:"cc-fade-in 0.6s ease-out infinite alternate"}}>_</span>
+              </div>}
             </div>
           </div>
           <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
@@ -5041,6 +5128,13 @@ export default function CyberChessPage(){
     <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title="⌨ Горячие клавиши">
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Работают во всех вкладках, пока курсор не в поле ввода.</div>
       {([
+        {title:"Ввод хода (когда твой ход)",rows:[
+          ["e4 / d5 / Nf3","Просто печатай — ход выполнится автоматом"],
+          ["O-O / 0-0","Короткая рокировка"],
+          ["O-O-O / 0-0-0","Длинная рокировка"],
+          ["e8=Q","Превращение пешки"],
+          ["Backspace","Стереть последний символ буфера"],
+        ]},
         {title:"Навигация по ходам",rows:[
           ["←  / →","Листать ходы назад / вперёд"],
           ["Home / End","К первому / последнему ходу"],
@@ -5048,7 +5142,7 @@ export default function CyberChessPage(){
         ]},
         {title:"Действия с доской",rows:[
           ["F","Перевернуть доску"],
-          ["Esc","Сбросить все премувы"],
+          ["Esc","Очистить буфер ввода / сбросить премувы"],
           ["ПКМ-drag","Нарисовать стрелку (Analysis / Coach / после партии)"],
           ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
         ]},

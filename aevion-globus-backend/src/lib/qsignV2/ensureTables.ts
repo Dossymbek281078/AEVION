@@ -153,6 +153,34 @@ export async function ensureQSignV2Tables(pool: PgPoolLike): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "QSignWebhookDelivery_createdAt_idx" ON "QSignWebhookDelivery" ("createdAt");`,
   );
 
+  /* Persisted retry queue — replaces in-process setTimeout chain so retries
+   * survive a restart. One row per (webhook, event) the moment it is fired;
+   * the worker tick picks rows where status='pending' AND nextAttemptAt<=NOW
+   * and runs the HTTP attempt. payload + signature are pre-computed at
+   * enqueue time so the body the consumer sees is byte-stable across attempts
+   * (matters for HMAC verification on the receiver side). */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignWebhookQueue" (
+      "id"             TEXT PRIMARY KEY,
+      "webhookId"      TEXT NOT NULL,
+      "event"          TEXT NOT NULL,
+      "payload"        TEXT NOT NULL,
+      "signature"      TEXT NOT NULL,
+      "attempts"       INTEGER NOT NULL DEFAULT 0,
+      "nextAttemptAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "status"         TEXT NOT NULL DEFAULT 'pending',
+      "lastError"      TEXT,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookQueue_due_idx" ON "QSignWebhookQueue" ("status", "nextAttemptAt");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookQueue_webhookId_idx" ON "QSignWebhookQueue" ("webhookId");`,
+  );
+
   /* Seed default keys if absent ---------------------------------------- */
   await pool.query(
     `

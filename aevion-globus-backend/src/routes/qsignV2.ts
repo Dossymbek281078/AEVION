@@ -417,7 +417,9 @@ qsignV2Router.get("/health", async (_req, res) => {
          (SELECT COUNT(*)::int FROM "QSignSignature" WHERE "revokedAt" IS NOT NULL) AS revoked,
          (SELECT COUNT(*)::int FROM "QSignKey") AS keys,
          (SELECT COUNT(*)::int FROM "QSignWebhook" WHERE "active" = TRUE) AS active_webhooks,
-         (SELECT COUNT(*)::int FROM "QSignWebhookDelivery") AS delivery_attempts`,
+         (SELECT COUNT(*)::int FROM "QSignWebhookDelivery") AS delivery_attempts,
+         (SELECT COUNT(*)::int FROM "QSignWebhookQueue" WHERE "status"='pending') AS queue_pending,
+         (SELECT COUNT(*)::int FROM "QSignWebhookQueue" WHERE "status"='failed') AS queue_failed`,
     )) as any;
     const c = r.rows?.[0] || {};
     out.counts = {
@@ -426,6 +428,8 @@ qsignV2Router.get("/health", async (_req, res) => {
       keys: c.keys ?? 0,
       activeWebhooks: c.active_webhooks ?? 0,
       deliveryAttempts: c.delivery_attempts ?? 0,
+      webhookQueuePending: c.queue_pending ?? 0,
+      webhookQueueFailed: c.queue_failed ?? 0,
     };
   } catch {
     out.counts = null;

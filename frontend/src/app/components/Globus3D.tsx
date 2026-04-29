@@ -156,6 +156,103 @@ function aliasCountry(name: string): string {
   return COUNTRY_NAME_ALIASES[name] ?? name;
 }
 
+/** Локализация названий стран для UI. Базовое имя — английское из topojson. */
+const COUNTRY_I18N: Record<string, { ru?: string; kk?: string }> = {
+  "United States": { ru: "США", kk: "АҚШ" },
+  UK: { ru: "Великобритания", kk: "Ұлыбритания" },
+  Russia: { ru: "Россия", kk: "Ресей" },
+  Germany: { ru: "Германия", kk: "Германия" },
+  France: { ru: "Франция", kk: "Франция" },
+  Italy: { ru: "Италия", kk: "Италия" },
+  Spain: { ru: "Испания", kk: "Испания" },
+  Netherlands: { ru: "Нидерланды", kk: "Нидерланды" },
+  Turkey: { ru: "Турция", kk: "Түркия" },
+  Japan: { ru: "Япония", kk: "Жапония" },
+  China: { ru: "Китай", kk: "Қытай" },
+  India: { ru: "Индия", kk: "Үндістан" },
+  Brazil: { ru: "Бразилия", kk: "Бразилия" },
+  Canada: { ru: "Канада", kk: "Канада" },
+  Australia: { ru: "Австралия", kk: "Австралия" },
+  Mexico: { ru: "Мексика", kk: "Мексика" },
+  Argentina: { ru: "Аргентина", kk: "Аргентина" },
+  "South Korea": { ru: "Южная Корея", kk: "Оңтүстік Корея" },
+  Indonesia: { ru: "Индонезия", kk: "Индонезия" },
+  Vietnam: { ru: "Вьетнам", kk: "Вьетнам" },
+  Thailand: { ru: "Таиланд", kk: "Тайланд" },
+  Singapore: { ru: "Сингапур", kk: "Сингапур" },
+  Malaysia: { ru: "Малайзия", kk: "Малайзия" },
+  Philippines: { ru: "Филиппины", kk: "Филиппин" },
+  "Saudi Arabia": { ru: "Саудовская Аравия", kk: "Сауд Арабиясы" },
+  "United Arab Emirates": { ru: "ОАЭ", kk: "БАӘ" },
+  Egypt: { ru: "Египет", kk: "Мысыр" },
+  "South Africa": { ru: "ЮАР", kk: "ОАР" },
+  Nigeria: { ru: "Нигерия", kk: "Нигерия" },
+  Israel: { ru: "Израиль", kk: "Израиль" },
+  Switzerland: { ru: "Швейцария", kk: "Швейцария" },
+  Sweden: { ru: "Швеция", kk: "Швеция" },
+  Norway: { ru: "Норвегия", kk: "Норвегия" },
+  Denmark: { ru: "Дания", kk: "Дания" },
+  Finland: { ru: "Финляндия", kk: "Финляндия" },
+  Poland: { ru: "Польша", kk: "Польша" },
+  Ukraine: { ru: "Украина", kk: "Украина" },
+  Kazakhstan: { ru: "Казахстан", kk: "Қазақстан" },
+  Belarus: { ru: "Беларусь", kk: "Беларусь" },
+  Belgium: { ru: "Бельгия", kk: "Бельгия" },
+  Austria: { ru: "Австрия", kk: "Австрия" },
+  Portugal: { ru: "Португалия", kk: "Португалия" },
+  Greece: { ru: "Греция", kk: "Греция" },
+  "Czech Republic": { ru: "Чехия", kk: "Чехия" },
+  Czechia: { ru: "Чехия", kk: "Чехия" },
+  Hungary: { ru: "Венгрия", kk: "Венгрия" },
+  Iran: { ru: "Иран", kk: "Иран" },
+  Iraq: { ru: "Ирак", kk: "Ирак" },
+  Pakistan: { ru: "Пакистан", kk: "Пәкістан" },
+  Bangladesh: { ru: "Бангладеш", kk: "Бангладеш" },
+  Ireland: { ru: "Ирландия", kk: "Ирландия" },
+  "New Zealand": { ru: "Новая Зеландия", kk: "Жаңа Зеландия" },
+  Chile: { ru: "Чили", kk: "Чили" },
+  Colombia: { ru: "Колумбия", kk: "Колумбия" },
+  Peru: { ru: "Перу", kk: "Перу" },
+  Romania: { ru: "Румыния", kk: "Румыния" },
+  Bulgaria: { ru: "Болгария", kk: "Болгария" },
+  Serbia: { ru: "Сербия", kk: "Сербия" },
+  Croatia: { ru: "Хорватия", kk: "Хорватия" },
+  Estonia: { ru: "Эстония", kk: "Эстония" },
+  Latvia: { ru: "Латвия", kk: "Латвия" },
+  Lithuania: { ru: "Литва", kk: "Литва" },
+  Georgia: { ru: "Грузия", kk: "Грузия" },
+  Armenia: { ru: "Армения", kk: "Армения" },
+  Azerbaijan: { ru: "Азербайджан", kk: "Әзірбайжан" },
+  Uzbekistan: { ru: "Узбекистан", kk: "Өзбекстан" },
+  Kyrgyzstan: { ru: "Кыргызстан", kk: "Қырғызстан" },
+  Tajikistan: { ru: "Таджикистан", kk: "Тәжікстан" },
+  Turkmenistan: { ru: "Туркменистан", kk: "Түрікменстан" },
+  Mongolia: { ru: "Монголия", kk: "Моңғолия" },
+  World: { ru: "Мир", kk: "Әлем" },
+};
+
+function detectLocale(): "en" | "ru" | "kk" {
+  if (typeof window === "undefined") return "en";
+  try {
+    const stored = window.localStorage.getItem("aevion:locale");
+    if (stored === "ru" || stored === "kk" || stored === "en") return stored;
+  } catch {}
+  const lang =
+    typeof navigator !== "undefined" && navigator.language
+      ? navigator.language.toLowerCase()
+      : "en";
+  if (lang.startsWith("ru")) return "ru";
+  if (lang.startsWith("kk") || lang.startsWith("kz")) return "kk";
+  return "en";
+}
+
+function displayCountry(name: string, locale: "en" | "ru" | "kk"): string {
+  if (locale === "en") return name;
+  const e = COUNTRY_I18N[name];
+  if (!e) return name;
+  return (locale === "kk" ? e.kk : e.ru) ?? name;
+}
+
 function findCountryAt(lat: number, lon: number): string | null {
   if (!countriesCache) return null;
   for (const c of countriesCache) {
@@ -621,6 +718,12 @@ export default function Globus3D({
   /** Country name detected by globe-surface point-in-polygon (shown as floating badge). */
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const hoveredCountryRef = useRef<string | null>(null);
+
+  /** Локаль для отображения country names. */
+  const [locale, setLocale] = useState<"en" | "ru" | "kk">("en");
+  useEffect(() => {
+    setLocale(detectLocale());
+  }, []);
   const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const selectedCountryRef = useRef<string | null>(null);
@@ -2996,7 +3099,7 @@ export default function Globus3D({
                       maxWidth: 110,
                     }}
                   >
-                    {name}
+                    {displayCountry(name, locale)}
                   </span>
                   <span
                     style={{
@@ -3128,7 +3231,7 @@ export default function Globus3D({
                   letterSpacing: "0.01em",
                 }}
               >
-                {selectedCountry}
+                {displayCountry(selectedCountry, locale)}
               </span>
             </div>
             <button
@@ -3236,7 +3339,7 @@ export default function Globus3D({
                 lineHeight: 1.45,
               }}
             >
-              No AEVION nodes registered in {selectedCountry} yet.
+              No AEVION nodes registered in {displayCountry(selectedCountry, locale)} yet.
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -4062,7 +4165,7 @@ export default function Globus3D({
               whiteSpace: "nowrap",
             }}
           >
-            {hoveredCountry}
+            {displayCountry(hoveredCountry, locale)}
           </span>
           <span
             style={{

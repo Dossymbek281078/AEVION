@@ -5010,26 +5010,56 @@ export default function CyberChessPage(){
       </Modal>;
     })()}
 
-    {/* Keyboard Shortcuts Help Overlay */}
+    {/* Keyboard Shortcuts Help Overlay — расширенная версия с группировкой */}
     <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title="⌨ Горячие клавиши">
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Работают во всех вкладках, пока курсор не в поле ввода.</div>
-      <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 16px",fontSize:14,alignItems:"center"}}>
-        {[
+      {([
+        {title:"Навигация по ходам",rows:[
           ["←  / →","Листать ходы назад / вперёд"],
           ["Home / End","К первому / последнему ходу"],
+          ["↑  / ↓","Перейти на 5 ходов"],
+        ]},
+        {title:"Действия с доской",rows:[
           ["F","Перевернуть доску"],
+          ["Esc","Сбросить все премувы"],
+          ["ПКМ-drag","Нарисовать стрелку (Analysis / Coach / после партии)"],
+          ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
+        ]},
+        {title:"Глобально",rows:[
           ["M","Вкл./выкл. звук"],
           ["N","Новая партия (в Play, до старта)"],
-          ["Esc","Сбросить все премувы"],
           ["?","Показать / скрыть эту подсказку"],
-          ["ПКМ-drag","Стрелка на доске (Analysis / Coach / после партии)"],
-          ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
-        ].map(([k,v])=><React.Fragment key={k}>
-          <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:12,padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text,whiteSpace:"nowrap"}}>{k}</kbd>
-          <span style={{color:CC.text}}>{v}</span>
-        </React.Fragment>)}
-      </div>
+        ]},
+      ] as const).map(grp=><div key={grp.title} style={{marginBottom:SPACE[3]}}>
+        <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6}}>{grp.title}</div>
+        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"8px 14px",fontSize:13,alignItems:"center"}}>
+          {grp.rows.map(([k,v])=><React.Fragment key={k}>
+            <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:12,padding:"4px 10px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text,whiteSpace:"nowrap"}}>{k}</kbd>
+            <span style={{color:CC.text,lineHeight:1.5}}>{v}</span>
+          </React.Fragment>)}
+        </div>
+      </div>)}
     </Modal>
+
+    {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help */}
+    {!streamerMode&&!showHelp&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
+      style={{
+        position:"fixed",bottom:16,right:16,zIndex:Z.sticky,
+        display:"inline-flex",alignItems:"center",gap:6,
+        padding:"6px 12px 6px 6px",
+        background:CC.surface1,
+        border:`1px solid ${CC.border}`,
+        borderRadius:RADIUS.full,
+        boxShadow:SHADOW.md,
+        cursor:"pointer",
+        transition:`transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.base} ${MOTION.ease}`,
+      }}
+      onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="translateY(-1px)";el.style.boxShadow=SHADOW.lg}}
+      onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="";el.style.boxShadow=SHADOW.md}}
+    >
+      <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:11,padding:"2px 8px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text}}>?</kbd>
+      <span style={{fontSize:11,fontWeight:700,color:CC.textDim,letterSpacing:0.2}}>горячие клавиши</span>
+    </button>}
 
     {/* AI Rival greeting */}
     <Modal open={showRivalGreet&&!!rivalProfile} onClose={()=>sShowRivalGreet(false)} size="sm"

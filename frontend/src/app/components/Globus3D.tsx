@@ -2366,6 +2366,32 @@ export default function Globus3D({
     persistViewDebounced();
   };
 
+  /** Camera fly-to при выборе страны: центроид bbox + дистанция по размеру страны. */
+  useEffect(() => {
+    if (!selectedCountry) return;
+    buildCountriesIfNeeded();
+    if (!countriesCache) return;
+    const entry = countriesCache.find((c) => c.name === selectedCountry);
+    if (!entry) return;
+    const [w, s, e, n] = entry.bbox;
+    const centerLat = (s + n) / 2;
+    let centerLon = (w + e) / 2;
+    if (w > e) {
+      // bbox wraps через 180° (Russia, Fiji) — берём «среднее» с учётом разрыва.
+      centerLon = ((w + e + 360) / 2) % 360;
+      if (centerLon > 180) centerLon -= 360;
+    }
+    const latRange = Math.abs(n - s);
+    const lonRange = Math.abs(e - w);
+    const spread = Math.max(
+      latRange,
+      lonRange * Math.cos((centerLat * Math.PI) / 180),
+    );
+    const dist = Math.max(180, Math.min(280, 160 + spread * 3));
+    flyToLatLon(centerLat, centerLon, dist);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCountry]);
+
   const locateMe = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setShareToast("geo-failed");

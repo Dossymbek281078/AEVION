@@ -14,6 +14,12 @@ const auth_1 = require("./routes/auth");
 const planetCompliance_1 = require("./routes/planetCompliance");
 const modules_1 = require("./routes/modules");
 const qcoreai_1 = require("./routes/qcoreai");
+const quantum_shield_1 = require("./routes/quantum-shield");
+const pipeline_1 = require("./routes/pipeline");
+const coach_1 = require("./routes/coach");
+const ecosystem_1 = require("./routes/ecosystem");
+const qrightRoyalties_1 = require("./routes/qrightRoyalties");
+const cyberchess_1 = require("./routes/cyberchess");
 const projects_1 = require("./data/projects");
 const moduleRuntime_1 = require("./data/moduleRuntime");
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -105,6 +111,13 @@ app.get("/api/openapi.json", (_req, res) => {
             "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
             "/api/qtrade/topup": { post: { summary: "Top up balance" } },
             "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
+            "/api/qtrade/accounts/lookup": { get: { summary: "Resolve email → primary accountId (auth)" } },
+            "/api/ecosystem/earnings": { get: { summary: "Aggregated earnings across qright/cyberchess/planet (auth)" } },
+            "/api/qright/royalties": { get: { summary: "Paid royalties for caller (auth)" } },
+            "/api/qright/royalties/verify-webhook": { post: { summary: "External rights body webhook (X-QRight-Secret)" } },
+            "/api/cyberchess/results": { get: { summary: "Recent tournament prize wins for caller (auth)" } },
+            "/api/cyberchess/upcoming": { get: { summary: "Public list of upcoming tournaments" } },
+            "/api/cyberchess/tournament-finalized": { post: { summary: "Tournament finalized webhook (X-CyberChess-Secret)" } },
         },
     });
 });
@@ -113,8 +126,18 @@ app.get("/api/openapi.json", (_req, res) => {
 // ==========================
 app.use("/api/qtrade", qtrade_1.qtradeRouter);
 app.use("/api/qright", qright_1.qrightRouter);
+// Royalties live alongside QRight authorship endpoints under /api/qright/*.
+app.use("/api/qright", qrightRoyalties_1.qrightRoyaltiesRouter);
+app.use("/api/ecosystem", ecosystem_1.ecosystemRouter);
+app.use("/api/cyberchess", cyberchess_1.cyberchessRouter);
 // ==========================
 app.use("/api/qsign", qsign_1.qsignRouter);
+// ==========================
+// Quantum Shield
+// ==========================
+app.use("/api/quantum-shield", quantum_shield_1.quantumShieldRouter);
+app.use("/api/pipeline", pipeline_1.pipelineRouter);
+app.use("/api/coach", coach_1.coachRouter);
 // ==========================
 // Auth
 // ==========================

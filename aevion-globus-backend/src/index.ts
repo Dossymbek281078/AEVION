@@ -14,6 +14,9 @@ import { qcoreaiRouter } from "./routes/qcoreai";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { coachRouter } from "./routes/coach";
+import { ecosystemRouter } from "./routes/ecosystem";
+import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
+import { cyberchessRouter } from "./routes/cyberchess";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -119,6 +122,13 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
       "/api/qtrade/topup": { post: { summary: "Top up balance" } },
       "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
+      "/api/qtrade/accounts/lookup": { get: { summary: "Resolve email → primary accountId (auth)" } },
+      "/api/ecosystem/earnings": { get: { summary: "Aggregated earnings across qright/cyberchess/planet (auth)" } },
+      "/api/qright/royalties": { get: { summary: "Paid royalties for caller (auth)" } },
+      "/api/qright/royalties/verify-webhook": { post: { summary: "External rights body webhook (X-QRight-Secret)" } },
+      "/api/cyberchess/results": { get: { summary: "Recent tournament prize wins for caller (auth)" } },
+      "/api/cyberchess/upcoming": { get: { summary: "Public list of upcoming tournaments" } },
+      "/api/cyberchess/tournament-finalized": { post: { summary: "Tournament finalized webhook (X-CyberChess-Secret)" } },
     },
   });
 });
@@ -128,6 +138,10 @@ app.get("/api/openapi.json", (_req, res) => {
 // ==========================
 app.use("/api/qtrade", qtradeRouter);
 app.use("/api/qright", qrightRouter);
+// Royalties live alongside QRight authorship endpoints under /api/qright/*.
+app.use("/api/qright", qrightRoyaltiesRouter);
+app.use("/api/ecosystem", ecosystemRouter);
+app.use("/api/cyberchess", cyberchessRouter);
 
 // ==========================
 app.use("/api/qsign", qsignRouter);

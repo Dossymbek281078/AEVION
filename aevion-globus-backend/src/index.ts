@@ -7,6 +7,7 @@ import cors from "cors";
 import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qsignV2Router } from "./routes/qsignV2";
+import { startWebhookWorker } from "./lib/qsignV2/webhooks";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
@@ -16,6 +17,7 @@ import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
+import { aevRouter } from "./routes/aev";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -196,6 +198,12 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
       "/api/qtrade/topup": { post: { summary: "Top up balance" } },
       "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
+      "/api/aev/wallet/{deviceId}": { get: { summary: "AEV wallet snapshot" } },
+      "/api/aev/wallet/{deviceId}/sync": { post: { summary: "Idempotent wallet upsert (last-writer-wins on balance, max() on lifetime counters)" } },
+      "/api/aev/wallet/{deviceId}/mint": { post: { summary: "Append mint entry, debit cap, credit balance + lifetimeMined" } },
+      "/api/aev/wallet/{deviceId}/spend": { post: { summary: "Append spend entry, debit balance, credit lifetimeSpent" } },
+      "/api/aev/ledger/{deviceId}": { get: { summary: "Append-only ledger tail (?limit=1..1000, default 100, newest first)" } },
+      "/api/aev/stats": { get: { summary: "Global AEV aggregates (wallets, totalMined/Spent/Balance, capRemaining of 21M)" } },
     },
   });
 });
@@ -204,6 +212,7 @@ app.get("/api/openapi.json", (_req, res) => {
 // QRight — патентирование
 // ==========================
 app.use("/api/qtrade", qtradeRouter);
+app.use("/api/aev", aevRouter);
 app.use("/api/qright", qrightRouter);
 
 // ==========================
@@ -244,4 +253,6 @@ app.use(
 
 app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
+  // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
+  startWebhookWorker();
 });

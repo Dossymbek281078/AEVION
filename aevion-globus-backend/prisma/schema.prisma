@@ -153,3 +153,62 @@ model QSignRevocation {
   revokerUserId     String?
   revokedAt         DateTime @default(now())
 }
+
+model QSignWebhook {
+  id          String    @id @default(uuid())
+  ownerUserId String                                    // owner of subscription; only events on their own sigs fire
+  url         String                                    // delivery target — must be https in prod, http in dev
+  secret      String                                    // HMAC-SHA256 over body, sent in X-QSign-Signature header
+  events      String                                    // comma-separated subset of "sign,revoke"
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  lastFiredAt DateTime?
+  lastStatus  Int?
+  lastError   String?
+
+  @@index([ownerUserId])
+  @@index([active])
+}
+
+// ── AEV native token ─────────────────────────────────────────────────
+// Snapshot wallet keyed on deviceId (anonymous) либо userId (authed).
+// Source-of-record для cross-device sync. Frontend держит copy в
+// localStorage, периодически syncит сюда. Append-only ledger ниже —
+// audit trail для каждого mint/spend.
+
+model AevWallet {
+  id                  String   @id @default(uuid())
+  deviceId            String   @unique
+  userId              String?
+  balance             Float    @default(0)
+  lifetimeMined       Float    @default(0)
+  lifetimeSpent       Float    @default(0)
+  globalSupplyMined   Float    @default(0)
+  dividendsClaimed    Float    @default(0)
+  modesPlay           Boolean  @default(true)
+  modesCompute        Boolean  @default(false)
+  modesStewardship    Boolean  @default(true)
+  startTs             DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  ledger              AevLedgerEntry[]
+
+  @@index([userId])
+}
+
+model AevLedgerEntry {
+  id          String     @id @default(uuid())
+  walletId    String
+  wallet      AevWallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  kind        String     // "mint" | "spend"
+  amount      Float
+  sourceKind  String?    // "play" | "compute" | "stewardship" | "streak" | etc.
+  sourceModule String?   // "cyberchess" | "qsign" | "qright" | "qtrade" | ...
+  sourceAction String?   // RATE_CARD action key (e.g. "cyberchess_win_easy")
+  reason      String?    // human-readable description
+  balanceAfter Float
+  ts          DateTime   @default(now())
+
+  @@index([walletId, ts])
+  @@index([sourceModule])
+}

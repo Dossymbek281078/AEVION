@@ -44,12 +44,22 @@ export type QSignRevocationRow = {
   revokedAt: Date;
 };
 
+export type QSignDilithiumPreview = {
+  algo: "ML-DSA-65";
+  kid: string;
+  mode: "preview";
+  digest: string;
+  valid: boolean | null;
+  note: string;
+};
+
 export type QSignVerifyResult = {
   valid: boolean;
   signatureId?: string;
   algoVersion: string;
   hmac: { kid: string; valid: boolean };
   ed25519: { kid: string | null; valid: boolean | null };
+  dilithium: QSignDilithiumPreview | null;
   revoked: boolean;
   revokedAt: string | null;
   revocationReason: string | null;

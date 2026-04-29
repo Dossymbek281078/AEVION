@@ -20,6 +20,7 @@ import { generateShareSVG, svgToPngBlob, downloadFile } from "./gameShare";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Tooltip } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
+import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -470,6 +471,11 @@ export default function CyberChessPage(){
   const[showOpeningTrainer,sShowOpeningTrainer]=useState(false);
   const[openingDrill,sOpeningDrill]=useState<null|{eco:string;name:string;moves:string[];ply:number;mistakes:number}>(null);
   const[openingDrillFilter,sOpeningDrillFilter]=useState("");
+  // AI Rival (killer #1)
+  const[rivalProfile,sRivalProfile]=useState<RivalProfile|null>(()=>ldRival());
+  useEffect(()=>{if(rivalProfile)svRival(rivalProfile)},[rivalProfile]);
+  const[rivalMode,sRivalMode]=useState(false);
+  const[showRivalGreet,sShowRivalGreet]=useState(false);
   // Live Voice Commentary — Coach читает краткие комментарии на каждом ходе (killer #5)
   const[liveCommentary,sLiveCommentary]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_live_commentary_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
@@ -1154,6 +1160,26 @@ export default function CyberChessPage(){
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
   },[pms.length,pmSel,hist.length,fenHist,browseIdx]);
+
+  /* ── Rival learning — after each encounter, adapt profile and save ── */
+  const rivalLearnedRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!rivalMode||!over||!rivalProfile)return;
+    // Identify this specific game so we don't double-learn
+    const gameKey=`${fenHist.length}-${over}`;
+    if(rivalLearnedRef.current===gameKey)return;
+    rivalLearnedRef.current=gameKey;
+    // Determine result from Rival's perspective
+    let rivalResult:"W"|"L"|"D";
+    if(over.includes("You win")||over.includes("timed out")){rivalResult="L"}
+    else if(over.includes("AI wins")||over.includes("resigned")){rivalResult="W"}
+    else rivalResult="D";
+    const updated=learnFromEncounter(rivalProfile,rivalResult,currentOpening?.name,hist.length,rat);
+    sRivalProfile(updated);
+    // Bonus Chessy for Rival encounters (twice regular)
+    if(rivalResult==="L")addChessy(10,`🏆 победа над ${rivalProfile.name}`);
+    else if(rivalResult==="D")addChessy(3,`🤝 ничья с ${rivalProfile.name}`);
+  },[over,rivalMode,rivalProfile,currentOpening,hist.length,rat,addChessy,fenHist.length]);
 
   /* ── Autosave in-progress game ── */
   useEffect(()=>{
@@ -2145,7 +2171,7 @@ export default function CyberChessPage(){
 
             {/* Actions */}
             <div style={{display:"flex",gap:SPACE[2],marginTop:SPACE[4],flexWrap:"wrap"}}>
-              <button onClick={()=>{sHotseat(false);newG()}} className="cc-focus-ring cc-touch"
+              <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
                 style={{flex:"2 1 260px",padding:"14px 22px",borderRadius:RADIUS.lg,border:"none",
                   background:`linear-gradient(135deg,${CC.brand},#10b981 60%,#14b8a6)`,color:"#fff",
                   fontWeight:900,fontSize:15,cursor:"pointer",
@@ -2160,7 +2186,7 @@ export default function CyberChessPage(){
               <Btn size="lg" variant="secondary" onClick={()=>{
                 const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
                 const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
-                sAiI(capped);sHotseat(false);
+                sAiI(capped);sHotseat(false);sRivalMode(false);
                 setTimeout(()=>newG(),50);
               }} style={{flex:"1 1 160px"}}>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -2168,7 +2194,7 @@ export default function CyberChessPage(){
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>AI ≈ {rat} ELO</span>
                 </div>
               </Btn>
-              <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);setTimeout(()=>newG(),50)}}
+              <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);sRivalMode(false);setTimeout(()=>newG(),50)}}
                 style={{flex:"1 1 160px",background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
                   border:"1px solid #bfdbfe",color:CC.info}}>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -2192,6 +2218,21 @@ export default function CyberChessPage(){
                   <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>drill дебютов</span>
                 </div>
               </Btn>
+              {/* AI Rival — only visible once unlocked via shop */}
+              {chessy.owned.ai_rival&&<Btn size="lg" variant="secondary" onClick={()=>{
+                if(!rivalProfile){sRivalProfile(createRival(rat))}
+                sShowRivalGreet(true);
+              }} style={{flex:"1 1 180px",
+                background:"linear-gradient(135deg,#1e1b4b,#4c1d95,#7c3aed)",
+                border:"1px solid #a78bfa",color:"#fff",
+                boxShadow:"0 4px 12px rgba(124,58,237,0.35)"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span>⚔ {rivalProfile?rivalProfile.name:"AI Rival"}</span>
+                  <span style={{fontSize:11,opacity:0.85,fontWeight:600}}>
+                    {rivalProfile?`${rivalProfile.rating} · ${rivalProfile.encounters} партий`:"персональный соперник"}
+                  </span>
+                </div>
+              </Btn>}
             </div>
           </Card>
 
@@ -4439,6 +4480,49 @@ export default function CyberChessPage(){
           <span style={{color:CC.text}}>{v}</span>
         </React.Fragment>)}
       </div>
+    </Modal>
+
+    {/* AI Rival greeting */}
+    <Modal open={showRivalGreet&&!!rivalProfile} onClose={()=>sShowRivalGreet(false)} size="sm"
+      title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>⚔ {rivalProfile?.name||"AI Rival"}</span>}>
+      {rivalProfile&&<div>
+        <div style={{display:"flex",alignItems:"center",gap:SPACE[3],marginBottom:SPACE[3]}}>
+          <div style={{width:64,height:64,borderRadius:RADIUS.lg,
+            background:"linear-gradient(135deg,#1e1b4b,#4c1d95,#7c3aed)",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:30,color:"#fff",boxShadow:SHADOW.md,flexShrink:0}}>🧠</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:18,fontWeight:900,color:CC.text}}>{rivalProfile.name}</div>
+            <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
+              <Badge tone="accent" size="xs">⚔ {rivalProfile.rating} ELO</Badge>
+              <Badge tone="neutral" size="xs">{rivalSummary(rivalProfile)}</Badge>
+            </div>
+          </div>
+        </div>
+        <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.accentSoft,border:`1px solid ${CC.accent}`,fontSize:14,color:CC.text,lineHeight:1.55,fontStyle:"italic",marginBottom:SPACE[3]}}>
+          «{rivalGreeting(rivalProfile,rat)}»
+        </div>
+        {rivalProfile.encounters>0&&<div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`,fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>
+          <div style={{fontWeight:800,color:CC.text,marginBottom:4}}>📜 Последние встречи</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {rivalProfile.history.slice(0,8).map((h,i)=>{
+              const tone:"brand"|"danger"|"neutral"=h.result==="W"?"brand":h.result==="L"?"danger":"neutral";
+              return <span key={i} title={`${h.opening||"—"} · ${h.moves} ходов`}><Badge tone={tone} size="xs">{h.result}</Badge></span>;
+            })}
+          </div>
+        </div>}
+        <div style={{display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sShowRivalGreet(false)}>Позже</Btn>
+          <Btn variant="accent" size="md" full onClick={()=>{
+            // Start a Rival match: rating-matched AI
+            const targetIdx=rivalProfile.rating<900?1:rivalProfile.rating<1300?2:rivalProfile.rating<1700?3:rivalProfile.rating<2100?4:5;
+            const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
+            sAiI(capped);sHotseat(false);sRivalMode(true);
+            sShowRivalGreet(false);
+            setTimeout(()=>newG(),60);
+          }}>⚔ Играть</Btn>
+        </div>
+      </div>}
     </Modal>
 
     {/* Opening Trainer modal — выбор дебюта */}

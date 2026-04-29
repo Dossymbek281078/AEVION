@@ -86,6 +86,101 @@ export async function ensureQSignV2Tables(pool: PgPoolLike): Promise<void> {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignWebhook" (
+      "id"            TEXT PRIMARY KEY,
+      "ownerUserId"   TEXT NOT NULL,
+      "url"           TEXT NOT NULL,
+      "secret"        TEXT NOT NULL,
+      "events"        TEXT NOT NULL,
+      "active"        BOOLEAN NOT NULL DEFAULT TRUE,
+      "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "lastFiredAt"   TIMESTAMPTZ,
+      "lastStatus"    INTEGER,
+      "lastError"     TEXT
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhook_ownerUserId_idx" ON "QSignWebhook" ("ownerUserId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhook_active_idx" ON "QSignWebhook" ("active");`,
+  );
+
+  /* Idempotency cache — `Idempotency-Key` header lookup keyed on
+   * (issuerUserId, key). Same key + same payload returns the cached
+   * signatureId; different payload yields 409. 24h TTL is enforced via
+   * createdAt at lookup time, expired rows are reclaimable for re-use. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignIdempotency" (
+      "id"             TEXT PRIMARY KEY,
+      "issuerUserId"   TEXT NOT NULL,
+      "idempotencyKey" TEXT NOT NULL,
+      "signatureId"    TEXT NOT NULL,
+      "payloadHash"    TEXT NOT NULL,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "QSignIdempotency_user_key_idx"
+       ON "QSignIdempotency" ("issuerUserId", "idempotencyKey");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignIdempotency_createdAt_idx"
+       ON "QSignIdempotency" ("createdAt");`,
+  );
+
+  /* Per-attempt delivery log — used by GET /webhooks/:id/deliveries and to
+   * help operators diagnose dead targets. One row per HTTP attempt; retries
+   * produce multiple rows linked by webhookId + event time clustering. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignWebhookDelivery" (
+      "id"           TEXT PRIMARY KEY,
+      "webhookId"    TEXT NOT NULL,
+      "event"        TEXT NOT NULL,
+      "attempt"      INTEGER NOT NULL DEFAULT 1,
+      "httpStatus"   INTEGER,
+      "error"        TEXT,
+      "durationMs"   INTEGER NOT NULL DEFAULT 0,
+      "succeeded"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookDelivery_webhookId_idx" ON "QSignWebhookDelivery" ("webhookId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookDelivery_createdAt_idx" ON "QSignWebhookDelivery" ("createdAt");`,
+  );
+
+  /* Persisted retry queue — replaces in-process setTimeout chain so retries
+   * survive a restart. One row per (webhook, event) the moment it is fired;
+   * the worker tick picks rows where status='pending' AND nextAttemptAt<=NOW
+   * and runs the HTTP attempt. payload + signature are pre-computed at
+   * enqueue time so the body the consumer sees is byte-stable across attempts
+   * (matters for HMAC verification on the receiver side). */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QSignWebhookQueue" (
+      "id"             TEXT PRIMARY KEY,
+      "webhookId"      TEXT NOT NULL,
+      "event"          TEXT NOT NULL,
+      "payload"        TEXT NOT NULL,
+      "signature"      TEXT NOT NULL,
+      "attempts"       INTEGER NOT NULL DEFAULT 0,
+      "nextAttemptAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "status"         TEXT NOT NULL DEFAULT 'pending',
+      "lastError"      TEXT,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookQueue_due_idx" ON "QSignWebhookQueue" ("status", "nextAttemptAt");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QSignWebhookQueue_webhookId_idx" ON "QSignWebhookQueue" ("webhookId");`,
+  );
+
   /* Seed default keys if absent ---------------------------------------- */
   await pool.query(
     `

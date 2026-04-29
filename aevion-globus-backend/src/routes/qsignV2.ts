@@ -18,6 +18,14 @@ import {
 import type { QSignVerifyResult } from "../lib/qsignV2/types";
 import { fireWebhooksFor } from "../lib/qsignV2/webhooks";
 import { QSIGN_V2_OPENAPI } from "../lib/qsignV2/openapiSpec";
+import { captureException as captureToSentry } from "../lib/qsignV2/sentry";
+import {
+  signDilithium as cryptoSignDilithium,
+  verifyDilithium as cryptoVerifyDilithium,
+  getActiveDilithium,
+  DILITHIUM_KID_PREVIEW,
+  DILITHIUM_KID_REAL,
+} from "../lib/qsignV2/dilithium";
 
 /* ───────── rate limits ─────────
  * Per-IP token-bucket style windows guarding the two expensive write paths.
@@ -114,6 +122,15 @@ function errResp(
   const id = reqId(req);
   if (err !== undefined) {
     console.error(`[qsign v2] [req=${id}] ${body.error || "error"}`, err);
+    if (status >= 500) {
+      captureToSentry(err, {
+        requestId: id,
+        errorCode: typeof body.error === "string" ? body.error : "unknown",
+        path: req.originalUrl || req.url,
+        method: req.method,
+        status,
+      });
+    }
   }
   res.status(status).json({ ...body, requestId: id });
 }
@@ -167,68 +184,126 @@ function constantTimeEqHex(a: string, b: string): boolean {
   }
 }
 
-/* ───────── Dilithium preview slot (post-quantum reservation) ─────────
- * Real ML-DSA (Dilithium) requires a WASM-bound PQClean impl which is on the
- * roadmap but out of scope for v2. To reserve the API surface and prevent
- * future breaking changes, every signature ships with a deterministic
- * SHA-512 fingerprint of (canonical || kid). It is NOT a cryptographic
- * signature — clients use it to (a) confirm the slot was emitted at sign
- * time and (b) round-trip integrity-check the canonical payload against the
- * server's view of it. v2.1 will replace `digest` with `signature` + add
- * `publicKey`, leaving the same JSON shape.
+/* ───────── Dilithium signature slot (post-quantum) ─────────
+ * Two modes coexist:
+ *
+ *   PREVIEW (default) — deterministic SHA-512(canonical || kid). 128 hex.
+ *                       Active when QSIGN_DILITHIUM_V1_SEED is unset.
+ *                       Reserves the API surface; not a real PQ signature.
+ *
+ *   REAL              — actual ML-DSA-65 (FIPS 204) signature, ~6618 hex.
+ *                       Active when QSIGN_DILITHIUM_V1_SEED is set.
+ *                       Backed by @noble/post-quantum (pure-JS, audited).
+ *
+ * Verify auto-detects mode by signature length, so historical preview rows
+ * continue to verify correctly after the operator turns on real ML-DSA.
+ * The crypto primitives live in lib/qsignV2/dilithium.ts; the route helpers
+ * below adapt those into the public JSON block shape.
  */
-const DILITHIUM_PREVIEW_KID = "qsign-dilithium-mldsa65-preview-v1";
 const DILITHIUM_PREVIEW_NOTE =
-  "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. v2.1 will add real `signature` + `publicKey`.";
+  "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. Set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65 signatures.";
+const DILITHIUM_REAL_NOTE =
+  "Real ML-DSA-65 (FIPS 204 Dilithium-3) post-quantum signature. Verify with the published `publicKey` against the canonical payload.";
 
-function dilithiumPreviewDigest(canonical: string): string {
-  return crypto
-    .createHash("sha512")
-    .update(canonical, "utf8")
-    .update("|", "utf8")
-    .update(DILITHIUM_PREVIEW_KID, "utf8")
-    .digest("hex");
-}
-
-type DilithiumPreviewBlock = {
+type DilithiumBlock = {
   algo: "ML-DSA-65";
   kid: string;
-  mode: "preview";
-  digest: string;
+  mode: "preview" | "real";
+  digest?: string;
+  signature?: string;
+  publicKey?: string;
   valid: boolean | null;
   note: string;
 };
 
-function dilithiumPreviewBlock(canonical: string, validOverride?: boolean | null): DilithiumPreviewBlock {
+/** Used by /sign + /sign/batch. Returns the public JSON block to echo in
+ * the response and the storage value to write into signatureDilithium. */
+async function dilithiumOnSign(
+  canonical: string,
+): Promise<{ block: DilithiumBlock; storedString: string }> {
+  const r = await cryptoSignDilithium(canonical);
+  if (r.mode === "real") {
+    return {
+      block: {
+        algo: "ML-DSA-65",
+        kid: r.kid,
+        mode: "real",
+        signature: r.signature,
+        publicKey: r.publicKey,
+        valid: true,
+        note: DILITHIUM_REAL_NOTE,
+      },
+      storedString: r.signature,
+    };
+  }
   return {
-    algo: "ML-DSA-65",
-    kid: DILITHIUM_PREVIEW_KID,
-    mode: "preview",
-    digest: dilithiumPreviewDigest(canonical),
-    valid: validOverride === undefined ? true : validOverride,
-    note: DILITHIUM_PREVIEW_NOTE,
+    block: {
+      algo: "ML-DSA-65",
+      kid: r.kid,
+      mode: "preview",
+      digest: r.signature,
+      valid: true,
+      note: DILITHIUM_PREVIEW_NOTE,
+    },
+    storedString: r.signature,
   };
 }
 
-/**
- * For DB-backed verifies: row.signatureDilithium may be null (legacy rows pre-preview),
- * a hex digest (post-preview rows), or anything else. We re-derive the expected digest
- * from the stored canonical payload + kid and compare constant-time. Returns null when
- * the column is null (legacy), otherwise a block with valid:true|false.
- */
-function dilithiumPreviewFromRow(row: any): DilithiumPreviewBlock | null {
+/** Used by /verify/:id + /:id/public + PDF render. Verifies the row's
+ * stored signatureDilithium against the canonical payload. Auto-detects
+ * preview vs real by length. Returns null when the column is empty. */
+async function dilithiumOnRow(row: any): Promise<DilithiumBlock | null> {
   if (!row || typeof row.signatureDilithium !== "string" || !row.signatureDilithium) {
     return null;
   }
   const stored = row.signatureDilithium;
-  const expected = dilithiumPreviewDigest(row.payloadCanonical);
-  const valid = constantTimeEqHex(stored, expected);
+  const v = await cryptoVerifyDilithium(row.payloadCanonical, stored);
+  if (v.mode === "real") {
+    const real = await getActiveDilithium();
+    return {
+      algo: "ML-DSA-65",
+      kid: DILITHIUM_KID_REAL,
+      mode: "real",
+      signature: stored,
+      publicKey: real ? Buffer.from(real.publicKey).toString("hex") : undefined,
+      valid: v.valid,
+      note: DILITHIUM_REAL_NOTE,
+    };
+  }
   return {
     algo: "ML-DSA-65",
-    kid: DILITHIUM_PREVIEW_KID,
+    kid: DILITHIUM_KID_PREVIEW,
     mode: "preview",
     digest: stored,
-    valid,
+    valid: v.valid,
+    note: DILITHIUM_PREVIEW_NOTE,
+  };
+}
+
+/** Used by stateless POST /verify. Caller supplies a signature in the body;
+ * we verify it against the canonical payload. */
+async function dilithiumStateless(
+  canonical: string,
+  supplied: string | null,
+): Promise<DilithiumBlock | null> {
+  if (!supplied || typeof supplied !== "string") return null;
+  const v = await cryptoVerifyDilithium(canonical, supplied);
+  if (v.mode === "real") {
+    return {
+      algo: "ML-DSA-65",
+      kid: DILITHIUM_KID_REAL,
+      mode: "real",
+      signature: supplied,
+      valid: v.valid,
+      note: DILITHIUM_REAL_NOTE,
+    };
+  }
+  return {
+    algo: "ML-DSA-65",
+    kid: DILITHIUM_KID_PREVIEW,
+    mode: "preview",
+    digest: supplied,
+    valid: v.valid,
     note: DILITHIUM_PREVIEW_NOTE,
   };
 }
@@ -792,7 +867,8 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       }
       if (cached && cached.status === "hit") {
         const row = cached.row;
-        const dilithiumBlock = dilithiumPreviewFromRow(row) ?? dilithiumPreviewBlock(canonical);
+        const dilithiumBlock =
+          (await dilithiumOnRow(row)) ?? (await dilithiumOnSign(canonical)).block;
         const edPub = row.ed25519Kid ? (await getKeyByKid(row.ed25519Kid))?.publicKey : null;
         return res.status(200).json({
           id: row.id,
@@ -835,7 +911,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
 
     const signatureHmac = signHmac(hmacKey.secret, canonical);
     const signatureEd25519 = signEd25519Hex(edKey.privateKey, canonical);
-    const dilithiumPreview = dilithiumPreviewBlock(canonical);
+    const dilithiumResult = await dilithiumOnSign(canonical);
 
     // Geo anchoring: body.gps (explicit client GPS) takes priority; fallback to IP lookup.
     const geo = resolveGeo(body.gps, req);
@@ -859,7 +935,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
         payloadHash,
         signatureHmac,
         signatureEd25519,
-        dilithiumPreview.digest,
+        dilithiumResult.storedString,
         ALGO_VERSION,
         auth.sub,
         auth.email,
@@ -910,7 +986,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
         signature: signatureEd25519,
         publicKey: edKey.publicKeyHex,
       },
-      dilithium: dilithiumPreview,
+      dilithium: dilithiumResult.block,
       idempotent: idemKey ? "fresh" : null,
       issuer: { userId: auth.sub, email: auth.email },
       geo: geo.source
@@ -988,7 +1064,7 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
         const payloadHash = sha256Hex(canonical);
         const signatureHmac = signHmac(hmacKey.secret, canonical);
         const signatureEd25519 = signEd25519Hex(edKey.privateKey, canonical);
-        const dilithiumDigest = dilithiumPreviewDigest(canonical);
+        const dilithiumResult = await dilithiumOnSign(canonical);
 
         const geo = gps !== undefined ? resolveGeo(gps, req) : fallbackGeo;
         const id = crypto.randomUUID();
@@ -1011,7 +1087,7 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
             payloadHash,
             signatureHmac,
             signatureEd25519,
-            dilithiumDigest,
+            dilithiumResult.storedString,
             ALGO_VERSION,
             auth.sub,
             auth.email,
@@ -1096,19 +1172,9 @@ qsignV2Router.post("/verify", async (req, res) => {
 
     const valid = hmacValid && (edValid === null ? true : edValid);
 
-    const dilithiumDigestIn =
+    const dilithiumIn =
       typeof req.body?.signatureDilithium === "string" ? req.body.signatureDilithium : null;
-    const dilithiumExpected = dilithiumPreviewDigest(canonical);
-    const dilithiumOut = dilithiumDigestIn
-      ? {
-          algo: "ML-DSA-65" as const,
-          kid: DILITHIUM_PREVIEW_KID,
-          mode: "preview" as const,
-          digest: dilithiumDigestIn,
-          valid: constantTimeEqHex(dilithiumDigestIn, dilithiumExpected),
-          note: DILITHIUM_PREVIEW_NOTE,
-        }
-      : null;
+    const dilithiumOut = await dilithiumStateless(canonical, dilithiumIn);
 
     res.json({
       valid,
@@ -1154,13 +1220,14 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
     const revoked = !!revokedAtSrc;
     const valid = hmacValid && (edValid === null ? true : edValid) && !revoked;
 
+    const dilithiumBlock = await dilithiumOnRow(row);
     const out: QSignVerifyResult = {
       valid,
       signatureId: row.id,
       algoVersion: row.algoVersion || ALGO_VERSION,
       hmac: { kid: row.hmacKid, valid: hmacValid },
       ed25519: { kid: row.ed25519Kid ?? null, valid: edValid },
-      dilithium: dilithiumPreviewFromRow(row),
+      dilithium: dilithiumBlock,
       revoked,
       revokedAt: revokedAtSrc ? new Date(revokedAtSrc).toISOString() : null,
       revocationReason: revocation?.reason ?? null,
@@ -1932,16 +1999,20 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
       doc.moveDown(0.4);
     }
 
-    const dilithiumRow = dilithiumPreviewFromRow(row);
+    const dilithiumRow = await dilithiumOnRow(row);
     if (dilithiumRow) {
+      const sigSlot = dilithiumRow.signature ?? dilithiumRow.digest ?? "";
+      const sigLabel = dilithiumRow.mode === "real" ? "signature" : "digest";
       doc.font("Helvetica-Bold").fontSize(9).fillColor(COLOR_MUTED).text(
         `ML-DSA-65 (Dilithium-3) — ${dilithiumRow.mode}`,
       );
       doc.font("Courier").fontSize(8.5).fillColor(COLOR_TEXT).text(
-        `kid: ${dilithiumRow.kid}\ndigest: ${truncate(dilithiumRow.digest, 80)}\nverify: ${dilithiumRow.valid === null ? "—" : dilithiumRow.valid ? "✓" : "✗"}`,
+        `kid: ${dilithiumRow.kid}\n${sigLabel}: ${truncate(sigSlot, 80)}\nverify: ${dilithiumRow.valid === null ? "—" : dilithiumRow.valid ? "✓" : "✗"}`,
       );
       doc.font("Helvetica-Oblique").fontSize(7).fillColor(COLOR_MUTED).text(
-        "Preview slot — real PQ signature lands in v2.1.",
+        dilithiumRow.mode === "real"
+          ? "FIPS 204 ML-DSA-65 — real post-quantum signature."
+          : "Preview slot — set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65.",
       );
       doc.moveDown(0.4);
     }
@@ -2045,6 +2116,8 @@ qsignV2Router.get("/:id/public", async (req, res) => {
       payloadDecoded = null;
     }
 
+    const dilithiumBlock = await dilithiumOnRow(row);
+
     res.json({
       id: row.id,
       algoVersion: row.algoVersion || ALGO_VERSION,
@@ -2072,7 +2145,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
             valid: edValid,
           }
         : null,
-      dilithium: dilithiumPreviewFromRow(row),
+      dilithium: dilithiumBlock,
       issuer: {
         userId: row.issuerUserId ?? null,
         email: row.issuerEmail ?? null,

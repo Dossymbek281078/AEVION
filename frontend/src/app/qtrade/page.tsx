@@ -23,6 +23,8 @@ import {
   type PortfolioStats, type PairBreakdown, type CalendarCell,
 } from "./analytics";
 import { runBacktest, type BacktestResult, type StrategyKind } from "./backtest";
+import { ldFees, slipEntryPrice, closeWithFees } from "./fees";
+import FeesPanel from "./FeesPanel";
 
 type Account = {
   id: string;
@@ -306,7 +308,11 @@ export default function QTradePage() {
             else stillOpen.push(pos);
           }
           if (triggered.length === 0) return prevPos;
-          const newClosed: ClosedPosition[] = triggered.map(({ pos, price }) => buildClosed(pos, price));
+          const fees = ldFees();
+          const newClosed: ClosedPosition[] = triggered.map(({ pos, price }) => {
+            const r = closeWithFees(pos, price, fees);
+            return { ...buildClosed(pos, r.exitPrice), realizedPnl: r.realizedPnl, realizedPct: r.realizedPct };
+          });
           setClosedPositions((cs) => [...newClosed, ...cs].slice(0, 200));
           // Mint AEV per profitable bracket-close
           const profitableCount = newClosed.filter((c) => c.realizedPnl > 0).length;
@@ -481,9 +487,10 @@ export default function QTradePage() {
     }
     if (orderType === "market") {
       const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      const pos: Position = { id, pair: pid, side, qty: q, entryPrice: cur.price, entryTs: Date.now() };
+      const fillPrice = slipEntryPrice(cur.price, side, ldFees());
+      const pos: Position = { id, pair: pid, side, qty: q, entryPrice: fillPrice, entryTs: Date.now() };
       setPositions((prev) => [pos, ...prev]);
-      setTradeMsg(`✓ ${side === "long" ? "Long" : "Short"} ${q} ${cur.symbol} @ ${fmtUsd(cur.price)}`);
+      setTradeMsg(`✓ ${side === "long" ? "Long" : "Short"} ${q} ${cur.symbol} @ ${fmtUsd(fillPrice)}`);
       setTimeout(() => setTradeMsg(null), 2400);
       return;
     }
@@ -589,7 +596,12 @@ export default function QTradePage() {
       if (!target) return prev;
       const cur = pairById.get(target.pair);
       if (!cur) return prev;
-      const closed = buildClosed(target, cur.price);
+      const r = closeWithFees(target, cur.price, ldFees());
+      const closed: ClosedPosition = {
+        ...buildClosed(target, r.exitPrice),
+        realizedPnl: r.realizedPnl,
+        realizedPct: r.realizedPct,
+      };
       setClosedPositions((cs) => [closed, ...cs].slice(0, 200));
       // Auto-mint AEV via Proof-of-Play when the trade was profitable.
       if (closed.realizedPnl > 0) {
@@ -751,6 +763,8 @@ export default function QTradePage() {
         <code style={{ fontSize: 13 }}>.aevion-data/qtrade.json</code>); цены и позиции
         — клиентский localStorage.
       </div>
+
+      <FeesPanel />
 
       {/* ═══ LIVE MARKETS ══════════════════════════════════════════ */}
       <section

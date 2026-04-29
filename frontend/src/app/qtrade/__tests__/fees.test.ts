@@ -9,6 +9,7 @@ import {
   slipExitPrice,
   roundTripFee,
   applyClosedFees,
+  closeWithFees,
   __FEES_INTERNAL,
   type FeeConfig,
 } from "../fees";
@@ -137,5 +138,45 @@ describe("fees · roundTripFee + applyClosedFees", () => {
     const heavyFees: FeeConfig = { enabled: true, makerBps: 50, takerBps: 50, slippageBps: 0 };
     const net = applyClosedFees(rawPnl, entry, exit, qty, "taker", "taker", heavyFees);
     expect(net).toBeLessThan(0);
+  });
+});
+
+describe("fees · closeWithFees", () => {
+  const target = { entryPrice: 100, side: "long" as const, qty: 2 };
+
+  it("disabled config — exitPrice unchanged, pnl = naïve", () => {
+    const cfg = { ...enabledCfg, enabled: false };
+    const r = closeWithFees(target, 110, cfg);
+    expect(r.exitPrice).toBe(110);
+    expect(r.realizedPnl).toBeCloseTo(20, 6);     // (110-100)*2
+    expect(r.realizedPct).toBeCloseTo(10, 6);     // 10%
+  });
+
+  it("enabled — long exit gets worse-down slip + taker fees deducted", () => {
+    // exitSlipped = 110 × (1 - 5/10000) = 109.945
+    // rawPnl = (109.945 - 100) × 2 = 19.89
+    // entryFee = 100 × 2 × 10/10000 = 0.20
+    // exitFee  = 109.945 × 2 × 10/10000 = 0.21989
+    // net pnl  = 19.89 - 0.20 - 0.21989 ≈ 19.47011
+    const r = closeWithFees(target, 110, enabledCfg);
+    expect(r.exitPrice).toBeCloseTo(109.945, 4);
+    expect(r.realizedPnl).toBeCloseTo(19.47011, 4);
+  });
+
+  it("short side — exit slip goes worse-up", () => {
+    const shortTarget = { entryPrice: 100, side: "short" as const, qty: 1 };
+    // shortExit slip: worse-up → 95 × (1 + 5/10000) = 95.0475
+    // rawPnl (short profit when price goes down): (95.0475 - 100) × 1 × -1 = 4.9525
+    const r = closeWithFees(shortTarget, 95, enabledCfg);
+    expect(r.exitPrice).toBeCloseTo(95.0475, 4);
+    expect(r.realizedPnl).toBeLessThan(4.9525); // fees deducted
+    expect(r.realizedPnl).toBeGreaterThan(4.7); // sanity
+  });
+
+  it("losing trade — fees make loss bigger", () => {
+    const r = closeWithFees(target, 90, enabledCfg);
+    // raw loss: (90 × (1-slip) - 100) × 2 ≈ -20.09
+    // fees deducted further → even more negative
+    expect(r.realizedPnl).toBeLessThan(-20);
   });
 });

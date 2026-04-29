@@ -15,12 +15,15 @@ const PAIR_PROMOS: Partial<Record<PairId, Partial<Pick<FeeConfig, "makerBps" | "
   "AEV/USD": { makerBps: 0 },
 };
 
+export type PairFeeOverride = Partial<Pick<FeeConfig, "makerBps" | "takerBps" | "slippageBps">>;
+
 export type FeeConfig = {
   enabled: boolean;
   makerBps: number;        // basis points (1 bps = 0.01%) для лимитных ордеров (passive fill)
   takerBps: number;        // bps для маркет ордеров (aggressive fill)
   slippageBps: number;     // bps от цены — entry/exit slip (sym., ухудшает цену)
   dailyLossLimitUsd?: number; // 0 / undefined = disabled. Опц. cap дневного убытка
+  pairOverrides?: Partial<Record<PairId, PairFeeOverride>>; // user-defined per-pair overrides
 };
 
 export const DEFAULT_FEES: FeeConfig = {
@@ -37,16 +40,38 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+const PAIR_KEYS = ["AEV/USD", "BTC/USD", "ETH/USD", "SOL/USD"] as const;
+
+function sanitizePairOverrides(raw: unknown): FeeConfig["pairOverrides"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: Partial<Record<PairId, PairFeeOverride>> = {};
+  for (const pair of PAIR_KEYS) {
+    const entry = r[pair];
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Partial<PairFeeOverride>;
+    const sane: PairFeeOverride = {};
+    if (Number.isFinite(e.makerBps)) sane.makerBps = clamp(Number(e.makerBps), FEE_BOUNDS.min, FEE_BOUNDS.max);
+    if (Number.isFinite(e.takerBps)) sane.takerBps = clamp(Number(e.takerBps), FEE_BOUNDS.min, FEE_BOUNDS.max);
+    if (Number.isFinite(e.slippageBps)) sane.slippageBps = clamp(Number(e.slippageBps), FEE_BOUNDS.min, FEE_BOUNDS.max);
+    if (Object.keys(sane).length > 0) out[pair] = sane;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function sanitize(raw: unknown): FeeConfig {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_FEES };
   const r = raw as Partial<FeeConfig>;
-  return {
+  const out: FeeConfig = {
     enabled: r.enabled === true,
     makerBps: Number.isFinite(r.makerBps) ? clamp(Number(r.makerBps), FEE_BOUNDS.min, FEE_BOUNDS.max) : DEFAULT_FEES.makerBps,
     takerBps: Number.isFinite(r.takerBps) ? clamp(Number(r.takerBps), FEE_BOUNDS.min, FEE_BOUNDS.max) : DEFAULT_FEES.takerBps,
     slippageBps: Number.isFinite(r.slippageBps) ? clamp(Number(r.slippageBps), FEE_BOUNDS.min, FEE_BOUNDS.max) : DEFAULT_FEES.slippageBps,
     dailyLossLimitUsd: Number.isFinite(r.dailyLossLimitUsd) ? Math.max(0, Number(r.dailyLossLimitUsd)) : 0,
   };
+  const overrides = sanitizePairOverrides(r.pairOverrides);
+  if (overrides) out.pairOverrides = overrides;
+  return out;
 }
 
 export function ldFees(): FeeConfig {
@@ -151,14 +176,17 @@ export function closeWithFees(
   return { exitPrice, realizedPnl: netPnl, realizedPct };
 }
 
-// Effective FeeConfig for a specific trading pair. Applies pair-specific promo
-// rate overrides on top of the global config. When fees.enabled is false —
-// returns the config unchanged (promos are no-op when fees are off).
+// Effective FeeConfig for a specific trading pair. Layers:
+//   1. global cfg (makerBps/takerBps/slippageBps)
+//   2. PAIR_PROMOS[pair] (system-level promo, e.g. AEV/USD 0% maker)
+//   3. cfg.pairOverrides[pair] (user-defined per-pair tier — wins всё)
+// When fees.enabled is false → returns config unchanged (no-op).
 export function feesForPair(pair: PairId, cfg: FeeConfig = ldFees()): FeeConfig {
   if (!cfg.enabled) return cfg;
   const promo = PAIR_PROMOS[pair];
-  if (!promo) return cfg;
-  return { ...cfg, ...promo };
+  const userOverride = cfg.pairOverrides?.[pair];
+  if (!promo && !userOverride) return cfg;
+  return { ...cfg, ...(promo ?? {}), ...(userOverride ?? {}) };
 }
 
 // Daily loss guard: returns sum of realized P&L for closes WHERE exitTs falls

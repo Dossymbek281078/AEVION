@@ -259,4 +259,73 @@ describe("fees · feesForPair (per-pair promo overrides)", () => {
     expect(tradeFee(10_000, "maker", promoCfg)).toBe(0);
     expect(tradeFee(10_000, "taker", promoCfg)).toBeCloseTo(10, 6); // taker still 10 bps
   });
+
+  it("user override wins promo: AEV/USD makerBps=20 overrides 0% promo", () => {
+    const cfg: FeeConfig = {
+      ...enabledCfg,
+      pairOverrides: { "AEV/USD": { makerBps: 20 } },
+    };
+    const out = feesForPair("AEV/USD", cfg);
+    expect(out.makerBps).toBe(20);   // user override wins
+    expect(out.takerBps).toBe(enabledCfg.takerBps); // unchanged
+  });
+
+  it("user override on non-promo pair: BTC/USD slippageBps=50", () => {
+    const cfg: FeeConfig = {
+      ...enabledCfg,
+      pairOverrides: { "BTC/USD": { slippageBps: 50 } },
+    };
+    const out = feesForPair("BTC/USD", cfg);
+    expect(out.slippageBps).toBe(50);
+    expect(out.makerBps).toBe(enabledCfg.makerBps);
+    expect(out.takerBps).toBe(enabledCfg.takerBps);
+  });
+
+  it("merge order: AEV/USD with override partial — promo applies for unset fields", () => {
+    // user overrides only takerBps; makerBps still falls back to PROMO (0)
+    const cfg: FeeConfig = {
+      ...enabledCfg,
+      pairOverrides: { "AEV/USD": { takerBps: 5 } },
+    };
+    const out = feesForPair("AEV/USD", cfg);
+    expect(out.makerBps).toBe(0);    // still promo (user did not set)
+    expect(out.takerBps).toBe(5);    // user override
+  });
+
+  it("disabled cfg → pairOverrides ignored", () => {
+    const cfg: FeeConfig = {
+      ...enabledCfg, enabled: false,
+      pairOverrides: { "BTC/USD": { takerBps: 99 } },
+    };
+    expect(feesForPair("BTC/USD", cfg)).toBe(cfg);
+  });
+
+  it("svFees → ldFees roundtrip preserves valid pairOverrides", () => {
+    window.localStorage.clear();
+    const cfg: FeeConfig = {
+      ...enabledCfg,
+      pairOverrides: { "BTC/USD": { makerBps: 1, takerBps: 2 }, "ETH/USD": { slippageBps: 3 } },
+    };
+    svFees(cfg);
+    expect(ldFees().pairOverrides).toEqual({
+      "BTC/USD": { makerBps: 1, takerBps: 2 },
+      "ETH/USD": { slippageBps: 3 },
+    });
+  });
+
+  it("sanitize: drops invalid override entries", () => {
+    window.localStorage.setItem(
+      __FEES_INTERNAL.FEES_KEY,
+      JSON.stringify({
+        ...enabledCfg,
+        pairOverrides: {
+          "BTC/USD": { makerBps: 5 },
+          "INVALID/PAIR": { makerBps: 99 },
+          "ETH/USD": "not-an-object",
+        },
+      }),
+    );
+    const out = ldFees();
+    expect(out.pairOverrides).toEqual({ "BTC/USD": { makerBps: 5 } });
+  });
 });

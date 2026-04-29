@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 
@@ -14,6 +15,14 @@ interface ChangeEntry {
   title: string;
   body: string;
   scope?: string;
+}
+
+interface ChangelogPayload {
+  items: ChangeEntry[];
+  total: number;
+  counts: Partial<Record<EntryKind, number>>;
+  kind: EntryKind | null;
+  since: string | null;
 }
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
@@ -28,7 +37,7 @@ const KIND_META: Record<EntryKind, { label: string; bg: string; fg: string }> = 
   module: { label: "МОДУЛЬ", bg: "#e0f2fe", fg: "#075985" },
 };
 
-const ENTRIES: ChangeEntry[] = [
+const ENTRIES_FALLBACK: ChangeEntry[] = [
   {
     date: "2026-04-28",
     kind: "added",
@@ -167,31 +176,51 @@ const ENTRIES: ChangeEntry[] = [
 export default function PricingChangelogPage() {
   const tp = usePricingT();
   const [filter, setFilter] = useState<EntryKind | null>(null);
+  const [entries, setEntries] = useState<ChangeEntry[]>(ENTRIES_FALLBACK);
+  const [counts, setCounts] = useState<Partial<Record<EntryKind, number>>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     track({ type: "page_view", source: "pricing/changelog" });
   }, []);
 
-  const filtered = useMemo(() => {
-    return filter ? ENTRIES.filter((e) => e.kind === filter) : ENTRIES;
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const url = apiUrl("/api/pricing/changelog") + "?limit=500" + (filter ? `&kind=${filter}` : "");
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = (await r.json()) as ChangelogPayload;
+        if (cancelled) return;
+        setEntries(j.items);
+        setCounts(j.counts);
+        setError(null);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [filter]);
-
-  const counts = useMemo(() => {
-    const c: Partial<Record<EntryKind, number>> = {};
-    for (const e of ENTRIES) c[e.kind] = (c[e.kind] ?? 0) + 1;
-    return c;
-  }, []);
 
   const grouped = useMemo(() => {
     const map = new Map<string, ChangeEntry[]>();
-    for (const e of filtered) {
+    for (const e of entries) {
       const month = e.date.slice(0, 7);
       const arr = map.get(month) ?? [];
       arr.push(e);
       map.set(month, arr);
     }
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [filtered]);
+  }, [entries]);
+
+  const totalForFilter = entries.length;
 
   return (
     <ProductPageShell maxWidth={920}>
@@ -263,7 +292,11 @@ export default function PricingChangelogPage() {
         <span style={{ fontSize: 11, fontWeight: 800, color: "#475569", letterSpacing: "0.06em" }}>
           {tp("changelog.filter")}
         </span>
-        <FilterChip active={filter === null} onClick={() => setFilter(null)} label={`${tp("changelog.filterAll")} · ${ENTRIES.length}`} />
+        <FilterChip
+          active={filter === null}
+          onClick={() => setFilter(null)}
+          label={`${tp("changelog.filterAll")} · ${filter === null ? totalForFilter : Object.values(counts).reduce((a, b) => a + (b ?? 0), 0)}`}
+        />
         {(Object.keys(KIND_META) as EntryKind[]).map((k) => {
           const c = counts[k] ?? 0;
           if (c === 0) return null;
@@ -279,6 +312,37 @@ export default function PricingChangelogPage() {
           );
         })}
       </section>
+
+      {error && (
+        <div
+          style={{
+            padding: 12,
+            marginBottom: 16,
+            background: "#fef3c7",
+            color: "#92400e",
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        >
+          Не удалось загрузить changelog с сервера ({error}). Показываем последний кеш.
+        </div>
+      )}
+
+      {loading && entries.length === 0 && (
+        <div
+          style={{
+            padding: 24,
+            background: "#f8fafc",
+            border: BORDER,
+            borderRadius: 12,
+            textAlign: "center",
+            color: "#64748b",
+            fontSize: 13,
+          }}
+        >
+          Загрузка…
+        </div>
+      )}
 
       {/* Timeline grouped by month */}
       <section style={{ marginBottom: 32 }}>

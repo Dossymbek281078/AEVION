@@ -19,6 +19,7 @@ import { projects } from "../data/projects";
 import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
+import { CHANGELOG, type ChangelogKind } from "../data/changelog";
 import { sendEmail } from "./provisioning";
 
 export const pricingRouter = Router();
@@ -921,6 +922,45 @@ pricingRouter.get("/newsletter/list", (req, res) => {
     console.error("[newsletter/list] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
+});
+
+/**
+ * GET /api/pricing/changelog
+ * Публичный journal изменений pricing-блока.
+ * Параметры:
+ *   - kind=added|changed|removed|deprecated|promo|module — фильтр по типу
+ *   - since=YYYY-MM-DD — отдавать только записи >= даты
+ *   - limit (default 100, max 500), offset (default 0)
+ *
+ * Сортировка по date desc (новейшие сверху).
+ */
+pricingRouter.get("/changelog", (req, res) => {
+  const KIND_VALUES: ChangelogKind[] = ["added", "changed", "removed", "deprecated", "promo", "module"];
+  const kind = typeof req.query.kind === "string" ? (req.query.kind as ChangelogKind) : undefined;
+  const since = typeof req.query.since === "string" ? req.query.since : undefined;
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
+  const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10), 0);
+
+  if (kind && !KIND_VALUES.includes(kind)) {
+    return res.status(400).json({ error: "invalid_kind", kind });
+  }
+
+  // Универсум по `since` — нужен для подсчёта counts (кол-во по каждому kind),
+  // чтобы UI-фильтры не пропадали при выбранном kind.
+  const universe = CHANGELOG.filter((e) => !since || e.date >= since);
+
+  const filtered = universe
+    .filter((e) => !kind || e.kind === kind)
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const total = filtered.length;
+  const items = filtered.slice(offset, offset + limit);
+
+  const counts: Partial<Record<ChangelogKind, number>> = {};
+  for (const e of universe) counts[e.kind] = (counts[e.kind] ?? 0) + 1;
+
+  res.json({ items, total, counts, kind: kind ?? null, since: since ?? null });
 });
 
 /**

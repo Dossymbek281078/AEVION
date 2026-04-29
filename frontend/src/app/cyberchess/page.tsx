@@ -474,6 +474,10 @@ export default function CyberChessPage(){
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
   const[showSettings,sShowSettings]=useState(false);
+  // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
+  // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
+  const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_autoqueen_v1",autoQueen?"1":"0")}catch{}},[autoQueen]);
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
   const[replaying,sReplaying]=useState(false);
   const[replaySpeed,sReplaySpeed]=useState(1000);
@@ -2055,7 +2059,7 @@ export default function CyberChessPage(){
     // In analysis tab: play both sides freely (use whoever's turn it is)
     const sideToMove=(tab==="analysis"||hotseat)?game.turn():pCol;
     if(sel){
-      if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){sPromo({from:sel,to:sq});return}exec(sel,sq);return}
+      if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){if(autoQueen){exec(sel,sq,"q");return}sPromo({from:sel,to:sq});return}exec(sel,sq);return}
       if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));return}
       sSel(null);sVm(new Set());return;
     }
@@ -2128,7 +2132,10 @@ export default function CyberChessPage(){
     const matched=legal.find(m=>m.to===to);
     if(matched){
       const mp=game.get(f);
-      if(mp?.type==="p"&&(to[1]==="1"||to[1]==="8"))sPromo({from:f,to});
+      if(mp?.type==="p"&&(to[1]==="1"||to[1]==="8")){
+        if(autoQueen)exec(f,to,"q");
+        else sPromo({from:f,to});
+      }
       else exec(f,to);
     }else{sSel(null);sVm(new Set());}
   };
@@ -6897,6 +6904,7 @@ export default function CyberChessPage(){
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
+            <Row label="Auto-queen (превращение в ферзя)" desc="Пешка на 8-й сразу становится ферзём — без модалки. Для bullet/blitz и премувов. Выключи если нужны underpromotions (конь, ладья, слон)." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
             <Row label="Threat Heatmap" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
             <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
           </div>

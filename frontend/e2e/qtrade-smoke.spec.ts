@@ -8,10 +8,14 @@ test.describe("QTrade smoke", () => {
     await page.goto("/qtrade", { waitUntil: "domcontentloaded" });
 
     await expect(page.getByRole("heading", { name: "QTrade" })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("Live Markets")).toBeVisible();
+    await expect(page.getByText("Live Markets").first()).toBeVisible();
 
-    for (const sym of ["AEV/USD", "BTC/USD", "ETH/USD", "SOL/USD"]) {
-      await expect(page.getByText(sym).first()).toBeVisible();
+    // Pair cards render only the short symbol (p.symbol = AEV/BTC/ETH/SOL).
+    // Strict-text-equals avoids matching "AEV" prefix inside e.g. "AEVION".
+    for (const sym of ["AEV", "BTC", "ETH", "SOL"]) {
+      const el = page.getByText(sym, { exact: true }).first();
+      await el.scrollIntoViewIfNeeded();
+      await expect(el).toBeVisible();
     }
   });
 });

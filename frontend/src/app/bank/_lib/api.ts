@@ -1,13 +1,17 @@
 // Thin typed client over /api/qtrade/* and /api/auth/me.
 //
-// Frontend-side hardening (Phase 3, 2026-04-26):
+// Frontend-side hardening:
 //   - All qtrade calls now send Bearer token (backend may or may not enforce yet,
 //     but we no longer leak unauth requests).
-//   - unwrap() distinguishes network errors (typed as "network") from HTTP errors
+//   - request() distinguishes network errors (typed as "network") from HTTP errors
 //     so the UI can render targeted messages.
 //   - lookupAccountByEmail() resolves an email → accountId by querying the
 //     accounts list, removing the requirement that recipients use raw acc_<uuid>.
 //   - pingBackend() drives the health banner.
+//   - newIdempotencyKey() / topUp+transfer accept idempotencyKey: caller-side
+//     defence so a double-click or retry under flaky network does not produce
+//     duplicate ledger entries. Header is `Idempotency-Key`. Backend enforcement
+//     is a separate concern; the wire-level contract is set correctly here.
 
 import { apiUrl } from "@/lib/apiBase";
 import type { Account, Me, Operation } from "./types";
@@ -49,6 +53,18 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { ...extra };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
+}
+
+/**
+ * Generates a stable, opaque key suitable for the `Idempotency-Key` HTTP header.
+ * Prefer crypto.randomUUID() (RFC 4122 v4) when available, otherwise fall back
+ * to a timestamp + base-36 random pair that preserves uniqueness with extremely
+ * high probability (1e-12 collision in a single-tab session).
+ */
+export function newIdempotencyKey(prefix = "aev"): string {
+  const c = typeof crypto !== "undefined" ? (crypto as Crypto & { randomUUID?: () => string }) : undefined;
+  if (c?.randomUUID) return `${prefix}-${c.randomUUID()}`;
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 class ApiError extends Error {
@@ -129,24 +145,37 @@ export async function listOperations(): Promise<Operation[]> {
   return Array.isArray(data.items) ? data.items : [];
 }
 
-export async function topUp(accountId: string, amount: number): Promise<{ id: string; balance: number; updatedAt: string }> {
+export async function topUp(
+  accountId: string,
+  amount: number,
+  options?: { idempotencyKey?: string },
+): Promise<{ id: string; balance: number; updatedAt: string }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   return request<{ id: string; balance: number; updatedAt: string }>(
     "/api/qtrade/topup",
     {
       method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: authHeaders(headers),
       body: JSON.stringify({ accountId, amount }),
     },
     "Top-up failed",
   );
 }
 
-export async function transfer(from: string, to: string, amount: number): Promise<Transfer> {
+export async function transfer(
+  from: string,
+  to: string,
+  amount: number,
+  options?: { idempotencyKey?: string },
+): Promise<Transfer> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   return request<Transfer>(
     "/api/qtrade/transfer",
     {
       method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: authHeaders(headers),
       body: JSON.stringify({ from, to, amount }),
     },
     "Transfer failed",

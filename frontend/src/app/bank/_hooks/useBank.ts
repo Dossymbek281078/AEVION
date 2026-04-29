@@ -65,7 +65,9 @@ export function useBank(me: Me | null, onError: ErrorHandler) {
         return false;
       }
       try {
-        const tx = await api.transfer(account.id, to, amount);
+        const tx = await api.transfer(account.id, to, amount, {
+          idempotencyKey: api.newIdempotencyKey(`xfer-${account.id.slice(0, 8)}`),
+        });
         try {
           const sig = await api.signPayload(tx);
           appendSignature({
@@ -98,7 +100,9 @@ export function useBank(me: Me | null, onError: ErrorHandler) {
         return false;
       }
       try {
-        const result = await api.topUp(account.id, amount);
+        const result = await api.topUp(account.id, amount, {
+          idempotencyKey: api.newIdempotencyKey(`topup-${account.id.slice(0, 8)}`),
+        });
         try {
           const payload = {
             kind: "topup" as const,

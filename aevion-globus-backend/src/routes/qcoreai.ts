@@ -29,22 +29,28 @@ import {
   validateWebhookUrl,
 } from "../services/qcoreai/userWebhooks";
 import {
+  applyRefinement,
   buildHistoryContext,
   createRun,
   deleteSession,
   ensureSession,
   finishRun,
   getAnalytics,
+  getCostTimeseries,
+  getMaxOrdering,
   getRun,
   getRunByShareToken,
   getSession,
   getSessionPublic,
+  getTopUserTags,
   insertMessage,
   listMessages,
   listRuns,
   listSessions,
   renameSession,
   renameSessionIfDefault,
+  searchRuns,
+  setRunTags,
   shareRun,
   touchSession,
   unshareRun,
@@ -361,6 +367,213 @@ qcoreaiRouter.get("/analytics", async (req, res) => {
     res.json(summary);
   } catch (err: any) {
     res.status(500).json({ error: "analytics failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Refinement / search / tagging — feat/qcore-extras 2026-04-29
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const refineLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyPrefix: "qcore-refine",
+  message: "Too many refinements from this IP. Please retry in a minute.",
+});
+
+/**
+ * POST /api/qcoreai/runs/:id/refine
+ * Body: { instruction, provider?, model?, temperature? }
+ * Single-pass refinement on top of an already-finished run.
+ * Appends a final/refinement message and accumulates cost+duration.
+ */
+qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const run = await getRun(String(req.params.id));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    if (run.status === "running") {
+      return res.status(409).json({ error: "run is still streaming — wait for it to finish" });
+    }
+    const baseFinal = run.finalContent;
+    if (!baseFinal || !baseFinal.trim()) {
+      return res.status(400).json({ error: "run has no final answer to refine" });
+    }
+
+    const instruction =
+      typeof req.body?.instruction === "string" ? req.body.instruction.trim().slice(0, 4000) : "";
+    if (!instruction) {
+      return res.status(400).json({ error: "instruction required" });
+    }
+
+    const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
+    const providerId = resolveProvider(requestedProvider);
+    if (providerId === "stub") {
+      return res.status(503).json({ error: "no AI provider configured" });
+    }
+    const provider = getProviders().find((p) => p.id === providerId)!;
+    const modelName =
+      typeof req.body?.model === "string" && req.body.model
+        ? req.body.model
+        : provider.defaultModel;
+    const temperature =
+      typeof req.body?.temperature === "number" ? req.body.temperature : 0.5;
+
+    const systemPrompt =
+      "You are refining a previously produced answer. Apply the user's instruction " +
+      "with surgical precision: keep correct content, rewrite or extend per the instruction, " +
+      "preserve formatting (headings, lists, tables, code blocks). Output ONLY the refined " +
+      "answer — no preamble, no meta commentary, no \"here is the refined version\" prefix.";
+    const userPrompt =
+      `Original task:\n${run.userInput}\n\n` +
+      `Current answer:\n${baseFinal}\n\n` +
+      `Refinement instruction:\n${instruction}`;
+
+    const startedAt = Date.now();
+    const result = await callProvider(
+      providerId,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      modelName,
+      temperature
+    );
+    const durationMs = Date.now() - startedAt;
+
+    const tokensIn =
+      typeof result.usage?.input_tokens === "number"
+        ? result.usage.input_tokens
+        : typeof result.usage?.prompt_tokens === "number"
+        ? result.usage.prompt_tokens
+        : typeof result.usage?.promptTokenCount === "number"
+        ? result.usage.promptTokenCount
+        : null;
+    const tokensOut =
+      typeof result.usage?.output_tokens === "number"
+        ? result.usage.output_tokens
+        : typeof result.usage?.completion_tokens === "number"
+        ? result.usage.completion_tokens
+        : typeof result.usage?.candidatesTokenCount === "number"
+        ? result.usage.candidatesTokenCount
+        : null;
+    const cost = costUsd(providerId, result.model || modelName, tokensIn ?? 0, tokensOut ?? 0);
+
+    const refinedContent = (result.reply || "").trim();
+    if (!refinedContent) {
+      return res.status(502).json({ error: "provider returned empty refinement" });
+    }
+
+    const ordering = (await getMaxOrdering(run.id)) + 1;
+    const message = await insertMessage({
+      runId: run.id,
+      role: "final",
+      stage: "refinement",
+      provider: providerId,
+      model: result.model || modelName,
+      content: refinedContent,
+      tokensIn,
+      tokensOut,
+      durationMs,
+      costUsd: cost,
+      ordering,
+    });
+
+    const updated = await applyRefinement({
+      runId: run.id,
+      finalContent: refinedContent,
+      addCostUsd: cost,
+      addDurationMs: durationMs,
+    });
+
+    res.json({
+      ok: true,
+      content: refinedContent,
+      provider: providerId,
+      model: result.model || modelName,
+      tokensIn,
+      tokensOut,
+      durationMs,
+      costUsd: cost,
+      runTotalCostUsd: updated?.totalCostUsd ?? null,
+      runTotalDurationMs: updated?.totalDurationMs ?? null,
+      messageId: message.id,
+    });
+  } catch (err: any) {
+    const msg = err?.message || "refine failed";
+    console.error("[QCoreAI] refine error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/qcoreai/search?q=...&limit=30
+ * Substring search across the caller's runs — userInput / finalContent /
+ * session.title / tags. Powers the sidebar quick-find.
+ */
+qcoreaiRouter.get("/search", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const q = String(req.query.q ?? "").trim().slice(0, 200);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    if (!q) return res.json({ items: [], query: "" });
+    const items = await searchRuns(auth?.sub ?? null, q, limit);
+    res.json({ items, query: q });
+  } catch (err: any) {
+    res.status(500).json({ error: "search failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/tags?limit=20
+ * Top tags across the caller's runs, sorted by usage count.
+ * One-click shortcut for the sidebar chip strip → /search?q=<tag>.
+ */
+qcoreaiRouter.get("/tags", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const items = await getTopUserTags(auth?.sub ?? null, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list tags failed", details: err?.message });
+  }
+});
+
+/**
+ * PATCH /api/qcoreai/runs/:id/tags
+ * Replace a run's tags. Owner-only. Body: { tags: string[] }.
+ * Normalized server-side: trim, dedupe, cap 16 × 32 chars.
+ */
+qcoreaiRouter.patch("/runs/:id/tags", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const incoming = Array.isArray(req.body?.tags) ? req.body.tags : null;
+    if (incoming === null) {
+      return res.status(400).json({ error: "tags must be an array of strings" });
+    }
+    const updated = await setRunTags(String(req.params.id), auth?.sub ?? null, incoming);
+    if (!updated) return res.status(404).json({ error: "run not found or forbidden" });
+    res.json({ ok: true, tags: updated.tags ?? [] });
+  } catch (err: any) {
+    res.status(500).json({ error: "set tags failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/analytics/timeseries?days=30
+ * Daily run + cost buckets for the cost-forecasting chart on /qcoreai/analytics.
+ */
+qcoreaiRouter.get("/analytics/timeseries", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const days = Math.max(1, Math.min(365, parseInt(String(req.query.days ?? "30"), 10) || 30));
+    const items = await getCostTimeseries(auth?.sub ?? null, days);
+    res.json({ items, days });
+  } catch (err: any) {
+    res.status(500).json({ error: "timeseries failed", details: err?.message });
   }
 });
 

@@ -97,6 +97,8 @@ type RunState = {
   agentConfig?: any;
   persisted?: boolean;
   shareToken?: string | null;
+  /** Free-form tags attached by the owner (PATCH /runs/:id/tags). */
+  tags?: string[];
 };
 
 type SessionSummary = {
@@ -354,6 +356,18 @@ export default function QCoreMultiAgentPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  // Sidebar quick-find + tag chip strip (feat/qcore-extras 2026-04-29).
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<Array<{
+    runId: string; sessionId: string; sessionTitle: string;
+    matched: "input" | "final" | "title" | "tag"; preview: string;
+  }>>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [topTags, setTopTags] = useState<Array<{ tag: string; count: number }>>([]);
+  // Inline refine state per-run.
+  const [refineOpen, setRefineOpen] = useState<string | null>(null);
+  const [refineText, setRefineText] = useState<string>("");
+  const [refineBusy, setRefineBusy] = useState<boolean>(false);
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -591,6 +605,51 @@ export default function QCoreMultiAgentPage() {
     userScrolledUpRef.current = distFromBottom > 80;
   }, []);
 
+  /* ── Sidebar quick-find: debounced search across all the user's runs. ── */
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchBusy(false);
+      return;
+    }
+    setSearchBusy(true);
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(q)}`),
+          { headers: bearerHeader(), signal: ctrl.signal }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.items)) setSearchResults(data.items);
+        else setSearchResults([]);
+      } catch {
+        /* aborted or network */
+      } finally {
+        setSearchBusy(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [searchQuery]);
+
+  /* ── Load top tags chip strip on mount. ── */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/qcoreai/tags?limit=20`), {
+          headers: bearerHeader(),
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.items)) setTopTags(data.items);
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
   /* ── Load a session's runs when selected ── */
   const loadSession = useCallback(async (sessionId: string) => {
     setBusy(false);
@@ -615,6 +674,7 @@ export default function QCoreMultiAgentPage() {
         agentConfig: r.agentConfig ?? undefined,
         persisted: true,
         shareToken: r.shareToken ?? null,
+        tags: Array.isArray(r.tags) ? r.tags : [],
       }));
       setRuns(hydrated);
       setActiveSessionId(sessionId);
@@ -1148,6 +1208,66 @@ export default function QCoreMultiAgentPage() {
     setMaxRevisions(nextMaxRev);
     send(run.userInput, { strategy: nextStrategy, overrides: nextOverrides, maxRevisions: nextMaxRev });
   }, [send, strategy, overrides, maxRevisions]);
+
+  /** Apply a one-pass refinement on top of a finished run. */
+  const refineRun = useCallback(async (runId: string, instruction: string) => {
+    const trimmed = instruction.trim();
+    if (!trimmed) return;
+    setRefineBusy(true);
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/refine`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ instruction: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setRuns((prev) =>
+        prev.map((r) =>
+          r.id === runId
+            ? {
+                ...r,
+                finalContent: data.content,
+                totalCostUsd: data.runTotalCostUsd ?? r.totalCostUsd,
+                totalDurationMs: data.runTotalDurationMs ?? r.totalDurationMs,
+              }
+            : r
+        )
+      );
+      setRefineOpen(null);
+      setRefineText("");
+    } catch (e: any) {
+      setGlobalError(e?.message || "refine failed");
+    } finally {
+      setRefineBusy(false);
+    }
+  }, []);
+
+  /** Replace a run's tags via PATCH and refresh chip strip. */
+  const updateRunTags = useCallback(async (runId: string, tags: string[]) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/tags`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ tags }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setRuns((prev) =>
+        prev.map((r) => (r.id === runId ? { ...r, tags: data.tags || [] } : r))
+      );
+      // Refresh top-tags chip ranking.
+      try {
+        const r2 = await fetch(apiUrl(`/api/qcoreai/tags?limit=20`), {
+          headers: bearerHeader(),
+        });
+        const d2 = await r2.json().catch(() => ({}));
+        if (Array.isArray(d2?.items)) setTopTags(d2.items);
+      } catch { /* ignore */ }
+    } catch (e: any) {
+      setGlobalError(e?.message || "set tags failed");
+    }
+  }, []);
 
   const configuredProviders = useMemo(() => providers.filter((p) => p.configured), [providers]);
   const anyConfigured = configuredProviders.length > 0;
@@ -1921,6 +2041,177 @@ export default function QCoreMultiAgentPage() {
             >
               + New session
             </button>
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search runs… (text, tags)"
+                style={{
+                  width: "100%",
+                  padding: "8px 32px 8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#0f172a",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  style={{
+                    position: "absolute",
+                    right: 6,
+                    top: 6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    border: "none",
+                    background: "transparent",
+                    color: "#94a3b8",
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {topTags.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 4,
+                  marginBottom: 10,
+                  paddingBottom: 8,
+                  borderBottom: "1px dashed rgba(15,23,42,0.08)",
+                }}
+              >
+                {topTags.slice(0, 12).map((t) => {
+                  const active = searchQuery.trim().toLowerCase() === t.tag.toLowerCase();
+                  return (
+                    <button
+                      key={t.tag}
+                      type="button"
+                      onClick={() => setSearchQuery(active ? "" : t.tag)}
+                      title={`${t.count} run${t.count === 1 ? "" : "s"} tagged "${t.tag}"`}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1px solid #0f766e"
+                          : "1px solid rgba(13,148,136,0.25)",
+                        background: active ? "#0f766e" : "rgba(13,148,136,0.06)",
+                        color: active ? "#fff" : "#0f766e",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {t.tag}
+                      <span
+                        style={{
+                          marginLeft: 4,
+                          opacity: 0.6,
+                          fontWeight: 500,
+                          fontSize: 9,
+                        }}
+                      >
+                        {t.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {searchQuery.trim() && (
+              <div style={{ marginBottom: 12 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    padding: "4px 6px 6px",
+                  }}
+                >
+                  Search {searchBusy ? "…" : `(${searchResults.length})`}
+                </div>
+                {!searchBusy && searchResults.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px" }}>
+                    No matches.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {searchResults.map((hit) => (
+                      <button
+                        key={hit.runId}
+                        onClick={() => loadSession(hit.sessionId)}
+                        title={hit.preview}
+                        style={{
+                          textAlign: "left",
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(13,148,136,0.2)",
+                          background:
+                            activeSessionId === hit.sessionId ? "rgba(13,148,136,0.08)" : "#fff",
+                          color: "#0f172a",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 11,
+                            color: "#0f766e",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              flex: 1,
+                            }}
+                          >
+                            {hit.sessionTitle || "(untitled)"}
+                          </span>
+                          <span style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase" }}>
+                            {hit.matched}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 11,
+                            color: "#475569",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {hit.preview}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "8px 6px 4px" }}>
               Sessions
             </div>
@@ -2014,6 +2305,14 @@ export default function QCoreMultiAgentPage() {
                     onEdit={() => editAndResend(run)}
                     onShare={() => shareRun(run.id)}
                     onUnshare={() => unshareRun(run.id)}
+                    onUpdateTags={(tags: string[]) => updateRunTags(run.id, tags)}
+                    refineOpen={refineOpen === run.id}
+                    refineText={refineOpen === run.id ? refineText : ""}
+                    refineBusy={refineOpen === run.id ? refineBusy : false}
+                    onOpenRefine={() => { setRefineOpen(run.id); setRefineText(""); }}
+                    onChangeRefineText={setRefineText}
+                    onCancelRefine={() => { setRefineOpen(null); setRefineText(""); }}
+                    onApplyRefine={() => refineRun(run.id, refineText)}
                   />
                 ))
               )}
@@ -2481,6 +2780,14 @@ function RunCard({
   onEdit,
   onShare,
   onUnshare,
+  onUpdateTags,
+  refineOpen,
+  refineText,
+  refineBusy,
+  onOpenRefine,
+  onChangeRefineText,
+  onCancelRefine,
+  onApplyRefine,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
@@ -2488,9 +2795,20 @@ function RunCard({
   onEdit?: () => void;
   onShare?: () => void;
   onUnshare?: () => void;
+  onUpdateTags?: (tags: string[]) => void;
+  refineOpen?: boolean;
+  refineText?: string;
+  refineBusy?: boolean;
+  onOpenRefine?: () => void;
+  onChangeRefineText?: (text: string) => void;
+  onCancelRefine?: () => void;
+  onApplyRefine?: () => void;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
+  const [tagInput, setTagInput] = useState<string>("");
+  const [tagInputOpen, setTagInputOpen] = useState<boolean>(false);
+  const tags = run.tags || [];
   const stats = runStats(run);
   const displayStrategy = (run.strategy as Strategy) || "sequential";
   const totalDur = run.totalDurationMs ?? stats.durationMs;
@@ -2592,7 +2910,107 @@ function RunCard({
       )}
 
       {/* Final */}
-      {run.finalContent && <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />}
+      {run.finalContent && (
+        <>
+          <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />
+          {run.status !== "running" && onOpenRefine && !refineOpen && (
+            <button
+              onClick={onOpenRefine}
+              title="One-pass surgical edit on top of this answer"
+              style={{
+                marginTop: 6,
+                alignSelf: "flex-start",
+                padding: "4px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "rgba(124,58,237,0.06)",
+                color: "#6d28d9",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              ✎ Refine
+            </button>
+          )}
+          {refineOpen && (
+            <div
+              style={{
+                marginTop: 6,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "rgba(124,58,237,0.04)",
+                borderRadius: 10,
+                padding: 10,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <textarea
+                value={refineText || ""}
+                onChange={(e) => onChangeRefineText && onChangeRefineText(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    onApplyRefine && onApplyRefine();
+                  } else if (e.key === "Escape") {
+                    onCancelRefine && onCancelRefine();
+                  }
+                }}
+                placeholder="e.g. Add a TL;DR section at the top, tighten the conclusion, fix the table…"
+                disabled={refineBusy}
+                rows={3}
+                style={{
+                  resize: "vertical",
+                  borderRadius: 8,
+                  border: "1px solid rgba(124,58,237,0.25)",
+                  padding: "8px 10px",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  background: "#fff",
+                  color: "#0f172a",
+                  outline: "none",
+                  minHeight: 60,
+                }}
+              />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  onClick={onApplyRefine}
+                  disabled={refineBusy || !(refineText || "").trim()}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 8,
+                    background: refineBusy ? "#a78bfa" : "#7c3aed",
+                    color: "#fff",
+                    border: "none",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: refineBusy ? "default" : "pointer",
+                  }}
+                >
+                  {refineBusy ? "Refining…" : "Apply (⌘/Ctrl+Enter)"}
+                </button>
+                <button
+                  onClick={onCancelRefine}
+                  disabled={refineBusy}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    background: "#fff",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel (Esc)
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Error */}
       {run.error && !run.finalContent && (
@@ -2667,6 +3085,106 @@ function RunCard({
           >
             💲 {formatMoney(totalCost)}
           </span>
+
+          {/* Tag chips + + Tag input — owner-only edit, displayed for everyone. */}
+          {run.persisted && run.id && !run.id.startsWith("tmp_") && (
+            <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+              {tags.map((t) => (
+                <span
+                  key={t}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3,
+                    padding: "2px 6px 2px 8px",
+                    borderRadius: 999,
+                    background: "rgba(13,148,136,0.08)",
+                    border: "1px solid rgba(13,148,136,0.25)",
+                    color: "#0f766e",
+                    fontSize: 10,
+                    fontWeight: 700,
+                  }}
+                >
+                  {t}
+                  {onUpdateTags && (
+                    <button
+                      onClick={() => onUpdateTags(tags.filter((x) => x !== t))}
+                      title={`Remove "${t}"`}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#0f766e",
+                        cursor: "pointer",
+                        fontSize: 11,
+                        padding: 0,
+                        lineHeight: 1,
+                        opacity: 0.6,
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+              {onUpdateTags && tags.length < 16 && (
+                tagInputOpen ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onBlur={() => {
+                      const v = tagInput.trim();
+                      if (v && !tags.includes(v)) onUpdateTags([...tags, v]);
+                      setTagInput("");
+                      setTagInputOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const v = tagInput.trim();
+                        if (v && !tags.includes(v)) onUpdateTags([...tags, v]);
+                        setTagInput("");
+                        setTagInputOpen(false);
+                      } else if (e.key === "Escape") {
+                        setTagInput("");
+                        setTagInputOpen(false);
+                      }
+                    }}
+                    placeholder="tag…"
+                    maxLength={32}
+                    style={{
+                      width: 80,
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(13,148,136,0.4)",
+                      background: "#fff",
+                      fontSize: 10,
+                      color: "#0f766e",
+                      fontWeight: 600,
+                      outline: "none",
+                    }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setTagInputOpen(true)}
+                    title="Add a tag"
+                    style={{
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      border: "1px dashed rgba(13,148,136,0.35)",
+                      background: "transparent",
+                      color: "#0f766e",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + Tag
+                  </button>
+                )
+              )}
+            </div>
+          )}
 
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
             {onEdit && run.status !== "running" && (

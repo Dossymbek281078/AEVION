@@ -3353,6 +3353,32 @@ export default function CyberChessPage(){
                   }))}
                 </div>;
               })()}
+              {/* Premove arrows — синие стрелки очереди премувов поверх доски (lichess-style) */}
+              {pms.length>0&&(()=>{
+                const sqXY=(sq:Square):[number,number]=>{
+                  const f=FILES.indexOf(sq[0]);const r=8-parseInt(sq[1]);
+                  const c=flip?7-f:f;const rr=flip?7-r:r;
+                  return [c*12.5+6.25,rr*12.5+6.25];
+                };
+                return <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:5}}>
+                  <defs>
+                    <marker id="cc-pm-head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="3.4" markerHeight="3.4" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+                  </defs>
+                  {pms.map((pm,i)=>{
+                    const[x1,y1]=sqXY(pm.from);const[x2,y2]=sqXY(pm.to);
+                    const dx=x2-x1,dy=y2-y1,len=Math.max(0.01,Math.hypot(dx,dy));
+                    const tx=x2-(dx/len)*3.7,ty=y2-(dy/len)*3.7;
+                    // Slight offset для каждой следующей стрелки чтобы видеть очередь
+                    const off=i*0.4;
+                    return <g key={`pm-${i}`} opacity={0.78-i*0.08}>
+                      <line x1={x1+off} y1={y1+off} x2={tx+off} y2={ty+off}
+                        stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round"
+                        markerEnd="url(#cc-pm-head)"/>
+                      <circle cx={x1} cy={y1} r="2.4" fill="#2563eb" opacity={0.5}/>
+                    </g>;
+                  })}
+                </svg>;
+              })()}
               {/* Arrow / highlight overlay */}
               {(arrows.length>0||sqHL.length>0)&&(()=>{
                 const sqXY=(sq:Square):[number,number]=>{

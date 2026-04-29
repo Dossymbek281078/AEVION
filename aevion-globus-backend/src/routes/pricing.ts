@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
+import { createHmac, timingSafeEqual } from "crypto";
 import {
   TIERS,
   MODULES_PRICING,
@@ -922,6 +923,354 @@ pricingRouter.get("/newsletter/list", (req, res) => {
     console.error("[newsletter/list] read failed", e);
     res.status(500).json({ error: "read_error" });
   }
+});
+
+/**
+ * Magic-link auth для self-service dashboards (affiliate, partners).
+ * HMAC(email + ":" + scope, DASHBOARD_SECRET) → токен 24-hex.
+ *
+ * DASHBOARD_SECRET по умолчанию = ADMIN_TOKEN (если не задан отдельно).
+ * Это not super-secret — даёт доступ только к данным конкретного email.
+ */
+function dashboardSecret(): string {
+  return (
+    process.env.DASHBOARD_SECRET?.trim() ||
+    process.env.ADMIN_TOKEN?.trim() ||
+    "aevion-dashboard-default-rotate-me"
+  );
+}
+
+function dashboardToken(email: string, scope: "affiliate" | "partners"): string {
+  return createHmac("sha256", dashboardSecret())
+    .update(`${email.toLowerCase()}:${scope}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function verifyDashboardToken(email: string, scope: "affiliate" | "partners", got: string): boolean {
+  const want = dashboardToken(email, scope);
+  if (want.length !== got.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(want), Buffer.from(got));
+  } catch {
+    return false;
+  }
+}
+
+function readJsonlAll<T>(file: string): T[] {
+  if (!existsSync(file)) return [];
+  try {
+    const content = readFileSync(file, "utf8");
+    const lines = content.split("\n").filter((l) => l.trim().length > 0);
+    const out: T[] = [];
+    for (const line of lines) {
+      try {
+        out.push(JSON.parse(line) as T);
+      } catch {
+        // skip malformed
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Детерминированный реферальный код по email + scope.
+ * Один email → один стабильный ref-code, чтобы повторные magic-link сессии
+ * не порождали разные коды.
+ */
+function refCode(email: string, scope: "aff" | "prt"): string {
+  return (
+    scope +
+    "_" +
+    createHmac("sha256", dashboardSecret())
+      .update(`ref:${email.toLowerCase()}:${scope}`)
+      .digest("hex")
+      .slice(0, 8)
+  );
+}
+
+const SITE_BASE = process.env.PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
+
+function magicLinkHtml(
+  appName: string,
+  link: string,
+  scope: "Affiliate" | "Partner",
+): string {
+  return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a">
+  <div style="background:#fff;border-radius:14px;padding:28px;border:1px solid rgba(15,23,42,0.08)">
+    <div style="font-size:11px;font-weight:800;color:#0d9488;letter-spacing:0.06em;margin-bottom:8px">AEVION · ${scope.toUpperCase()} DASHBOARD</div>
+    <h1 style="font-size:22px;margin:0 0 12px">Войти в дашборд</h1>
+    <p style="font-size:14px;line-height:1.5;color:#475569;margin:0 0 16px">
+      Привет, ${escapeHtml(appName)}. Перейдите по ссылке, чтобы открыть ваш ${scope.toLowerCase()}-дашборд.
+      Ссылка действительна для текущего устройства.
+    </p>
+    <a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:linear-gradient(135deg, #0d9488, #0ea5e9);color:#fff;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px">
+      Открыть дашборд
+    </a>
+    <p style="font-size:12px;color:#94a3b8;margin:16px 0 0;font-family:ui-monospace,monospace;word-break:break-all">${escapeHtml(link)}</p>
+  </div>
+</body></html>`;
+}
+
+/**
+ * POST /api/pricing/affiliate/magic-link
+ * Body: { email }
+ * Если email есть в affiliate-applications — отправляет magic-link на email.
+ * Всегда отвечает 204 (не раскрываем существование email).
+ */
+pricingRouter.post("/affiliate/magic-link", (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (programRateLimited(ip, "affiliate")) {
+    return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+  }
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "invalid_email" });
+  }
+
+  const apps = readJsonlAll<ProgramApplication>(AFFILIATE_FILE);
+  const found = apps.find((a) => a.email === email);
+
+  if (found) {
+    const token = dashboardToken(email, "affiliate");
+    const link = `${SITE_BASE}/pricing/affiliate-dashboard?email=${encodeURIComponent(email)}&token=${token}`;
+    sendEmail({
+      to: email,
+      subject: "AEVION Affiliate — вход в дашборд",
+      html: magicLinkHtml(found.name, link, "Affiliate"),
+      text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Affiliate-дашборд:\n${link}\n\n— AEVION`,
+    }).catch((e) => console.error("[affiliate/magic-link] email failed", e));
+  }
+
+  // Always 204, don't leak existence.
+  res.status(204).end();
+});
+
+/**
+ * GET /api/pricing/affiliate/dashboard?email=&token=
+ * Возвращает данные заявки и заглушки трекинга по аффилиату.
+ * Рефкод детерминирован по email — один email = один стабильный код.
+ */
+pricingRouter.get("/affiliate/dashboard", (req, res) => {
+  const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+
+  if (!email || !isValidEmail(email)) return res.status(400).json({ error: "invalid_email" });
+  if (!token || !verifyDashboardToken(email, "affiliate", token)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const apps = readJsonlAll<ProgramApplication>(AFFILIATE_FILE);
+  const found = apps.find((a) => a.email === email);
+  if (!found) return res.status(404).json({ error: "not_found" });
+
+  const code = refCode(email, "aff");
+  const refLink = `${SITE_BASE}/?ref=${code}`;
+
+  // Tracking infrastructure не собирает affiliate-клики ещё;
+  // отдаём честные нули. Когда появится — заменим на реальные агрегаты.
+  const stats = {
+    clicks: 0,
+    signups: 0,
+    mrr_usd: 0,
+    pending_payout_usd: 0,
+    paid_payout_usd: 0,
+    commission_percent: 20,
+    cookie_days: 60,
+  };
+
+  res.json({
+    application: {
+      id: found.id,
+      ts: found.ts,
+      name: found.name,
+      email: found.email,
+      organization: found.organization ?? null,
+      country: found.country ?? null,
+      channel: found.channel ?? null,
+      status: "submitted",
+    },
+    refCode: code,
+    refLink,
+    stats,
+    history: [] as Array<{ ts: string; kind: string; value?: number }>,
+  });
+});
+
+/**
+ * POST /api/pricing/partners/magic-link
+ * Идентично affiliate, но для partners.
+ */
+pricingRouter.post("/partners/magic-link", (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (programRateLimited(ip, "partners")) {
+    return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
+  }
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "invalid_email" });
+  }
+
+  const apps = readJsonlAll<ProgramApplication>(PARTNERS_FILE);
+  const found = apps.find((a) => a.email === email);
+
+  if (found) {
+    const token = dashboardToken(email, "partners");
+    const link = `${SITE_BASE}/pricing/partners-portal?email=${encodeURIComponent(email)}&token=${token}`;
+    sendEmail({
+      to: email,
+      subject: "AEVION Partner — вход в портал",
+      html: magicLinkHtml(found.name, link, "Partner"),
+      text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Partner-портал:\n${link}\n\n— AEVION`,
+    }).catch((e) => console.error("[partners/magic-link] email failed", e));
+  }
+  res.status(204).end();
+});
+
+const PARTNER_DEALS_FILE = process.env.PARTNER_DEALS_FILE
+  ? process.env.PARTNER_DEALS_FILE
+  : join(process.cwd(), "data", "partner-deals.jsonl");
+
+interface PartnerDeal {
+  id: string;
+  ts: string;
+  partnerEmail: string;
+  customer: string;
+  customerEmail?: string;
+  modules: string[];
+  dealSizeUsd: number;
+  expectedClose?: string;
+  notes?: string;
+  status: "registered" | "qualified" | "won" | "lost";
+}
+
+function persistDeal(deal: PartnerDeal) {
+  const dir = dirname(PARTNER_DEALS_FILE);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  appendFileSync(PARTNER_DEALS_FILE, JSON.stringify(deal) + "\n", "utf8");
+}
+
+/**
+ * GET /api/pricing/partners/dashboard?email=&token=
+ * Партнёрский портал: данные заявки + список зарегистрированных сделок этого партнёра.
+ */
+pricingRouter.get("/partners/dashboard", (req, res) => {
+  const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+
+  if (!email || !isValidEmail(email)) return res.status(400).json({ error: "invalid_email" });
+  if (!token || !verifyDashboardToken(email, "partners", token)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const apps = readJsonlAll<ProgramApplication>(PARTNERS_FILE);
+  const found = apps.find((a) => a.email === email);
+  if (!found) return res.status(404).json({ error: "not_found" });
+
+  const allDeals = readJsonlAll<PartnerDeal>(PARTNER_DEALS_FILE);
+  const myDeals = allDeals
+    .filter((d) => d.partnerEmail === email)
+    .sort((a, b) => b.ts.localeCompare(a.ts));
+
+  const totals = {
+    count: myDeals.length,
+    pipeline_usd: myDeals.filter((d) => d.status === "registered" || d.status === "qualified").reduce((s, d) => s + d.dealSizeUsd, 0),
+    won_usd: myDeals.filter((d) => d.status === "won").reduce((s, d) => s + d.dealSizeUsd, 0),
+    lost_usd: myDeals.filter((d) => d.status === "lost").reduce((s, d) => s + d.dealSizeUsd, 0),
+  };
+
+  res.json({
+    application: {
+      id: found.id,
+      ts: found.ts,
+      name: found.name,
+      email: found.email,
+      organization: found.organization ?? null,
+      country: found.country ?? null,
+      partnerType: found.partnerType ?? null,
+      status: "submitted",
+    },
+    deals: myDeals,
+    totals,
+    margin_percent: 30,
+  });
+});
+
+/**
+ * POST /api/pricing/partners/deals
+ * Body: { email, token, customer, customerEmail?, modules[], dealSizeUsd, expectedClose?, notes? }
+ * Регистрирует сделку партнёра (deal registration).
+ */
+pricingRouter.post("/partners/deals", (req, res) => {
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
+  const token = typeof body.token === "string" ? body.token.trim() : "";
+  if (!email || !isValidEmail(email)) return res.status(400).json({ error: "invalid_email" });
+  if (!token || !verifyDashboardToken(email, "partners", token)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const apps = readJsonlAll<ProgramApplication>(PARTNERS_FILE);
+  if (!apps.find((a) => a.email === email)) {
+    return res.status(404).json({ error: "partner_not_found" });
+  }
+
+  const customer = typeof body.customer === "string" ? body.customer.trim().slice(0, 200) : "";
+  const customerEmail = typeof body.customerEmail === "string" ? body.customerEmail.trim().toLowerCase().slice(0, 200) : undefined;
+  const modules = Array.isArray(body.modules)
+    ? body.modules.filter((m: unknown): m is string => typeof m === "string").slice(0, 20).map((m: string) => m.slice(0, 60))
+    : [];
+  const dealSizeUsd = Number.isFinite(body.dealSizeUsd) ? Math.max(0, Math.min(10_000_000, Number(body.dealSizeUsd))) : 0;
+  const expectedClose = typeof body.expectedClose === "string" ? body.expectedClose.slice(0, 20) : undefined;
+  const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) : undefined;
+
+  if (!customer) return res.status(400).json({ error: "invalid_customer" });
+  if (modules.length === 0) return res.status(400).json({ error: "modules_required" });
+
+  const deal: PartnerDeal = {
+    id: `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    partnerEmail: email,
+    customer,
+    customerEmail,
+    modules,
+    dealSizeUsd,
+    expectedClose,
+    notes,
+    status: "registered",
+  };
+
+  try {
+    persistDeal(deal);
+  } catch (e) {
+    console.error("[partners/deals] write failed", e);
+    return res.status(500).json({ error: "storage_error" });
+  }
+
+  // Notify channel team
+  sendEmail({
+    to: NOTIFY_EMAIL,
+    subject: `[partner-deal] ${customer} · $${dealSizeUsd.toLocaleString("en-US")}`,
+    html: `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:20px">
+      <div style="font-size:11px;font-weight:800;color:#7c3aed;letter-spacing:0.06em;margin-bottom:6px">NEW DEAL REGISTRATION</div>
+      <h2 style="margin:0 0 14px;font-size:18px">${escapeHtml(customer)} · $${dealSizeUsd.toLocaleString("en-US")}</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700">Партнёр</td><td style="padding:6px 10px">${escapeHtml(email)}</td></tr>
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700">Модули</td><td style="padding:6px 10px">${escapeHtml(modules.join(", "))}</td></tr>
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700">Expected close</td><td style="padding:6px 10px">${escapeHtml(expectedClose ?? "—")}</td></tr>
+        <tr><td style="padding:6px 10px;color:#64748b;font-weight:700;vertical-align:top">Заметки</td><td style="padding:6px 10px">${escapeHtml(notes ?? "—")}</td></tr>
+      </table>
+      <div style="margin-top:14px;font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace">ID: ${escapeHtml(deal.id)} · ${escapeHtml(deal.ts)}</div>
+    </body></html>`,
+    text: `New deal: ${customer} · $${dealSizeUsd}\nPartner: ${email}\nModules: ${modules.join(", ")}\nExpected close: ${expectedClose ?? "—"}\nNotes: ${notes ?? "—"}\nID: ${deal.id}`,
+  }).catch((e) => console.error("[partners/deals] notify failed", e));
+
+  res.status(201).json({ ok: true, deal });
 });
 
 /**

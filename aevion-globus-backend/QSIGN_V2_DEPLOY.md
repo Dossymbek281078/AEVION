@@ -220,4 +220,67 @@ git push origin main
 
 The DB schema is **forward-compatible**: rolling back code while leaving the
 new tables/columns in place is safe (older code ignores `signatureDilithium`,
-`QSignWebhookDelivery`, etc.).
+`QSignWebhookDelivery`, `QSignWebhookQueue`, etc.).
+
+---
+
+## 11. Sentry (optional, opt-in via env)
+
+Set `SENTRY_DSN` in Railway → backend container → Variables. The QSign v2
+error path (`errResp` for any 5xx) forwards to Sentry with structured tags:
+
+| Tag/Extra | Value |
+|-----------|-------|
+| `service` | `qsign-v2` (set on init) |
+| `requestId` | echoes `X-Request-Id` from response |
+| `errorCode` | the `error` field from the JSON body (e.g. `sign_failed`, `verify_failed`) |
+| `path` / `method` / `status` | request context |
+
+If `SENTRY_DSN` is unset/empty, the wrapper stays dormant — no init, no
+network IO, no perf cost. Tracing is off by default
+(`tracesSampleRate=0`); override via `SENTRY_TRACES_SAMPLE_RATE=0.1` for
+10% sample on a noisy host.
+
+**Generate alerts:** in Sentry project → Alerts → New Alert Rule. Useful
+defaults:
+- 5 events of `errorCode: sign_failed` in 1 hour → Slack
+- Any `errorCode: db_*` event → page on-call
+- `errorCode: webhook_*` warn-only
+
+---
+
+## 12. Publishing the SDKs to npm
+
+Both SDK packages live in `aevion-globus-backend/sdk/`:
+- `@aevion/qsign-client` — REST client, version 2.0.0
+- `@aevion/qsign-webhook-receiver` — HMAC verifier + Express middleware, 1.0.0
+
+### One-time setup
+
+1. Login to npm (interactive web flow):
+   ```bash
+   npm login
+   ```
+2. Confirm the org `aevion` exists on npmjs.com → if not, create it (free
+   for public packages). The `@aevion/` scope must resolve to that org.
+3. Both packages have `publishConfig.access: "public"` — required for
+   scoped public packages, otherwise npm tries to publish as private.
+
+### Publish (per package)
+
+```bash
+cd aevion-globus-backend/sdk/qsign-client
+npm publish        # prepublishOnly fires `npm run build` first
+
+cd ../qsign-webhook-receiver
+npm publish
+```
+
+After publish, verify on https://www.npmjs.com/package/@aevion/qsign-client
+and consumers can install via `npm i @aevion/qsign-client`.
+
+### Version bumps
+
+Use `npm version patch | minor | major` inside the package dir to bump
+`package.json` AND create a git tag. Then `git push --follow-tags` and
+`npm publish` again.

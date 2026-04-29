@@ -89,6 +89,59 @@ const STR: Record<string, Record<Lang, string>> = {
     en: "Print-friendly summary or raw JSON dump for backup",
     ru: "Печатный отчёт или JSON-выгрузка для бэкапа",
   },
+  tab_screener: { en: "Screener", ru: "Скрининг" },
+  phq9_title: { en: "PHQ-9 depression screener", ru: "PHQ-9 — скрининг депрессии" },
+  phq9_subtitle: {
+    en: "Standardized 9-question screener. «Over the last 2 weeks, how often have you been bothered by…»",
+    ru: "Стандартизированный 9-вопросный тест. «За последние 2 недели как часто вас беспокоило…»",
+  },
+  phq9_q1: {
+    en: "Little interest or pleasure in doing things",
+    ru: "Мало интереса или удовольствия от занятий",
+  },
+  phq9_q2: {
+    en: "Feeling down, depressed, or hopeless",
+    ru: "Чувство подавленности, угнетённости или безнадёжности",
+  },
+  phq9_q3: {
+    en: "Trouble falling/staying asleep, or sleeping too much",
+    ru: "Проблемы со сном — трудности засыпания / поверхностный сон / избыточный сон",
+  },
+  phq9_q4: { en: "Feeling tired or having little energy", ru: "Усталость или мало энергии" },
+  phq9_q5: { en: "Poor appetite or overeating", ru: "Плохой аппетит или переедание" },
+  phq9_q6: {
+    en: "Feeling bad about yourself — or that you are a failure or have let yourself or your family down",
+    ru: "Плохое чувство о себе — будто вы неудачник или подвели семью",
+  },
+  phq9_q7: {
+    en: "Trouble concentrating on things (reading the newspaper or watching TV)",
+    ru: "Трудности с концентрацией внимания (чтение, ТВ)",
+  },
+  phq9_q8: {
+    en: "Moving or speaking so slowly that other people could have noticed; or being so fidgety/restless that you have been moving around a lot more than usual",
+    ru: "Заторможенность движений/речи (заметная другим), или, наоборот, повышенная неусидчивость",
+  },
+  phq9_q9: {
+    en: "Thoughts that you would be better off dead or of hurting yourself in some way",
+    ru: "Мысли о причинении вреда себе или о том, что лучше бы умереть",
+  },
+  phq9_opt0: { en: "Not at all", ru: "Совсем нет" },
+  phq9_opt1: { en: "Several days", ru: "Несколько дней" },
+  phq9_opt2: { en: "More than half the days", ru: "Более половины дней" },
+  phq9_opt3: { en: "Nearly every day", ru: "Почти каждый день" },
+  phq9_submit: { en: "Calculate score", ru: "Рассчитать результат" },
+  phq9_result: { en: "Score: {n}/27", ru: "Результат: {n}/27" },
+  phq9_sev_minimal: { en: "Minimal", ru: "Минимальные симптомы" },
+  phq9_sev_mild: { en: "Mild", ru: "Лёгкая степень" },
+  phq9_sev_moderate: { en: "Moderate", ru: "Умеренная степень" },
+  phq9_sev_moderately_severe: { en: "Moderately severe", ru: "Умеренно-тяжёлая" },
+  phq9_sev_severe: { en: "Severe", ru: "Тяжёлая степень" },
+  phq9_suicide_warning: { en: "Important", ru: "Важно" },
+  phq9_disclaimer_short: {
+    en: "PHQ-9 is a screening tool, not a diagnosis. Discuss results with a clinician.",
+    ru: "PHQ-9 — скрининг, а не диагноз. Обсудите результаты со специалистом.",
+  },
+  phq9_incomplete: { en: "Answer all 9 questions", ru: "Ответьте на все 9 вопросов" },
   hist_subtitle: { en: "{c} checks · {l} logs", ru: "{c} чеков · {l} логов" },
   field_age: { en: "Age", ru: "Возраст" },
   field_sex: { en: "Sex", ru: "Пол" },
@@ -204,7 +257,7 @@ function detectLocale(): Lang {
   return "en";
 }
 
-type Tab = "profile" | "check" | "log" | "trends" | "history";
+type Tab = "profile" | "check" | "log" | "trends" | "history" | "screener";
 
 type Sex = "M" | "F" | "other";
 
@@ -344,6 +397,18 @@ export default function HealthAIPage() {
   const [llmAdvice, setLlmAdvice] = useState<string | null>(null);
   const [llmBusy, setLlmBusy] = useState(false);
 
+  // PHQ-9 state
+  const [phq9, setPhq9] = useState<Array<number | null>>(() => Array(9).fill(null));
+  const [phq9Result, setPhq9Result] = useState<{
+    score: number;
+    severity: string;
+    suicideFlag: boolean;
+    suicideAdvice: string | null;
+    advice: string;
+    createdAt: string;
+  } | null>(null);
+  const [phq9Busy, setPhq9Busy] = useState(false);
+
   // Log draft
   const [logSleep, setLogSleep] = useState("");
   const [logMood, setLogMood] = useState(5);
@@ -375,6 +440,27 @@ export default function HealthAIPage() {
       if (!r.ok) return;
       const j = await r.json();
       setTrends(j);
+    } catch {}
+  }, []);
+
+  const loadPhq9Last = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/screener/phq9/${profileId}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.last) {
+        setPhq9Result({
+          score: j.last.score,
+          severity: j.last.severity,
+          suicideFlag: j.last.suicideFlag,
+          suicideAdvice: null,
+          advice: "",
+          createdAt: j.last.createdAt,
+        });
+        if (Array.isArray(j.last.answers) && j.last.answers.length === 9) {
+          setPhq9(j.last.answers);
+        }
+      }
     } catch {}
   }, []);
 
@@ -424,16 +510,24 @@ export default function HealthAIPage() {
             loadHistory(stored);
             loadTrends(stored);
             loadRisks(stored);
+            loadPhq9Last(stored);
             setTab("check");
           }
         });
       }
       const t = window.localStorage.getItem(LS_TAB) as Tab | null;
-      if (t === "profile" || t === "check" || t === "log" || t === "trends" || t === "history") {
+      if (
+        t === "profile" ||
+        t === "check" ||
+        t === "log" ||
+        t === "trends" ||
+        t === "history" ||
+        t === "screener"
+      ) {
         setTab(t);
       }
     } catch {}
-  }, [loadProfile, loadHistory, loadTrends, loadRisks]);
+  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPhq9Last]);
 
   useEffect(() => {
     try {
@@ -518,6 +612,44 @@ export default function HealthAIPage() {
       setCheckNotes("");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitPhq9 = async () => {
+    if (!profileIdRef.current) {
+      showToast(t("toast_no_profile", lang));
+      setTab("profile");
+      return;
+    }
+    if (phq9.some((v) => v == null)) {
+      showToast(t("phq9_incomplete", lang));
+      return;
+    }
+    setPhq9Busy(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/screener/phq9`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: profileIdRef.current,
+          answers: phq9,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        showToast(t("toast_check_failed", lang));
+        return;
+      }
+      setPhq9Result({
+        score: j.score,
+        severity: j.severity,
+        suicideFlag: j.suicideFlag,
+        suicideAdvice: j.suicideAdvice,
+        advice: j.advice,
+        createdAt: j.createdAt,
+      });
+    } finally {
+      setPhq9Busy(false);
     }
   };
 
@@ -762,7 +894,7 @@ export default function HealthAIPage() {
             paddingBottom: 10,
           }}
         >
-          {(["profile", "check", "log", "trends", "history"] as const).map((t) => {
+          {(["profile", "check", "log", "trends", "history", "screener"] as const).map((t) => {
             const active = t === tab;
             return (
               <button
@@ -792,7 +924,9 @@ export default function HealthAIPage() {
                       ? STR.tab_log[lang]
                       : t === "trends"
                         ? STR.tab_trends[lang]
-                        : STR.tab_history[lang]}
+                        : t === "history"
+                          ? STR.tab_history[lang]
+                          : STR.tab_screener[lang]}
               </button>
             );
           })}
@@ -1330,6 +1464,215 @@ export default function HealthAIPage() {
                 ) : null}
               </>
             )}
+          </Card>
+        ) : null}
+
+        {tab === "screener" ? (
+          <Card>
+            <CardHeader
+              title={t("phq9_title", lang)}
+              subtitle={t("phq9_subtitle", lang)}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
+                const qKey = `phq9_q${n}` as const;
+                const idx = n - 1;
+                const cur = phq9[idx];
+                return (
+                  <div
+                    key={n}
+                    style={{
+                      padding: 10,
+                      background: "rgba(20,28,46,0.5)",
+                      border: "1px solid rgba(120,160,220,0.18)",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "#cbd5e1",
+                        fontWeight: 600,
+                        marginBottom: 8,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 22,
+                          height: 22,
+                          textAlign: "center",
+                          lineHeight: "22px",
+                          background: "rgba(94,234,212,0.18)",
+                          borderRadius: 11,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: "#5eead4",
+                          marginRight: 8,
+                        }}
+                      >
+                        {n}
+                      </span>
+                      {t(qKey, lang)}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {[0, 1, 2, 3].map((opt) => {
+                        const active = cur === opt;
+                        return (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              const next = [...phq9];
+                              next[idx] = opt;
+                              setPhq9(next);
+                            }}
+                            style={{
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              background: active
+                                ? "rgba(94,234,212,0.24)"
+                                : "rgba(8,12,24,0.6)",
+                              color: active ? "#5eead4" : "#94a3b8",
+                              border: active
+                                ? "1px solid rgba(94,234,212,0.55)"
+                                : "1px solid rgba(120,160,220,0.18)",
+                              borderRadius: 6,
+                              cursor: "pointer",
+                              flex: "1 1 100px",
+                            }}
+                          >
+                            {opt}. {t(`phq9_opt${opt}`, lang)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                onClick={submitPhq9}
+                disabled={phq9Busy}
+                style={primaryBtn}
+              >
+                {t("phq9_submit", lang)}
+              </button>
+            </div>
+            {phq9Result ? (
+              <div style={{ marginTop: 14 }}>
+                {(() => {
+                  const sevColor: Record<string, string> = {
+                    minimal: "#5eead4",
+                    mild: "#7dd3fc",
+                    moderate: "#fbbf24",
+                    "moderately-severe": "#f97316",
+                    severe: "#f87171",
+                  };
+                  const sevLabel: Record<string, string> = {
+                    minimal: t("phq9_sev_minimal", lang),
+                    mild: t("phq9_sev_mild", lang),
+                    moderate: t("phq9_sev_moderate", lang),
+                    "moderately-severe": t("phq9_sev_moderately_severe", lang),
+                    severe: t("phq9_sev_severe", lang),
+                  };
+                  const c = sevColor[phq9Result.severity] || "#94a3b8";
+                  return (
+                    <div
+                      style={{
+                        padding: 14,
+                        borderRadius: 10,
+                        background: `${c}10`,
+                        border: `1px solid ${c}55`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: 12,
+                          marginBottom: 6,
+                        }}
+                      >
+                        <div style={{ fontSize: 22, fontWeight: 900, color: c }}>
+                          {t("phq9_result", lang, { n: phq9Result.score })}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "#cbd5e1",
+                          }}
+                        >
+                          · {sevLabel[phq9Result.severity]}
+                        </div>
+                      </div>
+                      {phq9Result.advice ? (
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#cbd5e1",
+                            lineHeight: 1.5,
+                            marginBottom: 10,
+                          }}
+                        >
+                          {phq9Result.advice}
+                        </div>
+                      ) : null}
+                      {phq9Result.suicideFlag ? (
+                        <div
+                          style={{
+                            padding: 12,
+                            borderRadius: 8,
+                            background: "rgba(248,113,113,0.18)",
+                            border: "1px solid rgba(248,113,113,0.55)",
+                            marginTop: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: "#fecaca",
+                              marginBottom: 4,
+                              letterSpacing: "0.05em",
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            ⚠ {t("phq9_suicide_warning", lang)}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "#fecaca",
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            {phq9Result.suicideAdvice ||
+                              "Q9 > 0 — необходима неотложная консультация специалиста."}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div
+                        style={{
+                          marginTop: 10,
+                          fontSize: 10,
+                          color: "#94a3b8",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        {t("phq9_disclaimer_short", lang)} ·{" "}
+                        {new Date(phq9Result.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : null}
           </Card>
         ) : null}
 

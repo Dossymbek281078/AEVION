@@ -933,6 +933,100 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
   });
 });
 
+/**
+ * PHQ-9 — Patient Health Questionnaire-9, стандартизированный screener
+ * депрессии. 9 вопросов, каждый 0-3. Score 0-27.
+ *  0-4: minimal · 5-9: mild · 10-14: moderate · 15-19: moderately severe · 20-27: severe
+ *  Q9 (suicide ideation) > 0 → immediate flag.
+ */
+const PHQ9_LAST = new Map<string, { score: number; severity: string; suicideFlag: boolean; answers: number[]; createdAt: string }>();
+
+function phq9Severity(score: number): { severity: string; advice: string } {
+  if (score <= 4)
+    return {
+      severity: "minimal",
+      advice:
+        "Симптомов депрессии практически нет. Поддерживайте режим (сон 7-9ч, активность, контакт с близкими).",
+    };
+  if (score <= 9)
+    return {
+      severity: "mild",
+      advice:
+        "Лёгкие симптомы. Стоит проверить через 2-4 недели. Полезны ежедневные прогулки 30+ мин, психогигиена, ограничение алкоголя.",
+    };
+  if (score <= 14)
+    return {
+      severity: "moderate",
+      advice:
+        "Умеренная степень. Рекомендована консультация терапевта/психотерапевта. Психотерапия и/или медикаменты могут быть показаны.",
+    };
+  if (score <= 19)
+    return {
+      severity: "moderately-severe",
+      advice:
+        "Умеренно-тяжёлая степень. Активное лечение показано: психотерапия + (часто) фармакотерапия. Не откладывайте обращение к специалисту.",
+    };
+  return {
+    severity: "severe",
+    advice:
+      "Тяжёлая степень. Необходима неотложная консультация психиатра. Активное лечение, контроль безопасности.",
+  };
+}
+
+healthaiRouter.post("/screener/phq9", async (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.profileId || typeof body.profileId !== "string") {
+    return res.status(400).json({ error: "profileId-required" });
+  }
+  const profile = await store.getProfile(body.profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  if (!Array.isArray(body.answers) || body.answers.length !== 9) {
+    return res.status(400).json({ error: "answers-must-be-9-numbers" });
+  }
+  const answers: number[] = [];
+  for (const a of body.answers) {
+    const n = Math.round(Number(a));
+    if (!Number.isFinite(n) || n < 0 || n > 3) {
+      return res.status(400).json({ error: "answer-must-be-0-to-3" });
+    }
+    answers.push(n);
+  }
+  const score = answers.reduce((s, v) => s + v, 0);
+  const { severity, advice } = phq9Severity(score);
+  const suicideFlag = answers[8] > 0;
+
+  const result = {
+    score,
+    severity,
+    suicideFlag,
+    suicideAdvice: suicideFlag
+      ? "Вы отметили мысли о самоповреждении. ЭТО ВАЖНО. Свяжитесь со специалистом или позвоните на телефон доверия: РФ 8-800-2000-122 / Казахстан 150 / международный +1-800-273-8255 (US National Suicide Prevention Lifeline)."
+      : null,
+    advice,
+    answers,
+    createdAt: nowIso(),
+    disclaimer: DISCLAIMER,
+  };
+  PHQ9_LAST.set(body.profileId, {
+    score,
+    severity,
+    suicideFlag,
+    answers,
+    createdAt: result.createdAt,
+  });
+  res.json(result);
+});
+
+healthaiRouter.get(
+  "/screener/phq9/:profileId",
+  async (req: Request, res: Response) => {
+    const last = PHQ9_LAST.get(req.params.profileId);
+    if (!last) return res.json({ last: null });
+    res.json({ last });
+  },
+);
+
 /** Полный экспорт профиля для врача (или для backup). */
 healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
   const profileId = req.params.id;

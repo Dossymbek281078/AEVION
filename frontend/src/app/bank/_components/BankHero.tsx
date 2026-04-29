@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useI18n } from "@/lib/i18n";
 import { CurrencySwitcher } from "./Money";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { QuickDemoControls } from "./QuickDemoControls";
 
 export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }) {
   const { t } = useI18n();
@@ -72,6 +73,9 @@ export function BankHero({ email, extra }: { email?: string; extra?: ReactNode }
       <p style={{ margin: 0, fontSize: 15, opacity: 0.88, lineHeight: 1.6, maxWidth: 600 }}>
         {t("hero.subtitle")}
       </p>
+      <div style={{ marginTop: 14 }}>
+        <QuickDemoControls />
+      </div>
       {email ? (
         <div
           style={{

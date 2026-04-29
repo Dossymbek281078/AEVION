@@ -7,7 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
-import CoachKnowledge from "./CoachKnowledge";
+import CoachKnowledge from "./CoachKnowledgeModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
@@ -976,7 +976,11 @@ export default function CyberChessPage(){
     return()=>{cancelled=true};
   },[tab,hist.length,sfOk]);
 
+  // Когда true — следующий апдейт lm (свой ход юзера) НЕ запускает slide-animation.
+  // Юзер только что сам перетащил/щёлкнул — анимация лишь добавляет восприятия лага.
+  const skipNextAnimRef=useRef(false);
   const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
+    skipNextAnimRef.current=true;
     const p=game.get(from);if(!p)return false;
     // ── OPENING TRAINER — верификация хода против скрипта дебюта ──
     if(openingDrill){
@@ -1745,10 +1749,12 @@ export default function CyberChessPage(){
     const key=`${lm.from}-${lm.to}-${bk}`;
     if(lmKeyRef.current===key)return;
     lmKeyRef.current=key;
+    // Свой ход — анимация скипается. Юзер сам только что отпустил мышь/тапнул, ему нужен мгновенный отклик.
+    if(skipNextAnimRef.current){skipNextAnimRef.current=false;return;}
     const pc=game.get(lm.to as Square);
     if(!pc)return;
     sMoveAnim({from:lm.from as Square,to:lm.to as Square,piece:pc,key:Date.now()});
-    const id=window.setTimeout(()=>sMoveAnim(null),180);
+    const id=window.setTimeout(()=>sMoveAnim(null),160);
     return()=>window.clearTimeout(id);
   },[bk,lm,game]);
   // После mount floating piece — trigger transition через рефлоу, чтобы
@@ -5021,7 +5027,7 @@ export default function CyberChessPage(){
           <CoachKnowledge
             visible={showKnowledge}
             onClose={()=>sShowKnowledge(false)}
-            onLoadPosition={(fen,hint)=>{
+            onLoadPosition={(fen:string,hint?:string)=>{
               try{
                 const g=new Chess(fen);
                 setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");

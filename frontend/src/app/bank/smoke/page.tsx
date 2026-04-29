@@ -36,6 +36,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { appendSignature } from "../_lib/signatures";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
@@ -108,6 +109,7 @@ export default function BankSmokePage() {
   const [completedAt, setCompletedAt] = useState<string | null>(null);
   const [totalMs, setTotalMs] = useState<number | null>(null);
   const [apiBase, setApiBase] = useState<string>("");
+  const [lastTransferId, setLastTransferId] = useState<string>("");
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -123,6 +125,7 @@ export default function BankSmokePage() {
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, status: "pending", detail: undefined, ms: undefined, http: undefined })));
     setCompletedAt(null);
     setTotalMs(null);
+    setLastTransferId("");
   }, []);
 
   const run = useCallback(async () => {
@@ -334,6 +337,7 @@ export default function BankSmokePage() {
         });
         if (res.ok && data?.id) {
           ctx.lastTransfer = data;
+          setLastTransferId(String(data.id));
           update("transfer", { status: "pass", ms, http: res.status, detail: `Transfer id ${String(data.id).slice(0, 16)}…` });
         } else {
           failAndStop("transfer", data?.error || `transfer failed ${res.status}`, res.status);
@@ -353,7 +357,25 @@ export default function BankSmokePage() {
         });
         if (res.ok && data?.signature) {
           ctx.lastSignature = data.signature;
-          update("sign", { status: "pass", ms, http: res.status, detail: `${String(data.algo || "?")} · ${String(data.signature).slice(0, 18)}…` });
+          // Persist to the same local audit log that useBank.send writes to,
+          // so the printable receipt at /bank/receipt/<id> renders the
+          // signature row for transfers performed by the smoke runner. This
+          // closes the receipt e2e: smoke → /bank/receipt/<transferId>.
+          try {
+            appendSignature({
+              id: String((ctx.lastTransfer as any)?.id || `smoke_${Date.now()}`),
+              kind: "transfer",
+              payload: ctx.lastTransfer as unknown as Record<string, unknown>,
+              signature: data.signature,
+              algo: String(data.algo || "unknown"),
+              signedAt: String(data.createdAt || new Date().toISOString()),
+              verified: "unknown",
+              verifiedAt: null,
+            });
+          } catch {
+            /* localStorage unavailable — receipt page will simply lack the row */
+          }
+          update("sign", { status: "pass", ms, http: res.status, detail: `${String(data.algo || "?")} · ${String(data.signature).slice(0, 18)}… · saved to local audit log` });
         } else {
           failAndStop("sign", data?.error || `sign failed ${res.status}`, res.status);
         }
@@ -398,6 +420,7 @@ export default function BankSmokePage() {
   const passed = steps.filter((s) => s.status === "pass").length;
   const failed = steps.filter((s) => s.status === "fail").length;
   const allDone = !running && (passed + failed === steps.length);
+  const transferId = lastTransferId;
 
   return (
     <ProductPageShell>
@@ -565,6 +588,43 @@ export default function BankSmokePage() {
           ))}
         </ol>
 
+        {allDone && passed === steps.length && transferId ? (
+          <div
+            style={{
+              marginTop: 18,
+              padding: "14px 16px",
+              border: "1px solid rgba(16,185,129,0.40)",
+              borderRadius: 12,
+              background: "linear-gradient(135deg, rgba(209,250,229,0.55), rgba(167,243,208,0.40))",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "center",
+              fontSize: 13,
+              color: "#065f46",
+            }}
+          >
+            <span style={{ fontWeight: 800 }}>All 11 steps passed.</span>
+            <span>The signed transfer is now in your local audit log — open the printable receipt:</span>
+            <Link
+              href={`/bank/receipt/${encodeURIComponent(transferId)}`}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                background: "#065f46",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                textDecoration: "none",
+              }}
+            >
+              View receipt →
+            </Link>
+          </div>
+        ) : null}
+
         <div
           style={{
             marginTop: 18,
@@ -582,7 +642,8 @@ export default function BankSmokePage() {
           run after the first reuses the token, keeping account history accumulating. Append
           <code> ?auto=1</code> to this URL to run on load (handy for CI screenshots and investor
           demos). Top-up amount is 100 AEC; transfer is 1 AEC primary → freshly-provisioned alt
-          account.
+          account. Step 10 also writes the (payload, signature) pair into the local audit log so
+          the printable <code>/bank/receipt/&lt;id&gt;</code> renders the signature row end-to-end.
         </div>
       </main>
     </ProductPageShell>

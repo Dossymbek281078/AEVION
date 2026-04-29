@@ -21,6 +21,156 @@ const BACKEND =
 
 const LS_PROFILE_ID = "aevion:healthai:profileId";
 const LS_TAB = "aevion:healthai:tab";
+const LS_LOCALE = "aevion:locale";
+
+type Lang = "en" | "ru";
+
+const STR: Record<string, Record<Lang, string>> = {
+  subtitle: { en: "PERSONAL AI DOCTOR · v1", ru: "ПЕРСОНАЛЬНЫЙ AI-ДОКТОР · v1" },
+  hero: {
+    en: "Personal AI assistant: profile, symptom check, daily metrics, trends and history. Doesn't replace a doctor visit — educational service.",
+    ru: "Личный AI-помощник: профиль, симптом-чек, ежедневные показатели, тренды и история. Не заменяет визит к врачу — это образовательный сервис.",
+  },
+  tab_profile: { en: "Profile", ru: "Профиль" },
+  tab_check: { en: "Symptom check", ru: "Симптом-чек" },
+  tab_log: { en: "Daily log", ru: "Дневник" },
+  tab_trends: { en: "Trends", ru: "Тренды" },
+  tab_history: { en: "History", ru: "История" },
+  card_profile_title: { en: "Health profile", ru: "Медицинский профиль" },
+  card_profile_subtitle: {
+    en: "Baseline info for personalized advice",
+    ru: "Базовая информация для персонализации советов",
+  },
+  card_check_title: { en: "Symptom check", ru: "Симптом-чек" },
+  card_check_subtitle: {
+    en: "Describe what bothers you — get advice. Severe symptoms → see a doctor immediately.",
+    ru: "Опишите что беспокоит — получите advice. Серьёзные симптомы → немедленно к врачу.",
+  },
+  card_log_title: { en: "Daily wellness log", ru: "Дневник самочувствия" },
+  card_log_subtitle_n: { en: "Logged: {n} {d}", ru: "Записано: {n} {d}" },
+  day_one: { en: "day", ru: "день" },
+  day_many: { en: "days", ru: "дней" },
+  card_trends_title: { en: "Trends", ru: "Тренды" },
+  trends_subtitle_streak: { en: "🔥 {n}-day streak", ru: "🔥 {n} дней подряд" },
+  trends_subtitle_empty: {
+    en: "Add daily logs to see trends",
+    ru: "Добавьте логи для отображения трендов",
+  },
+  card_history_title: { en: "History", ru: "История" },
+  hist_subtitle: { en: "{c} checks · {l} logs", ru: "{c} чеков · {l} логов" },
+  field_age: { en: "Age", ru: "Возраст" },
+  field_sex: { en: "Sex", ru: "Пол" },
+  field_height: { en: "Height (cm)", ru: "Рост (см)" },
+  field_weight: { en: "Weight (kg)", ru: "Вес (кг)" },
+  field_conditions: {
+    en: "Chronic conditions (comma separated)",
+    ru: "Хронические заболевания (через запятую)",
+  },
+  field_allergies: { en: "Allergies", ru: "Аллергии" },
+  field_medications: { en: "Medications", ru: "Лекарства" },
+  field_symptoms: {
+    en: "Symptoms (comma or new line)",
+    ru: "Симптомы (запятая или новая строка)",
+  },
+  field_severity_n: { en: "Severity {n}/10", ru: "Тяжесть {n}/10" },
+  field_duration: { en: "Duration (hours)", ru: "Длительность (часы)" },
+  field_notes: { en: "Notes (optional)", ru: "Заметки (необязательно)" },
+  field_sleep: { en: "Sleep (hours)", ru: "Сон (часы)" },
+  field_mood_n: { en: "Mood {n}/10", ru: "Настроение {n}/10" },
+  field_water: { en: "Water (litres)", ru: "Вода (литры)" },
+  field_exercise: { en: "Exercise (minutes)", ru: "Тренировка (минуты)" },
+  ph_conditions: { en: "e.g. diabetes, hypertension", ru: "напр. диабет, гипертония" },
+  ph_allergies: { en: "e.g. pollen, nuts", ru: "напр. пыльца, орехи" },
+  ph_medications: { en: "regular medications", ru: "что принимаете регулярно" },
+  ph_symptoms: { en: "e.g. headache, fatigue, nausea", ru: "напр. headache, fatigue, тошнота" },
+  ph_check_notes: {
+    en: "what makes it better / worse",
+    ru: "что облегчает / ухудшает",
+  },
+  ph_log_notes: { en: "how the day went", ru: "как день прошёл" },
+  sex_other: { en: "Other / prefer not to say", ru: "Другое / без указания" },
+  sex_male: { en: "Male", ru: "Мужской" },
+  sex_female: { en: "Female", ru: "Женский" },
+  btn_create_profile: { en: "Create profile", ru: "Создать профиль" },
+  btn_update_profile: { en: "Update profile", ru: "Обновить профиль" },
+  btn_get_advice: { en: "Get advice", ru: "Получить совет" },
+  btn_log_today: { en: "Log today", ru: "Сохранить за сегодня" },
+  bmi: { en: "BMI", ru: "ИМТ" },
+  bmi_under: { en: "Underweight", ru: "Недостаточный вес" },
+  bmi_normal: { en: "Normal", ru: "Норма" },
+  bmi_over: { en: "Overweight", ru: "Избыточный вес" },
+  bmi_obese: { en: "Obese", ru: "Ожирение" },
+  stat_sleep: { en: "Sleep 7d", ru: "Сон 7д" },
+  stat_mood: { en: "Mood 7d", ru: "Настр. 7д" },
+  stat_weight: { en: "Weight 7d", ru: "Вес 7д" },
+  stat_water: { en: "Water 7d", ru: "Вода 7д" },
+  stat_exercise: { en: "Exer. 7d", ru: "Спорт 7д" },
+  trends_empty: {
+    en: "No data yet. Add at least one log to see trends.",
+    ru: "Пока нет данных. Добавьте хотя бы один лог.",
+  },
+  history_empty: {
+    en: "Empty. Run a symptom check or daily log to start.",
+    ru: "Пусто. Запустите симптом-чек или ежедневный лог.",
+  },
+  section_checks: { en: "Symptom checks", ru: "Симптом-чеки" },
+  section_logs: { en: "Daily logs", ru: "Ежедневные логи" },
+  section_risks: { en: "Risk indicators", ru: "Риск-индикаторы" },
+  risks_empty: {
+    en: "✓ No active risk flags. Keep up the wellness routine.",
+    ru: "✓ Активных рисков нет. Поддерживайте режим — отличная работа.",
+  },
+  symptoms: { en: "Symptoms", ru: "Симптомы" },
+  severity_short: { en: "severity", ru: "тяжесть" },
+  urg_self: { en: "Self-care", ru: "Самопомощь" },
+  urg_consult: { en: "Consult", ru: "К врачу" },
+  urg_urgent: { en: "Urgent", ru: "Срочно" },
+  risk_low: { en: "Low", ru: "Низкий" },
+  risk_medium: { en: "Medium", ru: "Средний" },
+  risk_high: { en: "High", ru: "Высокий" },
+  toast_save_failed: { en: "Save failed", ru: "Не удалось сохранить" },
+  toast_check_failed: { en: "Check failed", ru: "Не удалось" },
+  toast_log_failed: { en: "Log failed", ru: "Не удалось" },
+  toast_profile_created: { en: "Profile created ✓", ru: "Профиль создан ✓" },
+  toast_profile_saved: { en: "Profile saved ✓", ru: "Профиль сохранён ✓" },
+  toast_no_profile: { en: "Set up profile first", ru: "Сначала создайте профиль" },
+  toast_no_symptoms: {
+    en: "Describe at least one symptom",
+    ru: "Опишите хотя бы один симптом",
+  },
+  toast_logged: { en: "Logged ✓", ru: "Записано ✓" },
+  disclaimer_label: { en: "Disclaimer.", ru: "Дисклеймер." },
+  disclaimer_text: {
+    en:
+      "AEVION HealthAI is an educational AI assistant. " +
+      "It does not provide diagnoses and does not replace qualified medical advice. " +
+      "If you have alarming symptoms, see a doctor or call emergency services.",
+    ru:
+      "AEVION HealthAI — образовательный AI-помощник. " +
+      "Не ставит диагнозы и не заменяет квалифицированную медицинскую " +
+      "консультацию. При тревожных симптомах обратитесь к врачу или вызовите скорую (112).",
+  },
+};
+
+function t(key: string, lang: Lang, vars?: Record<string, string | number>): string {
+  let v = STR[key]?.[lang] ?? key;
+  if (vars) for (const [k, val] of Object.entries(vars)) v = v.replace(`{${k}}`, String(val));
+  return v;
+}
+
+function detectLocale(): Lang {
+  if (typeof window === "undefined") return "en";
+  try {
+    const stored = window.localStorage.getItem(LS_LOCALE);
+    if (stored === "ru" || stored === "en") return stored;
+  } catch {}
+  const lang =
+    typeof navigator !== "undefined" && navigator.language
+      ? navigator.language.toLowerCase()
+      : "en";
+  if (lang.startsWith("ru")) return "ru";
+  return "en";
+}
 
 type Tab = "profile" | "check" | "log" | "trends" | "history";
 
@@ -100,11 +250,14 @@ const URGENCY_COLOR: Record<Match["urgency"], string> = {
   urgent: "#f87171",
 };
 
-const URGENCY_LABEL: Record<Match["urgency"], string> = {
-  "self-care": "Self-care",
-  consult: "Consult",
-  urgent: "Urgent",
-};
+function urgencyLabel(u: Match["urgency"], lang: Lang): string {
+  const map: Record<Match["urgency"], string> = {
+    "self-care": "urg_self",
+    consult: "urg_consult",
+    urgent: "urg_urgent",
+  };
+  return t(map[u], lang);
+}
 
 function bmi(heightCm: number, weightKg: number): number {
   if (heightCm <= 0) return 0;
@@ -112,12 +265,12 @@ function bmi(heightCm: number, weightKg: number): number {
   return Math.round((weightKg / (m * m)) * 10) / 10;
 }
 
-function bmiLabel(value: number): { label: string; color: string } {
+function bmiLabel(value: number, lang: Lang): { label: string; color: string } {
   if (value === 0) return { label: "—", color: "#94a3b8" };
-  if (value < 18.5) return { label: "Underweight", color: "#7dd3fc" };
-  if (value < 25) return { label: "Normal", color: "#5eead4" };
-  if (value < 30) return { label: "Overweight", color: "#fbbf24" };
-  return { label: "Obese", color: "#f87171" };
+  if (value < 18.5) return { label: t("bmi_under", lang), color: "#7dd3fc" };
+  if (value < 25) return { label: t("bmi_normal", lang), color: "#5eead4" };
+  if (value < 30) return { label: t("bmi_over", lang), color: "#fbbf24" };
+  return { label: t("bmi_obese", lang), color: "#f87171" };
 }
 
 export default function HealthAIPage() {
@@ -130,6 +283,16 @@ export default function HealthAIPage() {
   const [risks, setRisks] = useState<RisksResp | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [lang, setLang] = useState<Lang>("en");
+  useEffect(() => {
+    setLang(detectLocale());
+  }, []);
+  const switchLang = (next: Lang) => {
+    setLang(next);
+    try {
+      window.localStorage.setItem(LS_LOCALE, next);
+    } catch {}
+  };
 
   // Profile draft
   const [age, setAge] = useState("");
@@ -264,7 +427,7 @@ export default function HealthAIPage() {
       });
       const j = await r.json();
       if (!r.ok || !j.profile) {
-        showToast("Save failed");
+        showToast(t("toast_save_failed", lang));
         return;
       }
       profileIdRef.current = j.profile.id;
@@ -273,7 +436,7 @@ export default function HealthAIPage() {
       } catch {}
       setProfile(j.profile);
       setProfileBmi(j.bmi || 0);
-      showToast(j.isNew ? "Profile created ✓" : "Profile saved ✓");
+      showToast(t(j.isNew ? "toast_profile_created" : "toast_profile_saved", lang));
       if (j.isNew) setTab("check");
     } finally {
       setBusy(false);
@@ -282,7 +445,7 @@ export default function HealthAIPage() {
 
   const runCheck = async () => {
     if (!profileIdRef.current) {
-      showToast("Set up profile first");
+      showToast(t("toast_no_profile", lang));
       setTab("profile");
       return;
     }
@@ -291,7 +454,7 @@ export default function HealthAIPage() {
       .map((s) => s.trim())
       .filter(Boolean);
     if (symptoms.length === 0) {
-      showToast("Describe at least one symptom");
+      showToast(t("toast_no_symptoms", lang));
       return;
     }
     setBusy(true);
@@ -309,7 +472,7 @@ export default function HealthAIPage() {
       });
       const j = await r.json();
       if (!r.ok) {
-        showToast("Check failed");
+        showToast(t("toast_check_failed", lang));
         return;
       }
       setLastCheck(j.check);
@@ -325,7 +488,7 @@ export default function HealthAIPage() {
 
   const submitLog = async () => {
     if (!profileIdRef.current) {
-      showToast("Set up profile first");
+      showToast(t("toast_no_profile", lang));
       setTab("profile");
       return;
     }
@@ -347,7 +510,7 @@ export default function HealthAIPage() {
       });
       const j = await r.json();
       if (!r.ok || !j.log) {
-        showToast("Log failed");
+        showToast(t("toast_log_failed", lang));
         return;
       }
       setLogs((prev) => {
@@ -357,7 +520,7 @@ export default function HealthAIPage() {
       // Освежаем тренды и риски.
       void loadTrends(profileIdRef.current);
       void loadRisks(profileIdRef.current);
-      showToast("Logged ✓");
+      showToast(t("toast_logged", lang));
       setLogSleep("");
       setLogWeight("");
       setLogWater("");
@@ -421,18 +584,53 @@ export default function HealthAIPage() {
         <Wave1Nav variant="dark" />
 
         <header style={{ marginBottom: 18 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
             <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>
               <span style={{ color: "#5eead4" }}>Health</span>
               <span style={{ color: "#7dd3fc" }}>AI</span>
             </h1>
             <span style={{ fontSize: 12, color: "#94a3b8", letterSpacing: "0.04em" }}>
-              PERSONAL AI DOCTOR · v1
+              {t("subtitle", lang)}
             </span>
+            <div style={{ flex: 1 }} />
+            <div
+              role="group"
+              aria-label="Locale"
+              style={{
+                display: "flex",
+                gap: 0,
+                border: "1px solid rgba(120,160,220,0.3)",
+                borderRadius: 999,
+                overflow: "hidden",
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              {(["en", "ru"] as const).map((l) => {
+                const active = l === lang;
+                return (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => switchLang(l)}
+                    style={{
+                      padding: "5px 12px",
+                      background: active ? "rgba(94,234,212,0.22)" : "transparent",
+                      color: active ? "#5eead4" : "#94a3b8",
+                      border: "none",
+                      cursor: "pointer",
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {l}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>
-            Личный AI-помощник: профиль, симптом-чек, ежедневные показатели,
-            тренды и история. Не заменяет визит к врачу — это образовательный сервис.
+            {t("hero", lang)}
           </p>
         </header>
 
@@ -469,14 +667,14 @@ export default function HealthAIPage() {
                 }}
               >
                 {t === "profile"
-                  ? "Profile"
+                  ? STR.tab_profile[lang]
                   : t === "check"
-                    ? "Symptom check"
+                    ? STR.tab_check[lang]
                     : t === "log"
-                      ? "Daily log"
+                      ? STR.tab_log[lang]
                       : t === "trends"
-                        ? "Trends"
-                        : "History"}
+                        ? STR.tab_trends[lang]
+                        : STR.tab_history[lang]}
               </button>
             );
           })}
@@ -484,9 +682,12 @@ export default function HealthAIPage() {
 
         {tab === "profile" ? (
           <Card>
-            <CardHeader title="Health profile" subtitle="Базовая информация для персонализации советов" />
+            <CardHeader
+              title={t("card_profile_title", lang)}
+              subtitle={t("card_profile_subtitle", lang)}
+            />
             <Grid2>
-              <Field label="Age">
+              <Field label={t("field_age", lang)}>
                 <input
                   type="number"
                   min={1}
@@ -496,14 +697,14 @@ export default function HealthAIPage() {
                   style={inputStyle}
                 />
               </Field>
-              <Field label="Sex">
+              <Field label={t("field_sex", lang)}>
                 <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} style={inputStyle}>
-                  <option value="other">Other / prefer not to say</option>
-                  <option value="M">Male</option>
-                  <option value="F">Female</option>
+                  <option value="other">{t("sex_other", lang)}</option>
+                  <option value="M">{t("sex_male", lang)}</option>
+                  <option value="F">{t("sex_female", lang)}</option>
                 </select>
               </Field>
-              <Field label="Height (cm)">
+              <Field label={t("field_height", lang)}>
                 <input
                   type="number"
                   min={50}
@@ -513,7 +714,7 @@ export default function HealthAIPage() {
                   style={inputStyle}
                 />
               </Field>
-              <Field label="Weight (kg)">
+              <Field label={t("field_weight", lang)}>
                 <input
                   type="number"
                   min={20}
@@ -524,28 +725,28 @@ export default function HealthAIPage() {
                 />
               </Field>
             </Grid2>
-            <Field label="Chronic conditions (comma separated)">
+            <Field label={t("field_conditions", lang)}>
               <input
                 type="text"
-                placeholder="e.g. диабет, гипертония"
+                placeholder={t("ph_conditions", lang)}
                 value={conditions}
                 onChange={(e) => setConditions(e.target.value)}
                 style={inputStyle}
               />
             </Field>
-            <Field label="Allergies">
+            <Field label={t("field_allergies", lang)}>
               <input
                 type="text"
-                placeholder="e.g. пыльца, орехи"
+                placeholder={t("ph_allergies", lang)}
                 value={allergies}
                 onChange={(e) => setAllergies(e.target.value)}
                 style={inputStyle}
               />
             </Field>
-            <Field label="Medications">
+            <Field label={t("field_medications", lang)}>
               <input
                 type="text"
-                placeholder="что принимаете регулярно"
+                placeholder={t("ph_medications", lang)}
                 value={medications}
                 onChange={(e) => setMedications(e.target.value)}
                 style={inputStyle}
@@ -564,18 +765,18 @@ export default function HealthAIPage() {
                   marginTop: 10,
                 }}
               >
-                <div style={{ fontSize: 12, color: "#94a3b8" }}>BMI</div>
+                <div style={{ fontSize: 12, color: "#94a3b8" }}>{t("bmi", lang)}</div>
                 <div
                   style={{
                     fontSize: 22,
                     fontWeight: 900,
-                    color: bmiLabel(profileBmi).color,
+                    color: bmiLabel(profileBmi, lang).color,
                   }}
                 >
                   {profileBmi || "—"}
                 </div>
                 <div style={{ fontSize: 13, color: "#cbd5e1", fontWeight: 700 }}>
-                  {bmiLabel(profileBmi).label}
+                  {bmiLabel(profileBmi, lang).label}
                 </div>
                 <div style={{ flex: 1 }} />
                 <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "ui-monospace, monospace" }}>
@@ -585,7 +786,7 @@ export default function HealthAIPage() {
             ) : null}
             <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
               <button type="button" onClick={saveProfile} disabled={busy} style={primaryBtn}>
-                {profile ? "Update profile" : "Create profile"}
+                {profile ? t("btn_update_profile", lang) : t("btn_create_profile", lang)}
               </button>
             </div>
           </Card>
@@ -595,20 +796,20 @@ export default function HealthAIPage() {
           <>
             <Card>
               <CardHeader
-                title="Symptom check"
-                subtitle="Опишите что беспокоит — получите advice. Серьёзные симптомы → немедленно к врачу."
+                title={t("card_check_title", lang)}
+                subtitle={t("card_check_subtitle", lang)}
               />
-              <Field label="Symptoms (comma or new line)">
+              <Field label={t("field_symptoms", lang)}>
                 <textarea
                   rows={3}
-                  placeholder="напр. headache, fatigue, тошнота"
+                  placeholder={t("ph_symptoms", lang)}
                   value={symptomsText}
                   onChange={(e) => setSymptomsText(e.target.value)}
                   style={{ ...inputStyle, resize: "vertical" as const, fontFamily: "inherit" }}
                 />
               </Field>
               <Grid2>
-                <Field label={`Severity ${severity}/10`}>
+                <Field label={t("field_severity_n", lang, { n: severity })}>
                   <input
                     type="range"
                     min={1}
@@ -618,7 +819,7 @@ export default function HealthAIPage() {
                     style={{ width: "100%" }}
                   />
                 </Field>
-                <Field label="Duration (hours)">
+                <Field label={t("field_duration", lang)}>
                   <input
                     type="number"
                     min={0}
@@ -628,34 +829,37 @@ export default function HealthAIPage() {
                   />
                 </Field>
               </Grid2>
-              <Field label="Notes (optional)">
+              <Field label={t("field_notes", lang)}>
                 <input
                   type="text"
                   value={checkNotes}
                   onChange={(e) => setCheckNotes(e.target.value)}
                   style={inputStyle}
-                  placeholder="что облегчает / ухудшает"
+                  placeholder={t("ph_check_notes", lang)}
                 />
               </Field>
               <div style={{ marginTop: 12 }}>
                 <button type="button" onClick={runCheck} disabled={busy} style={primaryBtn}>
-                  Get advice
+                  {t("btn_get_advice", lang)}
                 </button>
               </div>
             </Card>
 
-            {lastCheck ? <CheckCard check={lastCheck} /> : null}
+            {lastCheck ? <CheckCard check={lastCheck} lang={lang} /> : null}
           </>
         ) : null}
 
         {tab === "log" ? (
           <Card>
             <CardHeader
-              title="Daily wellness log"
-              subtitle={`Записано: ${logs.length} ${logs.length === 1 ? "day" : "days"}`}
+              title={t("card_log_title", lang)}
+              subtitle={t("card_log_subtitle_n", lang, {
+                n: logs.length,
+                d: logs.length === 1 ? t("day_one", lang) : t("day_many", lang),
+              })}
             />
             <Grid2>
-              <Field label="Sleep (hours)">
+              <Field label={t("field_sleep", lang)}>
                 <input
                   type="number"
                   step={0.5}
@@ -666,7 +870,7 @@ export default function HealthAIPage() {
                   style={inputStyle}
                 />
               </Field>
-              <Field label={`Mood ${logMood}/10`}>
+              <Field label={t("field_mood_n", lang, { n: logMood })}>
                 <input
                   type="range"
                   min={1}
@@ -676,7 +880,7 @@ export default function HealthAIPage() {
                   style={{ width: "100%" }}
                 />
               </Field>
-              <Field label="Weight (kg)">
+              <Field label={t("field_weight", lang)}>
                 <input
                   type="number"
                   step={0.1}
@@ -685,7 +889,7 @@ export default function HealthAIPage() {
                   style={inputStyle}
                 />
               </Field>
-              <Field label="Water (litres)">
+              <Field label={t("field_water", lang)}>
                 <input
                   type="number"
                   step={0.1}
@@ -694,7 +898,7 @@ export default function HealthAIPage() {
                   style={inputStyle}
                 />
               </Field>
-              <Field label="Exercise (minutes)">
+              <Field label={t("field_exercise", lang)}>
                 <input
                   type="number"
                   min={0}
@@ -704,18 +908,18 @@ export default function HealthAIPage() {
                 />
               </Field>
             </Grid2>
-            <Field label="Notes (optional)">
+            <Field label={t("field_notes", lang)}>
               <input
                 type="text"
                 value={logNotes}
                 onChange={(e) => setLogNotes(e.target.value)}
-                placeholder="как день прошёл"
+                placeholder={t("ph_log_notes", lang)}
                 style={inputStyle}
               />
             </Field>
             <div style={{ marginTop: 12 }}>
               <button type="button" onClick={submitLog} disabled={busy} style={primaryBtn}>
-                Log today
+                {t("btn_log_today", lang)}
               </button>
             </div>
           </Card>
@@ -724,17 +928,17 @@ export default function HealthAIPage() {
         {tab === "trends" ? (
           <Card>
             <CardHeader
-              title="Trends"
+              title={t("card_trends_title", lang)}
               subtitle={
                 trends?.streak
-                  ? `🔥 ${trends.streak}-day streak`
-                  : "Add daily logs to see trends"
+                  ? t("trends_subtitle_streak", lang, { n: trends.streak })
+                  : t("trends_subtitle_empty", lang)
               }
             />
             {risks && risks.risks.length > 0 ? (
               <div style={{ marginBottom: 14 }}>
                 <h3 style={sectionTitle}>
-                  Risk indicators
+                  {t("section_risks", lang)}
                   {risks.summary.high > 0 ? (
                     <span style={{ color: "#f87171", marginLeft: 8 }}>
                       · {risks.summary.high} high
@@ -748,7 +952,7 @@ export default function HealthAIPage() {
                 </h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {risks.risks.map((r) => (
-                    <RiskCard key={r.code} risk={r} />
+                    <RiskCard key={r.code} risk={r} lang={lang} />
                   ))}
                 </div>
               </div>
@@ -764,11 +968,11 @@ export default function HealthAIPage() {
                   marginBottom: 14,
                 }}
               >
-                ✓ No active risk flags. Keep up the wellness routine.
+                {t("risks_empty", lang)}
               </div>
             ) : null}
             {!trends || trends.series.length === 0 ? (
-              <div style={emptyStyle}>No data yet. Add at least one log to see trends.</div>
+              <div style={emptyStyle}>{t("trends_empty", lang)}</div>
             ) : (
               <>
                 <div
@@ -780,15 +984,15 @@ export default function HealthAIPage() {
                   }}
                 >
                   <Stat
-                    label="Sleep 7d"
+                    label={t("stat_sleep", lang)}
                     value={trends.avg7d?.sleep}
                     unit="h"
                     color="#7dd3fc"
                   />
-                  <Stat label="Mood 7d" value={trends.avg7d?.mood} unit="/10" color="#5eead4" />
-                  <Stat label="Weight 7d" value={trends.avg7d?.weight} unit="kg" color="#fbbf24" />
-                  <Stat label="Water 7d" value={trends.avg7d?.water} unit="L" color="#a5b4fc" />
-                  <Stat label="Exer. 7d" value={trends.avg7d?.exercise} unit="min" color="#f472b6" />
+                  <Stat label={t("stat_mood", lang)} value={trends.avg7d?.mood} unit="/10" color="#5eead4" />
+                  <Stat label={t("stat_weight", lang)} value={trends.avg7d?.weight} unit="kg" color="#fbbf24" />
+                  <Stat label={t("stat_water", lang)} value={trends.avg7d?.water} unit="L" color="#a5b4fc" />
+                  <Stat label={t("stat_exercise", lang)} value={trends.avg7d?.exercise} unit="min" color="#f472b6" />
                 </div>
                 {seriesChart ? (
                   <div
@@ -842,22 +1046,25 @@ export default function HealthAIPage() {
 
         {tab === "history" ? (
           <Card>
-            <CardHeader title="History" subtitle={`${checks.length} checks · ${logs.length} logs`} />
+            <CardHeader
+              title={t("card_history_title", lang)}
+              subtitle={t("hist_subtitle", lang, { c: checks.length, l: logs.length })}
+            />
             {checks.length === 0 && logs.length === 0 ? (
-              <div style={emptyStyle}>Empty. Run a symptom check or daily log to start.</div>
+              <div style={emptyStyle}>{t("history_empty", lang)}</div>
             ) : (
               <>
                 {checks.length > 0 ? (
                   <>
-                    <h3 style={sectionTitle}>Symptom checks</h3>
+                    <h3 style={sectionTitle}>{t("section_checks", lang)}</h3>
                     {checks.slice(0, 10).map((c) => (
-                      <CheckCard key={c.id} check={c} compact />
+                      <CheckCard key={c.id} check={c} compact lang={lang} />
                     ))}
                   </>
                 ) : null}
                 {logs.length > 0 ? (
                   <>
-                    <h3 style={sectionTitle}>Daily logs</h3>
+                    <h3 style={sectionTitle}>{t("section_logs", lang)}</h3>
                     {logs.slice(0, 30).map((l) => (
                       <div
                         key={l.id}
@@ -905,10 +1112,7 @@ export default function HealthAIPage() {
             lineHeight: 1.5,
           }}
         >
-          ⚠ <b>Disclaimer.</b> AEVION HealthAI — образовательный AI-помощник.
-          Не ставит диагнозы и не заменяет квалифицированную медицинскую
-          консультацию. При тревожных симптомах обратитесь к врачу или вызовите
-          скорую (112).
+          ⚠ <b>{t("disclaimer_label", lang)}</b> {t("disclaimer_text", lang)}
         </div>
       </div>
 
@@ -1029,13 +1233,16 @@ const RISK_COLOR: Record<Risk["severity"], string> = {
   high: "#f87171",
 };
 
-const RISK_LABEL: Record<Risk["severity"], string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-};
+function riskLabel(s: Risk["severity"], lang: Lang): string {
+  const map: Record<Risk["severity"], string> = {
+    low: "risk_low",
+    medium: "risk_medium",
+    high: "risk_high",
+  };
+  return t(map[s], lang);
+}
 
-function RiskCard({ risk }: { risk: Risk }) {
+function RiskCard({ risk, lang }: { risk: Risk; lang: Lang }) {
   const c = RISK_COLOR[risk.severity];
   return (
     <div
@@ -1059,7 +1266,7 @@ function RiskCard({ risk }: { risk: Risk }) {
             textTransform: "uppercase",
           }}
         >
-          {RISK_LABEL[risk.severity]}
+          {riskLabel(risk.severity, lang)}
         </span>
         <span style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f8" }}>
           {risk.title}
@@ -1072,7 +1279,15 @@ function RiskCard({ risk }: { risk: Risk }) {
   );
 }
 
-function CheckCard({ check, compact }: { check: Check; compact?: boolean }) {
+function CheckCard({
+  check,
+  compact,
+  lang,
+}: {
+  check: Check;
+  compact?: boolean;
+  lang: Lang;
+}) {
   return (
     <div
       style={{
@@ -1090,12 +1305,12 @@ function CheckCard({ check, compact }: { check: Check; compact?: boolean }) {
           ⓘ {new Date(check.createdAt).toLocaleString()}
         </span>
         <span style={{ fontSize: 11, color: "#94a3b8" }}>
-          severity {check.severity}/10
+          {t("severity_short", lang)} {check.severity}/10
           {check.durationH ? ` · ${check.durationH}h` : ""}
         </span>
       </div>
       <div style={{ fontSize: 13, color: "#e2e8f8", marginBottom: 10 }}>
-        <b>Symptoms:</b> {check.symptoms.join(", ")}
+        <b>{t("symptoms", lang)}:</b> {check.symptoms.join(", ")}
       </div>
       {check.matched.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1122,7 +1337,7 @@ function CheckCard({ check, compact }: { check: Check; compact?: boolean }) {
                     textTransform: "uppercase",
                   }}
                 >
-                  {URGENCY_LABEL[m.urgency]}
+                  {urgencyLabel(m.urgency, lang)}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f8" }}>
                   {m.keyword}

@@ -2392,6 +2392,30 @@ export default function Globus3D({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCountry]);
 
+  /** URL ?country=Russia — deep-link на конкретную страну (mount-only). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const c = sp.get("country");
+      if (c) setSelectedCountry(c);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Синхронизация URL ?country=... при изменении selectedCountry — shareable. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (selectedCountry) sp.set("country", selectedCountry);
+      else sp.delete("country");
+      const qs = sp.toString();
+      const url = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", url);
+    } catch {}
+  }, [selectedCountry]);
+
   const locateMe = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setShareToast("geo-failed");
@@ -2422,6 +2446,8 @@ export default function Globus3D({
       );
       if (filter !== "all") sp.set("filter", filter);
       else sp.delete("filter");
+      if (selectedCountry) sp.set("country", selectedCountry);
+      else sp.delete("country");
       const url = `${window.location.origin}${window.location.pathname}?${sp.toString()}`;
       await navigator.clipboard.writeText(url);
       setShareToast("copied");

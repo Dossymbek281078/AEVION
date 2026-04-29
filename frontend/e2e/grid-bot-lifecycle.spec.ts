@@ -14,6 +14,11 @@ test.describe("QTrade · Grid bot lifecycle", () => {
 
     await expect(page.getByText(/🎯 Grid Bot/i).first()).toBeVisible({ timeout: 15_000 });
 
+    // Default gridPair = BTC/USD; switch to AEV/USD before prefill so ±5% pulls the
+    // AEV/USD price into Low/High and creates AEV/USD-bound bot.
+    const gridPanel = page.getByText(/🎯 Grid Bot/i).locator("..").locator("..");
+    await gridPanel.locator("select").first().selectOption("AEV/USD");
+
     // ±5% prefill — fills Low/High inputs from current AEV/USD price
     await page.getByRole("button", { name: /^±5%$/ }).click();
 

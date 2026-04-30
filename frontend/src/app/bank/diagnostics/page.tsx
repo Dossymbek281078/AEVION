@@ -186,6 +186,8 @@ export default function BankDiagnosticsPage() {
   const [webhookResults, setWebhookResults] = useState<WebhookResult[]>([]);
   const [firingKind, setFiringKind] = useState<WebhookKind | null>(null);
   const [autoRefreshSec, setAutoRefreshSec] = useState<0 | 30 | 60>(0);
+  const [populating, setPopulating] = useState(false);
+  const [populateLog, setPopulateLog] = useState<string[]>([]);
 
   useEffect(() => {
     setToken(readToken());
@@ -274,6 +276,54 @@ export default function BankDiagnosticsPage() {
     const id = window.setInterval(() => void runProbes(), autoRefreshSec * 1000);
     return () => window.clearInterval(id);
   }, [autoRefreshSec, runProbes]);
+
+  const populateDemo = useCallback(async () => {
+    if (populating) return;
+    const t = readToken();
+    if (!t) {
+      setPopulateLog((prev) => [...prev, "no auth token — sign in first"].slice(-12));
+      return;
+    }
+    setPopulating(true);
+    setPopulateLog([]);
+    const log = (msg: string) => setPopulateLog((prev) => [...prev, msg].slice(-12));
+    const auth = { Authorization: `Bearer ${t}`, "Content-Type": "application/json" };
+
+    // Sequence: 3 royalty webhooks · 2 chess prizes · 2 planet certs.
+    // Each is server-pinned to req.auth.email so they all land in the
+    // signed-in user's own /earnings.
+    const plan: Array<{ kind: WebhookKind; n: number }> = [
+      { kind: "qright", n: 3 },
+      { kind: "chess", n: 2 },
+      { kind: "planet", n: 2 },
+    ];
+    let recorded = 0;
+    let replayed = 0;
+    for (const step of plan) {
+      for (let i = 0; i < step.n; i++) {
+        try {
+          const r = await fetch(apiUrl(`/api/bank/test-webhook/${step.kind}`), {
+            method: "POST",
+            cache: "no-store",
+            headers: auth,
+          });
+          const j = await r.json().catch(() => ({}));
+          const isReplay = !!j?.response?.replayed;
+          if (isReplay) replayed++;
+          else recorded++;
+          log(
+            `${step.kind} #${i + 1} → http ${r.status}${isReplay ? " (replayed)" : ""}`,
+          );
+        } catch (err) {
+          log(`${step.kind} #${i + 1} → error: ${err instanceof Error ? err.message : "network"}`);
+        }
+      }
+    }
+
+    log(`done — ${recorded} recorded, ${replayed} replayed (${plan.reduce((a, b) => a + b.n, 0)} fired)`);
+    void runProbes();
+    setPopulating(false);
+  }, [populating, runProbes]);
 
   const fireWebhook = useCallback(
     async (kind: WebhookKind) => {
@@ -579,6 +629,58 @@ export default function BankDiagnosticsPage() {
               </button>
             ))}
           </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "linear-gradient(135deg, rgba(124,58,237,0.06), rgba(14,165,233,0.05))",
+              border: "1px solid rgba(124,58,237,0.20)",
+              marginBottom: 12,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => void populateDemo()}
+              disabled={populating || firingKind !== null}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 9,
+                fontSize: 13,
+                fontWeight: 800,
+                background: populating ? "rgba(15,23,42,0.10)" : "#7c3aed",
+                color: populating ? "#0f172a" : "#fff",
+                border: "1px solid rgba(124,58,237,0.40)",
+                cursor: populating ? "default" : "pointer",
+              }}
+            >
+              {populating ? "Populating…" : "✦ Populate demo data (7 events)"}
+            </button>
+            <span style={{ fontSize: 12, color: "#475569", fontWeight: 600, flex: 1, minWidth: 220 }}>
+              Fires 3 royalty + 2 chess + 2 planet webhooks. Each event lands in your own /earnings.
+            </span>
+          </div>
+          {populateLog.length > 0 ? (
+            <pre
+              style={{
+                margin: "0 0 12px",
+                padding: 10,
+                borderRadius: 8,
+                background: "#0f172a",
+                color: "#e2e8f0",
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                lineHeight: 1.5,
+                maxHeight: 180,
+                overflow: "auto",
+              }}
+            >
+              {populateLog.join("\n")}
+            </pre>
+          ) : null}
           {webhookResults.length === 0 ? (
             <div
               style={{

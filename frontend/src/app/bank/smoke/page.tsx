@@ -70,6 +70,7 @@ const INITIAL_STEPS: Step[] = [
   { key: "royalties", label: "GET /api/qright/royalties", status: "pending" },
   { key: "chessResults", label: "GET /api/cyberchess/results", status: "pending" },
   { key: "planetPayouts", label: "GET /api/planet/payouts", status: "pending" },
+  { key: "capStatus", label: "GET /api/qtrade/cap-status (peek shape)", status: "pending" },
 ];
 
 function readToken(): string {
@@ -468,6 +469,32 @@ export default function BankSmokePage() {
         }
       } catch (e: any) {
         failAndStop("planetPayouts", `network: ${e?.message || "unknown"}`);
+      }
+      if (cancelRef.current) return;
+
+      // 16. cap-status — peek shape (used / cap / remainingSec) per kind
+      update("capStatus", { status: "running" });
+      try {
+        const { res, data, ms } = await fetchJson("/api/qtrade/cap-status", { token: ctx.token });
+        const okShape =
+          res.ok &&
+          data?.topup &&
+          typeof data.topup.cap === "number" &&
+          typeof data.topup.used === "number" &&
+          data?.transfer &&
+          typeof data.transfer.cap === "number";
+        if (okShape) {
+          update("capStatus", {
+            status: "pass",
+            ms,
+            http: res.status,
+            detail: `topup ${data.topup.used}/${data.topup.cap}, transfer ${data.transfer.used}/${data.transfer.cap}`,
+          });
+        } else {
+          failAndStop("capStatus", data?.error || `cap-status shape invalid (${res.status})`, res.status);
+        }
+      } catch (e: any) {
+        failAndStop("capStatus", `network: ${e?.message || "unknown"}`);
       }
     } finally {
       setTotalMs(Math.round(performance.now() - t0));

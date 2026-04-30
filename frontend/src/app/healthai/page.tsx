@@ -140,6 +140,29 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   cycle_save: { en: "Save", ru: "Сохранить" },
   cycle_recent: { en: "Recent days", ru: "Последние дни" },
+  population_title: {
+    en: "Compare with population",
+    ru: "Сравнение с популяцией",
+  },
+  population_subtitle: {
+    en: "Your last 7 days vs the AEVION HealthAI community average.",
+    ru: "Ваши последние 7 дней против средних по AEVION HealthAI.",
+  },
+  population_baseline: {
+    en: "Showing global baseline (sample too small).",
+    ru: "Показаны глобальные ориентиры (выборка слишком мала).",
+  },
+  population_sample_n: {
+    en: "Sample: {n} profiles",
+    ru: "Выборка: {n} профилей",
+  },
+  population_metric_sleep: { en: "Sleep", ru: "Сон" },
+  population_metric_mood: { en: "Mood", ru: "Настроение" },
+  population_metric_bmi: { en: "BMI", ru: "ИМТ" },
+  population_metric_exercise: { en: "Exercise", ru: "Упр." },
+  population_better: { en: "Better", ru: "Лучше" },
+  population_worse: { en: "Below avg", ru: "Ниже" },
+  population_average: { en: "Avg", ru: "Средн." },
   plan_history: { en: "Plan history", ru: "История планов" },
   plan_history_empty: {
     en: "Older plans will appear here when you regenerate.",
@@ -486,6 +509,13 @@ export default function HealthAIPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [trends, setTrends] = useState<Trends | null>(null);
   const [risks, setRisks] = useState<RisksResp | null>(null);
+  const [population, setPopulation] = useState<{
+    sample: number;
+    usedBaseline: boolean;
+    population: { sleepHours: number; moodScore: number; bmi: number; exerciseMin: number };
+    self: { sleepHours: number | null; moodScore: number | null; bmi: number | null; exerciseMin: number | null };
+    delta: { sleepHours: number | null; moodScore: number | null; bmi: number | null; exerciseMin: number | null };
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>("en");
@@ -665,6 +695,15 @@ export default function HealthAIPage() {
     } catch {}
   }, []);
 
+  const loadPopulation = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/population/${profileId}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      setPopulation(j);
+    } catch {}
+  }, []);
+
   const loadProfile = useCallback(
     async (id: string) => {
       try {
@@ -714,6 +753,7 @@ export default function HealthAIPage() {
             loadHistory(stored);
             loadTrends(stored);
             loadRisks(stored);
+            loadPopulation(stored);
             loadPhq9Last(stored);
             loadGad7Last(stored);
             void loadFamily();
@@ -735,7 +775,7 @@ export default function HealthAIPage() {
         setTab(t);
       }
     } catch {}
-  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPhq9Last, loadGad7Last, loadFamily]);
+  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPopulation, loadPhq9Last, loadGad7Last, loadFamily]);
 
   useEffect(() => {
     try {
@@ -834,6 +874,7 @@ export default function HealthAIPage() {
       void loadHistory(id);
       void loadTrends(id);
       void loadRisks(id);
+      void loadPopulation(id);
       void loadPhq9Last(id);
       void loadGad7Last(id);
       setPlan(null);
@@ -1141,6 +1182,7 @@ export default function HealthAIPage() {
       void loadHistory(profileIdRef.current);
       void loadTrends(profileIdRef.current);
       void loadRisks(profileIdRef.current);
+      void loadPopulation(profileIdRef.current);
     } finally {
       setBusy(false);
     }
@@ -1180,6 +1222,7 @@ export default function HealthAIPage() {
       // Освежаем тренды и риски.
       void loadTrends(profileIdRef.current);
       void loadRisks(profileIdRef.current);
+      void loadPopulation(profileIdRef.current);
       showToast(t("toast_logged", lang));
       setLogSleep("");
       setLogWeight("");
@@ -1888,6 +1931,180 @@ export default function HealthAIPage() {
                 }}
               >
                 {t("risks_empty", lang)}
+              </div>
+            ) : null}
+            {population ? (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: 12,
+                  background: "rgba(20,28,46,0.55)",
+                  border: "1px solid rgba(165,180,252,0.22)",
+                  borderRadius: 10,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    marginBottom: 4,
+                  }}
+                >
+                  <h3 style={{ ...sectionTitle, marginBottom: 0 }}>
+                    🌍 {t("population_title", lang)}
+                  </h3>
+                  <span style={{ fontSize: 10, color: "#94a3b8" }}>
+                    {t("population_sample_n", lang, { n: population.sample })}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#94a3b8",
+                    fontStyle: "italic",
+                    marginBottom: 10,
+                  }}
+                >
+                  {population.usedBaseline
+                    ? t("population_baseline", lang)
+                    : t("population_subtitle", lang)}
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                    gap: 8,
+                  }}
+                >
+                  {([
+                    {
+                      key: "sleepHours",
+                      label: t("population_metric_sleep", lang),
+                      unit: "h",
+                      higherIsBetter: true,
+                      color: "#7dd3fc",
+                    },
+                    {
+                      key: "moodScore",
+                      label: t("population_metric_mood", lang),
+                      unit: "/10",
+                      higherIsBetter: true,
+                      color: "#5eead4",
+                    },
+                    {
+                      key: "bmi",
+                      label: t("population_metric_bmi", lang),
+                      unit: "",
+                      higherIsBetter: false,
+                      color: "#fbbf24",
+                      idealRange: [18.5, 25] as [number, number],
+                    },
+                    {
+                      key: "exerciseMin",
+                      label: t("population_metric_exercise", lang),
+                      unit: "min",
+                      higherIsBetter: true,
+                      color: "#f472b6",
+                    },
+                  ] as const).map((m) => {
+                    const selfV = (population.self as any)[m.key] as number | null;
+                    const popV = (population.population as any)[m.key] as number;
+                    const dV = (population.delta as any)[m.key] as number | null;
+                    let tone: "good" | "bad" | "neutral" = "neutral";
+                    if (selfV != null && dV != null) {
+                      if ("idealRange" in m && m.idealRange) {
+                        tone =
+                          selfV >= m.idealRange[0] && selfV <= m.idealRange[1]
+                            ? "good"
+                            : "bad";
+                      } else if (m.higherIsBetter) {
+                        tone = dV > 0 ? "good" : dV < 0 ? "bad" : "neutral";
+                      } else {
+                        tone = dV < 0 ? "good" : dV > 0 ? "bad" : "neutral";
+                      }
+                    }
+                    const toneColor =
+                      tone === "good"
+                        ? "#5eead4"
+                        : tone === "bad"
+                        ? "#f87171"
+                        : "#94a3b8";
+                    const toneText =
+                      tone === "good"
+                        ? t("population_better", lang)
+                        : tone === "bad"
+                        ? t("population_worse", lang)
+                        : t("population_average", lang);
+                    return (
+                      <div
+                        key={m.key}
+                        style={{
+                          padding: 8,
+                          background: "rgba(8,12,24,0.6)",
+                          border: "1px solid rgba(120,160,220,0.16)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: m.color,
+                            fontWeight: 700,
+                            letterSpacing: "0.05em",
+                            textTransform: "uppercase",
+                            marginBottom: 4,
+                          }}
+                        >
+                          {m.label}
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "baseline",
+                          }}
+                        >
+                          <span style={{ fontSize: 18, color: "#e2e8f8", fontWeight: 700 }}>
+                            {selfV == null ? "—" : selfV}
+                            <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 2 }}>
+                              {m.unit}
+                            </span>
+                          </span>
+                          <span style={{ fontSize: 10, color: "#94a3b8" }}>
+                            avg {popV}
+                            {m.unit}
+                          </span>
+                        </div>
+                        {selfV != null && dV != null ? (
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 10,
+                              color: toneColor,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {dV > 0 ? "+" : ""}
+                            {dV}
+                            {m.unit} · {toneText}
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 10,
+                              color: "#64748b",
+                              fontStyle: "italic",
+                            }}
+                          >
+                            no data
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
             {!trends || trends.series.length === 0 ? (

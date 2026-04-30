@@ -614,6 +614,11 @@ function bmi(heightCm: number, weightKg: number): number {
   return Math.round((weightKg / (m * m)) * 10) / 10;
 }
 
+function round(n: number, decimals = 1): number {
+  const f = Math.pow(10, decimals);
+  return Math.round(n * f) / f;
+}
+
 healthaiRouter.get("/health", async (_req, res) => {
   await ensureDb();
   res.json({
@@ -1755,6 +1760,133 @@ healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
     symptomChecks: cks,
     dailyLogs: lgs,
     disclaimer: DISCLAIMER,
+  });
+});
+
+/**
+ * Population averages: сравнение пользователя с агрегатами по всем профилям.
+ * Считает средние sleep / mood / weight / BMI по всем активным профилям и
+ * возвращает дельты для конкретного profileId. Для разогрева анонимной демо-
+ * среды есть baseline — статичные «глобальные» averages если в системе пока
+ * меньше 5 профилей.
+ */
+const POP_BASELINE = {
+  sleepHours: 6.9,
+  moodScore: 6.4,
+  bmi: 25.7,
+  exerciseMin: 28,
+};
+
+healthaiRouter.get("/population/:profileId", async (req, res) => {
+  const profileId = req.params.profileId;
+  const profile = await store.getProfile(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const ids = await store.allProfileIdsWithLogs();
+  const profiles: HealthProfile[] = [];
+  for (const id of ids) {
+    const p = await store.getProfile(id);
+    if (p) profiles.push(p);
+  }
+  // ensure self counted даже если без логов
+  if (!profiles.find((p) => p.id === profileId)) profiles.push(profile);
+
+  let sleepSum = 0,
+    sleepN = 0,
+    moodSum = 0,
+    moodN = 0,
+    exSum = 0,
+    exN = 0;
+  let bmiSum = 0,
+    bmiN = 0;
+  for (const p of profiles) {
+    const lgs = await store.getLogs(p.id);
+    const last = lgs.slice(0, 7);
+    for (const l of last) {
+      if (typeof l.sleepHours === "number") {
+        sleepSum += l.sleepHours;
+        sleepN += 1;
+      }
+      if (typeof l.moodScore === "number") {
+        moodSum += l.moodScore;
+        moodN += 1;
+      }
+      if (typeof l.exerciseMin === "number") {
+        exSum += l.exerciseMin;
+        exN += 1;
+      }
+    }
+    const b = bmi(p.heightCm, p.weightKg);
+    if (b > 0) {
+      bmiSum += b;
+      bmiN += 1;
+    }
+  }
+
+  const usedBaseline = profiles.length < 5;
+  const popSleep = usedBaseline
+    ? POP_BASELINE.sleepHours
+    : sleepN > 0
+    ? sleepSum / sleepN
+    : POP_BASELINE.sleepHours;
+  const popMood = usedBaseline
+    ? POP_BASELINE.moodScore
+    : moodN > 0
+    ? moodSum / moodN
+    : POP_BASELINE.moodScore;
+  const popBmi = usedBaseline
+    ? POP_BASELINE.bmi
+    : bmiN > 0
+    ? bmiSum / bmiN
+    : POP_BASELINE.bmi;
+  const popExercise = usedBaseline
+    ? POP_BASELINE.exerciseMin
+    : exN > 0
+    ? exSum / exN
+    : POP_BASELINE.exerciseMin;
+
+  // self averages
+  const selfLogs = (await store.getLogs(profileId)).slice(0, 7);
+  const num = (xs: number[]) =>
+    xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length;
+  const selfSleep = num(
+    selfLogs.filter((l) => typeof l.sleepHours === "number").map((l) => l.sleepHours as number),
+  );
+  const selfMood = num(
+    selfLogs.filter((l) => typeof l.moodScore === "number").map((l) => l.moodScore as number),
+  );
+  const selfExercise = num(
+    selfLogs.filter((l) => typeof l.exerciseMin === "number").map((l) => l.exerciseMin as number),
+  );
+  const selfBmiRaw = bmi(profile.heightCm, profile.weightKg);
+  const selfBmi = selfBmiRaw > 0 ? selfBmiRaw : null;
+
+  res.json({
+    sample: profiles.length,
+    usedBaseline,
+    population: {
+      sleepHours: round(popSleep, 1),
+      moodScore: round(popMood, 1),
+      bmi: round(popBmi, 1),
+      exerciseMin: round(popExercise, 0),
+    },
+    self: {
+      sleepHours: selfSleep == null ? null : round(selfSleep, 1),
+      moodScore: selfMood == null ? null : round(selfMood, 1),
+      bmi: selfBmi,
+      exerciseMin: selfExercise == null ? null : round(selfExercise, 0),
+    },
+    delta: {
+      sleepHours:
+        selfSleep == null ? null : round(selfSleep - popSleep, 1),
+      moodScore:
+        selfMood == null ? null : round(selfMood - popMood, 1),
+      bmi: selfBmi == null ? null : round(selfBmi - popBmi, 1),
+      exerciseMin:
+        selfExercise == null
+          ? null
+          : round(selfExercise - popExercise, 0),
+    },
   });
 });
 

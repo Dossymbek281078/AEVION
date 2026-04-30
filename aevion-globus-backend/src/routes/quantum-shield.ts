@@ -15,6 +15,7 @@ import {
   wipeBuffer,
   type AuthenticatedShard,
 } from "../lib/shamir/shield";
+import { createShieldRecord } from "../lib/qshield/createRecord";
 import {
   clientIp,
   createInMemoryRateLimiter,
@@ -232,84 +233,24 @@ async function handleCreate(req: Request, res: Response): Promise<void> {
       threshold?: number;
       totalShards?: number;
     };
-    const title =
-      objectTitle || (payload ? JSON.stringify(payload).slice(0, 80) : null);
-    if (!title) {
-      res.status(400).json({ error: "objectTitle or payload is required" });
-      return;
-    }
-
-    // threshold/totalShards from body are accepted for UI parity but the
-    // crypto layer is fixed at 2-of-3 for v1 — we record the requested
-    // values for transparency but do not change the SSS split.
-    const recordedThreshold = Number.isInteger(threshold) && threshold! >= 2 && threshold! <= SHAMIR_SHARDS ? threshold! : SHAMIR_THRESHOLD;
-    const recordedTotalShards = Number.isInteger(totalShards) && totalShards! >= recordedThreshold && totalShards! <= 7 ? totalShards! : SHAMIR_SHARDS;
-
-    const id = "qs-" + crypto.randomBytes(8).toString("hex");
-    const { privateKeyRaw, publicKeySpkiHex } = generateEphemeralEd25519();
-
-    const dataToSign = JSON.stringify({
-      objectId,
-      objectTitle: title,
-      payload,
-      timestamp: Date.now(),
-    });
-    const pkcs8Prefix = Buffer.from(
-      "302e020100300506032b657004220420",
-      "hex",
-    );
-    const pkcs8 = Buffer.concat([pkcs8Prefix, privateKeyRaw]);
-    const signingKey = crypto.createPrivateKey({
-      key: pkcs8,
-      format: "der",
-      type: "pkcs8",
-    });
-    const signature = crypto
-      .sign(null, Buffer.from(dataToSign), signingKey)
-      .toString("hex");
-    wipeBuffer(pkcs8);
-
-    let shards: AuthenticatedShard[];
     try {
-      shards = splitAndAuthenticate(privateKeyRaw, id);
-    } finally {
-      wipeBuffer(privateKeyRaw);
+      const created = await createShieldRecord(pool, {
+        objectId,
+        objectTitle,
+        payload,
+        threshold,
+        totalShards,
+        ownerUserId: auth?.sub || null,
+      });
+      res.status(201).json(created);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "objectTitle or payload is required") {
+        res.status(400).json({ error: msg });
+        return;
+      }
+      throw e;
     }
-
-    await pool.query(
-      `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","ownerUserId","createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,$11,NOW())`,
-      [
-        id,
-        objectId || null,
-        title,
-        "Shamir's Secret Sharing + Ed25519",
-        recordedThreshold,
-        recordedTotalShards,
-        JSON.stringify(shards),
-        signature,
-        publicKeySpkiHex,
-        HMAC_KEY_VERSION,
-        auth?.sub || null,
-      ],
-    );
-
-    res.status(201).json({
-      id,
-      objectId,
-      objectTitle: title,
-      algorithm: "Shamir's Secret Sharing + Ed25519",
-      threshold: recordedThreshold,
-      totalShards: recordedTotalShards,
-      hmacKeyVersion: HMAC_KEY_VERSION,
-      shards,
-      signature,
-      publicKey: publicKeySpkiHex,
-      status: "active",
-      legacy: false,
-      ownerUserId: auth?.sub || null,
-      createdAt: new Date().toISOString(),
-    });
   } catch (err) {
     console.error(
       "[QuantumShield] create error:",

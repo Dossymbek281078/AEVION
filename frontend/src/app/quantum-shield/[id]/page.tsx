@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -33,6 +33,14 @@ export default function QuantumShieldPublicPage() {
   const [data, setData] = useState<PublicView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [shardJson, setShardJson] = useState<string>("");
+  const [reconstructBusy, setReconstructBusy] = useState(false);
+  const [reconstructResult, setReconstructResult] = useState<{
+    ok: boolean;
+    msg: string;
+    detail?: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -63,6 +71,105 @@ export default function QuantumShieldPublicPage() {
       navigator.clipboard.writeText(window.location.href);
       showToast("Link copied", "success");
     } catch { showToast("Copy failed", "error"); }
+  };
+
+  const onShardFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      // Accept either a single shard JSON, an array of shards, or a bundle
+      // produced by the dashboard's "Download All Shards" button.
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        // append all to whatever's already loaded
+        const existing = shardJson.trim() ? safeParseShardArray(shardJson) : [];
+        setShardJson(JSON.stringify([...existing, ...parsed], null, 2));
+      } else if (Array.isArray(parsed?.shards)) {
+        const existing = shardJson.trim() ? safeParseShardArray(shardJson) : [];
+        setShardJson(JSON.stringify([...existing, ...parsed.shards], null, 2));
+      } else if (parsed?.shard && typeof parsed.shard === "object") {
+        const existing = shardJson.trim() ? safeParseShardArray(shardJson) : [];
+        setShardJson(JSON.stringify([...existing, parsed.shard], null, 2));
+      } else if (parsed?.index !== undefined && parsed?.sssShare) {
+        const existing = shardJson.trim() ? safeParseShardArray(shardJson) : [];
+        setShardJson(JSON.stringify([...existing, parsed], null, 2));
+      } else {
+        showToast("Unrecognized shard format", "error");
+        return;
+      }
+      showToast(`Loaded ${file.name}`, "success");
+    } catch (e: unknown) {
+      showToast("Parse failed: " + (e instanceof Error ? e.message : String(e)), "error");
+    }
+  };
+
+  const tryReconstruct = async () => {
+    setReconstructResult(null);
+    let shards: unknown[];
+    try {
+      const parsed = JSON.parse(shardJson || "[]");
+      shards = Array.isArray(parsed) ? parsed : [parsed];
+    } catch (e: unknown) {
+      setReconstructResult({
+        ok: false,
+        msg: "Invalid JSON",
+        detail: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
+    if (!Array.isArray(shards) || shards.length < (data?.threshold ?? 2)) {
+      setReconstructResult({
+        ok: false,
+        msg: `Need ${data?.threshold ?? 2} shards, got ${shards.length}`,
+      });
+      return;
+    }
+    setReconstructBusy(true);
+    try {
+      const res = await fetch(
+        apiUrl(`/api/quantum-shield/${encodeURIComponent(id)}/reconstruct`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shards }),
+        },
+      );
+      const j = (await res.json()) as { valid?: boolean; reason?: string };
+      if (j.valid) {
+        setReconstructResult({
+          ok: true,
+          msg: "Reconstruction verified",
+          detail: "Lagrange interpolation + Ed25519 probe-sign passed.",
+        });
+        // refresh public view to show updated counter
+        try {
+          const r2 = await fetch(apiUrl(`/api/quantum-shield/${encodeURIComponent(id)}/public`));
+          if (r2.ok) setData(await r2.json());
+        } catch { /* non-fatal */ }
+      } else {
+        setReconstructResult({
+          ok: false,
+          msg: "Reconstruction failed",
+          detail: j.reason ? `Reason: ${j.reason}` : `HTTP ${res.status}`,
+        });
+      }
+    } catch (e: unknown) {
+      setReconstructResult({
+        ok: false,
+        msg: "Network error",
+        detail: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setReconstructBusy(false);
+    }
+  };
+
+  const safeParseShardArray = (raw: string): unknown[] => {
+    try {
+      const x = JSON.parse(raw);
+      return Array.isArray(x) ? x : [x];
+    } catch {
+      return [];
+    }
   };
 
   const labelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 4, letterSpacing: "0.05em", textTransform: "uppercase" };
@@ -160,6 +267,104 @@ export default function QuantumShieldPublicPage() {
               <div style={{ marginTop: 18, padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(13,148,136,0.2)", background: "rgba(13,148,136,0.05)", fontSize: 12, color: "#0f766e", lineHeight: 1.6 }}>
                 <b>Verification model:</b> shards are NOT exposed publicly. Reconstruction requires {data.threshold} of {data.totalShards} authenticated shards via <code>POST /api/quantum-shield/{data.id}/reconstruct</code>. The server runs Lagrange interpolation, derives the Ed25519 private key, signs a probe message, and verifies against the public key shown above — never exposing the key itself.
               </div>
+            </div>
+
+            <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", padding: 24, marginBottom: 16 }}>
+              <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 6, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 22 }} aria-hidden>&#128273;</span>
+                Verify here with your shards
+              </div>
+              <div style={{ fontSize: 12, color: "#475569", marginBottom: 14, lineHeight: 1.55 }}>
+                Drop {data.threshold} of {data.totalShards} authenticated shard JSON files (or paste them as an array). The server runs Lagrange interpolation + Ed25519 probe-sign and returns <code>valid: true</code> only if reconstruction succeeds.
+              </div>
+
+              <div
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const files = Array.from(e.dataTransfer.files || []);
+                  files.forEach(onShardFile);
+                }}
+                style={{
+                  border: "2px dashed rgba(13,148,136,0.35)",
+                  borderRadius: 10,
+                  padding: 14,
+                  marginBottom: 10,
+                  background: "rgba(13,148,136,0.04)",
+                  textAlign: "center" as const,
+                  fontSize: 12,
+                  color: "#0f766e",
+                  cursor: "pointer",
+                }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <b>Drop shard JSONs here</b> or click to browse
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    files.forEach(onShardFile);
+                    if (e.target) e.target.value = "";
+                  }}
+                />
+              </div>
+
+              <textarea
+                value={shardJson}
+                onChange={(e) => setShardJson(e.target.value)}
+                placeholder='[{"index":1,"sssShare":"...","hmac":"...","hmacKeyVersion":1}, ...]'
+                rows={6}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", fontFamily: "monospace", fontSize: 11, boxSizing: "border-box" as const, marginBottom: 10 }}
+              />
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "center" }}>
+                <button
+                  onClick={tryReconstruct}
+                  disabled={reconstructBusy || !shardJson.trim()}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: reconstructBusy || !shardJson.trim() ? "#cbd5e1" : "#0d9488",
+                    color: "#fff",
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: reconstructBusy || !shardJson.trim() ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {reconstructBusy ? "Verifying..." : "Run Reconstruct"}
+                </button>
+                <button
+                  onClick={() => { setShardJson(""); setReconstructResult(null); }}
+                  style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#475569" }}
+                >
+                  Clear
+                </button>
+              </div>
+
+              {reconstructResult && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    border: `1px solid ${reconstructResult.ok ? "rgba(16,185,129,0.35)" : "rgba(239,68,68,0.35)"}`,
+                    background: reconstructResult.ok ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 900, color: reconstructResult.ok ? "#059669" : "#dc2626", marginBottom: 4 }}>
+                    {reconstructResult.ok ? "✓ " : "✗ "}{reconstructResult.msg}
+                  </div>
+                  {reconstructResult.detail && (
+                    <div style={{ fontSize: 12, color: "#475569" }}>{reconstructResult.detail}</div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginBottom: 20 }}>

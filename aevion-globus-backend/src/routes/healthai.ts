@@ -1108,6 +1108,201 @@ healthaiRouter.get(
   },
 );
 
+/**
+ * Personalized plan generator. Rule-based (НЕ LLM) — генерирует
+ * weekly plan на основе профиля + последних трендов + screener-результатов.
+ * Безопасный фолбэк: общие рекомендации WHO для здоровых взрослых.
+ */
+type GeneratedPlan = {
+  goals: string[];
+  dailyRoutine: {
+    wake: string;
+    sleepTarget: string;
+    waterL: number;
+    meals: string[];
+  };
+  weeklyExercise: Array<{ type: string; frequency: string; minutes: number }>;
+  nutrition: { focus: string[]; avoid: string[]; sampleMeals: string[] };
+  habitsToAdd: string[];
+  habitsToReduce: string[];
+  mentalHealth: string[];
+  rationale: string[];
+};
+
+healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
+  const profileId = req.params.profileId;
+  const profile = await store.getProfile(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const lgs = await store.getLogs(profileId);
+  const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last7 = sorted.slice(-7);
+
+  const avgSleep = (() => {
+    const v = last7.map((l) => l.sleepHours).filter((x): x is number => x != null);
+    return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+  })();
+  const avgMood = (() => {
+    const v = last7.map((l) => l.moodScore).filter((x): x is number => x != null);
+    return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+  })();
+  const avgExercise = (() => {
+    const v = last7.map((l) => l.exerciseMin).filter((x): x is number => x != null);
+    return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+  })();
+
+  const bmiVal = bmi(profile.heightCm, profile.weightKg);
+  const phq9 = PHQ9_LAST.get(profileId);
+  const gad7 = GAD7_LAST.get(profileId);
+
+  const goals: string[] = [];
+  const habitsAdd: string[] = [];
+  const habitsReduce: string[] = [];
+  const mental: string[] = [];
+  const rationale: string[] = [];
+
+  // BMI-based goals.
+  if (bmiVal >= 30) {
+    goals.push("Снижение веса 0.5-0.7кг/неделю безопасным дефицитом калорий ~500ккал");
+    rationale.push(`BMI ${bmiVal} в зоне ожирения`);
+  } else if (bmiVal >= 27) {
+    goals.push("Постепенное снижение веса до BMI <25 (примерно 0.5кг/неделю)");
+    rationale.push(`BMI ${bmiVal} избыточный`);
+  } else if (bmiVal > 0 && bmiVal < 18.5) {
+    goals.push("Постепенный набор веса +0.3кг/неделю через калорийный профицит и силовые");
+    rationale.push(`BMI ${bmiVal} ниже нормы`);
+  } else if (bmiVal > 0) {
+    goals.push("Поддержание веса в норме");
+  }
+
+  // Sleep goal.
+  if (avgSleep != null && avgSleep < 6.5) {
+    goals.push("Восстановить сон 7-9ч в сутки");
+    habitsAdd.push("Wind-down routine: за 60 мин до сна — экраны off, тёплый душ, чтение");
+    habitsReduce.push("Кофеин после 14:00, алкоголь вечером");
+    rationale.push(`Сон 7д avg ${avgSleep.toFixed(1)}ч ниже нормы`);
+  } else {
+    habitsAdd.push("Постоянное время отбоя ±30 мин даже на выходных");
+  }
+
+  // Activity goal.
+  if (avgExercise == null || avgExercise < 20) {
+    goals.push("Достичь WHO-минимума 150 мин кардио + 2 силовые в неделю");
+    rationale.push("Текущая активность ниже WHO-минимума");
+  }
+
+  // Mental health.
+  if (phq9 && phq9.score >= 10) {
+    mental.push("PHQ-9 ≥10 — рекомендована консультация психотерапевта (КПТ показала высокую эффективность)");
+    mental.push("30 мин outdoor прогулок ежедневно — эффект сопоставим с антидепрессантами при mild-moderate депрессии");
+  } else if (avgMood != null && avgMood < 5) {
+    mental.push("Среднее настроение ниже 5/10 — добавьте 30 мин дневного света утром (помогает регуляции серотонина)");
+  }
+  if (gad7 && gad7.score >= 10) {
+    mental.push("GAD-7 ≥10 — психотерапия (КПТ) первая линия при тревожных расстройствах");
+    mental.push("Дыхание 4-7-8 (вдох 4с, задержка 7с, выдох 8с) 3 раунда — снижает кортизол быстро");
+  } else {
+    mental.push("Mindfulness 10 мин/день (Headspace, Calm) — научно доказанный эффект на стресс");
+  }
+
+  // Conditions-aware nutrition.
+  const focus: string[] = [
+    "Овощи и зелень минимум 400г/день",
+    "Белок 1.2-1.6г на кг веса (рыба, птица, бобовые, творог)",
+    "Цельные крупы (овсянка, гречка, киноа)",
+    "Орехи 30-40г/день (омега-3)",
+  ];
+  const avoid: string[] = [
+    "Сладкие напитки и соки",
+    "Промышленные транс-жиры (выпечка, фастфуд)",
+    "Избыток рафинированных углеводов",
+  ];
+  if (profile.conditions.some((c) => /diabet|диабет/i.test(c))) {
+    focus.unshift("Низкогликемические продукты (овощи, бобовые, ягоды)");
+    avoid.unshift("Простые сахара, белый рис, белый хлеб");
+    rationale.push("Диабет в анамнезе — приоритет низкого GI");
+  }
+  if (profile.conditions.some((c) => /гипертон|hypertens/i.test(c))) {
+    focus.push("Калий-богатые продукты (бананы, авокадо, листовая зелень)");
+    avoid.push("Соль >5г/день, обработанное мясо");
+    rationale.push("Гипертония — DASH-pattern диета");
+  }
+
+  // Filter allergies.
+  const allergiesLower = profile.allergies.map((a) => a.toLowerCase());
+  const filterAllergens = (arr: string[]) =>
+    arr.filter((s) => {
+      const sl = s.toLowerCase();
+      return !allergiesLower.some((a) => a && sl.includes(a));
+    });
+
+  const sampleMealsBase = [
+    "Завтрак: овсянка с ягодами и орехами + йогурт",
+    "Обед: куриная грудка + киноа + овощи на пару",
+    "Полдник: яблоко + горсть миндаля",
+    "Ужин: запечённая рыба + овощной салат + гречка",
+  ];
+  const sampleMeals = filterAllergens(sampleMealsBase);
+  const focusFiltered = filterAllergens(focus);
+
+  // Exercise plan.
+  const weeklyExercise: GeneratedPlan["weeklyExercise"] = [];
+  if (bmiVal >= 27) {
+    weeklyExercise.push({ type: "Кардио (быстрая ходьба, плавание, велосипед)", frequency: "5×/неделю", minutes: 40 });
+    weeklyExercise.push({ type: "Силовая тренировка", frequency: "2-3×/неделю", minutes: 45 });
+  } else {
+    weeklyExercise.push({ type: "Кардио (бег, плавание, велосипед)", frequency: "3×/неделю", minutes: 30 });
+    weeklyExercise.push({ type: "Силовая тренировка", frequency: "2×/неделю", minutes: 45 });
+  }
+  if (profile.age >= 50) {
+    weeklyExercise.push({ type: "Баланс и гибкость (йога, тай-чи)", frequency: "2×/неделю", minutes: 30 });
+  } else {
+    weeklyExercise.push({ type: "Растяжка / mobility", frequency: "ежедневно", minutes: 10 });
+  }
+
+  // Daily routine.
+  const dailyRoutine: GeneratedPlan["dailyRoutine"] = {
+    wake: "7:00",
+    sleepTarget: "23:00 (7-8ч)",
+    waterL: profile.weightKg ? Math.round(profile.weightKg * 0.03 * 10) / 10 : 2.5,
+    meals: sampleMeals,
+  };
+
+  // Habits.
+  habitsAdd.push("Утро: 500мл воды натощак");
+  habitsAdd.push("Прогулка 15+ мин после обеда (улучшает гликемию)");
+  if (profile.age >= 40) habitsAdd.push("Ежегодные screening: BP, липиды, глюкоза");
+
+  habitsReduce.push("Sitting >2ч подряд — каждый час 2-3 мин стоя/растяжки");
+
+  const plan: GeneratedPlan = {
+    goals,
+    dailyRoutine,
+    weeklyExercise,
+    nutrition: {
+      focus: focusFiltered,
+      avoid,
+      sampleMeals,
+    },
+    habitsToAdd: habitsAdd,
+    habitsToReduce: habitsReduce,
+    mentalHealth: mental,
+    rationale,
+  };
+
+  res.json({
+    plan,
+    bmi: bmiVal,
+    avgSleep7d: avgSleep,
+    avgMood7d: avgMood,
+    avgExercise7d: avgExercise,
+    phq9: phq9 ? { score: phq9.score, severity: phq9.severity } : null,
+    gad7: gad7 ? { score: gad7.score, severity: gad7.severity } : null,
+    generatedAt: nowIso(),
+    disclaimer: DISCLAIMER,
+  });
+});
+
 /** Полный экспорт профиля для врача (или для backup). */
 healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
   const profileId = req.params.id;

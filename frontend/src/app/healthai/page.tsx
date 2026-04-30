@@ -178,6 +178,30 @@ const STR: Record<string, Record<Lang, string>> = {
   gad7_sev_moderate: { en: "Moderate", ru: "Умеренная" },
   gad7_sev_severe: { en: "Severe", ru: "Тяжёлая" },
   gad7_incomplete: { en: "Answer all 7 questions", ru: "Ответьте на все 7 вопросов" },
+  tab_plan: { en: "Plan", ru: "План" },
+  plan_title: { en: "Personalized weekly plan", ru: "Персональный план на неделю" },
+  plan_subtitle: {
+    en: "Auto-generated from your profile, recent logs and screener results. Rule-based — safe defaults.",
+    ru: "Сгенерирован из профиля, логов и результатов screener-ов. Rule-based — безопасные defaults.",
+  },
+  plan_section_goals: { en: "Goals", ru: "Цели" },
+  plan_section_routine: { en: "Daily routine", ru: "Дневной режим" },
+  plan_section_exercise: { en: "Weekly exercise", ru: "Тренировки в неделю" },
+  plan_section_nutrition: { en: "Nutrition", ru: "Питание" },
+  plan_section_habits: { en: "Habits", ru: "Привычки" },
+  plan_section_mental: { en: "Mental health", ru: "Ментальное здоровье" },
+  plan_section_rationale: { en: "Why these choices", ru: "Обоснование" },
+  plan_focus: { en: "Focus on", ru: "Налегайте на" },
+  plan_avoid: { en: "Limit", ru: "Ограничьте" },
+  plan_sample_meals: { en: "Sample meals", ru: "Пример меню" },
+  plan_habits_add: { en: "Add", ru: "Добавить" },
+  plan_habits_reduce: { en: "Reduce", ru: "Уменьшить" },
+  plan_wake: { en: "Wake", ru: "Подъём" },
+  plan_sleep_target: { en: "Sleep target", ru: "Целевой сон" },
+  plan_water: { en: "Water", ru: "Вода" },
+  plan_refresh: { en: "Regenerate plan", ru: "Сгенерировать заново" },
+  plan_loading: { en: "Generating…", ru: "Генерирую…" },
+  plan_empty: { en: "No plan yet — open this tab to generate one.", ru: "Плана пока нет — откройте вкладку для генерации." },
   hist_subtitle: { en: "{c} checks · {l} logs", ru: "{c} чеков · {l} логов" },
   field_age: { en: "Age", ru: "Возраст" },
   field_sex: { en: "Sex", ru: "Пол" },
@@ -293,7 +317,7 @@ function detectLocale(): Lang {
   return "en";
 }
 
-type Tab = "profile" | "check" | "log" | "trends" | "history" | "screener";
+type Tab = "profile" | "check" | "log" | "trends" | "history" | "screener" | "plan";
 
 type Sex = "M" | "F" | "other";
 
@@ -455,6 +479,21 @@ export default function HealthAIPage() {
   } | null>(null);
   const [gad7Busy, setGad7Busy] = useState(false);
 
+  // Plan state
+  type Plan = {
+    goals: string[];
+    dailyRoutine: { wake: string; sleepTarget: string; waterL: number; meals: string[] };
+    weeklyExercise: Array<{ type: string; frequency: string; minutes: number }>;
+    nutrition: { focus: string[]; avoid: string[]; sampleMeals: string[] };
+    habitsToAdd: string[];
+    habitsToReduce: string[];
+    mentalHealth: string[];
+    rationale: string[];
+  };
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planMeta, setPlanMeta] = useState<{ generatedAt: string } | null>(null);
+
   // Log draft
   const [logSleep, setLogSleep] = useState("");
   const [logMood, setLogMood] = useState(5);
@@ -588,7 +627,8 @@ export default function HealthAIPage() {
         t === "log" ||
         t === "trends" ||
         t === "history" ||
-        t === "screener"
+        t === "screener" ||
+        t === "plan"
       ) {
         setTab(t);
       }
@@ -680,6 +720,31 @@ export default function HealthAIPage() {
       setBusy(false);
     }
   };
+
+  const generatePlan = useCallback(async () => {
+    if (!profileIdRef.current) return;
+    setPlanBusy(true);
+    try {
+      const r = await fetch(
+        `${BACKEND}/api/healthai/plan/${profileIdRef.current}`,
+      );
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.plan) {
+        setPlan(j.plan);
+        setPlanMeta({ generatedAt: j.generatedAt });
+      }
+    } finally {
+      setPlanBusy(false);
+    }
+  }, []);
+
+  // Auto-generate при первом открытии Plan tab.
+  useEffect(() => {
+    if (tab === "plan" && !plan && profileIdRef.current && !planBusy) {
+      void generatePlan();
+    }
+  }, [tab, plan, planBusy, generatePlan]);
 
   const submitGad7 = async () => {
     if (!profileIdRef.current) {
@@ -996,7 +1061,7 @@ export default function HealthAIPage() {
             paddingBottom: 10,
           }}
         >
-          {(["profile", "check", "log", "trends", "history", "screener"] as const).map((t) => {
+          {(["profile", "check", "log", "trends", "history", "screener", "plan"] as const).map((t) => {
             const active = t === tab;
             return (
               <button
@@ -1028,7 +1093,9 @@ export default function HealthAIPage() {
                         ? STR.tab_trends[lang]
                         : t === "history"
                           ? STR.tab_history[lang]
-                          : STR.tab_screener[lang]}
+                          : t === "screener"
+                            ? STR.tab_screener[lang]
+                            : STR.tab_plan[lang]}
               </button>
             );
           })}
@@ -1950,6 +2017,169 @@ export default function HealthAIPage() {
           </Card>
         ) : null}
 
+        {tab === "plan" ? (
+          <Card>
+            <CardHeader
+              title={t("plan_title", lang)}
+              subtitle={t("plan_subtitle", lang)}
+            />
+            {!plan && planBusy ? (
+              <div style={emptyStyle}>{t("plan_loading", lang)}</div>
+            ) : !plan ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={emptyStyle}>{t("plan_empty", lang)}</div>
+                <button type="button" onClick={generatePlan} disabled={planBusy} style={primaryBtn}>
+                  {t("plan_refresh", lang)}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  <button
+                    type="button"
+                    onClick={generatePlan}
+                    disabled={planBusy}
+                    style={{
+                      ...primaryBtn,
+                      background: "rgba(120,160,220,0.18)",
+                      color: "#cbd5e1",
+                      borderColor: "rgba(120,160,220,0.45)",
+                    }}
+                  >
+                    🔄 {t("plan_refresh", lang)}
+                  </button>
+                </div>
+
+                {plan.goals.length > 0 ? (
+                  <PlanSection title={t("plan_section_goals", lang)} accent="#5eead4">
+                    {plan.goals.map((g, i) => (
+                      <li key={i}>{g}</li>
+                    ))}
+                  </PlanSection>
+                ) : null}
+
+                <PlanSection title={t("plan_section_routine", lang)} accent="#7dd3fc">
+                  <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.7 }}>
+                    <div>🌅 <b>{t("plan_wake", lang)}:</b> {plan.dailyRoutine.wake}</div>
+                    <div>🌙 <b>{t("plan_sleep_target", lang)}:</b> {plan.dailyRoutine.sleepTarget}</div>
+                    <div>💧 <b>{t("plan_water", lang)}:</b> {plan.dailyRoutine.waterL} L</div>
+                  </div>
+                </PlanSection>
+
+                {plan.weeklyExercise.length > 0 ? (
+                  <PlanSection title={t("plan_section_exercise", lang)} accent="#fbbf24">
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {plan.weeklyExercise.map((e, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "8px 10px",
+                            background: "rgba(20,28,46,0.6)",
+                            borderRadius: 6,
+                            border: "1px solid rgba(120,160,220,0.16)",
+                            fontSize: 13,
+                          }}
+                        >
+                          <span style={{ color: "#e2e8f8", fontWeight: 600 }}>{e.type}</span>
+                          <span style={{ color: "#94a3b8" }}>
+                            {e.frequency} · {e.minutes} мин
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </PlanSection>
+                ) : null}
+
+                <PlanSection title={t("plan_section_nutrition", lang)} accent="#f472b6">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: "#5eead4", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>
+                        ✓ {t("plan_focus", lang)}
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
+                        {plan.nutrition.focus.map((s, i) => (<li key={i}>{s}</li>))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: "#f87171", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>
+                        ✗ {t("plan_avoid", lang)}
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
+                        {plan.nutrition.avoid.map((s, i) => (<li key={i}>{s}</li>))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: "#a5b4fc", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>
+                        🍽 {t("plan_sample_meals", lang)}
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
+                        {plan.nutrition.sampleMeals.map((s, i) => (<li key={i}>{s}</li>))}
+                      </ul>
+                    </div>
+                  </div>
+                </PlanSection>
+
+                <PlanSection title={t("plan_section_habits", lang)} accent="#a5b4fc">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {plan.habitsToAdd.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: "#5eead4", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>
+                          + {t("plan_habits_add", lang)}
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
+                          {plan.habitsToAdd.map((s, i) => (<li key={i}>{s}</li>))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {plan.habitsToReduce.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: "#f87171", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>
+                          − {t("plan_habits_reduce", lang)}
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
+                          {plan.habitsToReduce.map((s, i) => (<li key={i}>{s}</li>))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                </PlanSection>
+
+                {plan.mentalHealth.length > 0 ? (
+                  <PlanSection title={t("plan_section_mental", lang)} accent="#c084fc">
+                    {plan.mentalHealth.map((s, i) => (<li key={i}>{s}</li>))}
+                  </PlanSection>
+                ) : null}
+
+                {plan.rationale.length > 0 ? (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      padding: 10,
+                      background: "rgba(20,28,46,0.5)",
+                      border: "1px solid rgba(120,160,220,0.18)",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 6 }}>
+                      {t("plan_section_rationale", lang)}
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: "#94a3b8", lineHeight: 1.55 }}>
+                      {plan.rationale.map((s, i) => (<li key={i}>{s}</li>))}
+                    </ul>
+                  </div>
+                ) : null}
+                {planMeta ? (
+                  <div style={{ marginTop: 10, fontSize: 10, color: "#94a3b8", fontStyle: "italic", textAlign: "right" }}>
+                    {new Date(planMeta.generatedAt).toLocaleString()}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </Card>
+        ) : null}
+
         <div
           style={{
             marginTop: 22,
@@ -2004,6 +2234,57 @@ function Card({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+    </div>
+  );
+}
+
+function PlanSection({
+  title,
+  accent,
+  children,
+}: {
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+}) {
+  // Если children — узлы <li>, оборачиваем их в <ul>; иначе рендерим как есть.
+  const arr = Array.isArray(children) ? children : [children];
+  const allLi = arr.every(
+    (c) =>
+      typeof c === "object" &&
+      c !== null &&
+      "type" in (c as { type?: unknown }) &&
+      (c as { type?: unknown }).type === "li",
+  );
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <h3
+        style={{
+          margin: "0 0 6px",
+          fontSize: 12,
+          fontWeight: 800,
+          color: accent,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+        }}
+      >
+        {title}
+      </h3>
+      {allLi ? (
+        <ul
+          style={{
+            margin: 0,
+            paddingLeft: 20,
+            fontSize: 13,
+            color: "#cbd5e1",
+            lineHeight: 1.6,
+          }}
+        >
+          {children}
+        </ul>
+      ) : (
+        children
+      )}
     </div>
   );
 }

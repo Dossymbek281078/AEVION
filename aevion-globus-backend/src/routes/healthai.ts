@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { PrismaClient } from "@prisma/client";
+import { verifyBearerOptional } from "../lib/authJwt";
 
 /**
  * HealthAI v1 — Personal AI Doctor MVP.
@@ -24,6 +25,8 @@ export const healthaiRouter = Router();
 
 type HealthProfile = {
   id: string;
+  userId?: string | null;
+  memberLabel?: string | null;
   age: number;
   sex: "M" | "F" | "other";
   heightCm: number;
@@ -33,6 +36,16 @@ type HealthProfile = {
   medications: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+type CycleEntry = {
+  id: string;
+  profileId: string;
+  date: string;
+  flow?: string;
+  symptoms: string[];
+  notes?: string;
+  createdAt: string;
 };
 
 type AdviceMatch = {
@@ -105,6 +118,8 @@ void ensureDb();
 function rowToProfile(r: any): HealthProfile {
   return {
     id: r.id,
+    userId: r.userId ?? null,
+    memberLabel: r.memberLabel ?? null,
     age: r.age,
     sex: r.sex,
     heightCm: r.heightCm,
@@ -166,6 +181,8 @@ const store = {
       const r = await prisma.healthProfile.upsert({
         where: { id: p.id },
         update: {
+          userId: p.userId ?? null,
+          memberLabel: p.memberLabel ?? null,
           age: p.age,
           sex: p.sex,
           heightCm: p.heightCm,
@@ -176,6 +193,8 @@ const store = {
         },
         create: {
           id: p.id,
+          userId: p.userId ?? null,
+          memberLabel: p.memberLabel ?? null,
           age: p.age,
           sex: p.sex,
           heightCm: p.heightCm,
@@ -189,6 +208,29 @@ const store = {
     }
     profilesMem.set(p.id, p);
     return p;
+  },
+  async listProfilesByUser(userId: string): Promise<HealthProfile[]> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.healthProfile.findMany({
+        where: { userId },
+        orderBy: { createdAt: "asc" },
+      });
+      return rows.map(rowToProfile);
+    }
+    return Array.from(profilesMem.values()).filter((p) => p.userId === userId);
+  },
+  async deleteProfile(id: string): Promise<boolean> {
+    await ensureDb();
+    if (useDb && prisma) {
+      try {
+        await prisma.healthProfile.delete({ where: { id } });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return profilesMem.delete(id);
   },
   async getChecks(profileId: string, limit = 200): Promise<SymptomCheck[]> {
     await ensureDb();
@@ -463,9 +505,20 @@ healthaiRouter.post("/profile", async (req: Request, res: Response) => {
   const body = req.body || {};
   const id = body.id || newId("hp");
   const existing = await store.getProfile(id);
+  const auth = verifyBearerOptional(req);
+
+  // Если профиль уже принадлежит другому юзеру — отказать (если предъявлен токен).
+  if (existing?.userId && auth?.sub && existing.userId !== auth.sub) {
+    return res.status(403).json({ error: "profile-belongs-to-another-user" });
+  }
 
   const profile: HealthProfile = {
     id,
+    userId: existing?.userId ?? (auth?.sub ?? null),
+    memberLabel:
+      typeof body.memberLabel === "string"
+        ? body.memberLabel.slice(0, 80)
+        : existing?.memberLabel ?? null,
     age: Number(body.age) || existing?.age || 0,
     sex: ["M", "F", "other"].includes(body.sex)
       ? body.sex
@@ -491,6 +544,30 @@ healthaiRouter.post("/profile", async (req: Request, res: Response) => {
     bmi: bmi(saved.heightCm, saved.weightKg),
     isNew: !existing,
   });
+});
+
+healthaiRouter.get("/profiles/me", async (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth-required" });
+  const profiles = await store.listProfilesByUser(auth.sub);
+  res.json({
+    profiles: profiles.map((p) => ({
+      ...p,
+      bmi: bmi(p.heightCm, p.weightKg),
+    })),
+  });
+});
+
+healthaiRouter.delete("/profile/:id", async (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth-required" });
+  const profile = await store.getProfile(req.params.id);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+  if (profile.userId !== auth.sub) {
+    return res.status(403).json({ error: "not-profile-owner" });
+  }
+  const ok = await store.deleteProfile(req.params.id);
+  res.json({ ok });
 });
 
 healthaiRouter.get("/profile/:id", async (req: Request, res: Response) => {

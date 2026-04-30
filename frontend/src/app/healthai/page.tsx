@@ -22,6 +22,17 @@ const BACKEND =
 const LS_PROFILE_ID = "aevion:healthai:profileId";
 const LS_TAB = "aevion:healthai:tab";
 const LS_LOCALE = "aevion:locale";
+const LS_AUTH_TOKEN = "aevion:auth:token";
+
+function authHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const t = window.localStorage.getItem(LS_AUTH_TOKEN);
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 type Lang = "en" | "ru";
 
@@ -89,6 +100,25 @@ const STR: Record<string, Record<Lang, string>> = {
     en: "Print-friendly summary or raw JSON dump for backup",
     ru: "Печатный отчёт или JSON-выгрузка для бэкапа",
   },
+  family_title: { en: "Family profiles", ru: "Семейные профили" },
+  family_subtitle: {
+    en: "Manage profiles for your family members. Sign in to AEVION to enable.",
+    ru: "Управляйте профилями родственников. Войдите в AEVION для активации.",
+  },
+  family_no_auth: {
+    en: "Sign in via /auth to attach profiles to your AEVION account.",
+    ru: "Войдите через /auth, чтобы привязать профили к AEVION-аккаунту.",
+  },
+  family_no_profiles: {
+    en: "No additional profiles yet.",
+    ru: "Дополнительных профилей пока нет.",
+  },
+  family_member_label: { en: "Member name", ru: "Имя члена семьи" },
+  family_add: { en: "+ New profile", ru: "+ Новый профиль" },
+  family_switch: { en: "Switch", ru: "Открыть" },
+  family_delete: { en: "Delete", ru: "Удалить" },
+  family_self: { en: "Me", ru: "Я" },
+  family_active: { en: "Active", ru: "Активный" },
   tab_screener: { en: "Screener", ru: "Скрининг" },
   phq9_title: { en: "PHQ-9 depression screener", ru: "PHQ-9 — скрининг депрессии" },
   phq9_subtitle: {
@@ -323,6 +353,8 @@ type Sex = "M" | "F" | "other";
 
 type Profile = {
   id: string;
+  userId?: string | null;
+  memberLabel?: string | null;
   age: number;
   sex: Sex;
   heightCm: number;
@@ -447,6 +479,16 @@ export default function HealthAIPage() {
   const [conditions, setConditions] = useState("");
   const [allergies, setAllergies] = useState("");
   const [medications, setMedications] = useState("");
+  const [memberLabel, setMemberLabel] = useState("");
+
+  // Family
+  const [familyProfiles, setFamilyProfiles] = useState<Array<Profile & { bmi: number }>>([]);
+  const [hasAuthToken, setHasAuthToken] = useState(false);
+  useEffect(() => {
+    try {
+      setHasAuthToken(!!window.localStorage.getItem(LS_AUTH_TOKEN));
+    } catch {}
+  }, []);
 
   // Check draft
   const [symptomsText, setSymptomsText] = useState("");
@@ -594,6 +636,7 @@ export default function HealthAIPage() {
           setConditions((j.profile.conditions || []).join(", "));
           setAllergies((j.profile.allergies || []).join(", "));
           setMedications((j.profile.medications || []).join(", "));
+          setMemberLabel(j.profile.memberLabel || "");
         }
         return true;
       } catch {
@@ -602,6 +645,17 @@ export default function HealthAIPage() {
     },
     [],
   );
+
+  const loadFamily = useCallback(async () => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/profiles/me`, {
+        headers: authHeader(),
+      });
+      if (!r.ok) return;
+      const j = await r.json();
+      setFamilyProfiles(j.profiles || []);
+    } catch {}
+  }, []);
 
   // Mount: восстанавливаем profileId.
   useEffect(() => {
@@ -616,6 +670,7 @@ export default function HealthAIPage() {
             loadRisks(stored);
             loadPhq9Last(stored);
             loadGad7Last(stored);
+            void loadFamily();
             setTab("check");
           }
         });
@@ -633,7 +688,7 @@ export default function HealthAIPage() {
         setTab(t);
       }
     } catch {}
-  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPhq9Last, loadGad7Last]);
+  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPhq9Last, loadGad7Last, loadFamily]);
 
   useEffect(() => {
     try {
@@ -646,6 +701,7 @@ export default function HealthAIPage() {
     try {
       const body = {
         id: profileIdRef.current,
+        memberLabel: memberLabel || undefined,
         age: Number(age) || 0,
         sex,
         heightCm: Number(heightCm) || 0,
@@ -656,7 +712,7 @@ export default function HealthAIPage() {
       };
       const r = await fetch(`${BACKEND}/api/healthai/profile`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify(body),
       });
       const j = await r.json();
@@ -672,6 +728,7 @@ export default function HealthAIPage() {
       setProfileBmi(j.bmi || 0);
       showToast(t(j.isNew ? "toast_profile_created" : "toast_profile_saved", lang));
       if (j.isNew) setTab("check");
+      void loadFamily();
     } finally {
       setBusy(false);
     }
@@ -718,6 +775,64 @@ export default function HealthAIPage() {
       setCheckNotes("");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const switchToProfile = (id: string) => {
+    profileIdRef.current = id;
+    try {
+      window.localStorage.setItem(LS_PROFILE_ID, id);
+    } catch {}
+    void loadProfile(id).then(() => {
+      void loadHistory(id);
+      void loadTrends(id);
+      void loadRisks(id);
+      void loadPhq9Last(id);
+      void loadGad7Last(id);
+      setPlan(null);
+      setLastCheck(null);
+      setLlmAdvice(null);
+    });
+  };
+
+  const newFamilyProfile = async () => {
+    if (!hasAuthToken) {
+      showToast(t("family_no_auth", lang));
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({ age: 0, sex: "other" }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.profile) {
+        showToast(t("toast_save_failed", lang));
+        return;
+      }
+      void loadFamily();
+      switchToProfile(j.profile.id);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteFamilyProfile = async (id: string) => {
+    if (!hasAuthToken) return;
+    const r = await fetch(`${BACKEND}/api/healthai/profile/${id}`, {
+      method: "DELETE",
+      headers: authHeader(),
+    });
+    if (!r.ok) return;
+    void loadFamily();
+    if (id === profileIdRef.current) {
+      profileIdRef.current = null;
+      try {
+        window.localStorage.removeItem(LS_PROFILE_ID);
+      } catch {}
+      setProfile(null);
     }
   };
 
@@ -1107,6 +1222,15 @@ export default function HealthAIPage() {
               title={t("card_profile_title", lang)}
               subtitle={t("card_profile_subtitle", lang)}
             />
+            <Field label={t("family_member_label", lang)}>
+              <input
+                type="text"
+                placeholder="—"
+                value={memberLabel}
+                onChange={(e) => setMemberLabel(e.target.value)}
+                style={inputStyle}
+              />
+            </Field>
             <Grid2>
               <Field label={t("field_age", lang)}>
                 <input
@@ -1210,6 +1334,124 @@ export default function HealthAIPage() {
                 {profile ? t("btn_update_profile", lang) : t("btn_create_profile", lang)}
               </button>
             </div>
+          </Card>
+        ) : null}
+
+        {tab === "profile" ? (
+          <Card>
+            <CardHeader
+              title={t("family_title", lang)}
+              subtitle={t("family_subtitle", lang)}
+            />
+            {!hasAuthToken ? (
+              <div style={emptyStyle}>{t("family_no_auth", lang)}</div>
+            ) : (
+              <>
+                {familyProfiles.length === 0 ? (
+                  <div style={emptyStyle}>{t("family_no_profiles", lang)}</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {familyProfiles.map((p) => {
+                      const isActive = p.id === profile?.id;
+                      return (
+                        <div
+                          key={p.id}
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            padding: "8px 10px",
+                            background: isActive
+                              ? "rgba(94,234,212,0.12)"
+                              : "rgba(20,28,46,0.5)",
+                            border: isActive
+                              ? "1px solid rgba(94,234,212,0.45)"
+                              : "1px solid rgba(120,160,220,0.18)",
+                            borderRadius: 8,
+                            alignItems: "center",
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 700,
+                                color: "#e2e8f8",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {p.memberLabel || t("family_self", lang)}
+                              {isActive ? (
+                                <span
+                                  style={{
+                                    marginLeft: 6,
+                                    fontSize: 9,
+                                    color: "#5eead4",
+                                    letterSpacing: "0.06em",
+                                    textTransform: "uppercase",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  · {t("family_active", lang)}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                              {p.age || "?"}y · {p.sex} · BMI {p.bmi || "—"}
+                            </div>
+                          </div>
+                          {!isActive ? (
+                            <button
+                              type="button"
+                              onClick={() => switchToProfile(p.id)}
+                              style={{
+                                padding: "4px 10px",
+                                background: "rgba(94,234,212,0.18)",
+                                color: "#5eead4",
+                                border: "1px solid rgba(94,234,212,0.4)",
+                                borderRadius: 6,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {t("family_switch", lang)}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => deleteFamilyProfile(p.id)}
+                            style={{
+                              padding: "4px 8px",
+                              background: "rgba(248,113,113,0.12)",
+                              color: "#f87171",
+                              border: "1px solid rgba(248,113,113,0.3)",
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={newFamilyProfile}
+                    disabled={busy}
+                    style={primaryBtn}
+                  >
+                    {t("family_add", lang)}
+                  </button>
+                </div>
+              </>
+            )}
           </Card>
         ) : null}
 

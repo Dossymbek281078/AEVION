@@ -319,6 +319,8 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
   const [salary, setSalary] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [questionInput, setQuestionInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -332,6 +334,16 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
     setSkillInput("");
   }
 
+  function addQuestion() {
+    const v = questionInput.trim();
+    if (!v || questions.includes(v)) {
+      setQuestionInput("");
+      return;
+    }
+    setQuestions([...questions, v].slice(0, 5));
+    setQuestionInput("");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -343,12 +355,14 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
         description: description.trim(),
         salary: salary ? Number(salary) : undefined,
         skills,
+        questions,
       });
       setOpen(false);
       setTitle("");
       setDescription("");
       setSalary("");
       setSkills([]);
+      setQuestions([]);
       onCreated();
     } catch (e) {
       const apiErr = e as { code?: string; payload?: Record<string, unknown> };
@@ -438,6 +452,45 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
             placeholder={skills.length === 0 ? "Welding, AutoCAD…" : ""}
             className="flex-1 min-w-[100px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
           />
+        </div>
+      </div>
+      <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
+        <div className="mb-1 text-xs text-fuchsia-200/80">
+          Quick questions for applicants (max 5) — Claude will score answers automatically ✨
+        </div>
+        <div className="space-y-1.5">
+          {questions.map((q, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2 rounded-md bg-fuchsia-500/10 px-2 py-1 text-xs text-fuchsia-100"
+            >
+              <span className="font-mono text-fuchsia-300/70">Q{i + 1}.</span>
+              <span className="flex-1">{q}</span>
+              <button
+                type="button"
+                onClick={() => setQuestions(questions.filter((x) => x !== q))}
+                className="text-fuchsia-200/60 hover:text-fuchsia-100"
+                aria-label={`Remove question ${i + 1}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {questions.length < 5 && (
+            <input
+              value={questionInput}
+              onChange={(e) => setQuestionInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addQuestion();
+                }
+              }}
+              onBlur={addQuestion}
+              placeholder="e.g. Опишите проект где вы работали с AutoCAD"
+              className="w-full rounded-md border border-fuchsia-500/20 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-fuchsia-300/40"
+            />
+          )}
         </div>
       </div>
       {error && <p className="text-xs text-rose-300">{error}</p>}

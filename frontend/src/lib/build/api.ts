@@ -142,6 +142,14 @@ export type BuildVacancy = {
   skills?: string[];
   city?: string | null;
   salaryCurrency?: string | null;
+  questions?: string[];
+};
+
+export type ApplicationAiScores = {
+  overall?: number | null;
+  perAnswer?: { question: string; answer: string; score: number; reasoning: string }[];
+  redFlags?: string[];
+  summary?: string;
 };
 
 export type BuildApplication = {
@@ -164,6 +172,10 @@ export type BuildApplication = {
   applicantSkills?: string[];
   matchScore?: number | null;
   matchedSkills?: string[];
+  answers?: string[];
+  answersJson?: string;
+  aiScoresJson?: string | null;
+  aiScoreOverall?: number | null;
 };
 
 export type BuildMessage = {
@@ -474,6 +486,7 @@ export const buildApi = {
     skills?: string[];
     city?: string | null;
     salaryCurrency?: string;
+    questions?: string[];
   }) => call<BuildVacancy>("POST", "/api/build/vacancies", input),
   vacanciesByProject: (projectId: string) =>
     call<{ items: BuildVacancy[]; total: number }>(
@@ -501,7 +514,7 @@ export const buildApi = {
     }>("POST", `/api/build/vacancies/${encodeURIComponent(id)}/boost`, { days }),
 
   // Applications
-  apply: (input: { vacancyId: string; message?: string }) =>
+  apply: (input: { vacancyId: string; message?: string; answers?: string[] }) =>
     call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
   applicationsByVacancy: (vacancyId: string) =>

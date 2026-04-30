@@ -198,6 +198,13 @@ export async function ensureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "skillsJson" TEXT NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "city" TEXT;`);
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "salaryCurrency" TEXT DEFAULT 'RUB';`);
+  // Quick-questions: vacancy author can pose ≤5 short questions that
+  // every applicant must answer. Replaces the HH "free-form cover
+  // letter" with structured signal.
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "questionsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "answersJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiScoresJson" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiScoreOverall" INTEGER;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (

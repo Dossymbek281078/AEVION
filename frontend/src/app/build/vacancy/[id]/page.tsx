@@ -157,7 +157,12 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
                 Apply
               </h2>
-              <ApplicationForm vacancyId={vacancy.id} alreadyApplied={myApplied} onApplied={refresh} />
+              <ApplicationForm
+                vacancyId={vacancy.id}
+                alreadyApplied={myApplied}
+                questions={vacancy.questions || []}
+                onApplied={refresh}
+              />
             </div>
           )}
         </aside>
@@ -309,6 +314,7 @@ const STATUS_TONE: Record<ApplicationStatus, string> = {
 
 function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const matchScore = app.matchScore;
   const matchTone =
     matchScore == null
@@ -318,11 +324,32 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
         : matchScore >= 50
           ? "bg-amber-500/20 text-amber-200"
           : "bg-slate-500/15 text-slate-300";
+  const aiScore = app.aiScoreOverall;
+  const aiTone =
+    aiScore == null
+      ? ""
+      : aiScore >= 80
+        ? "bg-fuchsia-500/20 text-fuchsia-100"
+        : aiScore >= 50
+          ? "bg-amber-500/20 text-amber-200"
+          : "bg-rose-500/15 text-rose-200";
+  let aiDetails: {
+    perAnswer?: { question: string; answer: string; score: number; reasoning: string }[];
+    redFlags?: string[];
+    summary?: string;
+  } | null = null;
+  if (app.aiScoresJson) {
+    try {
+      aiDetails = JSON.parse(app.aiScoresJson);
+    } catch {
+      aiDetails = null;
+    }
+  }
   return (
     <li className="rounded-xl border border-white/10 bg-white/5 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/build/u/${encodeURIComponent(app.userId)}`}
               className="text-sm font-semibold text-white hover:text-emerald-200"
@@ -336,6 +363,16 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
               >
                 {matchScore}% match
               </span>
+            )}
+            {aiScore != null && (
+              <button
+                type="button"
+                onClick={() => setAiOpen((v) => !v)}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${aiTone}`}
+                title="Click to see AI breakdown"
+              >
+                ✨ AI {aiScore}/100
+              </button>
             )}
           </div>
           {app.applicantHeadline && (
@@ -411,6 +448,40 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           </button>
         )}
       </div>
+      {aiOpen && aiDetails && (
+        <div className="mt-3 space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs">
+          {aiDetails.summary && (
+            <p className="text-fuchsia-100/90">
+              <span className="font-semibold text-fuchsia-200">AI summary:</span> {aiDetails.summary}
+            </p>
+          )}
+          {(aiDetails.perAnswer || []).map((pa, i) => (
+            <div key={i} className="rounded border border-white/10 bg-black/20 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-fuchsia-200">Q{i + 1}.</span>
+                <span className="rounded-full bg-fuchsia-500/20 px-2 py-0.5 text-[10px] text-fuchsia-100">
+                  {pa.score}/100
+                </span>
+              </div>
+              <div className="mt-1 text-slate-300">{pa.question}</div>
+              <div className="mt-1 whitespace-pre-wrap text-slate-200">↳ {pa.answer || "(empty)"}</div>
+              {pa.reasoning && (
+                <div className="mt-1 italic text-slate-400">{pa.reasoning}</div>
+              )}
+            </div>
+          ))}
+          {(aiDetails.redFlags || []).length > 0 && (
+            <div>
+              <div className="font-semibold text-rose-200">⚠ Red flags</div>
+              <ul className="mt-1 list-disc pl-4 text-rose-200/90">
+                {aiDetails.redFlags!.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </li>
   );
 }

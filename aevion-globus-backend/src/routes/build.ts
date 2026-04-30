@@ -1100,11 +1100,18 @@ buildRouter.post("/vacancies", async (req, res) => {
     const salaryCurrency = typeof req.body?.salaryCurrency === "string"
       ? req.body.salaryCurrency.trim().slice(0, 8) || "RUB"
       : "RUB";
+    // Quick-questions for applicants. Max 5, each ≤200 chars.
+    const questions = Array.isArray(req.body?.questions)
+      ? req.body.questions
+          .map((q: unknown) => String(q).trim())
+          .filter((q: string) => q.length > 0 && q.length <= 200)
+          .slice(0, 5)
+      : [];
 
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING *`,
       [
         id,
@@ -1115,10 +1122,19 @@ buildRouter.post("/vacancies", async (req, res) => {
         JSON.stringify(skills),
         city,
         salaryCurrency,
+        JSON.stringify(questions),
       ],
     );
     const row = result.rows[0];
-    return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]) }, 201);
+    return ok(
+      res,
+      {
+        ...row,
+        skills: safeParseJson(row.skillsJson, [] as string[]),
+        questions: safeParseJson(row.questionsJson, [] as string[]),
+      },
+      201,
+    );
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_create_failed", { details: (err as Error).message });
   }
@@ -1219,7 +1235,11 @@ buildRouter.get("/vacancies/:id", async (req, res) => {
     );
     if (result.rowCount === 0) return fail(res, 404, "vacancy_not_found");
     const row = result.rows[0];
-    return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]) });
+    return ok(res, {
+      ...row,
+      skills: safeParseJson(row.skillsJson, [] as string[]),
+      questions: safeParseJson(row.questionsJson, [] as string[]),
+    });
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_fetch_failed", { details: (err as Error).message });
   }
@@ -1439,7 +1459,8 @@ buildRouter.post("/applications", async (req, res) => {
     if (message.ok === false) return fail(res, 400, message.error);
 
     const vacancy = await pool.query(
-      `SELECT v."id", v."status" AS "vacancyStatus", p."clientId"
+      `SELECT v."id", v."status" AS "vacancyStatus", v."title", v."description",
+              v."skillsJson", v."questionsJson", p."clientId"
        FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
        WHERE v."id" = $1 LIMIT 1`,
@@ -1451,14 +1472,38 @@ buildRouter.post("/applications", async (req, res) => {
       return fail(res, 400, "cannot_apply_to_own_vacancy");
     }
 
+    // Validate answers against vacancy questions. Each answer ≤ 2000 chars.
+    const questions = safeParseJson(vacancy.rows[0].questionsJson, [] as string[]);
+    const answers = Array.isArray(req.body?.answers)
+      ? req.body.answers.map((a: unknown) => String(a ?? "").trim().slice(0, 2000))
+      : [];
+    // Pad answers to questions length so each question has a slot
+    // (empty string is fine — AI will score it low).
+    while (answers.length < questions.length) answers.push("");
+
     const id = crypto.randomUUID();
     try {
       const result = await pool.query(
-        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message")
-         VALUES ($1,$2,$3,$4)
+        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson")
+         VALUES ($1,$2,$3,$4,$5)
          RETURNING *`,
-        [id, vacancyId.value, auth.sub, message.value || null],
+        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers)],
       );
+
+      // Async AI scoring — fire-and-forget so the apply request returns
+      // fast. Scores land on the row and surface to the recruiter on
+      // next applications-by-vacancy fetch.
+      if (questions.length > 0 && process.env.ANTHROPIC_API_KEY) {
+        void scoreApplicationAsync(id, {
+          vacancyTitle: vacancy.rows[0].title,
+          vacancyDescription: vacancy.rows[0].description,
+          requiredSkills: safeParseJson(vacancy.rows[0].skillsJson, [] as string[]),
+          questions,
+          answers,
+          candidateUserId: auth.sub,
+        });
+      }
+
       return ok(res, result.rows[0], 201);
     } catch (err: unknown) {
       const e = err as { code?: string };
@@ -1469,6 +1514,78 @@ buildRouter.post("/applications", async (req, res) => {
     return fail(res, 500, "application_create_failed", { details: (err as Error).message });
   }
 });
+
+// Background AI scoring — wraps Claude call + persists into the row.
+// All errors are swallowed (best-effort feature, never blocks apply).
+async function scoreApplicationAsync(
+  applicationId: string,
+  ctx: {
+    vacancyTitle: string;
+    vacancyDescription: string;
+    requiredSkills: string[];
+    questions: string[];
+    answers: string[];
+    candidateUserId: string;
+  },
+): Promise<void> {
+  try {
+    const { callClaude, APPLICATION_SCORER_SYSTEM_PROMPT } = await import("../lib/build/ai");
+    const profileQ = await pool.query(
+      `SELECT "name","title","summary","skillsJson","experienceYears"
+       FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
+      [ctx.candidateUserId],
+    );
+    const p = profileQ.rows[0];
+    const profileSummary = p
+      ? `Name: ${p.name}; Headline: ${p.title || "—"}; Years: ${p.experienceYears ?? 0}; Skills: ${(safeParseJson(p.skillsJson, [] as string[]) ?? []).join(", ") || "—"}; Summary: ${p.summary || "—"}`
+      : "(no profile)";
+
+    const userPayload = `VACANCY:
+Title: ${ctx.vacancyTitle}
+Description: ${ctx.vacancyDescription}
+Required skills: ${ctx.requiredSkills.join(", ") || "—"}
+
+QUESTIONS:
+${ctx.questions.map((q, i) => `Q${i + 1}: ${q}`).join("\n")}
+
+CANDIDATE PROFILE:
+${profileSummary}
+
+CANDIDATE ANSWERS:
+${ctx.answers.map((a, i) => `A${i + 1}: ${a || "(empty)"}`).join("\n")}
+
+Возвращай только JSON. Без markdown.`;
+
+    const reply = await callClaude({
+      systemPrompt: APPLICATION_SCORER_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 1024,
+      cacheSystem: true,
+    });
+
+    const stripped = reply.text
+      .replace(/^```(?:json)?\s*/m, "")
+      .replace(/\s*```$/m, "")
+      .trim();
+    let parsed: { overall?: number } | null = null;
+    try {
+      parsed = JSON.parse(stripped);
+    } catch {
+      console.warn(`[build] AI scoring returned invalid JSON for app ${applicationId}`);
+      return;
+    }
+    const overall = typeof parsed?.overall === "number" ? Math.max(0, Math.min(100, Math.round(parsed.overall))) : null;
+
+    await pool.query(
+      `UPDATE "BuildApplication"
+         SET "aiScoresJson" = $2, "aiScoreOverall" = $3, "updatedAt" = NOW()
+       WHERE "id" = $1`,
+      [applicationId, JSON.stringify(parsed), overall],
+    );
+  } catch (err) {
+    console.warn(`[build] AI scoring failed for app ${applicationId}:`, (err as Error).message);
+  }
+}
 
 // GET /api/build/applications/my — my applications across vacancies
 buildRouter.get("/applications/my", async (req, res) => {

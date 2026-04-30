@@ -214,6 +214,19 @@ export type BuildPlan = {
   sortOrder: number;
 };
 
+export type BuildBookmark = {
+  id: string;
+  userId: string;
+  kind: "VACANCY" | "CANDIDATE";
+  targetId: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export type HydratedBookmark = BuildBookmark & {
+  target: Record<string, unknown> | null;
+};
+
 export type BuildOrderRow = {
   id: string;
   userId: string;
@@ -487,6 +500,21 @@ export const buildApi = {
     ),
   send: (input: { receiverId: string; content: string }) =>
     call<BuildMessage>("POST", "/api/build/messages", input),
+
+  // Bookmarks
+  toggleBookmark: (input: { kind: "VACANCY" | "CANDIDATE"; targetId: string; note?: string | null }) =>
+    call<{ saved: boolean; bookmark?: BuildBookmark; removed?: string }>(
+      "POST",
+      "/api/build/bookmarks",
+      input,
+    ),
+  listBookmarks: (kind?: "VACANCY" | "CANDIDATE") => {
+    const qs = kind ? `?kind=${kind}` : "";
+    return call<{ items: HydratedBookmark[]; total: number }>(
+      "GET",
+      `/api/build/bookmarks${qs}`,
+    );
+  },
 
   // AI surfaces
   aiConsult: (messages: { role: "user" | "assistant"; content: string }[]) =>

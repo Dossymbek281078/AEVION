@@ -272,6 +272,10 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/ai/parse-resume": {
         post: { summary: "Parse free-form resume text into AEVION Resume Schema v2 JSON" },
       },
+      "/api/build/bookmarks": {
+        get: { summary: "List my bookmarks (kind=VACANCY|CANDIDATE), hydrated with target" },
+        post: { summary: "Toggle bookmark (kind+targetId). Idempotent: re-post removes." },
+      },
       "/api/build/usage/me": {
         get: { summary: "Plan + month-to-date counters + remaining slots (Bearer required)" },
       },

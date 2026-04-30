@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { BuildVacancy } from "@/lib/build/api";
+import { BookmarkButton } from "./BookmarkButton";
 
 export function VacancyCard({
   vacancy,
@@ -37,11 +38,14 @@ export function VacancyCard({
             </p>
           )}
         </div>
-        <div className="shrink-0 text-right">
-          <div className="text-sm font-semibold text-emerald-300">
-            {vacancy.salary > 0 ? `$${vacancy.salary.toLocaleString()}` : "—"}
+        <div className="flex shrink-0 items-start gap-2">
+          <div className="text-right">
+            <div className="text-sm font-semibold text-emerald-300">
+              {vacancy.salary > 0 ? `$${vacancy.salary.toLocaleString()}` : "—"}
+            </div>
+            {isClosed && <div className="mt-0.5 text-[10px] uppercase text-slate-500">closed</div>}
           </div>
-          {isClosed && <div className="mt-0.5 text-[10px] uppercase text-slate-500">closed</div>}
+          <BookmarkButton kind="VACANCY" targetId={vacancy.id} />
         </div>
       </div>
       <p className="mt-2 line-clamp-2 text-sm text-slate-300">{vacancy.description}</p>

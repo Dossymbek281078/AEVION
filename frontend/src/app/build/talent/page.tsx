@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type TalentRow, type BuildRole } from "@/lib/build/api";
+import { BookmarkButton } from "@/components/build/BookmarkButton";
 
 const ROLE_FILTERS: { value: BuildRole | "ALL"; label: string }[] = [
   { value: "ALL", label: "Any role" },
@@ -294,6 +295,7 @@ function TalentCard({ talent }: { talent: TalentRow }) {
             </div>
           </div>
         )}
+        <BookmarkButton kind="CANDIDATE" targetId={talent.userId} />
       </div>
       {talent.summary && (
         <p className="mt-2 line-clamp-2 text-sm text-slate-300">{talent.summary}</p>

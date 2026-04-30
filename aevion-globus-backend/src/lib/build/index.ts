@@ -294,6 +294,23 @@ export async function ensureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildOrder_user_idx" ON "BuildOrder" ("userId", "createdAt" DESC);`);
 
+  // BuildBookmark: per-user star list. Polymorphic — kind tells you
+  // what targetId points at (a vacancy id or a userId).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildBookmark" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "kind" TEXT NOT NULL,
+      "targetId" TEXT NOT NULL,
+      "note" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildBookmark_user_kind_target_uniq"
+    ON "BuildBookmark" ("userId","kind","targetId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildBookmark_user_idx"
+    ON "BuildBookmark" ("userId","createdAt" DESC);`);
+
   // BuildBoost: featured-pin entries for vacancies. Vacancy is
   // considered "boosted" when a row exists with endsAt > NOW().
   // We never delete — expired rows are kept for analytics.
@@ -492,3 +509,4 @@ export function isUnlimited(planLimit: number): boolean {
 export const SUBSCRIPTION_STATUSES = ["ACTIVE", "CANCELED", "PENDING"] as const;
 export const ORDER_KINDS = ["SUB_START", "BOOST", "TALENT_DAY_PASS", "HIRE_FEE"] as const;
 export const ORDER_STATUSES = ["PENDING", "PAID", "CANCELED", "REFUNDED"] as const;
+export const BOOKMARK_KINDS = ["VACANCY", "CANDIDATE"] as const;

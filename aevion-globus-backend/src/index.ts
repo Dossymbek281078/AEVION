@@ -55,13 +55,67 @@ const corsOptions = buildCorsOptions();
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Health-check
-app.get("/health", (_req, res) => {
-  res.json({
+// Health-check. Both /health (legacy) and /api/health (the path the
+// frontend + diagnostics page have always probed against) return the
+// same shape so existing callers don't break.
+function healthPayload() {
+  return {
     status: "ok",
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
-  });
+  };
+}
+app.get("/health", (_req, res) => res.json(healthPayload()));
+app.get("/api/health", (_req, res) => res.json(healthPayload()));
+
+// Deep health: aggregates ops-relevant counts so /bank/diagnostics +
+// oncall don't have to compose multiple endpoints. No auth — counts
+// only, no per-user data. If you need access control, gate via your
+// load balancer or use METRICS_TOKEN on /api/metrics for richer detail.
+const STARTED_AT = Date.now();
+app.get("/api/health/deep", async (_req, res) => {
+  // Lazy imports so this module's load order doesn't fight with
+  // ecosystem persistence. Errors are caught and surfaced.
+  try {
+    const { getQtradeMetrics } = await import("./routes/qtrade");
+    const { getEcosystemMetrics, ensureEcosystemLoaded } = await import("./routes/ecosystem");
+    await ensureEcosystemLoaded();
+    const q = getQtradeMetrics();
+    const e = getEcosystemMetrics();
+    const mem = process.memoryUsage();
+    res.json({
+      status: "ok",
+      service: "AEVION Globus Backend",
+      timestamp: new Date().toISOString(),
+      uptimeSec: Math.floor((Date.now() - STARTED_AT) / 1000),
+      sentry: isSentryEnabled(),
+      ledger: {
+        accounts: q.accounts,
+        transfers: q.transfers,
+        operations: q.operations,
+        idempotencyCacheSize: q.idemCache,
+        royaltyEvents: e.royaltyEvents,
+        chessPrizes: e.chessPrizes,
+        planetCerts: e.planetCerts,
+      },
+      memory: {
+        heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
+        rssMb: Math.round(mem.rss / 1024 / 1024),
+      },
+      env: {
+        nodeEnv: process.env.NODE_ENV || "development",
+        bankDailyTopupCap: Number(process.env.BANK_DAILY_TOPUP_CAP || 5000),
+        bankDailyTransferCap: Number(process.env.BANK_DAILY_TRANSFER_CAP || 2000),
+        corsRestricted: !!process.env.CORS_ALLOWED_ORIGINS,
+        metricsTokenSet: !!process.env.METRICS_TOKEN,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: err instanceof Error ? err.message : "deep health failed",
+    });
+  }
 });
 
 // Проверка соединения

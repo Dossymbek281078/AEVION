@@ -44,7 +44,8 @@ type Probe = {
 };
 
 const INITIAL_PROBES: Probe[] = [
-  { key: "health", label: "Backend health", path: "/api/health", needsAuth: false, status: "pending" },
+  { key: "health", label: "Backend health", path: "/api/health", needsAuth: false, ok2xxOnly: true, status: "pending" },
+  { key: "healthDeep", label: "Backend health (deep)", path: "/api/health/deep", needsAuth: false, ok2xxOnly: true, status: "pending" },
   { key: "me", label: "Auth — /api/auth/me", path: "/api/auth/me", needsAuth: true, ok2xxOnly: true, status: "pending" },
   { key: "accounts", label: "Accounts list", path: "/api/qtrade/accounts", needsAuth: true, ok2xxOnly: true, status: "pending" },
   { key: "operations", label: "Operations feed", path: "/api/qtrade/operations", needsAuth: true, ok2xxOnly: true, status: "pending" },

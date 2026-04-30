@@ -1020,6 +1020,85 @@ buildRouter.get("/vacancies/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/vacancies/:id/match-candidates — recruiter-facing
+// "who in the talent pool fits this vacancy?". Mirror of forward match
+// on applications. Owner-only. Returns top 20 candidates by skill-
+// coverage, ranked openToWork DESC then matchScore DESC.
+buildRouter.get("/vacancies/:id/match-candidates", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const owner = await pool.query(
+      `SELECT v."skillsJson", p."clientId"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_match");
+    }
+
+    const required = safeParseJson(owner.rows[0].skillsJson, [] as string[]).map((s) =>
+      s.toLowerCase(),
+    );
+    if (required.length === 0) {
+      return ok(res, { items: [], total: 0, requiredSkills: [], note: "vacancy_has_no_required_skills" });
+    }
+
+    // Pull a candidate pool — keep ordering by openToWork+updatedAt so
+    // freshest active candidates surface first. Don't include the
+    // vacancy owner themselves.
+    const pool_ = await pool.query(
+      `SELECT p."userId", p."name", p."city", p."buildRole",
+              p."title", p."summary", p."skillsJson", p."languagesJson",
+              p."salaryMin", p."salaryMax", p."salaryCurrency",
+              p."availability", p."experienceYears", p."photoUrl",
+              p."openToWork", p."verifiedAt", p."updatedAt"
+       FROM "BuildProfile" p
+       WHERE p."userId" <> $1
+       ORDER BY p."openToWork" DESC, p."updatedAt" DESC
+       LIMIT 200`,
+      [auth.sub],
+    );
+
+    type Row = {
+      skillsJson: string;
+      languagesJson: string;
+      openToWork: boolean;
+      [k: string]: unknown;
+    };
+    const requiredSet = new Set(required);
+    const ranked = (pool_.rows as Row[])
+      .map((row) => {
+        const candSkills = safeParseJson(row.skillsJson, [] as string[]);
+        const candSet = new Set(candSkills.map((s) => s.toLowerCase()));
+        const matched = required.filter((s) => candSet.has(s));
+        const score = required.length === 0 ? 0 : Math.round((matched.length / required.length) * 100);
+        return {
+          ...row,
+          skills: candSkills,
+          languages: safeParseJson(row.languagesJson, [] as string[]),
+          matchScore: score,
+          matchedSkills: candSkills.filter((s) => requiredSet.has(s.toLowerCase())),
+        };
+      })
+      .filter((r) => r.matchScore > 0)
+      .sort((a, b) => {
+        if (a.openToWork !== b.openToWork) return a.openToWork ? -1 : 1;
+        return b.matchScore - a.matchScore;
+      })
+      .slice(0, 20);
+
+    return ok(res, { items: ranked, total: ranked.length, requiredSkills: required });
+  } catch (err: unknown) {
+    return fail(res, 500, "match_candidates_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/vacancies/:id/boost — feature a vacancy at the top of
 // the feed for N days (default 7). Pricing tiers determine cost:
 //   - if plan.boostsPerMonth > 0 (PRO/AGENCY) and usage.boostsUsed < plan.boostsPerMonth

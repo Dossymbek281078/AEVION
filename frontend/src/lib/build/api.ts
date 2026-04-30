@@ -452,6 +452,13 @@ export const buildApi = {
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
   updateVacancy: (id: string, status: VacancyStatus) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
+  matchCandidates: (vacancyId: string) =>
+    call<{
+      items: (TalentRow & { matchScore: number; matchedSkills: string[] })[];
+      total: number;
+      requiredSkills: string[];
+      note?: string;
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(vacancyId)}/match-candidates`),
   boostVacancy: (id: string, days = 7) =>
     call<{
       boost: { id: string; vacancyId: string; endsAt: string; source: "PLAN" | "PAID" };

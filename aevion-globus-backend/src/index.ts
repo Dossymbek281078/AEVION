@@ -247,6 +247,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/vacancies/{id}/boost": {
         post: { summary: "Boost (featured-pin) a vacancy for N days. Free if plan boosts left, else PENDING order at 990₽/week." },
       },
+      "/api/build/vacancies/{id}/match-candidates": {
+        get: { summary: "Top 20 candidates from talent pool ranked by skill-coverage match (vacancy owner only)" },
+      },
       "/api/build/applications": { post: { summary: "Apply to vacancy (Bearer required)" } },
       "/api/build/applications/my": { get: { summary: "My applications" } },
       "/api/build/applications/by-vacancy/{id}": { get: { summary: "Vacancy applications (owner only)" } },

@@ -10,6 +10,7 @@ import {
   type BuildVacancy,
   type BuildApplication,
   type ApplicationStatus,
+  type TalentRow,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
@@ -122,6 +123,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             )}
           </div>
 
+          {isOwner && <SuggestedCandidates vacancyId={vacancy.id} />}
+
           {isOwner && applications && (
             <div className="mt-6">
               <h2 className="mb-3 text-lg font-semibold text-white">
@@ -154,6 +157,141 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
         </aside>
       </div>
     </BuildShell>
+  );
+}
+
+function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
+  const [items, setItems] = useState<(TalentRow & { matchScore: number; matchedSkills: string[] })[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    buildApi
+      .matchCandidates(vacancyId)
+      .then((r) => {
+        if (cancelled) return;
+        setItems(r.items);
+        setNote(r.note ?? null);
+        setLoaded(true);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vacancyId]);
+
+  if (loading) return <p className="mt-6 text-sm text-slate-400">Searching talent pool…</p>;
+  if (!loaded) return null;
+
+  if (note === "vacancy_has_no_required_skills") {
+    return (
+      <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200">
+        Add required skills to this vacancy and we&apos;ll surface matching candidates here automatically.
+      </div>
+    );
+  }
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-6">
+      <h2 className="mb-3 text-lg font-semibold text-white">
+        Suggested candidates <span className="text-slate-500">({items.length})</span>
+      </h2>
+      <p className="mb-3 text-xs text-slate-400">
+        From the AEVION talent pool, ranked by skill-coverage. They haven&apos;t applied yet — DM them to invite.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((c) => {
+          const matchTone =
+            c.matchScore >= 80
+              ? "bg-emerald-500/20 text-emerald-200"
+              : c.matchScore >= 50
+                ? "bg-amber-500/20 text-amber-200"
+                : "bg-slate-500/15 text-slate-300";
+          const initials = c.name
+            .split(/\s+/)
+            .map((s) => s.charAt(0))
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
+          return (
+            <div key={c.userId} className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <div className="flex items-start gap-3">
+                {c.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={c.photoUrl}
+                    alt={c.name}
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-200">
+                    {initials || "?"}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/build/u/${encodeURIComponent(c.userId)}`}
+                      className="truncate text-sm font-semibold text-white hover:text-emerald-200"
+                    >
+                      {c.name}
+                    </Link>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${matchTone}`}>
+                      {c.matchScore}% match
+                    </span>
+                    {c.openToWork && (
+                      <span className="shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
+                        open
+                      </span>
+                    )}
+                  </div>
+                  {c.title && <div className="truncate text-xs text-emerald-200/80">{c.title}</div>}
+                  <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-400">
+                    {c.city && <span>📍 {c.city}</span>}
+                    {c.experienceYears > 0 && <span>⏱ {c.experienceYears}y</span>}
+                  </div>
+                  {c.matchedSkills.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {c.matchedSkills.slice(0, 6).map((s) => (
+                        <span
+                          key={s}
+                          className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
+                        >
+                          ✓ {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <Link
+                  href={`/build/messages?to=${encodeURIComponent(c.userId)}`}
+                  className="rounded-md bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30"
+                >
+                  Invite via DM
+                </Link>
+                <Link
+                  href={`/build/u/${encodeURIComponent(c.userId)}`}
+                  className="rounded-md bg-white/5 px-3 py-1 text-xs text-slate-200 hover:bg-white/10"
+                >
+                  Profile →
+                </Link>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

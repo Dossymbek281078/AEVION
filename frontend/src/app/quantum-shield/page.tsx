@@ -8,13 +8,37 @@ import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 
-type ShardInfo = { index: number; shard: string };
-type ShieldRecord = { id: string; objectId?: string; objectTitle?: string; algorithm: string; threshold: number; totalShards: number; shards: ShardInfo[]; createdAt: string; status?: string };
+type AuthShard = {
+  index: number;
+  sssShare: string;
+  hmac: string;
+  hmacKeyVersion: number;
+  location?: string;
+  createdAt?: string;
+  lastVerified?: string;
+};
+type ShieldRecord = {
+  id: string;
+  objectId?: string;
+  objectTitle?: string;
+  algorithm: string;
+  threshold: number;
+  totalShards: number;
+  shards: AuthShard[];
+  signature?: string;
+  publicKey?: string;
+  hmacKeyVersion?: number;
+  verifiedCount?: number;
+  lastVerifiedAt?: string | null;
+  legacy?: boolean;
+  createdAt: string;
+  status?: string;
+};
 
-const DEMO_SHARDS: ShardInfo[] = [
-  { index: 1, shard: "801a3f2e8c4d6b9a0e1f3c5d7a9b2c4e6f8a0b2d4e6f8a1b3c5d7e9f0a2b4c6" },
-  { index: 2, shard: "802b4e3d9c5a7f1b3d5e7a9c1b3e5f7a9b1d3e5f7a9c1b3d5e7f9a1b3c5d7e9f" },
-  { index: 3, shard: "803c5f4e0d6b8a2c4f6e8a0c2d4f6a8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0" },
+const DEMO_SHARDS: AuthShard[] = [
+  { index: 1, sssShare: "801demo3f2e8c4d6b9a0e1f3c5d7a9b2c4e6f8a0b2d4e6f8a1b3c5d7e9f0a2b4c6", hmac: "demo-hmac-1", hmacKeyVersion: 1, location: "Author Vault" },
+  { index: 2, sssShare: "802demo4e3d9c5a7f1b3d5e7a9c1b3e5f7a9b1d3e5f7a9c1b3d5e7f9a1b3c5d7e9f", hmac: "demo-hmac-2", hmacKeyVersion: 1, location: "AEVION Platform" },
+  { index: 3, sssShare: "803demo5f4e0d6b8a2c4f6e8a0c2d4f6a8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0", hmac: "demo-hmac-3", hmacKeyVersion: 1, location: "Witness Node" },
 ];
 const DEMO_RECORDS: ShieldRecord[] = [
   { id: "qs-demo-001", objectId: "demo-1", objectTitle: "AI Music Generator v2.1", algorithm: "Shamir's Secret Sharing + Ed25519", threshold: 2, totalShards: 3, shards: DEMO_SHARDS, createdAt: "2026-03-15T10:35:00Z", status: "active" },
@@ -22,6 +46,17 @@ const DEMO_RECORDS: ShieldRecord[] = [
   { id: "qs-demo-003", objectId: "demo-3", objectTitle: "CyberChess AI Engine", algorithm: "Shamir's Secret Sharing + Ed25519", threshold: 2, totalShards: 3, shards: DEMO_SHARDS, createdAt: "2026-03-20T09:20:00Z", status: "active" },
   { id: "qs-demo-004", objectId: "demo-4", objectTitle: "AEVION Bank Smart Contract", algorithm: "Shamir's Secret Sharing + Ed25519", threshold: 2, totalShards: 3, shards: DEMO_SHARDS, createdAt: "2026-03-22T16:50:00Z", status: "active" },
 ];
+
+type HealthInfo = {
+  status: string;
+  service?: string;
+  algorithm?: string;
+  threshold?: number;
+  totalShards?: number;
+  hmacKeyVersion?: number;
+  shieldRecords?: number;
+  timestamp?: string;
+};
 
 type Tab = "dashboard" | "detail" | "create" | "verify";
 
@@ -56,7 +91,7 @@ function ShieldHeaderBg() {
   return <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />;
 }
 
-function ShardVisualizer({ shards, threshold }: { shards: ShardInfo[]; threshold: number }) {
+function ShardVisualizer({ shards, threshold }: { shards: AuthShard[]; threshold: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null); const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current; const container = containerRef.current; if (!canvas || !container) return;
@@ -148,6 +183,8 @@ export default function QuantumShieldPage() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [records, setRecords] = useState<ShieldRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+  const [health, setHealth] = useState<HealthInfo | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<ShieldRecord | null>(null);
   const [createPayload, setCreatePayload] = useState('{ "hello": "AEVION" }');
   const [createThreshold, setCreateThreshold] = useState(2);
@@ -162,25 +199,128 @@ export default function QuantumShieldPage() {
   const authHeaders = (): HeadersInit => { try { const r = localStorage.getItem(TOKEN_KEY); if (!r) return {}; return { Authorization: "Bearer " + r }; } catch { return {}; } };
 
   const loadRecords = useCallback(async () => {
-    try { setLoading(true); const res = await fetch(apiUrl("/api/quantum-shield/records"), { headers: { ...authHeaders() } }); if (!res.ok) throw new Error("API"); const d = await res.json(); setRecords(d.items || d.records || []); }
-    catch { setRecords(DEMO_RECORDS); } finally { setLoading(false); }
+    try {
+      setLoading(true);
+      const res = await fetch(apiUrl("/api/quantum-shield/records"), { headers: { ...authHeaders() } });
+      if (!res.ok) throw new Error("API");
+      const d = await res.json();
+      setRecords(d.items || d.records || []);
+      setIsDemo(false);
+    } catch {
+      setRecords(DEMO_RECORDS);
+      setIsDemo(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { loadRecords(); }, [loadRecords]);
+
+  const loadHealth = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl("/api/quantum-shield/health"));
+      if (!res.ok) throw new Error("health");
+      const d = (await res.json()) as HealthInfo;
+      setHealth(d);
+    } catch {
+      setHealth(null);
+    }
+  }, []);
+
+  useEffect(() => { loadRecords(); loadHealth(); }, [loadRecords, loadHealth]);
 
   const handleCreate = async () => {
     setCreating(true);
-    try { const payload = JSON.parse(createPayload); const res = await fetch(apiUrl("/api/quantum-shield/create"), { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ payload, threshold: createThreshold, totalShards: createTotalShards }) }); if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error((d as any).error || "Error " + res.status); } showToast("Quantum Shield created!", "success"); setTab("dashboard"); await loadRecords(); }
-    catch (e: any) { showToast("Error: " + (e?.message || String(e)), "error"); } finally { setCreating(false); }
+    try {
+      const payload = JSON.parse(createPayload);
+      const res = await fetch(apiUrl("/api/quantum-shield/create"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ payload, threshold: createThreshold, totalShards: createTotalShards }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error((d as { error?: string }).error || "Error " + res.status); }
+      showToast("Quantum Shield created!", "success");
+      setTab("dashboard");
+      await loadRecords();
+    } catch (e: unknown) {
+      showToast("Error: " + (e instanceof Error ? e.message : String(e)), "error");
+    } finally {
+      setCreating(false);
+    }
   };
 
+  /**
+   * Real reconstruction: parse pasted shards as AuthenticatedShard JSON,
+   * POST to /:id/reconstruct which runs Lagrange + Ed25519 probe-sign.
+   * Falls back to legacy /verify only if user pasted plain hex.
+   */
   const handleVerify = async () => {
     setVerifying(true); setVerifyResult("");
-    try { const s = [verifyShard1.trim(), verifyShard2.trim()].filter(Boolean); if (s.length < 2) { showToast("Enter at least 2 shards", "error"); setVerifying(false); return; } const res = await fetch(apiUrl("/api/quantum-shield/verify"), { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ recordId: verifyRecordId || undefined, shards: s }) }); const d = await res.json(); setVerifyResult(JSON.stringify(d, null, 2)); if (d.valid || d.recovered) showToast("Verification successful!", "success"); else showToast("Verification failed", "error"); }
-    catch (e: any) { setVerifyResult("Error: " + (e?.message || String(e))); showToast("Verification error", "error"); } finally { setVerifying(false); }
+    try {
+      const inputs = [verifyShard1.trim(), verifyShard2.trim()].filter(Boolean);
+      if (inputs.length < 2) { showToast("Paste at least 2 shards", "error"); setVerifying(false); return; }
+
+      const parsed: unknown[] = [];
+      let allJson = true;
+      for (const s of inputs) {
+        try { parsed.push(JSON.parse(s)); } catch { allJson = false; break; }
+      }
+
+      if (allJson && verifyRecordId) {
+        // Preferred: full Shamir reconstruction
+        const res = await fetch(apiUrl(`/api/quantum-shield/${encodeURIComponent(verifyRecordId)}/reconstruct`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ shards: parsed }),
+        });
+        const d = await res.json();
+        setVerifyResult(JSON.stringify(d, null, 2));
+        if (d.reconstructed) { showToast("Cryptographic recovery succeeded ✓", "success"); }
+        else showToast("Recovery failed: " + (d.reason || "unknown"), "error");
+      } else {
+        // Legacy fallback for plain hex strings
+        const res = await fetch(apiUrl("/api/quantum-shield/verify"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ recordId: verifyRecordId || undefined, shards: inputs }),
+        });
+        const d = await res.json();
+        setVerifyResult(JSON.stringify(d, null, 2));
+        if (d.valid || d.recovered) showToast("Verification successful (legacy mode)", "success");
+        else showToast("Verification failed", "error");
+      }
+    } catch (e: unknown) {
+      setVerifyResult("Error: " + (e instanceof Error ? e.message : String(e)));
+      showToast("Verification error", "error");
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const openDetail = (rec: ShieldRecord) => { setSelectedRecord(rec); setTab("detail"); };
   const copy = (text: string) => { navigator.clipboard.writeText(text).then(() => showToast("Copied!", "success"), () => showToast("Copy failed", "error")); };
+  const downloadShard = (rec: ShieldRecord, shard: AuthShard) => {
+    try {
+      const blob = new Blob(
+        [JSON.stringify({ shieldId: rec.id, shard, downloadedAt: new Date().toISOString() }, null, 2)],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aevion-shard-${rec.id}-${shard.index}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Shard downloaded", "success");
+    } catch (e: unknown) {
+      showToast("Download failed: " + (e instanceof Error ? e.message : String(e)), "error");
+    }
+  };
+  const sharePublic = (rec: ShieldRecord) => {
+    try {
+      const url = `${window.location.origin}/quantum-shield/${rec.id}`;
+      navigator.clipboard.writeText(url);
+      showToast("Public verify link copied", "success");
+    } catch { showToast("Copy failed", "error"); }
+  };
   const inp: React.CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" };
 
   const tabBtn = (t: Tab, label: string, icon: string) => (
@@ -198,24 +338,30 @@ export default function QuantumShieldPage() {
     <main>
       <ProductPageShell maxWidth={960}>
         <Wave1Nav />
-        <PipelineSteps current="qsign" />
+        <PipelineSteps current="qshield" />
 
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 20, position: "relative" }}>
           <div style={{ background: "linear-gradient(135deg, #0a0f1e 0%, #0f172a 30%, #0d2847 60%, #0c1a3a 100%)", padding: "32px 28px 26px", color: "#fff", position: "relative", overflow: "hidden", minHeight: 140 }}>
             <ShieldHeaderBg />
             <div style={{ position: "relative", zIndex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" as const }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(13,148,136,0.4), rgba(59,130,246,0.3))", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>&#x1F6E1;</div>
-                <div>
+                <div style={{ flex: 1, minWidth: 200 }}>
                   <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.03em" }}>Quantum Shield</h1>
                   <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2 }}>Post-Quantum Cryptographic Layer</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 800, background: health?.status === "ok" ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)", color: health?.status === "ok" ? "#34d399" : "#fca5a5", border: "1px solid " + (health?.status === "ok" ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"), letterSpacing: "0.05em" }}>
+                    {health?.status === "ok" ? "● ONLINE" : "○ OFFLINE"}
+                  </span>
+                  {health?.shieldRecords !== undefined && <span style={{ padding: "4px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)" }}>{health.shieldRecords} records</span>}
                 </div>
               </div>
               <p style={{ margin: "0 0 12px", fontSize: 14, opacity: 0.82, lineHeight: 1.6, maxWidth: 600 }}>
                 Ed25519 with the private key Shamir-split across three independent locations &#8212; any 2 of 3 reconstruct it, no single party (including AEVION) ever holds enough to forge.
               </p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-                {["Ed25519 + SSS", "Threshold 2/3", "Auto via QSign"].map((tag) => (
+                {["Ed25519 + SSS", "Threshold " + (health?.threshold ?? 2) + "/" + (health?.totalShards ?? 3), "Auto via QSign", "HMAC v" + (health?.hmacKeyVersion ?? 1)].map((tag) => (
                   <span key={tag} style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>{tag}</span>
                 ))}
               </div>
@@ -223,9 +369,19 @@ export default function QuantumShieldPage() {
           </div>
         </div>
 
+        {isDemo && (
+          <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 10, border: "1px dashed rgba(245,158,11,0.4)", background: "rgba(245,158,11,0.08)", fontSize: 12, color: "#92400e", display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ fontSize: 14 }}>&#x26A0;&#xFE0F;</span>
+            <div>
+              <b>Demo data</b> — backend unreachable. Records below are placeholders. Sign in or check API connection to see live shields.
+            </div>
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginBottom: 20 }}>
-          <Link href="/qsign" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>&#8592; QSign</Link>
-          <Link href="/qright" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>QRight</Link>
+          <Link href="/qright" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>&#8592; QRight</Link>
+          <Link href="/qsign" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>QSign v1</Link>
+          <Link href="/qsign/v2" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(13,148,136,0.4)", color: "#0d9488" }}>QSign v2</Link>
           <Link href="/bureau" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a" }}>IP Bureau &#8594;</Link>
           <Link href="/planet" style={{ padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, border: "1px solid #0f766e", color: "#0f766e" }}>Planet</Link>
         </div>
@@ -307,13 +463,20 @@ export default function QuantumShieldPage() {
                         <span style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>Shard #{shard.index}</span>
                         {shard.index <= selectedRecord.threshold && <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 9, fontWeight: 800, background: "rgba(13,148,136,0.15)", color: "#0d9488" }}>THRESHOLD</span>}
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); copy(shard.shard); }} style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#334155" }}>Copy</button>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={(e) => { e.stopPropagation(); copy(JSON.stringify(shard)); }} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#334155" }}>Copy JSON</button>
+                        <button onClick={(e) => { e.stopPropagation(); downloadShard(selectedRecord, shard); }} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(13,148,136,0.3)", background: "rgba(13,148,136,0.05)", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#0d9488" }}>Download</button>
+                      </div>
                     </div>
-                    <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(15,23,42,0.03)", fontSize: 11, fontFamily: "monospace", color: "#475569", wordBreak: "break-all" as const, lineHeight: 1.5 }}>{shard.shard}</div>
+                    {shard.location && <div style={{ fontSize: 10, color: "#64748b", marginBottom: 4 }}>Storage: <b>{shard.location}</b></div>}
+                    <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(15,23,42,0.03)", fontSize: 11, fontFamily: "monospace", color: "#475569", wordBreak: "break-all" as const, lineHeight: 1.5 }}>{shard.sssShare}</div>
+                    <div style={{ marginTop: 4, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>HMAC v{shard.hmacKeyVersion}: {shard.hmac.slice(0, 16)}...</div>
                   </div>))}
               </div>
               <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" as const }}>
                 <button onClick={() => { setVerifyRecordId(selectedRecord.id); setTab("verify"); }} style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Verify / Recover &#8594;</button>
+                <button onClick={() => sharePublic(selectedRecord)} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(13,148,136,0.4)", background: "rgba(13,148,136,0.05)", color: "#0d9488", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Share Public Link</button>
+                <Link href={`/quantum-shield/${selectedRecord.id}`} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", color: "#0f172a", fontWeight: 800, fontSize: 13, cursor: "pointer", textDecoration: "none" }}>Open Public Page &#8599;</Link>
                 <button onClick={() => copy(JSON.stringify(selectedRecord, null, 2))} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", color: "#0f172a", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Export JSON</button>
               </div>
             </div>
@@ -356,8 +519,9 @@ export default function QuantumShieldPage() {
           <div style={{ border: "1px solid rgba(15,23,42,0.1)", borderRadius: 16, padding: 20 }}>
             <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 16 }}>Verify and Recover from Shards</div>
             <div style={{ marginBottom: 14 }}><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Record ID (optional)</div><input value={verifyRecordId} onChange={(e) => setVerifyRecordId(e.target.value)} placeholder="qs-xxxx" style={inp} /></div>
-            <div style={{ marginBottom: 14 }}><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Shard #1</div><textarea value={verifyShard1} onChange={(e) => setVerifyShard1(e.target.value)} rows={3} placeholder="Paste first shard hex" style={{ ...inp, fontFamily: "monospace", fontSize: 12 }} /></div>
-            <div style={{ marginBottom: 14 }}><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Shard #2</div><textarea value={verifyShard2} onChange={(e) => setVerifyShard2(e.target.value)} rows={3} placeholder="Paste second shard hex" style={{ ...inp, fontFamily: "monospace", fontSize: 12 }} /></div>
+            <div style={{ marginBottom: 14 }}><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Shard #1 (paste full JSON)</div><textarea value={verifyShard1} onChange={(e) => setVerifyShard1(e.target.value)} rows={3} placeholder='{"index":1,"sssShare":"...","hmac":"...","hmacKeyVersion":1}' style={{ ...inp, fontFamily: "monospace", fontSize: 11 }} /></div>
+            <div style={{ marginBottom: 14 }}><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Shard #2 (paste full JSON)</div><textarea value={verifyShard2} onChange={(e) => setVerifyShard2(e.target.value)} rows={3} placeholder='{"index":2,"sssShare":"...","hmac":"...","hmacKeyVersion":1}' style={{ ...inp, fontFamily: "monospace", fontSize: 11 }} /></div>
+            <div style={{ marginBottom: 14, fontSize: 11, color: "#64748b", padding: "8px 10px", borderRadius: 8, background: "rgba(13,148,136,0.06)", border: "1px solid rgba(13,148,136,0.15)" }}>Tip: Paste full <b>AuthenticatedShard</b> JSON objects (with <code>sssShare</code>, <code>hmac</code>, <code>hmacKeyVersion</code>) to run real Lagrange reconstruction.</div>
             <button onClick={handleVerify} disabled={verifying} style={{ padding: "12px 24px", borderRadius: 12, border: "none", width: "100%", background: verifying ? "#94a3b8" : "#0d9488", color: "#fff", fontWeight: 900, fontSize: 15, cursor: verifying ? "default" : "pointer" }}>{verifying ? "Verifying..." : "Verify and Recover"}</button>
             {verifyResult && <div style={{ marginTop: 16, border: "1px solid rgba(15,23,42,0.1)", borderRadius: 12, padding: 14 }}><div style={{ fontWeight: 800, fontSize: 13, marginBottom: 6 }}>Result</div><pre style={{ background: "#f8fafc", padding: 12, borderRadius: 8, fontSize: 11, whiteSpace: "pre-wrap" as const, fontFamily: "monospace", color: "#334155", margin: 0 }}>{verifyResult}</pre></div>}
           </div>
@@ -372,7 +536,7 @@ export default function QuantumShieldPage() {
                 </div>))}
             </div>
             {records.length > 0 && <div style={{ marginTop: 16 }}><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 8 }}>Quick fill:</div><div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
-              {records.slice(0, 4).map((rec) => (<button key={rec.id} onClick={() => { setVerifyRecordId(rec.id); if (rec.shards[0]) setVerifyShard1(rec.shards[0].shard); if (rec.shards[1]) setVerifyShard2(rec.shards[1].shard); }} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#0d9488" }}>{(rec.objectTitle || rec.id).slice(0, 20)}</button>))}
+              {records.slice(0, 4).map((rec) => (<button key={rec.id} onClick={() => { setVerifyRecordId(rec.id); if (rec.shards[0]) setVerifyShard1(JSON.stringify(rec.shards[0])); if (rec.shards[1]) setVerifyShard2(JSON.stringify(rec.shards[1])); }} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#0d9488" }}>{(rec.objectTitle || rec.id).slice(0, 20)}</button>))}
             </div></div>}
           </div>
         </div>)}

@@ -16,6 +16,7 @@ import {
   type AuthenticatedShard,
 } from "../lib/shamir/shield";
 import { createShieldRecord } from "../lib/qshield/createRecord";
+import { QSHIELD_OPENAPI } from "../lib/qshield/openapiSpec";
 import {
   clientIp,
   createInMemoryRateLimiter,
@@ -40,6 +41,7 @@ const RESERVED_IDS = new Set([
   "reconstruct",
   "create",
   "witness",
+  "openapi.json",
 ]);
 
 let ensuredTable = false;
@@ -155,9 +157,15 @@ function rateLimit(
 quantumShieldRouter.get("/health", async (_req, res) => {
   try {
     await ensureShieldTable();
-    const { rows } = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM "QuantumShield"`,
-    );
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE "status" = 'active')::int AS active,
+        COUNT(*) FILTER (WHERE "legacy" = true)::int AS legacy,
+        COUNT(*) FILTER (WHERE "distribution_policy" = 'distributed_v2')::int AS distributed
+      FROM "QuantumShield"
+    `);
+    const r = rows[0] ?? { total: 0, active: 0, legacy: 0, distributed: 0 };
     res.json({
       status: "ok",
       service: "quantum-shield",
@@ -165,7 +173,12 @@ quantumShieldRouter.get("/health", async (_req, res) => {
       threshold: SHAMIR_THRESHOLD,
       totalShards: SHAMIR_SHARDS,
       hmacKeyVersion: HMAC_KEY_VERSION,
-      shieldRecords: rows[0]?.total ?? 0,
+      // Both legacy and v1.0 names — older clients keyed off shieldRecords.
+      shieldRecords: r.total,
+      totalRecords: r.total,
+      activeRecords: r.active,
+      legacyRecords: r.legacy,
+      distributedRecords: r.distributed,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -175,6 +188,14 @@ quantumShieldRouter.get("/health", async (_req, res) => {
     );
     res.status(500).json({ status: "error", service: "quantum-shield" });
   }
+});
+
+/**
+ * GET /openapi.json — machine-readable contract for SDK generators / Postman.
+ */
+quantumShieldRouter.get("/openapi.json", (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json(QSHIELD_OPENAPI);
 });
 
 /* ── List handler (reused by / and /records) ── */

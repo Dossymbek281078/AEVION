@@ -158,6 +158,91 @@ async function main() {
     pass("reconstruct.threshold", `correctly rejected with HTTP ${r.status}`);
   }
 
+  // 7b — Idempotency-Key on reconstruct: same key returns cached verdict and
+  // does NOT bump verifiedCount a second time.
+  {
+    const idemKey = `smoke-idem-${Date.now()}`;
+    const before = await jsonFetch("GET", `/api/quantum-shield/${shieldId}/public`);
+    const beforeCount = before.data?.verifiedCount ?? 0;
+
+    const r1 = await fetch(
+      `${BASE}/api/quantum-shield/${shieldId}/reconstruct`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idemKey,
+        },
+        body: JSON.stringify({ shards: [shards[0], shards[2]] }),
+      },
+    );
+    const j1 = await r1.json();
+    if (!j1?.valid) return fail("idempotency.first", JSON.stringify(j1));
+
+    const r2 = await fetch(
+      `${BASE}/api/quantum-shield/${shieldId}/reconstruct`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idemKey,
+        },
+        body: JSON.stringify({ shards: [shards[0], shards[2]] }),
+      },
+    );
+    const j2 = await r2.json();
+    if (j2?.idempotent !== "replayed")
+      return fail("idempotency.replay", `expected idempotent=replayed, got ${j2?.idempotent}`);
+
+    const after = await jsonFetch("GET", `/api/quantum-shield/${shieldId}/public`);
+    const afterCount = after.data?.verifiedCount ?? 0;
+    // Allow exactly 1 bump (first call), not 2.
+    if (afterCount - beforeCount > 1)
+      return fail("idempotency.count", `verifiedCount bumped ${afterCount - beforeCount} times, expected ≤1`);
+    pass("idempotency", `replay confirmed, verifiedCount delta=${afterCount - beforeCount}`);
+  }
+
+  // 7c — distributed_v2 create: server should NOT keep shard 1 internally
+  {
+    const r = await jsonFetch("POST", "/api/quantum-shield", {
+      token,
+      body: {
+        objectId: `smoke-dv2-${Date.now()}`,
+        objectTitle: "Distributed v2 smoke",
+        payload: { distributed: true },
+        distribution: "distributed_v2",
+      },
+    });
+    if (r.status !== 201) return fail("distributed.create", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (r.data?.distribution !== "distributed_v2")
+      return fail("distributed.create", `expected distributed_v2, got ${r.data?.distribution}`);
+    if (!r.data?.witnessCid)
+      return fail("distributed.create", "missing witnessCid");
+    const dvId = r.data.id;
+
+    // public projection should advertise the witness
+    const pub = await jsonFetch("GET", `/api/quantum-shield/${dvId}/public`);
+    if (pub.data?.distribution !== "distributed_v2")
+      return fail("distributed.public", "public projection lost policy");
+    if (!pub.data?.witnessUrl)
+      return fail("distributed.public", "missing witnessUrl");
+
+    // /witness must be publicly retrievable
+    const wit = await jsonFetch("GET", `/api/quantum-shield/${dvId}/witness`);
+    if (!wit.ok) return fail("distributed.witness", `HTTP ${wit.status}`);
+    if (wit.data?.shard?.index !== 3)
+      return fail("distributed.witness", `expected shard.index=3, got ${wit.data?.shard?.index}`);
+    if (wit.data?.cid !== r.data.witnessCid)
+      return fail("distributed.witness", "CID mismatch between create and witness endpoints");
+
+    // GET /:id should return only 2 shards (server-held), not 3
+    const full = await jsonFetch("GET", `/api/quantum-shield/${dvId}`);
+    const stored = (full.data?.shards || []).map((s) => s.index).sort();
+    if (JSON.stringify(stored) !== "[2,3]")
+      return fail("distributed.persisted", `expected [2,3] persisted, got ${JSON.stringify(stored)}`);
+    pass("distributed_v2", `id=${dvId} cid=${r.data.witnessCid.slice(0, 16)}… server holds shards ${stored.join("+")}`);
+  }
+
   // 8 — delete (owner can)
   if (!SKIP_DELETE) {
     const r = await jsonFetch("DELETE", `/api/quantum-shield/${shieldId}`, { token });

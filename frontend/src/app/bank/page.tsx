@@ -36,6 +36,7 @@ import { ChessWinnings } from "./_components/ChessWinnings";
 import { CommandPalette } from "./_components/CommandPalette";
 import { DailyCapStrip } from "./_components/DailyCapStrip";
 import { EquityChart } from "./_components/EquityChart";
+import { ReceivePanel } from "./_components/ReceivePanel";
 import { ConceptPrimer } from "./_components/ConceptPrimer";
 import { CoolDownQueue } from "./_components/CoolDownQueue";
 import { DeviceManagement } from "./_components/DeviceManagement";
@@ -182,6 +183,7 @@ function BankContent() {
 
       {hasWallet ? <DailyCapStrip /> : null}
       {hasWallet && account ? <EquityChart account={account} operations={operations} /> : null}
+      {hasWallet && account ? <ReceivePanel account={account} /> : null}
 
       {!authChecked ? (
         <div style={{ padding: 40, textAlign: "center", color: "#64748b", fontSize: 14 }}>

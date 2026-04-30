@@ -10,6 +10,7 @@
  */
 
 import { runMultiAgent, type OrchestratorInput } from "./orchestrator";
+import { callProvider, resolveProvider } from "./providers";
 import {
   type EvalCase,
   type EvalCaseResult,
@@ -19,6 +20,22 @@ import {
   getEvalRun,
 } from "./store";
 
+const DEFAULT_LLM_JUDGE_MODEL: Record<string, string> = {
+  anthropic: "claude-haiku-4-5-20251001",
+  openai: "gpt-4o-mini",
+  gemini: "gemini-2.5-flash",
+  deepseek: "deepseek-chat",
+  grok: "grok-3-mini",
+};
+
+const LLM_JUDGE_SYSTEM = `You are an automated grader. You will be shown a rubric and a candidate output.
+
+Reply with EXACTLY this format on two lines (no preamble, no markdown):
+VERDICT: PASS|FAIL
+CONFIDENCE: 0.0..1.0
+
+PASS means the output satisfies the rubric. CONFIDENCE expresses your certainty (1.0 = sure pass / sure fail; 0.5 = ambiguous). Be strict — if the rubric is not clearly met, FAIL.`;
+
 export type RunEvalSuiteOpts = {
   runId: string;
   suite: EvalSuiteRow;
@@ -26,7 +43,7 @@ export type RunEvalSuiteOpts = {
   perCaseMaxCostUsd?: number;
 };
 
-function judgeCase(judge: EvalJudge, output: string): { passed: boolean; reason: string } {
+async function judgeCase(judge: EvalJudge, output: string, input?: string): Promise<{ passed: boolean; reason: string }> {
   if (judge.type === "contains") {
     const hay = judge.caseSensitive ? output : output.toLowerCase();
     const ndl = judge.caseSensitive ? judge.needle : judge.needle.toLowerCase();
@@ -69,6 +86,47 @@ function judgeCase(judge: EvalJudge, output: string): { passed: boolean; reason:
     const ok = output.length <= judge.chars;
     return { passed: ok, reason: ok ? `${output.length} ≤ ${judge.chars} chars` : `${output.length} > ${judge.chars} chars` };
   }
+  if (judge.type === "llm_judge") {
+    try {
+      const provider = resolveProvider(judge.provider);
+      const model = judge.model || DEFAULT_LLM_JUDGE_MODEL[provider] || "claude-haiku-4-5-20251001";
+      const userPart = [
+        `RUBRIC:\n${judge.rubric}`,
+        input ? `\nORIGINAL PROMPT:\n${input}` : "",
+        `\nCANDIDATE OUTPUT:\n${output}`,
+      ].join("");
+      const result = await callProvider(
+        provider,
+        [
+          { role: "system", content: LLM_JUDGE_SYSTEM },
+          { role: "user", content: userPart },
+        ],
+        model,
+        0
+      );
+      const reply = (result.reply || "").trim();
+      const verdictMatch = reply.match(/VERDICT\s*:\s*(PASS|FAIL)/i);
+      const confidenceMatch = reply.match(/CONFIDENCE\s*:\s*([0-9.]+)/i);
+      if (!verdictMatch) {
+        return { passed: false, reason: `llm_judge unparseable reply: ${reply.slice(0, 100)}` };
+      }
+      const verdict = verdictMatch[1].toUpperCase();
+      const confidence = confidenceMatch ? Math.max(0, Math.min(1, parseFloat(confidenceMatch[1]))) : 1;
+      let passed = verdict === "PASS";
+      const threshold = judge.passThreshold;
+      let thresholdHint = "";
+      if (passed && typeof threshold === "number" && threshold > 0 && confidence < threshold) {
+        passed = false;
+        thresholdHint = ` (below confidence threshold ${threshold})`;
+      }
+      return {
+        passed,
+        reason: `${verdict} @ confidence ${confidence.toFixed(2)}${thresholdHint}`,
+      };
+    } catch (e: any) {
+      return { passed: false, reason: `llm_judge error: ${e?.message || "unknown"}` };
+    }
+  }
   return { passed: false, reason: "unknown judge type" };
 }
 
@@ -91,7 +149,7 @@ async function runOneCase(
       else if (ev.type === "agent_end" && typeof ev.costUsd === "number") costUsd += ev.costUsd;
       else if (ev.type === "done") costUsd = ev.totalCostUsd ?? costUsd;
     }
-    const verdict = judgeCase(c.judge, finalContent);
+    const verdict = await judgeCase(c.judge, finalContent, c.input);
     return {
       caseId: c.id,
       caseName: c.name || c.id,

@@ -120,7 +120,8 @@ export type EvalJudge =
   | { type: "equals"; expected: string; caseSensitive?: boolean; trim?: boolean }
   | { type: "regex"; pattern: string; flags?: string }
   | { type: "min_length"; chars: number }
-  | { type: "max_length"; chars: number };
+  | { type: "max_length"; chars: number }
+  | { type: "llm_judge"; rubric: string; provider?: string; model?: string; passThreshold?: number };
 
 export type EvalCase = {
   id: string;

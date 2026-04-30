@@ -1195,7 +1195,8 @@ export type EvalJudge =
   | { type: "regex"; pattern: string; flags?: string }
   | { type: "min_length"; chars: number }
   | { type: "max_length"; chars: number }
-  | { type: "not_contains"; needle: string; caseSensitive?: boolean };
+  | { type: "not_contains"; needle: string; caseSensitive?: boolean }
+  | { type: "llm_judge"; rubric: string; provider?: string; model?: string; passThreshold?: number };
 
 export type EvalCase = {
   id: string;
@@ -1274,6 +1275,15 @@ function normalizeCases(cases: any): EvalCase[] {
       judge = { type: "min_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
     } else if (j.type === "max_length" && Number.isFinite(Number(j.chars))) {
       judge = { type: "max_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
+    } else if (j.type === "llm_judge" && typeof j.rubric === "string" && j.rubric.trim()) {
+      const passThreshold = Number(j.passThreshold);
+      judge = {
+        type: "llm_judge",
+        rubric: String(j.rubric).slice(0, 4000),
+        provider: typeof j.provider === "string" ? j.provider.slice(0, 32) : undefined,
+        model: typeof j.model === "string" ? j.model.slice(0, 64) : undefined,
+        passThreshold: Number.isFinite(passThreshold) ? Math.max(0, Math.min(1, passThreshold)) : undefined,
+      };
     } else {
       continue;
     }

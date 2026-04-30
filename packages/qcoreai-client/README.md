@@ -160,6 +160,16 @@ const suite = await client.createEvalSuite({
       input: "Plan a 30-day onboarding for a B2B SaaS",
       judge: { type: "not_contains", needle: "as a large language model" },
     },
+    {
+      id: "c4",
+      name: "Tone is friendly + actionable",
+      input: "Plan a 30-day onboarding for a B2B SaaS",
+      judge: {
+        type: "llm_judge",
+        rubric: "The output must read as a friendly senior PM giving concrete week-by-week actions.",
+        passThreshold: 0.7,
+      },
+    },
   ],
 });
 

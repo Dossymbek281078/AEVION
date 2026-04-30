@@ -23,6 +23,7 @@ const LS_PROFILE_ID = "aevion:healthai:profileId";
 const LS_TAB = "aevion:healthai:tab";
 const LS_LOCALE = "aevion:locale";
 const LS_AUTH_TOKEN = "aevion:auth:token";
+const LS_NOTIF_OPTIN = "aevion:healthai:notif";
 
 function authHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -140,6 +141,27 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   cycle_save: { en: "Save", ru: "Сохранить" },
   cycle_recent: { en: "Recent days", ru: "Последние дни" },
+  notif_title: { en: "Daily reminder", ru: "Ежедневное напоминание" },
+  notif_subtitle: {
+    en: "Browser notification at 9:00 PM if you haven't logged today.",
+    ru: "Уведомление в браузере в 21:00, если запись за день ещё не сделана.",
+  },
+  notif_enable: { en: "Enable", ru: "Включить" },
+  notif_disable: { en: "Disable", ru: "Выключить" },
+  notif_enabled: { en: "Enabled", ru: "Включено" },
+  notif_denied: {
+    en: "Browser blocked notifications. Allow them in site settings.",
+    ru: "Браузер заблокировал. Разрешите уведомления в настройках сайта.",
+  },
+  notif_unsupported: {
+    en: "Your browser does not support notifications.",
+    ru: "Ваш браузер не поддерживает уведомления.",
+  },
+  notif_test: { en: "Test now", ru: "Тест" },
+  notif_body: {
+    en: "Time for your daily wellness check-in 💚",
+    ru: "Время отметить день в HealthAI 💚",
+  },
   population_title: {
     en: "Compare with population",
     ru: "Сравнение с популяцией",
@@ -519,9 +541,86 @@ export default function HealthAIPage() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>("en");
+  const [notifPerm, setNotifPerm] = useState<"unsupported" | "default" | "granted" | "denied">("default");
+  const [notifOptIn, setNotifOptIn] = useState(false);
   useEffect(() => {
     setLang(detectLocale());
+    if (typeof window !== "undefined") {
+      if ("Notification" in window) {
+        setNotifPerm(Notification.permission as typeof notifPerm);
+      } else {
+        setNotifPerm("unsupported");
+      }
+      try {
+        setNotifOptIn(window.localStorage.getItem(LS_NOTIF_OPTIN) === "1");
+      } catch {}
+    }
   }, []);
+
+  // Daily reminder scheduler — проверяем раз в минуту, не было ли лога сегодня;
+  // показываем notification после 21:00 (макс. 1 раз в день).
+  useEffect(() => {
+    if (!notifOptIn || notifPerm !== "granted") return;
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    const SHOWN_KEY = "aevion:healthai:notif:shown";
+    const tick = () => {
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+      if (now.getHours() < 21) return;
+      try {
+        if (window.localStorage.getItem(SHOWN_KEY) === today) return;
+        const hasLogToday = logs.some((l) => l.date === today);
+        if (hasLogToday) return;
+        new Notification("AEVION HealthAI", {
+          body: t("notif_body", lang),
+          tag: `healthai-${today}`,
+          icon: "/favicon.ico",
+        });
+        window.localStorage.setItem(SHOWN_KEY, today);
+      } catch {}
+    };
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, [notifOptIn, notifPerm, logs, lang]);
+
+  const enableNotifications = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotifPerm("unsupported");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setNotifPerm("denied");
+      return;
+    }
+    let perm: NotificationPermission = Notification.permission;
+    if (perm === "default") {
+      perm = await Notification.requestPermission();
+    }
+    setNotifPerm(perm as typeof notifPerm);
+    if (perm === "granted") {
+      setNotifOptIn(true);
+      try {
+        window.localStorage.setItem(LS_NOTIF_OPTIN, "1");
+      } catch {}
+    }
+  };
+
+  const disableNotifications = () => {
+    setNotifOptIn(false);
+    try {
+      window.localStorage.removeItem(LS_NOTIF_OPTIN);
+    } catch {}
+  };
+
+  const testNotification = () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    new Notification("AEVION HealthAI", {
+      body: t("notif_body", lang),
+      icon: "/favicon.ico",
+    });
+  };
   const switchLang = (next: Lang) => {
     setLang(next);
     try {
@@ -1893,6 +1992,118 @@ export default function HealthAIPage() {
               <button type="button" onClick={submitLog} disabled={busy} style={primaryBtn}>
                 {t("btn_log_today", lang)}
               </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 18,
+                padding: 12,
+                background: "rgba(20,28,46,0.55)",
+                border: "1px solid rgba(165,180,252,0.22)",
+                borderRadius: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 6,
+                  flexWrap: "wrap",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontSize: 13, color: "#e2e8f8", fontWeight: 700 }}>
+                  🔔 {t("notif_title", lang)}
+                </div>
+                {notifPerm === "granted" && notifOptIn ? (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: "2px 8px",
+                      background: "rgba(94,234,212,0.18)",
+                      color: "#5eead4",
+                      borderRadius: 4,
+                      letterSpacing: "0.05em",
+                      textTransform: "uppercase",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {t("notif_enabled", lang)}
+                  </span>
+                ) : null}
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#94a3b8",
+                  marginBottom: 10,
+                  lineHeight: 1.5,
+                }}
+              >
+                {notifPerm === "unsupported"
+                  ? t("notif_unsupported", lang)
+                  : notifPerm === "denied"
+                  ? t("notif_denied", lang)
+                  : t("notif_subtitle", lang)}
+              </div>
+              {notifPerm !== "unsupported" && notifPerm !== "denied" ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {!notifOptIn || notifPerm !== "granted" ? (
+                    <button
+                      type="button"
+                      onClick={enableNotifications}
+                      style={{
+                        padding: "6px 12px",
+                        background: "rgba(94,234,212,0.18)",
+                        color: "#5eead4",
+                        border: "1px solid rgba(94,234,212,0.45)",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        fontSize: 12,
+                      }}
+                    >
+                      {t("notif_enable", lang)}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={testNotification}
+                        style={{
+                          padding: "6px 12px",
+                          background: "rgba(120,160,220,0.18)",
+                          color: "#cbd5e1",
+                          border: "1px solid rgba(120,160,220,0.45)",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontWeight: 700,
+                          fontSize: 12,
+                        }}
+                      >
+                        {t("notif_test", lang)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={disableNotifications}
+                        style={{
+                          padding: "6px 12px",
+                          background: "rgba(248,113,113,0.12)",
+                          color: "#f87171",
+                          border: "1px solid rgba(248,113,113,0.35)",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontWeight: 700,
+                          fontSize: 12,
+                        }}
+                      >
+                        {t("notif_disable", lang)}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : null}
             </div>
           </Card>
         ) : null}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SentryInit } from "./_components/SentryInit";
 import { TestModeBanner } from "./_components/TestModeBanner";
 
 export const metadata: Metadata = {
@@ -69,6 +70,7 @@ export default function BankLayout({ children }: { children: React.ReactNode }) 
         }
       `}</style>
       <div data-bank-route>
+        <SentryInit />
         <TestModeBanner />
         {children}
       </div>

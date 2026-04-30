@@ -142,6 +142,42 @@ const STR: Record<string, Record<Lang, string>> = {
     ru: "PHQ-9 — скрининг, а не диагноз. Обсудите результаты со специалистом.",
   },
   phq9_incomplete: { en: "Answer all 9 questions", ru: "Ответьте на все 9 вопросов" },
+  gad7_title: {
+    en: "GAD-7 anxiety screener",
+    ru: "GAD-7 — скрининг тревоги",
+  },
+  gad7_subtitle: {
+    en: "Standardized 7-question anxiety screener. «Over the last 2 weeks…»",
+    ru: "Стандартизированный 7-вопросный тест тревожности. «За последние 2 недели…»",
+  },
+  gad7_q1: {
+    en: "Feeling nervous, anxious, or on edge",
+    ru: "Чувство нервозности или беспокойства",
+  },
+  gad7_q2: {
+    en: "Not being able to stop or control worrying",
+    ru: "Невозможность остановить или контролировать беспокойство",
+  },
+  gad7_q3: {
+    en: "Worrying too much about different things",
+    ru: "Слишком сильное беспокойство о разных вещах",
+  },
+  gad7_q4: { en: "Trouble relaxing", ru: "Трудность расслабиться" },
+  gad7_q5: {
+    en: "Being so restless that it's hard to sit still",
+    ru: "Беспокойство, при котором трудно усидеть на месте",
+  },
+  gad7_q6: { en: "Becoming easily annoyed or irritable", ru: "Раздражительность" },
+  gad7_q7: {
+    en: "Feeling afraid as if something awful might happen",
+    ru: "Чувство страха, будто может случиться что-то ужасное",
+  },
+  gad7_result: { en: "Score: {n}/21", ru: "Результат: {n}/21" },
+  gad7_sev_minimal: { en: "Minimal", ru: "Минимальная" },
+  gad7_sev_mild: { en: "Mild", ru: "Лёгкая" },
+  gad7_sev_moderate: { en: "Moderate", ru: "Умеренная" },
+  gad7_sev_severe: { en: "Severe", ru: "Тяжёлая" },
+  gad7_incomplete: { en: "Answer all 7 questions", ru: "Ответьте на все 7 вопросов" },
   hist_subtitle: { en: "{c} checks · {l} logs", ru: "{c} чеков · {l} логов" },
   field_age: { en: "Age", ru: "Возраст" },
   field_sex: { en: "Sex", ru: "Пол" },
@@ -409,6 +445,16 @@ export default function HealthAIPage() {
   } | null>(null);
   const [phq9Busy, setPhq9Busy] = useState(false);
 
+  // GAD-7 state
+  const [gad7, setGad7] = useState<Array<number | null>>(() => Array(7).fill(null));
+  const [gad7Result, setGad7Result] = useState<{
+    score: number;
+    severity: string;
+    advice: string;
+    createdAt: string;
+  } | null>(null);
+  const [gad7Busy, setGad7Busy] = useState(false);
+
   // Log draft
   const [logSleep, setLogSleep] = useState("");
   const [logMood, setLogMood] = useState(5);
@@ -440,6 +486,25 @@ export default function HealthAIPage() {
       if (!r.ok) return;
       const j = await r.json();
       setTrends(j);
+    } catch {}
+  }, []);
+
+  const loadGad7Last = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/screener/gad7/${profileId}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.last) {
+        setGad7Result({
+          score: j.last.score,
+          severity: j.last.severity,
+          advice: "",
+          createdAt: j.last.createdAt,
+        });
+        if (Array.isArray(j.last.answers) && j.last.answers.length === 7) {
+          setGad7(j.last.answers);
+        }
+      }
     } catch {}
   }, []);
 
@@ -511,6 +576,7 @@ export default function HealthAIPage() {
             loadTrends(stored);
             loadRisks(stored);
             loadPhq9Last(stored);
+            loadGad7Last(stored);
             setTab("check");
           }
         });
@@ -527,7 +593,7 @@ export default function HealthAIPage() {
         setTab(t);
       }
     } catch {}
-  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPhq9Last]);
+  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPhq9Last, loadGad7Last]);
 
   useEffect(() => {
     try {
@@ -612,6 +678,42 @@ export default function HealthAIPage() {
       setCheckNotes("");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitGad7 = async () => {
+    if (!profileIdRef.current) {
+      showToast(t("toast_no_profile", lang));
+      setTab("profile");
+      return;
+    }
+    if (gad7.some((v) => v == null)) {
+      showToast(t("gad7_incomplete", lang));
+      return;
+    }
+    setGad7Busy(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/screener/gad7`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: profileIdRef.current,
+          answers: gad7,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        showToast(t("toast_check_failed", lang));
+        return;
+      }
+      setGad7Result({
+        score: j.score,
+        severity: j.severity,
+        advice: j.advice,
+        createdAt: j.createdAt,
+      });
+    } finally {
+      setGad7Busy(false);
     }
   };
 
@@ -1667,6 +1769,178 @@ export default function HealthAIPage() {
                       >
                         {t("phq9_disclaimer_short", lang)} ·{" "}
                         {new Date(phq9Result.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {tab === "screener" ? (
+          <Card>
+            <CardHeader
+              title={t("gad7_title", lang)}
+              subtitle={t("gad7_subtitle", lang)}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => {
+                const qKey = `gad7_q${n}` as const;
+                const idx = n - 1;
+                const cur = gad7[idx];
+                return (
+                  <div
+                    key={n}
+                    style={{
+                      padding: 10,
+                      background: "rgba(20,28,46,0.5)",
+                      border: "1px solid rgba(120,160,220,0.18)",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "#cbd5e1",
+                        fontWeight: 600,
+                        marginBottom: 8,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 22,
+                          height: 22,
+                          textAlign: "center",
+                          lineHeight: "22px",
+                          background: "rgba(165,180,252,0.18)",
+                          borderRadius: 11,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: "#a5b4fc",
+                          marginRight: 8,
+                        }}
+                      >
+                        {n}
+                      </span>
+                      {t(qKey, lang)}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {[0, 1, 2, 3].map((opt) => {
+                        const active = cur === opt;
+                        return (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              const next = [...gad7];
+                              next[idx] = opt;
+                              setGad7(next);
+                            }}
+                            style={{
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              background: active
+                                ? "rgba(165,180,252,0.24)"
+                                : "rgba(8,12,24,0.6)",
+                              color: active ? "#a5b4fc" : "#94a3b8",
+                              border: active
+                                ? "1px solid rgba(165,180,252,0.55)"
+                                : "1px solid rgba(120,160,220,0.18)",
+                              borderRadius: 6,
+                              cursor: "pointer",
+                              flex: "1 1 100px",
+                            }}
+                          >
+                            {opt}. {t(`phq9_opt${opt}`, lang)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                onClick={submitGad7}
+                disabled={gad7Busy}
+                style={primaryBtn}
+              >
+                {t("phq9_submit", lang)}
+              </button>
+            </div>
+            {gad7Result ? (
+              <div style={{ marginTop: 14 }}>
+                {(() => {
+                  const sevColor: Record<string, string> = {
+                    minimal: "#5eead4",
+                    mild: "#7dd3fc",
+                    moderate: "#fbbf24",
+                    severe: "#f87171",
+                  };
+                  const sevLabel: Record<string, string> = {
+                    minimal: t("gad7_sev_minimal", lang),
+                    mild: t("gad7_sev_mild", lang),
+                    moderate: t("gad7_sev_moderate", lang),
+                    severe: t("gad7_sev_severe", lang),
+                  };
+                  const c = sevColor[gad7Result.severity] || "#94a3b8";
+                  return (
+                    <div
+                      style={{
+                        padding: 14,
+                        borderRadius: 10,
+                        background: `${c}10`,
+                        border: `1px solid ${c}55`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: 12,
+                          marginBottom: 6,
+                        }}
+                      >
+                        <div style={{ fontSize: 22, fontWeight: 900, color: c }}>
+                          {t("gad7_result", lang, { n: gad7Result.score })}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "#cbd5e1",
+                          }}
+                        >
+                          · {sevLabel[gad7Result.severity]}
+                        </div>
+                      </div>
+                      {gad7Result.advice ? (
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#cbd5e1",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {gad7Result.advice}
+                        </div>
+                      ) : null}
+                      <div
+                        style={{
+                          marginTop: 10,
+                          fontSize: 10,
+                          color: "#94a3b8",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        {t("phq9_disclaimer_short", lang)} ·{" "}
+                        {new Date(gad7Result.createdAt).toLocaleString()}
                       </div>
                     </div>
                   );

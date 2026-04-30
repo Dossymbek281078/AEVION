@@ -1027,6 +1027,87 @@ healthaiRouter.get(
   },
 );
 
+/**
+ * GAD-7 — Generalized Anxiety Disorder 7-item, стандартизированный
+ * скрининг тревожных расстройств. 7 вопросов 0-3, score 0-21.
+ *  0-4: minimal · 5-9: mild · 10-14: moderate · 15-21: severe
+ */
+const GAD7_LAST = new Map<string, { score: number; severity: string; answers: number[]; createdAt: string }>();
+
+function gad7Severity(score: number): { severity: string; advice: string } {
+  if (score <= 4)
+    return {
+      severity: "minimal",
+      advice:
+        "Тревога в норме. Продолжайте здоровые привычки: регулярный сон, физ. активность, ограничение кофеина.",
+    };
+  if (score <= 9)
+    return {
+      severity: "mild",
+      advice:
+        "Лёгкая тревога. Помогают: дыхательные техники (4-7-8), 20-30 мин прогулок, mindfulness 10 мин в день. Если симптомы сохраняются >3 недель — консультация специалиста.",
+    };
+  if (score <= 14)
+    return {
+      severity: "moderate",
+      advice:
+        "Умеренная тревога. Рекомендована консультация психотерапевта (КПТ показала высокую эффективность при тревожных расстройствах).",
+    };
+  return {
+    severity: "severe",
+    advice:
+      "Тяжёлая тревога. Активное лечение показано: психотерапия + (часто) фармакотерапия. Не откладывайте обращение к специалисту.",
+  };
+}
+
+healthaiRouter.post("/screener/gad7", async (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.profileId || typeof body.profileId !== "string") {
+    return res.status(400).json({ error: "profileId-required" });
+  }
+  const profile = await store.getProfile(body.profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  if (!Array.isArray(body.answers) || body.answers.length !== 7) {
+    return res.status(400).json({ error: "answers-must-be-7-numbers" });
+  }
+  const answers: number[] = [];
+  for (const a of body.answers) {
+    const n = Math.round(Number(a));
+    if (!Number.isFinite(n) || n < 0 || n > 3) {
+      return res.status(400).json({ error: "answer-must-be-0-to-3" });
+    }
+    answers.push(n);
+  }
+  const score = answers.reduce((s, v) => s + v, 0);
+  const { severity, advice } = gad7Severity(score);
+
+  const result = {
+    score,
+    severity,
+    advice,
+    answers,
+    createdAt: nowIso(),
+    disclaimer: DISCLAIMER,
+  };
+  GAD7_LAST.set(body.profileId, {
+    score,
+    severity,
+    answers,
+    createdAt: result.createdAt,
+  });
+  res.json(result);
+});
+
+healthaiRouter.get(
+  "/screener/gad7/:profileId",
+  async (req: Request, res: Response) => {
+    const last = GAD7_LAST.get(req.params.profileId);
+    if (!last) return res.json({ last: null });
+    res.json({ last });
+  },
+);
+
 /** Полный экспорт профиля для врача (или для backup). */
 healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
   const profileId = req.params.id;

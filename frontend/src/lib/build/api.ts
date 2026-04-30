@@ -419,6 +419,18 @@ export const buildApi = {
   }) => call<BuildExperience>("POST", "/api/build/experiences", input),
   deleteExperience: (id: string) =>
     call<{ id: string; deleted: boolean }>("DELETE", `/api/build/experiences/${encodeURIComponent(id)}`),
+  updateExperience: (
+    id: string,
+    input: Partial<{
+      title: string;
+      company: string;
+      city: string | null;
+      fromDate: string | null;
+      toDate: string | null;
+      current: boolean;
+      description: string | null;
+    }>,
+  ) => call<BuildExperience>("PATCH", `/api/build/experiences/${encodeURIComponent(id)}`, input),
   addEducation: (input: {
     institution: string;
     degree?: string | null;

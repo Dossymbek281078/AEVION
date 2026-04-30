@@ -16,6 +16,7 @@ import { VoiceInput } from "@/components/build/VoiceInput";
 import { ResumeImporter } from "@/components/build/ResumeImporter";
 import { AiCoachChat } from "@/components/build/AiCoachChat";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
+import { AiImprove } from "@/components/build/AiImprove";
 
 export default function ProfilePage() {
   return (
@@ -306,6 +307,12 @@ function ExperienceEditor({
               setDescription((prev) => (prev ? prev.trim() + " " + chunk : chunk))
             }
           />
+          <AiImprove
+            value={description}
+            onAccept={(v) => setDescription(v)}
+            kind="experience"
+            hint="Сделать описание роли конкретнее (объёмы, сроки, бюджет)"
+          />
           {err && <p className="text-xs text-rose-300">{err}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5">
@@ -325,30 +332,7 @@ function ExperienceEditor({
       ) : (
         <ul className="space-y-3">
           {items.map((e) => (
-            <li key={e.id} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-semibold text-white">{e.title}</div>
-                  <div className="text-sm text-slate-300">
-                    {e.company}
-                    {e.city ? ` · ${e.city}` : ""}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {[e.fromDate, e.current ? "present" : e.toDate].filter(Boolean).join(" — ")}
-                  </div>
-                  {e.description && (
-                    <p className="mt-1 text-sm text-slate-400">{e.description}</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => remove(e.id)}
-                  className="text-xs text-rose-300/80 hover:text-rose-200"
-                  aria-label="Delete experience"
-                >
-                  ✕
-                </button>
-              </div>
-            </li>
+            <ExperienceRow key={e.id} item={e} onChanged={onChange} onDelete={() => remove(e.id)} />
           ))}
         </ul>
       )}
@@ -368,6 +352,107 @@ function ExperienceEditor({
         .input-resume:disabled { opacity: 0.5; }
       `}</style>
     </div>
+  );
+}
+
+function ExperienceRow({
+  item,
+  onChanged,
+  onDelete,
+}: {
+  item: BuildExperience;
+  onChanged: () => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [desc, setDesc] = useState(item.description ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await buildApi.updateExperience(item.id, { description: desc.trim() || null });
+      setEditing(false);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <div className="font-semibold text-white">{item.title}</div>
+          <div className="text-sm text-slate-300">
+            {item.company}
+            {item.city ? ` · ${item.city}` : ""}
+          </div>
+          <div className="text-xs text-slate-500">
+            {[item.fromDate, item.current ? "present" : item.toDate].filter(Boolean).join(" — ")}
+          </div>
+          {!editing && item.description && (
+            <p className="mt-1 text-sm text-slate-400">{item.description}</p>
+          )}
+          {editing && (
+            <div className="mt-2 space-y-2">
+              <textarea
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                rows={3}
+                placeholder="Describe what you did, scope, results…"
+                className="w-full rounded-md border border-white/10 bg-white/5 p-2 text-sm text-white placeholder:text-slate-500"
+              />
+              <AiImprove
+                value={desc}
+                onAccept={(v) => setDesc(v)}
+                kind="experience"
+                hint="Сделать описание роли конкретнее"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={busy}
+                  className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+                >
+                  {busy ? "…" : "Сохранить"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDesc(item.description ?? "");
+                    setEditing(false);
+                  }}
+                  className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1 text-[10px] font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
+              title="Edit description (with AI improve)"
+            >
+              ✨ Edit
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            className="text-xs text-rose-300/80 hover:text-rose-200"
+            aria-label="Delete experience"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </li>
   );
 }
 

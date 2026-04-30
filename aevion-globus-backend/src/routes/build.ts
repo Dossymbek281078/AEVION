@@ -746,6 +746,47 @@ buildRouter.post("/experiences", async (req, res) => {
   }
 });
 
+// PATCH /api/build/experiences/:id — owner-only partial update.
+// Body fields are individually optional; null clears, undefined keeps.
+buildRouter.patch("/experiences/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const row = await pool.query(`SELECT "userId" FROM "BuildExperience" WHERE "id" = $1`, [id]);
+    if (row.rowCount === 0) return fail(res, 404, "experience_not_found");
+    if (row.rows[0].userId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    // Accept the same shape as POST but every field optional.
+    const sets: string[] = [];
+    const vals: unknown[] = [id];
+    function push(col: string, val: unknown) {
+      vals.push(val);
+      sets.push(`"${col}" = $${vals.length}`);
+    }
+    if (typeof req.body?.title === "string") push("title", req.body.title.trim().slice(0, 200));
+    if (typeof req.body?.company === "string") push("company", req.body.company.trim().slice(0, 200));
+    if (req.body?.city !== undefined)
+      push("city", req.body.city == null ? null : String(req.body.city).trim().slice(0, 120));
+    if (req.body?.fromDate !== undefined)
+      push("fromDate", req.body.fromDate == null ? null : String(req.body.fromDate).trim().slice(0, 32));
+    if (req.body?.toDate !== undefined)
+      push("toDate", req.body.toDate == null ? null : String(req.body.toDate).trim().slice(0, 32));
+    if (typeof req.body?.current === "boolean") push("current", req.body.current);
+    if (req.body?.description !== undefined)
+      push("description", req.body.description == null ? null : String(req.body.description).slice(0, 4000));
+    if (sets.length === 0) return ok(res, { id, updated: false });
+
+    const upd = await pool.query(
+      `UPDATE "BuildExperience" SET ${sets.join(", ")} WHERE "id" = $1 RETURNING *`,
+      vals,
+    );
+    return ok(res, upd.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "experience_update_failed", { details: (err as Error).message });
+  }
+});
+
 // DELETE /api/build/experiences/:id — owner only
 buildRouter.delete("/experiences/:id", async (req, res) => {
   try {

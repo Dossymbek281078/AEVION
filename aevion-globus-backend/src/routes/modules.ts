@@ -412,6 +412,47 @@ modulesRouter.get("/:id/embed", modulesEmbedRateLimit, async (req, res) => {
   }
 });
 
+// 🔹 GET /:id/detail — public, full sanitized record for a single module.
+//    Superset of /:id/embed (adds description, priority, base tier/hint and
+//    override metadata) so the /modules/[id] page can render without
+//    fan-out to /registry and stripping the rest. No PII (no actor).
+modulesRouter.get("/:id/detail", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const base = projects.find((p) => p.id === id);
+    if (!base) {
+      res.setHeader("Cache-Control", "public, max-age=30");
+      return res.status(404).json({ id, status: "not_found" });
+    }
+    const overrides = await loadOverrides();
+    const p = applyOverride(enrichProject(base), overrides.get(id));
+    res.setHeader("Cache-Control", "public, max-age=120");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      description: p.description,
+      kind: p.kind,
+      priority: p.priority,
+      tags: p.tags || [],
+      effectiveStatus: p.effectiveStatus,
+      effectiveTier: p.effectiveTier,
+      effectiveHint: p.effectiveHint,
+      baseStatus: p.status,
+      baseTier: p.runtime.tier,
+      baseHint: p.runtime.hint,
+      primaryPath: p.runtime.primaryPath,
+      apiHints: p.runtime.apiHints || [],
+      isOverridden: !!p.override,
+      overrideUpdatedAt: p.override?.updatedAt || null,
+      updatedAt: p.updatedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "detail failed", details: err.message });
+  }
+});
+
 // 🔹 GET /:id/badge.svg — shields.io-style two-segment badge.
 //    Color is keyed off effective tier:
 //      mvp_live    → green   #0d9488
@@ -520,22 +561,38 @@ modulesRouter.get("/dependency-graph", modulesEmbedRateLimit, async (_req, res) 
 });
 
 // 🔹 GET /changelog — public changelog of admin overrides (recent first).
+//    Optional ?moduleId= scopes to a single module — used by /modules/[id]
+//    detail page to render that module's own history without pulling 200
+//    rows of unrelated noise.
 modulesRouter.get("/changelog", modulesEmbedRateLimit, async (req, res) => {
   try {
     await ensureModulesTables();
     const limitRaw = parseInt(String(req.query.limit || "50"), 10);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+    const moduleId = String(req.query.moduleId || "").trim();
+
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (moduleId) {
+      params.push(moduleId);
+      conds.push(`"moduleId" = $${params.length}`);
+    }
+    params.push(limit);
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
     const r = await pool.query(
       `SELECT "id","moduleId","oldState","newState","at"
        FROM "ModuleStateChange"
+       ${where}
        ORDER BY "at" DESC
-       LIMIT $1`,
-      [limit]
+       LIMIT $${params.length}`,
+      params
     );
     res.setHeader("Cache-Control", "public, max-age=300");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.json({
       total: r.rowCount,
+      filter: { moduleId: moduleId || null, limit },
       // Public changelog deliberately omits actor (PII).
       items: r.rows.map((row: any) => ({
         id: row.id,

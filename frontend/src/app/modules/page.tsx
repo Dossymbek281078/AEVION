@@ -512,7 +512,7 @@ function ModuleCard({ m, t }: { m: RegistryItem; t: Record<string, string> }) {
             Embed badge →
           </Link>
           <Link
-            href={`/${m.id}`}
+            href={`/modules/${m.id}`}
             style={{
               padding: "5px 10px",
               borderRadius: 6,

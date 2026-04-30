@@ -33,18 +33,23 @@ import {
   buildHistoryContext,
   createEvalRun,
   createEvalSuite,
+  createPrompt,
   createRun,
   createSharedPreset,
   deleteEvalSuite,
+  deletePrompt,
   deleteSession,
   deleteSharedPreset,
   ensureSession,
   finishRun,
+  forkPrompt,
   getAnalytics,
   getCostTimeseries,
   getEvalRun,
   getEvalSuite,
   getMaxOrdering,
+  getPrompt,
+  getPromptVersionChain,
   getRun,
   getRunByShareToken,
   getSession,
@@ -55,6 +60,8 @@ import {
   insertMessage,
   listEvalSuites,
   listMessages,
+  listPrompts,
+  listPublicPrompts,
   listPublicSharedPresets,
   listRuns,
   listSessions,
@@ -67,6 +74,7 @@ import {
   touchSession,
   unshareRun,
   updateEvalSuite,
+  updatePrompt,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 
@@ -1234,6 +1242,130 @@ qcoreaiRouter.get("/eval/suites/:id/runs", async (req, res) => {
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: "list eval runs failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompts library (V6-P) — versioned custom system prompts per agent role
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/prompts", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, role, content, parentPromptId, isPublic } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
+    if (typeof content !== "string" || !content.trim()) return res.status(400).json({ error: "content required" });
+    const p = await createPrompt({
+      ownerUserId: auth.sub,
+      name,
+      description: typeof description === "string" ? description : null,
+      role: typeof role === "string" ? role : "writer",
+      content,
+      parentPromptId: typeof parentPromptId === "string" ? parentPromptId : null,
+      isPublic: isPublic === true,
+    });
+    res.json({ ok: true, prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "create prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+    const items = await listPrompts(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list prompts failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/public", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim().slice(0, 80);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const items = await listPublicPrompts(q, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public prompts failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const p = await getPrompt(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "prompt not found" });
+    if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
+      return res.status(404).json({ error: "prompt not found" });
+    }
+    res.json({ prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "get prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const p = await getPrompt(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "prompt not found" });
+    if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
+      return res.status(404).json({ error: "prompt not found" });
+    }
+    const chain = await getPromptVersionChain(String(req.params.id));
+    res.json({ items: chain });
+  } catch (err: any) {
+    res.status(500).json({ error: "version chain failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, role, isPublic } = req.body || {};
+    const p = await updatePrompt(String(req.params.id), auth.sub, {
+      name,
+      description,
+      role,
+      isPublic,
+    });
+    if (!p) return res.status(404).json({ error: "prompt not found or forbidden" });
+    res.json({ prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "update prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deletePrompt(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "prompt not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/prompts/:id/fork", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { content, name } = req.body || {};
+    const forked = await forkPrompt(String(req.params.id), auth.sub, {
+      content: typeof content === "string" ? content : undefined,
+      name: typeof name === "string" ? name : undefined,
+    });
+    if (!forked) return res.status(404).json({ error: "prompt not found or not forkable" });
+    res.json({ ok: true, prompt: forked });
+  } catch (err: any) {
+    res.status(500).json({ error: "fork prompt failed", details: err?.message });
   }
 });
 

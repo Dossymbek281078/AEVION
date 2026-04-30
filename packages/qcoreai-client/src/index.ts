@@ -170,6 +170,21 @@ export type EvalRun = {
   completedAt: string | null;
 };
 
+export type Prompt = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  role: string;
+  content: string;
+  version: number;
+  parentPromptId: string | null;
+  isPublic: boolean;
+  importCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ClientOptions = {
   /** Base URL of the AEVION backend, e.g. "https://api.aevion.io". */
   baseUrl: string;
@@ -639,6 +654,107 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`listSuiteRuns failed: ${await safeError(res)}`);
     const data = await res.json();
     return data.items || [];
+  }
+
+  /* ─── Prompts library (V6-P) ─────────────────────────────────────────── */
+
+  /** Create a new prompt. Defaults role="writer", isPublic=false, version=1. */
+  async createPrompt(opts: {
+    name: string;
+    content: string;
+    role?: string;
+    description?: string | null;
+    parentPromptId?: string | null;
+    isPublic?: boolean;
+  }): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/prompts"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createPrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
+  }
+
+  /** List the caller's prompts (most recently updated first). */
+  async listPrompts(limit = 100): Promise<Prompt[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listPrompts failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Browse public prompts shared by other users. No auth required. */
+  async listPublicPrompts(query?: string, limit = 30): Promise<Prompt[]> {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    params.set("limit", String(limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/public?${params.toString()}`));
+    if (!res.ok) throw new Error(`listPublicPrompts failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Fetch a single prompt (own or public). */
+  async getPrompt(id: string): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getPrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
+  }
+
+  /** Get all versions in a prompt's chain (ancestors + descendants). */
+  async getPromptVersions(id: string): Promise<Prompt[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}/versions`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getPromptVersions failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Update prompt metadata (name/description/role/isPublic). Content is immutable — fork to edit. */
+  async updatePrompt(
+    id: string,
+    patch: { name?: string; description?: string | null; role?: string; isPublic?: boolean }
+  ): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updatePrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
+  }
+
+  /** Delete one prompt version (other versions in the chain remain). */
+  async deletePrompt(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deletePrompt failed: ${await safeError(res)}`);
+  }
+
+  /**
+   * Fork a prompt — your own prompts get a new version in the chain;
+   * other users' public prompts get a fresh root copy in your library.
+   */
+  async forkPrompt(parentId: string, opts: { content?: string; name?: string } = {}): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(parentId)}/fork`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`forkPrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
   }
 
   /**

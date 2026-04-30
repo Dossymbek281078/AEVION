@@ -202,6 +202,38 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       ON "QCoreEvalRun" ("ownerUserId", "startedAt" DESC);
   `);
 
+  // Prompts library — versioned custom system prompts per agent role.
+  // parentPromptId chains versions; root prompts have parentPromptId=null.
+  // Public prompts can be browsed and forked into the user's own library.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePrompt" (
+      "id"              TEXT PRIMARY KEY,
+      "ownerUserId"     TEXT NOT NULL,
+      "name"            TEXT NOT NULL,
+      "description"     TEXT,
+      "role"            TEXT NOT NULL DEFAULT 'writer',
+      "content"         TEXT NOT NULL,
+      "version"         INTEGER NOT NULL DEFAULT 1,
+      "parentPromptId"  TEXT,
+      "isPublic"        BOOLEAN NOT NULL DEFAULT FALSE,
+      "importCount"     INTEGER NOT NULL DEFAULT 0,
+      "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCorePrompt_owner_updated_idx"
+      ON "QCorePrompt" ("ownerUserId", "updatedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCorePrompt_parent_idx"
+      ON "QCorePrompt" ("parentPromptId");
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCorePrompt_public_imports_idx"
+      ON "QCorePrompt" ("isPublic", "importCount" DESC, "updatedAt" DESC);
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

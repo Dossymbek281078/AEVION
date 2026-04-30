@@ -1204,6 +1204,7 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
             : 1) !== HMAC_KEY_VERSION,
         quantumShieldStatus: shieldStatus,
         shieldLegacy,
+        shieldId: cert.shieldId || null,
         shards: cert.shardCount,
         threshold: cert.shardThreshold,
         authorCosign: cosignStatus,
@@ -1280,7 +1281,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     await ensureTables();
 
     const { rows } = await pool.query(
-      `SELECT "id","objectId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
+      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
        FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`,
     );
 
@@ -1295,6 +1296,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         algorithm: r.algorithm,
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,
+        shieldId: r.shieldId || null,
         verifyUrl: `https://aevion.vercel.app/verify/${r.id}`,
       })),
       total: rows.length,

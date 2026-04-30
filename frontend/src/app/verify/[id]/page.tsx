@@ -38,6 +38,7 @@ type VerifyData = {
     keyRotatedSinceSigning?: boolean;
     quantumShieldStatus: string;
     shieldLegacy?: boolean;
+    shieldId?: string | null;
     shards: number;
     threshold: number;
     authorCosign?:
@@ -506,6 +507,24 @@ export default function VerifyPage() {
                 </div>
               ))}
             </div>
+
+            {integrity.shieldId && (
+              <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 10, background: "linear-gradient(135deg, rgba(13,148,136,0.06), rgba(59,130,246,0.04))", border: "1px solid rgba(13,148,136,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" as const, gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 18 }} aria-hidden>🛡️</span>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e" }}>Linked Quantum Shield record</div>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", color: "#475569", marginTop: 2 }}>{integrity.shieldId}</div>
+                  </div>
+                </div>
+                <a
+                  href={`/quantum-shield/${integrity.shieldId}`}
+                  style={{ padding: "8px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontSize: 12, fontWeight: 800 }}
+                >
+                  View Shield →
+                </a>
+              </div>
+            )}
           </div>
         </div>
 

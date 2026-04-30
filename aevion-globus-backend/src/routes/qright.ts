@@ -4,6 +4,14 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { deliverWebhook } from "../lib/webhookDelivery";
+
+const QRIGHT_WEBHOOK_DELIVERY_CFG = {
+  webhookTable: "QRightWebhook",
+  deliveryTable: "QRightWebhookDelivery",
+  entityColumn: "objectId",
+  userAgent: "AEVION-QRight-Webhook/1.0",
+} as const;
 
 export const qrightRouter = Router();
 
@@ -172,69 +180,15 @@ async function attemptWebhookDelivery(opts: {
   objectId: string | null;
   isRetry: boolean;
 }): Promise<{ ok: boolean; statusCode: number | null; error: string | null }> {
-  const sig = crypto.createHmac("sha256", opts.secret).update(opts.body).digest("hex");
-  let ok = false;
-  let statusCode: number | null = null;
-  let error: string | null = null;
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 5000);
-    const r = await fetch(opts.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "AEVION-QRight-Webhook/1.0",
-        "X-AEVION-Event": opts.eventType,
-        "X-AEVION-Signature": `sha256=${sig}`,
-      },
-      body: opts.body,
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    statusCode = r.status;
-    ok = r.ok;
-    if (!r.ok) error = `HTTP ${r.status}`;
-  } catch (err) {
-    error = (err as Error).message.slice(0, 500);
-  }
-
-  // Persist log row + bump per-webhook last* counters in parallel.
-  pool
-    .query(
-      `INSERT INTO "QRightWebhookDelivery"
-         ("id", "webhookId", "objectId", "eventType", "requestBody", "statusCode", "ok", "error", "isRetry")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        crypto.randomUUID(),
-        opts.webhookId,
-        opts.objectId,
-        opts.eventType,
-        opts.body,
-        statusCode,
-        ok,
-        error,
-        opts.isRetry,
-      ]
-    )
-    .catch((e: Error) => {
-      console.warn(`[qright] delivery log insert failed:`, e.message);
-    });
-  if (ok) {
-    pool
-      .query(
-        `UPDATE "QRightWebhook" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
-        [opts.webhookId]
-      )
-      .catch(() => {});
-  } else {
-    pool
-      .query(
-        `UPDATE "QRightWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
-        [opts.webhookId, error || "delivery failed"]
-      )
-      .catch(() => {});
-  }
-  return { ok, statusCode, error };
+  return deliverWebhook(pool, QRIGHT_WEBHOOK_DELIVERY_CFG, {
+    webhookId: opts.webhookId,
+    url: opts.url,
+    secret: opts.secret,
+    body: opts.body,
+    eventType: opts.eventType,
+    entityId: opts.objectId,
+    isRetry: opts.isRetry,
+  });
 }
 
 // Fan out a revoke event to every webhook registered by the object's owner.

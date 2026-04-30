@@ -22,7 +22,9 @@ const awardsEmbedRateLimit = rateLimit({
 const AWARD_TYPE_TO_PRODUCT_PREFIX: Record<string, string> = {
   music: "awards.music",
   film: "awards.film",
-  // future: "code", "design", etc.
+  code: "awards.code",
+  design: "awards.design",
+  science: "awards.science",
 };
 const AWARD_TYPES = new Set(Object.keys(AWARD_TYPE_TO_PRODUCT_PREFIX));
 const AWARD_SEASON_STATUSES = new Set([

@@ -15,6 +15,14 @@ import { rateLimit } from "../lib/rateLimit";
 // Reuse the privacy-aware Referer hostname bucket from QRight Tier 2 — same
 // behaviour, same lowercasing/www-strip, "(direct)" fallback.
 import { refererHost } from "../lib/qrightHelpers";
+import { deliverWebhook } from "../lib/webhookDelivery";
+
+const PLANET_WEBHOOK_DELIVERY_CFG = {
+  webhookTable: "PlanetWebhook",
+  deliveryTable: "PlanetWebhookDelivery",
+  entityColumn: "certificateId",
+  userAgent: "AEVION-Planet-Webhook/1.0",
+} as const;
 
 export const planetComplianceRouter = Router();
 
@@ -311,65 +319,15 @@ async function attemptPlanetWebhookDelivery(opts: {
   certificateId: string | null;
   isRetry: boolean;
 }): Promise<{ ok: boolean; statusCode: number | null; error: string | null }> {
-  const sig = crypto.createHmac("sha256", opts.secret).update(opts.body).digest("hex");
-  let ok = false;
-  let statusCode: number | null = null;
-  let error: string | null = null;
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 5000);
-    const r = await fetch(opts.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "AEVION-Planet-Webhook/1.0",
-        "X-AEVION-Event": opts.eventType,
-        "X-AEVION-Signature": `sha256=${sig}`,
-      },
-      body: opts.body,
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    statusCode = r.status;
-    ok = r.ok;
-    if (!r.ok) error = `HTTP ${r.status}`;
-  } catch (err) {
-    error = (err as Error).message.slice(0, 500);
-  }
-  pool
-    .query(
-      `INSERT INTO "PlanetWebhookDelivery"
-         ("id", "webhookId", "certificateId", "eventType", "requestBody", "statusCode", "ok", "error", "isRetry")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        crypto.randomUUID(),
-        opts.webhookId,
-        opts.certificateId,
-        opts.eventType,
-        opts.body,
-        statusCode,
-        ok,
-        error,
-        opts.isRetry,
-      ]
-    )
-    .catch(() => {});
-  if (ok) {
-    pool
-      .query(
-        `UPDATE "PlanetWebhook" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
-        [opts.webhookId]
-      )
-      .catch(() => {});
-  } else {
-    pool
-      .query(
-        `UPDATE "PlanetWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
-        [opts.webhookId, error || "delivery failed"]
-      )
-      .catch(() => {});
-  }
-  return { ok, statusCode, error };
+  return deliverWebhook(pool, PLANET_WEBHOOK_DELIVERY_CFG, {
+    webhookId: opts.webhookId,
+    url: opts.url,
+    secret: opts.secret,
+    body: opts.body,
+    eventType: opts.eventType,
+    entityId: opts.certificateId,
+    isRetry: opts.isRetry,
+  });
 }
 
 // Fan out a certificate-revoke event to every webhook the cert's owner

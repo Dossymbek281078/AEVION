@@ -20,6 +20,7 @@ import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { aevRouter } from "./routes/aev";
+import { aevionHubRouter } from "./routes/aevion-hub";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -240,6 +241,11 @@ app.use("/api/auth", authRouter);
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
 app.use("/api/awards", awardsRouter);
+
+// ==========================
+// AEVION Hub — composite cross-product health + OpenAPI index
+// ==========================
+app.use("/api/aevion", aevionHubRouter);
 
 app.use(
   (

@@ -503,6 +503,205 @@ buildRouter.delete("/profiles/:id/verify", async (req, res) => {
   }
 });
 
+// GET /api/build/profiles/:id/resume.pdf — public, downloadable PDF.
+// Renders the AEVION Resume Schema v2 into a clean A4 sheet via pdfkit.
+// Strips PII the same way /profiles/:id does (no email, no phone) so a
+// recruiter can save & forward a candidate's resume without leaking
+// contact info that's only meant to surface inside DMs.
+buildRouter.get("/profiles/:id/resume.pdf", async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const profileQ = await pool.query(
+      `SELECT p.*, u."email" FROM "BuildProfile" p
+       LEFT JOIN "AEVIONUser" u ON u."id" = p."userId"
+       WHERE p."userId" = $1 LIMIT 1`,
+      [id],
+    );
+    if (profileQ.rowCount === 0) return fail(res, 404, "profile_not_found");
+    const p = profileQ.rows[0];
+
+    const [expQ, eduQ] = await Promise.all([
+      pool.query(
+        `SELECT * FROM "BuildExperience" WHERE "userId" = $1
+         ORDER BY "current" DESC, "sortOrder" ASC, "createdAt" DESC`,
+        [id],
+      ),
+      pool.query(
+        `SELECT * FROM "BuildEducation" WHERE "userId" = $1
+         ORDER BY COALESCE("toYear",9999) DESC, "createdAt" DESC`,
+        [id],
+      ),
+    ]);
+
+    // pdfkit is already a backend dep (pulled in by QSign / QRight).
+    // Methods return the doc for chaining; we just want side effects.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const PDFDocument = ((await import("pdfkit")) as any).default;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const doc: any = new PDFDocument({ size: "A4", margin: 48 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c?: Buffer) => {
+      if (c) chunks.push(c);
+    });
+    const done = new Promise<Buffer>((resolve) => {
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+    });
+
+    const skills = safeParseJson(p.skillsJson, [] as string[]);
+    const languages = safeParseJson(p.languagesJson, [] as string[]);
+    const certifications = safeParseJson(p.certificationsJson, [] as Array<{ name?: string; issuer?: string; year?: number }>);
+    const portfolio = safeParseJson(p.portfolioJson, [] as Array<{ label?: string; url?: string }>);
+    const achievements = safeParseJson(p.achievementsJson, [] as Array<{ title?: string; description?: string; year?: number }>);
+    const preferredLocations = safeParseJson(p.preferredLocationsJson, [] as string[]);
+    const toolsOwned = safeParseJson(p.toolsOwnedJson, [] as string[]);
+
+    // Header
+    doc.fillColor("#0f172a").fontSize(24).text(p.name || "AEVION QBuild Resume", { continued: false });
+    if (p.title) doc.fontSize(13).fillColor("#0d9488").text(p.title);
+    if (p.verifiedAt) {
+      doc.fontSize(10).fillColor("#0284c7").text(`✓ Verified${p.verifiedReason ? ` (${p.verifiedReason})` : ""}`);
+    }
+    doc.moveDown(0.3);
+    const metaLine = [
+      p.city,
+      p.experienceYears ? `${p.experienceYears}y experience` : null,
+      p.buildRole,
+      p.openToWork ? "Open to work" : null,
+      p.salaryMin || p.salaryMax
+        ? `${p.salaryMin || "—"}–${p.salaryMax || "—"} ${p.salaryCurrency || "RUB"}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("  ·  ");
+    if (metaLine) doc.fontSize(10).fillColor("#334155").text(metaLine);
+
+    const hr = () => {
+      doc.moveDown(0.6);
+      doc
+        .strokeColor("#cbd5e1")
+        .moveTo(48, doc.y)
+        .lineTo(doc.page.width - 48, doc.y)
+        .stroke();
+      doc.moveDown(0.6);
+    };
+
+    const heading = (txt: string) => {
+      doc.moveDown(0.4);
+      doc.fillColor("#0f172a").fontSize(13).text(txt, { underline: false });
+      doc.moveDown(0.15);
+    };
+
+    if (p.summary) {
+      hr();
+      heading("Summary");
+      doc.fillColor("#0f172a").fontSize(10).text(String(p.summary), { align: "left" });
+    }
+
+    if (skills.length) {
+      hr();
+      heading("Skills");
+      doc.fillColor("#0f172a").fontSize(10).text(skills.join(" · "));
+    }
+    if (languages.length) {
+      doc.moveDown(0.3);
+      doc.fillColor("#334155").fontSize(10).text(`Languages: ${languages.join(" · ")}`);
+    }
+
+    // Construction-vertical signals
+    const cv: string[] = [];
+    if (p.driversLicense) cv.push(`Driver's license: ${p.driversLicense}`);
+    if (p.shiftPreference) cv.push(`Shifts: ${p.shiftPreference}`);
+    if (p.availabilityType) cv.push(`Availability: ${String(p.availabilityType).replace("_", " ")}`);
+    if (p.readyFromDate) cv.push(`Ready from: ${p.readyFromDate}`);
+    if (p.medicalCheckValid) cv.push(`Medical check ✓${p.medicalCheckUntil ? ` until ${p.medicalCheckUntil}` : ""}`);
+    if (p.safetyTrainingValid) cv.push(`Safety training ✓${p.safetyTrainingUntil ? ` until ${p.safetyTrainingUntil}` : ""}`);
+    if (preferredLocations.length) cv.push(`Preferred: ${preferredLocations.join(", ")}`);
+    if (cv.length) {
+      hr();
+      heading("Construction-vertical");
+      doc.fillColor("#0f172a").fontSize(10).text(cv.join("\n"));
+    }
+    if (toolsOwned.length) {
+      doc.moveDown(0.3);
+      doc.fillColor("#334155").fontSize(10).text(`Tools / equipment owned: ${toolsOwned.join(", ")}`);
+    }
+
+    if (expQ.rows.length) {
+      hr();
+      heading("Experience");
+      for (const e of expQ.rows) {
+        const dateLine = [e.fromDate, e.current ? "present" : e.toDate].filter(Boolean).join(" — ");
+        doc.fillColor("#0f172a").fontSize(11).text(`${e.title} — ${e.company}${e.city ? `, ${e.city}` : ""}`);
+        if (dateLine) doc.fillColor("#64748b").fontSize(9).text(dateLine);
+        if (e.description) doc.fillColor("#334155").fontSize(10).text(e.description, { paragraphGap: 4 });
+        doc.moveDown(0.25);
+      }
+    }
+
+    if (eduQ.rows.length) {
+      hr();
+      heading("Education");
+      for (const ed of eduQ.rows) {
+        const dl = [ed.fromYear, ed.toYear].filter(Boolean).join(" — ");
+        doc.fillColor("#0f172a").fontSize(11).text(ed.institution);
+        const second = [ed.degree, ed.field].filter(Boolean).join(", ");
+        if (second) doc.fillColor("#334155").fontSize(10).text(second);
+        if (dl) doc.fillColor("#64748b").fontSize(9).text(dl);
+        doc.moveDown(0.25);
+      }
+    }
+
+    if (certifications.length) {
+      hr();
+      heading("Certifications & licenses");
+      for (const c of certifications) {
+        const line = [c.name, c.issuer, c.year ? String(c.year) : null].filter(Boolean).join(" · ");
+        doc.fillColor("#0f172a").fontSize(10).text(line);
+      }
+    }
+
+    if (achievements.length) {
+      hr();
+      heading("Achievements");
+      for (const a of achievements) {
+        doc.fillColor("#0f172a").fontSize(10).text(`${a.title}${a.year ? ` (${a.year})` : ""}`);
+        if (a.description) doc.fillColor("#334155").fontSize(9).text(a.description);
+        doc.moveDown(0.15);
+      }
+    }
+
+    if (portfolio.length) {
+      hr();
+      heading("Portfolio");
+      for (const pf of portfolio) {
+        doc.fillColor("#0f172a").fontSize(10).text(`${pf.label}: ${pf.url}`);
+      }
+    }
+
+    if (p.description) {
+      hr();
+      heading("About");
+      doc.fillColor("#0f172a").fontSize(10).text(String(p.description), { paragraphGap: 4 });
+    }
+
+    // Footer
+    doc.moveDown(1);
+    doc.fillColor("#94a3b8").fontSize(9).text(`Generated by AEVION QBuild — aevion.kz · profile id ${id}`, {
+      align: "center",
+    });
+
+    doc.end();
+    const buf = await done;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="aevion-resume-${id.slice(0, 8)}.pdf"`);
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.status(200).send(buf);
+  } catch (err: unknown) {
+    return fail(res, 500, "resume_pdf_failed", { details: (err as Error).message });
+  }
+});
+
 // ── Experience CRUD ──────────────────────────────────────────────────
 
 // POST /api/build/experiences — add an experience entry

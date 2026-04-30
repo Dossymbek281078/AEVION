@@ -220,6 +220,9 @@ app.get("/api/openapi.json", (_req, res) => {
         post: { summary: "Mark profile as verified (admin only)" },
         delete: { summary: "Revoke verification (admin only)" },
       },
+      "/api/build/profiles/{id}/resume.pdf": {
+        get: { summary: "Public PDF render of the AEVION Resume Schema v2 (PII-stripped, cache 60s)" },
+      },
       "/api/build/experiences": { post: { summary: "Add a work experience entry to own profile" } },
       "/api/build/experiences/{id}": { delete: { summary: "Delete experience (owner only)" } },
       "/api/build/education": { post: { summary: "Add an education entry to own profile" } },

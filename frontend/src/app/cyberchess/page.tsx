@@ -19,6 +19,8 @@ import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
+import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
+import MultiPanel from "./MultiPanel";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
@@ -83,7 +85,17 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
     if(l.startsWith("bestmove")){
       if(this.mpvCb){this.mpvCb([...this.mpvLines]);this.mpvCb=null;this.mpvLines=[]}
       const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
-    if(l==="uciok"){this.ok=true;this.w!.postMessage("isready")}};this.w.postMessage("uci")}catch{this.w=null}}
+    if(l==="uciok"){
+      // Speed-up Stockfish: больше потоков + бOльший hash → analysis ~3-5x быстрее.
+      // Threads = cores-1 (оставляем ядро под UI/render). Hash 256MB.
+      try{
+        const cores=typeof navigator!=="undefined"&&navigator.hardwareConcurrency?Math.max(1,navigator.hardwareConcurrency-1):4;
+        this.w!.postMessage(`setoption name Threads value ${cores}`);
+        this.w!.postMessage("setoption name Hash value 256");
+        this.w!.postMessage("setoption name UCI_AnalyseMode value true");
+      }catch{}
+      this.ok=true;this.w!.postMessage("isready");
+    }};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
   go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
   eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
@@ -632,6 +644,11 @@ export default function CyberChessPage(){
   const[showInsights,sShowInsights]=useState(false);
   // Master Games (killer #17)
   const[showMasters,sShowMasters]=useState(false);
+  const[lbExpanded,sLbExpanded]=useState<LbCategory|null>(null);
+  const[showMultiPanel,sShowMultiPanel]=useState(false);
+  // Активная "дашборд-плитка" (3 крупные карточки на лендинге).
+  // play = варианты/режимы партии · learn = тренажёры · meta = аналитика+стрим.
+  const[activeDash,sActiveDash]=useState<"play"|"learn"|"meta"|null>(null);
   const[masterCurrent,sMasterCurrent]=useState<MasterGame|null>(null);
   const[masterPly,sMasterPly]=useState(0);
   const[masterMode,sMasterMode]=useState<"replay"|"guess">("replay");
@@ -920,14 +937,14 @@ export default function CyberChessPage(){
     const idleId=typeof window!=="undefined"&&"requestIdleCallback" in window
       ?(window as any).requestIdleCallback(()=>{
         if(done||!sfR.current?.ready())return;
-        sfR.current.eval(game.fen(),15,(cp,mate)=>{
+        sfR.current.eval(game.fen(),13,(cp,mate)=>{
           if(done)return;
           sEvalCp(cp*sign);sEvalMate(mate*sign);
         },()=>{done=true});
       },{timeout:200})
       :setTimeout(()=>{
         if(done||!sfR.current?.ready())return;
-        sfR.current.eval(game.fen(),15,(cp,mate)=>{
+        sfR.current.eval(game.fen(),13,(cp,mate)=>{
           if(done)return;
           sEvalCp(cp*sign);sEvalMate(mate*sign);
         },()=>{done=true});
@@ -986,7 +1003,7 @@ export default function CyberChessPage(){
         for(let i=results.length;i<hist.length;i++){
           if(cancelled)return;
           const fen=fenHist[i+1];if(!fen)break;
-          const ev=await evalAt(fen,10);
+          const ev=await evalAt(fen,8);
           const turn=fen.split(" ")[1];
           results.push({move:i+1,cp:ev.cp,mate:ev.mate,quality:classifyMove(prevCp,ev.cp,turn)});
           prevCp=ev.cp;
@@ -1003,7 +1020,7 @@ export default function CyberChessPage(){
       for(let i=0;i<hist.length;i++){
         if(cancelled){sRefiningAnalysis(false);return;}
         const fen=fenHist[i+1];if(!fen)break;
-        const ev=await evalAt(fen,18);
+        const ev=await evalAt(fen,14);
         const turn=fen.split(" ")[1];
         results2[i]={move:i+1,cp:ev.cp,mate:ev.mate,quality:classifyMove(prevCp2,ev.cp,turn)};
         prevCp2=ev.cp;
@@ -1858,7 +1875,8 @@ export default function CyberChessPage(){
     // Bullet 0pm: 500+5×280 = 1900ms · 5pm: 500ms
     // Blitz  0pm: 700+5×380 = 2600ms · 5pm: 700ms
     // Rapid  0pm: 900+5×480 = 3300ms · 5pm: 900ms
-    const delay=Math.max(rawDelay,premoveFloor);
+    // Тест-режим: AI ходит минимум 5 сек чтобы можно было неспеша щупать механику.
+    const delay=Math.max(rawDelay,premoveFloor,5000);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece
@@ -2099,10 +2117,16 @@ export default function CyberChessPage(){
         return;
       }
 
+      // Case CANCEL (chess.com-like): клик по любой клетке существующего премува
+      // (FROM или TO) — отменяет этот премув. Цепочки премувов теперь только драгом
+      // (drag отрабатывается в pointerup отдельно и не попадает сюда).
+      const pmHit=curPms.findIndex(x=>x.from===sq||x.to===sq);
+      if(pmHit>=0){sPms(v=>v.filter((_,i)=>i!==pmHit));snd("premove");return}
+
       // Case 2: no selection → click on own piece (real or virtual) starts new premove
       if(vp?.color===pCol){sPmSel(sq);return}
 
-      // Case 3: click on source square of existing premove → remove that premove
+      // Legacy fallback (на случай несмежных edge cases)
       const pmIdx=curPms.findIndex(x=>x.from===sq);
       if(pmIdx>=0){sPms(v=>[...v.slice(0,pmIdx),...v.slice(pmIdx+1)]);return}
 
@@ -2565,7 +2589,7 @@ export default function CyberChessPage(){
       const fen=fenHist[i];const turn=fen.split(" ")[1];
       const{cp,mate}=await new Promise<{cp:number;mate:number}>(res=>{
         let lastCp=0,lastMate=0;
-        sfR.current!.eval(fen,20,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+        sfR.current!.eval(fen,16,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
       });
       if(i>0){
         // Evaluate quality of move played that led to this position
@@ -2815,36 +2839,8 @@ export default function CyberChessPage(){
           </button>
         </div>
 
-        {/* Icon buttons */}
-        <Btn
-          variant="secondary"
-          size="sm"
-          icon={<span style={{fontSize:14}}>📊</span>}
-          onClick={()=>sShowVariantStats(true)}
-          title="Статистика по 12 режимам"
-          ariaLabel="Variant stats"
-          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
-        />
-        <Btn
-          variant={streamerMode?"accent":"secondary"}
-          size="sm"
-          icon={<span style={{fontSize:14}}>📺</span>}
-          active={streamerMode}
-          onClick={()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode — OBS-ready","info")}}
-          title={streamerMode?"Вернуть обычный вид":"Streamer mode для стримов (OBS)"}
-          ariaLabel="Streamer mode"
-          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
-        />
-        <Btn
-          variant={liveCommentary?"accent":"secondary"}
-          size="sm"
-          icon={<span style={{fontSize:13}}>🔊</span>}
-          onClick={()=>{sLiveCommentary(v=>!v);showToast(liveCommentary?"Live-комментарии выкл":"Live-комментарии вкл · Coach говорит вслух каждый ход","info")}}
-          title={liveCommentary?"Выключить live-комментарии":"Live commentary от Coach — читает ходы вслух"}
-          ariaLabel="Live commentary toggle"
-          active={liveCommentary}
-          style={{padding:"6px 10px",minHeight:36,minWidth:36}}
-        />
+        {/* Утилиты в шапке — только настройки/help/mute. Стрим, голос, варианты —
+            переехали в большие дашборд-тайлы на лендинге. */}
         <Btn
           variant="secondary"
           size="sm"
@@ -2903,13 +2899,6 @@ export default function CyberChessPage(){
             const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
           }
         };
-        const subBy:Record<string,string>={
-          play:"Партии · AI · Hotseat · Варианты",
-          puzzles:`${PUZZLES.length.toLocaleString()} тактических задач`,
-          analysis:"Stockfish · MultiPV · «угадай ход»",
-          coach:"AI-разбор · база знаний · 45 тем"
-        };
-        const sym=tab==="puzzles"?SYM.puzzle:tab==="analysis"?SYM.analysis:tab==="coach"?SYM.coach:SYM.play;
         return <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             <SymTab sym={SYM.play}     active={tab==="play"}     onClick={()=>switchTab("play")}/>
@@ -2918,7 +2907,15 @@ export default function CyberChessPage(){
             <SymTab sym={SYM.analysis} active={tab==="analysis"} onClick={()=>switchTab("analysis")}/>
           </div>
           <div style={{flex:1}}/>
-          <SymCrest sym={sym} subtitle={subBy[tab]}/>
+          <button onClick={()=>sShowMultiPanel(true)} title="Multi-panel: chess + YouTube/Twitch streams" className="cc-focus-ring" style={{
+            display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
+            borderRadius:RADIUS.full,border:"1px solid #c4b5fd",
+            background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",color:CC.accent,
+            fontSize:13,fontWeight:800,cursor:"pointer",
+            boxShadow:"0 2px 6px rgba(124,58,237,0.18)"
+          }}>
+            <span>📺</span><span>Multi-panel</span>
+          </button>
         </div>;
       })()}
 
@@ -2934,87 +2931,103 @@ export default function CyberChessPage(){
         const achPct=Math.round(achGot/achTotal*100);
         return<div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
 
-          {/* ─── HERO: format + color + AI + actions ─── */}
+          {/* ─── HERO: format + color + AI + premoves — компактно вместе ─── */}
           <Card padding={SPACE[4]} elevation="md">
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:SPACE[4]}}>
-
-              {/* Time format */}
-              <div>
-                <SectionHeader title="ФОРМАТ" hint={`≈ ${Math.round(tc.ini/60*2+tc.inc*0.5)} min`}/>
-                <UiTabs<"Bullet"|"Blitz"|"Rapid"|"Custom">
-                  variant="pill"
-                  size="sm"
-                  value={activeCat}
-                  onChange={(c)=>{
+            {/* Формат + Time chips — на всю ширину, КРУПНЫЕ названия */}
+            <div>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:SPACE[2]}}>
+                <span style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Формат партии</span>
+                <span style={{fontSize:12,color:CC.textMute,fontWeight:700}}>≈ {Math.round(tc.ini/60*2+tc.inc*0.5)} мин</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1]}}>
+                {(["Bullet","Blitz","Rapid","Custom"] as const).map(c=>{
+                  const sel=activeCat===c;
+                  const tone={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Custom:CC.accent}[c];
+                  const emoji={Bullet:"💨",Blitz:"⚡",Rapid:"🕐",Custom:"⚙"}[c];
+                  return <button key={c} onClick={()=>{
                     if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
                     sUseCustom(false);
                     const first=TCS.findIndex(t=>t.cat===c);
                     if(first>=0)sTcI(first);
-                  }}
-                  tabs={[
-                    {value:"Bullet",label:"Bullet"},
-                    {value:"Blitz",label:"Blitz"},
-                    {value:"Rapid",label:"Rapid"},
-                    {value:"Custom",label:"Custom"},
-                  ]}
-                />
-                {activeCat!=="Custom"?(
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,marginTop:SPACE[2]}}>
-                    {catTcs.map(({t,i})=>{
-                      const selected=!useCustom&&tcI===i;
-                      return <button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} className="cc-focus-ring"
-                        style={{padding:"9px 0",borderRadius:RADIUS.sm,
-                          border:selected?`2px solid ${catColor}`:`1px solid ${CC.border}`,
-                          background:selected?`${catColor}15`:CC.surface1,
-                          color:selected?catColor:CC.text,
-                          fontSize:12,fontWeight:selected?900:700,cursor:"pointer",
-                          fontFamily:"ui-monospace, SFMono-Regular, monospace",
-                          transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-                        {t.name}
-                      </button>;
-                    })}
-                  </div>
-                ):(
-                  <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],alignItems:"center"}}>
-                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
-                      Min <input type="number" min={1} max={60} value={customMin}
-                        onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))}
-                        style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
-                    </label>
-                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
-                      +Inc <input type="number" min={0} max={60} value={customInc}
-                        onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))}
-                        style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
-                    </label>
-                    <Badge tone="accent" size="md">{customMin}+{customInc}</Badge>
-                  </div>
-                )}
+                  }} className="cc-focus-ring" style={{
+                    display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                    padding:"12px 8px",
+                    borderRadius:RADIUS.md,
+                    border:sel?`2px solid ${tone}`:`1px solid ${CC.border}`,
+                    background:sel?`linear-gradient(135deg, ${tone}10, ${tone}22)`:CC.surface1,
+                    color:sel?tone:CC.text,
+                    cursor:"pointer",
+                    fontSize:18,fontWeight:sel?900:800,letterSpacing:0.4,
+                    boxShadow:sel?`0 4px 12px ${tone}33`:"none",
+                    transition:`all ${MOTION.fast} ${MOTION.ease}`,
+                  }}>
+                    <span style={{fontSize:20,lineHeight:1}}>{emoji}</span>
+                    <span style={{fontSize:15,fontWeight:sel?900:800}}>{c}</span>
+                  </button>;
+                })}
               </div>
+              {activeCat!=="Custom"?(
+                <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,marginTop:SPACE[2]}}>
+                  {catTcs.map(({t,i})=>{
+                    const selected=!useCustom&&tcI===i;
+                    return <button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} className="cc-focus-ring"
+                      style={{padding:"11px 0",borderRadius:RADIUS.sm,
+                        border:selected?`2px solid ${catColor}`:`1px solid ${CC.border}`,
+                        background:selected?`${catColor}15`:CC.surface1,
+                        color:selected?catColor:CC.text,
+                        fontSize:14,fontWeight:selected?900:800,cursor:"pointer",
+                        fontFamily:"ui-monospace, SFMono-Regular, monospace",
+                        transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                      {t.name}
+                    </button>;
+                  })}
+                </div>
+              ):(
+                <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],alignItems:"center"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
+                    Min <input type="number" min={1} max={60} value={customMin}
+                      onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))}
+                      style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
+                  </label>
+                  <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
+                    +Inc <input type="number" min={0} max={60} value={customInc}
+                      onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))}
+                      style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
+                  </label>
+                  <Badge tone="accent" size="md">{customMin}+{customInc}</Badge>
+                </div>
+              )}
+            </div>
 
+            {/* Разделитель */}
+            <div style={{height:1,background:CC.border,margin:`${SPACE[3]}px 0`}}/>
+
+            {/* Цвет + AI + Премувы — на одной строке (responsive grid) */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:SPACE[3]}}>
               {/* Color */}
               <div>
-                <SectionHeader title="ЦВЕТ"/>
-                <div style={{display:"flex",gap:SPACE[2]}}>
+                <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,marginBottom:SPACE[1],textTransform:"uppercase" as const}}>Цвет</div>
+                <div style={{display:"flex",gap:6}}>
                   {([["w","♔","Белые"],["b","♚","Чёрные"]] as const).map(([v,ic,name])=>{
                     const selected=pCol===v;
                     return <button key={v} onClick={()=>sPCol(v as ChessColor)} className="cc-focus-ring"
-                      style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                        padding:"10px 0",borderRadius:RADIUS.md,
+                      style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:1,
+                        padding:"8px 0",borderRadius:RADIUS.md,
                         border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
                         background:selected?CC.brandSoft:CC.surface1,
                         color:selected?CC.brand:CC.text,
                         cursor:"pointer",transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-                      <span style={{fontSize:24,lineHeight:1}}>{ic}</span>
+                      <span style={{fontSize:22,lineHeight:1}}>{ic}</span>
                       <span style={{fontSize:11,fontWeight:700}}>{name}</span>
                     </button>;
                   })}
                   <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Random"
                     className="cc-focus-ring"
-                    style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                      padding:"10px 0",borderRadius:RADIUS.md,
+                    style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:1,
+                      padding:"8px 0",borderRadius:RADIUS.md,
                       border:`1px dashed ${CC.borderStrong}`,background:CC.surface2,
                       color:CC.textDim,cursor:"pointer"}}>
-                    <span style={{fontSize:22,lineHeight:1}}>🎲</span>
+                    <span style={{fontSize:20,lineHeight:1}}>🎲</span>
                     <span style={{fontSize:11,fontWeight:700}}>Random</span>
                   </button>
                 </div>
@@ -3022,25 +3035,41 @@ export default function CyberChessPage(){
 
               {/* AI opponent */}
               <div>
-                <SectionHeader title="СОПЕРНИК" hint={`${lv.name} · ${lv.elo} ELO${aiI===5&&!chessy.owned.master_ai?" 🔒":""}`}/>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:SPACE[1]}}>
+                  <span style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Соперник</span>
+                  <span style={{fontSize:11,fontWeight:800,color:lv.color}}>{lv.name} · {lv.elo}{aiI===5&&!chessy.owned.master_ai?" 🔒":""}</span>
+                </div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <input type="range" min={0} max={chessy.owned.master_ai?5:4}
                     value={Math.min(aiI,chessy.owned.master_ai?5:4)}
                     onChange={e=>{const v=+e.target.value;if(v===5&&!chessy.owned.master_ai){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
-                  <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",
-                    borderRadius:RADIUS.full,background:lv.color+"20",color:lv.color,
-                    fontSize:12,fontWeight:900,minWidth:80,justifyContent:"center"}}>
-                    {lv.name}{aiI>=3?" ⚡":""}
-                  </div>
                 </div>
                 {!chessy.owned.master_ai&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"
-                  style={{marginTop:SPACE[2],padding:"5px 10px",borderRadius:RADIUS.sm,
+                  style={{marginTop:6,padding:"4px 9px",borderRadius:RADIUS.sm,
                     border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
-                    fontSize:12,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+                    fontSize:10.5,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
                   🔒 Master AI · 30 Chessy
                 </button>}
+              </div>
+
+              {/* Premove queue limit */}
+              <div>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:SPACE[1]}}>
+                  <span style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>⚡ Премувы</span>
+                  <span style={{fontSize:13,fontWeight:900,color:CC.info,fontFamily:"ui-monospace,monospace"}}>{pmLim}</span>
+                </div>
+                <div style={{display:"flex",gap:4,marginBottom:6}}>
+                  {[3,5,10,20].map(n=><button key={n} onClick={()=>sPmLim(n)}
+                    style={{flex:1,padding:"6px 0",borderRadius:RADIUS.sm,fontSize:12,fontWeight:800,
+                      border:pmLim===n?`2px solid ${CC.info}`:`1px solid ${CC.border}`,
+                      background:pmLim===n?CC.infoSoft:CC.surface1,
+                      color:pmLim===n?CC.info:CC.textDim,cursor:"pointer"}}>{n}</button>)}
+                </div>
+                <input type="range" min={1} max={20} value={pmLim}
+                  onChange={e=>sPmLim(+e.target.value)}
+                  style={{width:"100%",accentColor:CC.info}}/>
               </div>
             </div>
 
@@ -3085,129 +3114,8 @@ export default function CyberChessPage(){
                 </Btn>
               </div>
 
-              {/* Premove queue limit — лимит сколько премувов можно поставить в очередь */}
-              <div style={{marginTop:SPACE[3],padding:`${SPACE[2]}px ${SPACE[3]}px`,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`,display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
-                <span style={{fontSize:11,fontWeight:900,letterSpacing:1.2,color:CC.textDim,textTransform:"uppercase" as const,whiteSpace:"nowrap"}}>⚡ Очередь премувов</span>
-                <div style={{display:"flex",gap:4}}>
-                  {[3,5,10,20].map(n=><button key={n} onClick={()=>sPmLim(n)}
-                    style={{padding:"5px 12px",borderRadius:RADIUS.sm,fontSize:12,fontWeight:800,
-                      border:pmLim===n?`2px solid ${CC.info}`:`1px solid ${CC.border}`,
-                      background:pmLim===n?CC.infoSoft:CC.surface1,
-                      color:pmLim===n?CC.info:CC.textDim,cursor:"pointer"}}>{n}</button>)}
-                </div>
-                <span style={{fontSize:11,color:CC.textMute,fontWeight:600}}>или</span>
-                <input type="range" min={1} max={20} value={pmLim}
-                  onChange={e=>sPmLim(+e.target.value)}
-                  style={{flex:1,minWidth:120,maxWidth:200,accentColor:CC.info}}/>
-                <span style={{fontSize:13,fontWeight:900,color:CC.info,fontFamily:"ui-monospace,monospace",minWidth:24,textAlign:"right"}}>{pmLim}</span>
-              </div>
             </div>
 
-            {/* ─── Section 2: GAME MODES ─── */}
-            <div style={{marginTop:SPACE[4]}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
-                <span style={{fontSize:10,fontWeight:900,color:"#9a3412",letterSpacing:1.5,textTransform:"uppercase" as const}}>▸ Режимы и оппоненты</span>
-                <div style={{flex:1,height:1,background:`linear-gradient(90deg, #fb923c33, transparent)`}}/>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))",gap:SPACE[2]}}>
-                <Btn size="lg" variant="secondary" onClick={()=>sShowVariants(true)}
-                  style={{background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
-                    border:"1px solid #fb923c",color:"#9a3412"}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>🎲 Variants <Badge tone="gold" size="xs">{VARIANTS.length}</Badge></span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600,maxWidth:140,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
-                      {variant==="standard"?"Fischer 960 · Atomic · ...":VARIANTS.find(v=>v.id===variant)?.name||variant}
-                    </span>
-                  </div>
-                </Btn>
-                <Btn size="lg" variant="secondary" onClick={()=>{
-                  const r=randomVariant();
-                  sVariant(r);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
-                  if(r==="asymmetric")sManualArmyFen("");
-                  setTimeout(()=>newG(),50);
-                  showToast(`🎰 Surprise Me: ${VARIANTS.find(v=>v.id===r)?.name}`,"success");
-                }} style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
-                  border:"1px solid #c4b5fd",color:CC.accent}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>🎰 Surprise Me</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>рандом-режим</span>
-                  </div>
-                </Btn>
-                <Btn size="lg" variant="secondary" onClick={()=>sShowTournament(true)}
-                  style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",
-                    border:"1px solid #fcd34d",color:"#92400e"}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>🏆 Tournament</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-                      {tournament?(tournament.currentRound==="done"?"открой ✓":`${tournament.currentRound.toUpperCase()}`):"8 ботов knockout"}
-                    </span>
-                  </div>
-                </Btn>
-                <Btn size="lg" variant="secondary" onClick={()=>sShowGhost(true)}
-                  style={{background:"linear-gradient(135deg,#1f2937,#0f172a)",
-                    border:"1px solid #374151",color:"#fbbf24"}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>👻 Ghost Mode</span>
-                    <span style={{fontSize:11,color:"#9ca3af",fontWeight:600,maxWidth:140,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
-                      {ghostMode&&activeGhost?`vs ${activeGhost.name}`:"Magnus · Tal · Fischer"}
-                    </span>
-                  </div>
-                </Btn>
-                <Btn size="lg" variant="secondary" onClick={()=>sShowCloner(true)}
-                  style={{background:"linear-gradient(135deg,#ecfeff,#cffafe)",
-                    border:"1px solid #67e8f9",color:"#155e75"}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>🧬 Style Cloner</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-                      {clones.length>0?`${clones.length} клон${clones.length===1?"":clones.length<5?"а":"ов"}`:"Lichess → бот"}
-                    </span>
-                  </div>
-                </Btn>
-                {chessy.owned.ai_rival&&<Btn size="lg" variant="secondary" onClick={()=>{
-                  if(!rivalProfile){sRivalProfile(createRival(rat))}
-                  sShowRivalGreet(true);
-                }} style={{
-                  background:"linear-gradient(135deg,#1e1b4b,#4c1d95,#7c3aed)",
-                  border:"1px solid #a78bfa",color:"#fff",
-                  boxShadow:"0 4px 12px rgba(124,58,237,0.35)"}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>⚔ {rivalProfile?rivalProfile.name:"AI Rival"}</span>
-                    <span style={{fontSize:11,opacity:0.85,fontWeight:600}}>
-                      {rivalProfile?`${rivalProfile.rating} ELO`:"персональный"}
-                    </span>
-                  </div>
-                </Btn>}
-              </div>
-            </div>
-
-            {/* ─── Section 3: TRAINING & DAILY ─── */}
-            <div style={{marginTop:SPACE[4]}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
-                <span style={{fontSize:10,fontWeight:900,color:CC.accent,letterSpacing:1.5,textTransform:"uppercase" as const}}>▸ Тренировка и daily</span>
-                <div style={{flex:1,height:1,background:`linear-gradient(90deg, ${CC.accent}33, transparent)`}}/>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))",gap:SPACE[2]}}>
-                <Btn size="lg" variant="secondary" onClick={()=>sShowOpeningTrainer(true)}
-                  style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",
-                    border:"1px solid #d8b4fe",color:CC.accent}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>🎓 Opening Trainer</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>drill дебютов</span>
-                  </div>
-                </Btn>
-                <Btn size="lg" variant="secondary" onClick={()=>{
-                  const{hunt,state}=todayHunt();
-                  sBrilliancyHunt(hunt);sBrilliancyState(state);sBrilliancyInput("");sBrilliancyResult(null);
-                  sShowBrilliancy(true);
-                }} style={{background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
-                  border:"1px solid #fcd34d",color:"#92400e"}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>💎 Brilliancy <Badge tone="gold" size="xs">daily</Badge></span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>найди гениальный ход</span>
-                  </div>
-                </Btn>
-              </div>
-            </div>
           </Card>
 
           {/* ─── DAILY hub: Daily Variant Challenge + Daily Puzzle side-by-side ─── */}
@@ -3274,98 +3182,126 @@ export default function CyberChessPage(){
             </Card>;
           })()}
 
-          {/* ─── Daily Puzzle Leaderboard ─── */}
+          {/* ─── DASHBOARDS: 3 крупные плитки сгруппированные по смыслу.
+                 1. ИГРА: что и как играть (варианты, hotseat, турниры)
+                 2. ТРЕНИРОВКА: упражнения для роста (координаты, эндшпиль, личность, editor)
+                 3. АНАЛИЗ & СТРИМ: разбор партий + создание контента
+              ─── */}
           {(()=>{
-            const PUZZLE_LB=[
-              {rank:1,name:"Magnus_C",initial:"M",time:"00:08",streak:31},
-              {rank:2,name:"DarkBishop",initial:"D",time:"00:14",streak:7},
-              {rank:3,name:"QueenGambit",initial:"Q",time:"00:22",streak:14},
-              {rank:4,name:"RookHunter",initial:"R",time:"00:35",streak:5},
-              {rank:5,name:"Aevion_X",initial:"A",time:"00:47",streak:22},
-              {rank:6,name:"NightRider",initial:"N",time:"00:59",streak:3},
-              {rank:7,name:"SilentKnight",initial:"S",time:"01:04",streak:9},
-              {rank:8,name:"PawnStorm",initial:"P",time:"01:10",streak:1},
-              {rank:9,name:"BlitzPrince",initial:"B",time:"01:11",streak:18},
-              {rank:10,name:"ChessDragon",initial:"C",time:"01:12",streak:6},
+            type DashId="play"|"learn"|"meta";
+            const dashes:{id:DashId;icon:string;title:string;hint:string;tint:string;ring:string;active:number}[]=[
+              {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · Турниры",         tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)},
+              {id:"learn",icon:"🎓",title:"Тренировка",   hint:"Координаты · Эндшпиль · Личность · Editor",tint:"linear-gradient(135deg,#fef3c7,#fde68a)",ring:"#d97706",active:0},
+              {id:"meta", icon:"📊",title:"Анализ & Стрим",hint:"Game DNA · Insights · OBS · Live-озвучка", tint:"linear-gradient(135deg,#ede9fe,#ddd6fe)",ring:"#7c3aed",active:(streamerMode?1:0)+(liveCommentary?1:0)},
             ];
-            const medalColor=(r:number)=>r===1?"#f59e0b":r===2?"#94a3b8":r===3?"#b45309":"transparent";
-            const medalText=(r:number)=>r===1?"🥇":r===2?"🥈":r===3?"🥉":`#${r}`;
-            return <Card padding={0} elevation="sm" style={{overflow:"hidden",animation:"fadeInUp 0.4s ease-out 0.1s both"}}>
-              <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,
-                background:"linear-gradient(90deg,#e0f2fe,#bae6fd,#e0f2fe)",
-                borderBottom:`1px solid ${CC.border}`,
-                display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:16}}>🏆</span>
-                <span style={{fontSize:11,fontWeight:900,color:"#0c4a6e",letterSpacing:1,textTransform:"uppercase" as const}}>Daily Puzzle · Top 10 Fastest</span>
-                <div style={{flex:1}}/>
-                <span style={{fontSize:10,color:"#075985",fontWeight:700}}>сегодня</span>
-              </div>
-              <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,display:"flex",flexDirection:"column",gap:2}}>
-                {PUZZLE_LB.map(entry=>(
-                  <div key={entry.rank} style={{
-                    display:"flex",alignItems:"center",gap:SPACE[2],
-                    padding:`${SPACE[1]}px ${SPACE[2]}px`,
-                    borderRadius:RADIUS.sm,
-                    background:entry.rank<=3?`${medalColor(entry.rank)}18`:CC.surface1,
-                    border:`1px solid ${entry.rank<=3?`${medalColor(entry.rank)}44`:CC.border}`,
-                    transition:`background ${MOTION.base} ${MOTION.ease}`}}>
-                    <span style={{fontSize:entry.rank<=3?15:12,fontWeight:900,minWidth:28,textAlign:"center" as const}}>{medalText(entry.rank)}</span>
-                    <div style={{
-                      width:28,height:28,borderRadius:"50%",flexShrink:0,
-                      background:`linear-gradient(135deg,${CC.brand},${CC.accent})`,
-                      display:"flex",alignItems:"center",justifyContent:"center",
-                      fontSize:12,fontWeight:900,color:"#fff"}}>
-                      {entry.initial}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:700,color:CC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{entry.name}</div>
-                      <div style={{fontSize:10,color:CC.textDim,display:"flex",alignItems:"center",gap:4}}>
-                        <span>🔥 {entry.streak}d streak</span>
+            const isOpen=(id:DashId)=>activeDash===(id as any);
+            const toggle=(id:DashId)=>sActiveDash(v=>v===id?null:(id as any));
+            return <div style={{display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:SPACE[2]}}>
+                {dashes.map(d=>{
+                  const open=isOpen(d.id);
+                  return <button key={d.id} onClick={()=>toggle(d.id)} className="cc-focus-ring" style={{
+                    position:"relative",overflow:"hidden",
+                    padding:"16px 18px",
+                    border:`1px solid ${open?d.ring:"transparent"}`,
+                    borderRadius:RADIUS.lg,
+                    background:d.tint,
+                    boxShadow:open?`0 8px 24px ${d.ring}45, 0 0 0 3px ${d.ring}22`:SHADOW.sm,
+                    cursor:"pointer",textAlign:"left",
+                    transform:open?"translateY(-3px)":"none",
+                    transition:`transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.base} ${MOTION.ease}, border-color ${MOTION.fast} ${MOTION.ease}`,
+                  }}>
+                    {d.active>0&&<span style={{position:"absolute",top:10,right:12,minWidth:20,height:20,padding:"0 7px",borderRadius:10,background:d.ring,color:"#fff",fontSize:11,fontWeight:900,display:"inline-flex",alignItems:"center",justifyContent:"center",letterSpacing:0.3,boxShadow:`0 2px 6px ${d.ring}66`}}>{d.active}</span>}
+                    <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                      <span style={{fontSize:34,lineHeight:1}}>{d.icon}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:900,color:CC.text,lineHeight:1.2,letterSpacing:0.2}}>{d.title}</div>
+                        <div style={{fontSize:11,color:CC.textDim,marginTop:3,lineHeight:1.3}}>{d.hint}</div>
                       </div>
+                      <span style={{fontSize:14,color:d.ring,fontWeight:900,transform:open?"rotate(180deg)":"none",transition:`transform ${MOTION.base} ${MOTION.ease}`}}>▾</span>
                     </div>
-                    <span style={{fontSize:13,fontWeight:900,color:entry.rank===1?CC.accent:CC.text,fontVariantNumeric:"tabular-nums",letterSpacing:0.5}}>{entry.time}</span>
-                  </div>
-                ))}
+                  </button>;
+                })}
               </div>
-            </Card>;
+              {/* ───── Раскрытые панели ───── */}
+              {activeDash==="play"&&<Card padding={SPACE[3]} elevation="sm">
+                <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[3],paddingBottom:SPACE[2],borderBottom:`1px solid ${CC.border}`}}>
+                  <span style={{fontSize:18}}>🎮</span>
+                  <span style={{fontSize:13,fontWeight:900,letterSpacing:0.4,color:CC.text,textTransform:"uppercase" as const}}>Игра — конфигурация партии</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
+                  <button onClick={()=>sShowVariants(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${variant!=="standard"?"#3b82f6":CC.border}`,background:variant!=="standard"?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>{variant!=="standard"?VARIANTS.find(v=>v.id===variant)?.emoji||"🎲":"🎲"}</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>12 Вариантов</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Fischer 960 · Atomic · KotH · Crazyhouse · Three-Check +6. Сейчас: <strong>{variant==="standard"?"Стандарт":VARIANTS.find(v=>v.id===variant)?.name}</strong></div>
+                  </button>
+                  <button onClick={()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл — играй вдвоём за одной доской","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${hotseat?"#3b82f6":CC.border}`,background:hotseat?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Hotseat 1v1</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:hotseat?"#3b82f6":"#e5e7eb",color:hotseat?"#fff":CC.textDim}}>{hotseat?"ON":"OFF"}</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без AI — оба игрока ходят на одном устройстве.</div>
+                  </button>
+                  <button onClick={()=>sShowTournament(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🏆</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Турниры</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Свисс / Round-Robin против AI разных рейтингов.</div>
+                  </button>
+                  <button onClick={()=>sShowVariantStats(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📈</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Статы по режимам</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Винрейт, средняя точность, любимый вариант.</div>
+                  </button>
+                </div>
+              </Card>}
+              {activeDash==="learn"&&<Card padding={SPACE[3]} elevation="sm">
+                <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[3],paddingBottom:SPACE[2],borderBottom:`1px solid ${CC.border}`}}>
+                  <span style={{fontSize:18}}>🎓</span>
+                  <span style={{fontSize:13,fontWeight:900,letterSpacing:0.4,color:CC.text,textTransform:"uppercase" as const}}>Тренировка — упражнения для роста</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:SPACE[2]}}>
+                  <button onClick={()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🎯</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Координаты</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>30 сек — find the square. Скорость чтения доски.</div>
+                  </button>
+                  <button onClick={()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🏰</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Эндшпиль</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>6 базовых техник: К+Ф, К+Л, опозиция, треугольник.</div>
+                  </button>
+                  <button onClick={()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🧠</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Личность</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedQuizResult?`Твой архетип — ${QUIZ_PLAYERS[savedQuizResult.result.topId].name}`:"10 вопросов · твой шахматный архетип"}</div>
+                  </button>
+                  <button onClick={()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>♟</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Editor</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>FEN · ручная расстановка для тренировки конкретных позиций.</div>
+                  </button>
+                </div>
+              </Card>}
+              {activeDash==="meta"&&<Card padding={SPACE[3]} elevation="sm">
+                <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[3],paddingBottom:SPACE[2],borderBottom:`1px solid ${CC.border}`}}>
+                  <span style={{fontSize:18}}>📊</span>
+                  <span style={{fontSize:13,fontWeight:900,letterSpacing:0.4,color:CC.text,textTransform:"uppercase" as const}}>Анализ & Стрим</span>
+                </div>
+                <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2],textTransform:"uppercase" as const}}>Аналитика игры</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:SPACE[2],marginBottom:SPACE[3]}}>
+                  <button onClick={()=>sShowGameDna(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📈</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Game DNA</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedGames.length>0&&gameDna.insights.length>0?`${gameDna.insights.length} инсайтов по твоему стилю`:"Сыграй 5+ партий — увидишь свой стиль"}</div>
+                  </button>
+                  <button onClick={()=>sShowInsights(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🔬</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Insights</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedGames.length>0?`Анализ ${savedGames.length} партий — слабости и сильные стороны`:"Сыграй партии — соберём инсайты"}</div>
+                  </button>
+                </div>
+                <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2],textTransform:"uppercase" as const}}>Контент &amp; Стрим</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:SPACE[2]}}>
+                  <button onClick={()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode — OBS-ready","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${streamerMode?"#7c3aed":CC.border}`,background:streamerMode?"linear-gradient(135deg,#ede9fe,#ddd6fe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📺</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Streamer Mode</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:streamerMode?"#7c3aed":"#e5e7eb",color:streamerMode?"#fff":CC.textDim}}>{streamerMode?"ON":"OFF"}</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>OBS-ready: тёмный фон, чистый интерфейс.</div>
+                  </button>
+                  <button onClick={()=>{sLiveCommentary(v=>!v);showToast(liveCommentary?"Live-комментарии выкл":"Live-комментарии вкл — Coach говорит вслух","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${liveCommentary?"#7c3aed":CC.border}`,background:liveCommentary?"linear-gradient(135deg,#ede9fe,#ddd6fe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🎙</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Live Commentary</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:liveCommentary?"#7c3aed":"#e5e7eb",color:liveCommentary?"#fff":CC.textDim}}>{liveCommentary?"ON":"OFF"}</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Coach читает каждый ход вслух — для зрителей.</div>
+                  </button>
+                </div>
+              </Card>}
+            </div>;
           })()}
-
-          {/* ─── Board theme + Premove slider (consolidated) ─── */}
-          <Card padding={SPACE[3]}>
-            <div style={{display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
-              <SectionHeader title="ДОСКА"/>
-              <div style={{flex:1}}/>
-              <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:11,color:CC.textDim,fontWeight:700,letterSpacing:0.3,whiteSpace:"nowrap"}} title="Сколько премувов можно ставить в очередь">
-                <span>⚡ PREMOVE {pmLim}</span>
-                <input type="range" min={1} max={20} value={pmLim}
-                  onChange={e=>sPmLim(+e.target.value)}
-                  style={{width:100,accentColor:CC.brand}}/>
-              </label>
-            </div>
-            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginTop:SPACE[2]}}>
-              {BOARD_THEMES.map((th,i)=>{
-                const locked=!!th.premium&&!chessy.owned[th.premium!];
-                const selected=boardTheme===i;
-                return <button key={i}
-                  className="cc-focus-ring"
-                  onClick={()=>{if(locked){showToast("Premium — доступно в магазине","info");sShowShop(true);return}sBoardTheme(i)}}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",
-                    borderRadius:RADIUS.full,
-                    border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
-                    background:selected?CC.brandSoft:locked?CC.surface2:CC.surface1,
-                    cursor:"pointer",opacity:locked?0.65:1,
-                    transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-                  <div style={{width:22,height:16,borderRadius:4,overflow:"hidden",
-                    display:"flex",flexShrink:0,boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)"}}>
-                    <div style={{width:11,height:16,background:th.light}}/>
-                    <div style={{width:11,height:16,background:th.dark}}/>
-                  </div>
-                  <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{th.name}</span>
-                  {locked&&<span style={{fontSize:10,color:"#b45309"}}>🔒</span>}
-                </button>;
-              })}
-            </div>
-          </Card>
 
           {/* ─── HERO: главный блок «с чего начать» ─── */}
           {(()=>{
@@ -3477,47 +3413,50 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── Тренажёры и инструменты ─── */}
-          <div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:SPACE[2]}}>
-              <SymBadge sym="training" size="md"/>
-              <span style={{fontSize:11,color:CC.textMute,fontWeight:600}}>{savedGames.length>0?`${savedGames.length} партий в истории`:"Сыграй чтобы открыть статистику"}</span>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:SPACE[2]}}>
-              {[
-                {sym:SYM.training,label:"Координаты",sub:"30 сек на скорость",onClick:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
-                {sym:SYM.coach,label:"Личность",sub:savedQuizResult?QUIZ_PLAYERS[savedQuizResult.result.topId].name:"10 вопросов · твой стиль",onClick:()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}},
-                {sym:SYM.analysis,label:"Game DNA",sub:savedGames.length>0&&gameDna.insights.length>0?`${gameDna.insights.length} инсайтов`:"Сыграй 5+ партий",onClick:()=>sShowGameDna(true)},
-                {sym:SYM.tools,label:"Insights",sub:savedGames.length>0?`Анализ ${savedGames.length} партий`:"Сыграй партии",onClick:()=>sShowInsights(true)},
-                {sym:SYM.knowledge,label:"Editor",sub:"FEN · ручная расстановка",onClick:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},
-                {sym:SYM.endgame,label:"Эндшпиль",sub:"6 базовых техник",onClick:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
-                {sym:SYM.tournament,label:"Турниры",sub:"Свисс / Round-Robin",onClick:()=>sShowTournament(true)},
-                {sym:SYM.variants,label:"Варианты",sub:"Fischer 960 · Atomic · KotH +9",onClick:()=>sShowVariants(true)},
-              ].map((t,i)=><button key={i} onClick={t.onClick} className="cc-launch-card" style={{
-                padding:`${SPACE[3]}px ${SPACE[3]}px`,
-                background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,
-                cursor:"pointer",textAlign:"left",
-                transition:`transform ${MOTION.fast} ${MOTION.ease}, border-color ${MOTION.base} ${MOTION.ease}, box-shadow ${MOTION.base} ${MOTION.ease}`,
-              }}
-              onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.borderColor=`${t.sym.color}55`;el.style.boxShadow=SHADOW.sm}}
-              onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.borderColor=CC.border;el.style.boxShadow="none"}}>
+          {/* ─── Лидерборды по категориям ─── */}
+          {(()=>{
+            const categories:LbCategory[]=["blitz","rapid","bullet","puzzles","rush"];
+            const myName="Ты";
+            // Подбираем рейтинг под категорию: blitz/rapid/bullet — общий rat,
+            // puzzles — pzSolvedCount как «индекс силы» (×10 для масштаба),
+            // rush — rushBest напрямую.
+            const myRatingFor=(c:LbCategory)=>{
+              if(c==="puzzles")return 800+pzSolvedCount*8;
+              if(c==="rush")return rushBest;
+              return rat;
+            };
+            return <Card padding={0} elevation="sm">
+              <div style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,borderBottom:`1px solid ${CC.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                  <span style={{
-                    width:32,height:32,borderRadius:RADIUS.md,
-                    background:t.sym.bg,color:t.sym.color,
-                    display:"inline-flex",alignItems:"center",justifyContent:"center",
-                    flexShrink:0,
-                  }}>
-                    <t.sym.icon size={18} color={t.sym.color}/>
-                  </span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.label}</div>
-                    <div style={{fontSize:10,color:CC.textDim,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.sub}</div>
-                  </div>
+                  <span style={{fontSize:22,lineHeight:1}}>🏆</span>
+                  <span style={{fontSize:16,fontWeight:900,color:CC.text,letterSpacing:0.4}}>Лидеры площадки</span>
                 </div>
-              </button>)}
-            </div>
-          </div>
+                <span style={{fontSize:11,color:CC.textMute,fontWeight:700}}>топ-3 + твоя позиция</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))"}}>
+                {categories.map((cat,catIdx)=>{
+                  const myRating=myRatingFor(cat);
+                  const myRank=findMyRank(cat,myRating);
+                  const top=getTopWithMe(cat,myRating,myName,3);
+                  const lastBorder=catIdx<categories.length-1;
+                  return <div key={cat} style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,borderRight:lastBorder?`1px solid ${CC.border}`:"none",display:"flex",flexDirection:"column",gap:SPACE[1]}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:SPACE[2]}}>
+                      <span style={{fontSize:16,fontWeight:900,color:CC.text,letterSpacing:0.4,lineHeight:1.1}}>{CATEGORY_LABEL[cat]}</span>
+                      <span style={{fontSize:11,color:CC.textMute,fontWeight:800,padding:"2px 7px",borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>#{myRank.toLocaleString()}</span>
+                    </div>
+                    {top.map(e=><div key={`${cat}-${e.rank}`} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 5px",borderRadius:5,background:e.isMe?"rgba(5,150,105,0.08)":"transparent",border:e.isMe?"1px solid rgba(5,150,105,0.3)":"1px solid transparent"}}>
+                      <span style={{width:18,fontSize:9.5,fontWeight:900,color:e.rank<=3?CC.gold:CC.textDim,textAlign:"center"}}>{e.rank}</span>
+                      <span style={{fontSize:11,lineHeight:1}}>{e.country}</span>
+                      <span style={{flex:1,fontSize:11,fontWeight:e.isMe?900:600,color:e.isMe?CC.brand:CC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.name}</span>
+                      <span style={{fontSize:11,fontWeight:800,color:CC.textDim,fontFamily:"ui-monospace, SFMono-Regular, monospace"}}>{e.rating}</span>
+                    </div>)}
+                    <button onClick={()=>sLbExpanded(cat)} style={{marginTop:4,padding:"5px 8px",border:"none",background:"transparent",color:CC.brand,fontSize:10.5,fontWeight:800,cursor:"pointer",letterSpacing:0.3,textAlign:"right"}}>Весь топ →</button>
+                  </div>;
+                })}
+              </div>
+            </Card>;
+          })()}
+
 
           {/* ─── Game History ─── */}
           {savedGames.length>0&&<Card padding={0} elevation="sm">
@@ -5630,6 +5569,44 @@ export default function CyberChessPage(){
       </Modal>;
     })()}
 
+    {/* Leaderboard expanded — full top with user position highlighted */}
+    {(()=>{
+      if(!lbExpanded)return null;
+      const myName="Ты";
+      const myRating=lbExpanded==="puzzles"?800+pzSolvedCount*8:lbExpanded==="rush"?rushBest:rat;
+      const all=getFullBoardAroundMe(lbExpanded,myRating,myName);
+      const myRank=findMyRank(lbExpanded,myRating);
+      // Авто-скролл к юзеру когда модалка открывается. Делаем DOM lookup
+      // в setTimeout чтобы рендер успел.
+      setTimeout(()=>{
+        try{const el=document.querySelector("[data-lb-me=\"1\"]");if(el)(el as HTMLElement).scrollIntoView({block:"center",behavior:"smooth"})}catch{}
+      },50);
+      return <Modal open={!!lbExpanded} onClose={()=>sLbExpanded(null)} size="lg" title={`🏆 ${CATEGORY_LABEL[lbExpanded]} · топ-${all.length}`}>
+        <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>Твоя позиция: <span style={{fontWeight:900,color:CC.brand}}>#{myRank.toLocaleString()}</span> · рейтинг {myRating}</div>
+        <div style={{maxHeight:"60vh",overflowY:"auto",border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1}}>
+          {all.map((e,i)=>{
+            const podium=e.rank===1?"🥇":e.rank===2?"🥈":e.rank===3?"🥉":null;
+            return <div key={`${e.rank}-${i}`} data-lb-me={e.isMe?"1":"0"} style={{
+              display:"flex",alignItems:"center",gap:SPACE[2],padding:"7px 12px",
+              borderBottom:i<all.length-1?`1px solid ${CC.border}`:"none",
+              background:e.isMe?"rgba(5,150,105,0.1)":"transparent",
+              borderLeft:e.isMe?`3px solid ${CC.brand}`:"3px solid transparent",
+            }}>
+              <span style={{width:36,fontSize:12,fontWeight:900,color:e.rank<=3?CC.gold:CC.textDim,textAlign:"center"}}>{podium||`#${e.rank}`}</span>
+              <span style={{fontSize:14,lineHeight:1}}>{e.country}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:e.isMe?900:600,color:e.isMe?CC.brand:CC.text}}>{e.name}{e.isMe&&<span style={{marginLeft:6,padding:"1px 6px",borderRadius:3,background:CC.brand,color:"#fff",fontSize:9.5,letterSpacing:0.5}}>ВЫ</span>}</span>
+              {e.games!==undefined&&<span style={{fontSize:10.5,color:CC.textMute,fontWeight:600}}>{e.games.toLocaleString()} игр</span>}
+              <span style={{minWidth:48,textAlign:"right",fontSize:13,fontWeight:800,color:CC.text,fontFamily:"ui-monospace, SFMono-Regular, monospace"}}>{e.rating}</span>
+            </div>;
+          })}
+        </div>
+        <div style={{fontSize:10,color:CC.textMute,marginTop:SPACE[2],fontStyle:"italic"}}>Симулированный лидерборд для одиночной игры. Реальные таблицы появятся после связки с бэкендом.</div>
+      </Modal>;
+    })()}
+
+    {/* Multi-Panel — split-screen до 4 окон с YouTube/Twitch */}
+    <MultiPanel open={showMultiPanel} onClose={()=>sShowMultiPanel(false)}/>
+
     {/* Keyboard Shortcuts Help Overlay — расширенная версия с группировкой */}
     <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title="⌨ Горячие клавиши">
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Работают во всех вкладках, пока курсор не в поле ввода.</div>
@@ -7161,7 +7138,35 @@ export default function CyberChessPage(){
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎨 Тема доски</div>
-            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>Сейчас: <b style={{color:CC.text}}>{bT.name} {bT.icon}</b>. Выбор полной палитры — на главном экране (Play tab).</div>
+            <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2]}}>Сейчас: <b style={{color:CC.text}}>{bT.name} {bT.icon}</b></div>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
+              {BOARD_THEMES.map((th,i)=>{
+                const locked=!!th.premium&&!chessy.owned[th.premium!];
+                const selected=boardTheme===i;
+                return <button key={i}
+                  className="cc-focus-ring"
+                  onClick={()=>{if(locked){showToast("Premium — доступно в магазине","info");sShowSettings(false);sShowShop(true);return}sBoardTheme(i)}}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",
+                    borderRadius:RADIUS.full,
+                    border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                    background:selected?CC.brandSoft:locked?CC.surface2:CC.surface1,
+                    cursor:"pointer",opacity:locked?0.65:1,
+                    transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                  <div style={{width:22,height:16,borderRadius:4,overflow:"hidden",
+                    display:"flex",flexShrink:0,boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)"}}>
+                    <div style={{width:11,height:16,background:th.light}}/>
+                    <div style={{width:11,height:16,background:th.dark}}/>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{th.name}</span>
+                  {locked&&<span style={{fontSize:10,color:"#b45309"}}>🔒</span>}
+                </button>;
+              })}
+            </div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>⚡ Очередь премувов</div>
+            <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim,fontWeight:600}}>
+              <span>Лимит: <b style={{color:CC.text}}>{pmLim}</b></span>
+              <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
+            </label>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.danger,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>⚠ Сброс данных</div>

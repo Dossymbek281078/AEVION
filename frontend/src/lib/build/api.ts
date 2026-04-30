@@ -405,6 +405,20 @@ export const buildApi = {
   send: (input: { receiverId: string; content: string }) =>
     call<BuildMessage>("POST", "/api/build/messages", input),
 
+  // Plan usage
+  myUsage: () =>
+    call<{
+      plan: BuildPlan;
+      usage: { userId: string; monthKey: string; talentSearches: number; boostsUsed: number };
+      monthKey: string;
+      activeVacancies: number;
+      limits: {
+        vacanciesRemaining: number;
+        talentSearchesRemaining: number;
+        boostsRemaining: number;
+      };
+    }>("GET", "/api/build/usage/me"),
+
   // Pricing
   listPlans: () =>
     call<{ items: BuildPlan[]; total: number }>("GET", "/api/build/plans", undefined, { auth: false }),

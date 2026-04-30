@@ -15,6 +15,11 @@ import {
   BUILD_ROLES,
   PLAN_KEYS,
   safeParseJson,
+  getUserPlan,
+  ensureUsageRow,
+  bumpUsage,
+  currentMonthKey,
+  isUnlimited,
 } from "../lib/build";
 
 export const buildRouter = Router();
@@ -259,6 +264,27 @@ buildRouter.get("/profiles/search", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
+
+    // Talent-search rate limit per month.
+    if (auth.role !== "ADMIN") {
+      const plan = await getUserPlan(auth.sub);
+      if (!isUnlimited(plan.talentSearchPerMonth)) {
+        const usage = await ensureUsageRow(auth.sub);
+        if (usage.talentSearches >= plan.talentSearchPerMonth) {
+          return fail(res, 403, "plan_talent_search_limit_reached", {
+            planKey: plan.key,
+            limit: plan.talentSearchPerMonth,
+            used: usage.talentSearches,
+            monthKey: usage.monthKey,
+            upgradeUrl: "/build/pricing",
+          });
+        }
+      }
+      // Count this call. Failed downstream errors still count, which
+      // is intentional — an unbounded retry loop would otherwise drain
+      // somebody else's quota by accident.
+      await bumpUsage(auth.sub, "talentSearches");
+    }
 
     const params: unknown[] = [];
     const where: string[] = [];
@@ -688,6 +714,30 @@ buildRouter.post("/vacancies", async (req, res) => {
     if (project.rowCount === 0) return fail(res, 404, "project_not_found");
     if (project.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
       return fail(res, 403, "only_project_owner_can_post_vacancies");
+    }
+
+    // Plan-based vacancy slot limit. Counts OPEN vacancies across all
+    // projects owned by the same user. Admins are exempt.
+    if (auth.role !== "ADMIN") {
+      const plan = await getUserPlan(auth.sub);
+      if (!isUnlimited(plan.vacancySlots)) {
+        const active = await pool.query(
+          `SELECT COUNT(*)::int AS c
+           FROM "BuildVacancy" v
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND v."status" = 'OPEN'`,
+          [auth.sub],
+        );
+        const used = active.rows[0]?.c ?? 0;
+        if (used >= plan.vacancySlots) {
+          return fail(res, 403, "plan_vacancy_limit_reached", {
+            planKey: plan.key,
+            limit: plan.vacancySlots,
+            used,
+            upgradeUrl: "/build/pricing",
+          });
+        }
+      }
     }
 
     const id = crypto.randomUUID();
@@ -1198,6 +1248,45 @@ buildRouter.get("/notifications/summary", async (req, res) => {
     });
   } catch (err: unknown) {
     return fail(res, 500, "notifications_summary_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/usage/me — current plan limits + month-to-date counters
+// + computed remaining slots for the auth-bearer. Powers the badge in
+// BuildShell and the "12/∞ this month" footer on /build/talent.
+buildRouter.get("/usage/me", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const plan = await getUserPlan(auth.sub);
+    const usage = await ensureUsageRow(auth.sub);
+
+    // Active vacancy count across all of this user's projects.
+    const active = await pool.query(
+      `SELECT COUNT(*)::int AS c
+       FROM "BuildVacancy" v
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE p."clientId" = $1 AND v."status" = 'OPEN'`,
+      [auth.sub],
+    );
+    const activeVacancies = active.rows[0]?.c ?? 0;
+
+    return ok(res, {
+      plan,
+      usage,
+      monthKey: currentMonthKey(),
+      activeVacancies,
+      limits: {
+        vacanciesRemaining: isUnlimited(plan.vacancySlots) ? -1 : Math.max(0, plan.vacancySlots - activeVacancies),
+        talentSearchesRemaining: isUnlimited(plan.talentSearchPerMonth)
+          ? -1
+          : Math.max(0, plan.talentSearchPerMonth - usage.talentSearches),
+        boostsRemaining: isUnlimited(plan.boostsPerMonth) ? -1 : Math.max(0, plan.boostsPerMonth - usage.boostsUsed),
+      },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "usage_me_failed", { details: (err as Error).message });
   }
 });
 

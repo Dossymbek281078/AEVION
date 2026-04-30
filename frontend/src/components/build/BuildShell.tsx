@@ -51,6 +51,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 text-xs">
             {hydrated && user ? (
               <>
+                <PlanBadge />
                 <NotificationBell />
                 <span className="hidden text-slate-400 sm:inline">{user.email}</span>
                 <button
@@ -86,6 +87,49 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
 
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
     </div>
+  );
+}
+
+function PlanBadge() {
+  const token = useBuildAuth((s) => s.token);
+  const [planKey, setPlanKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) {
+      setPlanKey(null);
+      return;
+    }
+    let cancelled = false;
+    buildApi
+      .myUsage()
+      .then((r) => {
+        if (!cancelled) setPlanKey(r.plan.key);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanKey("FREE");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  if (!planKey) return null;
+  const tone =
+    planKey === "PRO"
+      ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/30"
+      : planKey === "AGENCY"
+        ? "bg-amber-500/20 text-amber-200 border-amber-500/30"
+        : planKey === "PPHIRE"
+          ? "bg-sky-500/20 text-sky-200 border-sky-500/30"
+          : "bg-white/5 text-slate-300 border-white/10";
+  return (
+    <Link
+      href="/build/pricing"
+      className={`hidden items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:inline-flex ${tone}`}
+      title="Your current plan — click to compare or upgrade"
+    >
+      {planKey === "PPHIRE" ? "Pay-per-Hire" : planKey}
+    </Link>
   );
 }
 

@@ -26,6 +26,11 @@ function TalentBody() {
   const [items, setItems] = useState<TalentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<{
+    planKey: string;
+    talentSearches: number;
+    talentSearchLimit: number;
+  } | null>(null);
 
   const [q, setQ] = useState("");
   const [skill, setSkill] = useState("");
@@ -33,6 +38,24 @@ function TalentBody() {
   const [role, setRole] = useState<BuildRole | "ALL">("ALL");
   const [minExp, setMinExp] = useState<string>("");
   const [openOnly, setOpenOnly] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .myUsage()
+      .then((u) => {
+        if (cancelled) return;
+        setUsage({
+          planKey: u.plan.key,
+          talentSearches: u.usage.talentSearches,
+          talentSearchLimit: u.plan.talentSearchPerMonth,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -50,7 +73,20 @@ function TalentBody() {
           limit: 50,
         })
         .then((r) => {
-          if (!cancelled) setItems(r.items);
+          if (!cancelled) {
+            setItems(r.items);
+            setError(null);
+            // Refresh usage counter — we just spent one search.
+            buildApi.myUsage().then((u) => {
+              if (!cancelled) {
+                setUsage({
+                  planKey: u.plan.key,
+                  talentSearches: u.usage.talentSearches,
+                  talentSearchLimit: u.plan.talentSearchPerMonth,
+                });
+              }
+            }).catch(() => {});
+          }
         })
         .catch((e) => {
           if (!cancelled) setError((e as Error).message);
@@ -138,10 +174,34 @@ function TalentBody() {
         </button>
       </div>
 
+      {usage && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
+          <span>
+            Plan: <span className="font-semibold text-slate-200">{usage.planKey}</span> ·
+            Talent search this month:{" "}
+            <span className="font-semibold text-emerald-200">
+              {usage.talentSearches}
+            </span>{" "}
+            /{" "}
+            <span className="text-slate-300">
+              {usage.talentSearchLimit === -1 ? "∞" : usage.talentSearchLimit}
+            </span>
+          </span>
+          <Link href="/build/pricing" className="text-emerald-300 hover:underline">
+            {usage.talentSearchLimit !== -1 && usage.talentSearches >= usage.talentSearchLimit ? "Upgrade →" : "Compare plans →"}
+          </Link>
+        </div>
+      )}
+
       {error && (
-        <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-          {error}
-        </p>
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <div className="font-medium">{error}</div>
+          {error.includes("plan_talent_search_limit_reached") && (
+            <Link href="/build/pricing" className="mt-1 inline-block text-rose-100 underline">
+              Upgrade to Pro for unlimited search →
+            </Link>
+          )}
+        </div>
       )}
 
       {loading && <p className="text-sm text-slate-400">Searching…</p>}

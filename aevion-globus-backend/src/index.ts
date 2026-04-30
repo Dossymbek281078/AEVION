@@ -251,6 +251,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/notifications/summary": {
         get: { summary: "Header-bell counts: unreadMessages + pendingApplications + applicationUpdates (Bearer required)" },
       },
+      "/api/build/usage/me": {
+        get: { summary: "Plan + month-to-date counters + remaining slots (Bearer required)" },
+      },
       "/api/build/plans": {
         get: { summary: "Public catalog of subscription plans (cache 300s)" },
       },

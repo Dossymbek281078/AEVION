@@ -271,6 +271,20 @@ export async function ensureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildOrder_user_idx" ON "BuildOrder" ("userId", "createdAt" DESC);`);
 
+  // BuildPlanUsage: per-month counters for plan-limited actions.
+  // Composite PK so increments are idempotent via ON CONFLICT.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPlanUsage" (
+      "userId" TEXT NOT NULL,
+      "monthKey" TEXT NOT NULL,
+      "talentSearches" INTEGER NOT NULL DEFAULT 0,
+      "boostsUsed" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId","monthKey")
+    );
+  `);
+
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.
   await pool.query(
@@ -337,6 +351,99 @@ export function safeParseJson<T>(raw: unknown, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+// ── Plan resolution + usage ─────────────────────────────────────────
+
+export type PlanRow = {
+  key: "FREE" | "PRO" | "AGENCY" | "PPHIRE";
+  name: string;
+  priceMonthly: number;
+  currency: string;
+  vacancySlots: number;
+  talentSearchPerMonth: number;
+  boostsPerMonth: number;
+  hireFeeBps: number;
+};
+
+export type UsageRow = {
+  userId: string;
+  monthKey: string;
+  talentSearches: number;
+  boostsUsed: number;
+};
+
+export function currentMonthKey(d: Date = new Date()): string {
+  return d.toISOString().slice(0, 7); // YYYY-MM
+}
+
+/**
+ * Resolve the active plan for a user. Falls back to FREE when no
+ * ACTIVE subscription exists, so every signed-in user always has a
+ * plan to gate against.
+ */
+export async function getUserPlan(userId: string): Promise<PlanRow> {
+  const sub = await pool.query(
+    `SELECT "planKey" FROM "BuildSubscription"
+     WHERE "userId" = $1 AND "status" = 'ACTIVE'
+     ORDER BY "createdAt" DESC LIMIT 1`,
+    [userId],
+  );
+  const planKey = sub.rows[0]?.planKey ?? "FREE";
+  const plan = await pool.query(
+    `SELECT "key","name","priceMonthly","currency","vacancySlots","talentSearchPerMonth","boostsPerMonth","hireFeeBps"
+     FROM "BuildPlan" WHERE "key" = $1 AND "active" = TRUE LIMIT 1`,
+    [planKey],
+  );
+  if (plan.rowCount === 0) {
+    // FREE row missing — extreme edge case (DB tampering). Synthesize
+    // a safe-by-default FREE row instead of crashing.
+    return {
+      key: "FREE",
+      name: "Free Forever",
+      priceMonthly: 0,
+      currency: "RUB",
+      vacancySlots: 1,
+      talentSearchPerMonth: 5,
+      boostsPerMonth: 0,
+      hireFeeBps: 0,
+    };
+  }
+  return plan.rows[0] as PlanRow;
+}
+
+export async function ensureUsageRow(userId: string, monthKey = currentMonthKey()): Promise<UsageRow> {
+  await pool.query(
+    `INSERT INTO "BuildPlanUsage" ("userId","monthKey")
+     VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+    [userId, monthKey],
+  );
+  const r = await pool.query(
+    `SELECT * FROM "BuildPlanUsage" WHERE "userId" = $1 AND "monthKey" = $2 LIMIT 1`,
+    [userId, monthKey],
+  );
+  return r.rows[0] as UsageRow;
+}
+
+export async function bumpUsage(
+  userId: string,
+  field: "talentSearches" | "boostsUsed",
+  monthKey = currentMonthKey(),
+): Promise<UsageRow> {
+  await ensureUsageRow(userId, monthKey);
+  const r = await pool.query(
+    `UPDATE "BuildPlanUsage"
+       SET "${field}" = "${field}" + 1, "updatedAt" = NOW()
+     WHERE "userId" = $1 AND "monthKey" = $2
+     RETURNING *`,
+    [userId, monthKey],
+  );
+  return r.rows[0] as UsageRow;
+}
+
+/** -1 in plan column means "unlimited". */
+export function isUnlimited(planLimit: number): boolean {
+  return planLimit === -1;
 }
 
 export const SUBSCRIPTION_STATUSES = ["ACTIVE", "CANCELED", "PENDING"] as const;

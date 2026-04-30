@@ -1274,6 +1274,7 @@ export default function HealthAIPage() {
 
   return (
     <div
+      className="ha-wrap"
       style={{
         background: "linear-gradient(180deg, #060912 0%, #0c1322 100%)",
         minHeight: "100vh",
@@ -1283,12 +1284,20 @@ export default function HealthAIPage() {
           'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
       }}
     >
+      <style>{`
+        @media (max-width: 720px) {
+          .ha-wrap { padding: 12px 10px 60px !important; }
+          .ha-tabs { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; scrollbar-width: thin; }
+          .ha-tabs button { flex: 0 0 auto; padding: 6px 10px !important; font-size: 12px !important; }
+          .ha-h1 { font-size: 22px !important; }
+        }
+      `}</style>
       <div style={{ maxWidth: 880, margin: "0 auto" }}>
         <Wave1Nav variant="dark" />
 
         <header style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>
+            <h1 className="ha-h1" style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>
               <span style={{ color: "#5eead4" }}>Health</span>
               <span style={{ color: "#7dd3fc" }}>AI</span>
             </h1>
@@ -1338,6 +1347,7 @@ export default function HealthAIPage() {
         </header>
 
         <div
+          className="ha-tabs"
           style={{
             display: "flex",
             gap: 6,

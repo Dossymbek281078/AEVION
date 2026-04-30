@@ -27,6 +27,19 @@ All QRight tables are bootstrapped via `CREATE TABLE IF NOT EXISTS` / `ALTER TAB
 - **`QRightAuditLog(id TEXT PK, actor TEXT, action TEXT, targetId TEXT, payload JSONB, at TIMESTAMPTZ)`** *(v1.1)* — append-only audit history, indexed on `at DESC` + `action` + `targetId`. Replaces the v1.0 `console.warn` trail with a queryable, persistent log surfaced via `GET /api/qright/admin/audit`. Actions logged: `owner.revoke`, `admin.revoke`, `admin.bulk-revoke`.
 - **`QRightWebhook(id TEXT PK, ownerUserId TEXT, url TEXT, secret TEXT, createdAt TIMESTAMPTZ, lastDeliveredAt TIMESTAMPTZ, lastFailedAt TIMESTAMPTZ, lastError TEXT)`** *(v1.1)* — per-owner outgoing webhook config, indexed on `ownerUserId`. Cap of 10 endpoints/owner. Delivery is fire-and-forget on every revoke path with HMAC-SHA256 signature in `X-AEVION-Signature: sha256=<hex>` and 5s `AbortController` timeout.
 
+## SRI-like hash gate (v1.2)
+
+Embed and badge endpoints accept a `?expected-hash=<sha256>` query param. If supplied, the server compares (constant-time) against the stored `contentHash`:
+
+- **`GET /api/qright/embed/:id?expected-hash=<hex>`** — JSON response gains `expectedHash` (echoed back, normalized lowercase) and `hashStatus` (`match` / `mismatch` / `unspecified`). The top-level `status` field (`registered` / `revoked`) is unchanged so existing consumers don't break.
+- **`GET /api/qright/badge/:id.svg?expected-hash=<hex>`** — when the pin doesn't match (and the object is not revoked), the badge flips to `HASH MISMATCH · YYYY-MM-DD` with an orange right-segment (`#ea580c`). Revoked still wins (red).
+
+Both endpoints fold the hash status into their `ETag`, so a CDN won't cache a "match" variant and serve it to a caller passing a different (or no) pin.
+
+Param accepts both `expected-hash=` and `expectedHash=`. Validation is strict: must be exactly 64 hex chars (case-insensitive). Invalid or missing pin → `hashStatus: "unspecified"` (no badge color change).
+
+This replaces the originally-planned iframe `integrity` attribute (which the spec doesn't natively support for `<iframe>`) with a query-param-based pin that works for both `<img>` and `<iframe>` embeds.
+
 ## Headers / iframe support
 
 `/qright/object/:id`, `/qright/badge/:id`, `/qright/transparency` carry route-specific headers in `frontend/next.config.ts` to override the catch-all COEP `require-corp` and allow third-party iframe embedding:
@@ -77,6 +90,19 @@ curl -I $HOST/qright/object/<known-object-id>?embed=1
 # 5. per-source counter wiring (v1.1) — bump with a custom Referer
 curl -s -H "Referer: https://example.com/blog/post" $HOST/api/qright/embed/<known-object-id> > /dev/null
 # expect 200; row added/updated in QRightFetchSource for sourceHost='example.com'
+
+# 5a. SRI-like hash gate (v1.2) — match
+HASH=$(curl -s $HOST/api/qright/embed/<known-object-id> | jq -r '.contentHash')
+curl -s "$HOST/api/qright/embed/<known-object-id>?expected-hash=$HASH" | jq '.hashStatus'
+# expect "match"
+
+# 5b. hash gate — mismatch (any 64-hex other than the real one)
+curl -s "$HOST/api/qright/embed/<known-object-id>?expected-hash=0000000000000000000000000000000000000000000000000000000000000000" | jq '.hashStatus'
+# expect "mismatch"
+
+# 5c. badge flips orange on mismatch
+curl -i "$HOST/api/qright/badge/<known-object-id>.svg?expected-hash=0000000000000000000000000000000000000000000000000000000000000000" | grep -o 'HASH MISMATCH'
+# expect "HASH MISMATCH"
 ```
 
 ### Admin endpoints (v1.1)

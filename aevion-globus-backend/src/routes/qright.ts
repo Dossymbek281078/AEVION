@@ -238,6 +238,33 @@ function recordAudit(
     });
 }
 
+// Validate and normalize a SRI-like ?expected-hash=<sha256> query param.
+// Embeds pass the contentHash they were originally built around so that any
+// drift on the server (re-issued under same id, or DB tampering) is detected
+// by the third-party page WITHOUT trusting the embed JSON itself. Returns the
+// normalized lowercase hex if syntactically valid (64 hex chars), else null.
+// We accept both `expected-hash` and `expectedHash` for ergonomics.
+function readExpectedHash(query: Record<string, unknown>): string | null {
+  const raw = query["expected-hash"] ?? query["expectedHash"];
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+// Constant-time string compare for hex hashes — defends against the (very
+// unlikely) timing-oracle on the embed surface. Both inputs assumed lowercase
+// hex of the same length; falls back to false on length mismatch.
+function timingSafeHexEq(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+  } catch {
+    return false;
+  }
+}
+
 // Extract a privacy-safe bucket key from the Referer header.
 // We keep only the hostname (no path, no query, no port, no protocol)
 // and lowercase + strip leading "www." so example.com and www.example.com
@@ -677,8 +704,20 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
         ? row.revokedAt.getTime()
         : new Date(row.revokedAt).getTime()
       : 0;
-    // ETag must change on revoke so cached badges flip without manual purge.
-    const etag = `W/"qright-embed-${row.id}-${createdAtMs}-${revokedAtMs}"`;
+    // SRI-like integrity gate (v1.2): caller pins the contentHash they were
+    // built around. We compare in constant time and report match/mismatch
+    // as a separate field, leaving `status` (registered/revoked) untouched
+    // so existing consumers don't break. The expected-hash is folded into
+    // the ETag so a client polling with the same pin gets a stable 304 even
+    // if another caller hits the same id with a different pin.
+    const expectedHash = readExpectedHash(req.query as Record<string, unknown>);
+    const storedHashLower = (row.contentHash || "").toLowerCase();
+    const hashStatus: "match" | "mismatch" | "unspecified" = expectedHash
+      ? timingSafeHexEq(expectedHash, storedHashLower)
+        ? "match"
+        : "mismatch"
+      : "unspecified";
+    const etag = `W/"qright-embed-${row.id}-${createdAtMs}-${revokedAtMs}-${hashStatus}"`;
 
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -697,6 +736,8 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       kind: row.kind,
       contentHashPrefix: row.contentHash.slice(0, 16),
       contentHash: row.contentHash,
+      expectedHash,
+      hashStatus,
       ownerName: row.ownerName,
       country: row.country,
       city: row.city,
@@ -733,10 +774,16 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     const theme = String(req.query.theme || "dark").toLowerCase() === "light" ? "light" : "dark";
 
     const result = await pool.query(
-      `SELECT id, kind, "createdAt", "revokedAt"
+      `SELECT id, kind, "contentHash", "createdAt", "revokedAt"
        FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
       [id]
     );
+
+    // SRI-like pin (v1.2): if a pin was supplied and doesn't match the
+    // stored contentHash, the badge flips to a HASH MISMATCH state — even
+    // when the underlying object is still active. This protects third-party
+    // sites whose embed snippet was generated against a specific contentHash.
+    const expectedHash = readExpectedHash(req.query as Record<string, unknown>);
 
     function svgShell(left: string, right: string, rightFill: string): string {
       // Approximate text widths (Verdana 11px ≈ 6.6px/char for uppercase).
@@ -785,6 +832,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     const row = result.rows[0] as {
       id: string;
       kind: string;
+      contentHash: string;
       createdAt: Date | string;
       revokedAt: Date | string | null;
     };
@@ -795,7 +843,15 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
         ? row.revokedAt.getTime()
         : new Date(row.revokedAt).getTime()
       : 0;
-    const etag = `W/"qright-badge-${row.id}-${createdAt.getTime()}-${revokedAtMs}-${theme}"`;
+    const storedHashLower = (row.contentHash || "").toLowerCase();
+    const hashStatus: "match" | "mismatch" | "unspecified" = expectedHash
+      ? timingSafeHexEq(expectedHash, storedHashLower)
+        ? "match"
+        : "mismatch"
+      : "unspecified";
+    // ETag includes hashStatus so a CDN doesn't cache a "match" variant
+    // and serve it to a caller passing a different (or no) pin.
+    const etag = `W/"qright-badge-${row.id}-${createdAt.getTime()}-${revokedAtMs}-${theme}-${hashStatus}"`;
 
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -813,6 +869,15 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
       res.setHeader("ETag", etag);
       res.setHeader("Cache-Control", "public, max-age=300");
       return res.send(svgShell("AEVION QRIGHT", `REVOKED · ${dateLabel}`, "#dc2626"));
+    }
+
+    if (hashStatus === "mismatch") {
+      // Pinned hash didn't match — surface as orange to distinguish from
+      // revocation. Tells the embedding site that the content has drifted
+      // from what they originally generated their snippet against.
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.send(svgShell("AEVION QRIGHT", `HASH MISMATCH · ${dateLabel}`, "#ea580c"));
     }
 
     const right = `${row.kind.toUpperCase()} · ${dateLabel}`;

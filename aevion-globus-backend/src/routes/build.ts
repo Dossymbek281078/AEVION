@@ -830,6 +830,59 @@ buildRouter.post("/files/upload", async (req, res) => {
   }
 });
 
+// ──────────────────────────────────────────────────────────────────────
+// Notifications — small badge counts so the header bell knows what's new.
+// One round-trip, three numbers. Frontend polls every ~30s.
+// ──────────────────────────────────────────────────────────────────────
+
+// GET /api/build/notifications/summary
+//   { unreadMessages, pendingApplications, applicationUpdates }
+//   - unreadMessages       = BuildMessage where receiverId=me AND readAt IS NULL
+//   - pendingApplications  = applications PENDING on my (owner's) vacancies
+//   - applicationUpdates   = my own applications updated to ACCEPTED/REJECTED in last 14d
+buildRouter.get("/notifications/summary", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const [msgs, pending, updates] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS c FROM "BuildMessage"
+         WHERE "receiverId" = $1 AND "readAt" IS NULL`,
+        [auth.sub],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS c
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND a."status" = 'PENDING'`,
+        [auth.sub],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS c
+         FROM "BuildApplication" a
+         WHERE a."userId" = $1
+           AND a."status" IN ('ACCEPTED','REJECTED')
+           AND a."updatedAt" > NOW() - INTERVAL '14 days'`,
+        [auth.sub],
+      ),
+    ]);
+
+    const unreadMessages = msgs.rows[0]?.c ?? 0;
+    const pendingApplications = pending.rows[0]?.c ?? 0;
+    const applicationUpdates = updates.rows[0]?.c ?? 0;
+    return ok(res, {
+      unreadMessages,
+      pendingApplications,
+      applicationUpdates,
+      total: unreadMessages + pendingApplications + applicationUpdates,
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "notifications_summary_failed", { details: (err as Error).message });
+  }
+});
+
 // Health probe — no auth, no DB roundtrip beyond the bootstrap middleware.
 buildRouter.get("/health", (_req, res) => {
   return ok(res, {

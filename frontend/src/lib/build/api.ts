@@ -255,6 +255,15 @@ export const buildApi = {
   send: (input: { receiverId: string; content: string }) =>
     call<BuildMessage>("POST", "/api/build/messages", input),
 
+  // Notifications
+  notifySummary: () =>
+    call<{
+      unreadMessages: number;
+      pendingApplications: number;
+      applicationUpdates: number;
+      total: number;
+    }>("GET", "/api/build/notifications/summary"),
+
   // Files
   uploadFile: (input: {
     projectId: string;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
-import { buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
+import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
 
 const NAV: { href: string; label: string }[] = [
   { href: "/build", label: "Projects" },
@@ -49,6 +49,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 text-xs">
             {hydrated && user ? (
               <>
+                <NotificationBell />
                 <span className="hidden text-slate-400 sm:inline">{user.email}</span>
                 <button
                   onClick={logout}
@@ -82,6 +83,115 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+    </div>
+  );
+}
+
+function NotificationBell() {
+  const token = useBuildAuth((s) => s.token);
+  const [summary, setSummary] = useState<{
+    unreadMessages: number;
+    pendingApplications: number;
+    applicationUpdates: number;
+    total: number;
+  } | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const tick = () => {
+      buildApi
+        .notifySummary()
+        .then((r) => {
+          if (!cancelled) setSummary(r);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [token]);
+
+  const total = summary?.total ?? 0;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label={total > 0 ? `${total} new notifications` : "Notifications"}
+        className="relative rounded-md border border-white/10 px-2.5 py-1.5 text-slate-200 hover:bg-white/10"
+      >
+        <span aria-hidden>🔔</span>
+        {total > 0 && (
+          <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold leading-none text-emerald-950">
+            {total > 99 ? "99+" : total}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-white/10 bg-slate-900 p-3 text-sm shadow-xl"
+          onMouseLeave={() => setOpen(false)}
+        >
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Notifications
+          </div>
+          {!summary ? (
+            <p className="text-xs text-slate-500">Loading…</p>
+          ) : total === 0 ? (
+            <p className="text-xs text-slate-500">All caught up.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {summary.unreadMessages > 0 && (
+                <li>
+                  <Link
+                    href="/build/messages"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
+                  >
+                    <span>Unread messages</span>
+                    <span className="rounded-full bg-emerald-500/20 px-2 text-xs text-emerald-200">
+                      {summary.unreadMessages}
+                    </span>
+                  </Link>
+                </li>
+              )}
+              {summary.pendingApplications > 0 && (
+                <li>
+                  <Link
+                    href="/build"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
+                  >
+                    <span>Pending applications</span>
+                    <span className="rounded-full bg-amber-500/20 px-2 text-xs text-amber-200">
+                      {summary.pendingApplications}
+                    </span>
+                  </Link>
+                </li>
+              )}
+              {summary.applicationUpdates > 0 && (
+                <li>
+                  <Link
+                    href="/build/profile"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
+                  >
+                    <span>My application updates</span>
+                    <span className="rounded-full bg-sky-500/20 px-2 text-xs text-sky-200">
+                      {summary.applicationUpdates}
+                    </span>
+                  </Link>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

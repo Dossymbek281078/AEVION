@@ -236,6 +236,9 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/build/messages/{userId}": { get: { summary: "Full thread between current user and peer" } },
       "/api/build/files/upload": { post: { summary: "Register externally-uploaded file (project owner only)" } },
+      "/api/build/notifications/summary": {
+        get: { summary: "Header-bell counts: unreadMessages + pendingApplications + applicationUpdates (Bearer required)" },
+      },
     },
   });
 });

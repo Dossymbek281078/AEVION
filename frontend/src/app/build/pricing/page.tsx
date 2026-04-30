@@ -145,11 +145,78 @@ export default function PricingPage() {
         </div>
       )}
 
+      <LoyaltyBanner />
+
       <ComparisonTable plans={plans} />
       <AddOns />
       {token && orders.length > 0 && <OrdersLedger orders={orders} onPay={pay} />}
       <Faq />
     </BuildShell>
+  );
+}
+
+function LoyaltyBanner() {
+  const token = useBuildAuth((s) => s.token);
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.loyaltyMe>> | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    buildApi.loyaltyMe().then(setData).catch(() => {});
+  }, [token]);
+
+  return (
+    <section className="mt-12 rounded-2xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-slate-900 to-slate-900 px-6 py-8 sm:px-10">
+      <div className="text-xs font-bold uppercase tracking-wider text-fuchsia-300">
+        Loyalty · pay only when you hire
+      </div>
+      <h2 className="mt-2 text-2xl font-bold text-white">
+        Чем больше нанимаете — тем меньше комиссия
+      </h2>
+      <p className="mt-2 max-w-2xl text-sm text-slate-300">
+        Pay-per-Hire начинается с <span className="font-semibold text-fuchsia-200">12%</span> (vs HH-агентство 15–25%) и снижается по мере того, как кандидаты выходят на работу. Плюс <span className="font-semibold text-fuchsia-200">2% AEV cashback</span> на каждый PAID заказ — copyуется в ваш AEV-кошелёк.
+      </p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-4">
+        {[
+          { hires: 0, pct: 12, label: "Default" },
+          { hires: 3, pct: 10, label: "Bronze" },
+          { hires: 10, pct: 8, label: "Silver" },
+          { hires: 25, pct: 6, label: "Gold" },
+        ].map((t) => {
+          const reached = data ? data.hires >= t.hires : false;
+          const current = data ? data.hireFeePct === t.pct : t.hires === 0;
+          return (
+            <div
+              key={t.hires}
+              className={`rounded-xl border p-4 text-sm ${
+                current
+                  ? "border-fuchsia-400 bg-fuchsia-500/15 text-white"
+                  : reached
+                    ? "border-fuchsia-500/40 bg-fuchsia-500/5 text-fuchsia-100"
+                    : "border-white/10 bg-white/5 text-slate-300"
+              }`}
+            >
+              <div className="text-xs font-semibold uppercase tracking-wider">
+                {t.label}
+                {current && <span className="ml-1 text-fuchsia-200">— ваш уровень</span>}
+              </div>
+              <div className="mt-1 text-3xl font-bold">{t.pct}%</div>
+              <div className="text-xs text-slate-400">
+                {t.hires === 0 ? "С первого найма" : `с ${t.hires} наймов`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {data && (
+        <div className="mt-4 text-xs text-fuchsia-100/80">
+          У вас уже {data.hires} закрытых наймов на платформе.
+          {data.nextTierAt != null &&
+            ` До следующего уровня (${(data.nextTierBps! / 100).toFixed(0)}%) — ещё ${data.nextTierAt - data.hires}.`}
+        </div>
+      )}
+      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
+        💎 +2% AEV cashback на любой платёж
+      </div>
+    </section>
   );
 }
 
@@ -231,7 +298,8 @@ function Hero() {
       <div className="mt-5 flex flex-wrap gap-2 text-xs">
         <Badge>0 ₽ за публикацию вакансии</Badge>
         <Badge>База резюме во всех тарифах</Badge>
-        <Badge>Pay-per-Hire 12% vs HH 15-25%</Badge>
+        <Badge>Loyalty: 12% → 6% по мере наймов</Badge>
+        <Badge>2% AEV cashback на каждый PAID заказ</Badge>
         <Badge>Cancel anytime</Badge>
       </div>
     </section>

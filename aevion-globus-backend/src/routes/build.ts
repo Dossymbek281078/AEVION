@@ -2600,6 +2600,78 @@ buildRouter.get("/bookmarks", async (req, res) => {
   }
 });
 
+// GET /api/build/loyalty/me — stepped hire-fee + AEV cashback for the
+// auth-bearer. Pure read, derived from completed-hire history (ACCEPTED
+// applications on this user's vacancies, plus APPROVED trial tasks).
+//
+// Tiers (vs HH agency 15-25%):
+//   0 hires  → 12.0% (default Pay-per-Hire)
+//   3 hires  → 10.0%
+//   10 hires → 8.0%
+//   25 hires → 6.0%
+// AEV cashback line — 2% of every PAID order is credited to your AEV
+// wallet. Applied automatically; we surface the rate on /build/pricing.
+buildRouter.get("/loyalty/me", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    // Count distinct ACCEPTED applications on vacancies whose project
+    // belongs to this recruiter — that's the canonical "hire" signal.
+    const acceptedQ = await pool.query(
+      `SELECT COUNT(DISTINCT a."id")::int AS "count"
+       FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE p."clientId" = $1 AND a."status" = 'ACCEPTED'`,
+      [auth.sub],
+    );
+    const trialQ = await pool.query(
+      `SELECT COUNT(*)::int AS "count"
+       FROM "BuildTrialTask"
+       WHERE "recruiterId" = $1 AND "status" = 'APPROVED'`,
+      [auth.sub],
+    );
+    const hires =
+      Number(acceptedQ.rows[0]?.count ?? 0) + Number(trialQ.rows[0]?.count ?? 0);
+
+    let hireFeeBps = 1200;
+    let nextTierAt: number | null = 3;
+    let nextTierBps: number | null = 1000;
+    if (hires >= 25) {
+      hireFeeBps = 600;
+      nextTierAt = null;
+      nextTierBps = null;
+    } else if (hires >= 10) {
+      hireFeeBps = 800;
+      nextTierAt = 25;
+      nextTierBps = 600;
+    } else if (hires >= 3) {
+      hireFeeBps = 1000;
+      nextTierAt = 10;
+      nextTierBps = 800;
+    }
+
+    return ok(res, {
+      hires,
+      hireFeeBps,
+      hireFeePct: hireFeeBps / 100,
+      cashbackBps: 200, // 2% AEV cashback on every PAID order
+      cashbackPct: 2,
+      nextTierAt,
+      nextTierBps,
+      tiers: [
+        { atHires: 0, bps: 1200, label: "Default" },
+        { atHires: 3, bps: 1000, label: "Bronze" },
+        { atHires: 10, bps: 800, label: "Silver" },
+        { atHires: 25, bps: 600, label: "Gold" },
+      ],
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "loyalty_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/usage/me — current plan limits + month-to-date counters
 // + computed remaining slots for the auth-bearer. Powers the badge in
 // BuildShell and the "12/∞ this month" footer on /build/talent.

@@ -572,6 +572,17 @@ export const buildApi = {
       improved: string;
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/improve-text", input),
+  loyaltyMe: () =>
+    call<{
+      hires: number;
+      hireFeeBps: number;
+      hireFeePct: number;
+      cashbackBps: number;
+      cashbackPct: number;
+      nextTierAt: number | null;
+      nextTierBps: number | null;
+      tiers: { atHires: number; bps: number; label: string }[];
+    }>("GET", "/api/build/loyalty/me"),
 
     // Trial tasks
   proposeTrialTask: (input: {

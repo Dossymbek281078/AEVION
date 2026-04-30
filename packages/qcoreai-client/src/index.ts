@@ -112,6 +112,63 @@ export type RunSyncResult = {
   events: OrchestratorEvent[];
 };
 
+/* ─── Eval harness types ──────────────────────────────────────────────── */
+
+export type EvalJudge =
+  | { type: "contains"; needle: string; caseSensitive?: boolean }
+  | { type: "not_contains"; needle: string; caseSensitive?: boolean }
+  | { type: "equals"; expected: string; caseSensitive?: boolean; trim?: boolean }
+  | { type: "regex"; pattern: string; flags?: string }
+  | { type: "min_length"; chars: number }
+  | { type: "max_length"; chars: number };
+
+export type EvalCase = {
+  id: string;
+  name?: string;
+  input: string;
+  judge: EvalJudge;
+  weight?: number;
+};
+
+export type EvalSuite = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  strategy: Strategy;
+  overrides: Partial<Record<ConfigRoleId, AgentOverride>>;
+  cases: EvalCase[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EvalCaseResult = {
+  caseId: string;
+  caseName: string;
+  passed: boolean;
+  judgeKind: string;
+  reason: string;
+  output: string;
+  costUsd: number;
+  durationMs: number;
+  error?: string;
+};
+
+export type EvalRun = {
+  id: string;
+  suiteId: string;
+  ownerUserId: string;
+  status: "running" | "done" | "error" | "aborted";
+  score: number | null;
+  totalCases: number;
+  passedCases: number;
+  totalCostUsd: number;
+  results: EvalCaseResult[];
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
 export type ClientOptions = {
   /** Base URL of the AEVION backend, e.g. "https://api.aevion.io". */
   baseUrl: string;
@@ -479,6 +536,134 @@ export class QCoreClient {
       headers: this.headers(),
     });
     if (!res.ok) throw new Error(`deleteUserWebhook failed: ${await safeError(res)}`);
+  }
+
+  /* ─── Eval harness ───────────────────────────────────────────────────── */
+
+  /** Create a new eval suite. */
+  async createEvalSuite(opts: {
+    name: string;
+    description?: string | null;
+    strategy?: Strategy;
+    overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+    cases?: EvalCase[];
+  }): Promise<EvalSuite> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/eval/suites"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.suite;
+  }
+
+  /** List the caller's eval suites (most recently updated first). */
+  async listEvalSuites(limit = 50): Promise<EvalSuite[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listEvalSuites failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Fetch one suite (owner-only). */
+  async getEvalSuite(id: string): Promise<EvalSuite> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.suite;
+  }
+
+  /** Update a suite (any subset of fields). */
+  async updateEvalSuite(
+    id: string,
+    patch: { name?: string; description?: string | null; strategy?: Strategy; overrides?: Partial<Record<ConfigRoleId, AgentOverride>>; cases?: EvalCase[] }
+  ): Promise<EvalSuite> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updateEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.suite;
+  }
+
+  /** Delete a suite + its run history. */
+  async deleteEvalSuite(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deleteEvalSuite failed: ${await safeError(res)}`);
+  }
+
+  /**
+   * Kick off an async eval run. Resolves immediately with the in-flight
+   * EvalRun row — poll `getEvalRun` until status !== "running".
+   */
+  async runEvalSuite(
+    suiteId: string,
+    opts: { concurrency?: number; perCaseMaxCostUsd?: number } = {}
+  ): Promise<EvalRun> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(suiteId)}/run`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`runEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.run;
+  }
+
+  /** Poll one eval run for progress / final results. */
+  async getEvalRun(id: string): Promise<EvalRun> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/runs/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getEvalRun failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.run;
+  }
+
+  /** History of a suite's runs (newest first). Drives the regression chart. */
+  async listSuiteRuns(suiteId: string, limit = 30): Promise<EvalRun[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(suiteId)}/runs?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listSuiteRuns failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /**
+   * Convenience helper: kick off a run and resolve once it's complete (or
+   * the timeout elapses). Polls every `pollMs` (default 1500). Throws if
+   * the run errors out.
+   */
+  async runEvalSuiteAndWait(
+    suiteId: string,
+    opts: { concurrency?: number; perCaseMaxCostUsd?: number; pollMs?: number; timeoutMs?: number } = {}
+  ): Promise<EvalRun> {
+    const initial = await this.runEvalSuite(suiteId, {
+      concurrency: opts.concurrency,
+      perCaseMaxCostUsd: opts.perCaseMaxCostUsd,
+    });
+    const pollMs = Math.max(250, opts.pollMs ?? 1500);
+    const timeoutMs = opts.timeoutMs ?? 300_000;
+    const deadline = Date.now() + timeoutMs;
+    let cur = initial;
+    while (cur.status === "running") {
+      if (Date.now() > deadline) throw new Error(`runEvalSuiteAndWait timed out after ${timeoutMs}ms`);
+      await new Promise((r) => setTimeout(r, pollMs));
+      cur = await this.getEvalRun(cur.id);
+    }
+    if (cur.status === "error") throw new Error(`eval run failed: ${cur.errorMessage || "unknown"}`);
+    return cur;
   }
 }
 

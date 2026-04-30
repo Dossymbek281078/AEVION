@@ -31,14 +31,19 @@ import {
 import {
   applyRefinement,
   buildHistoryContext,
+  createEvalRun,
+  createEvalSuite,
   createRun,
   createSharedPreset,
+  deleteEvalSuite,
   deleteSession,
   deleteSharedPreset,
   ensureSession,
   finishRun,
   getAnalytics,
   getCostTimeseries,
+  getEvalRun,
+  getEvalSuite,
   getMaxOrdering,
   getRun,
   getRunByShareToken,
@@ -48,10 +53,12 @@ import {
   getTopUserTags,
   importSharedPreset,
   insertMessage,
+  listEvalSuites,
   listMessages,
   listPublicSharedPresets,
   listRuns,
   listSessions,
+  listSuiteRuns,
   renameSession,
   renameSessionIfDefault,
   searchRuns,
@@ -59,7 +66,9 @@ import {
   shareRun,
   touchSession,
   unshareRun,
+  updateEvalSuite,
 } from "../services/qcoreai/store";
+import { runEvalSuite } from "../services/qcoreai/evalRunner";
 
 export const qcoreaiRouter = Router();
 
@@ -1082,6 +1091,149 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     res.end();
   } else {
     try { res.end(); } catch { /* noop */ }
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Eval harness — test suites + regression tracking
+   ═══════════════════════════════════════════════════════════════════════
+   A suite holds a list of test cases (input + judge); /run kicks off an
+   async run; consumers poll GET /eval/runs/:id for progress + final score.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/eval/suites", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, strategy, overrides, cases } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "name required" });
+    }
+    const suite = await createEvalSuite({
+      ownerUserId: auth.sub,
+      name,
+      description: typeof description === "string" ? description : null,
+      strategy: typeof strategy === "string" ? strategy : "sequential",
+      overrides: overrides && typeof overrides === "object" ? overrides : {},
+      cases,
+    });
+    res.json({ ok: true, suite });
+  } catch (err: any) {
+    res.status(500).json({ error: "create eval suite failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/suites", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const items = await listEvalSuites(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list eval suites failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/suites/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const s = await getEvalSuite(String(req.params.id));
+    if (!s || s.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
+    res.json({ suite: s });
+  } catch (err: any) {
+    res.status(500).json({ error: "get eval suite failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/eval/suites/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, strategy, overrides, cases } = req.body || {};
+    const s = await updateEvalSuite(String(req.params.id), auth.sub, {
+      name,
+      description,
+      strategy,
+      overrides,
+      cases,
+    });
+    if (!s) return res.status(404).json({ error: "suite not found or forbidden" });
+    res.json({ suite: s });
+  } catch (err: any) {
+    res.status(500).json({ error: "update eval suite failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/eval/suites/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteEvalSuite(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "suite not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete eval suite failed", details: err?.message });
+  }
+});
+
+const evalRunLimiter = rateLimit({ windowMs: 60_000, max: 10 });
+
+qcoreaiRouter.post("/eval/suites/:id/run", evalRunLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const suite = await getEvalSuite(String(req.params.id));
+    if (!suite || suite.ownerUserId !== auth.sub) {
+      return res.status(404).json({ error: "suite not found" });
+    }
+    if (!suite.cases?.length) {
+      return res.status(400).json({ error: "suite has no cases" });
+    }
+    const run = await createEvalRun({
+      suiteId: suite.id,
+      ownerUserId: auth.sub,
+      totalCases: suite.cases.length,
+    });
+    const concurrency = Math.max(1, Math.min(8, Number(req.body?.concurrency) || 3));
+    const perCaseMax = Number(req.body?.perCaseMaxCostUsd);
+    // Fire and forget. Persisted progress is what the client polls.
+    void runEvalSuite({
+      runId: run.id,
+      suite,
+      concurrency,
+      perCaseMaxCostUsd: Number.isFinite(perCaseMax) && perCaseMax > 0 ? perCaseMax : undefined,
+    });
+    res.json({ ok: true, run });
+  } catch (err: any) {
+    res.status(500).json({ error: "start eval run failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/runs/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const r = await getEvalRun(String(req.params.id));
+    if (!r || r.ownerUserId !== auth.sub) return res.status(404).json({ error: "run not found" });
+    res.json({ run: r });
+  } catch (err: any) {
+    res.status(500).json({ error: "get eval run failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/suites/:id/runs", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const suite = await getEvalSuite(String(req.params.id));
+    if (!suite || suite.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const items = await listSuiteRuns(suite.id, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list eval runs failed", details: err?.message });
   }
 });
 

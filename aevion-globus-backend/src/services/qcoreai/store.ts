@@ -1181,3 +1181,342 @@ export async function buildHistoryContext(sessionId: string, maxTurns = 6): Prom
   }
   return out;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Eval harness
+   ═══════════════════════════════════════════════════════════════════════
+   A suite holds a list of test cases (input + judge config). A run executes
+   each case through the orchestrator, applies the per-case judge, and
+   aggregates a 0..1 score so the user can track regressions over time. */
+
+export type EvalJudge =
+  | { type: "contains"; needle: string; caseSensitive?: boolean }
+  | { type: "equals"; expected: string; caseSensitive?: boolean; trim?: boolean }
+  | { type: "regex"; pattern: string; flags?: string }
+  | { type: "min_length"; chars: number }
+  | { type: "max_length"; chars: number }
+  | { type: "not_contains"; needle: string; caseSensitive?: boolean };
+
+export type EvalCase = {
+  id: string;
+  name?: string;
+  input: string;
+  judge: EvalJudge;
+  weight?: number;
+};
+
+export type EvalSuiteRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  strategy: string;
+  overrides: any;
+  cases: EvalCase[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EvalCaseResult = {
+  caseId: string;
+  caseName: string;
+  passed: boolean;
+  judgeKind: string;
+  reason: string;
+  output: string;
+  costUsd: number;
+  durationMs: number;
+  runId?: string | null;
+  error?: string;
+};
+
+export type EvalRunRow = {
+  id: string;
+  suiteId: string;
+  ownerUserId: string;
+  status: "running" | "done" | "error" | "aborted";
+  score: number | null;
+  totalCases: number;
+  passedCases: number;
+  totalCostUsd: number;
+  results: EvalCaseResult[];
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+const memEvalSuites = new Map<string, EvalSuiteRow>();
+const memEvalRuns = new Map<string, EvalRunRow>();
+
+function normalizeStrategy(s?: string): string {
+  return s === "parallel" || s === "debate" ? s : "sequential";
+}
+
+function normalizeCases(cases: any): EvalCase[] {
+  if (!Array.isArray(cases)) return [];
+  const out: EvalCase[] = [];
+  for (const c of cases) {
+    if (!c || typeof c !== "object") continue;
+    const id = String(c.id || crypto.randomUUID()).slice(0, 64);
+    const input = String(c.input ?? "").slice(0, 4000);
+    if (!input.trim()) continue;
+    const j = c.judge || {};
+    let judge: EvalJudge | null = null;
+    if (j.type === "contains" && typeof j.needle === "string") {
+      judge = { type: "contains", needle: String(j.needle).slice(0, 500), caseSensitive: !!j.caseSensitive };
+    } else if (j.type === "not_contains" && typeof j.needle === "string") {
+      judge = { type: "not_contains", needle: String(j.needle).slice(0, 500), caseSensitive: !!j.caseSensitive };
+    } else if (j.type === "equals" && typeof j.expected === "string") {
+      judge = { type: "equals", expected: String(j.expected).slice(0, 4000), caseSensitive: !!j.caseSensitive, trim: j.trim !== false };
+    } else if (j.type === "regex" && typeof j.pattern === "string") {
+      judge = { type: "regex", pattern: String(j.pattern).slice(0, 500), flags: typeof j.flags === "string" ? j.flags.slice(0, 8) : "" };
+    } else if (j.type === "min_length" && Number.isFinite(Number(j.chars))) {
+      judge = { type: "min_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
+    } else if (j.type === "max_length" && Number.isFinite(Number(j.chars))) {
+      judge = { type: "max_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
+    } else {
+      continue;
+    }
+    const weight = Number.isFinite(Number(c.weight)) ? Math.max(0, Math.min(100, Number(c.weight))) : 1;
+    const name = c.name ? String(c.name).slice(0, 80) : `Case ${id.slice(0, 6)}`;
+    out.push({ id, name, input, judge, weight });
+    if (out.length >= 200) break;
+  }
+  return out;
+}
+
+export async function createEvalSuite(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  strategy?: string;
+  overrides?: any;
+  cases?: any;
+}): Promise<EvalSuiteRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (opts.name || "").trim().slice(0, 80) || "Untitled suite";
+  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
+  const strategy = normalizeStrategy(opts.strategy);
+  const overrides = opts.overrides && typeof opts.overrides === "object" ? opts.overrides : {};
+  const cases = normalizeCases(opts.cases);
+
+  if (!isDbReady()) {
+    const row: EvalSuiteRow = {
+      id,
+      ownerUserId: opts.ownerUserId,
+      name,
+      description,
+      strategy,
+      overrides,
+      cases,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memEvalSuites.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreEvalSuite"
+       ("id","ownerUserId","name","description","strategy","overrides","cases")
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)
+     RETURNING *`,
+    [id, opts.ownerUserId, name, description, strategy, JSON.stringify(overrides), JSON.stringify(cases)]
+  );
+  return r.rows[0] as EvalSuiteRow;
+}
+
+export async function listEvalSuites(userId: string, limit = 50): Promise<EvalSuiteRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(200, limit));
+  if (!isDbReady()) {
+    return Array.from(memEvalSuites.values())
+      .filter((s) => s.ownerUserId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, lim);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreEvalSuite"
+      WHERE "ownerUserId" = $1
+      ORDER BY "updatedAt" DESC
+      LIMIT $2`,
+    [userId, lim]
+  );
+  return r.rows as EvalSuiteRow[];
+}
+
+export async function getEvalSuite(id: string): Promise<EvalSuiteRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memEvalSuites.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreEvalSuite" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as EvalSuiteRow) || null;
+}
+
+export async function updateEvalSuite(
+  id: string,
+  userId: string,
+  patch: { name?: string; description?: string | null; strategy?: string; overrides?: any; cases?: any }
+): Promise<EvalSuiteRow | null> {
+  await ensureQCoreTables(pool);
+
+  if (!isDbReady()) {
+    const cur = memEvalSuites.get(id);
+    if (!cur || cur.ownerUserId !== userId) return null;
+    if (patch.name != null) cur.name = String(patch.name).trim().slice(0, 80) || cur.name;
+    if (patch.description !== undefined)
+      cur.description = patch.description ? String(patch.description).trim().slice(0, 400) : null;
+    if (patch.strategy) cur.strategy = normalizeStrategy(patch.strategy);
+    if (patch.overrides && typeof patch.overrides === "object") cur.overrides = patch.overrides;
+    if (patch.cases !== undefined) cur.cases = normalizeCases(patch.cases);
+    cur.updatedAt = nowIso();
+    return cur;
+  }
+
+  const sets: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (patch.name != null) {
+    const v = String(patch.name).trim().slice(0, 80);
+    if (v) {
+      sets.push(`"name"=$${i++}`);
+      params.push(v);
+    }
+  }
+  if (patch.description !== undefined) {
+    sets.push(`"description"=$${i++}`);
+    params.push(patch.description ? String(patch.description).trim().slice(0, 400) : null);
+  }
+  if (patch.strategy) {
+    sets.push(`"strategy"=$${i++}`);
+    params.push(normalizeStrategy(patch.strategy));
+  }
+  if (patch.overrides && typeof patch.overrides === "object") {
+    sets.push(`"overrides"=$${i++}::jsonb`);
+    params.push(JSON.stringify(patch.overrides));
+  }
+  if (patch.cases !== undefined) {
+    sets.push(`"cases"=$${i++}::jsonb`);
+    params.push(JSON.stringify(normalizeCases(patch.cases)));
+  }
+  if (!sets.length) return getEvalSuite(id);
+  sets.push(`"updatedAt"=NOW()`);
+  params.push(id, userId);
+  const r = await pool.query(
+    `UPDATE "QCoreEvalSuite" SET ${sets.join(", ")}
+      WHERE "id"=$${i++} AND "ownerUserId"=$${i++}
+      RETURNING *`,
+    params
+  );
+  return (r.rows?.[0] as EvalSuiteRow) || null;
+}
+
+export async function deleteEvalSuite(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memEvalSuites.get(id);
+    if (!s || s.ownerUserId !== userId) return false;
+    memEvalSuites.delete(id);
+    for (const [runId, run] of memEvalRuns) {
+      if (run.suiteId === id) memEvalRuns.delete(runId);
+    }
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreEvalSuite" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function createEvalRun(opts: {
+  suiteId: string;
+  ownerUserId: string;
+  totalCases: number;
+}): Promise<EvalRunRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  if (!isDbReady()) {
+    const row: EvalRunRow = {
+      id,
+      suiteId: opts.suiteId,
+      ownerUserId: opts.ownerUserId,
+      status: "running",
+      score: null,
+      totalCases: opts.totalCases,
+      passedCases: 0,
+      totalCostUsd: 0,
+      results: [],
+      errorMessage: null,
+      startedAt: nowIso(),
+      completedAt: null,
+    };
+    memEvalRuns.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreEvalRun"
+       ("id","suiteId","ownerUserId","status","totalCases","passedCases","totalCostUsd","results")
+     VALUES ($1,$2,$3,'running',$4,0,0,'[]'::jsonb)
+     RETURNING *`,
+    [id, opts.suiteId, opts.ownerUserId, opts.totalCases]
+  );
+  return r.rows[0] as EvalRunRow;
+}
+
+export async function updateEvalRun(
+  id: string,
+  patch: Partial<Omit<EvalRunRow, "id" | "suiteId" | "ownerUserId" | "startedAt">>
+): Promise<EvalRunRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const cur = memEvalRuns.get(id);
+    if (!cur) return null;
+    Object.assign(cur, patch);
+    return cur;
+  }
+  const sets: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (patch.status !== undefined) { sets.push(`"status"=$${i++}`); params.push(patch.status); }
+  if (patch.score !== undefined) { sets.push(`"score"=$${i++}`); params.push(patch.score); }
+  if (patch.passedCases !== undefined) { sets.push(`"passedCases"=$${i++}`); params.push(patch.passedCases); }
+  if (patch.totalCostUsd !== undefined) { sets.push(`"totalCostUsd"=$${i++}`); params.push(patch.totalCostUsd); }
+  if (patch.results !== undefined) { sets.push(`"results"=$${i++}::jsonb`); params.push(JSON.stringify(patch.results)); }
+  if (patch.errorMessage !== undefined) { sets.push(`"errorMessage"=$${i++}`); params.push(patch.errorMessage); }
+  if (patch.completedAt !== undefined) { sets.push(`"completedAt"=$${i++}`); params.push(patch.completedAt); }
+  if (!sets.length) return getEvalRun(id);
+  params.push(id);
+  const r = await pool.query(
+    `UPDATE "QCoreEvalRun" SET ${sets.join(", ")}
+      WHERE "id"=$${i++}
+      RETURNING *`,
+    params
+  );
+  return (r.rows?.[0] as EvalRunRow) || null;
+}
+
+export async function getEvalRun(id: string): Promise<EvalRunRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memEvalRuns.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreEvalRun" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as EvalRunRow) || null;
+}
+
+export async function listSuiteRuns(suiteId: string, limit = 30): Promise<EvalRunRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  if (!isDbReady()) {
+    return Array.from(memEvalRuns.values())
+      .filter((r) => r.suiteId === suiteId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, lim);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreEvalRun"
+      WHERE "suiteId"=$1
+      ORDER BY "startedAt" DESC
+      LIMIT $2`,
+    [suiteId, lim]
+  );
+  return r.rows as EvalRunRow[];
+}

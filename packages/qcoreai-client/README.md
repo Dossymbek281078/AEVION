@@ -131,6 +131,67 @@ console.log("Got preset:", imported.name, imported.strategy, imported.overrides)
 await client.deletePreset(id);
 ```
 
+## Eval harness
+
+Track quality regressions by running a fixed suite of test cases through your multi-agent pipeline. Each case has an input prompt and a judge (`contains` / `not_contains` / `equals` / `regex` / `min_length` / `max_length`). The runner aggregates a 0..1 weighted score so you can chart it over time.
+
+```ts
+// 1. Create a suite.
+const suite = await client.createEvalSuite({
+  name: "Onboarding writer regression",
+  description: "Catch days where the writer drops the TL;DR section",
+  strategy: "sequential",
+  cases: [
+    {
+      id: "c1",
+      name: "Has TL;DR",
+      input: "Plan a 30-day onboarding for a B2B SaaS",
+      judge: { type: "contains", needle: "TL;DR", caseSensitive: false },
+    },
+    {
+      id: "c2",
+      name: "Min length",
+      input: "Plan a 30-day onboarding for a B2B SaaS",
+      judge: { type: "min_length", chars: 800 },
+    },
+    {
+      id: "c3",
+      name: "No banned phrasing",
+      input: "Plan a 30-day onboarding for a B2B SaaS",
+      judge: { type: "not_contains", needle: "as a large language model" },
+    },
+  ],
+});
+
+// 2. Run it (and wait for completion).
+const result = await client.runEvalSuiteAndWait(suite.id, {
+  concurrency: 3,
+  perCaseMaxCostUsd: 0.05,
+  timeoutMs: 5 * 60_000,
+});
+
+console.log(`Score: ${(result.score! * 100).toFixed(1)}%`);
+for (const r of result.results) {
+  console.log(`${r.passed ? "✔" : "✘"} ${r.caseName} — ${r.reason}`);
+}
+
+// 3. Track regressions over time.
+const history = await client.listSuiteRuns(suite.id, 30);
+const trend = history.filter((r) => r.status === "done").map((r) => r.score);
+console.log("Last 30 scores:", trend);
+```
+
+Or kick off a run without blocking and poll yourself:
+
+```ts
+const run = await client.runEvalSuite(suite.id);
+while (run.status === "running") {
+  await new Promise((r) => setTimeout(r, 1500));
+  Object.assign(run, await client.getEvalRun(run.id));
+  console.log(`progress: ${run.results.length}/${run.totalCases}`);
+}
+```
+
 ## Per-user webhooks
 
 Configure a personal webhook that receives `run.completed` events with HMAC signatures.
@@ -188,6 +249,15 @@ app.post("/qcore-webhook", express.raw({ type: "*/*" }), async (req, res) => {
 | `setUserWebhook(url, secret?)` | `PUT /api/qcoreai/me/webhook` | Auth required |
 | `deleteUserWebhook()` | `DELETE /api/qcoreai/me/webhook` | Auth required |
 | `verifyWebhookHmac(body, sig, secret)` | — | Receiver-side utility |
+| `createEvalSuite(opts)` | `POST /api/qcoreai/eval/suites` | Auth |
+| `listEvalSuites(limit?)` | `GET /api/qcoreai/eval/suites` | Auth |
+| `getEvalSuite(id)` | `GET /api/qcoreai/eval/suites/:id` | Owner |
+| `updateEvalSuite(id, patch)` | `PATCH /api/qcoreai/eval/suites/:id` | Owner |
+| `deleteEvalSuite(id)` | `DELETE /api/qcoreai/eval/suites/:id` | Owner |
+| `runEvalSuite(id, opts?)` | `POST /api/qcoreai/eval/suites/:id/run` | Async, returns in-flight EvalRun |
+| `getEvalRun(id)` | `GET /api/qcoreai/eval/runs/:id` | Poll for progress |
+| `listSuiteRuns(id, limit?)` | `GET /api/qcoreai/eval/suites/:id/runs` | Regression history |
+| `runEvalSuiteAndWait(id, opts?)` | — | Convenience: kick off + poll until done |
 
 ## Browser usage
 

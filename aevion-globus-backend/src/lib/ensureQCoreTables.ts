@@ -156,6 +156,52 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       ON "QCoreSharedPreset" ("ownerUserId");
   `);
 
+  // Eval harness — test suites and runs for regression tracking. A suite
+  // is a list of cases (input + judge config); a run executes every case
+  // through the orchestrator and aggregates a 0..1 score.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreEvalSuite" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "cases"       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreEvalSuite_owner_updated_idx"
+      ON "QCoreEvalSuite" ("ownerUserId", "updatedAt" DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreEvalRun" (
+      "id"             TEXT PRIMARY KEY,
+      "suiteId"        TEXT NOT NULL,
+      "ownerUserId"    TEXT NOT NULL,
+      "status"         TEXT NOT NULL DEFAULT 'running',
+      "score"          DOUBLE PRECISION,
+      "totalCases"     INTEGER NOT NULL DEFAULT 0,
+      "passedCases"    INTEGER NOT NULL DEFAULT 0,
+      "totalCostUsd"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "results"        JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "errorMessage"   TEXT,
+      "startedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "completedAt"    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreEvalRun_suite_started_idx"
+      ON "QCoreEvalRun" ("suiteId", "startedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreEvalRun_owner_started_idx"
+      ON "QCoreEvalRun" ("ownerUserId", "startedAt" DESC);
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

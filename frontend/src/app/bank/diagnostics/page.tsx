@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { captureMessage } from "@/lib/sentry";
 import { loadSignatures, type SignedOperation } from "../_lib/signatures";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
@@ -189,6 +190,7 @@ export default function BankDiagnosticsPage() {
   const [autoRefreshSec, setAutoRefreshSec] = useState<0 | 30 | 60>(0);
   const [populating, setPopulating] = useState(false);
   const [populateLog, setPopulateLog] = useState<string[]>([]);
+  const [sentryTestState, setSentryTestState] = useState<"idle" | "fired" | "no-dsn">("idle");
 
   useEffect(() => {
     setToken(readToken());
@@ -277,6 +279,27 @@ export default function BankDiagnosticsPage() {
     const id = window.setInterval(() => void runProbes(), autoRefreshSec * 1000);
     return () => window.clearInterval(id);
   }, [autoRefreshSec, runProbes]);
+
+  const fireSentryTest = useCallback(() => {
+    const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
+    if (!dsn) {
+      setSentryTestState("no-dsn");
+      window.setTimeout(() => setSentryTestState("idle"), 4000);
+      return;
+    }
+    captureMessage(
+      `[bank-diagnostics] synthetic test fired at ${new Date().toISOString()}`,
+      "info",
+    );
+    // ALSO throw async so the window.onerror path is exercised end-to-end.
+    window.setTimeout(() => {
+      throw new Error(
+        `bank-diagnostics: synthetic test exception fired at ${new Date().toISOString()}`,
+      );
+    }, 0);
+    setSentryTestState("fired");
+    window.setTimeout(() => setSentryTestState("idle"), 4000);
+  }, []);
 
   const populateDemo = useCallback(async () => {
     if (populating) return;
@@ -745,6 +768,40 @@ export default function BankDiagnosticsPage() {
               </table>
             </div>
           )}
+        </Section>
+
+        <Section
+          title="Observability self-test"
+          subtitle="Fires a synthetic message + async exception so you can verify the Sentry hook is configured AND receiving events. No-op if NEXT_PUBLIC_SENTRY_DSN is unset."
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={fireSentryTest}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 9,
+                fontSize: 13,
+                fontWeight: 800,
+                background: "linear-gradient(135deg, rgba(220,38,38,0.10), rgba(217,119,6,0.10))",
+                color: "#b91c1c",
+                border: "1px solid rgba(220,38,38,0.30)",
+                cursor: "pointer",
+              }}
+            >
+              ⚠ Fire test exception
+            </button>
+            {sentryTestState === "fired" ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#16a34a" }}>
+                Captured. Check your Sentry inbox in a few seconds.
+              </span>
+            ) : null}
+            {sentryTestState === "no-dsn" ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#dc2626" }}>
+                NEXT_PUBLIC_SENTRY_DSN not set — hook is a no-op. Set it on the build environment to enable.
+              </span>
+            ) : null}
+          </div>
         </Section>
 
         <Section title="Auth state" subtitle="Token is read from localStorage and verified via /api/auth/me.">

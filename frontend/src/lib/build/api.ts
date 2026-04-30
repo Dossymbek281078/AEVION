@@ -10,6 +10,18 @@ export type ProjectStatus = "OPEN" | "IN_PROGRESS" | "DONE";
 export type VacancyStatus = "OPEN" | "CLOSED";
 export type ApplicationStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 
+export type ShiftPreference = "DAY" | "NIGHT" | "FLEX" | "ANY";
+export type AvailabilityType = "FULL_TIME" | "PART_TIME" | "PROJECT" | "SHIFT" | "REMOTE";
+
+export type ResumeCertification = {
+  name: string;
+  issuer?: string;
+  year?: number | null;
+  credentialUrl?: string | null;
+};
+export type ResumePortfolioItem = { label: string; url: string };
+export type ResumeAchievement = { title: string; description?: string; year?: number | null };
+
 export type BuildProfile = {
   id: string;
   userId: string;
@@ -34,6 +46,20 @@ export type BuildProfile = {
   openToWork: boolean;
   verifiedAt: string | null;
   verifiedReason: string | null;
+  // Resume v2 — construction-vertical
+  certifications: ResumeCertification[];
+  portfolio: ResumePortfolioItem[];
+  achievements: ResumeAchievement[];
+  driversLicense: string | null;
+  shiftPreference: ShiftPreference | null;
+  availabilityType: AvailabilityType | null;
+  readyFromDate: string | null;
+  preferredLocations: string[];
+  toolsOwned: string[];
+  medicalCheckValid: boolean;
+  medicalCheckUntil: string | null;
+  safetyTrainingValid: boolean;
+  safetyTrainingUntil: string | null;
 };
 
 export type BuildExperience = {
@@ -295,6 +321,19 @@ export const buildApi = {
     experienceYears?: number;
     photoUrl?: string | null;
     openToWork?: boolean;
+    certifications?: ResumeCertification[];
+    portfolio?: ResumePortfolioItem[];
+    achievements?: ResumeAchievement[];
+    driversLicense?: string | null;
+    shiftPreference?: ShiftPreference | null;
+    availabilityType?: AvailabilityType | null;
+    readyFromDate?: string | null;
+    preferredLocations?: string[];
+    toolsOwned?: string[];
+    medicalCheckValid?: boolean;
+    medicalCheckUntil?: string | null;
+    safetyTrainingValid?: boolean;
+    safetyTrainingUntil?: string | null;
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),

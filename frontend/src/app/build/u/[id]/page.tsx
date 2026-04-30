@@ -23,6 +23,19 @@ type Bundle = {
   openToWork: boolean;
   verifiedAt: string | null;
   verifiedReason: string | null;
+  certifications: { name: string; issuer?: string; year?: number | null; credentialUrl?: string | null }[];
+  portfolio: { label: string; url: string }[];
+  achievements: { title: string; description?: string; year?: number | null }[];
+  driversLicense: string | null;
+  shiftPreference: string | null;
+  availabilityType: string | null;
+  readyFromDate: string | null;
+  preferredLocations: string[];
+  toolsOwned: string[];
+  medicalCheckValid: boolean;
+  medicalCheckUntil: string | null;
+  safetyTrainingValid: boolean;
+  safetyTrainingUntil: string | null;
   email: string | null;
   experiences: {
     id: string;
@@ -204,6 +217,118 @@ export default async function PublicProfilePage({ params }: Props) {
           </Section>
         )}
 
+        {(data.driversLicense ||
+          data.shiftPreference ||
+          data.availabilityType ||
+          data.readyFromDate ||
+          data.preferredLocations.length > 0 ||
+          data.toolsOwned.length > 0 ||
+          data.medicalCheckValid ||
+          data.safetyTrainingValid) && (
+          <Section title="Construction-vertical signals">
+            <div className="grid gap-3 text-sm sm:grid-cols-2">
+              {data.availabilityType && (
+                <KV k="Availability">{data.availabilityType.replace("_", " ")}</KV>
+              )}
+              {data.shiftPreference && <KV k="Shifts">{data.shiftPreference}</KV>}
+              {data.readyFromDate && <KV k="Ready from">{data.readyFromDate}</KV>}
+              {data.driversLicense && <KV k="Driver's license">{data.driversLicense}</KV>}
+              {data.medicalCheckValid && (
+                <KV k="Medical check">
+                  ✓ valid{data.medicalCheckUntil ? ` until ${data.medicalCheckUntil}` : ""}
+                </KV>
+              )}
+              {data.safetyTrainingValid && (
+                <KV k="Safety training">
+                  ✓ current{data.safetyTrainingUntil ? ` until ${data.safetyTrainingUntil}` : ""}
+                </KV>
+              )}
+              {data.preferredLocations.length > 0 && (
+                <KV k="Preferred locations">{data.preferredLocations.join(", ")}</KV>
+              )}
+            </div>
+            {data.toolsOwned.length > 0 && (
+              <div className="mt-4">
+                <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Tools / equipment owned
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {data.toolsOwned.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-full bg-fuchsia-500/15 px-3 py-0.5 text-xs text-fuchsia-200"
+                    >
+                      🔧 {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Section>
+        )}
+
+        {data.certifications.length > 0 && (
+          <Section title="Certifications & licenses">
+            <ul className="space-y-2 text-sm">
+              {data.certifications.map((c, i) => (
+                <li key={`${c.name}-${i}`} className="flex flex-wrap gap-2">
+                  <span className="font-semibold text-white">{c.name}</span>
+                  {c.issuer && <span className="text-slate-400">· {c.issuer}</span>}
+                  {c.year && <span className="text-slate-500">· {c.year}</span>}
+                  {c.credentialUrl && (
+                    <a
+                      href={c.credentialUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-300 underline-offset-2 hover:underline"
+                    >
+                      verify ↗
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
+        {data.portfolio.length > 0 && (
+          <Section title="Portfolio">
+            <ul className="grid gap-2 text-sm sm:grid-cols-2">
+              {data.portfolio.map((p, i) => (
+                <li key={i}>
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 hover:bg-white/5"
+                  >
+                    <div className="font-medium text-slate-200">{p.label}</div>
+                    <div className="truncate text-xs text-slate-500">{p.url}</div>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
+        {data.achievements.length > 0 && (
+          <Section title="Achievements">
+            <ul className="space-y-3 text-sm">
+              {data.achievements.map((a, i) => (
+                <li key={i}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="font-semibold text-white">{a.title}</div>
+                    {a.year && <div className="text-xs text-slate-500">{a.year}</div>}
+                  </div>
+                  {a.description && (
+                    <p className="mt-1 text-slate-400">{a.description}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
         {data.experiences.length > 0 && (
           <Section title="Experience">
             <ul className="space-y-4">
@@ -253,6 +378,15 @@ export default async function PublicProfilePage({ params }: Props) {
         )}
       </div>
     </main>
+  );
+}
+
+function KV({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{k}</div>
+      <div className="mt-0.5 text-slate-200">{children}</div>
+    </div>
   );
 }
 

@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { buildApi, type BuildProfile, type BuildRole } from "@/lib/build/api";
+import {
+  buildApi,
+  type BuildProfile,
+  type BuildRole,
+  type ShiftPreference,
+  type AvailabilityType,
+} from "@/lib/build/api";
+
+const SHIFTS: ShiftPreference[] = ["DAY", "NIGHT", "FLEX", "ANY"];
+const AVAILS: AvailabilityType[] = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"];
 
 const ROLES: { value: BuildRole; label: string; hint: string }[] = [
   { value: "CLIENT", label: "Client", hint: "I post projects and hire" },
@@ -45,6 +54,30 @@ export function ProfileForm({
   const [photoUrl, setPhotoUrl] = useState(initial?.photoUrl ?? "");
   const [openToWork, setOpenToWork] = useState<boolean>(initial?.openToWork ?? false);
 
+  // Resume v2 — construction-vertical
+  const [driversLicense, setDriversLicense] = useState(initial?.driversLicense ?? "");
+  const [shiftPreference, setShiftPreference] = useState<ShiftPreference | "">(
+    initial?.shiftPreference ?? "",
+  );
+  const [availabilityType, setAvailabilityType] = useState<AvailabilityType | "">(
+    initial?.availabilityType ?? "",
+  );
+  const [readyFromDate, setReadyFromDate] = useState(initial?.readyFromDate ?? "");
+  const [preferredLocations, setPreferredLocations] = useState<string[]>(
+    initial?.preferredLocations ?? [],
+  );
+  const [locInput, setLocInput] = useState("");
+  const [toolsOwned, setToolsOwned] = useState<string[]>(initial?.toolsOwned ?? []);
+  const [toolInput, setToolInput] = useState("");
+  const [medicalCheckValid, setMedicalCheckValid] = useState<boolean>(
+    initial?.medicalCheckValid ?? false,
+  );
+  const [medicalCheckUntil, setMedicalCheckUntil] = useState(initial?.medicalCheckUntil ?? "");
+  const [safetyTrainingValid, setSafetyTrainingValid] = useState<boolean>(
+    initial?.safetyTrainingValid ?? false,
+  );
+  const [safetyTrainingUntil, setSafetyTrainingUntil] = useState(initial?.safetyTrainingUntil ?? "");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -69,6 +102,24 @@ export function ProfileForm({
     setLanguages([...languages, v].slice(0, 20));
     setLanguageInput("");
   }
+  function addLoc() {
+    const v = locInput.trim();
+    if (!v || preferredLocations.includes(v)) {
+      setLocInput("");
+      return;
+    }
+    setPreferredLocations([...preferredLocations, v].slice(0, 20));
+    setLocInput("");
+  }
+  function addTool() {
+    const v = toolInput.trim();
+    if (!v || toolsOwned.includes(v)) {
+      setToolInput("");
+      return;
+    }
+    setToolsOwned([...toolsOwned, v].slice(0, 50));
+    setToolInput("");
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -92,6 +143,16 @@ export function ProfileForm({
         experienceYears: experienceYears ? Number(experienceYears) : 0,
         photoUrl: photoUrl.trim() || null,
         openToWork,
+        driversLicense: driversLicense.trim() || null,
+        shiftPreference: shiftPreference || null,
+        availabilityType: availabilityType || null,
+        readyFromDate: readyFromDate.trim() || null,
+        preferredLocations,
+        toolsOwned,
+        medicalCheckValid,
+        medicalCheckUntil: medicalCheckUntil.trim() || null,
+        safetyTrainingValid,
+        safetyTrainingUntil: safetyTrainingUntil.trim() || null,
       });
       setSavedAt(new Date().toISOString());
       onSaved?.(saved);
@@ -320,6 +381,180 @@ export function ProfileForm({
           <span>Open to work — show me in talent search</span>
         </label>
       </Field>
+
+      <SectionTitle
+        title="Construction-vertical"
+        hint="Detailed signals that matter for on-site hiring — most platforms miss these. Filling them puts you on top of recruiter searches."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Driver's license categories">
+          <input
+            value={driversLicense}
+            onChange={(e) => setDriversLicense(e.target.value)}
+            placeholder="B, C, E (comma-separated)"
+            maxLength={32}
+            className="input-build"
+          />
+        </Field>
+        <Field label="Ready from (date)">
+          <input
+            type="date"
+            value={readyFromDate}
+            onChange={(e) => setReadyFromDate(e.target.value)}
+            className="input-build"
+          />
+        </Field>
+        <Field label="Availability type">
+          <div className="flex flex-wrap gap-1">
+            {AVAILS.map((a) => (
+              <button
+                type="button"
+                key={a}
+                onClick={() => setAvailabilityType(availabilityType === a ? "" : a)}
+                className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                  availabilityType === a
+                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                    : "border-white/10 bg-white/5 text-slate-300 hover:border-white/30"
+                }`}
+              >
+                {a.replace("_", " ")}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Shift preference">
+          <div className="flex flex-wrap gap-1">
+            {SHIFTS.map((s) => (
+              <button
+                type="button"
+                key={s}
+                onClick={() => setShiftPreference(shiftPreference === s ? "" : s)}
+                className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                  shiftPreference === s
+                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                    : "border-white/10 bg-white/5 text-slate-300 hover:border-white/30"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Preferred locations">
+          <div className="flex flex-wrap gap-1.5 rounded-lg border border-white/10 bg-white/5 p-2">
+            {preferredLocations.map((l) => (
+              <span
+                key={l}
+                className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200"
+              >
+                {l}
+                <button
+                  type="button"
+                  onClick={() => setPreferredLocations(preferredLocations.filter((x) => x !== l))}
+                  className="text-amber-200/60 hover:text-amber-200"
+                  aria-label={`Remove ${l}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              value={locInput}
+              onChange={(e) => setLocInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addLoc();
+                }
+              }}
+              onBlur={addLoc}
+              placeholder={preferredLocations.length === 0 ? "Almaty, Astana, Remote…" : ""}
+              className="flex-1 min-w-[120px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+            />
+          </div>
+        </Field>
+
+        <Field label="Tools / equipment owned">
+          <div className="flex flex-wrap gap-1.5 rounded-lg border border-white/10 bg-white/5 p-2">
+            {toolsOwned.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-1 rounded-full bg-fuchsia-500/15 px-2 py-0.5 text-xs text-fuchsia-200"
+              >
+                {t}
+                <button
+                  type="button"
+                  onClick={() => setToolsOwned(toolsOwned.filter((x) => x !== t))}
+                  className="text-fuchsia-200/60 hover:text-fuchsia-200"
+                  aria-label={`Remove ${t}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              value={toolInput}
+              onChange={(e) => setToolInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addTool();
+                }
+              }}
+              onBlur={addTool}
+              placeholder={toolsOwned.length === 0 ? "Welding mask, drill, scaffolding…" : ""}
+              className="flex-1 min-w-[120px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+            />
+          </div>
+        </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="">
+          <label className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={medicalCheckValid}
+              onChange={(e) => setMedicalCheckValid(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded accent-emerald-500"
+            />
+            <div className="flex-1">
+              <div className="font-medium text-slate-200">Medical check valid</div>
+              <input
+                type="date"
+                value={medicalCheckUntil}
+                onChange={(e) => setMedicalCheckUntil(e.target.value)}
+                disabled={!medicalCheckValid}
+                placeholder="valid until"
+                className="input-build mt-1.5 text-xs disabled:opacity-50"
+              />
+            </div>
+          </label>
+        </Field>
+        <Field label="">
+          <label className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={safetyTrainingValid}
+              onChange={(e) => setSafetyTrainingValid(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded accent-emerald-500"
+            />
+            <div className="flex-1">
+              <div className="font-medium text-slate-200">Safety training current</div>
+              <input
+                type="date"
+                value={safetyTrainingUntil}
+                onChange={(e) => setSafetyTrainingUntil(e.target.value)}
+                disabled={!safetyTrainingValid}
+                placeholder="valid until"
+                className="input-build mt-1.5 text-xs disabled:opacity-50"
+              />
+            </div>
+          </label>
+        </Field>
+      </div>
 
       <Field label="About (long-form)">
         <textarea

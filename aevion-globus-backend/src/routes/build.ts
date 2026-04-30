@@ -13,6 +13,8 @@ import {
   VACANCY_STATUSES,
   APPLICATION_STATUSES,
   BUILD_ROLES,
+  SHIFT_PREFERENCES,
+  AVAILABILITY_TYPES,
   PLAN_KEYS,
   safeParseJson,
   getUserPlan,
@@ -63,6 +65,11 @@ buildRouter.get("/users/me", async (req, res) => {
           ...rawProfile,
           skills: safeParseJson(rawProfile.skillsJson, [] as string[]),
           languages: safeParseJson(rawProfile.languagesJson, [] as string[]),
+          certifications: safeParseJson(rawProfile.certificationsJson, [] as unknown[]),
+          portfolio: safeParseJson(rawProfile.portfolioJson, [] as unknown[]),
+          achievements: safeParseJson(rawProfile.achievementsJson, [] as unknown[]),
+          preferredLocations: safeParseJson(rawProfile.preferredLocationsJson, [] as string[]),
+          toolsOwned: safeParseJson(rawProfile.toolsOwnedJson, [] as string[]),
         }
       : null;
 
@@ -143,14 +150,60 @@ buildRouter.post("/profiles", async (req, res) => {
       : String(req.body.photoUrl).trim().slice(0, 2000) || null;
     const openToWork = req.body?.openToWork === true || req.body?.openToWork === "true";
 
+    // Resume v2 — construction-vertical fields. All optional.
+    const arrField = (raw: unknown, max = 30, maxLen = 200): string[] =>
+      Array.isArray(raw)
+        ? raw
+            .map((s) => String(s).trim())
+            .filter((s) => s.length > 0 && s.length <= maxLen)
+            .slice(0, max)
+        : [];
+    const objArrField = (raw: unknown, max = 30): unknown[] =>
+      Array.isArray(raw) ? raw.slice(0, max) : [];
+
+    const certifications = objArrField(req.body?.certifications, 20); // [{name, issuer, year, credentialUrl?}]
+    const portfolio = objArrField(req.body?.portfolio, 20); // [{label, url}]
+    const achievements = objArrField(req.body?.achievements, 20); // [{title, description?, year?}]
+    const driversLicense = req.body?.driversLicense == null
+      ? null
+      : String(req.body.driversLicense).trim().slice(0, 32) || null;
+    const shiftPreference =
+      typeof req.body?.shiftPreference === "string" && (SHIFT_PREFERENCES as readonly string[]).includes(req.body.shiftPreference)
+        ? (req.body.shiftPreference as typeof SHIFT_PREFERENCES[number])
+        : null;
+    const availabilityType =
+      typeof req.body?.availabilityType === "string" &&
+      (AVAILABILITY_TYPES as readonly string[]).includes(req.body.availabilityType)
+        ? (req.body.availabilityType as typeof AVAILABILITY_TYPES[number])
+        : null;
+    const readyFromDate = req.body?.readyFromDate == null
+      ? null
+      : String(req.body.readyFromDate).trim().slice(0, 32) || null;
+    const preferredLocations = arrField(req.body?.preferredLocations, 20, 100);
+    const toolsOwned = arrField(req.body?.toolsOwned, 50, 80);
+    const medicalCheckValid = req.body?.medicalCheckValid === true || req.body?.medicalCheckValid === "true";
+    const medicalCheckUntil = req.body?.medicalCheckUntil == null
+      ? null
+      : String(req.body.medicalCheckUntil).trim().slice(0, 32) || null;
+    const safetyTrainingValid = req.body?.safetyTrainingValid === true || req.body?.safetyTrainingValid === "true";
+    const safetyTrainingUntil = req.body?.safetyTrainingUntil == null
+      ? null
+      : String(req.body.safetyTrainingUntil).trim().slice(0, 32) || null;
+
     const id = crypto.randomUUID();
     const result = await pool.query(
       `INSERT INTO "BuildProfile"
          ("id","userId","name","phone","city","description","buildRole",
           "title","summary","skillsJson","languagesJson",
           "salaryMin","salaryMax","salaryCurrency","availability",
-          "experienceYears","photoUrl","openToWork")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          "experienceYears","photoUrl","openToWork",
+          "certificationsJson","portfolioJson","achievementsJson",
+          "driversLicense","shiftPreference","availabilityType","readyFromDate",
+          "preferredLocationsJson","toolsOwnedJson",
+          "medicalCheckValid","medicalCheckUntil",
+          "safetyTrainingValid","safetyTrainingUntil")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
        ON CONFLICT ("userId") DO UPDATE SET
          "name" = EXCLUDED."name",
          "phone" = EXCLUDED."phone",
@@ -168,6 +221,19 @@ buildRouter.post("/profiles", async (req, res) => {
          "experienceYears" = EXCLUDED."experienceYears",
          "photoUrl" = EXCLUDED."photoUrl",
          "openToWork" = EXCLUDED."openToWork",
+         "certificationsJson" = EXCLUDED."certificationsJson",
+         "portfolioJson" = EXCLUDED."portfolioJson",
+         "achievementsJson" = EXCLUDED."achievementsJson",
+         "driversLicense" = EXCLUDED."driversLicense",
+         "shiftPreference" = EXCLUDED."shiftPreference",
+         "availabilityType" = EXCLUDED."availabilityType",
+         "readyFromDate" = EXCLUDED."readyFromDate",
+         "preferredLocationsJson" = EXCLUDED."preferredLocationsJson",
+         "toolsOwnedJson" = EXCLUDED."toolsOwnedJson",
+         "medicalCheckValid" = EXCLUDED."medicalCheckValid",
+         "medicalCheckUntil" = EXCLUDED."medicalCheckUntil",
+         "safetyTrainingValid" = EXCLUDED."safetyTrainingValid",
+         "safetyTrainingUntil" = EXCLUDED."safetyTrainingUntil",
          "updatedAt" = NOW()
        RETURNING *`,
       [
@@ -189,6 +255,19 @@ buildRouter.post("/profiles", async (req, res) => {
         experienceYears,
         photoUrl,
         openToWork,
+        JSON.stringify(certifications),
+        JSON.stringify(portfolio),
+        JSON.stringify(achievements),
+        driversLicense,
+        shiftPreference,
+        availabilityType,
+        readyFromDate,
+        JSON.stringify(preferredLocations),
+        JSON.stringify(toolsOwned),
+        medicalCheckValid,
+        medicalCheckUntil,
+        safetyTrainingValid,
+        safetyTrainingUntil,
       ],
     );
 
@@ -197,6 +276,11 @@ buildRouter.post("/profiles", async (req, res) => {
       ...row,
       skills: safeParseJson(row.skillsJson, [] as string[]),
       languages: safeParseJson(row.languagesJson, [] as string[]),
+      certifications: safeParseJson(row.certificationsJson, [] as unknown[]),
+      portfolio: safeParseJson(row.portfolioJson, [] as unknown[]),
+      achievements: safeParseJson(row.achievementsJson, [] as unknown[]),
+      preferredLocations: safeParseJson(row.preferredLocationsJson, [] as string[]),
+      toolsOwned: safeParseJson(row.toolsOwnedJson, [] as string[]),
     }, 201);
   } catch (err: unknown) {
     return fail(res, 500, "profile_upsert_failed", { details: (err as Error).message });
@@ -216,6 +300,11 @@ buildRouter.get("/profiles/:id", async (req, res) => {
               p."salaryMin", p."salaryMax", p."salaryCurrency", p."availability",
               p."experienceYears", p."photoUrl", p."openToWork",
               p."verifiedAt", p."verifiedReason",
+              p."certificationsJson", p."portfolioJson", p."achievementsJson",
+              p."driversLicense", p."shiftPreference", p."availabilityType", p."readyFromDate",
+              p."preferredLocationsJson", p."toolsOwnedJson",
+              p."medicalCheckValid", p."medicalCheckUntil",
+              p."safetyTrainingValid", p."safetyTrainingUntil",
               u."email"
        FROM "BuildProfile" p
        LEFT JOIN "AEVIONUser" u ON u."id" = p."userId"
@@ -244,6 +333,11 @@ buildRouter.get("/profiles/:id", async (req, res) => {
       ...row,
       skills: safeParseJson(row.skillsJson, [] as string[]),
       languages: safeParseJson(row.languagesJson, [] as string[]),
+      certifications: safeParseJson(row.certificationsJson, [] as unknown[]),
+      portfolio: safeParseJson(row.portfolioJson, [] as unknown[]),
+      achievements: safeParseJson(row.achievementsJson, [] as unknown[]),
+      preferredLocations: safeParseJson(row.preferredLocationsJson, [] as string[]),
+      toolsOwned: safeParseJson(row.toolsOwnedJson, [] as string[]),
       experiences: exp.rows,
       education: edu.rows,
     });

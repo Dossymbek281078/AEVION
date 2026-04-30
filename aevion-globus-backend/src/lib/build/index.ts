@@ -118,6 +118,24 @@ export async function ensureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "verifiedAt" TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "verifiedReason" TEXT;`);
 
+  // ── AEVION Resume schema v2 — construction-vertical fields ──
+  // Designed for blue-collar / on-site work where HH-style resumes
+  // miss critical signals: which tools you own, whether your medical
+  // check / safety training is current, license categories, etc.
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "certificationsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "portfolioJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "achievementsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "driversLicense" TEXT;`); // e.g. "B,C,E"
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "shiftPreference" TEXT;`); // DAY|NIGHT|FLEX|ANY
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availabilityType" TEXT;`); // FULL_TIME|PART_TIME|PROJECT|SHIFT|REMOTE
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "readyFromDate" TEXT;`); // YYYY-MM-DD or freeform
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "preferredLocationsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "toolsOwnedJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "medicalCheckValid" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "medicalCheckUntil" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "safetyTrainingValid" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "safetyTrainingUntil" TEXT;`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,
@@ -365,6 +383,8 @@ export const PROJECT_STATUSES = ["OPEN", "IN_PROGRESS", "DONE"] as const;
 export const VACANCY_STATUSES = ["OPEN", "CLOSED"] as const;
 export const APPLICATION_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const;
 export const BUILD_ROLES = ["CLIENT", "CONTRACTOR", "WORKER", "ADMIN"] as const;
+export const SHIFT_PREFERENCES = ["DAY", "NIGHT", "FLEX", "ANY"] as const;
+export const AVAILABILITY_TYPES = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"] as const;
 export const PLAN_KEYS = ["FREE", "PRO", "AGENCY", "PPHIRE"] as const;
 
 export function safeParseJson<T>(raw: unknown, fallback: T): T {

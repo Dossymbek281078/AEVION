@@ -642,10 +642,99 @@ healthaiRouter.get("/trends/:id", async (req: Request, res: Response) => {
 });
 
 /**
- * LLM-augmented advice — fallback когда rule-base молчит. Системный промпт
- * с safety guardrails (не диагноз, не лекарства, urgent → скорая). Если
- * ANTHROPIC_API_KEY не настроен — вернёт 503.
+ * LLM provider chain: Anthropic → OpenAI → Gemini. Каждый со одинаковыми
+ * safety guardrails. Если ни один не настроен — 503.
  */
+async function callLlmAnthropic(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<{ advice: string; model: string }> {
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!key) throw new Error("not-configured");
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      temperature: 0.4,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    }),
+  });
+  const data = (await r.json()) as {
+    content?: Array<{ text?: string }>;
+    error?: { message?: string };
+  };
+  if (!r.ok) throw new Error(data.error?.message || `Anthropic ${r.status}`);
+  const reply = data.content?.map((b) => b.text || "").join("").trim() || "";
+  if (!reply) throw new Error("empty-reply");
+  return { advice: reply, model: "claude-haiku-4-5" };
+}
+
+async function callLlmOpenAI(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<{ advice: string; model: string }> {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) throw new Error("not-configured");
+  const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const r = await fetch(`${base}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      temperature: 0.4,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+  const data = (await r.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+    error?: { message?: string };
+  };
+  if (!r.ok) throw new Error(data.error?.message || `OpenAI ${r.status}`);
+  const reply = data.choices?.[0]?.message?.content?.trim() || "";
+  if (!reply) throw new Error("empty-reply");
+  return { advice: reply, model };
+}
+
+async function callLlmGemini(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<{ advice: string; model: string }> {
+  const key = process.env.GEMINI_API_KEY?.trim();
+  if (!key) throw new Error("not-configured");
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash-001";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+    }),
+  });
+  const data = (await r.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    error?: { message?: string };
+  };
+  if (!r.ok) throw new Error(data.error?.message || `Gemini ${r.status}`);
+  const reply =
+    data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim() || "";
+  if (!reply) throw new Error("empty-reply");
+  return { advice: reply, model };
+}
+
 healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
@@ -660,14 +749,6 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
   }
   const lang =
     body.lang === "en" || body.lang === "ru" ? body.lang : "ru";
-
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) {
-    return res.status(503).json({
-      error: "llm-not-configured",
-      hint: "Set ANTHROPIC_API_KEY in env to enable LLM-augmented advice.",
-    });
-  }
 
   const profileLine = `Возраст: ${profile.age || "?"}, пол: ${profile.sex}, рост: ${profile.heightCm || "?"}см, вес: ${profile.weightKg || "?"}кг.`;
   const conditionsLine = profile.conditions.length
@@ -702,48 +783,59 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
       ? `Patient profile: ${profileLine} ${conditionsLine} ${allergiesLine} ${medsLine}\nSymptoms: ${symptoms.join("; ")}.\nDuration: ${body.durationH || "?"}h. Severity: ${body.severity || "?"}/10.${body.notes ? `\nNotes: ${body.notes}` : ""}\n\nGive structured advice.`
       : `Профиль пациента: ${profileLine} ${conditionsLine} ${allergiesLine} ${medsLine}\nСимптомы: ${symptoms.join("; ")}.\nДлительность: ${body.durationH || "?"}ч. Тяжесть: ${body.severity || "?"}/10.${body.notes ? `\nЗаметки: ${body.notes}` : ""}\n\nДай структурированный совет.`;
 
-  try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
-        temperature: 0.4,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
-    const data = (await r.json()) as {
-      content?: Array<{ text?: string }>;
-      error?: { message?: string };
-    };
-    if (!r.ok) {
-      return res.status(502).json({
-        error: "llm-failed",
-        detail: data.error?.message || `status ${r.status}`,
+  // Provider chain: Anthropic → OpenAI → Gemini. Юзер может pin через body.provider.
+  const requested =
+    body.provider === "anthropic" ||
+    body.provider === "openai" ||
+    body.provider === "gemini"
+      ? body.provider
+      : null;
+  const chain: Array<["anthropic" | "openai" | "gemini", typeof callLlmAnthropic]> =
+    requested
+      ? [
+          [
+            requested,
+            requested === "anthropic"
+              ? callLlmAnthropic
+              : requested === "openai"
+                ? callLlmOpenAI
+                : callLlmGemini,
+          ],
+        ]
+      : [
+          ["anthropic", callLlmAnthropic],
+          ["openai", callLlmOpenAI],
+          ["gemini", callLlmGemini],
+        ];
+
+  const tried: Array<{ provider: string; error: string }> = [];
+  for (const [name, fn] of chain) {
+    try {
+      const { advice, model } = await fn(systemPrompt, userPrompt);
+      return res.json({
+        advice,
+        provider: name,
+        model,
+        triedFallbacks: tried,
+        disclaimer: DISCLAIMER,
       });
+    } catch (e: any) {
+      tried.push({
+        provider: name,
+        error: String(e?.message || e),
+      });
+      // continue chain
     }
-    const reply =
-      data.content?.map((b) => b.text || "").join("").trim() || "";
-    if (!reply) {
-      return res.status(502).json({ error: "llm-empty-reply" });
-    }
-    res.json({
-      advice: reply,
-      provider: "anthropic",
-      model: "claude-haiku-4-5",
-      disclaimer: DISCLAIMER,
-    });
-  } catch (e: any) {
-    return res
-      .status(502)
-      .json({ error: "llm-fetch-failed", detail: String(e?.message || e) });
   }
+  // Все провайдеры упали или не настроены.
+  const allUnconfigured = tried.every((t) => t.error === "not-configured");
+  res.status(allUnconfigured ? 503 : 502).json({
+    error: allUnconfigured ? "llm-not-configured" : "llm-all-failed",
+    hint: allUnconfigured
+      ? "Set at least one of ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY in env."
+      : "All configured LLM providers failed; see attempts.",
+    attempts: tried,
+  });
 });
 
 healthaiRouter.post("/import", async (req: Request, res: Response) => {

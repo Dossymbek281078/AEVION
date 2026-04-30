@@ -145,7 +145,7 @@ async function main() {
       body: { shards: twoShards },
     });
     if (!r.ok) return fail("reconstruct", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
-    if (r.data?.ok !== true) return fail("reconstruct", `not ok: ${JSON.stringify(r.data)}`);
+    if (r.data?.valid !== true) return fail("reconstruct", `not valid: ${JSON.stringify(r.data)}`);
     pass("reconstruct", "Lagrange + probe-sign verified");
   }
 

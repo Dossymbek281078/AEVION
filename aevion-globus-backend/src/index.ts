@@ -13,6 +13,7 @@ import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter } from "./routes/qcoreai";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
@@ -238,6 +239,7 @@ app.use("/api/auth", authRouter);
 // Planet / Compliance / Evidence / Certificate
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
+app.use("/api/awards", awardsRouter);
 
 app.use(
   (

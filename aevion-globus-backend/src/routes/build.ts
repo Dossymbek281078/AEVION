@@ -2966,6 +2966,48 @@ buildRouter.get("/loyalty/cashback", async (req, res) => {
   }
 });
 
+// POST /api/build/leads — public email capture for /build/why-aevion.
+// No auth required (this fires before login). Idempotent on
+// (lower(email), source) — re-submit returns alreadyExists=true so
+// the UI can switch to a "you're already on the list" message.
+buildRouter.post("/leads", async (req, res) => {
+  try {
+    const emailRaw = String(req.body?.email ?? "").trim();
+    // Cheap email shape gate. Real validation lands when we wire a
+    // confirmation email — for now we just want bad data to bounce
+    // before hitting the table.
+    if (!emailRaw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) || emailRaw.length > 200) {
+      return fail(res, 400, "invalid_email");
+    }
+    const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 120) || null;
+    const locale = ["ru", "en", "kz"].includes(String(req.body?.locale))
+      ? String(req.body.locale)
+      : "ru";
+    const source = typeof req.body?.source === "string"
+      ? String(req.body.source).trim().slice(0, 64) || "why-aevion"
+      : "why-aevion";
+
+    const existing = await pool.query(
+      `SELECT "id" FROM "BuildLead" WHERE lower("email") = lower($1) AND "source" = $2 LIMIT 1`,
+      [emailRaw, source],
+    );
+    if (existing.rowCount && existing.rowCount > 0) {
+      return ok(res, { alreadyExists: true });
+    }
+
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO "BuildLead" ("id","email","city","locale","source")
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (lower("email"), "source") DO NOTHING`,
+      [id, emailRaw, city, locale, source],
+    );
+    return ok(res, { alreadyExists: false }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "lead_create_failed", { details: (err as Error).message });
+  }
+});
+
 // Health probe — no auth, no DB roundtrip beyond the bootstrap middleware.
 buildRouter.get("/health", async (_req, res) => {
   // Public counters for the /build/why-aevion landing. Best-effort:

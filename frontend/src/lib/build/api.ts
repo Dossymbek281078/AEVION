@@ -583,6 +583,18 @@ export const buildApi = {
       nextTierBps: number | null;
       tiers: { atHires: number; bps: number; label: string }[];
     }>("GET", "/api/build/loyalty/me"),
+  submitLead: (input: {
+    email: string;
+    city?: string;
+    locale?: string;
+    source?: string;
+  }) =>
+    call<{ alreadyExists: boolean }>(
+      "POST",
+      "/api/build/leads",
+      input,
+      { auth: false },
+    ),
   loyaltyCashback: () =>
     call<{
       totalAev: number;

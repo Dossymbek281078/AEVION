@@ -433,6 +433,7 @@ export const openapiSpec = {
     "/api/qsign/sign": { post: { summary: "Sign payload (legacy)" } },
     "/api/qsign/verify": { post: { summary: "Verify signature (legacy)" } },
     "/api/qtrade/cap-status": { get: { summary: "Daily-cap headroom for caller (used / cap / remainingSec)" } },
+    "/api/qtrade/receipt/{opId}.pdf": { get: { summary: "Server-rendered single-page PDF receipt (auth, scoped)" } },
     "/api/qtrade/accounts.csv": { get: { summary: "Caller's accounts as CSV" } },
     "/api/qtrade/transfers.csv": { get: { summary: "Caller's transfers as CSV" } },
     "/api/qtrade/operations.csv": { get: { summary: "Caller's ledger operations as CSV" } },

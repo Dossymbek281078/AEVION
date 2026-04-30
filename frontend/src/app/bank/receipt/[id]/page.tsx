@@ -4,11 +4,41 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 import { QRCodeView } from "../../_components/QRCode";
 import { listAccounts, listOperations } from "../../_lib/api";
 import { formatCurrency, loadCurrency, type CurrencyCode } from "../../_lib/currency";
 import { loadSignatures, type SignedOperation } from "../../_lib/signatures";
 import type { Account, Operation } from "../../_lib/types";
+
+const TOKEN_KEY = "aevion_auth_token_v1";
+
+async function downloadReceiptPdf(opId: string) {
+  if (typeof window === "undefined") return;
+  let token = "";
+  try {
+    token = localStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    // ignore
+  }
+  const r = await fetch(apiUrl(`/api/qtrade/receipt/${opId}.pdf`), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    cache: "no-store",
+  });
+  if (!r.ok) {
+    alert(`PDF download failed (${r.status})`);
+    return;
+  }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `aevion-receipt-${opId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
 
 export default function ReceiptPage() {
   const params = useParams<{ id: string }>();
@@ -441,6 +471,22 @@ export default function ReceiptPage() {
           }}
         >
           {t("receipt.action.copyLink")}
+        </button>
+        <button
+          type="button"
+          onClick={() => void downloadReceiptPdf(id)}
+          style={{
+            padding: "10px 18px",
+            borderRadius: 10,
+            background: "linear-gradient(135deg, rgba(124,58,237,0.10), rgba(14,165,233,0.10))",
+            color: "#4c1d95",
+            fontSize: 13,
+            fontWeight: 800,
+            border: "1px solid rgba(124,58,237,0.30)",
+            cursor: "pointer",
+          }}
+        >
+          ⬇ Download PDF
         </button>
         <Link
           href="/bank/statement"

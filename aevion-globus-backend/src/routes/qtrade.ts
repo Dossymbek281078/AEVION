@@ -358,6 +358,98 @@ qtradeRouter.get("/operations.csv", (req, res) => {
 });
 
 // =======================
+// Server-rendered single-page PDF receipt for one operation.
+// Auth-gated and scoped: caller must own one side of the operation.
+// pdfkit is already a dep (used by /api/pipeline/* certificate PDFs).
+// =======================
+qtradeRouter.get("/receipt/:opId.pdf", async (req, res, next) => {
+  try {
+    const owner = ownerEmail(req);
+    const ownIds = ownAccountIds(owner);
+    const opId = req.params.opId;
+    const op = operations.find((x) => x.id === opId);
+    if (!op) return res.status(404).json({ error: "operation not found" });
+    if (!ownIds.has(op.to) && !(op.from && ownIds.has(op.from))) {
+      return res.status(403).json({ error: "not your operation" });
+    }
+
+    const PDFDocumentMod = await import("pdfkit");
+    const PDFDocument = PDFDocumentMod.default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="aevion-receipt-${op.id}.pdf"`);
+    doc.pipe(res);
+
+    const W = doc.page.width - 100;
+    const pageW = doc.page.width;
+
+    // Header bar
+    doc.rect(0, 0, pageW, 80).fill("#0f172a");
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#ffffff").text("AEVION Bank", 50, 26);
+    doc.fontSize(10).font("Helvetica").fillColor("#94a3b8").text("Operation receipt — Test Net", 50, 52);
+
+    // Accent
+    doc.rect(0, 80, pageW, 3).fill("#7c3aed");
+
+    // Title
+    const yTitle = 110;
+    doc.fontSize(11).font("Helvetica").fillColor("#7c3aed").text("PROOF OF MOVEMENT", 50, yTitle, { align: "center", width: W });
+    doc.fontSize(22).font("Helvetica-Bold").fillColor("#0f172a").text(
+      `${op.kind === "topup" ? "Top-up" : "Transfer"} · ${op.amount.toFixed(2)} AEC`,
+      50,
+      yTitle + 22,
+      { align: "center", width: W },
+    );
+    doc.fontSize(10).font("Helvetica").fillColor("#64748b").text(
+      new Date(op.createdAt).toLocaleString(),
+      50,
+      yTitle + 56,
+      { align: "center", width: W },
+    );
+
+    const yDiv = yTitle + 90;
+    doc.rect(50, yDiv, W, 1).fill("#e2e8f0");
+
+    // Detail grid
+    const yInfo = yDiv + 16;
+    const col1X = 50;
+    const col2X = 50 + W / 2;
+
+    function row(y: number, k1: string, v1: string, k2?: string, v2?: string) {
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text(k1, col1X, y);
+      doc.fontSize(11).font("Courier").fillColor("#0f172a").text(v1, col1X, y + 12);
+      if (k2 && v2) {
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#94a3b8").text(k2, col2X, y);
+        doc.fontSize(11).font("Courier").fillColor("#0f172a").text(v2, col2X, y + 12);
+      }
+    }
+
+    row(yInfo, "OPERATION ID", op.id, "KIND", op.kind);
+    row(yInfo + 42, "FROM", op.from ?? "(top-up source)", "TO", op.to);
+    row(yInfo + 84, "AMOUNT (AEC)", op.amount.toFixed(2), "OWNER", owner);
+    row(yInfo + 126, "TIMESTAMP", op.createdAt, "BANK", "AEVION Bank · Test Net");
+
+    // Footer
+    doc.fontSize(9).font("Helvetica").fillColor("#94a3b8").text(
+      "This document is generated server-side from the AEVION Bank ledger. Verify any signed envelope at /bank/audit-log.",
+      50,
+      doc.page.height - 80,
+      { width: W, align: "center" },
+    );
+    doc.fontSize(8).font("Helvetica").fillColor("#cbd5e1").text(
+      `Generated ${new Date().toISOString()}`,
+      50,
+      doc.page.height - 60,
+      { width: W, align: "center" },
+    );
+
+    doc.end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// =======================
 // Idempotency cache (in-memory, 24h TTL).
 // Same key → same response, no double-billing on retry storms.
 // =======================

@@ -519,11 +519,21 @@ qtradeRouter.get("/receipt/:opId.pdf", async (req, res, next) => {
     }
 
     const PDFDocumentMod = await import("pdfkit");
+    const QRCodeMod = await import("qrcode");
     const PDFDocument = PDFDocumentMod.default;
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="aevion-receipt-${op.id}.pdf"`);
     doc.pipe(res);
+
+    const baseUrl = process.env.RECEIPT_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://aevion.app";
+    const verifyUrl = `${baseUrl.replace(/\/+$/, "")}/bank/receipt/${op.id}`;
+    const qrDataUrl = await QRCodeMod.toDataURL(verifyUrl, {
+      width: 220,
+      margin: 1,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    });
+    const qrBuffer = Buffer.from(qrDataUrl.replace(/^data:image\/png;base64,/, ""), "base64");
 
     const W = doc.page.width - 100;
     const pageW = doc.page.width;
@@ -535,6 +545,21 @@ qtradeRouter.get("/receipt/:opId.pdf", async (req, res, next) => {
 
     // Accent
     doc.rect(0, 80, pageW, 3).fill("#7c3aed");
+
+    // Verify QR — top right of body. Friend scans → /bank/receipt/:id
+    // opens with the signed envelope rendered alongside the PDF reader,
+    // which is the closest thing to a "tap to verify" we can ship before
+    // a dedicated /verify-bank route.
+    const qrSize = 80;
+    const qrX = pageW - qrSize - 50;
+    const qrY = 100;
+    doc.image(qrBuffer, qrX, qrY, { width: qrSize });
+    doc.fontSize(7).font("Helvetica-Bold").fillColor("#94a3b8").text(
+      "SCAN TO VERIFY",
+      qrX,
+      qrY + qrSize + 4,
+      { width: qrSize, align: "center" },
+    );
 
     // Title
     const yTitle = 110;

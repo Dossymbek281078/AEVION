@@ -1221,27 +1221,51 @@ buildRouter.get("/vacancies", async (req, res) => {
       params.push(v.value);
       where.push(`v."salary" >= $${params.length}`);
     }
+    // skill filter — JSON contains. We do a case-insensitive ILIKE
+    // against the raw skillsJson text since the array entries are
+    // simple strings; precise match would need json operators.
+    if (typeof req.query.skill === "string" && req.query.skill.trim()) {
+      params.push(`%"${req.query.skill.trim().toLowerCase()}"%`);
+      where.push(`lower(v."skillsJson") ILIKE $${params.length}`);
+    }
 
     const limitRaw = req.query.limit !== undefined ? vNumber(req.query.limit, "limit", { min: 1, max: 100 }) : { ok: true as const, value: 50 };
     if (limitRaw.ok === false) return fail(res, 400, limitRaw.error);
     params.push(limitRaw.value);
 
+    // Sort modes:
+    //   "recent" (default) — boosted first, then newest
+    //   "salary"           — highest salary first
+    //   "popular"          — most applications first
+    const sortRaw = typeof req.query.sort === "string" ? req.query.sort.toLowerCase() : "recent";
+    const sortClause =
+      sortRaw === "salary"
+        ? `v."salary" DESC NULLS LAST, v."createdAt" DESC`
+        : sortRaw === "popular"
+          ? `(SELECT COUNT(*) FROM "BuildApplication" a2 WHERE a2."vacancyId" = v."id") DESC, v."createdAt" DESC`
+          : `(
+              (SELECT MAX(b2."endsAt") FROM "BuildBoost" b2 WHERE b2."vacancyId" = v."id" AND b2."endsAt" > NOW())
+            ) DESC NULLS LAST,
+            v."createdAt" DESC`;
+
     const result = await pool.query(
       `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
+              v."skillsJson",
               p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
        FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-       ORDER BY (
-         (SELECT MAX(b2."endsAt") FROM "BuildBoost" b2 WHERE b2."vacancyId" = v."id" AND b2."endsAt" > NOW())
-       ) DESC NULLS LAST,
-       v."createdAt" DESC
+       ORDER BY ${sortClause}
        LIMIT $${params.length}`,
       params,
     );
-    return ok(res, { items: result.rows, total: result.rowCount });
+    const items = result.rows.map((row: Record<string, unknown>) => ({
+      ...row,
+      skills: safeParseJson(row.skillsJson, [] as string[]),
+    }));
+    return ok(res, { items, total: items.length });
   } catch (err: unknown) {
     return fail(res, 500, "vacancies_feed_failed", { details: (err as Error).message });
   }
@@ -2774,6 +2798,70 @@ buildRouter.post("/loyalty/cashback/claim", async (req, res) => {
     }
   } catch (err: unknown) {
     return fail(res, 500, "cashback_claim_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/referrals/leaderboard — public top-N referrers ordered
+// by accepted applications (the strong signal). Falls back to total
+// referred when no accepts yet, so early-stage data isn't all zero.
+buildRouter.get("/referrals/leaderboard", async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+    const r = await pool.query(
+      `SELECT
+         a."referredByUserId" AS "userId",
+         u."name" AS "name",
+         COUNT(*)::int AS "totalReferred",
+         SUM(CASE WHEN a."status" = 'ACCEPTED' THEN 1 ELSE 0 END)::int AS "acceptedReferred"
+       FROM "BuildApplication" a
+       LEFT JOIN "AEVIONUser" u ON u."id" = a."referredByUserId"
+       WHERE a."referredByUserId" IS NOT NULL
+       GROUP BY a."referredByUserId", u."name"
+       ORDER BY "acceptedReferred" DESC, "totalReferred" DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return ok(res, { items: r.rows, limit });
+  } catch (err: unknown) {
+    return fail(res, 500, "leaderboard_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/referrals/me — authenticated user's referral stats
+// (totals + recent referred applications).
+buildRouter.get("/referrals/me", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const [totals, tail] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*)::int AS "totalReferred",
+           SUM(CASE WHEN "status" = 'ACCEPTED' THEN 1 ELSE 0 END)::int AS "acceptedReferred"
+         FROM "BuildApplication"
+         WHERE "referredByUserId" = $1`,
+        [auth.sub],
+      ),
+      pool.query(
+        `SELECT a."id", a."status", a."createdAt", v."title" AS "vacancyTitle",
+                u."name" AS "applicantName"
+         FROM "BuildApplication" a
+         LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+         WHERE a."referredByUserId" = $1
+         ORDER BY a."createdAt" DESC
+         LIMIT 25`,
+        [auth.sub],
+      ),
+    ]);
+    return ok(res, {
+      totalReferred: Number(totals.rows[0]?.totalReferred ?? 0),
+      acceptedReferred: Number(totals.rows[0]?.acceptedReferred ?? 0),
+      recent: tail.rows,
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "referrals_me_failed", { details: (err as Error).message });
   }
 });
 

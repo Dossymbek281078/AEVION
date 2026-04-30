@@ -17,6 +17,7 @@ import { ResumeImporter } from "@/components/build/ResumeImporter";
 import { AiCoachChat } from "@/components/build/AiCoachChat";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import { AiImprove } from "@/components/build/AiImprove";
+import { ProfileCompletenessMeter } from "@/components/build/ProfileCompletenessMeter";
 
 export default function ProfilePage() {
   return (
@@ -102,6 +103,12 @@ function ProfileBody() {
           <p className="mb-5 text-sm text-slate-400">
             Tell clients and project owners who you are. Required to apply for vacancies.
           </p>
+
+          {profile && (
+            <div className="mb-4">
+              <ProfileCompletenessMeter profile={profile} />
+            </div>
+          )}
 
           <div className="mb-4">
             <ResumeImporter

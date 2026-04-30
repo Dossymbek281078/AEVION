@@ -475,6 +475,8 @@ export const buildApi = {
     q?: string;
     city?: string;
     minSalary?: number;
+    skill?: string;
+    sort?: "recent" | "salary" | "popular";
     limit?: number;
   }) => {
     const params = new URLSearchParams();
@@ -483,6 +485,8 @@ export const buildApi = {
     if (q?.q) params.set("q", q.q);
     if (q?.city) params.set("city", q.city);
     if (q?.minSalary != null) params.set("minSalary", String(q.minSalary));
+    if (q?.skill) params.set("skill", q.skill);
+    if (q?.sort) params.set("sort", q.sort);
     if (q?.limit) params.set("limit", String(q.limit));
     const qs = params.toString();
     return call<{ items: (BuildVacancy & { projectCity?: string | null })[]; total: number }>(
@@ -643,6 +647,33 @@ export const buildApi = {
       "/api/build/loyalty/cashback/claim",
       { deviceId },
     ),
+  referralLeaderboard: (limit = 20) =>
+    call<{
+      items: {
+        userId: string;
+        name: string | null;
+        totalReferred: number;
+        acceptedReferred: number;
+      }[];
+      limit: number;
+    }>(
+      "GET",
+      `/api/build/referrals/leaderboard?limit=${limit}`,
+      undefined,
+      { auth: false },
+    ),
+  myReferrals: () =>
+    call<{
+      totalReferred: number;
+      acceptedReferred: number;
+      recent: {
+        id: string;
+        status: string;
+        createdAt: string;
+        vacancyTitle: string | null;
+        applicantName: string | null;
+      }[];
+    }>("GET", "/api/build/referrals/me"),
   buildStats: () =>
     call<{
       vacancies: { open: number; total: number };

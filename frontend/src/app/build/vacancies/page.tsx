@@ -18,6 +18,8 @@ export default function VacanciesFeedPage() {
   const [q, setQ] = useState("");
   const [city, setCity] = useState("");
   const [minSalary, setMinSalary] = useState<string>("");
+  const [skill, setSkill] = useState("");
+  const [sort, setSort] = useState<"recent" | "salary" | "popular">("recent");
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -30,6 +32,8 @@ export default function VacanciesFeedPage() {
           q: q.trim() || undefined,
           city: city.trim() || undefined,
           minSalary: Number.isFinite(min) ? (min as number) : undefined,
+          skill: skill.trim() || undefined,
+          sort,
           limit: 100,
         })
         .then((r) => {
@@ -46,7 +50,7 @@ export default function VacanciesFeedPage() {
       };
     }, 250);
     return () => clearTimeout(handle);
-  }, [status, q, city, minSalary]);
+  }, [status, q, city, minSalary, skill, sort]);
 
   const stats = useMemo(() => {
     const openItems = items.filter((v) => v.status === "OPEN");
@@ -105,6 +109,21 @@ export default function VacanciesFeedPage() {
           inputMode="numeric"
           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-28"
         />
+        <input
+          value={skill}
+          onChange={(e) => setSkill(e.target.value)}
+          placeholder="Skill (e.g. AutoCAD)"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-40"
+        />
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as "recent" | "salary" | "popular")}
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+        >
+          <option value="recent">Recent</option>
+          <option value="salary">Salary ↓</option>
+          <option value="popular">Popular</option>
+        </select>
         <div className="flex items-center gap-1">
           {STATUS_FILTERS.map((s) => (
             <button

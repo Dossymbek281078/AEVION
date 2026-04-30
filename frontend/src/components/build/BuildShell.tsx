@@ -16,6 +16,7 @@ const NAV: { href: string; label: string }[] = [
   { href: "/build/profile", label: "Profile" },
   { href: "/build/messages", label: "Messages" },
   { href: "/build/pricing", label: "Pricing" },
+  { href: "/build/why-aevion", label: "Why us" },
 ];
 
 export function BuildShell({ children }: { children: React.ReactNode }) {

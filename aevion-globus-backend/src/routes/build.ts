@@ -2910,7 +2910,25 @@ buildRouter.post("/orders/:id/pay", async (req, res) => {
 });
 
 // Health probe — no auth, no DB roundtrip beyond the bootstrap middleware.
-buildRouter.get("/health", (_req, res) => {
+buildRouter.get("/health", async (_req, res) => {
+  // Public counters for the /build/why-aevion landing. Best-effort:
+  // a DB hiccup falls back to zeroes (the route still returns 200 so
+  // the landing keeps rendering).
+  let vacancies = 0;
+  let candidates = 0;
+  let projects = 0;
+  try {
+    const r = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" WHERE "status" = 'OPEN'`),
+    ]);
+    vacancies = Number(r[0].rows[0]?.n ?? 0);
+    candidates = Number(r[1].rows[0]?.n ?? 0);
+    projects = Number(r[2].rows[0]?.n ?? 0);
+  } catch {
+    // swallow — we still return 200
+  }
   return ok(res, {
     service: "qbuild",
     status: "ok",
@@ -2920,6 +2938,9 @@ buildRouter.get("/health", (_req, res) => {
       application: APPLICATION_STATUSES,
       role: BUILD_ROLES,
     },
+    vacancies,
+    candidates,
+    projects,
     timestamp: new Date().toISOString(),
   });
 });

@@ -1,6 +1,20 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../lib/authJwt";
 import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
+import { csvFromRows } from "../lib/csv";
+
+function sendCsv(
+  res: Response,
+  baseName: string,
+  rows: (string | number | null | undefined)[][],
+): void {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+  );
+  res.status(200).send(csvFromRows(rows));
+}
 
 export const ecosystemRouter = Router();
 
@@ -127,4 +141,19 @@ ecosystemRouter.get("/earnings", (req, res) => {
       { source: "planet", amount: sumP, count: p.length, last: p[p.length - 1]?.certifiedAt ?? null },
     ],
   });
+});
+
+ecosystemRouter.get("/earnings.csv", (req, res) => {
+  const email = ownerEmail(req);
+  const r = royaltyEvents.filter((x) => x.email === email);
+  const c = chessPrizes.filter((x) => x.email === email);
+  const p = planetCerts.filter((x) => x.email === email);
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const rows: (string | number | null | undefined)[][] = [
+    ["source", "amount_aec", "event_count", "last_at"],
+    ["qright", round(r.reduce((s, x) => s + x.amount, 0)), r.length, r[r.length - 1]?.paidAt ?? null],
+    ["cyberchess", round(c.reduce((s, x) => s + x.amount, 0)), c.length, c[c.length - 1]?.finalizedAt ?? null],
+    ["planet", round(p.reduce((s, x) => s + x.amount, 0)), p.length, p[p.length - 1]?.certifiedAt ?? null],
+  ];
+  sendCsv(res, "ecosystem-earnings", rows);
 });

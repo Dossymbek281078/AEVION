@@ -1,12 +1,22 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
+import { csvFromRows } from "../lib/csv";
 import {
   ensureEcosystemLoaded,
   royaltyEvents,
   scheduleEcosystemPersist,
   type RoyaltyEvent,
 } from "./ecosystem";
+
+function sendCsv(res: Response, baseName: string, rows: (string | number | null | undefined)[][]): void {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+  );
+  res.status(200).send(csvFromRows(rows));
+}
 
 // Sub-router intended to be mounted at /api/qright (so it lives under the
 // existing namespace alongside the legacy QRight authorship endpoints).
@@ -29,6 +39,19 @@ qrightRoyaltiesRouter.get("/royalties", requireAuth, async (req, res) => {
     .filter((x) => x.email === email)
     .sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1));
   res.json({ items });
+});
+
+qrightRoyaltiesRouter.get("/royalties.csv", requireAuth, async (req, res) => {
+  await ensureEcosystemLoaded();
+  const email = ownerEmail(req);
+  const items = royaltyEvents
+    .filter((x) => x.email === email)
+    .sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1));
+  const rows: (string | number | null | undefined)[][] = [
+    ["id", "product_key", "period", "amount_aec", "paid_at", "transfer_id"],
+    ...items.map((x) => [x.id, x.productKey, x.period, x.amount, x.paidAt, x.transferId]),
+  ];
+  sendCsv(res, "qright-royalties", rows);
 });
 
 // Webhook is *not* requireAuth-gated: called by trusted external rights

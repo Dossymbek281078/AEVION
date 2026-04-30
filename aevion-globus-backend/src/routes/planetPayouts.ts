@@ -1,12 +1,22 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
+import { csvFromRows } from "../lib/csv";
 import {
   ensureEcosystemLoaded,
   planetCerts,
   scheduleEcosystemPersist,
   type PlanetCert,
 } from "./ecosystem";
+
+function sendCsv(res: Response, baseName: string, rows: (string | number | null | undefined)[][]): void {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+  );
+  res.status(200).send(csvFromRows(rows));
+}
 
 // Mounted at /api/planet alongside the existing /api/planet/{stats,artifacts}.
 //   GET  /payouts                      — caller's planet certification rewards
@@ -28,6 +38,19 @@ planetPayoutsRouter.get("/payouts", requireAuth, async (req, res) => {
     .filter((x) => x.email === email)
     .sort((a, b) => (a.certifiedAt < b.certifiedAt ? 1 : -1));
   res.json({ items });
+});
+
+planetPayoutsRouter.get("/payouts.csv", requireAuth, async (req, res) => {
+  await ensureEcosystemLoaded();
+  const email = ownerEmail(req);
+  const items = planetCerts
+    .filter((x) => x.email === email)
+    .sort((a, b) => (a.certifiedAt < b.certifiedAt ? 1 : -1));
+  const rows: (string | number | null | undefined)[][] = [
+    ["id", "artifact_version_id", "amount_aec", "certified_at"],
+    ...items.map((x) => [x.id, x.artifactVersionId, x.amount, x.certifiedAt]),
+  ];
+  sendCsv(res, "planet-payouts", rows);
 });
 
 const WEBHOOK_SECRET = process.env.PLANET_WEBHOOK_SECRET || "dev-planet-webhook";

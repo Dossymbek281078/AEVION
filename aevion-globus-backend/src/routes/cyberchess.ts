@@ -1,12 +1,22 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
+import { csvFromRows } from "../lib/csv";
 import {
   chessPrizes,
   ensureEcosystemLoaded,
   scheduleEcosystemPersist,
   type ChessPrize,
 } from "./ecosystem";
+
+function sendCsv(res: Response, baseName: string, rows: (string | number | null | undefined)[][]): void {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+  );
+  res.status(200).send(csvFromRows(rows));
+}
 
 // /api/cyberchess/* — three test-mode endpoints the bank UI reads to render
 // ChessWinnings live instead of mocked. In production these will be proxied
@@ -26,6 +36,19 @@ cyberchessRouter.get("/results", requireAuth, async (req, res) => {
     .filter((x) => x.email === email)
     .sort((a, b) => (a.finalizedAt < b.finalizedAt ? 1 : -1));
   res.json({ items });
+});
+
+cyberchessRouter.get("/results.csv", requireAuth, async (req, res) => {
+  await ensureEcosystemLoaded();
+  const email = ownerEmail(req);
+  const items = chessPrizes
+    .filter((x) => x.email === email)
+    .sort((a, b) => (a.finalizedAt < b.finalizedAt ? 1 : -1));
+  const rows: (string | number | null | undefined)[][] = [
+    ["id", "tournament_id", "place", "amount_aec", "finalized_at", "transfer_id"],
+    ...items.map((x) => [x.id, x.tournamentId, x.place, x.amount, x.finalizedAt, x.transferId]),
+  ];
+  sendCsv(res, "cyberchess-results", rows);
 });
 
 // Public list of upcoming tournaments anyone can register for.

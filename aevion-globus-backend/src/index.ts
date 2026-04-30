@@ -18,6 +18,7 @@ import { ecosystemRouter } from "./routes/ecosystem";
 import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { cyberchessRouter } from "./routes/cyberchess";
 import { planetPayoutsRouter } from "./routes/planetPayouts";
+import { bankTestRouter } from "./routes/bankTest";
 import { openapiSpec } from "./lib/openapiSpec";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -108,6 +109,10 @@ app.use("/api/auth", authRouter);
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
 app.use("/api/planet", planetPayoutsRouter);
+
+// Internal: synthetic webhook dispatcher used by /bank/diagnostics.
+// Every route is requireAuth + scopes the synthesized event to the caller.
+app.use("/api/bank", bankTestRouter);
 
 app.use(
   (

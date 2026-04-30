@@ -158,6 +158,22 @@ function summariseSignatures(): SignatureSummary {
   return { total: list.length, byKind, oldest, newest };
 }
 
+type WebhookKind = "qright" | "chess" | "planet";
+
+type WebhookResult = {
+  kind: WebhookKind;
+  status: "ok" | "fail";
+  http?: number;
+  detail: string;
+  ts: string;
+};
+
+const WEBHOOK_BUTTONS: Array<{ kind: WebhookKind; label: string; tone: string }> = [
+  { kind: "qright", label: "Fire QRight royalty", tone: "rgba(124,58,237,0.14)" },
+  { kind: "chess", label: "Fire CyberChess prize", tone: "rgba(13,148,136,0.14)" },
+  { kind: "planet", label: "Fire Planet certify", tone: "rgba(14,165,233,0.14)" },
+];
+
 export default function BankDiagnosticsPage() {
   const [probes, setProbes] = useState<Probe[]>(INITIAL_PROBES);
   const [running, setRunning] = useState(false);
@@ -166,6 +182,8 @@ export default function BankDiagnosticsPage() {
   const [sig, setSig] = useState<SignatureSummary>({ total: 0, byKind: {}, oldest: null, newest: null });
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
   const autoRanRef = useRef(false);
+  const [webhookResults, setWebhookResults] = useState<WebhookResult[]>([]);
+  const [firingKind, setFiringKind] = useState<WebhookKind | null>(null);
 
   useEffect(() => {
     setToken(readToken());
@@ -248,6 +266,63 @@ export default function BankDiagnosticsPage() {
     autoRanRef.current = true;
     void runProbes();
   }, [runProbes]);
+
+  const fireWebhook = useCallback(
+    async (kind: WebhookKind) => {
+      if (firingKind) return;
+      const t = readToken();
+      if (!t) {
+        setWebhookResults((prev) => [
+          { kind, status: "fail" as const, detail: "no auth token — sign in first", ts: new Date().toISOString() },
+          ...prev,
+        ].slice(0, 8));
+        return;
+      }
+      setFiringKind(kind);
+      try {
+        const r = await fetch(apiUrl(`/api/bank/test-webhook/${kind}`), {
+          method: "POST",
+          cache: "no-store",
+          headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
+        });
+        let detail = "";
+        try {
+          const j = await r.json();
+          if (j?.response?.replayed) {
+            detail = `replayed (idempotent)`;
+          } else if (kind === "chess" && Array.isArray(j?.response?.recorded)) {
+            detail = `recorded ${j.response.recorded.length} prize(s) — ${j.prize ?? "?"} AEC`;
+          } else if (j?.amount != null) {
+            detail = `amount ${j.amount} AEC, eventId ${j.eventId ?? "—"}`;
+          } else {
+            detail = `http ${r.status}`;
+          }
+        } catch {
+          detail = `http ${r.status}`;
+        }
+        const status: "ok" | "fail" = r.status >= 200 && r.status < 300 ? "ok" : "fail";
+        setWebhookResults((prev) => [
+          { kind, status, http: r.status, detail, ts: new Date().toISOString() },
+          ...prev,
+        ].slice(0, 8));
+        // Refresh the read-only ecosystem probes so the new entry shows up.
+        void runProbes();
+      } catch (err: unknown) {
+        setWebhookResults((prev) => [
+          {
+            kind,
+            status: "fail" as const,
+            detail: err instanceof Error ? err.message : "network error",
+            ts: new Date().toISOString(),
+          },
+          ...prev,
+        ].slice(0, 8));
+      } finally {
+        setFiringKind(null);
+      }
+    },
+    [firingKind, runProbes],
+  );
 
   const summary = useMemo(() => {
     let ok = 0;
@@ -449,6 +524,98 @@ export default function BankDiagnosticsPage() {
           </div>
         </Section>
 
+        <Section
+          title="Synthetic webhook tester"
+          subtitle="Fires a synthetic partner webhook against the backend with the secret loaded from process.env. The synthesized event is pinned to your authenticated email — the resulting royalty / prize / certify entry lands in your own /earnings."
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+            {WEBHOOK_BUTTONS.map((b) => (
+              <button
+                key={b.kind}
+                type="button"
+                onClick={() => void fireWebhook(b.kind)}
+                disabled={firingKind !== null}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  background: firingKind === b.kind ? "rgba(15,23,42,0.10)" : b.tone,
+                  color: "#0f172a",
+                  border: "1px solid rgba(15,23,42,0.10)",
+                  cursor: firingKind ? "default" : "pointer",
+                  opacity: firingKind && firingKind !== b.kind ? 0.55 : 1,
+                }}
+              >
+                {firingKind === b.kind ? "Firing…" : `▶ ${b.label}`}
+              </button>
+            ))}
+          </div>
+          {webhookResults.length === 0 ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#64748b",
+                padding: "10px 14px",
+                border: "1px dashed rgba(15,23,42,0.12)",
+                borderRadius: 10,
+                background: "rgba(15,23,42,0.02)",
+              }}
+            >
+              No webhooks fired yet. Click a button above to record a synthetic event in your ledger; the
+              probes will re-run automatically and the new amount should appear in <code>/api/ecosystem/earnings</code>.
+            </div>
+          ) : (
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                overflow: "hidden",
+              }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "rgba(15,23,42,0.03)" }}>
+                    <th style={thStyle}>When</th>
+                    <th style={thStyle}>Kind</th>
+                    <th style={thStyle}>HTTP</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={thStyle}>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {webhookResults.map((r, i) => (
+                    <tr key={`${r.ts}-${i}`} style={{ borderTop: "1px solid rgba(15,23,42,0.05)" }}>
+                      <td style={{ ...tdStyle, fontFamily: "ui-monospace, monospace", fontSize: 12 }}>
+                        {new Date(r.ts).toLocaleTimeString()}
+                      </td>
+                      <td style={tdStyle}>{r.kind}</td>
+                      <td style={tdStyle}>{r.http ?? "—"}</td>
+                      <td style={tdStyle}>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: "0.06em",
+                            color: "#fff",
+                            background: r.status === "ok" ? "#16a34a" : "#dc2626",
+                          }}
+                        >
+                          {r.status === "ok" ? "OK" : "FAIL"}
+                        </span>
+                      </td>
+                      <td style={{ ...tdStyle, color: "#475569" }}>{r.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
+
         <Section title="Auth state" subtitle="Token is read from localStorage and verified via /api/auth/me.">
           <KvList
             rows={[
@@ -491,8 +658,9 @@ export default function BankDiagnosticsPage() {
 
         <footer style={{ margin: "32px 0 16px", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
           <p style={{ margin: "0 0 4px" }}>
-            <strong>Why this page?</strong> /bank/smoke <em>writes</em> to the backend (registers a user,
-            top-ups, transfers, signs). This page is read-only and safe to run as often as you like.
+            <strong>Why this page?</strong> /bank/smoke <em>writes</em> a full E2E flow to the backend
+            (register, top-up, transfer, sign). This page is mostly read-only — only the synthetic
+            webhook tester writes, and it pins every event to your own email.
           </p>
           <p style={{ margin: 0 }}>
             <strong>Hidden from search:</strong> robots noindex,nofollow. Operational tool only.

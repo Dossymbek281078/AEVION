@@ -41,6 +41,9 @@ const RESERVED_IDS = new Set([
   "reconstruct",
   "create",
   "witness",
+  "revoke",
+  "audit",
+  "metrics",
   "openapi.json",
 ]);
 
@@ -109,6 +112,23 @@ async function ensureShieldTable(): Promise<void> {
   await pool.query(
     `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "distribution_policy" TEXT NOT NULL DEFAULT 'legacy_all_local';`,
   );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QuantumShieldAudit" (
+      "id" TEXT PRIMARY KEY,
+      "shieldId" TEXT NOT NULL,
+      "event" TEXT NOT NULL,
+      "actorUserId" TEXT,
+      "actorIp" TEXT,
+      "details" JSONB,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QuantumShieldAudit_shieldId_idx" ON "QuantumShieldAudit" ("shieldId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QuantumShieldAudit_createdAt_idx" ON "QuantumShieldAudit" ("createdAt" DESC);`,
+  );
   ensuredTable = true;
 }
 
@@ -133,6 +153,39 @@ function parseShards(raw: unknown, ctx?: { shieldId?: string }): AuthenticatedSh
     return [];
   }
   return parsed as AuthenticatedShard[];
+}
+
+/**
+ * Best-effort audit-log write. Never throws — audit must not break a live
+ * write path. `details` is JSON-serialized via pg driver (jsonb column).
+ */
+async function audit(
+  shieldId: string,
+  event: string,
+  req: Request,
+  details?: Record<string, unknown>,
+  actorUserId?: string | null,
+): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO "QuantumShieldAudit"
+        ("id","shieldId","event","actorUserId","actorIp","details")
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        crypto.randomUUID(),
+        shieldId,
+        event,
+        actorUserId ?? null,
+        clientIp(req) ?? null,
+        details ? JSON.stringify(details) : null,
+      ],
+    );
+  } catch (err) {
+    console.warn(
+      "[QuantumShield] audit write failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
 
 function rateLimit(
@@ -196,6 +249,104 @@ quantumShieldRouter.get("/health", async (_req, res) => {
 quantumShieldRouter.get("/openapi.json", (_req, res) => {
   res.setHeader("Cache-Control", "public, max-age=300");
   res.json(QSHIELD_OPENAPI);
+});
+
+/**
+ * GET /metrics — Prometheus exposition format. text/plain, no auth.
+ * Same counters as /health plus runtime gauges. Cheap single-round-trip.
+ */
+quantumShieldRouter.get("/metrics", async (_req, res) => {
+  try {
+    let dbLatencyMs = 0;
+    try {
+      const t0 = Date.now();
+      await pool.query("SELECT 1");
+      dbLatencyMs = Date.now() - t0;
+    } catch {
+      /* graceful 0 */
+    }
+    await ensureShieldTable();
+
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE "status" = 'active')::int AS active,
+        COUNT(*) FILTER (WHERE "status" = 'revoked')::int AS revoked,
+        COUNT(*) FILTER (WHERE "legacy" = true)::int AS legacy,
+        COUNT(*) FILTER (WHERE "distribution_policy" = 'distributed_v2')::int AS distributed,
+        COALESCE(SUM("verifiedCount"),0)::int AS reconstructions
+      FROM "QuantumShield"
+    `);
+    const auditCount = await pool
+      .query(`SELECT COUNT(*)::int AS n FROM "QuantumShieldAudit"`)
+      .catch(() => ({ rows: [{ n: 0 }] }) as { rows: Array<{ n: number }> });
+    const c = rows[0] ?? {
+      total: 0,
+      active: 0,
+      revoked: 0,
+      legacy: 0,
+      distributed: 0,
+      reconstructions: 0,
+    };
+
+    const mem = process.memoryUsage();
+    const uptimeSec = Math.round(process.uptime());
+
+    const lines: string[] = [];
+    const out = (
+      name: string,
+      type: "counter" | "gauge",
+      help: string,
+      value: number | string,
+      labels?: string,
+    ) => {
+      lines.push(`# HELP ${name} ${help}`);
+      lines.push(`# TYPE ${name} ${type}`);
+      lines.push(`${name}${labels ?? ""} ${value}`);
+    };
+
+    out("qshield_records_total", "gauge", "All shield records", c.total);
+    out("qshield_records_active", "gauge", "Active shield records", c.active);
+    out("qshield_records_revoked", "gauge", "Revoked shield records", c.revoked);
+    out("qshield_records_legacy", "gauge", "Legacy (pre-v2) shield records", c.legacy);
+    out(
+      "qshield_records_distributed",
+      "gauge",
+      "Records using distributed_v2 policy",
+      c.distributed,
+    );
+    out(
+      "qshield_reconstructions_total",
+      "counter",
+      "Sum of verifiedCount across all records",
+      c.reconstructions,
+    );
+    out(
+      "qshield_audit_entries_total",
+      "counter",
+      "Total audit log rows",
+      auditCount.rows[0]?.n ?? 0,
+    );
+    out(
+      "qshield_db_latency_seconds",
+      "gauge",
+      "Latency of SELECT 1 against the configured DB",
+      (dbLatencyMs / 1000).toFixed(4),
+    );
+    out("qshield_uptime_seconds", "gauge", "Process uptime in seconds", uptimeSec);
+    out("qshield_memory_rss_bytes", "gauge", "Resident set size in bytes", mem.rss);
+    out("qshield_memory_heap_used_bytes", "gauge", "V8 heap bytes in use", mem.heapUsed);
+
+    res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(lines.join("\n") + "\n");
+  } catch (e: unknown) {
+    console.error(
+      "[QuantumShield] metrics error:",
+      e instanceof Error ? e.message : String(e),
+    );
+    res.status(500).type("text/plain").send(`# error generating metrics\n`);
+  }
 });
 
 /* ── List handler (reused by / and /records) ── */
@@ -294,6 +445,12 @@ async function handleCreate(req: Request, res: Response): Promise<void> {
         ownerUserId: auth?.sub || null,
         distribution,
       });
+      void audit(created.id, "create", req, {
+        distribution: created.distribution,
+        threshold: created.threshold,
+        totalShards: created.totalShards,
+        objectId: created.objectId,
+      }, auth?.sub || null);
       res.status(201).json(created);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -605,6 +762,7 @@ quantumShieldRouter.post("/:id/reconstruct", async (req, res) => {
       shieldId: req.params.id,
       verifiedAt: new Date().toISOString(),
     };
+    void audit(req.params.id, "reconstruct", req, { shardCount: shardsInput.length, idempotent: !!idemKey });
     if (idemKey) {
       try {
         await pool.query(
@@ -769,6 +927,115 @@ quantumShieldRouter.post("/verify", async (req, res) => {
   }
 });
 
+/**
+ * POST /:id/revoke — mark a record as revoked without deleting it.
+ * Permission: owner or admin. Status change is logged in QuantumShieldAudit.
+ * Re-revocation is idempotent (200 with status: "already-revoked").
+ */
+quantumShieldRouter.post("/:id/revoke", async (req, res) => {
+  if (RESERVED_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  try {
+    await ensureShieldTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const { rows } = await pool.query(
+      `SELECT "ownerUserId","status" FROM "QuantumShield" WHERE "id" = $1`,
+      [req.params.id],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Shield record not found" });
+    }
+    const row = rows[0] as { ownerUserId: string | null; status: string };
+    const isAdmin = auth.role === "admin";
+    const isOwner = row.ownerUserId === auth.sub;
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    if (row.status === "revoked") {
+      return res.status(200).json({
+        success: true,
+        shieldId: req.params.id,
+        status: "already-revoked",
+      });
+    }
+    const reason =
+      typeof (req.body as { reason?: unknown })?.reason === "string"
+        ? ((req.body as { reason: string }).reason).slice(0, 500)
+        : null;
+    await pool.query(
+      `UPDATE "QuantumShield" SET "status" = 'revoked' WHERE "id" = $1`,
+      [req.params.id],
+    );
+    void audit(req.params.id, "revoke", req, { reason, admin: isAdmin, owner: isOwner }, auth.sub);
+    res.json({
+      success: true,
+      shieldId: req.params.id,
+      status: "revoked",
+      revokedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] revoke error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Failed to revoke shield record" });
+  }
+});
+
+/**
+ * GET /:id/audit — paginated audit trail for a record.
+ * Permission: owner of the record or admin. Public projection has no audit.
+ */
+quantumShieldRouter.get("/:id/audit", async (req, res) => {
+  if (RESERVED_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  try {
+    await ensureShieldTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const { rows: ownerRows } = await pool.query(
+      `SELECT "ownerUserId" FROM "QuantumShield" WHERE "id" = $1`,
+      [req.params.id],
+    );
+    if (ownerRows.length === 0) {
+      return res.status(404).json({ error: "Shield record not found" });
+    }
+    const ownerUserId = (ownerRows[0] as { ownerUserId: string | null }).ownerUserId;
+    const isAdmin = auth.role === "admin";
+    const isOwner = !!auth.sub && ownerUserId === auth.sub;
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const { rows } = await pool.query(
+      `SELECT "id","event","actorUserId","actorIp","details","createdAt"
+       FROM "QuantumShieldAudit" WHERE "shieldId" = $1
+       ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3`,
+      [req.params.id, limit, offset],
+    );
+    res.json({
+      shieldId: req.params.id,
+      entries: rows,
+      limit,
+      offset,
+    });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] audit list error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Failed to fetch audit log" });
+  }
+});
+
 quantumShieldRouter.delete("/:id", async (req, res) => {
   if (RESERVED_IDS.has(req.params.id)) {
     return res.status(404).json({ error: "Not found" });
@@ -800,6 +1067,7 @@ quantumShieldRouter.delete("/:id", async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Shield record not found" });
     }
+    void audit(req.params.id, "delete", req, { admin: isAdmin, owner: isOwner }, auth?.sub || null);
     res.json({ success: true, deleted: req.params.id });
   } catch (err) {
     console.error(

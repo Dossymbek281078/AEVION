@@ -172,6 +172,107 @@ export async function ensureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildFile_project_created_idx" ON "BuildFile" ("projectId", "createdAt" DESC);`);
 
+  // ── Pricing ──────────────────────────────────────────────────────
+  // BuildPlan: catalog of subscription tiers. Seeded with the 4 plans
+  // QBuild ships with (FREE / PRO / AGENCY / PPHIRE).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPlan" (
+      "key" TEXT PRIMARY KEY,
+      "name" TEXT NOT NULL,
+      "tagline" TEXT,
+      "priceMonthly" INTEGER NOT NULL DEFAULT 0,
+      "currency" TEXT NOT NULL DEFAULT 'RUB',
+      "vacancySlots" INTEGER NOT NULL DEFAULT 0,
+      "talentSearchPerMonth" INTEGER NOT NULL DEFAULT 0,
+      "boostsPerMonth" INTEGER NOT NULL DEFAULT 0,
+      "hireFeeBps" INTEGER NOT NULL DEFAULT 0,
+      "featuresJson" TEXT NOT NULL DEFAULT '[]',
+      "sortOrder" INTEGER NOT NULL DEFAULT 0,
+      "active" BOOLEAN NOT NULL DEFAULT TRUE,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // BuildSubscription: at most one ACTIVE row per user.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildSubscription" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "planKey" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+      "startedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "endsAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildSubscription_user_active_uniq"
+    ON "BuildSubscription" ("userId") WHERE "status" = 'ACTIVE';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildSubscription_user_idx" ON "BuildSubscription" ("userId", "createdAt" DESC);`);
+
+  // BuildOrder: payment / state-change ledger for plans, boosts, day-passes.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildOrder" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "kind" TEXT NOT NULL,
+      "ref" TEXT,
+      "amount" INTEGER NOT NULL DEFAULT 0,
+      "currency" TEXT NOT NULL DEFAULT 'RUB',
+      "status" TEXT NOT NULL DEFAULT 'PENDING',
+      "metaJson" TEXT NOT NULL DEFAULT '{}',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildOrder_user_idx" ON "BuildOrder" ("userId", "createdAt" DESC);`);
+
+  // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
+  // operators can edit a plan in DB without it being clobbered on boot.
+  await pool.query(
+    `INSERT INTO "BuildPlan"
+       ("key","name","tagline","priceMonthly","currency","vacancySlots","talentSearchPerMonth","boostsPerMonth","hireFeeBps","featuresJson","sortOrder","active")
+     VALUES
+       ('FREE','Free Forever','For tiny teams hiring their first contractor.',0,'RUB',1,5,0,0,
+         $1, 10, TRUE),
+       ('PRO','Pro','For growing companies with steady hiring needs.',4990,'RUB',10,-1,5,0,
+         $2, 20, TRUE),
+       ('AGENCY','Agency','For staffing agencies and large operators.',14990,'RUB',-1,-1,20,0,
+         $3, 30, TRUE),
+       ('PPHIRE','Pay-per-Hire','Zero upfront. Pay only on a successful hire.',0,'RUB',-1,-1,0,1200,
+         $4, 40, TRUE)
+     ON CONFLICT ("key") DO NOTHING;`,
+    [
+      JSON.stringify([
+        "1 active vacancy",
+        "All resumes visible — no paywall",
+        "5 talent searches per month",
+        "Direct messages with candidates",
+        "Public project page + share link",
+      ]),
+      JSON.stringify([
+        "10 active vacancies",
+        "Unlimited talent search",
+        "5 boost-vacancy add-ons / month",
+        "Priority placement in feed",
+        "Email + chat support",
+      ]),
+      JSON.stringify([
+        "Unlimited vacancies",
+        "Unlimited talent search",
+        "20 boost-vacancy / month",
+        "White-label public pages",
+        "API access (planned)",
+        "Dedicated success manager",
+      ]),
+      JSON.stringify([
+        "0 ₽ upfront — no monthly fee",
+        "12% of monthly salary on successful hire (vs HH 15-20%)",
+        "Escrow held until candidate's first day",
+        "Unlimited active vacancies",
+        "Full platform access",
+      ]),
+    ],
+  );
+
   ensured = true;
 }
 
@@ -181,3 +282,17 @@ export const PROJECT_STATUSES = ["OPEN", "IN_PROGRESS", "DONE"] as const;
 export const VACANCY_STATUSES = ["OPEN", "CLOSED"] as const;
 export const APPLICATION_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const;
 export const BUILD_ROLES = ["CLIENT", "CONTRACTOR", "WORKER", "ADMIN"] as const;
+export const PLAN_KEYS = ["FREE", "PRO", "AGENCY", "PPHIRE"] as const;
+
+export function safeParseJson<T>(raw: unknown, fallback: T): T {
+  if (typeof raw !== "string") return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export const SUBSCRIPTION_STATUSES = ["ACTIVE", "CANCELED", "PENDING"] as const;
+export const ORDER_KINDS = ["SUB_START", "BOOST", "TALENT_DAY_PASS", "HIRE_FEE"] as const;
+export const ORDER_STATUSES = ["PENDING", "PAID", "CANCELED", "REFUNDED"] as const;

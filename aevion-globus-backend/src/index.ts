@@ -242,6 +242,15 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/notifications/summary": {
         get: { summary: "Header-bell counts: unreadMessages + pendingApplications + applicationUpdates (Bearer required)" },
       },
+      "/api/build/plans": {
+        get: { summary: "Public catalog of subscription plans (cache 300s)" },
+      },
+      "/api/build/subscriptions/me": {
+        get: { summary: "Current ACTIVE subscription for the bearer (or null)" },
+      },
+      "/api/build/subscriptions/start": {
+        post: { summary: "Start/switch plan — FREE/PPHIRE → ACTIVE; PRO/AGENCY → PENDING (awaiting payment provider)" },
+      },
     },
   });
 });

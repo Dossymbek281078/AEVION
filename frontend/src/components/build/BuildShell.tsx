@@ -12,6 +12,7 @@ const NAV: { href: string; label: string }[] = [
   { href: "/build/create-project", label: "New project" },
   { href: "/build/profile", label: "Profile" },
   { href: "/build/messages", label: "Messages" },
+  { href: "/build/pricing", label: "Pricing" },
 ];
 
 export function BuildShell({ children }: { children: React.ReactNode }) {

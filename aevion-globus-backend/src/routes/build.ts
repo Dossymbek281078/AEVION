@@ -13,6 +13,8 @@ import {
   VACANCY_STATUSES,
   APPLICATION_STATUSES,
   BUILD_ROLES,
+  PLAN_KEYS,
+  safeParseJson,
 } from "../lib/build";
 
 export const buildRouter = Router();
@@ -912,6 +914,130 @@ buildRouter.get("/notifications/summary", async (req, res) => {
     });
   } catch (err: unknown) {
     return fail(res, 500, "notifications_summary_failed", { details: (err as Error).message });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Pricing — plans, subscriptions, order ledger.
+// Plans are seeded by ensureBuildTables. Reading is public; subscribing
+// requires auth. Payments are out-of-scope: we record an order in
+// PENDING/PAID and a Subscription row goes ACTIVE on the FREE tier
+// immediately (everything else stays PENDING until a payment provider
+// flips it).
+// ──────────────────────────────────────────────────────────────────────
+
+// GET /api/build/plans — public catalog
+buildRouter.get("/plans", async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT "key","name","tagline","priceMonthly","currency","vacancySlots","talentSearchPerMonth","boostsPerMonth","hireFeeBps","featuresJson","sortOrder"
+       FROM "BuildPlan"
+       WHERE "active" = TRUE
+       ORDER BY "sortOrder" ASC`,
+    );
+    const items = result.rows.map((r: Record<string, unknown>) => ({
+      ...r,
+      features: safeParseJson(r.featuresJson, [] as string[]),
+    }));
+    res.setHeader("Cache-Control", "public, max-age=300");
+    return ok(res, { items, total: items.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "plans_list_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/subscriptions/me — current plan for the bearer
+buildRouter.get("/subscriptions/me", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const sub = await pool.query(
+      `SELECT s.*, p."name" AS "planName", p."priceMonthly", p."currency",
+              p."vacancySlots", p."talentSearchPerMonth", p."boostsPerMonth", p."hireFeeBps"
+       FROM "BuildSubscription" s
+       LEFT JOIN "BuildPlan" p ON p."key" = s."planKey"
+       WHERE s."userId" = $1 AND s."status" = 'ACTIVE'
+       ORDER BY s."createdAt" DESC
+       LIMIT 1`,
+      [auth.sub],
+    );
+
+    if (sub.rowCount === 0) return ok(res, { subscription: null });
+    return ok(res, { subscription: sub.rows[0] });
+  } catch (err: unknown) {
+    return fail(res, 500, "subscription_me_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/subscriptions/start { planKey } — start or switch plan
+//   FREE                   → ACTIVE immediately, order PAID(0)
+//   PPHIRE                 → ACTIVE (no monthly fee, fee at hire-time)
+//   PRO/AGENCY             → subscription PENDING + order PENDING
+//                            (real payment integration plugs in later)
+buildRouter.post("/subscriptions/start", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const planKey = vEnum(req.body?.planKey, "planKey", PLAN_KEYS);
+    if (!planKey.ok) return fail(res, 400, planKey.error);
+
+    const plan = await pool.query(
+      `SELECT "key","priceMonthly","currency" FROM "BuildPlan" WHERE "key" = $1 AND "active" = TRUE LIMIT 1`,
+      [planKey.value],
+    );
+    if (plan.rowCount === 0) return fail(res, 404, "plan_not_found");
+    const planRow = plan.rows[0];
+
+    const isFreeStart = planRow.priceMonthly === 0;
+    const subStatus = isFreeStart ? "ACTIVE" : "PENDING";
+    const orderStatus = isFreeStart ? "PAID" : "PENDING";
+
+    await pool.query("BEGIN");
+    try {
+      // Cancel any existing ACTIVE sub for this user before inserting a new one
+      // (the partial-unique index requires it).
+      await pool.query(
+        `UPDATE "BuildSubscription" SET "status" = 'CANCELED', "endsAt" = NOW()
+         WHERE "userId" = $1 AND "status" = 'ACTIVE'`,
+        [auth.sub],
+      );
+
+      const subId = crypto.randomUUID();
+      const subResult = await pool.query(
+        `INSERT INTO "BuildSubscription" ("id","userId","planKey","status")
+         VALUES ($1,$2,$3,$4) RETURNING *`,
+        [subId, auth.sub, planKey.value, subStatus],
+      );
+
+      const orderId = crypto.randomUUID();
+      const orderResult = await pool.query(
+        `INSERT INTO "BuildOrder" ("id","userId","kind","ref","amount","currency","status","metaJson")
+         VALUES ($1,$2,'SUB_START',$3,$4,$5,$6,$7) RETURNING *`,
+        [
+          orderId,
+          auth.sub,
+          subId,
+          planRow.priceMonthly,
+          planRow.currency,
+          orderStatus,
+          JSON.stringify({ planKey: planKey.value }),
+        ],
+      );
+
+      await pool.query("COMMIT");
+      return ok(
+        res,
+        { subscription: subResult.rows[0], order: orderResult.rows[0] },
+        201,
+      );
+    } catch (innerErr) {
+      await pool.query("ROLLBACK");
+      throw innerErr;
+    }
+  } catch (err: unknown) {
+    return fail(res, 500, "subscription_start_failed", { details: (err as Error).message });
   }
 });
 

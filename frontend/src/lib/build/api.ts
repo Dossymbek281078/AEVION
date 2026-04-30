@@ -95,6 +95,38 @@ export type BuildFile = {
   createdAt: string;
 };
 
+// ── Pricing types ────────────────────────────────────────────────────
+
+export type PlanKey = "FREE" | "PRO" | "AGENCY" | "PPHIRE";
+export type SubscriptionStatus = "ACTIVE" | "CANCELED" | "PENDING";
+
+export type BuildPlan = {
+  key: PlanKey;
+  name: string;
+  tagline: string | null;
+  priceMonthly: number;
+  currency: string;
+  vacancySlots: number;          // -1 = unlimited
+  talentSearchPerMonth: number;  // -1 = unlimited
+  boostsPerMonth: number;
+  hireFeeBps: number;            // basis points (1200 = 12.00%)
+  features: string[];
+  sortOrder: number;
+};
+
+export type BuildSubscription = {
+  id: string;
+  userId: string;
+  planKey: PlanKey;
+  status: SubscriptionStatus;
+  startedAt: string;
+  endsAt: string | null;
+  createdAt: string;
+  planName?: string;
+  priceMonthly?: number;
+  currency?: string;
+};
+
 // ── Envelope + transport ─────────────────────────────────────────────
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string; [k: string]: unknown };
@@ -256,6 +288,18 @@ export const buildApi = {
     ),
   send: (input: { receiverId: string; content: string }) =>
     call<BuildMessage>("POST", "/api/build/messages", input),
+
+  // Pricing
+  listPlans: () =>
+    call<{ items: BuildPlan[]; total: number }>("GET", "/api/build/plans", undefined, { auth: false }),
+  mySubscription: () =>
+    call<{ subscription: BuildSubscription | null }>("GET", "/api/build/subscriptions/me"),
+  startSubscription: (planKey: PlanKey) =>
+    call<{ subscription: BuildSubscription; order: { id: string; status: string; amount: number; currency: string } }>(
+      "POST",
+      "/api/build/subscriptions/start",
+      { planKey },
+    ),
 
   // Notifications
   notifySummary: () =>

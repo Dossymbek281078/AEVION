@@ -258,6 +258,12 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/notifications/summary": {
         get: { summary: "Header-bell counts: unreadMessages + pendingApplications + applicationUpdates (Bearer required)" },
       },
+      "/api/build/ai/consult": {
+        post: { summary: "QBuild AI career coach (Anthropic Haiku, profile + open vacancies in cached system prompt)" },
+      },
+      "/api/build/ai/parse-resume": {
+        post: { summary: "Parse free-form resume text into AEVION Resume Schema v2 JSON" },
+      },
       "/api/build/usage/me": {
         get: { summary: "Plan + month-to-date counters + remaining slots (Bearer required)" },
       },

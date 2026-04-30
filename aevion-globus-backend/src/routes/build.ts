@@ -1553,6 +1553,181 @@ buildRouter.get("/notifications/summary", async (req, res) => {
   }
 });
 
+// ──────────────────────────────────────────────────────────────────────
+// AI surfaces — career coach + resume parser. Both wrap Anthropic Haiku
+// via lib/build/ai.ts. Coach is a chat (multi-turn). Parser is one-shot
+// JSON extraction.
+// ──────────────────────────────────────────────────────────────────────
+
+// POST /api/build/ai/consult — chat turn with the QBuild career coach.
+//   Body: { messages: [{role:"user"|"assistant", content:"..."}] }
+//   Returns: { reply, usage }
+//   Loads the user's profile + last 5 open vacancies into the system
+//   prompt so the coach has live context (and benefits from prompt
+//   caching — the system prompt + profile are stable across turns).
+buildRouter.post("/ai/consult", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const messagesRaw = req.body?.messages;
+    if (!Array.isArray(messagesRaw) || messagesRaw.length === 0) {
+      return fail(res, 400, "messages_required");
+    }
+    const messages = messagesRaw
+      .filter(
+        (m: unknown) =>
+          typeof m === "object" &&
+          m !== null &&
+          (m as { role?: string }).role &&
+          typeof (m as { content?: string }).content === "string",
+      )
+      .map((m: unknown) => {
+        const obj = m as { role: string; content: string };
+        return {
+          role: obj.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content: obj.content.slice(0, 8000),
+        };
+      })
+      .slice(-20); // bound history
+
+    if (messages.length === 0) return fail(res, 400, "messages_empty");
+    if (messages[messages.length - 1].role !== "user") {
+      return fail(res, 400, "last_message_must_be_user");
+    }
+
+    // Lazy-load AI helper so the import isn't hoisted into modules
+    // that don't need it.
+    const { callClaude, COACH_SYSTEM_PROMPT } = await import("../lib/build/ai");
+
+    // Profile context.
+    const profileQ = await pool.query(
+      `SELECT "name","title","city","summary","skillsJson","experienceYears",
+              "salaryMin","salaryMax","salaryCurrency","openToWork",
+              "driversLicense","shiftPreference","availabilityType",
+              "medicalCheckValid","safetyTrainingValid","buildRole"
+       FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
+      [auth.sub],
+    );
+    const p = profileQ.rows[0] || null;
+    const profileBlock = p
+      ? `Контекст профиля пользователя (актуальный, обновлено им):
+- Имя: ${p.name}
+- Заголовок: ${p.title || "—"}
+- Роль: ${p.buildRole}
+- Город: ${p.city || "—"}
+- Лет опыта: ${p.experienceYears ?? 0}
+- Skills: ${(safeParseJson(p.skillsJson, [] as string[])).join(", ") || "—"}
+- Зарплата: ${p.salaryMin || "—"}–${p.salaryMax || "—"} ${p.salaryCurrency || ""}
+- Open to work: ${p.openToWork ? "yes" : "no"}
+- Водительские: ${p.driversLicense || "—"}
+- Смены: ${p.shiftPreference || "—"}
+- Тип занятости: ${p.availabilityType || "—"}
+- Медкомиссия: ${p.medicalCheckValid ? "✓" : "—"}
+- ТБ: ${p.safetyTrainingValid ? "✓" : "—"}
+- Summary: ${p.summary || "—"}`
+      : `У пользователя ещё нет заполненного профиля QBuild.`;
+
+    // Recent open vacancies — gives the coach something concrete to
+    // suggest applying to ("вот 2 подходят прямо сейчас").
+    const vacQ = await pool.query(
+      `SELECT v."title", v."salary", v."skillsJson", p."city" AS "projectCity"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."status" = 'OPEN'
+       ORDER BY v."createdAt" DESC LIMIT 5`,
+    );
+    const vacBlock = vacQ.rows.length
+      ? `Последние открытые вакансии на платформе:
+${vacQ.rows
+  .map((v: { title: string; salary: number; skillsJson: string; projectCity: string | null }, i: number) => {
+    const sk = safeParseJson(v.skillsJson, [] as string[]);
+    return `${i + 1}. ${v.title}${v.projectCity ? ` (${v.projectCity})` : ""}${v.salary ? `, ${v.salary}` : ""}${sk.length ? ` · skills: ${sk.join(", ")}` : ""}`;
+  })
+  .join("\n")}`
+      : "На платформе сейчас нет открытых вакансий — упомяни это, если пользователь спросит.";
+
+    const fullSystem = `${COACH_SYSTEM_PROMPT}
+
+${profileBlock}
+
+${vacBlock}`;
+
+    const reply = await callClaude({
+      systemPrompt: fullSystem,
+      messages,
+      maxTokens: 1024,
+      cacheSystem: true,
+    });
+
+    return ok(res, {
+      reply: reply.text,
+      usage: {
+        input: reply.inputTokens,
+        output: reply.outputTokens,
+        cacheRead: reply.cacheReadInputTokens || 0,
+        cacheWrite: reply.cacheCreationInputTokens || 0,
+      },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_consult_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/parse-resume — extract structured AEVION resume
+// schema from a free-form text dump (PDF text, OCR'd image, voice
+// transcript). Returns { parsed: {...} } and lets the frontend show a
+// preview before hitting POST /profiles to merge.
+buildRouter.post("/ai/parse-resume", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const text = vString(req.body?.text, "text", { min: 20, max: 60_000 });
+    if (!text.ok) return fail(res, 400, text.error);
+
+    const { callClaude, RESUME_PARSER_SYSTEM_PROMPT } = await import("../lib/build/ai");
+
+    const reply = await callClaude({
+      systemPrompt: RESUME_PARSER_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: text.value }],
+      maxTokens: 4096,
+      cacheSystem: true,
+    });
+
+    // Defensive parse — strip ```json fences if the model added them.
+    const stripped = reply.text
+      .replace(/^```(?:json)?\s*/m, "")
+      .replace(/\s*```$/m, "")
+      .trim();
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stripped);
+    } catch {
+      return fail(res, 502, "ai_returned_invalid_json", {
+        sample: stripped.slice(0, 200),
+        usage: {
+          input: reply.inputTokens,
+          output: reply.outputTokens,
+        },
+      });
+    }
+
+    return ok(res, {
+      parsed,
+      usage: {
+        input: reply.inputTokens,
+        output: reply.outputTokens,
+        cacheRead: reply.cacheReadInputTokens || 0,
+        cacheWrite: reply.cacheCreationInputTokens || 0,
+      },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_parse_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/usage/me — current plan limits + month-to-date counters
 // + computed remaining slots for the auth-bearer. Powers the badge in
 // BuildShell and the "12/∞ this month" footer on /build/talent.

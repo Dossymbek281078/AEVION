@@ -481,6 +481,18 @@ export const buildApi = {
   send: (input: { receiverId: string; content: string }) =>
     call<BuildMessage>("POST", "/api/build/messages", input),
 
+  // AI surfaces
+  aiConsult: (messages: { role: "user" | "assistant"; content: string }[]) =>
+    call<{
+      reply: string;
+      usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
+    }>("POST", "/api/build/ai/consult", { messages }),
+  aiParseResume: (text: string) =>
+    call<{
+      parsed: Record<string, unknown>;
+      usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
+    }>("POST", "/api/build/ai/parse-resume", { text }),
+
   // Plan usage
   myUsage: () =>
     call<{

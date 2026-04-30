@@ -21,6 +21,7 @@ type Transfer = {
   to: string;
   amount: number;
   createdAt: string;
+  memo?: string;
 };
 
 type Operation = {
@@ -30,7 +31,15 @@ type Operation = {
   from: string | null;
   to: string;
   createdAt: string;
+  memo?: string;
 };
+
+const MAX_MEMO_LEN = 140;
+function sanitiseMemo(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim().slice(0, MAX_MEMO_LEN);
+  return trimmed ? trimmed : undefined;
+}
 
 const STORE_REL = "qtrade.json";
 
@@ -333,11 +342,11 @@ qtradeRouter.get("/accounts.csv", (req, res) => {
 qtradeRouter.get("/transfers.csv", (req, res) => {
   const ownIds = ownAccountIds(ownerEmail(req));
   const rows = [
-    ["id", "from", "to", "amount", "createdAt"],
+    ["id", "from", "to", "amount", "createdAt", "memo"],
     ...[...transfers]
       .reverse()
       .filter((x) => ownIds.has(x.from) || ownIds.has(x.to))
-      .map((x) => [x.id, x.from, x.to, x.amount, x.createdAt]),
+      .map((x) => [x.id, x.from, x.to, x.amount, x.createdAt, x.memo ?? ""]),
   ];
   sendCsvAttachment(res, "qtrade-transfers", rows);
 });
@@ -348,11 +357,11 @@ qtradeRouter.get("/transfers.csv", (req, res) => {
 qtradeRouter.get("/operations.csv", (req, res) => {
   const ownIds = ownAccountIds(ownerEmail(req));
   const rows = [
-    ["id", "kind", "amount", "from", "to", "createdAt"],
+    ["id", "kind", "amount", "from", "to", "createdAt", "memo"],
     ...[...operations]
       .reverse()
       .filter((x) => ownIds.has(x.to) || (x.from && ownIds.has(x.from)))
-      .map((x) => [x.id, x.kind, x.amount, x.from, x.to, x.createdAt]),
+      .map((x) => [x.id, x.kind, x.amount, x.from, x.to, x.createdAt, x.memo ?? ""]),
   ];
   sendCsvAttachment(res, "qtrade-operations", rows);
 });
@@ -598,6 +607,9 @@ qtradeRouter.get("/receipt/:opId.pdf", async (req, res, next) => {
     row(yInfo + 42, "FROM", op.from ?? "(top-up source)", "TO", op.to);
     row(yInfo + 84, "AMOUNT (AEC)", op.amount.toFixed(2), "OWNER", owner);
     row(yInfo + 126, "TIMESTAMP", op.createdAt, "BANK", "AEVION Bank · Test Net");
+    if (op.memo) {
+      row(yInfo + 168, "MEMO", op.memo, "", "");
+    }
 
     // Footer
     doc.fontSize(9).font("Helvetica").fillColor("#94a3b8").text(
@@ -740,6 +752,7 @@ qtradeRouter.post("/topup", (req, res) => {
 qtradeRouter.post("/transfer", (req, res) => {
   const owner = ownerEmail(req);
   const { from, to, amount } = req.body || {};
+  const memo = sanitiseMemo(req.body?.memo);
 
   if (!ownsAccount(owner, from)) {
     return res.status(403).json({ error: "not owner of source account" });
@@ -791,6 +804,7 @@ qtradeRouter.post("/transfer", (req, res) => {
     to,
     amount: a,
     createdAt: new Date().toISOString(),
+    ...(memo ? { memo } : {}),
   };
 
   transfers.push(tx);
@@ -801,6 +815,7 @@ qtradeRouter.post("/transfer", (req, res) => {
     from,
     to,
     createdAt: tx.createdAt,
+    ...(memo ? { memo } : {}),
   });
   schedulePersist();
 

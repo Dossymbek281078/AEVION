@@ -167,16 +167,18 @@ export async function transfer(
   from: string,
   to: string,
   amount: number,
-  options?: { idempotencyKey?: string },
+  options?: { idempotencyKey?: string; memo?: string },
 ): Promise<Transfer> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const body: Record<string, unknown> = { from, to, amount };
+  if (options?.memo) body.memo = options.memo;
   return request<Transfer>(
     "/api/qtrade/transfer",
     {
       method: "POST",
       headers: authHeaders(headers),
-      body: JSON.stringify({ from, to, amount }),
+      body: JSON.stringify(body),
     },
     "Transfer failed",
   );

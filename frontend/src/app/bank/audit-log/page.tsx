@@ -40,6 +40,7 @@ type Row = {
   direction: "in" | "out" | "topup";
   amount: number;
   counterparty: string | null;
+  memo: string | null;
   signature: SignedOperation | null;
 };
 
@@ -227,6 +228,7 @@ export default function AuditLogPage() {
         direction,
         amount: Number(op.amount) || 0,
         counterparty,
+        memo: op.memo ?? null,
         signature: sigById.get(op.id) ?? null,
       };
     });
@@ -244,6 +246,7 @@ export default function AuditLogPage() {
           direction: "in",
           amount: r.amount,
           counterparty: `${r.productKey} · ${r.period}`,
+          memo: null,
           signature: null,
         }),
       ),
@@ -255,6 +258,7 @@ export default function AuditLogPage() {
           direction: "in",
           amount: p.amount,
           counterparty: `${p.tournamentId} · place ${p.place}`,
+          memo: null,
           signature: null,
         }),
       ),
@@ -266,6 +270,7 @@ export default function AuditLogPage() {
           direction: "in",
           amount: c.amount,
           counterparty: c.artifactVersionId,
+          memo: null,
           signature: null,
         }),
       ),
@@ -294,6 +299,7 @@ export default function AuditLogPage() {
         const hay = [
           r.id,
           r.counterparty ?? "",
+          r.memo ?? "",
           r.kind,
           r.direction,
           String(r.amount),
@@ -349,6 +355,7 @@ export default function AuditLogPage() {
       "direction",
       "amount",
       "counterparty",
+      "memo",
       "signature_algo",
       "signature_signed_at",
       "signature_verified",
@@ -363,6 +370,7 @@ export default function AuditLogPage() {
           csvEscape(r.direction),
           csvEscape(String(r.amount)),
           csvEscape(r.counterparty ?? ""),
+          csvEscape(r.memo ?? ""),
           csvEscape(r.signature?.algo ?? ""),
           csvEscape(r.signature?.signedAt ?? ""),
           csvEscape(r.signature?.verified ?? ""),
@@ -741,6 +749,21 @@ export default function AuditLogPage() {
                       ) : (
                         "—"
                       )}
+                      {r.memo ? (
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontFamily: "inherit",
+                            fontStyle: "italic",
+                            color: "#94a3b8",
+                            fontSize: 11,
+                            fontWeight: 400,
+                          }}
+                          title={r.memo}
+                        >
+                          {r.memo}
+                        </div>
+                      ) : null}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       {r.signature ? (

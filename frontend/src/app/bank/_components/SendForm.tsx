@@ -18,7 +18,7 @@ type Props = {
   myId: string;
   balance: number;
   prefill?: PaymentRequest | null;
-  onSend: (to: string, amount: number) => Promise<boolean>;
+  onSend: (to: string, amount: number, memo?: string) => Promise<boolean>;
   onError: (msg: string) => void;
 };
 
@@ -152,7 +152,7 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
         return;
       }
     }
-    const ok = await onSend(trimmedTo, n);
+    const ok = await onSend(trimmedTo, n, memo.trim() || undefined);
     if (ok) {
       if (nickname.trim() && !existingContact) {
         contactsLib.saveContact(trimmedTo, nickname.trim());

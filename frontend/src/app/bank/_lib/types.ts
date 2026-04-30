@@ -12,6 +12,7 @@ export type Operation = {
   from: string | null;
   to: string;
   createdAt: string;
+  memo?: string;
 };
 
 export type Me = {

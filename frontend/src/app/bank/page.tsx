@@ -122,8 +122,8 @@ function BankContent() {
   }, [searchParams]);
 
   const handleSend = useCallback(
-    async (to: string, amount: number) => {
-      const ok = await send(to, amount);
+    async (to: string, amount: number, memo?: string) => {
+      const ok = await send(to, amount, memo);
       if (ok) showToast(`Sent ${amount.toFixed(2)} AEC`, "success");
       return ok;
     },

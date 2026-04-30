@@ -59,7 +59,7 @@ export function useBank(me: Me | null, onError: ErrorHandler) {
   }, [me, provisioning, load, onError]);
 
   const send = useCallback(
-    async (to: string, amount: number): Promise<boolean> => {
+    async (to: string, amount: number, memo?: string): Promise<boolean> => {
       if (!account) {
         onError("No account");
         return false;
@@ -67,6 +67,7 @@ export function useBank(me: Me | null, onError: ErrorHandler) {
       try {
         const tx = await api.transfer(account.id, to, amount, {
           idempotencyKey: api.newIdempotencyKey(`xfer-${account.id.slice(0, 8)}`),
+          memo,
         });
         try {
           const sig = await api.signPayload(tx);

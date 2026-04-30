@@ -19,12 +19,16 @@ import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { cyberchessRouter } from "./routes/cyberchess";
 import { planetPayoutsRouter } from "./routes/planetPayouts";
 import { bankTestRouter } from "./routes/bankTest";
+import { initSentry, captureException, isSentryEnabled } from "./lib/sentry";
 import { openapiSpec } from "./lib/openapiSpec";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
+
+// Optional Sentry. No-op when SENTRY_DSN is unset OR @sentry/node missing.
+initSentry();
 
 const app = express();
 const PORT = process.env.PORT || 4001;
@@ -117,16 +121,24 @@ app.use("/api/bank", bankTestRouter);
 app.use(
   (
     err: unknown,
-    _req: express.Request,
+    req: express.Request,
     res: express.Response,
     _next: express.NextFunction,
   ) => {
     console.error("[express]", err);
+    captureException(err, {
+      url: req.originalUrl ?? req.url,
+      method: req.method,
+      ip: req.ip,
+    });
     if (res.headersSent) return;
     res.status(500).json({ error: "internal_error" });
   },
 );
 
 app.listen(PORT, () => {
-  console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
+  console.log(
+    `AEVION Globus Backend запущен на порту ${PORT}` +
+      (isSentryEnabled() ? " (sentry on)" : ""),
+  );
 });

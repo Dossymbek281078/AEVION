@@ -1,15 +1,18 @@
 # Быстрый gate: обе части стека собираются без ручных переключений папок.
+# Backend matrix runs tsc *and* the integration suite so a regression in any
+# of the bank-track routes (qtrade / ecosystem / cyberchess / planet payouts /
+# qright royalties / metrics) lights the PR red.
 name: CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, bank-payment-layer]
   pull_request:
-    branches: [main, master, develop]
+    branches: [main, master, develop, bank-payment-layer]
 
 jobs:
   backend:
-    name: Backend (tsc)
+    name: Backend (tsc + integration tests)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,6 +26,15 @@ jobs:
           cache-dependency-path: aevion-globus-backend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm test
+        env:
+          # Test secrets — never reused in any other context. The suite sets
+          # its own values too, but having them in the env keeps the harness
+          # explicit + documents the surface for future contributors.
+          AUTH_JWT_SECRET: test-secret-please-rotate
+          QRIGHT_WEBHOOK_SECRET: test-qright
+          CYBERCHESS_WEBHOOK_SECRET: test-chess
+          PLANET_WEBHOOK_SECRET: test-planet
 
   frontend:
     name: Frontend (next build)

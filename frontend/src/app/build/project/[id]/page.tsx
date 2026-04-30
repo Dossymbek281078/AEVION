@@ -5,6 +5,7 @@ import { use } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
+import { AiImprove } from "@/components/build/AiImprove";
 import {
   buildApi,
   type BuildVacancy,
@@ -410,6 +411,12 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
         minLength={10}
         rows={3}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
+      />
+      <AiImprove
+        value={description}
+        onAccept={(v) => setDescription(v)}
+        kind="vacancy_description"
+        hint="Сделать описание вакансии конкретнее"
       />
       <input
         type="number"

@@ -2163,6 +2163,67 @@ buildRouter.post("/ai/parse-resume", async (req, res) => {
   }
 });
 
+// POST /api/build/ai/improve-text — rewrite a snippet (summary, vacancy
+// description, application cover note, etc.) so it's more concrete and
+// professional. Body: { text, kind?, locale? }. Returns { improved }.
+// kind tunes the system prompt (e.g. "summary" → 2-4 sentences, no bullets).
+buildRouter.post("/ai/improve-text", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const text = vString(req.body?.text, "text", { min: 10, max: 4000 });
+    if (!text.ok) return fail(res, 400, text.error);
+    const kindRaw = typeof req.body?.kind === "string" ? req.body.kind.trim().toLowerCase() : "generic";
+    const kind = ["summary", "vacancy_description", "cover_note", "experience", "generic"].includes(kindRaw)
+      ? kindRaw
+      : "generic";
+    const locale = typeof req.body?.locale === "string" ? req.body.locale.trim().slice(0, 8) : "ru";
+
+    const kindGuide: Record<string, string> = {
+      summary:
+        "Это поле SUMMARY на резюме строителя/инженера. 2–4 коротких предложения, без буллетов, без \"Я — ...\", сразу про опыт + ключевую экспертизу + что ищет.",
+      vacancy_description:
+        "Это описание вакансии в строительстве. Сделай конкретно: задачи, требования, условия (смены, оплата). Без воды, без \"мы — динамичная команда\". Строки можно через пустую строку для читаемости.",
+      cover_note:
+        "Это сопроводительное письмо к отклику на стройвакансию. 3–5 предложений, конкретный опыт + почему подходит + готов выйти.",
+      experience:
+        "Это блок 'опыт работы' (один пункт). Опиши что делал, чем измеряется результат (объёмы, сроки, бюджет). Сухо, без рекламных эпитетов.",
+      generic: "Перепиши текст более конкретно и профессионально.",
+    };
+
+    const { callClaude } = await import("../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — редактор резюме и вакансий на платформе AEVION QBuild (стройка).
+Твоя задача: переписать переданный текст ярче и конкретнее, не выдумывая фактов.
+
+${kindGuide[kind]}
+
+Язык ответа: ${locale === "en" ? "English" : locale === "kz" ? "Kazakh (cyrillic)" : "Russian"}.
+
+Правила:
+- Не добавляй данные, которых нет в исходнике (никаких \"работал в Газпроме\" если не указано).
+- Не используй markdown-разметку, кроме переноса строк.
+- Не пиши преамбулы типа \"Вот улучшенная версия:\". Только сам текст.
+- Сохраняй родной язык исходника, если совпадает с ${locale}.`,
+      messages: [{ role: "user", content: text.value }],
+      maxTokens: 800,
+      cacheSystem: false,
+    });
+
+    const improved = reply.text.trim();
+    return ok(res, {
+      improved,
+      usage: {
+        input: reply.inputTokens,
+        output: reply.outputTokens,
+      },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_improve_failed", { details: (err as Error).message });
+  }
+});
+
 // ──────────────────────────────────────────────────────────────────────
 // Trial Tasks — paid test work between recruiter and applicant.
 // Differentiator vs HH: instead of "review CV → maybe call → ghost",

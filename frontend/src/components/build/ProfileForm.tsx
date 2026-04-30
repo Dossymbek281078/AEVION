@@ -9,6 +9,7 @@ import {
   type AvailabilityType,
 } from "@/lib/build/api";
 import { VoiceInput } from "./VoiceInput";
+import { AiImprove } from "./AiImprove";
 
 const SHIFTS: ShiftPreference[] = ["DAY", "NIGHT", "FLEX", "ANY"];
 const AVAILS: AvailabilityType[] = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"];
@@ -256,6 +257,12 @@ export function ProfileForm({
             maxLength={4000}
             placeholder="2–3 lines about yourself: specialisation, key projects, what you're looking for."
             className="input-build"
+          />
+          <AiImprove
+            value={summary}
+            onAccept={(v) => setSummary(v)}
+            kind="summary"
+            hint="Сделать summary ярче и конкретнее"
           />
           <div className="flex items-center justify-between">
             <VoiceInput

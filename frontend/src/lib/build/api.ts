@@ -563,6 +563,15 @@ export const buildApi = {
       parsed: Record<string, unknown>;
       usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
     }>("POST", "/api/build/ai/parse-resume", input),
+  aiImproveText: (input: {
+    text: string;
+    kind?: "summary" | "vacancy_description" | "cover_note" | "experience" | "generic";
+    locale?: string;
+  }) =>
+    call<{
+      improved: string;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/improve-text", input),
 
     // Trial tasks
   proposeTrialTask: (input: {

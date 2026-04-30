@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { buildApi, BuildApiError } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { AiImprove } from "@/components/build/AiImprove";
 
 export function ApplicationForm({
   vacancyId,
@@ -77,6 +78,12 @@ export function ApplicationForm({
           className="mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
         />
       </label>
+      <AiImprove
+        value={message}
+        onAccept={(v) => setMessage(v)}
+        kind="cover_note"
+        hint="Сделать сопроводительное письмо конкретнее"
+      />
       {qs.length > 0 && (
         <div className="space-y-2 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/5 p-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-fuchsia-200">

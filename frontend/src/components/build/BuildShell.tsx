@@ -87,6 +87,68 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
+    </div>
+  );
+}
+
+function FloatingCoachLauncher() {
+  const [open, setOpen] = useState(false);
+
+  // Lazy-load the chat only when the user opens the modal so the
+  // import + Anthropic call don't run on every page load.
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Open AI coach"
+        className="fixed bottom-5 right-5 z-40 inline-flex h-14 items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500 px-5 text-sm font-bold text-emerald-950 shadow-2xl shadow-emerald-500/20 transition hover:bg-emerald-400"
+      >
+        <span className="text-base">🤖</span>
+        <span>AI coach</span>
+      </button>
+      {open && <CoachModal onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function CoachModal({ onClose }: { onClose: () => void }) {
+  // We need AiCoachChat lazily — but lazy() can't be used here without
+  // Suspense boundary. Pull it directly; the import cost only fires
+  // when the modal mounts (the launcher button itself imports nothing).
+  const [Chat, setChat] = useState<React.ComponentType<{ height?: number }> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("./AiCoachChat").then((mod) => {
+      if (!cancelled) setChat(() => mod.AiCoachChat);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-end bg-black/40 p-4 sm:items-center sm:justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute -top-3 -right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-slate-200 hover:bg-slate-800"
+        >
+          ×
+        </button>
+        {Chat ? <Chat height={560} /> : (
+          <div className="rounded-2xl border border-emerald-500/20 bg-slate-900 p-8 text-center text-sm text-slate-400">
+            Loading coach…
+          </div>
+        )}
+      </div>
     </div>
   );
 }

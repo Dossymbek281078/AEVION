@@ -4,6 +4,7 @@ import { csvFromRows } from "../lib/csv";
 import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 import { requireAuth } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
+import { consumeDailyCap } from "../lib/dailyCap";
 
 export const qtradeRouter = Router();
 
@@ -398,6 +399,21 @@ qtradeRouter.post("/topup", (req, res) => {
     res.setHeader("Idempotency-Warning", "missing-key");
   }
 
+  // Daily cap is checked after idempotency replay so a retry of an already-
+  // accepted top-up doesn't get rejected for "exceeded today" — the cap was
+  // already consumed by the original request.
+  const cap = consumeDailyCap(owner, "topup", a);
+  if (!cap.ok) {
+    res.setHeader("Retry-After", String(cap.retryInSec));
+    return res.status(429).json({
+      error: "daily topup cap exceeded",
+      cap: cap.cap,
+      used: cap.used,
+      requested: a,
+      retryInSec: cap.retryInSec,
+    });
+  }
+
   acc.balance += a;
   operations.push({
     id: nextId("op"),
@@ -460,6 +476,18 @@ qtradeRouter.post("/transfer", (req, res) => {
     }
   } else {
     res.setHeader("Idempotency-Warning", "missing-key");
+  }
+
+  const cap = consumeDailyCap(owner, "transfer", a);
+  if (!cap.ok) {
+    res.setHeader("Retry-After", String(cap.retryInSec));
+    return res.status(429).json({
+      error: "daily transfer cap exceeded",
+      cap: cap.cap,
+      used: cap.used,
+      requested: a,
+      retryInSec: cap.retryInSec,
+    });
   }
 
   fromAcc.balance -= a;

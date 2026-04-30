@@ -28,6 +28,9 @@ process.env.AEVION_DATA_DIR = `${process.cwd()}/.aevion-data-test-${process.pid}
 process.env.QRIGHT_WEBHOOK_SECRET = "test-qright";
 process.env.CYBERCHESS_WEBHOOK_SECRET = "test-chess";
 process.env.PLANET_WEBHOOK_SECRET = "test-planet";
+// Tight cap so the cap-exceeded test doesn't have to top up 5000 AEC.
+process.env.BANK_DAILY_TOPUP_CAP = "300";
+process.env.BANK_DAILY_TRANSFER_CAP = "300";
 
 const { qtradeRouter } = await import("../dist/routes/qtrade.js");
 const { ecosystemRouter } = await import("../dist/routes/ecosystem.js");
@@ -127,6 +130,31 @@ describe("ownership + transfer + idempotency", () => {
       { Authorization: `Bearer ${aliceTok}` },
     );
     assert.equal(r.status, 403);
+  });
+
+  it("topup rejects with 429 once daily cap is exceeded", async () => {
+    const tok = tokenFor("capper@aevion.test");
+    const a = await post("/api/qtrade/accounts", {}, { Authorization: `Bearer ${tok}` });
+    const acc = (await a.json()).id;
+    // Cap = 300; first topup of 250 should pass.
+    const r1 = await post(
+      "/api/qtrade/topup",
+      { accountId: acc, amount: 250 },
+      { Authorization: `Bearer ${tok}`, "Idempotency-Key": "cap-1" },
+    );
+    assert.equal(r1.status, 200);
+    // Next topup of 100 would push to 350 — must 429 with Retry-After.
+    const r2 = await post(
+      "/api/qtrade/topup",
+      { accountId: acc, amount: 100 },
+      { Authorization: `Bearer ${tok}`, "Idempotency-Key": "cap-2" },
+    );
+    assert.equal(r2.status, 429);
+    assert.ok(r2.headers.get("retry-after"), "Retry-After header must be set");
+    const j = await r2.json();
+    assert.equal(j.cap, 300);
+    assert.equal(j.used, 250);
+    assert.equal(j.requested, 100);
   });
 
   it("operations pagination — limit + cursor advance", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { buildApi, BuildApiError } from "@/lib/build/api";
 
 const COPY = {
@@ -31,6 +31,27 @@ export function LeadForm({ lang }: { lang: "ru" | "en" }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<"new" | "already" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [utm, setUtm] = useState<{
+    referrer?: string;
+    utmSource?: string;
+    utmCampaign?: string;
+  }>({});
+
+  // Read URL params + document.referrer once on mount; we keep them in
+  // state so they're available when the user submits.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const next: typeof utm = {};
+    const utmSource = sp.get("utm_source") || sp.get("ref");
+    if (utmSource) next.utmSource = utmSource.slice(0, 200);
+    const utmCampaign = sp.get("utm_campaign");
+    if (utmCampaign) next.utmCampaign = utmCampaign.slice(0, 200);
+    if (document.referrer && !document.referrer.includes(window.location.host)) {
+      next.referrer = document.referrer.slice(0, 200);
+    }
+    setUtm(next);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,6 +64,7 @@ export function LeadForm({ lang }: { lang: "ru" | "en" }) {
         city: city.trim() || undefined,
         locale: lang,
         source: "why-aevion",
+        ...utm,
       });
       setDone(r.alreadyExists ? "already" : "new");
     } catch (err) {

@@ -2913,65 +2913,156 @@ buildRouter.post("/orders/:id/pay", async (req, res) => {
     if (row.status === "PAID") return ok(res, { order: row, alreadyPaid: true });
     if (row.status !== "PENDING") return fail(res, 400, `order_not_payable`, { currentStatus: row.status });
 
-    await pool.query("BEGIN");
-    try {
-      const updated = await pool.query(
-        `UPDATE "BuildOrder" SET "status" = 'PAID' WHERE "id" = $1 RETURNING *`,
-        [id],
-      );
-
-      // Side-effects keyed by order kind.
-      if (row.kind === "SUB_START" && row.ref) {
-        // Cancel any other ACTIVE sub first to honor the unique-active index.
-        await pool.query(
-          `UPDATE "BuildSubscription" SET "status" = 'CANCELED', "endsAt" = NOW()
-           WHERE "userId" = $1 AND "status" = 'ACTIVE' AND "id" <> $2`,
-          [row.userId, row.ref],
-        );
-        await pool.query(
-          `UPDATE "BuildSubscription" SET "status" = 'ACTIVE', "startedAt" = NOW()
-           WHERE "id" = $1`,
-          [row.ref],
-        );
-      }
-      // BOOST orders: nothing to flip — the BuildBoost row was inserted at
-      // boost-time. We could add an "active" flag later if we want strict
-      // pay-before-feature semantics; for now boosts go live immediately
-      // (PAID just clears the bill).
-
-      // AEV cashback: 2% of PAID order amount → BuildCashback ledger.
-      // Idempotent via UNIQUE(orderId): re-running pay never double-credits.
-      // We mint at conversion 1 unit of order currency = 1 AEV-unit-eq for
-      // simplicity in v1; real fx wiring lands later when the cashback
-      // wallet sync hits.
-      const orderAmount = Number(row.amount) || 0;
-      if (orderAmount > 0) {
-        const cashbackAev = Math.round(orderAmount * 0.02 * 1_000_000) / 1_000_000;
-        await pool.query(
-          `INSERT INTO "BuildCashback"
-             ("id","userId","orderId","orderKind","orderAmount","orderCurrency","cashbackAev")
-           VALUES ($1,$2,$3,$4,$5,$6,$7)
-           ON CONFLICT ("orderId") DO NOTHING`,
-          [
-            crypto.randomUUID(),
-            row.userId,
-            row.id,
-            row.kind,
-            orderAmount,
-            row.currency || "RUB",
-            cashbackAev,
-          ],
-        );
-      }
-
-      await pool.query("COMMIT");
-      return ok(res, { order: updated.rows[0] });
-    } catch (innerErr) {
-      await pool.query("ROLLBACK");
-      throw innerErr;
-    }
+    const result = await markOrderPaid(id);
+    return ok(res, { order: result.order });
   } catch (err: unknown) {
     return fail(res, 500, "order_pay_failed", { details: (err as Error).message });
+  }
+});
+
+// Shared "mark order PAID + run side-effects" helper. Used by both the
+// authenticated POST /orders/:id/pay (manual / dev path) and the
+// HMAC-verified payment webhook. Returns the updated order row.
+//
+// Side-effects:
+//   - If kind=SUB_START, flip any prior ACTIVE sub to CANCELED and
+//     activate the referenced BuildSubscription.
+//   - 2% AEV cashback into BuildCashback (idempotent on orderId).
+async function markOrderPaid(
+  orderId: string,
+): Promise<{ order: Record<string, unknown>; alreadyPaid: boolean }> {
+  await pool.query("BEGIN");
+  try {
+    const cur = await pool.query(`SELECT * FROM "BuildOrder" WHERE "id" = $1 FOR UPDATE`, [orderId]);
+    if (cur.rowCount === 0) {
+      await pool.query("ROLLBACK");
+      throw new Error("order_not_found");
+    }
+    const row = cur.rows[0];
+    if (row.status === "PAID") {
+      await pool.query("ROLLBACK");
+      return { order: row, alreadyPaid: true };
+    }
+    if (row.status !== "PENDING") {
+      await pool.query("ROLLBACK");
+      throw new Error(`order_not_payable_status_${row.status}`);
+    }
+
+    const updated = await pool.query(
+      `UPDATE "BuildOrder" SET "status" = 'PAID' WHERE "id" = $1 RETURNING *`,
+      [orderId],
+    );
+
+    if (row.kind === "SUB_START" && row.ref) {
+      await pool.query(
+        `UPDATE "BuildSubscription" SET "status" = 'CANCELED', "endsAt" = NOW()
+         WHERE "userId" = $1 AND "status" = 'ACTIVE' AND "id" <> $2`,
+        [row.userId, row.ref],
+      );
+      await pool.query(
+        `UPDATE "BuildSubscription" SET "status" = 'ACTIVE', "startedAt" = NOW()
+         WHERE "id" = $1`,
+        [row.ref],
+      );
+    }
+
+    const orderAmount = Number(row.amount) || 0;
+    if (orderAmount > 0) {
+      const cashbackAev = Math.round(orderAmount * 0.02 * 1_000_000) / 1_000_000;
+      await pool.query(
+        `INSERT INTO "BuildCashback"
+           ("id","userId","orderId","orderKind","orderAmount","orderCurrency","cashbackAev")
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT ("orderId") DO NOTHING`,
+        [
+          crypto.randomUUID(),
+          row.userId,
+          row.id,
+          row.kind,
+          orderAmount,
+          row.currency || "RUB",
+          cashbackAev,
+        ],
+      );
+    }
+
+    await pool.query("COMMIT");
+    return { order: updated.rows[0], alreadyPaid: false };
+  } catch (err) {
+    await pool.query("ROLLBACK").catch(() => {});
+    throw err;
+  }
+}
+
+// POST /api/build/webhooks/payment — production-shape entry point for
+// payment providers (Stripe, YooKassa, Paddle, etc.). Body shape is
+// provider-agnostic:
+//
+//   { event: "payment.succeeded" | "payment.failed",
+//     orderId: string,
+//     providerId?: string,   // for audit
+//     timestamp?: number }
+//
+// Auth is via the X-Aevion-Signature header (hex HMAC-SHA256 of the
+// raw body using BUILD_PAYMENT_WEBHOOK_SECRET). If the secret is unset
+// in env, we *only* accept calls from localhost — that keeps dev ergonomic
+// and prod safe-by-default.
+buildRouter.post("/webhooks/payment", async (req, res) => {
+  try {
+    const secret = (process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "").trim();
+    const remoteAddr = (req.ip || (req.socket && req.socket.remoteAddress) || "").toString();
+    const isLocal = /^(127\.|::1|::ffff:127\.|localhost)/.test(remoteAddr);
+
+    if (secret) {
+      const sigHeader = (req.headers["x-aevion-signature"] || "").toString();
+      // Express has already parsed JSON, so we hash the canonicalized
+      // body to verify. This is "good enough" for our v1 shape — Stripe
+      // would hash the raw body, which we'd wire via express.raw later.
+      const canonical = JSON.stringify(req.body ?? {});
+      const expected = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
+      if (
+        sigHeader.length !== expected.length ||
+        !crypto.timingSafeEqual(Buffer.from(sigHeader, "hex"), Buffer.from(expected, "hex"))
+      ) {
+        return fail(res, 401, "invalid_signature");
+      }
+    } else if (!isLocal) {
+      return fail(res, 503, "webhook_secret_not_configured");
+    }
+
+    const event = String(req.body?.event || "").trim();
+    const orderId = String(req.body?.orderId || "").trim();
+    if (!orderId) return fail(res, 400, "orderId_required");
+
+    if (event === "payment.succeeded") {
+      try {
+        const result = await markOrderPaid(orderId);
+        return ok(res, {
+          processed: true,
+          orderId,
+          alreadyPaid: result.alreadyPaid,
+          order: result.order,
+        });
+      } catch (err) {
+        const msg = (err as Error).message;
+        if (msg === "order_not_found") return fail(res, 404, "order_not_found");
+        if (msg.startsWith("order_not_payable_status_")) {
+          return fail(res, 409, "order_not_payable", { reason: msg });
+        }
+        throw err;
+      }
+    }
+    if (event === "payment.failed") {
+      // Mark the order CANCELED so the user sees they need to retry.
+      const upd = await pool.query(
+        `UPDATE "BuildOrder" SET "status" = 'CANCELED' WHERE "id" = $1 AND "status" = 'PENDING' RETURNING "id","status"`,
+        [orderId],
+      );
+      return ok(res, { processed: true, orderId, status: upd.rows[0]?.status || "noop" });
+    }
+    return fail(res, 400, "unknown_event", { event });
+  } catch (err: unknown) {
+    return fail(res, 500, "webhook_failed", { details: (err as Error).message });
   }
 });
 
@@ -3036,16 +3127,120 @@ buildRouter.post("/leads", async (req, res) => {
       return ok(res, { alreadyExists: true });
     }
 
+    const sliceOpt = (v: unknown): string | null =>
+      v == null ? null : String(v).trim().slice(0, 200) || null;
+    const referrer = sliceOpt(req.body?.referrer);
+    const utmSource = sliceOpt(req.body?.utmSource);
+    const utmCampaign = sliceOpt(req.body?.utmCampaign);
+
     const id = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO "BuildLead" ("id","email","city","locale","source")
-       VALUES ($1,$2,$3,$4,$5)
+      `INSERT INTO "BuildLead"
+         ("id","email","city","locale","source","referrer","utmSource","utmCampaign")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (lower("email"), "source") DO NOTHING`,
-      [id, emailRaw, city, locale, source],
+      [id, emailRaw, city, locale, source, referrer, utmSource, utmCampaign],
     );
     return ok(res, { alreadyExists: false }, 201);
   } catch (err: unknown) {
     return fail(res, 500, "lead_create_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/leads — admin-only paginated list.
+//   ?q=string  → search by email/city/utmSource ILIKE
+//   ?limit=    → 1..500, default 100
+//   ?offset=   → default 0
+buildRouter.get("/admin/leads", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const q = typeof req.query.q === "string" ? String(req.query.q).trim().slice(0, 100) : "";
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 100));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    const params: unknown[] = [];
+    let where = "";
+    if (q) {
+      params.push(`%${q}%`);
+      where = `WHERE "email" ILIKE $1 OR COALESCE("city", '') ILIKE $1 OR COALESCE("utmSource", '') ILIKE $1`;
+    }
+    params.push(limit);
+    params.push(offset);
+    const limOff = `LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+    const [list, total] = await Promise.all([
+      pool.query(
+        `SELECT "id","email","city","locale","source","referrer","utmSource","utmCampaign","createdAt"
+         FROM "BuildLead" ${where} ORDER BY "createdAt" DESC ${limOff}`,
+        params,
+      ),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildLead" ${where}`, q ? [`%${q}%`] : []),
+    ]);
+    return ok(res, { items: list.rows, total: Number(total.rows[0]?.n ?? 0), limit, offset });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_leads_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/leads.csv — admin-only CSV download for the
+// upcoming city-launch mailing. Honors the same ?q filter; no pagination —
+// CSV is meant to be one full export per city push.
+buildRouter.get("/admin/leads.csv", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const q = typeof req.query.q === "string" ? String(req.query.q).trim().slice(0, 100) : "";
+    const params: unknown[] = [];
+    let where = "";
+    if (q) {
+      params.push(`%${q}%`);
+      where = `WHERE "email" ILIKE $1 OR COALESCE("city", '') ILIKE $1 OR COALESCE("utmSource", '') ILIKE $1`;
+    }
+    const r = await pool.query(
+      `SELECT "email","city","locale","source","referrer","utmSource","utmCampaign","createdAt"
+       FROM "BuildLead" ${where} ORDER BY "createdAt" DESC`,
+      params,
+    );
+
+    const escape = (v: unknown): string => {
+      if (v == null) return "";
+      const s = String(v);
+      if (s.includes(",") || s.includes("\n") || s.includes('"')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const header = "email,city,locale,source,referrer,utmSource,utmCampaign,createdAt";
+    const body = r.rows
+      .map((row: Record<string, unknown>) =>
+        [
+          row.email,
+          row.city,
+          row.locale,
+          row.source,
+          row.referrer,
+          row.utmSource,
+          row.utmCampaign,
+          row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+        ]
+          .map(escape)
+          .join(","),
+      )
+      .join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="qbuild-leads-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
+    return res.send(`${header}\n${body}`);
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_leads_csv_failed", { details: (err as Error).message });
   }
 });
 

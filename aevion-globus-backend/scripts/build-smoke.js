@@ -239,6 +239,87 @@ async function main() {
     console.log(`  ${String(step).padStart(2, "0")}  SKIP  AI consult (ANTHROPIC_API_KEY not set)`);
   } else return fail("AI consult", `status=${r.status} ${r.body?.details || ""}`);
 
+  // 26. Lead capture — public, no auth.
+  const leadEmail = `lead-${RUN}@aev.test`;
+  r = await call("POST", "/api/build/leads", {
+    email: leadEmail,
+    city: "Astana",
+    locale: "ru",
+    source: "smoke-test",
+    utmSource: "ci",
+    utmCampaign: "build-smoke",
+  });
+  if (r.status === 201 && unwrap(r)?.alreadyExists === false) ok("lead capture", `email=${leadEmail}`);
+  else return fail("lead capture", `status=${r.status}`);
+
+  // 27. Lead capture idempotent — same email second time → alreadyExists.
+  r = await call("POST", "/api/build/leads", {
+    email: leadEmail,
+    locale: "ru",
+    source: "smoke-test",
+  });
+  if (r.status === 200 && unwrap(r)?.alreadyExists === true) ok("lead idempotent", "alreadyExists=true");
+  else return fail("lead idempotent", `status=${r.status}`);
+
+  // 28. Loyalty cashback ledger reachable (totals 0 unless prior PAID orders).
+  r = await call("GET", "/api/build/loyalty/cashback", null, clientToken);
+  if (r.status === 200 && typeof unwrap(r)?.totalAev === "number") {
+    ok("loyalty cashback ledger", `totalAev=${unwrap(r).totalAev}`);
+  } else return fail("loyalty cashback", `status=${r.status}`);
+
+  // 29. PATCH experience description — owner-only update path.
+  // First, find any experience this worker added during the smoke flow.
+  // (The smoke script earlier in main creates 1 experience for the worker
+  // via /experiences). If none, we add one now and patch it.
+  r = await call("POST", "/api/build/experiences", {
+    title: "Smoke role",
+    company: "Smoke Inc.",
+    description: "Old description.",
+  }, workerToken);
+  if (r.status !== 201) return fail("create experience for PATCH", `status=${r.status}`);
+  const expId = unwrap(r)?.id;
+  r = await call("PATCH", `/api/build/experiences/${expId}`, {
+    description: "Polished description with concrete numbers.",
+  }, workerToken);
+  if (r.status === 200 && unwrap(r)?.description?.includes("Polished")) {
+    ok("PATCH experience description", `id=${expId.slice(0, 8)}…`);
+  } else return fail("PATCH experience", `status=${r.status}`);
+
+  // 30. Health counters now include vacancies/candidates/projects.
+  r = await call("GET", "/api/build/health");
+  const h = unwrap(r);
+  if (
+    r.status === 200 &&
+    typeof h?.vacancies === "number" &&
+    typeof h?.candidates === "number" &&
+    typeof h?.projects === "number"
+  ) {
+    ok("health counters", `v=${h.vacancies} c=${h.candidates} p=${h.projects}`);
+  } else return fail("health counters", `status=${r.status}`);
+
+  // 31. Payment webhook — local-mode (no secret env). Pay an existing
+  // PENDING order via the webhook path. We need a fresh PENDING order
+  // since earlier flow may have already paid one. Fire a sub-start to
+  // create one.
+  // (only if a vacancy/sub flow created BuildOrder rows earlier — skip
+  // if none)
+  r = await call("GET", "/api/build/orders/me", null, clientToken);
+  const orders = unwrap(r)?.items || [];
+  const pendingOrder = orders.find((o) => o.status === "PENDING");
+  if (pendingOrder) {
+    r = await call("POST", "/api/build/webhooks/payment", {
+      event: "payment.succeeded",
+      orderId: pendingOrder.id,
+      providerId: `smoke-${RUN}`,
+    });
+    if (r.status === 200 && unwrap(r)?.processed === true) {
+      ok("webhook payment.succeeded", `orderId=${pendingOrder.id.slice(0, 8)}…`);
+    } else return fail("webhook payment", `status=${r.status} ${r.body?.code || ""}`);
+  } else {
+    step += 1;
+    console.log(`  ${String(step).padStart(2, "0")}  SKIP  webhook payment (no PENDING orders)`);
+  }
+
   // suppress unused-variable warning for clientId
   void clientId;
 }

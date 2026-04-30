@@ -54,6 +54,14 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 text-xs">
             {hydrated && user ? (
               <>
+                {user.role === "ADMIN" && (
+                  <Link
+                    href="/build/admin/leads"
+                    className="rounded-md bg-fuchsia-500/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-fuchsia-200 hover:bg-fuchsia-500/30"
+                  >
+                    Admin
+                  </Link>
+                )}
                 <PlanBadge />
                 <NotificationBell />
                 <span className="hidden text-slate-400 sm:inline">{user.email}</span>

@@ -420,6 +420,11 @@ export async function ensureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildLead_email_source_uniq" ON "BuildLead" (lower("email"), "source");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildLead_created_idx" ON "BuildLead" ("createdAt" DESC);`);
+  // UTM tracking: which campaign / referrer drove this lead. Keep as
+  // a free-form string capped at 200 chars to avoid abuse.
+  await pool.query(`ALTER TABLE "BuildLead" ADD COLUMN IF NOT EXISTS "referrer" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildLead" ADD COLUMN IF NOT EXISTS "utmSource" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildLead" ADD COLUMN IF NOT EXISTS "utmCampaign" TEXT;`);
 
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.

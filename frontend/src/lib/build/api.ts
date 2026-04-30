@@ -600,6 +600,9 @@ export const buildApi = {
     city?: string;
     locale?: string;
     source?: string;
+    referrer?: string;
+    utmSource?: string;
+    utmCampaign?: string;
   }) =>
     call<{ alreadyExists: boolean }>(
       "POST",
@@ -607,6 +610,29 @@ export const buildApi = {
       input,
       { auth: false },
     ),
+  adminLeads: (q?: { q?: string; limit?: number; offset?: number }) => {
+    const sp = new URLSearchParams();
+    if (q?.q) sp.set("q", q.q);
+    if (q?.limit != null) sp.set("limit", String(q.limit));
+    if (q?.offset != null) sp.set("offset", String(q.offset));
+    const qs = sp.toString();
+    return call<{
+      items: {
+        id: string;
+        email: string;
+        city: string | null;
+        locale: string;
+        source: string;
+        referrer: string | null;
+        utmSource: string | null;
+        utmCampaign: string | null;
+        createdAt: string;
+      }[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>("GET", `/api/build/admin/leads${qs ? `?${qs}` : ""}`);
+  },
   loyaltyCashback: () =>
     call<{
       totalAev: number;

@@ -3,7 +3,35 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 import { fetchMe, listAccounts, listOperations } from "../_lib/api";
+
+async function downloadStatementPdf(period: string) {
+  if (typeof window === "undefined") return;
+  let token = "";
+  try {
+    token = localStorage.getItem("aevion_auth_token_v1") || "";
+  } catch {
+    // ignore
+  }
+  const r = await fetch(apiUrl(`/api/qtrade/statement.pdf?period=${encodeURIComponent(period)}`), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    cache: "no-store",
+  });
+  if (!r.ok) {
+    alert(`Statement PDF download failed (${r.status})`);
+    return;
+  }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `aevion-statement-${period}-${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
 import { formatCurrency, loadCurrency, type CurrencyCode } from "../_lib/currency";
 import { loadGoals } from "../_lib/savings";
 import { loadRecurring } from "../_lib/recurring";
@@ -186,6 +214,17 @@ export default function BankStatementPage() {
         ))}
         <button type="button" onClick={() => window.print()}>
           {t("statement.print")}
+        </button>
+        <button
+          type="button"
+          onClick={() => void downloadStatementPdf(period)}
+          style={{
+            background: "linear-gradient(135deg, rgba(124,58,237,0.12), rgba(14,165,233,0.10))",
+            color: "#4c1d95",
+            borderColor: "rgba(124,58,237,0.30)",
+          }}
+        >
+          ⬇ PDF
         </button>
       </div>
 

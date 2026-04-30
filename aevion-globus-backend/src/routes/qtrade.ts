@@ -358,6 +358,151 @@ qtradeRouter.get("/operations.csv", (req, res) => {
 });
 
 // =======================
+// Server-rendered account statement PDF — multi-page, all operations
+// owned by the caller within ?period=30d|90d|all (default 30d), with
+// running balance reconstructed from zero so the totals are auditable.
+// =======================
+qtradeRouter.get("/statement.pdf", async (req, res, next) => {
+  try {
+    const owner = ownerEmail(req);
+    const ownIds = ownAccountIds(owner);
+    const period = (typeof req.query.period === "string" ? req.query.period : "30d").toLowerCase();
+    const now = Date.now();
+    let cutoff = 0;
+    if (period === "30d") cutoff = now - 30 * 24 * 3600_000;
+    else if (period === "90d") cutoff = now - 90 * 24 * 3600_000;
+    else if (period === "ytd") cutoff = Date.UTC(new Date().getUTCFullYear(), 0, 1);
+    else if (period === "all") cutoff = 0;
+    else cutoff = now - 30 * 24 * 3600_000;
+
+    const myOps = [...operations]
+      .filter((op) => ownIds.has(op.to) || (op.from && ownIds.has(op.from)))
+      .filter((op) => Date.parse(op.createdAt) >= cutoff)
+      .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+
+    const myAccounts = accounts.filter((a) => a.owner === owner);
+    const liveBalance = myAccounts.reduce((s, a) => s + a.balance, 0);
+
+    // Running balance walks from 0; this should land at liveBalance when
+    // period=all, and somewhere short of it for shorter windows because
+    // earlier ops are excluded. Either way the column shows what the
+    // user actually held *at that moment in the window*.
+    let running = 0;
+    if (period !== "all") {
+      // Sum every op before cutoff to get the opening balance.
+      for (const op of operations) {
+        if (Date.parse(op.createdAt) >= cutoff) continue;
+        if (op.kind === "topup" && ownIds.has(op.to)) running += op.amount;
+        else if (op.kind === "transfer") {
+          if (op.from && ownIds.has(op.from)) running -= op.amount;
+          if (ownIds.has(op.to)) running += op.amount;
+        }
+      }
+    }
+    const opening = Math.round(running * 100) / 100;
+
+    const PDFDocumentMod = await import("pdfkit");
+    const PDFDocument = PDFDocumentMod.default;
+    const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="aevion-statement-${period}-${new Date().toISOString().slice(0, 10)}.pdf"`,
+    );
+    doc.pipe(res);
+
+    const W = doc.page.width - 100;
+    const pageW = doc.page.width;
+
+    // Header bar
+    doc.rect(0, 0, pageW, 80).fill("#0f172a");
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#ffffff").text("AEVION Bank", 50, 26);
+    doc.fontSize(10).font("Helvetica").fillColor("#94a3b8").text("Account statement — Test Net", 50, 52);
+    doc.rect(0, 80, pageW, 3).fill("#7c3aed");
+
+    // Summary block
+    let y = 100;
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#475569").text("OWNER", 50, y);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text(owner, 50, y + 14);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#475569").text("PERIOD", 280, y);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text(period, 280, y + 14);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#475569").text("LIVE BALANCE", 420, y);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text(`${liveBalance.toFixed(2)} AEC`, 420, y + 14);
+
+    y += 44;
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#475569").text("ACCOUNTS", 50, y);
+    doc.fontSize(10).font("Courier").fillColor("#0f172a").text(myAccounts.map((a) => a.id).join(", ") || "(none)", 50, y + 14, { width: W });
+    y += 32;
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#475569").text("OPENING BALANCE", 50, y);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text(`${opening.toFixed(2)} AEC`, 50, y + 14);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#475569").text("OPERATIONS", 280, y);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text(String(myOps.length), 280, y + 14);
+    y += 38;
+    doc.rect(50, y, W, 1).fill("#e2e8f0");
+    y += 12;
+
+    // Column headers
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#64748b");
+    doc.text("DATE", 50, y);
+    doc.text("KIND", 130, y);
+    doc.text("FROM → TO", 175, y);
+    doc.text("AMOUNT", 380, y, { width: 70, align: "right" });
+    doc.text("BALANCE", 460, y, { width: 90, align: "right" });
+    y += 14;
+    doc.rect(50, y, W, 0.5).fill("#cbd5e1");
+    y += 6;
+
+    // Table rows
+    doc.fontSize(9).font("Helvetica").fillColor("#0f172a");
+    for (const op of myOps) {
+      if (op.kind === "topup" && ownIds.has(op.to)) running += op.amount;
+      else if (op.kind === "transfer") {
+        if (op.from && ownIds.has(op.from)) running -= op.amount;
+        if (ownIds.has(op.to)) running += op.amount;
+      }
+      const sign = op.kind === "topup" || (op.from && !ownIds.has(op.from)) ? "+" : "-";
+      const dt = new Date(op.createdAt).toISOString().replace("T", " ").slice(0, 16);
+      // Page break check
+      if (y > doc.page.height - 80) {
+        doc.addPage();
+        y = 50;
+      }
+      doc.fillColor("#0f172a").font("Courier").fontSize(8).text(dt, 50, y, { width: 75 });
+      doc.font("Helvetica").fontSize(9).text(op.kind, 130, y);
+      doc.font("Courier").fontSize(8).text(`${op.from ?? "(net)"} → ${op.to}`, 175, y, { width: 200 });
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(sign === "+" ? "#16a34a" : "#dc2626").text(
+        `${sign}${op.amount.toFixed(2)}`,
+        380,
+        y,
+        { width: 70, align: "right" },
+      );
+      doc.fillColor("#0f172a").font("Courier").fontSize(9).text(running.toFixed(2), 460, y, { width: 90, align: "right" });
+      y += 14;
+    }
+
+    if (myOps.length === 0) {
+      doc.fontSize(10).font("Helvetica").fillColor("#64748b").text("No operations in selected period.", 50, y);
+    }
+
+    // Page numbers in the bottom margin
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      doc.fontSize(8).font("Helvetica").fillColor("#94a3b8").text(
+        `Page ${i + 1} of ${range.count}  ·  Generated ${new Date().toISOString()}  ·  AEVION Bank Test Net`,
+        50,
+        doc.page.height - 40,
+        { width: W, align: "center" },
+      );
+    }
+
+    doc.end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// =======================
 // Server-rendered single-page PDF receipt for one operation.
 // Auth-gated and scoped: caller must own one side of the operation.
 // pdfkit is already a dep (used by /api/pipeline/* certificate PDFs).

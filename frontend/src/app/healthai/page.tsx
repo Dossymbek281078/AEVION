@@ -119,6 +119,27 @@ const STR: Record<string, Record<Lang, string>> = {
   family_delete: { en: "Delete", ru: "Удалить" },
   family_self: { en: "Me", ru: "Я" },
   family_active: { en: "Active", ru: "Активный" },
+  tab_cycle: { en: "Cycle", ru: "Цикл" },
+  cycle_title: { en: "Cycle tracker", ru: "Цикл-трекер" },
+  cycle_subtitle: {
+    en: "Period log + cycle length stats. Predictions are estimates, not medical advice.",
+    ru: "Дневник цикла + статистика длины. Предсказания — оценочные, не медицинские.",
+  },
+  cycle_log_today: { en: "Log today's flow", ru: "Записать сегодня" },
+  cycle_flow_spotting: { en: "Spotting", ru: "Мажущие" },
+  cycle_flow_light: { en: "Light", ru: "Лёгкие" },
+  cycle_flow_medium: { en: "Medium", ru: "Средние" },
+  cycle_flow_heavy: { en: "Heavy", ru: "Обильные" },
+  cycle_last_start: { en: "Last period started", ru: "Начало последних месячных" },
+  cycle_avg_len: { en: "Avg cycle length", ru: "Средняя длина цикла" },
+  cycle_next: { en: "Next predicted", ru: "Следующий ожидаемый" },
+  cycle_ov: { en: "Predicted ovulation", ru: "Предполагаемая овуляция" },
+  cycle_empty: {
+    en: "No entries yet. Start logging to see predictions.",
+    ru: "Пока нет записей. Начните отмечать дни — появятся предсказания.",
+  },
+  cycle_save: { en: "Save", ru: "Сохранить" },
+  cycle_recent: { en: "Recent days", ru: "Последние дни" },
   tab_screener: { en: "Screener", ru: "Скрининг" },
   phq9_title: { en: "PHQ-9 depression screener", ru: "PHQ-9 — скрининг депрессии" },
   phq9_subtitle: {
@@ -347,7 +368,7 @@ function detectLocale(): Lang {
   return "en";
 }
 
-type Tab = "profile" | "check" | "log" | "trends" | "history" | "screener" | "plan";
+type Tab = "profile" | "check" | "log" | "trends" | "history" | "screener" | "plan" | "cycle";
 
 type Sex = "M" | "F" | "other";
 
@@ -521,6 +542,18 @@ export default function HealthAIPage() {
   } | null>(null);
   const [gad7Busy, setGad7Busy] = useState(false);
 
+  // Cycle state
+  type CycleData = {
+    entries: Array<{ id: string; date: string; flow?: string; symptoms: string[]; notes?: string }>;
+    lastPeriodStart: string | null;
+    avgCycleLength: number | null;
+    predictedNextStart: string | null;
+    predictedOvulation: string | null;
+  };
+  const [cycle, setCycle] = useState<CycleData | null>(null);
+  const [cycleFlow, setCycleFlow] = useState<"" | "spotting" | "light" | "medium" | "heavy">("");
+  const [cycleBusy, setCycleBusy] = useState(false);
+
   // Plan state
   type Plan = {
     goals: string[];
@@ -683,7 +716,8 @@ export default function HealthAIPage() {
         t === "trends" ||
         t === "history" ||
         t === "screener" ||
-        t === "plan"
+        t === "plan" ||
+        t === "cycle"
       ) {
         setTab(t);
       }
@@ -836,6 +870,46 @@ export default function HealthAIPage() {
     }
   };
 
+  const loadCycle = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/cycle/${profileId}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      setCycle(j);
+    } catch {}
+  }, []);
+
+  const submitCycle = async () => {
+    if (!profileIdRef.current) {
+      showToast(t("toast_no_profile", lang));
+      setTab("profile");
+      return;
+    }
+    if (!cycleFlow) {
+      showToast(t("toast_check_failed", lang));
+      return;
+    }
+    setCycleBusy(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/cycle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: profileIdRef.current,
+          flow: cycleFlow,
+        }),
+      });
+      if (!r.ok) {
+        showToast(t("toast_log_failed", lang));
+        return;
+      }
+      void loadCycle(profileIdRef.current);
+      showToast(t("toast_logged", lang));
+    } finally {
+      setCycleBusy(false);
+    }
+  };
+
   const generatePlan = useCallback(async () => {
     if (!profileIdRef.current) return;
     setPlanBusy(true);
@@ -860,6 +934,13 @@ export default function HealthAIPage() {
       void generatePlan();
     }
   }, [tab, plan, planBusy, generatePlan]);
+
+  // Lazy load cycle на открытии cycle tab.
+  useEffect(() => {
+    if (tab === "cycle" && profileIdRef.current && !cycle) {
+      void loadCycle(profileIdRef.current);
+    }
+  }, [tab, cycle, loadCycle]);
 
   const submitGad7 = async () => {
     if (!profileIdRef.current) {
@@ -1176,7 +1257,18 @@ export default function HealthAIPage() {
             paddingBottom: 10,
           }}
         >
-          {(["profile", "check", "log", "trends", "history", "screener", "plan"] as const).map((t) => {
+          {(
+            [
+              "profile",
+              "check",
+              "log",
+              "trends",
+              "history",
+              "screener",
+              "plan",
+              ...(profile?.sex === "F" ? (["cycle"] as const) : []),
+            ] as const
+          ).map((t) => {
             const active = t === tab;
             return (
               <button
@@ -1210,7 +1302,9 @@ export default function HealthAIPage() {
                           ? STR.tab_history[lang]
                           : t === "screener"
                             ? STR.tab_screener[lang]
-                            : STR.tab_plan[lang]}
+                            : t === "plan"
+                              ? STR.tab_plan[lang]
+                              : STR.tab_cycle[lang]}
               </button>
             );
           })}
@@ -2417,6 +2511,124 @@ export default function HealthAIPage() {
                     {new Date(planMeta.generatedAt).toLocaleString()}
                   </div>
                 ) : null}
+              </>
+            )}
+          </Card>
+        ) : null}
+
+        {tab === "cycle" ? (
+          <Card>
+            <CardHeader title={t("cycle_title", lang)} subtitle={t("cycle_subtitle", lang)} />
+            <Field label="Flow">
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {(["spotting", "light", "medium", "heavy"] as const).map((f) => {
+                  const active = cycleFlow === f;
+                  const labels: Record<typeof f, string> = {
+                    spotting: t("cycle_flow_spotting", lang),
+                    light: t("cycle_flow_light", lang),
+                    medium: t("cycle_flow_medium", lang),
+                    heavy: t("cycle_flow_heavy", lang),
+                  };
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setCycleFlow(f)}
+                      style={{
+                        padding: "8px 14px",
+                        background: active ? "rgba(244,114,182,0.22)" : "rgba(20,28,46,0.6)",
+                        color: active ? "#f472b6" : "#94a3b8",
+                        border: active
+                          ? "1px solid rgba(244,114,182,0.55)"
+                          : "1px solid rgba(120,160,220,0.2)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        flex: "1 1 100px",
+                      }}
+                    >
+                      {labels[f]}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+            <div style={{ marginTop: 12, marginBottom: 14 }}>
+              <button type="button" onClick={submitCycle} disabled={cycleBusy} style={primaryBtn}>
+                {t("cycle_save", lang)}
+              </button>
+            </div>
+            {!cycle || cycle.entries.length === 0 ? (
+              <div style={emptyStyle}>{t("cycle_empty", lang)}</div>
+            ) : (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                    gap: 8,
+                    marginBottom: 14,
+                  }}
+                >
+                  <Stat
+                    label={t("cycle_last_start", lang)}
+                    value={cycle.lastPeriodStart ? 1 : null}
+                    unit=""
+                    color="#f472b6"
+                  />
+                  <Stat
+                    label={t("cycle_avg_len", lang)}
+                    value={cycle.avgCycleLength}
+                    unit="d"
+                    color="#a5b4fc"
+                  />
+                  <Stat
+                    label={t("cycle_next", lang)}
+                    value={cycle.predictedNextStart ? 1 : null}
+                    unit=""
+                    color="#fbbf24"
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#cbd5e1" }}>
+                  {cycle.lastPeriodStart ? (
+                    <div>📅 <b>{t("cycle_last_start", lang)}:</b> {cycle.lastPeriodStart}</div>
+                  ) : null}
+                  {cycle.predictedNextStart ? (
+                    <div>🌸 <b>{t("cycle_next", lang)}:</b> {cycle.predictedNextStart}</div>
+                  ) : null}
+                  {cycle.predictedOvulation ? (
+                    <div>✨ <b>{t("cycle_ov", lang)}:</b> {cycle.predictedOvulation}</div>
+                  ) : null}
+                </div>
+                <h3 style={sectionTitle}>{t("cycle_recent", lang)}</h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {cycle.entries
+                    .slice()
+                    .reverse()
+                    .slice(0, 30)
+                    .map((e) => (
+                      <div
+                        key={e.id}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "100px 1fr",
+                          gap: 10,
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          background: "rgba(20,28,46,0.5)",
+                          border: "1px solid rgba(120,160,220,0.14)",
+                          alignItems: "baseline",
+                          fontSize: 12,
+                        }}
+                      >
+                        <div style={{ color: "#f472b6", fontWeight: 700, fontFamily: "ui-monospace, monospace" }}>
+                          {e.date}
+                        </div>
+                        <div style={{ color: "#cbd5e1" }}>{e.flow || "—"}</div>
+                      </div>
+                    ))}
+                </div>
               </>
             )}
           </Card>

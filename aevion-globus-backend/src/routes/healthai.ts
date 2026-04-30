@@ -83,6 +83,7 @@ type DailyLog = {
 const profilesMem = new Map<string, HealthProfile>();
 const checksMem = new Map<string, SymptomCheck[]>();
 const logsMem = new Map<string, DailyLog[]>();
+const cyclesMem = new Map<string, CycleEntry[]>();
 
 /**
  * Hybrid store: Prisma если есть DATABASE_URL и таблицы доступны, иначе
@@ -145,6 +146,19 @@ function rowToCheck(r: any): SymptomCheck {
     matched: typeof r.matched === "string" ? JSON.parse(r.matched) : r.matched,
     generic: r.generic || "",
     disclaimer: r.disclaimer || DISCLAIMER,
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+  };
+}
+
+function rowToCycle(r: any): CycleEntry {
+  return {
+    id: r.id,
+    profileId: r.profileId,
+    date: r.date,
+    flow: r.flow ?? undefined,
+    symptoms: r.symptoms || [],
+    notes: r.notes ?? undefined,
     createdAt:
       r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
   };
@@ -315,6 +329,42 @@ const store = {
     if (list.length > 365) list.length = 365;
     logsMem.set(l.profileId, list);
     return l;
+  },
+  async getCycles(profileId: string, limit = 365): Promise<CycleEntry[]> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.cycleEntry.findMany({
+        where: { profileId },
+        orderBy: { date: "desc" },
+        take: limit,
+      });
+      return rows.map(rowToCycle);
+    }
+    return (cyclesMem.get(profileId) || []).slice(0, limit);
+  },
+  async upsertCycle(c: CycleEntry): Promise<CycleEntry> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.cycleEntry.upsert({
+        where: { profileId_date: { profileId: c.profileId, date: c.date } },
+        update: { flow: c.flow, symptoms: c.symptoms, notes: c.notes },
+        create: {
+          id: c.id,
+          profileId: c.profileId,
+          date: c.date,
+          flow: c.flow,
+          symptoms: c.symptoms,
+          notes: c.notes,
+        },
+      });
+      return rowToCycle(r);
+    }
+    const list = cyclesMem.get(c.profileId) || [];
+    const idx = list.findIndex((x) => x.date === c.date);
+    if (idx >= 0) list[idx] = c;
+    else list.unshift(c);
+    cyclesMem.set(c.profileId, list);
+    return c;
   },
   async allProfileIdsWithLogs(): Promise<string[]> {
     await ensureDb();
@@ -1098,6 +1148,109 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
     bmi: bmiVal,
     avgSleep7d: avgSleep7,
     avgMood7d: avgMood7,
+    disclaimer: DISCLAIMER,
+  });
+});
+
+/**
+ * Cycle tracking — period log + predictions (avg cycle length из последних
+ * 3 законченных циклов).
+ */
+healthaiRouter.post("/cycle", async (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.profileId || typeof body.profileId !== "string") {
+    return res.status(400).json({ error: "profileId-required" });
+  }
+  const date =
+    typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+      ? body.date
+      : todayDate();
+  const flow =
+    body.flow === "spotting" ||
+    body.flow === "light" ||
+    body.flow === "medium" ||
+    body.flow === "heavy"
+      ? body.flow
+      : undefined;
+  const symptoms = Array.isArray(body.symptoms)
+    ? body.symptoms.map(String).slice(0, 20)
+    : [];
+  const entry: CycleEntry = {
+    id: newId("cyc"),
+    profileId: body.profileId,
+    date,
+    flow,
+    symptoms,
+    notes: typeof body.notes === "string" ? body.notes.slice(0, 500) : undefined,
+    createdAt: nowIso(),
+  };
+  const saved = await store.upsertCycle(entry);
+  res.json({ entry: saved });
+});
+
+healthaiRouter.get("/cycle/:profileId", async (req: Request, res: Response) => {
+  const profileId = req.params.profileId;
+  const all = await store.getCycles(profileId);
+  if (all.length === 0) {
+    return res.json({
+      entries: [],
+      lastPeriodStart: null,
+      avgCycleLength: null,
+      predictedNextStart: null,
+      predictedOvulation: null,
+    });
+  }
+  const sorted = [...all].sort((a, b) => (a.date < b.date ? -1 : 1));
+  // Period start = первая запись с flow != spotting в каждом блоке последовательных дней.
+  const isPeriod = (e: CycleEntry) =>
+    !!e.flow && e.flow !== "spotting";
+  const starts: string[] = [];
+  let prev: string | null = null;
+  for (const e of sorted) {
+    if (!isPeriod(e)) {
+      prev = null;
+      continue;
+    }
+    if (prev) {
+      const a = new Date(prev + "T00:00:00Z");
+      const b = new Date(e.date + "T00:00:00Z");
+      if ((b.getTime() - a.getTime()) / (24 * 3600 * 1000) <= 2) {
+        prev = e.date;
+        continue;
+      }
+    }
+    starts.push(e.date);
+    prev = e.date;
+  }
+  const lastStart = starts[starts.length - 1] || null;
+  let avgLen: number | null = null;
+  if (starts.length >= 2) {
+    const diffs: number[] = [];
+    for (let i = 1; i < starts.length; i++) {
+      const a = new Date(starts[i - 1] + "T00:00:00Z");
+      const b = new Date(starts[i] + "T00:00:00Z");
+      diffs.push(Math.round((b.getTime() - a.getTime()) / (24 * 3600 * 1000)));
+    }
+    const recent = diffs.slice(-3);
+    avgLen = Math.round(recent.reduce((s, x) => s + x, 0) / recent.length);
+    if (avgLen < 18 || avgLen > 60) avgLen = null;
+  }
+  let predictedNext: string | null = null;
+  let predictedOv: string | null = null;
+  if (lastStart && avgLen) {
+    const lastDate = new Date(lastStart + "T00:00:00Z");
+    const nextDate = new Date(lastDate.getTime() + avgLen * 24 * 3600 * 1000);
+    predictedNext = nextDate.toISOString().slice(0, 10);
+    const ovDate = new Date(nextDate.getTime() - 14 * 24 * 3600 * 1000);
+    predictedOv = ovDate.toISOString().slice(0, 10);
+  }
+  res.json({
+    entries: sorted.slice(-90),
+    periodStarts: starts,
+    lastPeriodStart: lastStart,
+    avgCycleLength: avgLen,
+    predictedNextStart: predictedNext,
+    predictedOvulation: predictedOv,
     disclaimer: DISCLAIMER,
   });
 });

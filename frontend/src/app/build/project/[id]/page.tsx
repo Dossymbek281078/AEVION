@@ -317,8 +317,20 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [salary, setSalary] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [skillInput, setSkillInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function addSkill() {
+    const v = skillInput.trim();
+    if (!v || skills.includes(v)) {
+      setSkillInput("");
+      return;
+    }
+    setSkills([...skills, v].slice(0, 30));
+    setSkillInput("");
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -330,14 +342,23 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
         title: title.trim(),
         description: description.trim(),
         salary: salary ? Number(salary) : undefined,
+        skills,
       });
       setOpen(false);
       setTitle("");
       setDescription("");
       setSalary("");
+      setSkills([]);
       onCreated();
     } catch (e) {
-      setError((e as Error).message);
+      const apiErr = e as { code?: string; payload?: Record<string, unknown> };
+      if (apiErr.code === "plan_vacancy_limit_reached") {
+        setError(
+          `Plan limit reached: ${apiErr.payload?.used}/${apiErr.payload?.limit} active vacancies. Upgrade your plan on /build/pricing.`,
+        );
+      } else {
+        setError((e as Error).message);
+      }
     } finally {
       setBusy(false);
     }
@@ -385,6 +406,40 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
         placeholder="Monthly salary (USD, optional)"
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
+      <div className="rounded-md border border-white/10 bg-white/5 p-2">
+        <div className="mb-1 text-xs text-slate-400">Required skills (Enter to add — used for match score)</div>
+        <div className="flex flex-wrap gap-1.5">
+          {skills.map((s) => (
+            <span
+              key={s}
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-200"
+            >
+              {s}
+              <button
+                type="button"
+                onClick={() => setSkills(skills.filter((x) => x !== s))}
+                className="text-emerald-200/60 hover:text-emerald-200"
+                aria-label={`Remove ${s}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <input
+            value={skillInput}
+            onChange={(e) => setSkillInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addSkill();
+              }
+            }}
+            onBlur={addSkill}
+            placeholder={skills.length === 0 ? "Welding, AutoCAD…" : ""}
+            className="flex-1 min-w-[100px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+          />
+        </div>
+      </div>
       {error && <p className="text-xs text-rose-300">{error}</p>}
       <div className="flex items-center justify-end gap-2">
         <button

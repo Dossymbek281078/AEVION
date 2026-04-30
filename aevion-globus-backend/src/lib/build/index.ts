@@ -175,6 +175,9 @@ export async function ensureBuildTables(): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancy_project_created_idx" ON "BuildVacancy" ("projectId", "createdAt" DESC);`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "skillsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "city" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "salaryCurrency" TEXT DEFAULT 'RUB';`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (

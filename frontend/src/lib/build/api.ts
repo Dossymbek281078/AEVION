@@ -110,6 +110,9 @@ export type BuildVacancy = {
   projectStatus?: ProjectStatus;
   clientId?: string;
   boostUntil?: string | null;
+  skills?: string[];
+  city?: string | null;
+  salaryCurrency?: string | null;
 };
 
 export type BuildApplication = {
@@ -127,6 +130,11 @@ export type BuildApplication = {
   email?: string;
   applicantName?: string;
   applicantCity?: string;
+  applicantHeadline?: string | null;
+  applicantExperienceYears?: number;
+  applicantSkills?: string[];
+  matchScore?: number | null;
+  matchedSkills?: string[];
 };
 
 export type BuildMessage = {
@@ -370,8 +378,15 @@ export const buildApi = {
       { auth: false },
     );
   },
-  createVacancy: (input: { projectId: string; title: string; description: string; salary?: number }) =>
-    call<BuildVacancy>("POST", "/api/build/vacancies", input),
+  createVacancy: (input: {
+    projectId: string;
+    title: string;
+    description: string;
+    salary?: number;
+    skills?: string[];
+    city?: string | null;
+    salaryCurrency?: string;
+  }) => call<BuildVacancy>("POST", "/api/build/vacancies", input),
   vacanciesByProject: (projectId: string) =>
     call<{ items: BuildVacancy[]; total: number }>(
       "GET",

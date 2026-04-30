@@ -740,14 +740,35 @@ buildRouter.post("/vacancies", async (req, res) => {
       }
     }
 
+    const skills = Array.isArray(req.body?.skills)
+      ? req.body.skills
+          .map((s: unknown) => String(s).trim())
+          .filter((s: string) => s.length > 0 && s.length <= 60)
+          .slice(0, 30)
+      : [];
+    const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 100) || null;
+    const salaryCurrency = typeof req.body?.salaryCurrency === "string"
+      ? req.body.salaryCurrency.trim().slice(0, 8) || "RUB"
+      : "RUB";
+
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary")
-       VALUES ($1,$2,$3,$4,$5)
+      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
-      [id, projectId.value, title.value, description.value, salary.value],
+      [
+        id,
+        projectId.value,
+        title.value,
+        description.value,
+        salary.value,
+        JSON.stringify(skills),
+        city,
+        salaryCurrency,
+      ],
     );
-    return ok(res, result.rows[0], 201);
+    const row = result.rows[0];
+    return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]) }, 201);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_create_failed", { details: (err as Error).message });
   }
@@ -847,7 +868,8 @@ buildRouter.get("/vacancies/:id", async (req, res) => {
       [id],
     );
     if (result.rowCount === 0) return fail(res, 404, "vacancy_not_found");
-    return ok(res, result.rows[0]);
+    const row = result.rows[0];
+    return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]) });
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_fetch_failed", { details: (err as Error).message });
   }
@@ -1058,16 +1080,61 @@ buildRouter.get("/applications/by-vacancy/:id", async (req, res) => {
       return fail(res, 403, "only_vacancy_owner_can_list");
     }
 
-    const result = await pool.query(
-      `SELECT a.*, u."email", u."name" AS "applicantName", bp."city" AS "applicantCity"
-       FROM "BuildApplication" a
-       LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
-       LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
-       WHERE a."vacancyId" = $1
-       ORDER BY a."createdAt" DESC`,
-      [id],
+    // Pull vacancy skills + applications + each applicant's profile in
+    // one round-trip, then compute Jaccard skill overlap in JS.
+    const [vacancy, result] = await Promise.all([
+      pool.query(
+        `SELECT v."skillsJson", v."title" FROM "BuildVacancy" v WHERE v."id" = $1 LIMIT 1`,
+        [id],
+      ),
+      pool.query(
+        `SELECT a.*, u."email", u."name" AS "applicantName",
+                bp."city" AS "applicantCity",
+                bp."skillsJson" AS "applicantSkillsJson",
+                bp."title" AS "applicantHeadline",
+                bp."experienceYears" AS "applicantExperienceYears"
+         FROM "BuildApplication" a
+         LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+         LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+         WHERE a."vacancyId" = $1
+         ORDER BY a."createdAt" DESC`,
+        [id],
+      ),
+    ]);
+
+    const vSkills = new Set(
+      safeParseJson(vacancy.rows[0]?.skillsJson, [] as string[]).map((s) => s.toLowerCase()),
     );
-    return ok(res, { items: result.rows, total: result.rowCount });
+
+    const items = result.rows.map((row: Record<string, unknown>) => {
+      const aSkillsArr = safeParseJson(row.applicantSkillsJson, [] as string[]);
+      const aSkills = new Set(aSkillsArr.map((s) => s.toLowerCase()));
+      let matchScore: number | null = null;
+      let matchedSkills: string[] = [];
+      if (vSkills.size > 0) {
+        matchedSkills = aSkillsArr.filter((s) => vSkills.has(s.toLowerCase()));
+        // Asymmetric coverage — what fraction of vacancy-required skills
+        // does the candidate have. Friendlier than Jaccard for hiring
+        // (extra candidate skills are good, not penalized).
+        matchScore = Math.round((matchedSkills.length / vSkills.size) * 100);
+      }
+      return {
+        ...row,
+        applicantSkills: aSkillsArr,
+        matchScore,
+        matchedSkills,
+      };
+    });
+
+    // Sort: highest match first, then newest. NULL match goes after numbers.
+    items.sort((a: { matchScore: number | null }, b: { matchScore: number | null }) => {
+      if (a.matchScore == null && b.matchScore == null) return 0;
+      if (a.matchScore == null) return 1;
+      if (b.matchScore == null) return -1;
+      return b.matchScore - a.matchScore;
+    });
+
+    return ok(res, { items, total: result.rowCount });
   } catch (err: unknown) {
     return fail(res, 500, "applications_by_vacancy_failed", { details: (err as Error).message });
   }

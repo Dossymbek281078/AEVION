@@ -1527,13 +1527,19 @@ buildRouter.post("/applications", async (req, res) => {
     // (empty string is fine — AI will score it low).
     while (answers.length < questions.length) answers.push("");
 
+    const referredByRaw = req.body?.referredByUserId;
+    const referredByUserId =
+      typeof referredByRaw === "string" && referredByRaw.trim().length > 0 && referredByRaw.trim() !== auth.sub
+        ? referredByRaw.trim().slice(0, 200)
+        : null;
+
     const id = crypto.randomUUID();
     try {
       const result = await pool.query(
-        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson")
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId")
+         VALUES ($1,$2,$3,$4,$5,$6)
          RETURNING *`,
-        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers)],
+        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId],
       );
 
       // Async AI scoring — fire-and-forget so the apply request returns
@@ -2710,6 +2716,129 @@ buildRouter.get("/loyalty/me", async (req, res) => {
     });
   } catch (err: unknown) {
     return fail(res, 500, "loyalty_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/loyalty/cashback/claim — bridge unclaimed BuildCashback
+// rows into the user's AEV wallet by deviceId. We don't actually call the
+// /api/aev mint endpoint here (that's keyed by deviceId and would require
+// passing a JWT-bound deviceId); instead we record intent + flip
+// claimStatus → CLAIMED. Frontend can then call /api/aev/wallet/:dev/mint
+// itself with `sourceModule: "qbuild-cashback"` and the totalAev we
+// returned.
+buildRouter.post("/loyalty/cashback/claim", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const deviceId = typeof req.body?.deviceId === "string"
+      ? req.body.deviceId.trim().slice(0, 200)
+      : null;
+    if (!deviceId) return fail(res, 400, "deviceId_required");
+
+    await pool.query("BEGIN");
+    try {
+      const pending = await pool.query(
+        `SELECT "id","cashbackAev"
+         FROM "BuildCashback"
+         WHERE "userId" = $1 AND "claimStatus" = 'PENDING'
+         FOR UPDATE`,
+        [auth.sub],
+      );
+      const ids = pending.rows.map((r: { id: string }) => r.id);
+      const claimedAev = pending.rows.reduce(
+        (acc: number, r: { cashbackAev: number }) => acc + Number(r.cashbackAev),
+        0,
+      );
+
+      if (ids.length === 0) {
+        await pool.query("COMMIT");
+        return ok(res, { claimedAev: 0, claimedRows: 0 });
+      }
+
+      await pool.query(
+        `UPDATE "BuildCashback"
+           SET "claimStatus" = 'CLAIMED', "claimedAt" = NOW(), "claimDeviceId" = $2
+         WHERE "id" = ANY($1::text[])`,
+        [ids, deviceId],
+      );
+      await pool.query("COMMIT");
+      return ok(res, {
+        claimedAev: Math.round(claimedAev * 1_000_000) / 1_000_000,
+        claimedRows: ids.length,
+        deviceId,
+      });
+    } catch (innerErr) {
+      await pool.query("ROLLBACK");
+      throw innerErr;
+    }
+  } catch (err: unknown) {
+    return fail(res, 500, "cashback_claim_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/stats — public platform-wide stats, no auth.
+// Used by /build/stats and the lead capture conversion widget.
+buildRouter.get("/stats", async (_req, res) => {
+  try {
+    const r = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" WHERE "status" = 'OPEN'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" WHERE "status" = 'ACCEPTED'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildTrialTask"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildTrialTask" WHERE "status" = 'APPROVED'`),
+      pool.query(`SELECT COALESCE(SUM("cashbackAev"),0)::float8 AS "n" FROM "BuildCashback"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildCashback"`),
+    ]);
+    return ok(res, {
+      vacancies: { open: Number(r[0].rows[0].n), total: Number(r[1].rows[0].n) },
+      candidates: Number(r[2].rows[0].n),
+      projects: { total: Number(r[3].rows[0].n), open: Number(r[4].rows[0].n) },
+      applications: {
+        total: Number(r[5].rows[0].n),
+        accepted: Number(r[6].rows[0].n),
+        acceptRate: Number(r[5].rows[0].n) > 0
+          ? Math.round((Number(r[6].rows[0].n) / Number(r[5].rows[0].n)) * 1000) / 10
+          : 0,
+      },
+      trials: { total: Number(r[7].rows[0].n), approved: Number(r[8].rows[0].n) },
+      cashback: { totalAev: Number(r[9].rows[0].n), entries: Number(r[10].rows[0].n) },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "stats_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/stats — admin-only platform metrics with PII-safe
+// recent-activity tail. Used by /build/admin index page.
+buildRouter.get("/admin/stats", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const r = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildLead"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildLead" WHERE "createdAt" > NOW() - INTERVAL '7 days'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildOrder" WHERE "status" = 'PAID'`),
+      pool.query(`SELECT COALESCE(SUM("amount"),0)::float8 AS "n" FROM "BuildOrder" WHERE "status" = 'PAID'`),
+      pool.query(`SELECT COALESCE(SUM("cashbackAev"),0)::float8 AS "n" FROM "BuildCashback"`),
+      pool.query(`SELECT COALESCE(SUM("cashbackAev"),0)::float8 AS "n" FROM "BuildCashback" WHERE "claimStatus" = 'CLAIMED'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "AEVIONUser"`),
+    ]);
+    return ok(res, {
+      leads: { total: Number(r[0].rows[0].n), last7d: Number(r[1].rows[0].n) },
+      paidOrders: { count: Number(r[2].rows[0].n), totalAmount: Number(r[3].rows[0].n) },
+      cashback: { totalAev: Number(r[4].rows[0].n), claimedAev: Number(r[5].rows[0].n) },
+      users: { total: Number(r[6].rows[0].n) },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_stats_failed", { details: (err as Error).message });
   }
 });
 

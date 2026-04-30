@@ -209,6 +209,10 @@ export async function ensureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "answersJson" TEXT NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiScoresJson" TEXT;`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiScoreOverall" INTEGER;`);
+  // Referral tracking: if the candidate clicked through a "share"
+  // link with ?ref=<userId>, we capture who drove the application.
+  // Used downstream for referrer rewards / leaderboard.
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "referredByUserId" TEXT;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (
@@ -404,6 +408,11 @@ export async function ensureBuildTables(): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildCashback_user_idx" ON "BuildCashback" ("userId", "createdAt" DESC);`);
+  // Claim status: PENDING (just minted) → CLAIMED (user pulled into AEV
+  // wallet) — claimedAt timestamps the bridge call.
+  await pool.query(`ALTER TABLE "BuildCashback" ADD COLUMN IF NOT EXISTS "claimStatus" TEXT NOT NULL DEFAULT 'PENDING';`);
+  await pool.query(`ALTER TABLE "BuildCashback" ADD COLUMN IF NOT EXISTS "claimedAt" TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE "BuildCashback" ADD COLUMN IF NOT EXISTS "claimDeviceId" TEXT;`);
 
   // BuildLead: email captures from /build/why-aevion landing for the
   // pre-launch / city-by-city marketing list. We don't tie to user

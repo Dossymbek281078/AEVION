@@ -155,6 +155,46 @@ export default function PricingPage() {
   );
 }
 
+function ClaimCashbackButton({ onClaimed }: { onClaimed: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  async function claim() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      // Reuse a stable per-browser deviceId for the AEV bridge.
+      let deviceId = typeof window !== "undefined" ? localStorage.getItem("aev-device-id") : null;
+      if (!deviceId) {
+        deviceId = `dev-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+        if (typeof window !== "undefined") localStorage.setItem("aev-device-id", deviceId);
+      }
+      const r = await buildApi.claimCashback(deviceId);
+      if (r.claimedRows === 0) {
+        setMsg("Все cashback уже были claimed.");
+      } else {
+        setMsg(`Claimed: ${r.claimedAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} AEV (${r.claimedRows} записей).`);
+      }
+      onClaimed();
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <button
+        onClick={claim}
+        disabled={busy}
+        className="rounded-md bg-emerald-500 px-4 py-2 text-xs font-bold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50"
+      >
+        {busy ? "…" : "💎 Claim AEV → wallet"}
+      </button>
+      {msg && <span className="text-xs text-emerald-200/80">{msg}</span>}
+    </div>
+  );
+}
+
 function LoyaltyBanner() {
   const token = useBuildAuth((s) => s.token);
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.loyaltyMe>> | null>(null);
@@ -219,23 +259,28 @@ function LoyaltyBanner() {
         💎 +2% AEV cashback на любой платёж
       </div>
       {cashback && cashback.entries > 0 && (
-        <div className="mt-4 grid gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:grid-cols-3">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-emerald-300">Earned cashback</div>
-            <div className="mt-1 text-2xl font-bold text-emerald-200">
-              {cashback.totalAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} AEV
+        <div className="mt-4 space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">Earned cashback</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-200">
+                {cashback.totalAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} AEV
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">PAID-заказов</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-200">{cashback.entries}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-emerald-300">Текущая ставка</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-200">
+                {(cashback.cashbackBps / 100).toFixed(0)}%
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-emerald-300">PAID-заказов</div>
-            <div className="mt-1 text-2xl font-bold text-emerald-200">{cashback.entries}</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-emerald-300">Текущая ставка</div>
-            <div className="mt-1 text-2xl font-bold text-emerald-200">
-              {(cashback.cashbackBps / 100).toFixed(0)}%
-            </div>
-          </div>
+          <ClaimCashbackButton onClaimed={() => {
+            buildApi.loyaltyCashback().then(setCashback).catch(() => {});
+          }} />
         </div>
       )}
     </section>

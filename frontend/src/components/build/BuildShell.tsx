@@ -56,7 +56,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
               <>
                 {user.role === "ADMIN" && (
                   <Link
-                    href="/build/admin/leads"
+                    href="/build/admin"
                     className="rounded-md bg-fuchsia-500/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-fuchsia-200 hover:bg-fuchsia-500/30"
                   >
                     Admin

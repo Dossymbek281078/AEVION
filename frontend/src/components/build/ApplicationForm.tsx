@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { buildApi, BuildApiError } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { AiImprove } from "@/components/build/AiImprove";
@@ -23,6 +23,15 @@ export function ApplicationForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [referredBy, setReferredBy] = useState<string | null>(null);
+
+  // Read ?ref=<userId> from URL once on mount to attribute applications
+  // back to whoever shared the vacancy link.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref && ref.length <= 200) setReferredBy(ref);
+  }, []);
 
   if (!token) {
     return (
@@ -54,6 +63,7 @@ export function ApplicationForm({
         vacancyId,
         message: message.trim() || undefined,
         answers: qs.length > 0 ? answers.map((a) => a.trim()) : undefined,
+        referredByUserId: referredBy || undefined,
       });
       setSuccess(true);
       onApplied?.();

@@ -165,6 +165,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               />
             </div>
           )}
+          <ShareVacancyBlock vacancyId={vacancy.id} />
         </aside>
       </div>
     </BuildShell>
@@ -483,5 +484,58 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
         </div>
       )}
     </li>
+  );
+}
+
+function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
+  const me = useBuildAuth((s) => s.user);
+  const [copied, setCopied] = useState(false);
+
+  function buildLink(withRef: boolean) {
+    if (typeof window === "undefined") return "";
+    const url = new URL(`${window.location.origin}/build/vacancy/${encodeURIComponent(vacancyId)}`);
+    if (withRef && me?.id) url.searchParams.set("ref", me.id);
+    return url.toString();
+  }
+
+  async function copy(withRef: boolean) {
+    const text = buildLink(withRef);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // fallback: prompt
+      window.prompt("Скопируйте ссылку:", text);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+        Поделиться
+      </h2>
+      <p className="text-xs text-slate-400">
+        Скопируйте ссылку для друга. Если они откликнутся через ваш реферал — это засчитывается в платформенный лидерборд (скоро).
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          onClick={() => copy(false)}
+          className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10"
+        >
+          🔗 Copy link
+        </button>
+        {me && (
+          <button
+            onClick={() => copy(true)}
+            className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
+          >
+            🎯 Copy ref-link
+          </button>
+        )}
+        {copied && <span className="text-xs text-emerald-300">Скопировано ✓</span>}
+      </div>
+    </div>
   );
 }

@@ -528,8 +528,12 @@ export const buildApi = {
     }>("POST", `/api/build/vacancies/${encodeURIComponent(id)}/boost`, { days }),
 
   // Applications
-  apply: (input: { vacancyId: string; message?: string; answers?: string[] }) =>
-    call<BuildApplication>("POST", "/api/build/applications", input),
+  apply: (input: {
+    vacancyId: string;
+    message?: string;
+    answers?: string[];
+    referredByUserId?: string;
+  }) => call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
   applicationsByVacancy: (vacancyId: string) =>
     call<{ items: BuildApplication[]; total: number }>(
@@ -633,6 +637,29 @@ export const buildApi = {
       offset: number;
     }>("GET", `/api/build/admin/leads${qs ? `?${qs}` : ""}`);
   },
+  claimCashback: (deviceId: string) =>
+    call<{ claimedAev: number; claimedRows: number; deviceId?: string }>(
+      "POST",
+      "/api/build/loyalty/cashback/claim",
+      { deviceId },
+    ),
+  buildStats: () =>
+    call<{
+      vacancies: { open: number; total: number };
+      candidates: number;
+      projects: { total: number; open: number };
+      applications: { total: number; accepted: number; acceptRate: number };
+      trials: { total: number; approved: number };
+      cashback: { totalAev: number; entries: number };
+      timestamp: string;
+    }>("GET", "/api/build/stats", undefined, { auth: false }),
+  adminStats: () =>
+    call<{
+      leads: { total: number; last7d: number };
+      paidOrders: { count: number; totalAmount: number };
+      cashback: { totalAev: number; claimedAev: number };
+      users: { total: number };
+    }>("GET", "/api/build/admin/stats"),
   loyaltyCashback: () =>
     call<{
       totalAev: number;

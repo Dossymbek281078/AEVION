@@ -14,6 +14,7 @@ Four tables, all `CREATE TABLE IF NOT EXISTS`:
 - **`ModuleStateChange(id, moduleId, actor, oldState JSONB, newState JSONB, at)`** — append-only audit of override edits. Indexed on `at DESC` and `(moduleId, at DESC)`.
 - **`ModuleWebhook(id, url, secret, events, label, active, createdAt, createdBy, lastFiredAt, lastError, failureCount)`** — Tier 3 webhook subscriptions. Platform-level (no per-user scope).
 - **`ModuleWebhookDelivery(id, webhookId, event, moduleId, succeeded, statusCode, errorMessage, durationMs, createdAt)`** — append-only delivery log. Indexed on `(webhookId, createdAt DESC)`.
+- **`ModuleHit(id, moduleId, surface, at)`** — Tier 3 public-surface hit log. Surfaces: `embed`, `badge`, `detail`. Used to compute trending. Indexed on `(moduleId, at DESC)` and `(at DESC)`. Fire-and-forget writes; no IP/UA stored. Prune older than 30 days if growth becomes a concern.
 
 ## Public surfaces (rate-limited 240/min/IP, CORS open)
 
@@ -49,6 +50,13 @@ curl -s "$HOST/api/modules/qright/detail" | jq
 
 # 9. Public RSS feed (Tier 3) — for journalists / partners
 curl -s "$HOST/api/modules/changelog.rss" | head -30
+
+# 10. Trending modules by public hit count (Tier 3)
+curl -s "$HOST/api/modules/trending?window=24h&limit=10" | jq
+curl -s "$HOST/api/modules/trending?window=7d&limit=10" | jq
+
+# 10b. Trending-sorted registry — pin hot modules to the top
+curl -s "$HOST/api/modules/registry?sort=trending&window=24h" | jq '.items[].id'
 ```
 
 ## Admin endpoints (Bearer required + admin gate)
@@ -111,7 +119,7 @@ if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) reject();
 
 ## Frontend pages
 
-- **`/modules`** — public browser (server component, EN/RU). Tier/status/kind filters + free-text search + CSV download button + 4-stat headline cards. Each card shows tier color chip, status, kind badge, override marker, tags, primary path, API hints, plus "Embed badge" and "Detail" buttons.
+- **`/modules`** — public browser (server component, EN/RU). Tier/status/kind filters + free-text search + CSV download button + 4-stat headline cards + Tier 3 trending strip (top 5 modules by 24h hits) + sort toggle (priority / trending). Each card shows tier color chip, status, kind badge, override marker, tags, primary path, API hints, plus "Embed badge" and "Detail" buttons.
 - **`/modules/[id]`** — Tier 3 detail page (server component, EN/RU). Identity + live state with base→effective diff, surfaces, inline badge previews (dark/light), outgoing API dependency edges, full per-module changelog with diff view. CTA: open primary path.
 - **`/modules/[id]/badge`** — embed configurator. Live SVG preview, dark/light theme toggle, copy-able snippets (Markdown for README badges, HTML `<img>`, direct URL, JS fetch).
 - **`/admin/modules`** — registry with per-row "Edit override" modal (status / tier / hint dropdowns, blank = clear that field). Audit log section at the bottom with diff details. Webhook subscriptions managed via API (see above).
@@ -134,7 +142,8 @@ The original three endpoints (`GET /status`, `GET /:id/health`, `GET /:id/meta`)
 - [ ] Set `MODULES_ADMIN_EMAILS` (Railway env vars)
 - [ ] First request to `/api/modules/registry` after deploy creates `ModuleState*` tables (`\dt "ModuleState*"` should list both)
 - [ ] First webhook create / fire bootstraps `ModuleWebhook` + `ModuleWebhookDelivery` tables (`\dt "ModuleWebhook*"`)
-- [ ] Public smoke 1-9 pass (registry, CSV, stats, embed, badge.svg, dependency-graph, changelog, detail, RSS)
+- [ ] First request to `/api/modules/<id>/embed` (or `/badge.svg`, `/detail`) creates `ModuleHit` (`\dt "ModuleHit"`)
+- [ ] Public smoke 1-10 pass (registry, CSV, stats, embed, badge.svg, dependency-graph, changelog, detail, RSS, trending)
 - [ ] Admin probe returns `{ isAdmin: true }` for an allowlisted user
 - [ ] Override edit → audit row appears in `/admin/modules` audit log + `/api/modules/changelog` (without actor)
 - [ ] Override edit → if a `ModuleWebhook` exists, delivery row lands in `/admin/webhooks/<id>/deliveries`

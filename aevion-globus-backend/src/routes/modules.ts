@@ -19,6 +19,11 @@ import {
   MODULE_WEBHOOK_EVENTS,
   type ModuleWebhookEvent,
 } from "../lib/modules/webhooks";
+import {
+  recordModuleHit,
+  loadTrending,
+  type TrendingWindow,
+} from "../lib/modules/hits";
 
 export const modulesRouter = Router();
 
@@ -224,6 +229,9 @@ modulesRouter.get("/:id/meta", (req, res) => {
 // 🔹 GET /registry — filtered + searchable registry. Public.
 //    Filters: tier, status, kind, q (matches name/code/id/description/tags).
 //    `tier` and `status` filter against the EFFECTIVE values (post-override).
+//    Sort: ?sort=trending[&window=24h|7d] — orders matches by hit count
+//    descending (window default 24h). Modules without hits sink below
+//    those with hits.
 modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
   try {
     const enriched = await loadAllEnriched();
@@ -231,6 +239,9 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
     const status = String(req.query.status || "").trim();
     const kind = String(req.query.kind || "").trim();
     const q = String(req.query.q || "").trim().toLowerCase();
+    const sort = String(req.query.sort || "").trim().toLowerCase();
+    const windowRaw = String(req.query.window || "24h").trim().toLowerCase();
+    const window: TrendingWindow = windowRaw === "7d" ? "7d" : "24h";
     const limitRaw = parseInt(String(req.query.limit || "100"), 10);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 100;
 
@@ -253,8 +264,26 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
       return true;
     });
 
+    let items = filtered;
+    let trendingHits: Record<string, number> | null = null;
+    if (sort === "trending") {
+      const trending = await loadTrending(pool, window, 500);
+      trendingHits = Object.fromEntries(trending.map((t) => [t.moduleId, t.hits]));
+      items = [...filtered].sort((a, b) => {
+        const ha = trendingHits![a.id] || 0;
+        const hb = trendingHits![b.id] || 0;
+        if (hb !== ha) return hb - ha;
+        return a.priority - b.priority;
+      });
+    }
+
+    const sliced = items.slice(0, limit);
+    const decorated = trendingHits
+      ? sliced.map((p) => ({ ...p, hits: trendingHits![p.id] || 0 }))
+      : sliced;
+
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "public, max-age=60");
+    res.setHeader("Cache-Control", sort === "trending" ? "public, max-age=30" : "public, max-age=60");
     res.json({
       generatedAt: new Date().toISOString(),
       total: enriched.length,
@@ -265,8 +294,10 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
         kind: kind || null,
         q: q || null,
         limit,
+        sort: sort || null,
+        window: sort === "trending" ? window : null,
       },
-      items: filtered.slice(0, limit),
+      items: decorated,
     });
   } catch (err: any) {
     res.status(500).json({ error: "registry failed", details: err.message });
@@ -360,6 +391,10 @@ modulesRouter.get("/stats", modulesEmbedRateLimit, async (_req, res) => {
       if (p.runtime.primaryPath) withPath++;
       if (p.override) overridden++;
     }
+    const [trending24h, trending7d] = await Promise.all([
+      loadTrending(pool, "24h", 5),
+      loadTrending(pool, "7d", 5),
+    ]);
     res.setHeader("Cache-Control", "public, max-age=300");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.json({
@@ -371,9 +406,51 @@ modulesRouter.get("/stats", modulesEmbedRateLimit, async (_req, res) => {
       byTier,
       byStatus,
       byKind,
+      trending24h,
+      trending7d,
     });
   } catch (err: any) {
     res.status(500).json({ error: "stats failed", details: err.message });
+  }
+});
+
+// 🔹 GET /trending — top modules by public hit count (embed/badge/detail).
+//    ?window=24h|7d (default 24h) · ?limit=1..50 (default 10)
+//    Returns [{ moduleId, code, name, hits, effectiveTier }] joined with
+//    registry data so dashboards can render labels without a second call.
+modulesRouter.get("/trending", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    const windowRaw = String(req.query.window || "24h").trim().toLowerCase();
+    const window: TrendingWindow = windowRaw === "7d" ? "7d" : "24h";
+    const limitRaw = parseInt(String(req.query.limit || "10"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 10;
+    const trending = await loadTrending(pool, window, limit);
+    const overrides = await loadOverrides();
+    const enriched = enrichProjects(projects).map((p) => applyOverride(p, overrides.get(p.id)));
+    const byId = new Map(enriched.map((p) => [p.id, p]));
+    const items = trending.map((t) => {
+      const p = byId.get(t.moduleId);
+      return {
+        moduleId: t.moduleId,
+        hits: t.hits,
+        code: p?.code || null,
+        name: p?.name || null,
+        kind: p?.kind || null,
+        effectiveTier: p?.effectiveTier || null,
+        effectiveStatus: p?.effectiveStatus || null,
+        primaryPath: p?.runtime.primaryPath || null,
+      };
+    });
+    res.setHeader("Cache-Control", "public, max-age=120");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      generatedAt: new Date().toISOString(),
+      window,
+      total: items.length,
+      items,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "trending failed", details: err.message });
   }
 });
 
@@ -389,6 +466,7 @@ modulesRouter.get("/:id/embed", modulesEmbedRateLimit, async (req, res) => {
     }
     const overrides = await loadOverrides();
     const p = applyOverride(enrichProject(base), overrides.get(id));
+    recordModuleHit(pool, id, "embed");
     const etag = `W/"modules-embed-${id}-${p.override?.updatedAt || p.updatedAt}"`;
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -432,6 +510,7 @@ modulesRouter.get("/:id/detail", modulesEmbedRateLimit, async (req, res) => {
     }
     const overrides = await loadOverrides();
     const p = applyOverride(enrichProject(base), overrides.get(id));
+    recordModuleHit(pool, id, "detail");
     res.setHeader("Cache-Control", "public, max-age=120");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.json({
@@ -512,6 +591,7 @@ modulesRouter.get("/:id/badge.svg", modulesEmbedRateLimit, async (req, res) => {
     }
     const overrides = await loadOverrides();
     const p = applyOverride(enrichProject(base), overrides.get(id));
+    recordModuleHit(pool, id, "badge");
     const etag = `W/"modules-badge-${id}-${p.effectiveTier}-${p.effectiveStatus}-${theme}"`;
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);

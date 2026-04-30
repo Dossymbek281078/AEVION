@@ -115,6 +115,10 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreMessage — per-call cost (computed from provider/model/tokens at runtime).
   await pool.query(`ALTER TABLE "QCoreMessage" ADD COLUMN IF NOT EXISTS "costUsd" DOUBLE PRECISION;`);
 
+  // QCoreRun — free-form tags ([]) + GIN index for tag-filter chip strip.
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_tags_gin_idx" ON "QCoreRun" USING GIN ("tags");`);
+
   // Per-user webhook config. One row per JWT sub. URL is required, secret
   // optional (when set, run.completed POSTs include X-QCore-Signature).
   await pool.query(`
@@ -125,6 +129,31 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  // Agent marketplace — community-shared presets. Owner can publish, others
+  // can browse and import to their personal localStorage presets bar.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSharedPreset" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT TRUE,
+      "importCount" INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreSharedPreset_public_imports_idx"
+      ON "QCoreSharedPreset" ("isPublic", "importCount" DESC, "updatedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreSharedPreset_owner_idx"
+      ON "QCoreSharedPreset" ("ownerUserId");
   `);
 
     dbReady = true;

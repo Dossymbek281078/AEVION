@@ -1,0 +1,51 @@
+{
+  "name": "@aevion/qcoreai-client",
+  "version": "0.1.0",
+  "description": "TypeScript client for AEVION QCoreAI multi-agent pipeline — sync, streaming, refine, tags, webhook verification.",
+  "license": "Apache-2.0",
+  "author": "AEVION",
+  "homepage": "https://aevion.io/qcoreai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "frontend-qcore/packages/qcoreai-client"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "aevion",
+    "qcoreai",
+    "multi-agent",
+    "llm",
+    "anthropic",
+    "openai",
+    "gemini",
+    "deepseek",
+    "grok",
+    "sse",
+    "webhook"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

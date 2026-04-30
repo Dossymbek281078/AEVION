@@ -23,6 +23,7 @@
     "@types/geoip-lite": "^1.4.4",
     "@types/pdfkit": "^0.17.5",
     "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -34,7 +35,8 @@
     "pdfkit": "^0.18.0",
     "pg": "^8.19.0",
     "qrcode": "^1.5.4",
-    "secrets.js-grempe": "^2.0.0"
+    "secrets.js-grempe": "^2.0.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

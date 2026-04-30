@@ -15,6 +15,7 @@ import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter } from "./routes/qcoreai";
+import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
@@ -264,8 +265,12 @@ app.use(
 // the listener binds so any startup failures are captured too.
 initSentry();
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();
 });
+
+// QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)
+// but lets clients interject mid-run guidance on the same connection.
+attachQCoreWebSocket(httpServer, "/api/qcoreai/ws");

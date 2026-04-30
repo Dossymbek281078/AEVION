@@ -118,7 +118,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 {vacancies.map((v) => (
                   <div key={v.id} className="space-y-1.5">
                     <VacancyCard vacancy={v} />
-                    {isOwner && <VacancyOwnerToggle vacancy={v} onUpdated={refresh} />}
+                    {isOwner && (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <VacancyBoostButton vacancy={v} onUpdated={refresh} />
+                        <VacancyOwnerToggle vacancy={v} onUpdated={refresh} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -187,6 +192,52 @@ function ShareButton({ projectId }: { projectId: string }) {
       className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/10"
     >
       {copied ? "✓ Link copied" : "🔗 Share"}
+    </button>
+  );
+}
+
+function VacancyBoostButton({
+  vacancy,
+  onUpdated,
+}: {
+  vacancy: BuildVacancy;
+  onUpdated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
+  return (
+    <button
+      disabled={busy || vacancy.status !== "OPEN"}
+      onClick={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isFeatured) return;
+        if (!confirm("Boost this vacancy for 7 days? Free if your plan has boosts left, otherwise creates a 990 ₽ pending order.")) {
+          return;
+        }
+        setBusy(true);
+        try {
+          const r = await buildApi.boostVacancy(vacancy.id, 7);
+          onUpdated();
+          alert(
+            r.source === "PLAN"
+              ? "Boost activated! Vacancy is now featured for 7 days."
+              : `Boost recorded as a pending order (id ${r.orderId?.slice(0, 8)}…). Pay it on the Pricing page to activate.`,
+          );
+        } catch (err) {
+          alert((err as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+      title={isFeatured ? `Featured until ${new Date(vacancy.boostUntil!).toLocaleDateString()}` : "Boost this vacancy for 7 days"}
+      className={`w-full rounded-md px-2.5 py-1 text-xs ${
+        isFeatured
+          ? "bg-amber-500/15 text-amber-200"
+          : "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+      } disabled:opacity-50`}
+    >
+      {busy ? "…" : isFeatured ? "★ Featured" : "★ Boost 7d"}
     </button>
   );
 }

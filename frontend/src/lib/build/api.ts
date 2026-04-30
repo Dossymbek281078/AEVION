@@ -109,6 +109,7 @@ export type BuildVacancy = {
   projectTitle?: string;
   projectStatus?: ProjectStatus;
   clientId?: string;
+  boostUntil?: string | null;
 };
 
 export type BuildApplication = {
@@ -382,6 +383,12 @@ export const buildApi = {
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
   updateVacancy: (id: string, status: VacancyStatus) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
+  boostVacancy: (id: string, days = 7) =>
+    call<{
+      boost: { id: string; vacancyId: string; endsAt: string; source: "PLAN" | "PAID" };
+      orderId: string | null;
+      source: "PLAN" | "PAID";
+    }>("POST", `/api/build/vacancies/${encodeURIComponent(id)}/boost`, { days }),
 
   // Applications
   apply: (input: { vacancyId: string; message?: string }) =>

@@ -9,15 +9,23 @@ export function VacancyCard({
   showProject?: boolean;
 }) {
   const isClosed = vacancy.status === "CLOSED";
+  const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
   return (
     <Link
       href={`/build/vacancy/${encodeURIComponent(vacancy.id)}`}
       className={`group block rounded-xl border p-4 transition ${
         isClosed
           ? "border-white/5 bg-white/[0.02] opacity-60"
-          : "border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10"
+          : isFeatured
+            ? "border-amber-500/40 bg-amber-500/5 hover:border-amber-500/70"
+            : "border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10"
       }`}
     >
+      {isFeatured && (
+        <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+          ★ Featured
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="truncate text-base font-semibold text-white group-hover:text-emerald-200">

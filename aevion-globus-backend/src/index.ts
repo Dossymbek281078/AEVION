@@ -235,8 +235,11 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/build/vacancies/by-project/{id}": { get: { summary: "Vacancies for a project" } },
       "/api/build/vacancies/{id}": {
-        get: { summary: "Vacancy detail + project link" },
+        get: { summary: "Vacancy detail + project link + boostUntil" },
         patch: { summary: "Toggle vacancy status OPEN/CLOSED (project owner or admin)" },
+      },
+      "/api/build/vacancies/{id}/boost": {
+        post: { summary: "Boost (featured-pin) a vacancy for N days. Free if plan boosts left, else PENDING order at 990₽/week." },
       },
       "/api/build/applications": { post: { summary: "Apply to vacancy (Bearer required)" } },
       "/api/build/applications/my": { get: { summary: "My applications" } },

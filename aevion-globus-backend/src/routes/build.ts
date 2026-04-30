@@ -796,11 +796,15 @@ buildRouter.get("/vacancies", async (req, res) => {
     const result = await pool.query(
       `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
               p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
-              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount"
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
+              (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
        FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-       ORDER BY v."createdAt" DESC
+       ORDER BY (
+         (SELECT MAX(b2."endsAt") FROM "BuildBoost" b2 WHERE b2."vacancyId" = v."id" AND b2."endsAt" > NOW())
+       ) DESC NULLS LAST,
+       v."createdAt" DESC
        LIMIT $${params.length}`,
       params,
     );
@@ -816,7 +820,8 @@ buildRouter.get("/vacancies/by-project/:id", async (req, res) => {
     const id = String(req.params.id);
     const result = await pool.query(
       `SELECT v.*,
-              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount"
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
+              (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
        FROM "BuildVacancy" v
        WHERE v."projectId" = $1
        ORDER BY v."createdAt" DESC`,
@@ -833,7 +838,8 @@ buildRouter.get("/vacancies/:id", async (req, res) => {
   try {
     const id = String(req.params.id);
     const result = await pool.query(
-      `SELECT v.*, p."title" AS "projectTitle", p."status" AS "projectStatus", p."clientId"
+      `SELECT v.*, p."title" AS "projectTitle", p."status" AS "projectStatus", p."clientId",
+              (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
        FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
        WHERE v."id" = $1
@@ -844,6 +850,90 @@ buildRouter.get("/vacancies/:id", async (req, res) => {
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_fetch_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/boost — feature a vacancy at the top of
+// the feed for N days (default 7). Pricing tiers determine cost:
+//   - if plan.boostsPerMonth > 0 (PRO/AGENCY) and usage.boostsUsed < plan.boostsPerMonth
+//     → free, increments boostsUsed.
+//   - otherwise → creates a PENDING BOOST order at 990 ₽ × days/7.
+// Caller must own the vacancy's parent project (or be ADMIN).
+buildRouter.post("/vacancies/:id/boost", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const days = req.body?.days != null
+      ? Math.max(1, Math.min(30, Math.round(Number(req.body.days) || 7)))
+      : 7;
+
+    const row = await pool.query(
+      `SELECT v."id", v."projectId", v."status", p."clientId"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_project_owner_can_boost");
+    }
+    if (row.rows[0].status !== "OPEN") {
+      return fail(res, 400, "boost_requires_open_vacancy");
+    }
+
+    const plan = await getUserPlan(auth.sub);
+    const usage = await ensureUsageRow(auth.sub);
+    const planAllows = !isUnlimited(plan.boostsPerMonth)
+      ? usage.boostsUsed < plan.boostsPerMonth
+      : true;
+    const wantPaid = req.body?.paid === true; // explicit override
+
+    const boostId = crypto.randomUUID();
+    const endsAt = new Date(Date.now() + days * 24 * 3600 * 1000);
+
+    await pool.query("BEGIN");
+    try {
+      let orderId: string | null = null;
+      let source: "PLAN" | "PAID" = "PLAN";
+
+      if (planAllows && !wantPaid) {
+        // Plan-included boost — count it.
+        await bumpUsage(auth.sub, "boostsUsed");
+      } else {
+        // Out-of-plan or explicitly paid — record a PENDING order.
+        source = "PAID";
+        orderId = crypto.randomUUID();
+        const amount = 990 * Math.ceil(days / 7);
+        await pool.query(
+          `INSERT INTO "BuildOrder" ("id","userId","kind","ref","amount","currency","status","metaJson")
+           VALUES ($1,$2,'BOOST',$3,$4,'RUB','PENDING',$5)`,
+          [
+            orderId,
+            auth.sub,
+            boostId,
+            amount,
+            JSON.stringify({ vacancyId: id, days }),
+          ],
+        );
+      }
+
+      const ins = await pool.query(
+        `INSERT INTO "BuildBoost" ("id","vacancyId","userId","endsAt","source","orderId")
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [boostId, id, auth.sub, endsAt.toISOString(), source, orderId],
+      );
+
+      await pool.query("COMMIT");
+      return ok(res, { boost: ins.rows[0], orderId, source }, 201);
+    } catch (innerErr) {
+      await pool.query("ROLLBACK");
+      throw innerErr;
+    }
+  } catch (err: unknown) {
+    return fail(res, 500, "boost_failed", { details: (err as Error).message });
   }
 });
 

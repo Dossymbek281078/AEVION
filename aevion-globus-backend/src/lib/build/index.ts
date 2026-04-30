@@ -271,6 +271,24 @@ export async function ensureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildOrder_user_idx" ON "BuildOrder" ("userId", "createdAt" DESC);`);
 
+  // BuildBoost: featured-pin entries for vacancies. Vacancy is
+  // considered "boosted" when a row exists with endsAt > NOW().
+  // We never delete — expired rows are kept for analytics.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildBoost" (
+      "id" TEXT PRIMARY KEY,
+      "vacancyId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "startedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "endsAt" TIMESTAMPTZ NOT NULL,
+      "source" TEXT NOT NULL DEFAULT 'PLAN',
+      "orderId" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildBoost_vacancy_idx" ON "BuildBoost" ("vacancyId", "endsAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildBoost_user_idx" ON "BuildBoost" ("userId", "createdAt" DESC);`);
+
   // BuildPlanUsage: per-month counters for plan-limited actions.
   // Composite PK so increments are idempotent via ON CONFLICT.
   await pool.query(`

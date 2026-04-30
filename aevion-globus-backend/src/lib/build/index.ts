@@ -506,6 +506,30 @@ export function isUnlimited(planLimit: number): boolean {
   return planLimit === -1;
 }
 
+// ── Periodic cleanup ────────────────────────────────────────────────
+// Expired BuildBoost rows accumulate forever — every read query already
+// filters endsAt > NOW(), but we still want to keep the table compact.
+// Run a single delete when more than COOLDOWN_MS has passed since the
+// last sweep, gated on a simple in-memory timestamp. No cron needed.
+const CLEANUP_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h
+let lastCleanupAt = 0;
+
+export async function maybeCleanupExpiredBoosts(): Promise<number> {
+  const now = Date.now();
+  if (now - lastCleanupAt < CLEANUP_COOLDOWN_MS) return 0;
+  lastCleanupAt = now;
+  try {
+    const r = await pool.query(
+      `DELETE FROM "BuildBoost" WHERE "endsAt" < NOW() - INTERVAL '7 days'`,
+    );
+    return r.rowCount ?? 0;
+  } catch (err) {
+    // Don't break user-facing requests over a maintenance task.
+    console.warn("[build] expired-boost cleanup failed:", (err as Error).message);
+    return 0;
+  }
+}
+
 export const SUBSCRIPTION_STATUSES = ["ACTIVE", "CANCELED", "PENDING"] as const;
 export const ORDER_KINDS = ["SUB_START", "BOOST", "TALENT_DAY_PASS", "HIRE_FEE"] as const;
 export const ORDER_STATUSES = ["PENDING", "PAID", "CANCELED", "REFUNDED"] as const;

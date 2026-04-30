@@ -18,6 +18,7 @@ import {
   PLAN_KEYS,
   BOOKMARK_KINDS,
   safeParseJson,
+  maybeCleanupExpiredBoosts,
   getUserPlan,
   ensureUsageRow,
   bumpUsage,
@@ -31,6 +32,9 @@ export const buildRouter = Router();
 buildRouter.use(async (_req, res, next) => {
   try {
     await ensureBuildTables();
+    // Best-effort: clean expired boosts on a 6h cooldown so the table
+    // stays compact. Fire-and-forget — don't block the request.
+    void maybeCleanupExpiredBoosts();
     next();
   } catch (err: unknown) {
     console.error("[build] ensureBuildTables failed:", err);

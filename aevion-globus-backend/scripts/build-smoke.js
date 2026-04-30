@@ -189,6 +189,56 @@ async function main() {
   if (r.status === 401) ok("/notifications/summary requires auth");
   else return fail("notifications auth gate", `expected 401 got ${r.status}`);
 
+  // 18. plans catalog
+  r = await call("GET", "/api/build/plans");
+  if (r.status === 200 && unwrap(r)?.items?.length >= 4) ok("plans catalog (4 tiers)");
+  else return fail("plans catalog", `status=${r.status}`);
+
+  // 19. usage/me on FREE plan baseline
+  r = await call("GET", "/api/build/usage/me", null, clientToken);
+  if (r.status === 200 && unwrap(r)?.plan?.key === "FREE") ok("usage/me FREE baseline");
+  else return fail("usage/me FREE", `plan=${unwrap(r)?.plan?.key}`);
+
+  // 20. bookmark VACANCY toggle on
+  r = await call("POST", "/api/build/bookmarks", { kind: "VACANCY", targetId: vacancyId }, workerToken);
+  if (r.status === 201 && unwrap(r)?.saved === true) ok("bookmark vacancy added");
+  else return fail("bookmark add", `status=${r.status}`);
+
+  // 21. bookmark VACANCY toggle off (idempotent removal)
+  r = await call("POST", "/api/build/bookmarks", { kind: "VACANCY", targetId: vacancyId }, workerToken);
+  if (r.status === 200 && unwrap(r)?.saved === false) ok("bookmark toggle off (idempotent)");
+  else return fail("bookmark toggle off", `status=${r.status}`);
+
+  // 22. bookmarks list (re-add then list)
+  await call("POST", "/api/build/bookmarks", { kind: "VACANCY", targetId: vacancyId }, workerToken);
+  r = await call("GET", "/api/build/bookmarks?kind=VACANCY", null, workerToken);
+  if (r.status === 200 && unwrap(r)?.items?.length >= 1 && unwrap(r).items[0]?.target?.id === vacancyId) ok("bookmarks list hydrated");
+  else return fail("bookmarks list", `status=${r.status} items=${unwrap(r)?.items?.length}`);
+
+  // 23. reverse-match: vacancy → top candidates (worker had "5 years" but
+  //     no overlapping skills with vacancy — could be 0). Just check 200.
+  r = await call("GET", `/api/build/vacancies/${vacancyId}/match-candidates`, null, clientToken);
+  if (r.status === 200) ok("reverse match candidates", `total=${unwrap(r)?.total ?? 0}`);
+  else return fail("reverse match", `status=${r.status}`);
+
+  // 24. PDF resume export (public, no auth)
+  const pdfRes = await fetch(`${BASE}/api/build/profiles/${workerId}/resume.pdf`);
+  const ct = pdfRes.headers.get("content-type") || "";
+  if (pdfRes.status === 200 && ct.includes("pdf")) ok("PDF resume export", `${ct}`);
+  else return fail("PDF resume", `status=${pdfRes.status} type=${ct}`);
+
+  // 25. AI consult — only if ANTHROPIC_API_KEY is configured backend-side.
+  //     We probe with a minimal prompt; if it returns ai_consult_failed
+  //     with "ANTHROPIC_API_KEY not configured" we treat that as SKIP.
+  r = await call("POST", "/api/build/ai/consult", {
+    messages: [{ role: "user", content: "Hi, one-liner: am I ready to apply for vacancies?" }],
+  }, workerToken);
+  if (r.status === 200 && typeof unwrap(r)?.reply === "string") ok("AI consult", `tokens=${unwrap(r)?.usage?.output}`);
+  else if (r.body?.details && /ANTHROPIC_API_KEY/i.test(r.body.details)) {
+    step += 1;
+    console.log(`  ${String(step).padStart(2, "0")}  SKIP  AI consult (ANTHROPIC_API_KEY not set)`);
+  } else return fail("AI consult", `status=${r.status} ${r.body?.details || ""}`);
+
   // suppress unused-variable warning for clientId
   void clientId;
 }

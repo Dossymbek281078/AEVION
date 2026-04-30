@@ -7,7 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 
-type JudgeType = "contains" | "not_contains" | "equals" | "regex" | "min_length" | "max_length";
+type JudgeType = "contains" | "not_contains" | "equals" | "regex" | "min_length" | "max_length" | "llm_judge";
 
 type EvalCase = {
   id: string;
@@ -19,7 +19,8 @@ type EvalCase = {
     | { type: "equals"; expected: string; caseSensitive?: boolean; trim?: boolean }
     | { type: "regex"; pattern: string; flags?: string }
     | { type: "min_length"; chars: number }
-    | { type: "max_length"; chars: number };
+    | { type: "max_length"; chars: number }
+    | { type: "llm_judge"; rubric: string; provider?: string; model?: string; passThreshold?: number };
   weight?: number;
 };
 
@@ -103,7 +104,8 @@ function emptyJudge(type: JudgeType): EvalCase["judge"] {
   if (type === "equals") return { type, expected: "", caseSensitive: false, trim: true };
   if (type === "regex") return { type, pattern: "", flags: "i" };
   if (type === "min_length") return { type, chars: 50 };
-  return { type, chars: 4000 };
+  if (type === "max_length") return { type, chars: 4000 };
+  return { type: "llm_judge", rubric: "", passThreshold: 0.7 };
 }
 
 function ScoreSparkline({ runs }: { runs: EvalRun[] }) {
@@ -641,42 +643,55 @@ export default function QCoreEvalSuitePage() {
                   <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}>Score</th>
                   <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}>Passed</th>
                   <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}>Cost</th>
+                  <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {runs.map((r) => (
-                  <tr
-                    key={r.id}
-                    onClick={() => setActiveRun(r)}
-                    style={{ cursor: "pointer", borderTop: "1px solid #f1f5f9" }}
-                  >
-                    <td style={{ padding: "8px 12px", color: "#475569" }}>{fmtDate(r.startedAt)}</td>
-                    <td style={{ padding: "8px 12px" }}>
-                      <span
-                        style={{
-                          padding: "2px 7px",
-                          borderRadius: 4,
-                          fontSize: 11,
-                          background:
-                            r.status === "done" ? "#f0fdf4" :
-                            r.status === "running" ? "#f0fdfa" :
-                            r.status === "error" ? "#fef2f2" : "#f1f5f9",
-                          color:
-                            r.status === "done" ? "#15803d" :
-                            r.status === "running" ? "#0d9488" :
-                            r.status === "error" ? "#991b1b" : "#475569",
-                        }}
-                      >
-                        {r.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600 }}>{fmtScore(r.score)}</td>
-                    <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569" }}>
-                      {r.passedCases}/{r.totalCases}
-                    </td>
-                    <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569" }}>{fmtMoney(r.totalCostUsd)}</td>
-                  </tr>
-                ))}
+                {runs.map((r, i) => {
+                  const prev = runs[i + 1];
+                  return (
+                    <tr
+                      key={r.id}
+                      style={{ borderTop: "1px solid #f1f5f9" }}
+                    >
+                      <td style={{ padding: "8px 12px", color: "#475569", cursor: "pointer" }} onClick={() => setActiveRun(r)}>{fmtDate(r.startedAt)}</td>
+                      <td style={{ padding: "8px 12px", cursor: "pointer" }} onClick={() => setActiveRun(r)}>
+                        <span
+                          style={{
+                            padding: "2px 7px",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            background:
+                              r.status === "done" ? "#f0fdf4" :
+                              r.status === "running" ? "#f0fdfa" :
+                              r.status === "error" ? "#fef2f2" : "#f1f5f9",
+                            color:
+                              r.status === "done" ? "#15803d" :
+                              r.status === "running" ? "#0d9488" :
+                              r.status === "error" ? "#991b1b" : "#475569",
+                          }}
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600, cursor: "pointer" }} onClick={() => setActiveRun(r)}>{fmtScore(r.score)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569", cursor: "pointer" }} onClick={() => setActiveRun(r)}>
+                        {r.passedCases}/{r.totalCases}
+                      </td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569", cursor: "pointer" }} onClick={() => setActiveRun(r)}>{fmtMoney(r.totalCostUsd)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                        {prev && r.status === "done" && prev.status === "done" && (
+                          <Link
+                            href={`/qcoreai/eval/${suiteId}/compare?a=${prev.id}&b=${r.id}`}
+                            style={{ fontSize: 11, color: "#0d9488", textDecoration: "none", whiteSpace: "nowrap" }}
+                          >
+                            Compare ↔
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -756,6 +771,7 @@ function CaseEditor({
           <option value="regex">regex</option>
           <option value="min_length">min length</option>
           <option value="max_length">max length</option>
+          <option value="llm_judge">LLM judge</option>
         </select>
         <button
           onClick={onDelete}
@@ -865,6 +881,78 @@ function CaseEditor({
           />
           <span style={{ color: "#64748b" }}>chars</span>
         </div>
+      )}
+
+      {j.type === "llm_judge" && (
+        <>
+          <textarea
+            value={j.rubric}
+            onChange={(e) => onChange({ judge: { ...j, rubric: e.target.value } })}
+            placeholder="Rubric for the judge LLM. Example: &quot;Output must be in plain English, mention a TL;DR section, and avoid the phrase 'as a large language model'.&quot;"
+            rows={3}
+            style={{
+              padding: "5px 8px",
+              border: "1px solid #cbd5e1",
+              borderRadius: 6,
+              fontSize: 13,
+              resize: "vertical",
+              fontFamily: "inherit",
+            }}
+          />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 6, fontSize: 12 }}>
+            <select
+              value={j.provider || ""}
+              onChange={(e) => onChange({ judge: { ...j, provider: e.target.value || undefined } })}
+              style={{
+                padding: "5px 8px",
+                border: "1px solid #cbd5e1",
+                borderRadius: 6,
+                fontSize: 12,
+              }}
+            >
+              <option value="">Default provider</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Gemini</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="grok">Grok</option>
+            </select>
+            <input
+              value={j.model || ""}
+              onChange={(e) => onChange({ judge: { ...j, model: e.target.value || undefined } })}
+              placeholder="Model (e.g. claude-haiku-4-5-20251001)"
+              style={{
+                padding: "5px 8px",
+                border: "1px solid #cbd5e1",
+                borderRadius: 6,
+                fontSize: 12,
+                fontFamily: "monospace",
+              }}
+            />
+            <input
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              value={j.passThreshold ?? 0.7}
+              onChange={(e) =>
+                onChange({
+                  judge: {
+                    ...j,
+                    passThreshold: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)),
+                  },
+                })
+              }
+              title="Confidence threshold (0..1) — passes only if VERDICT=PASS and confidence ≥ threshold"
+              style={{
+                padding: "5px 8px",
+                border: "1px solid #cbd5e1",
+                borderRadius: 6,
+                fontSize: 12,
+              }}
+            />
+          </div>
+        </>
       )}
     </div>
   );

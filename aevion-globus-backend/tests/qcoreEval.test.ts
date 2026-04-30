@@ -1,12 +1,21 @@
 import { describe, test, expect, vi } from "vitest";
 
 // Force in-memory mode by failing the SELECT 1 probe.
-const { mockQuery } = vi.hoisted(() => ({
+const { mockQuery, mockCallProvider } = vi.hoisted(() => ({
   mockQuery: vi.fn().mockRejectedValue(new Error("no db")),
+  mockCallProvider: vi.fn(),
 }));
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({ query: mockQuery, on: () => {} }),
 }));
+vi.mock("../src/services/qcoreai/providers", async (orig) => {
+  const real: any = await orig();
+  return {
+    ...real,
+    callProvider: (...args: any[]) => mockCallProvider(...args),
+    resolveProvider: (id?: string) => id || "anthropic",
+  };
+});
 
 import {
   createEvalSuite,
@@ -135,43 +144,93 @@ describe("QCoreEvalSuite (in-memory)", () => {
 });
 
 describe("evalRunner judges", () => {
-  test("contains: case-insensitive by default", () => {
-    expect(judgeCase({ type: "contains", needle: "TL;DR" }, "Here is the TL;DR section").passed).toBe(true);
-    expect(judgeCase({ type: "contains", needle: "tl;dr" }, "Here is the TL;DR section").passed).toBe(true);
-    expect(judgeCase({ type: "contains", needle: "missing" }, "Here is the TL;DR section").passed).toBe(false);
+  test("contains: case-insensitive by default", async () => {
+    expect((await judgeCase({ type: "contains", needle: "TL;DR" }, "Here is the TL;DR section")).passed).toBe(true);
+    expect((await judgeCase({ type: "contains", needle: "tl;dr" }, "Here is the TL;DR section")).passed).toBe(true);
+    expect((await judgeCase({ type: "contains", needle: "missing" }, "Here is the TL;DR section")).passed).toBe(false);
   });
 
-  test("contains: caseSensitive flag works", () => {
-    const j = judgeCase({ type: "contains", needle: "tl;dr", caseSensitive: true }, "TL;DR section");
+  test("contains: caseSensitive flag works", async () => {
+    const j = await judgeCase({ type: "contains", needle: "tl;dr", caseSensitive: true }, "TL;DR section");
     expect(j.passed).toBe(false);
   });
 
-  test("not_contains: passes when needle absent", () => {
+  test("not_contains: passes when needle absent", async () => {
     expect(
-      judgeCase({ type: "not_contains", needle: "as a large language model" }, "Friendly answer here").passed
+      (await judgeCase({ type: "not_contains", needle: "as a large language model" }, "Friendly answer here")).passed
     ).toBe(true);
     expect(
-      judgeCase({ type: "not_contains", needle: "model" }, "as a large language model, I…").passed
+      (await judgeCase({ type: "not_contains", needle: "model" }, "as a large language model, I…")).passed
     ).toBe(false);
   });
 
-  test("equals: trim + case-insensitive defaults", () => {
-    expect(judgeCase({ type: "equals", expected: "Yes" }, "  yes  ").passed).toBe(true);
+  test("equals: trim + case-insensitive defaults", async () => {
+    expect((await judgeCase({ type: "equals", expected: "Yes" }, "  yes  ")).passed).toBe(true);
     expect(
-      judgeCase({ type: "equals", expected: "yes", caseSensitive: true, trim: false }, "Yes").passed
+      (await judgeCase({ type: "equals", expected: "yes", caseSensitive: true, trim: false }, "Yes")).passed
     ).toBe(false);
   });
 
-  test("regex: respects flags + handles invalid pattern", () => {
-    expect(judgeCase({ type: "regex", pattern: "^TL;DR.*", flags: "m" }, "TL;DR\nrest").passed).toBe(true);
-    expect(judgeCase({ type: "regex", pattern: "[unclosed" }, "anything").passed).toBe(false);
+  test("regex: respects flags + handles invalid pattern", async () => {
+    expect((await judgeCase({ type: "regex", pattern: "^TL;DR.*", flags: "m" }, "TL;DR\nrest")).passed).toBe(true);
+    expect((await judgeCase({ type: "regex", pattern: "[unclosed" }, "anything")).passed).toBe(false);
   });
 
-  test("min_length / max_length", () => {
-    expect(judgeCase({ type: "min_length", chars: 5 }, "hello world").passed).toBe(true);
-    expect(judgeCase({ type: "min_length", chars: 50 }, "short").passed).toBe(false);
-    expect(judgeCase({ type: "max_length", chars: 10 }, "short").passed).toBe(true);
-    expect(judgeCase({ type: "max_length", chars: 10 }, "way too long content").passed).toBe(false);
+  test("min_length / max_length", async () => {
+    expect((await judgeCase({ type: "min_length", chars: 5 }, "hello world")).passed).toBe(true);
+    expect((await judgeCase({ type: "min_length", chars: 50 }, "short")).passed).toBe(false);
+    expect((await judgeCase({ type: "max_length", chars: 10 }, "short")).passed).toBe(true);
+    expect((await judgeCase({ type: "max_length", chars: 10 }, "way too long content")).passed).toBe(false);
+  });
+
+  test("llm_judge: parses VERDICT + CONFIDENCE", async () => {
+    mockCallProvider.mockResolvedValueOnce({ reply: "VERDICT: PASS\nCONFIDENCE: 0.92", model: "x", usage: {} });
+    const v = await judgeCase(
+      { type: "llm_judge", rubric: "Output mentions a TL;DR" },
+      "TL;DR: this is the answer."
+    );
+    expect(v.passed).toBe(true);
+    expect(v.reason).toMatch(/PASS @ confidence 0\.92/);
+  });
+
+  test("llm_judge: FAIL verdict marks case failed", async () => {
+    mockCallProvider.mockResolvedValueOnce({ reply: "VERDICT: FAIL\nCONFIDENCE: 0.7", model: "x", usage: {} });
+    const v = await judgeCase(
+      { type: "llm_judge", rubric: "Output is friendly" },
+      "Cold robotic reply."
+    );
+    expect(v.passed).toBe(false);
+    expect(v.reason).toMatch(/FAIL/);
+  });
+
+  test("llm_judge: passThreshold rejects low-confidence PASS", async () => {
+    mockCallProvider.mockResolvedValueOnce({ reply: "VERDICT: PASS\nCONFIDENCE: 0.4", model: "x", usage: {} });
+    const v = await judgeCase(
+      { type: "llm_judge", rubric: "Output is comprehensive", passThreshold: 0.7 },
+      "Some output"
+    );
+    expect(v.passed).toBe(false);
+    expect(v.reason).toMatch(/below confidence threshold 0\.7/);
+  });
+
+  test("llm_judge: unparseable reply fails gracefully", async () => {
+    mockCallProvider.mockResolvedValueOnce({ reply: "I think it's good", model: "x", usage: {} });
+    const v = await judgeCase(
+      { type: "llm_judge", rubric: "x" },
+      "y"
+    );
+    expect(v.passed).toBe(false);
+    expect(v.reason).toMatch(/unparseable/);
+  });
+
+  test("llm_judge: provider error fails gracefully", async () => {
+    mockCallProvider.mockRejectedValueOnce(new Error("rate limit"));
+    const v = await judgeCase(
+      { type: "llm_judge", rubric: "x" },
+      "y"
+    );
+    expect(v.passed).toBe(false);
+    expect(v.reason).toMatch(/llm_judge error: rate limit/);
   });
 
   test("aggregateScore weights cases properly", () => {

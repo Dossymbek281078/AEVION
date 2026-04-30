@@ -33,18 +33,23 @@ import {
   buildHistoryContext,
   createEvalRun,
   createEvalSuite,
+  createPrompt,
   createRun,
   createSharedPreset,
   deleteEvalSuite,
+  deletePrompt,
   deleteSession,
   deleteSharedPreset,
   ensureSession,
   finishRun,
+  forkPrompt,
   getAnalytics,
   getCostTimeseries,
   getEvalRun,
   getEvalSuite,
   getMaxOrdering,
+  getPrompt,
+  getPromptVersionChain,
   getRun,
   getRunByShareToken,
   getSession,
@@ -55,6 +60,8 @@ import {
   insertMessage,
   listEvalSuites,
   listMessages,
+  listPrompts,
+  listPublicPrompts,
   listPublicSharedPresets,
   listRuns,
   listSessions,
@@ -67,8 +74,10 @@ import {
   touchSession,
   unshareRun,
   updateEvalSuite,
+  updatePrompt,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
+import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
 
 export const qcoreaiRouter = Router();
 
@@ -154,6 +163,13 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     const { getPool } = await import("../lib/dbPool");
     await ensureQCoreTables(getPool());
   } catch { /* probe errors are reflected via isDbReady() */ }
+  let guidanceBusKind = "memory";
+  let liveRuns = 0;
+  try {
+    const bus = await getGuidanceBus();
+    guidanceBusKind = bus.kind;
+    liveRuns = bus.liveRuns().length;
+  } catch { /* tolerable */ }
   res.json({
     service: "qcoreai",
     ok: true,
@@ -163,6 +179,8 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     storage: isDbReady() ? "postgres" : "in-memory",
     storageError: isDbReady() ? null : getDbError(),
     webhookConfigured: isWebhookConfigured(),
+    guidanceBus: guidanceBusKind,
+    liveRuns,
     at: new Date().toISOString(),
   });
 });
@@ -738,21 +756,27 @@ const multiAgentLimiter = rateLimit({
  * In-process is fine for single-instance deploys. A multi-instance setup
  * would replace this with Redis pub/sub keyed by runId.
  */
-const liveRunGuidance = new Map<string, string[]>();
-
-function pushGuidance(runId: string, text: string): boolean {
-  const arr = liveRunGuidance.get(runId);
-  if (!arr) return false;
-  arr.push(text);
-  return true;
+// Backend swap: GuidanceBus has both InMemory + Redis impls. With
+// QCORE_REDIS_URL set the bus boots in Redis pub/sub mode so multi-instance
+// deploys can route /guidance to any node. Without it, behavior is the same
+// in-process Map as before. See services/qcoreai/guidanceBus.ts.
+async function pushGuidance(runId: string, text: string): Promise<boolean> {
+  const bus = await getGuidanceBus();
+  return bus.push(runId, text);
 }
 
-function drainGuidance(runId: string): string[] {
-  const arr = liveRunGuidance.get(runId);
-  if (!arr || arr.length === 0) return [];
-  const out = arr.slice();
-  arr.length = 0;
-  return out;
+// Synchronous version for the orchestrator's `guidanceProvider` contract,
+// which is called inside the generator's flow control. The bus's drain is
+// synchronous on both impls (Redis subscriber accumulates into a local
+// buffer; drain reads + clears that buffer), so we expose a sync wrapper
+// using the cached bus reference fetched at run start.
+function drainGuidanceSync(bus: { drain: (id: string) => any }, runId: string): string[] {
+  const result = bus.drain(runId);
+  if (Array.isArray(result)) return result;
+  // Both bus implementations return arrays synchronously; if a future impl
+  // returns a Promise, the orchestrator can't await it — log and drop.
+  console.warn("[QCoreAI] guidance drain returned non-array, dropping");
+  return [];
 }
 
 const guidanceLimiter = rateLimit({
@@ -768,13 +792,17 @@ const guidanceLimiter = rateLimit({
  * Returns 404 if the run has already finished or doesn't exist in this
  * process; the client should treat that as "too late, run is over".
  */
-qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, (req, res) => {
+qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) => {
   const runId = String(req.params.runId || "");
   const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
   if (!text) return res.status(400).json({ error: "text required" });
-  const ok = pushGuidance(runId, text);
-  if (!ok) return res.status(404).json({ error: "run is not live" });
-  return res.json({ ok: true, queueDepth: liveRunGuidance.get(runId)?.length ?? 0 });
+  try {
+    const ok = await pushGuidance(runId, text);
+    if (!ok) return res.status(404).json({ error: "run is not live" });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: "guidance push failed", details: err?.message });
+  }
 });
 
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
@@ -812,6 +840,35 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     writerB: parseAgentOverride(req.body?.overrides?.writerB),
     critic: parseAgentOverride(req.body?.overrides?.critic),
   };
+
+  // V6-P integration: promptOverrides — { role: { promptId? OR content? } }
+  // Either reference a saved prompt by id (owner-scoped fetch) or pass content
+  // inline. The result is merged into overrides[role].systemPrompt so the
+  // orchestrator picks it up via existing AgentOverride.systemPrompt path.
+  const rawPromptOverrides = req.body?.promptOverrides;
+  if (rawPromptOverrides && typeof rawPromptOverrides === "object") {
+    const roles = ["analyst", "writer", "writerB", "critic"] as const;
+    for (const role of roles) {
+      const entry = rawPromptOverrides[role];
+      if (!entry || typeof entry !== "object") continue;
+      let content: string | null = null;
+      if (typeof entry.content === "string" && entry.content.trim()) {
+        content = entry.content.slice(0, 16000);
+      } else if (typeof entry.promptId === "string" && entry.promptId) {
+        try {
+          const p = await getPrompt(entry.promptId);
+          // Owner-only fetch unless prompt is public — same gate as /prompts/:id
+          if (p && (p.isPublic || (userId && p.ownerUserId === userId))) {
+            content = p.content;
+          }
+        } catch { /* ignore — fall through with no override */ }
+      }
+      if (content) {
+        const cur = overrides[role] || {};
+        overrides[role] = { ...cur, systemPrompt: content };
+      }
+    }
+  }
 
   // Pre-fetch any QRight attachments the user wants the agents to reason
   // against. Pulled BEFORE the SSE stream opens so we can fail fast (bad
@@ -902,10 +959,12 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     }
   }
 
-  // Register this run for mid-run guidance. The orchestrator will drain
-  // this queue at each writer-stage boundary; the new
-  // POST /runs/:runId/guidance endpoint pushes into it.
-  liveRunGuidance.set(runId, []);
+  // Register this run for mid-run guidance via the bus. The orchestrator
+  // drains the bus at each writer-stage boundary; POST /runs/:id/guidance
+  // pushes into it. With QCORE_REDIS_URL set, pushes are broadcast across
+  // nodes; otherwise it's an in-process Map.
+  const guidanceBus = await getGuidanceBus();
+  await guidanceBus.register(runId);
 
   const history = await buildHistoryContext(sessionId, 6);
 
@@ -930,7 +989,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       overrides,
       maxRevisions,
       history,
-      guidanceProvider: () => drainGuidance(runId),
+      guidanceProvider: () => drainGuidanceSync(guidanceBus, runId),
       maxCostUsd,
     }) as AsyncGenerator<OrchestratorEvent>) {
       if (aborted) break;
@@ -1084,7 +1143,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   // Deregister mid-run guidance queue regardless of how the run finished.
   // Any guidance posted after this point gets a 404 — accurate.
-  liveRunGuidance.delete(runId);
+  await guidanceBus.unregister(runId);
 
   if (!aborted) {
     send({ type: "sse_end" });
@@ -1234,6 +1293,130 @@ qcoreaiRouter.get("/eval/suites/:id/runs", async (req, res) => {
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: "list eval runs failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompts library (V6-P) — versioned custom system prompts per agent role
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/prompts", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, role, content, parentPromptId, isPublic } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
+    if (typeof content !== "string" || !content.trim()) return res.status(400).json({ error: "content required" });
+    const p = await createPrompt({
+      ownerUserId: auth.sub,
+      name,
+      description: typeof description === "string" ? description : null,
+      role: typeof role === "string" ? role : "writer",
+      content,
+      parentPromptId: typeof parentPromptId === "string" ? parentPromptId : null,
+      isPublic: isPublic === true,
+    });
+    res.json({ ok: true, prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "create prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+    const items = await listPrompts(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list prompts failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/public", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim().slice(0, 80);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const items = await listPublicPrompts(q, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public prompts failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const p = await getPrompt(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "prompt not found" });
+    if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
+      return res.status(404).json({ error: "prompt not found" });
+    }
+    res.json({ prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "get prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const p = await getPrompt(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "prompt not found" });
+    if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
+      return res.status(404).json({ error: "prompt not found" });
+    }
+    const chain = await getPromptVersionChain(String(req.params.id));
+    res.json({ items: chain });
+  } catch (err: any) {
+    res.status(500).json({ error: "version chain failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, role, isPublic } = req.body || {};
+    const p = await updatePrompt(String(req.params.id), auth.sub, {
+      name,
+      description,
+      role,
+      isPublic,
+    });
+    if (!p) return res.status(404).json({ error: "prompt not found or forbidden" });
+    res.json({ prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "update prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deletePrompt(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "prompt not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/prompts/:id/fork", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { content, name } = req.body || {};
+    const forked = await forkPrompt(String(req.params.id), auth.sub, {
+      content: typeof content === "string" ? content : undefined,
+      name: typeof name === "string" ? name : undefined,
+    });
+    if (!forked) return res.status(404).json({ error: "prompt not found or not forkable" });
+    res.json({ ok: true, prompt: forked });
+  } catch (err: any) {
+    res.status(500).json({ error: "fork prompt failed", details: err?.message });
   }
 });
 

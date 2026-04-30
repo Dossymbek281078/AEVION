@@ -1195,7 +1195,8 @@ export type EvalJudge =
   | { type: "regex"; pattern: string; flags?: string }
   | { type: "min_length"; chars: number }
   | { type: "max_length"; chars: number }
-  | { type: "not_contains"; needle: string; caseSensitive?: boolean };
+  | { type: "not_contains"; needle: string; caseSensitive?: boolean }
+  | { type: "llm_judge"; rubric: string; provider?: string; model?: string; passThreshold?: number };
 
 export type EvalCase = {
   id: string;
@@ -1274,6 +1275,15 @@ function normalizeCases(cases: any): EvalCase[] {
       judge = { type: "min_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
     } else if (j.type === "max_length" && Number.isFinite(Number(j.chars))) {
       judge = { type: "max_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
+    } else if (j.type === "llm_judge" && typeof j.rubric === "string" && j.rubric.trim()) {
+      const passThreshold = Number(j.passThreshold);
+      judge = {
+        type: "llm_judge",
+        rubric: String(j.rubric).slice(0, 4000),
+        provider: typeof j.provider === "string" ? j.provider.slice(0, 32) : undefined,
+        model: typeof j.model === "string" ? j.model.slice(0, 64) : undefined,
+        passThreshold: Number.isFinite(passThreshold) ? Math.max(0, Math.min(1, passThreshold)) : undefined,
+      };
     } else {
       continue;
     }
@@ -1519,4 +1529,315 @@ export async function listSuiteRuns(suiteId: string, limit = 30): Promise<EvalRu
     [suiteId, lim]
   );
   return r.rows as EvalRunRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompts library (V6-P)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type PromptRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  role: string;
+  content: string;
+  version: number;
+  parentPromptId: string | null;
+  isPublic: boolean;
+  importCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memPrompts = new Map<string, PromptRow>();
+
+const VALID_PROMPT_ROLES = new Set(["analyst", "writer", "writerB", "critic", "judge", "system"]);
+
+function normalizePromptRole(role: any): string {
+  if (typeof role !== "string") return "writer";
+  return VALID_PROMPT_ROLES.has(role) ? role : "writer";
+}
+
+export async function createPrompt(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  role?: string;
+  content: string;
+  parentPromptId?: string | null;
+  isPublic?: boolean;
+}): Promise<PromptRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (opts.name || "").trim().slice(0, 80);
+  if (!name) throw new Error("prompt name required");
+  const content = (opts.content || "").slice(0, 16000);
+  if (!content.trim()) throw new Error("prompt content required");
+  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
+  const role = normalizePromptRole(opts.role);
+  const isPublic = opts.isPublic === true;
+  const parentPromptId = opts.parentPromptId ? String(opts.parentPromptId) : null;
+
+  // Compute version: parent.version + 1, default 1.
+  let version = 1;
+  if (parentPromptId) {
+    const parent = await getPrompt(parentPromptId);
+    if (parent) version = (parent.version || 1) + 1;
+  }
+
+  if (!isDbReady()) {
+    const row: PromptRow = {
+      id,
+      ownerUserId: opts.ownerUserId,
+      name,
+      description,
+      role,
+      content,
+      version,
+      parentPromptId,
+      isPublic,
+      importCount: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memPrompts.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCorePrompt"
+       ("id","ownerUserId","name","description","role","content","version","parentPromptId","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     RETURNING *`,
+    [id, opts.ownerUserId, name, description, role, content, version, parentPromptId, isPublic]
+  );
+  return r.rows[0] as PromptRow;
+}
+
+export async function getPrompt(id: string): Promise<PromptRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memPrompts.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCorePrompt" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as PromptRow) || null;
+}
+
+export async function listPrompts(userId: string, limit = 100): Promise<PromptRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(500, limit));
+  if (!isDbReady()) {
+    return Array.from(memPrompts.values())
+      .filter((p) => p.ownerUserId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, lim);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCorePrompt"
+      WHERE "ownerUserId"=$1
+      ORDER BY "updatedAt" DESC
+      LIMIT $2`,
+    [userId, lim]
+  );
+  return r.rows as PromptRow[];
+}
+
+export async function listPublicPrompts(query?: string, limit = 30): Promise<PromptRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  const q = (query || "").trim();
+
+  if (!isDbReady()) {
+    let rows = Array.from(memPrompts.values()).filter((p) => p.isPublic);
+    if (q) {
+      const ql = q.toLowerCase();
+      rows = rows.filter(
+        (p) =>
+          p.name.toLowerCase().includes(ql) ||
+          (p.description || "").toLowerCase().includes(ql) ||
+          p.content.toLowerCase().includes(ql)
+      );
+    }
+    rows.sort((a, b) => b.importCount - a.importCount || b.updatedAt.localeCompare(a.updatedAt));
+    return rows.slice(0, lim);
+  }
+  if (q) {
+    const r = await pool.query(
+      `SELECT * FROM "QCorePrompt"
+        WHERE "isPublic"=TRUE
+          AND ("name" ILIKE $1 OR "description" ILIKE $1 OR "content" ILIKE $1)
+        ORDER BY "importCount" DESC, "updatedAt" DESC
+        LIMIT $2`,
+      [`%${q}%`, lim]
+    );
+    return r.rows as PromptRow[];
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCorePrompt"
+      WHERE "isPublic"=TRUE
+      ORDER BY "importCount" DESC, "updatedAt" DESC
+      LIMIT $1`,
+    [lim]
+  );
+  return r.rows as PromptRow[];
+}
+
+export async function updatePrompt(
+  id: string,
+  userId: string,
+  patch: { name?: string; description?: string | null; role?: string; isPublic?: boolean }
+): Promise<PromptRow | null> {
+  await ensureQCoreTables(pool);
+
+  if (!isDbReady()) {
+    const cur = memPrompts.get(id);
+    if (!cur || cur.ownerUserId !== userId) return null;
+    if (patch.name != null) {
+      const v = String(patch.name).trim().slice(0, 80);
+      if (v) cur.name = v;
+    }
+    if (patch.description !== undefined)
+      cur.description = patch.description ? String(patch.description).trim().slice(0, 400) : null;
+    if (patch.role != null) cur.role = normalizePromptRole(patch.role);
+    if (patch.isPublic != null) cur.isPublic = patch.isPublic === true;
+    cur.updatedAt = nowIso();
+    return cur;
+  }
+
+  const sets: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (patch.name != null) {
+    const v = String(patch.name).trim().slice(0, 80);
+    if (v) {
+      sets.push(`"name"=$${i++}`);
+      params.push(v);
+    }
+  }
+  if (patch.description !== undefined) {
+    sets.push(`"description"=$${i++}`);
+    params.push(patch.description ? String(patch.description).trim().slice(0, 400) : null);
+  }
+  if (patch.role != null) {
+    sets.push(`"role"=$${i++}`);
+    params.push(normalizePromptRole(patch.role));
+  }
+  if (patch.isPublic != null) {
+    sets.push(`"isPublic"=$${i++}`);
+    params.push(patch.isPublic === true);
+  }
+  if (!sets.length) return getPrompt(id);
+  sets.push(`"updatedAt"=NOW()`);
+  params.push(id, userId);
+  const r = await pool.query(
+    `UPDATE "QCorePrompt" SET ${sets.join(", ")}
+      WHERE "id"=$${i++} AND "ownerUserId"=$${i++}
+      RETURNING *`,
+    params
+  );
+  return (r.rows?.[0] as PromptRow) || null;
+}
+
+export async function deletePrompt(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const p = memPrompts.get(id);
+    if (!p || p.ownerUserId !== userId) return false;
+    memPrompts.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCorePrompt" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Fork an existing prompt — creates a child version. Owner's own prompts
+ * are forkable freely (creates next version in the chain). Public prompts
+ * by other users get the importCount bumped + a fresh root for the forker.
+ */
+export async function forkPrompt(
+  parentId: string,
+  forkerUserId: string,
+  patch: { content?: string; name?: string }
+): Promise<PromptRow | null> {
+  const parent = await getPrompt(parentId);
+  if (!parent) return null;
+
+  const isOwn = parent.ownerUserId === forkerUserId;
+  const isAccessible = isOwn || parent.isPublic;
+  if (!isAccessible) return null;
+
+  if (!isOwn) {
+    // Bump parent.importCount.
+    if (!isDbReady()) {
+      parent.importCount += 1;
+      parent.updatedAt = nowIso();
+    } else {
+      await pool.query(
+        `UPDATE "QCorePrompt" SET "importCount" = "importCount" + 1, "updatedAt"=NOW() WHERE "id"=$1`,
+        [parentId]
+      );
+    }
+  }
+
+  return createPrompt({
+    ownerUserId: forkerUserId,
+    name: patch.name?.trim() || `${parent.name} (fork)`,
+    description: parent.description,
+    role: parent.role,
+    content: patch.content?.trim() ? patch.content.slice(0, 16000) : parent.content,
+    parentPromptId: isOwn ? parent.id : null,
+    isPublic: false,
+  });
+}
+
+/** Returns the version chain for a prompt: ancestors + descendants. */
+export async function getPromptVersionChain(rootId: string): Promise<PromptRow[]> {
+  await ensureQCoreTables(pool);
+  // Walk up to root, then collect all descendants.
+  const visited = new Set<string>();
+  const chain: PromptRow[] = [];
+
+  // Walk ancestors.
+  let cur = await getPrompt(rootId);
+  while (cur && !visited.has(cur.id)) {
+    visited.add(cur.id);
+    chain.unshift(cur);
+    if (!cur.parentPromptId) break;
+    cur = await getPrompt(cur.parentPromptId);
+  }
+
+  // BFS descendants from every node already in the chain (each ancestor +
+  // the original target). We keep visited for dedup, but the queue starts
+  // populated so descendants of nodes deeper than the root are reachable.
+  if (!chain.length) return [];
+
+  if (!isDbReady()) {
+    const all = Array.from(memPrompts.values());
+    const queue: PromptRow[] = [...chain];
+    while (queue.length) {
+      const node = queue.shift()!;
+      const children = all.filter((p) => p.parentPromptId === node.id && !visited.has(p.id));
+      for (const c of children) {
+        visited.add(c.id);
+        chain.push(c);
+        queue.push(c);
+      }
+    }
+    return chain.sort((a, b) => a.version - b.version);
+  }
+
+  const queue: PromptRow[] = [...chain];
+  while (queue.length) {
+    const node = queue.shift()!;
+    const r = await pool.query(`SELECT * FROM "QCorePrompt" WHERE "parentPromptId"=$1`, [node.id]);
+    for (const child of r.rows as PromptRow[]) {
+      if (visited.has(child.id)) continue;
+      visited.add(child.id);
+      chain.push(child);
+      queue.push(child);
+    }
+  }
+  return chain.sort((a, b) => a.version - b.version);
 }

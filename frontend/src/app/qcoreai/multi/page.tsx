@@ -322,6 +322,16 @@ export default function QCoreMultiAgentPage() {
     writerB: { provider: "", model: "" },
     critic: { provider: "", model: "" },
   });
+  // V6-P integration: per-role custom system prompt selection. Holds the
+  // promptId that the orchestrator will fetch + inject as systemPrompt for
+  // that role. Empty string = use the role's default prompt.
+  const [promptSelections, setPromptSelections] = useState<Record<ConfigRoleId, string>>({
+    analyst: "",
+    writer: "",
+    writerB: "",
+    critic: "",
+  });
+  const [userPrompts, setUserPrompts] = useState<Array<{ id: string; name: string; role: string; version: number }>>([]);
   const [maxRevisions, setMaxRevisions] = useState(1);
   // Optional spend cap per run (USD). 0 = no cap. Persisted in localStorage
   // so investors don't accidentally start a $5 run during a demo.
@@ -436,6 +446,35 @@ export default function QCoreMultiAgentPage() {
       }
     })();
   }, []);
+
+  /* ── Lazy-load user's prompts when config panel opens ── */
+  useEffect(() => {
+    if (!configOpen) return;
+    if (typeof window === "undefined") return;
+    const headers = bearerHeader();
+    if (!("Authorization" in headers)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/qcoreai/prompts?limit=200"), { headers });
+        if (!r.ok || cancelled) return;
+        const data = await r.json();
+        if (!cancelled) {
+          setUserPrompts(
+            (data.items || []).map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              role: p.role,
+              version: p.version,
+            }))
+          );
+        }
+      } catch {
+        /* ignore — prompts panel just stays empty */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [configOpen]);
 
   /* ── Lazy-load personal webhook config when config panel opens ── */
   useEffect(() => {
@@ -941,6 +980,15 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
+      // V6-P integration: send promptOverrides if user picked custom prompts.
+      const promptOverridesBody: Record<string, { promptId: string }> = {};
+      (Object.keys(promptSelections) as ConfigRoleId[]).forEach((role) => {
+        const id = promptSelections[role];
+        if (id) promptOverridesBody[role] = { promptId: id };
+      });
+      if (Object.keys(promptOverridesBody).length > 0) {
+        body.promptOverrides = promptOverridesBody;
+      }
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...bearerHeader() },
@@ -1988,6 +2036,9 @@ export default function QCoreMultiAgentPage() {
                       pricing={pricing}
                       value={overrides[r.id]}
                       onChange={(v) => setOverrides((prev) => ({ ...prev, [r.id]: v }))}
+                      promptId={promptSelections[r.id] || ""}
+                      onPromptChange={(id) => setPromptSelections((prev) => ({ ...prev, [r.id]: id }))}
+                      availablePrompts={userPrompts.filter((p) => p.role === r.id || p.role === "writer" || p.role === "system")}
                     />
                   ))}
               </div>
@@ -2876,6 +2927,9 @@ function RoleConfigCard({
   pricing,
   value,
   onChange,
+  promptId,
+  onPromptChange,
+  availablePrompts,
 }: {
   role: RoleDefault;
   strategy: Strategy;
@@ -2883,6 +2937,9 @@ function RoleConfigCard({
   pricing: PricingRow[];
   value: { provider: string; model: string };
   onChange: (v: { provider: string; model: string }) => void;
+  promptId?: string;
+  onPromptChange?: (id: string) => void;
+  availablePrompts?: Array<{ id: string; name: string; role: string; version: number }>;
 }) {
   const s = roleSlotStyle(role.id, strategy);
   const label = roleSlotLabel(role.id, strategy);
@@ -2959,6 +3016,34 @@ function RoleConfigCard({
         <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>
           <b>${priceRow.inputPer1M.toFixed(2)}</b>/M input · <b>${priceRow.outputPer1M.toFixed(2)}</b>/M output
         </div>
+      )}
+      {onPromptChange && (
+        <>
+          <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#475569", marginTop: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Custom prompt
+          </label>
+          <select
+            value={promptId || ""}
+            onChange={(e) => onPromptChange(e.target.value)}
+            style={{
+              width: "100%", padding: "6px 8px", borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.15)", background: "#fff",
+              fontSize: 12,
+            }}
+          >
+            <option value="">— role default —</option>
+            {(availablePrompts || []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · v{p.version} ({p.role})
+              </option>
+            ))}
+          </select>
+          {(!availablePrompts || availablePrompts.length === 0) && (
+            <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+              No prompts yet — create at <a href="/qcoreai/prompts" style={{ color: "#4f46e5" }}>/qcoreai/prompts</a>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

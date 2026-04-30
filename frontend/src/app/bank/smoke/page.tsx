@@ -71,6 +71,8 @@ const INITIAL_STEPS: Step[] = [
   { key: "chessResults", label: "GET /api/cyberchess/results", status: "pending" },
   { key: "planetPayouts", label: "GET /api/planet/payouts", status: "pending" },
   { key: "capStatus", label: "GET /api/qtrade/cap-status (peek shape)", status: "pending" },
+  { key: "hmacSelfTest", label: "POST /api/bank/hmac-self-test (HMAC end-to-end)", status: "pending" },
+  { key: "cursorPagination", label: "GET /api/qright/royalties?limit=1 (cursor shape)", status: "pending" },
 ];
 
 function readToken(): string {
@@ -495,6 +497,66 @@ export default function BankSmokePage() {
         }
       } catch (e: any) {
         failAndStop("capStatus", `network: ${e?.message || "unknown"}`);
+      }
+      if (cancelRef.current) return;
+
+      // 17. HMAC webhook self-test — verifies the X-Aevion-Signature path
+      // works end-to-end (server signs with each webhook secret + posts
+      // back to its own /verify-webhook). Catches secret-rotation drift
+      // and partial-deploy states without leaking secrets to the browser.
+      update("hmacSelfTest", { status: "running" });
+      try {
+        const { res, data, ms } = await fetchJson("/api/bank/hmac-self-test", {
+          method: "POST",
+          token: ctx.token,
+        });
+        if (res.ok && data?.ok && Array.isArray(data?.results) && data.results.length === 3) {
+          const summary = data.results
+            .map((x: { kind: string; status: number }) => `${x.kind}=${x.status}`)
+            .join(", ");
+          update("hmacSelfTest", { status: "pass", ms, http: res.status, detail: summary });
+        } else {
+          failAndStop(
+            "hmacSelfTest",
+            data?.error || `HMAC self-test failed (${res.status})`,
+            res.status,
+          );
+        }
+      } catch (e: any) {
+        failAndStop("hmacSelfTest", `network: ${e?.message || "unknown"}`);
+      }
+      if (cancelRef.current) return;
+
+      // 18. Cursor-pagination shape — request limit=1 and assert that
+      // the response shape matches the contract documented on /bank/api
+      // ({ items, total, nextCursor }). Doesn't depend on having any
+      // royalties recorded — total can be 0, nextCursor can be null.
+      update("cursorPagination", { status: "running" });
+      try {
+        const { res, data, ms } = await fetchJson("/api/qright/royalties?limit=1", {
+          token: ctx.token,
+        });
+        const okShape =
+          res.ok &&
+          Array.isArray(data?.items) &&
+          typeof data.total === "number" &&
+          (data.nextCursor === null || typeof data.nextCursor === "string");
+        if (okShape) {
+          update("cursorPagination", {
+            status: "pass",
+            ms,
+            http: res.status,
+            detail: `total=${data.total}, nextCursor=${data.nextCursor ?? "null"}`,
+          });
+        } else {
+          failAndStop(
+            "cursorPagination",
+            data?.error || `pagination shape invalid (${res.status})`,
+            res.status,
+          );
+        }
+      } catch (e: any) {
+        failAndStop("cursorPagination", `network: ${e?.message || "unknown"}`);
       }
     } finally {
       setTotalMs(Math.round(performance.now() - t0));

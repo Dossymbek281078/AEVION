@@ -77,6 +77,7 @@ import {
   updatePrompt,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
+import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
 
 export const qcoreaiRouter = Router();
 
@@ -162,6 +163,13 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     const { getPool } = await import("../lib/dbPool");
     await ensureQCoreTables(getPool());
   } catch { /* probe errors are reflected via isDbReady() */ }
+  let guidanceBusKind = "memory";
+  let liveRuns = 0;
+  try {
+    const bus = await getGuidanceBus();
+    guidanceBusKind = bus.kind;
+    liveRuns = bus.liveRuns().length;
+  } catch { /* tolerable */ }
   res.json({
     service: "qcoreai",
     ok: true,
@@ -171,6 +179,8 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     storage: isDbReady() ? "postgres" : "in-memory",
     storageError: isDbReady() ? null : getDbError(),
     webhookConfigured: isWebhookConfigured(),
+    guidanceBus: guidanceBusKind,
+    liveRuns,
     at: new Date().toISOString(),
   });
 });
@@ -746,21 +756,27 @@ const multiAgentLimiter = rateLimit({
  * In-process is fine for single-instance deploys. A multi-instance setup
  * would replace this with Redis pub/sub keyed by runId.
  */
-const liveRunGuidance = new Map<string, string[]>();
-
-function pushGuidance(runId: string, text: string): boolean {
-  const arr = liveRunGuidance.get(runId);
-  if (!arr) return false;
-  arr.push(text);
-  return true;
+// Backend swap: GuidanceBus has both InMemory + Redis impls. With
+// QCORE_REDIS_URL set the bus boots in Redis pub/sub mode so multi-instance
+// deploys can route /guidance to any node. Without it, behavior is the same
+// in-process Map as before. See services/qcoreai/guidanceBus.ts.
+async function pushGuidance(runId: string, text: string): Promise<boolean> {
+  const bus = await getGuidanceBus();
+  return bus.push(runId, text);
 }
 
-function drainGuidance(runId: string): string[] {
-  const arr = liveRunGuidance.get(runId);
-  if (!arr || arr.length === 0) return [];
-  const out = arr.slice();
-  arr.length = 0;
-  return out;
+// Synchronous version for the orchestrator's `guidanceProvider` contract,
+// which is called inside the generator's flow control. The bus's drain is
+// synchronous on both impls (Redis subscriber accumulates into a local
+// buffer; drain reads + clears that buffer), so we expose a sync wrapper
+// using the cached bus reference fetched at run start.
+function drainGuidanceSync(bus: { drain: (id: string) => any }, runId: string): string[] {
+  const result = bus.drain(runId);
+  if (Array.isArray(result)) return result;
+  // Both bus implementations return arrays synchronously; if a future impl
+  // returns a Promise, the orchestrator can't await it — log and drop.
+  console.warn("[QCoreAI] guidance drain returned non-array, dropping");
+  return [];
 }
 
 const guidanceLimiter = rateLimit({
@@ -776,13 +792,17 @@ const guidanceLimiter = rateLimit({
  * Returns 404 if the run has already finished or doesn't exist in this
  * process; the client should treat that as "too late, run is over".
  */
-qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, (req, res) => {
+qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) => {
   const runId = String(req.params.runId || "");
   const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
   if (!text) return res.status(400).json({ error: "text required" });
-  const ok = pushGuidance(runId, text);
-  if (!ok) return res.status(404).json({ error: "run is not live" });
-  return res.json({ ok: true, queueDepth: liveRunGuidance.get(runId)?.length ?? 0 });
+  try {
+    const ok = await pushGuidance(runId, text);
+    if (!ok) return res.status(404).json({ error: "run is not live" });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: "guidance push failed", details: err?.message });
+  }
 });
 
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
@@ -910,10 +930,12 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     }
   }
 
-  // Register this run for mid-run guidance. The orchestrator will drain
-  // this queue at each writer-stage boundary; the new
-  // POST /runs/:runId/guidance endpoint pushes into it.
-  liveRunGuidance.set(runId, []);
+  // Register this run for mid-run guidance via the bus. The orchestrator
+  // drains the bus at each writer-stage boundary; POST /runs/:id/guidance
+  // pushes into it. With QCORE_REDIS_URL set, pushes are broadcast across
+  // nodes; otherwise it's an in-process Map.
+  const guidanceBus = await getGuidanceBus();
+  await guidanceBus.register(runId);
 
   const history = await buildHistoryContext(sessionId, 6);
 
@@ -938,7 +960,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       overrides,
       maxRevisions,
       history,
-      guidanceProvider: () => drainGuidance(runId),
+      guidanceProvider: () => drainGuidanceSync(guidanceBus, runId),
       maxCostUsd,
     }) as AsyncGenerator<OrchestratorEvent>) {
       if (aborted) break;
@@ -1092,7 +1114,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   // Deregister mid-run guidance queue regardless of how the run finished.
   // Any guidance posted after this point gets a 404 — accurate.
-  liveRunGuidance.delete(runId);
+  await guidanceBus.unregister(runId);
 
   if (!aborted) {
     send({ type: "sse_end" });

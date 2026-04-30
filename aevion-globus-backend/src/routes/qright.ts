@@ -1430,6 +1430,71 @@ qrightRouter.get("/admin/audit", async (req, res) => {
   }
 });
 
+// 🔹 Admin per-source breakdown — aggregated topSources across ALL objects
+//    Useful for abuse detection: which third-party hosts are loading the
+//    most badges, and how many distinct works they're scraping. Owner-only
+//    topSources (in /objects/:id/stats) shows the same for one work; this
+//    rolls them up. Privacy is preserved by reusing the same hostname-only
+//    bucket from QRightFetchSource (no path/UA/IP).
+qrightRouter.get("/admin/sources", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!isQRightAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+
+    const daysRaw = parseInt(String(req.query.days || "30"), 10);
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, daysRaw)) : 30;
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 50;
+
+    // Group by sourceHost over the window. Per-row UNIQUE objectId count tells
+    // operators whether a host is scraping one work hard or many works thinly.
+    const result = await pool.query(
+      `SELECT "sourceHost",
+              SUM("fetches")::bigint AS total,
+              COUNT(DISTINCT "objectId")::int AS objects
+       FROM "QRightFetchSource"
+       WHERE "day" >= (CURRENT_DATE - ($1::int * INTERVAL '1 day'))
+       GROUP BY "sourceHost"
+       ORDER BY total DESC
+       LIMIT $2`,
+      [days, limit]
+    );
+
+    const rows = result.rows.map(
+      (r: { sourceHost: string; total: string | number; objects: number }) => ({
+        host: r.sourceHost,
+        totalFetches: Number(r.total) || 0,
+        uniqueObjects: Number(r.objects) || 0,
+      })
+    );
+    const totalFetches = rows.reduce(
+      (acc: number, r: { totalFetches: number }) => acc + r.totalFetches,
+      0
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      days,
+      windowStart: new Date(Date.now() - days * 86400 * 1000).toISOString().slice(0, 10),
+      windowEnd: new Date().toISOString().slice(0, 10),
+      uniqueHosts: rows.length,
+      totalFetches,
+      hosts: rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
 // 🔹 Admin probe — lets the frontend /admin/qright check role without leaking data
 qrightRouter.get("/admin/whoami", async (req, res) => {
   const auth = verifyBearerOptional(req);

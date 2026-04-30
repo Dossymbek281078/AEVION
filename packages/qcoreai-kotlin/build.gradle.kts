@@ -14,8 +14,9 @@ repositories {
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
-    testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation(kotlin("test-junit5"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
 
 kotlin {

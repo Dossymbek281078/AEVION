@@ -511,6 +511,38 @@ buildRouter.get("/vacancies/:id", async (req, res) => {
   }
 });
 
+// PATCH /api/build/vacancies/:id — toggle status (project owner or admin)
+buildRouter.patch("/vacancies/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const status = vEnum(req.body?.status, "status", VACANCY_STATUSES);
+    if (!status.ok) return fail(res, 400, status.error);
+
+    const row = await pool.query(
+      `SELECT v."id", p."clientId"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_project_owner_can_update_vacancy");
+    }
+
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET "status" = $1 WHERE "id" = $2 RETURNING *`,
+      [status.value, id],
+    );
+    return ok(res, result.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_update_failed", { details: (err as Error).message });
+  }
+});
+
 // ──────────────────────────────────────────────────────────────────────
 // Applications
 // ──────────────────────────────────────────────────────────────────────

@@ -225,7 +225,10 @@ app.get("/api/openapi.json", (_req, res) => {
         post: { summary: "Create vacancy (project owner only)" },
       },
       "/api/build/vacancies/by-project/{id}": { get: { summary: "Vacancies for a project" } },
-      "/api/build/vacancies/{id}": { get: { summary: "Vacancy detail + project link" } },
+      "/api/build/vacancies/{id}": {
+        get: { summary: "Vacancy detail + project link" },
+        patch: { summary: "Toggle vacancy status OPEN/CLOSED (project owner or admin)" },
+      },
       "/api/build/applications": { post: { summary: "Apply to vacancy (Bearer required)" } },
       "/api/build/applications/my": { get: { summary: "My applications" } },
       "/api/build/applications/by-vacancy/{id}": { get: { summary: "Vacancy applications (owner only)" } },

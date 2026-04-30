@@ -80,13 +80,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             {project.budget > 0 && <span>· Budget ${project.budget.toLocaleString()}</span>}
           </div>
         </div>
-        <div className="text-right text-xs text-slate-400">
+        <div className="flex items-start gap-2">
+          <ShareButton projectId={project.id} />
           {client && (
-            <>
+            <div className="text-right text-xs text-slate-400">
               <div>Posted by</div>
               <div className="text-sm font-medium text-slate-200">{client.name}</div>
               <div>{client.email}</div>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -115,7 +116,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {vacancies.map((v) => (
-                  <VacancyCard key={v.id} vacancy={v} />
+                  <div key={v.id} className="space-y-1.5">
+                    <VacancyCard vacancy={v} />
+                    {isOwner && <VacancyOwnerToggle vacancy={v} onUpdated={refresh} />}
+                  </div>
                 ))}
               </div>
             )}
@@ -156,6 +160,68 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </aside>
       </div>
     </BuildShell>
+  );
+}
+
+function ShareButton({ projectId }: { projectId: string }) {
+  const [copied, setCopied] = useState(false);
+  const onClick = useCallback(() => {
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/build/p/${projectId}`
+        : `/build/p/${projectId}`;
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(url)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+        })
+        .catch(() => {});
+    }
+  }, [projectId]);
+  return (
+    <button
+      onClick={onClick}
+      title="Copy public link to clipboard"
+      className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/10"
+    >
+      {copied ? "✓ Link copied" : "🔗 Share"}
+    </button>
+  );
+}
+
+function VacancyOwnerToggle({
+  vacancy,
+  onUpdated,
+}: {
+  vacancy: BuildVacancy;
+  onUpdated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const isClosed = vacancy.status === "CLOSED";
+  return (
+    <button
+      disabled={busy}
+      onClick={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setBusy(true);
+        try {
+          await buildApi.updateVacancy(vacancy.id, isClosed ? "OPEN" : "CLOSED");
+          onUpdated();
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className={`w-full rounded-md px-2.5 py-1 text-xs ${
+        isClosed
+          ? "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+          : "bg-white/5 text-slate-300 hover:bg-white/10"
+      }`}
+    >
+      {busy ? "…" : isClosed ? "↻ Reopen vacancy" : "✕ Close vacancy"}
+    </button>
   );
 }
 

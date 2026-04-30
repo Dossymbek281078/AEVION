@@ -232,6 +232,8 @@ export const buildApi = {
     ),
   getVacancy: (id: string) =>
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
+  updateVacancy: (id: string, status: VacancyStatus) =>
+    call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
 
   // Applications
   apply: (input: { vacancyId: string; message?: string }) =>

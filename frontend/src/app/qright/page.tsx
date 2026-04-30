@@ -1398,9 +1398,15 @@ export default function QRightPage() {
                                 ✗ {w.lastError || "failed"}
                               </span>
                             )}
+                            <Link
+                              href={`/qright/webhooks/${encodeURIComponent(w.id)}`}
+                              style={{ marginLeft: "auto", padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.4)", background: "transparent", color: "#0d9488", fontSize: 10, fontWeight: 800, cursor: "pointer", textDecoration: "none" }}
+                            >
+                              Log & retry →
+                            </Link>
                             <button
                               onClick={() => deleteWebhook(w.id)}
-                              style={{ marginLeft: "auto", padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.4)", background: "transparent", color: "#dc2626", fontSize: 10, fontWeight: 800, cursor: "pointer" }}
+                              style={{ padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(220,38,38,0.4)", background: "transparent", color: "#dc2626", fontSize: 10, fontWeight: 800, cursor: "pointer" }}
                             >
                               Delete
                             </button>

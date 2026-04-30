@@ -10,7 +10,8 @@
     "test": "node --test tests/integration.test.mjs",
     "backup": "node scripts/backup.mjs",
     "backup:list": "node scripts/restore.mjs --list",
-    "restore": "node scripts/restore.mjs"
+    "restore": "node scripts/restore.mjs",
+    "migrate:ecosystem": "node scripts/migrate-ecosystem-to-pg.mjs"
   },
   "keywords": [],
   "author": "",

@@ -128,7 +128,113 @@ async function ensureQRightTable() {
     `CREATE INDEX IF NOT EXISTS "QRightWebhook_owner_idx" ON "QRightWebhook" ("ownerUserId");`
   );
 
+  // Per-attempt webhook delivery log (v1.2). Lets owners see exactly what
+  // was sent, when, and why a delivery failed — and lets them re-issue the
+  // same body via POST /webhooks/:id/retry/:deliveryId. We store the raw
+  // request body so a retry uses the original payload (not a fresh one
+  // built around the current revokedAt timestamp), which preserves the
+  // signature semantics for the receiver's idempotency keys.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QRightWebhookDelivery" (
+      "id" TEXT PRIMARY KEY,
+      "webhookId" TEXT NOT NULL,
+      "objectId" TEXT,
+      "eventType" TEXT NOT NULL,
+      "requestBody" TEXT NOT NULL,
+      "statusCode" INTEGER,
+      "ok" BOOLEAN NOT NULL DEFAULT FALSE,
+      "error" TEXT,
+      "deliveredAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "isRetry" BOOLEAN NOT NULL DEFAULT FALSE
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QRightWebhookDelivery_webhook_idx" ON "QRightWebhookDelivery" ("webhookId", "deliveredAt" DESC);`
+  );
+
   ensuredTable = true;
+}
+
+// Single delivery attempt: sign, POST, persist a delivery row, update the
+// webhook's last* status. Returns the inserted delivery row id so callers
+// can correlate / retry by id. Body is the raw JSON we'll send AND the
+// payload we sign — receiver verifies HMAC against this exact byte stream.
+//
+// Best-effort error handling: this never throws. Even an outright DB failure
+// while writing the delivery log is swallowed (warn-logged) so the original
+// revoke flow remains unaffected.
+async function attemptWebhookDelivery(opts: {
+  webhookId: string;
+  url: string;
+  secret: string;
+  body: string;
+  eventType: string;
+  objectId: string | null;
+  isRetry: boolean;
+}): Promise<{ ok: boolean; statusCode: number | null; error: string | null }> {
+  const sig = crypto.createHmac("sha256", opts.secret).update(opts.body).digest("hex");
+  let ok = false;
+  let statusCode: number | null = null;
+  let error: string | null = null;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch(opts.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "AEVION-QRight-Webhook/1.0",
+        "X-AEVION-Event": opts.eventType,
+        "X-AEVION-Signature": `sha256=${sig}`,
+      },
+      body: opts.body,
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    statusCode = r.status;
+    ok = r.ok;
+    if (!r.ok) error = `HTTP ${r.status}`;
+  } catch (err) {
+    error = (err as Error).message.slice(0, 500);
+  }
+
+  // Persist log row + bump per-webhook last* counters in parallel.
+  pool
+    .query(
+      `INSERT INTO "QRightWebhookDelivery"
+         ("id", "webhookId", "objectId", "eventType", "requestBody", "statusCode", "ok", "error", "isRetry")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        crypto.randomUUID(),
+        opts.webhookId,
+        opts.objectId,
+        opts.eventType,
+        opts.body,
+        statusCode,
+        ok,
+        error,
+        opts.isRetry,
+      ]
+    )
+    .catch((e: Error) => {
+      console.warn(`[qright] delivery log insert failed:`, e.message);
+    });
+  if (ok) {
+    pool
+      .query(
+        `UPDATE "QRightWebhook" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
+        [opts.webhookId]
+      )
+      .catch(() => {});
+  } else {
+    pool
+      .query(
+        `UPDATE "QRightWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
+        [opts.webhookId, error || "delivery failed"]
+      )
+      .catch(() => {});
+  }
+  return { ok, statusCode, error };
 }
 
 // Fan out a revoke event to every webhook registered by the object's owner.
@@ -169,47 +275,15 @@ function triggerRevokeWebhooks(
           revokedBy: payload.revokedBy,
           deliveredAt: new Date().toISOString(),
         });
-        const sig = crypto.createHmac("sha256", wh.secret).update(body).digest("hex");
-        try {
-          // 5s timeout so a hanging endpoint doesn't tie up the connection
-          // pool for one of the per-DB workers.
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 5000);
-          const r = await fetch(wh.url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "User-Agent": "AEVION-QRight-Webhook/1.0",
-              "X-AEVION-Event": "qright.object.revoked",
-              "X-AEVION-Signature": `sha256=${sig}`,
-            },
-            body,
-            signal: ctrl.signal,
-          });
-          clearTimeout(t);
-          if (r.ok) {
-            pool
-              .query(
-                `UPDATE "QRightWebhook" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
-                [wh.id]
-              )
-              .catch(() => {});
-          } else {
-            pool
-              .query(
-                `UPDATE "QRightWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
-                [wh.id, `HTTP ${r.status}`]
-              )
-              .catch(() => {});
-          }
-        } catch (err) {
-          pool
-            .query(
-              `UPDATE "QRightWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
-              [wh.id, (err as Error).message.slice(0, 500)]
-            )
-            .catch(() => {});
-        }
+        await attemptWebhookDelivery({
+          webhookId: wh.id,
+          url: wh.url,
+          secret: wh.secret,
+          body,
+          eventType: "qright.object.revoked",
+          objectId,
+          isRetry: false,
+        });
       }
     })
     .catch((err: Error) => {
@@ -238,26 +312,9 @@ function recordAudit(
     });
 }
 
-// Extract a privacy-safe bucket key from the Referer header.
-// We keep only the hostname (no path, no query, no port, no protocol)
-// and lowercase + strip leading "www." so example.com and www.example.com
-// share a row. Anything that doesn't parse → "(direct)".
-function refererHost(req: { headers: Record<string, string | string[] | undefined> }): string {
-  const raw = req.headers["referer"] || req.headers["referrer"];
-  const ref = Array.isArray(raw) ? raw[0] : raw;
-  if (!ref || typeof ref !== "string") return "(direct)";
-  try {
-    const u = new URL(ref);
-    let host = u.hostname.toLowerCase();
-    if (host.startsWith("www.")) host = host.slice(4);
-    if (!host) return "(direct)";
-    // Defensive cap — a malformed/abusive Referer with a 2 KB hostname
-    // shouldn't be allowed to bloat the row.
-    return host.slice(0, 253);
-  } catch {
-    return "(direct)";
-  }
-}
+// Pure helpers (no DB / no IO) live in src/lib/qrightHelpers.ts so vitest
+// can exercise them in isolation. Imported here unchanged.
+import { readExpectedHash, timingSafeHexEq, refererHost } from "../lib/qrightHelpers";
 
 // Best-effort counter bump — fire-and-forget. Errors here must never break
 // the embed/badge response, since these endpoints are loaded by third parties.
@@ -677,8 +734,20 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
         ? row.revokedAt.getTime()
         : new Date(row.revokedAt).getTime()
       : 0;
-    // ETag must change on revoke so cached badges flip without manual purge.
-    const etag = `W/"qright-embed-${row.id}-${createdAtMs}-${revokedAtMs}"`;
+    // SRI-like integrity gate (v1.2): caller pins the contentHash they were
+    // built around. We compare in constant time and report match/mismatch
+    // as a separate field, leaving `status` (registered/revoked) untouched
+    // so existing consumers don't break. The expected-hash is folded into
+    // the ETag so a client polling with the same pin gets a stable 304 even
+    // if another caller hits the same id with a different pin.
+    const expectedHash = readExpectedHash(req.query as Record<string, unknown>);
+    const storedHashLower = (row.contentHash || "").toLowerCase();
+    const hashStatus: "match" | "mismatch" | "unspecified" = expectedHash
+      ? timingSafeHexEq(expectedHash, storedHashLower)
+        ? "match"
+        : "mismatch"
+      : "unspecified";
+    const etag = `W/"qright-embed-${row.id}-${createdAtMs}-${revokedAtMs}-${hashStatus}"`;
 
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -697,6 +766,8 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       kind: row.kind,
       contentHashPrefix: row.contentHash.slice(0, 16),
       contentHash: row.contentHash,
+      expectedHash,
+      hashStatus,
       ownerName: row.ownerName,
       country: row.country,
       city: row.city,
@@ -733,10 +804,16 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     const theme = String(req.query.theme || "dark").toLowerCase() === "light" ? "light" : "dark";
 
     const result = await pool.query(
-      `SELECT id, kind, "createdAt", "revokedAt"
+      `SELECT id, kind, "contentHash", "createdAt", "revokedAt"
        FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
       [id]
     );
+
+    // SRI-like pin (v1.2): if a pin was supplied and doesn't match the
+    // stored contentHash, the badge flips to a HASH MISMATCH state — even
+    // when the underlying object is still active. This protects third-party
+    // sites whose embed snippet was generated against a specific contentHash.
+    const expectedHash = readExpectedHash(req.query as Record<string, unknown>);
 
     function svgShell(left: string, right: string, rightFill: string): string {
       // Approximate text widths (Verdana 11px ≈ 6.6px/char for uppercase).
@@ -785,6 +862,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     const row = result.rows[0] as {
       id: string;
       kind: string;
+      contentHash: string;
       createdAt: Date | string;
       revokedAt: Date | string | null;
     };
@@ -795,7 +873,15 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
         ? row.revokedAt.getTime()
         : new Date(row.revokedAt).getTime()
       : 0;
-    const etag = `W/"qright-badge-${row.id}-${createdAt.getTime()}-${revokedAtMs}-${theme}"`;
+    const storedHashLower = (row.contentHash || "").toLowerCase();
+    const hashStatus: "match" | "mismatch" | "unspecified" = expectedHash
+      ? timingSafeHexEq(expectedHash, storedHashLower)
+        ? "match"
+        : "mismatch"
+      : "unspecified";
+    // ETag includes hashStatus so a CDN doesn't cache a "match" variant
+    // and serve it to a caller passing a different (or no) pin.
+    const etag = `W/"qright-badge-${row.id}-${createdAt.getTime()}-${revokedAtMs}-${theme}-${hashStatus}"`;
 
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -813,6 +899,15 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
       res.setHeader("ETag", etag);
       res.setHeader("Cache-Control", "public, max-age=300");
       return res.send(svgShell("AEVION QRIGHT", `REVOKED · ${dateLabel}`, "#dc2626"));
+    }
+
+    if (hashStatus === "mismatch") {
+      // Pinned hash didn't match — surface as orange to distinguish from
+      // revocation. Tells the embedding site that the content has drifted
+      // from what they originally generated their snippet against.
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.send(svgShell("AEVION QRIGHT", `HASH MISMATCH · ${dateLabel}`, "#ea580c"));
     }
 
     const right = `${row.kind.toUpperCase()} · ${dateLabel}`;
@@ -1365,6 +1460,71 @@ qrightRouter.get("/admin/audit", async (req, res) => {
   }
 });
 
+// 🔹 Admin per-source breakdown — aggregated topSources across ALL objects
+//    Useful for abuse detection: which third-party hosts are loading the
+//    most badges, and how many distinct works they're scraping. Owner-only
+//    topSources (in /objects/:id/stats) shows the same for one work; this
+//    rolls them up. Privacy is preserved by reusing the same hostname-only
+//    bucket from QRightFetchSource (no path/UA/IP).
+qrightRouter.get("/admin/sources", async (req, res) => {
+  try {
+    await ensureQRightTable();
+
+    const auth = verifyBearerOptional(req);
+    if (!isQRightAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+
+    const daysRaw = parseInt(String(req.query.days || "30"), 10);
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, daysRaw)) : 30;
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 50;
+
+    // Group by sourceHost over the window. Per-row UNIQUE objectId count tells
+    // operators whether a host is scraping one work hard or many works thinly.
+    const result = await pool.query(
+      `SELECT "sourceHost",
+              SUM("fetches")::bigint AS total,
+              COUNT(DISTINCT "objectId")::int AS objects
+       FROM "QRightFetchSource"
+       WHERE "day" >= (CURRENT_DATE - ($1::int * INTERVAL '1 day'))
+       GROUP BY "sourceHost"
+       ORDER BY total DESC
+       LIMIT $2`,
+      [days, limit]
+    );
+
+    const rows = result.rows.map(
+      (r: { sourceHost: string; total: string | number; objects: number }) => ({
+        host: r.sourceHost,
+        totalFetches: Number(r.total) || 0,
+        uniqueObjects: Number(r.objects) || 0,
+      })
+    );
+    const totalFetches = rows.reduce(
+      (acc: number, r: { totalFetches: number }) => acc + r.totalFetches,
+      0
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      days,
+      windowStart: new Date(Date.now() - days * 86400 * 1000).toISOString().slice(0, 10),
+      windowEnd: new Date().toISOString().slice(0, 10),
+      uniqueHosts: rows.length,
+      totalFetches,
+      hosts: rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      name: err.name,
+      details: err.message,
+    });
+  }
+});
+
 // 🔹 Admin probe — lets the frontend /admin/qright check role without leaking data
 qrightRouter.get("/admin/whoami", async (req, res) => {
   const auth = verifyBearerOptional(req);
@@ -1582,6 +1742,167 @@ qrightRouter.delete("/webhooks/:id", async (req, res) => {
       return res.status(404).json({ error: "Not found" });
     }
     res.json({ id, deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 PATCH /webhooks/:id — edit URL without re-creating (which would
+//    rotate the secret and invalidate any HMAC verification on the
+//    receiver's side). Only the URL is mutable; secret stays put. 404
+//    masks "not yours" identically to "not found" so ids can't be probed.
+qrightRouter.patch("/webhooks/:id", async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "Bearer token required" });
+
+    const id = String(req.params.id);
+    const url = String(req.body?.url || "").trim();
+    if (!url || url.length > 500) {
+      return res.status(400).json({ error: "url required (≤ 500 chars)" });
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ error: "url must start with http:// or https://" });
+    }
+
+    const result = await pool.query(
+      `UPDATE "QRightWebhook"
+         SET "url" = $1
+       WHERE "id" = $2 AND "ownerUserId" = $3
+       RETURNING "id", "url"`,
+      [url, id, auth.sub]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    res.json({ id: result.rows[0].id, url: result.rows[0].url, updated: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 GET /webhooks/:id/deliveries — list recent attempts. Owner-scoped.
+//    Default 50, max 200. Returns the raw requestBody so the owner can
+//    diff what they sent vs what the receiver expected (or feed it into
+//    a manual signature check).
+qrightRouter.get("/webhooks/:id/deliveries", async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "Bearer token required" });
+
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    // Ownership check via JOIN — we don't expose deliveries for someone
+    // else's webhook even if the caller knows the webhookId.
+    const own = await pool.query(
+      `SELECT "id" FROM "QRightWebhook" WHERE "id" = $1 AND "ownerUserId" = $2 LIMIT 1`,
+      [id, auth.sub]
+    );
+    if (own.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const result = await pool.query(
+      `SELECT "id", "objectId", "eventType", "requestBody", "statusCode", "ok", "error", "deliveredAt", "isRetry"
+       FROM "QRightWebhookDelivery"
+       WHERE "webhookId" = $1
+       ORDER BY "deliveredAt" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      webhookId: id,
+      total: result.rowCount,
+      items: result.rows.map(
+        (r: {
+          id: string;
+          objectId: string | null;
+          eventType: string;
+          requestBody: string;
+          statusCode: number | null;
+          ok: boolean;
+          error: string | null;
+          deliveredAt: Date | string;
+          isRetry: boolean;
+        }) => ({
+          id: r.id,
+          objectId: r.objectId,
+          eventType: r.eventType,
+          requestBody: r.requestBody,
+          statusCode: r.statusCode,
+          ok: r.ok,
+          error: r.error,
+          deliveredAt:
+            r.deliveredAt instanceof Date ? r.deliveredAt.toISOString() : r.deliveredAt,
+          isRetry: r.isRetry,
+        })
+      ),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 POST /webhooks/:id/retry/:deliveryId — re-issue the same body the
+//    original attempt used. Preserves HMAC signature semantics so
+//    receivers using idempotency keys can dedup. Only the owner can retry.
+qrightRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "Bearer token required" });
+
+    const webhookId = String(req.params.id);
+    const deliveryId = String(req.params.deliveryId);
+
+    // One JOIN to fetch both the (owner-scoped) webhook AND the original
+    // delivery payload — saves a round-trip and keeps the ownership gate
+    // tight (the WHERE filters on ownerUserId).
+    const lookup = await pool.query(
+      `SELECT w."id" AS "webhookId", w."url", w."secret",
+              d."requestBody", d."eventType", d."objectId"
+       FROM "QRightWebhook" w
+       JOIN "QRightWebhookDelivery" d
+         ON d."webhookId" = w."id"
+       WHERE w."id" = $1 AND w."ownerUserId" = $2 AND d."id" = $3
+       LIMIT 1`,
+      [webhookId, auth.sub, deliveryId]
+    );
+    if (lookup.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    const row = lookup.rows[0] as {
+      webhookId: string;
+      url: string;
+      secret: string;
+      requestBody: string;
+      eventType: string;
+      objectId: string | null;
+    };
+
+    const result = await attemptWebhookDelivery({
+      webhookId: row.webhookId,
+      url: row.url,
+      secret: row.secret,
+      body: row.requestBody,
+      eventType: row.eventType,
+      objectId: row.objectId,
+      isRetry: true,
+    });
+
+    res.json({
+      webhookId,
+      retriedDeliveryId: deliveryId,
+      ok: result.ok,
+      statusCode: result.statusCode,
+      error: result.error,
+    });
   } catch (err: any) {
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }

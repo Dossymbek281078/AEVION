@@ -67,18 +67,35 @@ export default function QRightBadgePage({
   const { id } = usePromise(params);
   const { showToast } = useToast();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  // SRI-like pin (v1.2): when enabled, badge/embed URLs append ?expected-hash=<sha256>.
+  // The third-party site that drops the snippet is now guaranteed that drift in the
+  // registered contentHash will visibly flip the badge orange (HASH MISMATCH).
+  const [pinHash, setPinHash] = useState(false);
   const [data, setData] = useState<EmbedData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const badgePath = useMemo(
-    () => apiUrl(`/api/qright/badge/${encodeURIComponent(id)}.svg?theme=${theme}`),
-    [id, theme]
-  );
-  const embedPath = useMemo(
+  // Plain (no pin) URL is used for the initial fetch so we can read the
+  // contentHash without already needing to know it.
+  const embedPathPlain = useMemo(
     () => apiUrl(`/api/qright/embed/${encodeURIComponent(id)}`),
     [id]
   );
+  const pinSuffix = pinHash && data?.contentHash
+    ? `&expected-hash=${data.contentHash.toLowerCase()}`
+    : "";
+  const badgePath = useMemo(
+    () =>
+      apiUrl(`/api/qright/badge/${encodeURIComponent(id)}.svg?theme=${theme}${pinSuffix}`),
+    [id, theme, pinSuffix]
+  );
+  const embedPath = useMemo(() => {
+    const base = apiUrl(`/api/qright/embed/${encodeURIComponent(id)}`);
+    if (!pinSuffix) return base;
+    // pinSuffix starts with "&" because it's appended to a URL that already has ?theme=…;
+    // for embed we want a leading "?" instead.
+    return `${base}?${pinSuffix.slice(1)}`;
+  }, [id, pinSuffix]);
 
   const [origin, setOrigin] = useState("");
   useEffect(() => {
@@ -98,7 +115,7 @@ export default function QRightBadgePage({
     let alive = true;
     setLoading(true);
     setError(null);
-    fetch(embedPath, { headers: { Accept: "application/json" } })
+    fetch(embedPathPlain, { headers: { Accept: "application/json" } })
       .then(async (r) => {
         const json = (await r.json()) as EmbedData;
         if (!alive) return;
@@ -116,7 +133,7 @@ export default function QRightBadgePage({
     return () => {
       alive = false;
     };
-  }, [embedPath, id]);
+  }, [embedPathPlain, id]);
 
   function copy(text: string, label: string) {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -218,7 +235,7 @@ fetch("${absoluteEmbedUrl}")
                     style={{ display: "block" }}
                   />
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>Theme:</span>
                   {(["dark", "light"] as const).map((t) => (
                     <button
@@ -234,7 +251,46 @@ fetch("${absoluteEmbedUrl}")
                       {t}
                     </button>
                   ))}
+                  {data?.contentHash && (
+                    <label
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#0f172a",
+                        marginLeft: 12,
+                        cursor: "pointer",
+                      }}
+                      title="Pin the current contentHash so the badge flips orange (HASH MISMATCH) if the registered content drifts on the server. Recommended for high-trust embeds."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={pinHash}
+                        onChange={(e) => setPinHash(e.target.checked)}
+                      />
+                      Pin contentHash (SRI-like)
+                    </label>
+                  )}
                 </div>
+                {pinHash && data?.contentHash && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 11,
+                      color: "#475569",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Snippets below now include{" "}
+                    <code style={{ fontSize: 10, background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>
+                      ?expected-hash={data.contentHash.slice(0, 16)}…
+                    </code>
+                    . If the registered content ever drifts, the badge flips orange and the JSON
+                    response sets <code style={{ fontSize: 10 }}>hashStatus: &quot;mismatch&quot;</code>.
+                  </div>
+                )}
               </div>
 
               <div style={{ ...card, marginBottom: 20 }}>

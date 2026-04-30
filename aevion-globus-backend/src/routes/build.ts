@@ -246,6 +246,92 @@ buildRouter.get("/profiles/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/profiles/search — recruiter-facing talent search
+//   Auth gate: any signed-in user can search (plan-based limits enforced
+//   later when billing wiring lands). Anonymous gets 401 so we can
+//   tighten plan limits without a public escape hatch.
+//   Query: ?q= title/summary/description, ?skill= comma-separated AND,
+//          ?city=, ?role= CLIENT/CONTRACTOR/WORKER, ?minExp= years,
+//          ?openToWork=1 (default = include only openToWork=true if set),
+//          ?limit= 1..50 (default 30)
+//   Returns sanitized profile rows (no email, no phone).
+buildRouter.get("/profiles/search", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const params: unknown[] = [];
+    const where: string[] = [];
+
+    if (typeof req.query.q === "string" && req.query.q.trim()) {
+      params.push(`%${req.query.q.trim()}%`);
+      where.push(
+        `(p."name" ILIKE $${params.length} OR p."title" ILIKE $${params.length} OR p."summary" ILIKE $${params.length} OR p."description" ILIKE $${params.length})`,
+      );
+    }
+    if (typeof req.query.city === "string" && req.query.city.trim()) {
+      params.push(`%${req.query.city.trim()}%`);
+      where.push(`p."city" ILIKE $${params.length}`);
+    }
+    if (typeof req.query.role === "string") {
+      const r = vEnum(req.query.role, "role", BUILD_ROLES);
+      if (!r.ok) return fail(res, 400, r.error);
+      params.push(r.value);
+      where.push(`p."buildRole" = $${params.length}`);
+    }
+    if (req.query.minExp !== undefined) {
+      const v = vNumber(req.query.minExp, "minExp", { min: 0, max: 80 });
+      if (!v.ok) return fail(res, 400, v.error);
+      params.push(Math.round(v.value));
+      where.push(`p."experienceYears" >= $${params.length}`);
+    }
+    if (req.query.openToWork === "1" || req.query.openToWork === "true") {
+      where.push(`p."openToWork" = TRUE`);
+    }
+    // skill= comma-separated → all-required match against skillsJson
+    // (case-insensitive substring on the JSON-encoded text — no need
+    // for a separate join table at this scale).
+    if (typeof req.query.skill === "string" && req.query.skill.trim()) {
+      const skills = req.query.skill
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && s.length <= 60)
+        .slice(0, 10);
+      for (const s of skills) {
+        params.push(`%"${s.replace(/"/g, "")}%`);
+        where.push(`p."skillsJson" ILIKE $${params.length}`);
+      }
+    }
+
+    const limitRaw = req.query.limit !== undefined
+      ? vNumber(req.query.limit, "limit", { min: 1, max: 50 })
+      : { ok: true as const, value: 30 };
+    if (limitRaw.ok === false) return fail(res, 400, limitRaw.error);
+    params.push(limitRaw.value);
+
+    const result = await pool.query(
+      `SELECT p."userId", p."name", p."city", p."buildRole",
+              p."title", p."summary", p."skillsJson", p."languagesJson",
+              p."salaryMin", p."salaryMax", p."salaryCurrency",
+              p."availability", p."experienceYears", p."photoUrl",
+              p."openToWork", p."updatedAt"
+       FROM "BuildProfile" p
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY p."openToWork" DESC, p."updatedAt" DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    const items = result.rows.map((r: Record<string, unknown>) => ({
+      ...r,
+      skills: safeParseJson(r.skillsJson, [] as string[]),
+      languages: safeParseJson(r.languagesJson, [] as string[]),
+    }));
+    return ok(res, { items, total: result.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "profiles_search_failed", { details: (err as Error).message });
+  }
+});
+
 // ── Experience CRUD ──────────────────────────────────────────────────
 
 // POST /api/build/experiences — add an experience entry

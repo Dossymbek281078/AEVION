@@ -211,6 +211,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/profiles/{id}": {
         get: { summary: "Public resume bundle (profile + skills/languages + experiences + education) — cache 60s" },
       },
+      "/api/build/profiles/search": {
+        get: { summary: "Talent search (?q=&skill=a,b,c&city=&role=&minExp=&openToWork=1&limit=) — Bearer required" },
+      },
       "/api/build/experiences": { post: { summary: "Add a work experience entry to own profile" } },
       "/api/build/experiences/{id}": { delete: { summary: "Delete experience (owner only)" } },
       "/api/build/education": { post: { summary: "Add an education entry to own profile" } },

@@ -59,6 +59,25 @@ export type BuildEducation = {
   createdAt: string;
 };
 
+export type TalentRow = {
+  userId: string;
+  name: string;
+  city: string | null;
+  buildRole: BuildRole;
+  title: string | null;
+  summary: string | null;
+  skills: string[];
+  languages: string[];
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  availability: string | null;
+  experienceYears: number;
+  photoUrl: string | null;
+  openToWork: boolean;
+  updatedAt: string;
+};
+
 export type BuildResumeBundle = BuildProfile & {
   email: string | null;
   experiences: BuildExperience[];
@@ -255,6 +274,29 @@ export const buildApi = {
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
+  searchProfiles: (q?: {
+    q?: string;
+    skill?: string;
+    city?: string;
+    role?: BuildRole;
+    minExp?: number;
+    openToWork?: boolean;
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (q?.q) params.set("q", q.q);
+    if (q?.skill) params.set("skill", q.skill);
+    if (q?.city) params.set("city", q.city);
+    if (q?.role) params.set("role", q.role);
+    if (q?.minExp != null) params.set("minExp", String(q.minExp));
+    if (q?.openToWork) params.set("openToWork", "1");
+    if (q?.limit) params.set("limit", String(q.limit));
+    const qs = params.toString();
+    return call<{ items: TalentRow[]; total: number }>(
+      "GET",
+      `/api/build/profiles/search${qs ? "?" + qs : ""}`,
+    );
+  },
   addExperience: (input: {
     title: string;
     company: string;

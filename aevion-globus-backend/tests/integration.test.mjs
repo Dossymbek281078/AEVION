@@ -20,6 +20,7 @@
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import express from "express";
 import jwt from "jsonwebtoken";
 
@@ -251,6 +252,48 @@ describe("ecosystem + royalties + chess + planet", () => {
     assert.match(text, /aevion_accounts_total \d+/);
     assert.match(text, /aevion_uptime_seconds \d+/);
     assert.match(text, /aevion_sentry_enabled \d/);
+  });
+
+  it("qright webhook accepts valid HMAC signature", async () => {
+    const body = {
+      eventId: "hmac-evt-1",
+      email: "hmac-creator@aevion.test",
+      productKey: "album-hmac",
+      period: "2026-Q2",
+      amount: 7,
+    };
+    const ts = Math.floor(Date.now() / 1000);
+    // Mirror server-side stableStringify: sort keys alphabetically.
+    const sorted = JSON.stringify(body, Object.keys(body).sort());
+    const sig = createHmac("sha256", "test-qright")
+      .update(`${ts}.${sorted}`)
+      .digest("hex");
+    const r = await post("/api/qright/royalties/verify-webhook", body, {
+      "X-Aevion-Timestamp": String(ts),
+      "X-Aevion-Signature": sig,
+    });
+    assert.equal(r.status, 201);
+  });
+
+  it("qright webhook rejects HMAC outside timestamp window", async () => {
+    const body = {
+      eventId: "hmac-evt-stale",
+      email: "stale@aevion.test",
+      productKey: "p",
+      period: "2026",
+      amount: 1,
+    };
+    // 10 minutes in the past — outside the 5-minute default tolerance.
+    const ts = Math.floor(Date.now() / 1000) - 600;
+    const sorted = JSON.stringify(body, Object.keys(body).sort());
+    const sig = createHmac("sha256", "test-qright")
+      .update(`${ts}.${sorted}`)
+      .digest("hex");
+    const r = await post("/api/qright/royalties/verify-webhook", body, {
+      "X-Aevion-Timestamp": String(ts),
+      "X-Aevion-Signature": sig,
+    });
+    assert.equal(r.status, 401);
   });
 
   it("planet webhook + payouts round-trip", async () => {

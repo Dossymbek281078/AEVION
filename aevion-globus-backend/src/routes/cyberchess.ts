@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
+import { verifyWebhookSig } from "../lib/webhookSig";
 import {
   chessPrizes,
   ensureEcosystemLoaded,
@@ -90,10 +91,15 @@ cyberchessRouter.get("/upcoming", (_req, res) => {
 const WEBHOOK_SECRET = process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook";
 
 cyberchessRouter.post("/tournament-finalized", async (req, res) => {
-  const provided = req.headers["x-cyberchess-secret"];
-  const tokenStr = Array.isArray(provided) ? provided[0] : provided;
-  if (!tokenStr || tokenStr !== WEBHOOK_SECRET) {
-    return res.status(401).json({ error: "invalid webhook secret" });
+  const verdict = verifyWebhookSig({
+    signature: req.headers["x-aevion-signature"],
+    timestamp: req.headers["x-aevion-timestamp"],
+    legacySecret: req.headers["x-cyberchess-secret"],
+    body: req.body,
+    secret: WEBHOOK_SECRET,
+  });
+  if (!verdict.ok) {
+    return res.status(401).json({ error: "invalid webhook signature", reason: verdict.reason });
   }
   await ensureEcosystemLoaded();
 

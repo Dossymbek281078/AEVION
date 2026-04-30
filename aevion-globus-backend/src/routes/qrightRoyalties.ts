@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
+import { verifyWebhookSig } from "../lib/webhookSig";
 import {
   ensureEcosystemLoaded,
   royaltyEvents,
@@ -62,10 +63,15 @@ const WEBHOOK_SECRET = process.env.QRIGHT_WEBHOOK_SECRET || "dev-qright-webhook"
 const seenWebhookIds = new Set<string>();
 
 qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
-  const provided = req.headers["x-qright-secret"];
-  const tokenStr = Array.isArray(provided) ? provided[0] : provided;
-  if (!tokenStr || tokenStr !== WEBHOOK_SECRET) {
-    return res.status(401).json({ error: "invalid webhook secret" });
+  const verdict = verifyWebhookSig({
+    signature: req.headers["x-aevion-signature"],
+    timestamp: req.headers["x-aevion-timestamp"],
+    legacySecret: req.headers["x-qright-secret"],
+    body: req.body,
+    secret: WEBHOOK_SECRET,
+  });
+  if (!verdict.ok) {
+    return res.status(401).json({ error: "invalid webhook signature", reason: verdict.reason });
   }
   await ensureEcosystemLoaded();
 

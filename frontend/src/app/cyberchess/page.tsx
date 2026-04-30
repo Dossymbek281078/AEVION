@@ -505,6 +505,12 @@ export default function CyberChessPage(){
   const[repertoire,sRepertoire]=useState<Repertoire>(()=>loadRepertoire());
   const[repertoireOpen,sRepertoireOpen]=useState(false);
   const[famousOpen,sFamousOpen]=useState(false);
+  const[showOnboarding,sShowOnboarding]=useState(()=>{try{return typeof window!=="undefined"&&!localStorage.getItem("aevion_cc_visited_v1")}catch{return false}});
+  useEffect(()=>{
+    if(!showOnboarding)return;
+    const t=setTimeout(()=>{sShowOnboarding(false);try{localStorage.setItem("aevion_cc_visited_v1","1")}catch{}},22000);
+    return()=>clearTimeout(t);
+  },[showOnboarding]);
   useEffect(()=>{saveRepertoire(repertoire)},[repertoire]);
   const repMatches=useMemo(()=>matchHist(repertoire,hist,pCol),[repertoire,hist,pCol]);
   const inBook=repMatches.some(m=>m.matchedPlies===hist.length);
@@ -4730,6 +4736,31 @@ export default function CyberChessPage(){
         </div>
       </div>
     </Modal>
+
+    {/* First-time onboarding floating card */}
+    {showOnboarding&&<div role="dialog" aria-label="Welcome"
+      style={{position:"fixed",right:24,bottom:24,zIndex:90,maxWidth:320,padding:16,
+        background:"linear-gradient(135deg,#0e766e,#14b8a6)",color:"#fff",
+        borderRadius:14,boxShadow:"0 20px 60px rgba(14,118,110,0.4)",
+        animation:"cc-fade-in 360ms ease-out"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <span style={{fontSize:22}}>♞</span>
+        <span style={{fontSize:14,fontWeight:900,letterSpacing:0.3}}>Добро пожаловать в AEVION CyberChess!</span>
+      </div>
+      <ul style={{margin:0,paddingLeft:18,fontSize:12,lineHeight:1.6,listStyle:"disc"}}>
+        <li><b>Quick Start</b> — играй с AI прямо сейчас (6 ботов с характерами)</li>
+        <li><b>🌐 С другом</b> — играй с другом по ссылке (P2P, без аккаунта)</li>
+        <li><b>📚 Репертуар</b> — сохраняй любимые дебютные линии (хоткей <kbd style={{padding:"1px 4px",borderRadius:3,background:"rgba(0,0,0,0.25)",fontSize:10}}>R</kbd>)</li>
+        <li><b>🏆 Великие партии</b> — учись на классике (хоткей <kbd style={{padding:"1px 4px",borderRadius:3,background:"rgba(0,0,0,0.25)",fontSize:10}}>G</kbd>)</li>
+        <li><b>🎓 Coach</b> — твой ИИ-тренер на базе Claude Opus</li>
+      </ul>
+      <div style={{display:"flex",gap:6,marginTop:12,justifyContent:"flex-end"}}>
+        <button onClick={()=>{sShowOnboarding(false);try{localStorage.setItem("aevion_cc_visited_v1","1")}catch{}}}
+          style={{padding:"5px 14px",border:"1px solid rgba(255,255,255,0.3)",background:"transparent",color:"#fff",borderRadius:6,fontSize:12,fontWeight:800,cursor:"pointer"}}>
+          Понял
+        </button>
+      </div>
+    </div>}
 
     {/* Famous Games library modal */}
     <Modal open={famousOpen} onClose={()=>sFamousOpen(false)} size="lg"

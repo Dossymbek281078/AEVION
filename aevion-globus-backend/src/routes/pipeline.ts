@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
@@ -208,6 +209,25 @@ async function ensureTables(): Promise<void> {
   );
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsUpgradedAt" TIMESTAMPTZ;`,
+  );
+
+  // Tier 2: append-only admin audit (force-revoke, etc).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PipelineAuditLog" (
+      "id" TEXT PRIMARY KEY,
+      "action" TEXT NOT NULL,
+      "certId" TEXT,
+      "objectId" TEXT,
+      "actor" TEXT,
+      "payload" JSONB,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_at_idx" ON "PipelineAuditLog" ("at" DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_action_at_idx" ON "PipelineAuditLog" ("action", "at" DESC);`,
   );
 
   tablesReady = true;
@@ -2117,4 +2137,170 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
       res.status(500).json({ error: msg });
     }
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 2: transparency + admin + audit
+// (Embed/badge for individual certs lives at /api/bureau/cert/:certId/* —
+//  Bureau owns the per-cert public surface; Pipeline owns lifecycle ops.)
+// ─────────────────────────────────────────────────────────────────────────
+
+function pipelineAdminEmailsAllowlist(): Set<string> {
+  const raw = String(process.env.PIPELINE_ADMIN_EMAILS || "").trim();
+  if (!raw) return new Set();
+  return new Set(
+    raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+  );
+}
+
+function isPipelineAdmin(req: Request): { ok: boolean; email: string | null; reason: string | null } {
+  const auth = String(req.headers.authorization || "");
+  if (!auth.startsWith("Bearer ")) return { ok: false, email: null, reason: "no-bearer" };
+  const token = auth.slice(7).trim();
+  try {
+    const secret = process.env.JWT_SECRET || "dev-secret-change-me";
+    const decoded = jwt.verify(token, secret) as Record<string, unknown>;
+    const email = String(decoded.email || "").toLowerCase();
+    const role = String(decoded.role || "").toLowerCase();
+    if (role === "admin") return { ok: true, email, reason: null };
+    const allow = pipelineAdminEmailsAllowlist();
+    if (allow.has(email)) return { ok: true, email, reason: null };
+    return { ok: false, email, reason: "not-in-allowlist" };
+  } catch {
+    return { ok: false, email: null, reason: "invalid-token" };
+  }
+}
+
+async function logPipelineAudit(opts: {
+  action: string;
+  certId: string | null;
+  objectId: string | null;
+  actor: string | null;
+  payload: Record<string, unknown> | null;
+}): Promise<void> {
+  await pool
+    .query(
+      `INSERT INTO "PipelineAuditLog" ("id","action","certId","objectId","actor","payload")
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        crypto.randomUUID(),
+        opts.action,
+        opts.certId,
+        opts.objectId,
+        opts.actor,
+        opts.payload ? JSON.stringify(opts.payload) : null,
+      ]
+    )
+    .catch(() => {});
+}
+
+// 🔹 GET /transparency — public counts only (no PII).
+pipelineRouter.get("/transparency", async (_req, res) => {
+  try {
+    await ensureTables();
+    const totals = await pool.query(
+      `SELECT COUNT(*)::int AS "n",
+              SUM(CASE WHEN "status"='active' THEN 1 ELSE 0 END)::int AS "active",
+              SUM(CASE WHEN "status"='revoked' THEN 1 ELSE 0 END)::int AS "revoked"
+       FROM "IPCertificate"`
+    );
+    const byKind = await pool.query(
+      `SELECT "kind","status", COUNT(*)::int AS "n"
+       FROM "IPCertificate" GROUP BY "kind","status" ORDER BY "n" DESC`
+    );
+    const byCountry = await pool.query(
+      `SELECT "country", COUNT(*)::int AS "n"
+       FROM "IPCertificate" WHERE "country" IS NOT NULL
+       GROUP BY "country" ORDER BY "n" DESC LIMIT 10`
+    );
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      totals: {
+        certificates: totals.rows[0]?.n || 0,
+        active: totals.rows[0]?.active || 0,
+        revoked: totals.rows[0]?.revoked || 0,
+      },
+      byKind: byKind.rows.map((r: any) => ({ kind: r.kind, status: r.status, count: r.n })),
+      topCountries: byCountry.rows.map((r: any) => ({ country: r.country, count: r.n })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "transparency failed", details: err.message });
+  }
+});
+
+// 🔹 Admin probe.
+pipelineRouter.get("/admin/whoami", (req, res) => {
+  const a = isPipelineAdmin(req);
+  res.json({ isAdmin: a.ok, email: a.email, reason: a.reason });
+});
+
+// 🔹 Admin: list certs (?status, ?kind, ?q, ?limit≤200).
+pipelineRouter.get("/admin/certificates", async (req, res) => {
+  const a = isPipelineAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureTables();
+  const status = String(req.query.status || "").trim();
+  const kind = String(req.query.kind || "").trim();
+  const q = String(req.query.q || "").trim();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+  const conds: string[] = [];
+  const args: any[] = [];
+  if (status) { args.push(status); conds.push(`"status" = $${args.length}`); }
+  if (kind) { args.push(kind); conds.push(`"kind" = $${args.length}`); }
+  if (q && q.length >= 2) { args.push(`%${q}%`); conds.push(`"title" ILIKE $${args.length}`); }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  args.push(limit);
+  const r = await pool.query(
+    `SELECT "id","objectId","title","kind","authorName","country","status","protectedAt","authorVerificationLevel"
+     FROM "IPCertificate" ${where}
+     ORDER BY "protectedAt" DESC LIMIT $${args.length}`,
+    args
+  );
+  res.json({ items: r.rows });
+});
+
+// 🔹 Admin: force-revoke a cert (reason required, audit logged).
+pipelineRouter.post("/admin/certificate/:certId/revoke", async (req, res) => {
+  const a = isPipelineAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureTables();
+  const certId = String(req.params.certId);
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
+  if (!reason) return res.status(400).json({ error: "reason_required" });
+  const cur = await pool.query(
+    `SELECT "id","objectId","status" FROM "IPCertificate" WHERE "id" = $1`,
+    [certId]
+  );
+  if (cur.rowCount === 0) return res.status(404).json({ error: "cert_not_found" });
+  if (cur.rows[0].status === "revoked") return res.status(409).json({ error: "already_revoked" });
+  await pool.query(`UPDATE "IPCertificate" SET "status" = 'revoked' WHERE "id" = $1`, [certId]);
+  await logPipelineAudit({
+    action: "admin.revoke-cert",
+    certId,
+    objectId: cur.rows[0].objectId,
+    actor: a.email,
+    payload: { reason, prevStatus: cur.rows[0].status },
+  });
+  res.json({ ok: true });
+});
+
+// 🔹 Admin: audit reader.
+pipelineRouter.get("/admin/audit", async (req, res) => {
+  const a = isPipelineAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureTables();
+  const action = String(req.query.action || "").trim();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+  const args: any[] = [];
+  let where = "";
+  if (action) { args.push(action); where = `WHERE "action" = $1`; }
+  args.push(limit);
+  const r = await pool.query(
+    `SELECT "id","action","certId","objectId","actor","payload","at"
+     FROM "PipelineAuditLog" ${where}
+     ORDER BY "at" DESC LIMIT $${args.length}`,
+    args
+  );
+  res.json({ items: r.rows });
 });

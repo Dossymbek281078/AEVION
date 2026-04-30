@@ -424,6 +424,98 @@ export default function BankApiDocsPage() {
         </div>
       </section>
 
+      <section
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          border: "1px solid rgba(124,58,237,0.18)",
+          padding: 16,
+          marginBottom: 18,
+        }}
+      >
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#7c3aed", marginBottom: 8 }}>
+          Webhook signing (recommended)
+        </div>
+        <p style={{ fontSize: 13, color: "#1e293b", margin: "0 0 10px 0", lineHeight: 1.55 }}>
+          Webhook receivers (<code>/api/qright/royalties/verify-webhook</code>,{" "}
+          <code>/api/cyberchess/tournament-finalized</code>,{" "}
+          <code>/api/planet/payouts/certify-webhook</code>) accept Stripe-style HMAC
+          signatures with a ±5min timestamp window. The legacy{" "}
+          <code>X-QRight-Secret</code> / <code>X-CyberChess-Secret</code> /{" "}
+          <code>X-Planet-Secret</code> bearer-style headers still work as a fallback —
+          they will be removed once partners migrate (set{" "}
+          <code>WEBHOOK_REQUIRE_HMAC=1</code> on the backend to disable fallback).
+        </p>
+        <pre
+          style={{
+            background: "rgba(15,23,42,0.06)",
+            borderRadius: 8,
+            padding: 10,
+            fontSize: 12,
+            fontFamily: "ui-monospace, monospace",
+            margin: "0 0 8px 0",
+            overflowX: "auto",
+            whiteSpace: "pre",
+          }}
+        >{`# Sign with shared secret + sorted-key body. Headers:
+#   X-Aevion-Timestamp: <unix-seconds>
+#   X-Aevion-Signature: hex(HMAC-SHA256(\`\${ts}.\${stableJson}\`, secret))
+
+ts=$(date +%s)
+body='{"amount":12.34,"email":"creator@example.com","eventId":"evt_001","period":"2026-Q1","productKey":"album-x"}'
+sig=$(printf "%s.%s" "$ts" "$body" | openssl dgst -sha256 -hmac "$QRIGHT_WEBHOOK_SECRET" | awk '{print $2}')
+
+curl -X POST $BASE/api/qright/royalties/verify-webhook \\
+  -H "Content-Type: application/json" \\
+  -H "X-Aevion-Timestamp: $ts" \\
+  -H "X-Aevion-Signature: $sig" \\
+  -d "$body"`}</pre>
+        <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.55 }}>
+          <strong>Stable serialization:</strong> partners must serialize the body with
+          alphabetically-sorted keys before signing — same convention QSign uses.{" "}
+          <strong>Replay protection:</strong> requests outside ±300s of server time
+          return <code>401 timestamp skew</code>.
+        </div>
+      </section>
+
+      <section
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          border: "1px solid rgba(13,148,136,0.18)",
+          padding: 16,
+          marginBottom: 18,
+        }}
+      >
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0d9488", marginBottom: 8 }}>
+          Cursor pagination
+        </div>
+        <p style={{ fontSize: 13, color: "#1e293b", margin: "0 0 10px 0", lineHeight: 1.55 }}>
+          Five list endpoints accept <code>?limit=&cursor=</code> query parameters
+          (default <code>limit=50</code>, max <code>200</code>):{" "}
+          <code>/api/qtrade/operations</code>, <code>/api/qtrade/transfers</code>,{" "}
+          <code>/api/qright/royalties</code>, <code>/api/cyberchess/results</code>,{" "}
+          <code>/api/planet/payouts</code>. The response shape is{" "}
+          <code>{"{ items, total, nextCursor }"}</code>. When <code>nextCursor</code>{" "}
+          is non-null, request the next page with{" "}
+          <code>?cursor=&lt;value&gt;</code>; when null, the list is exhausted.
+        </p>
+        <pre
+          style={{
+            background: "rgba(15,23,42,0.06)",
+            borderRadius: 8,
+            padding: 10,
+            fontSize: 12,
+            fontFamily: "ui-monospace, monospace",
+            margin: 0,
+            overflowX: "auto",
+            whiteSpace: "pre",
+          }}
+        >{`curl "$BASE/api/qright/royalties?limit=50" -H "Authorization: Bearer $TOKEN"
+# → { "items": [...50], "total": 213, "nextCursor": "roy_abc..." }
+curl "$BASE/api/qright/royalties?limit=50&cursor=roy_abc..." -H "Authorization: Bearer $TOKEN"`}</pre>
+      </section>
+
       {ENDPOINTS.map((group, gi) => (
         <section key={gi} style={{ marginBottom: 22 }}>
           <h2 style={{ fontSize: 15, fontWeight: 900, margin: "0 0 10px 0", letterSpacing: 0.2, color: "#475569", textTransform: "uppercase" }}>

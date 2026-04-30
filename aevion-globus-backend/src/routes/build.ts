@@ -1675,25 +1675,54 @@ ${vacBlock}`;
 });
 
 // POST /api/build/ai/parse-resume — extract structured AEVION resume
-// schema from a free-form text dump (PDF text, OCR'd image, voice
-// transcript). Returns { parsed: {...} } and lets the frontend show a
-// preview before hitting POST /profiles to merge.
+// schema from either:
+//   { text: string } — free-form text dump (PDF text, voice transcript, paste)
+//   { imageBase64, imageMediaType } — photo or scan of a resume (Claude vision)
+// Returns { parsed: {...} } and lets the frontend show a preview before
+// hitting POST /profiles to merge.
 buildRouter.post("/ai/parse-resume", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
-    const text = vString(req.body?.text, "text", { min: 20, max: 60_000 });
-    if (!text.ok) return fail(res, 400, text.error);
+    const hasImage =
+      typeof req.body?.imageBase64 === "string" && req.body.imageBase64.length > 0;
+    const hasText = typeof req.body?.text === "string" && req.body.text.trim().length > 0;
+    if (!hasImage && !hasText) return fail(res, 400, "text_or_image_required");
 
-    const { callClaude, RESUME_PARSER_SYSTEM_PROMPT } = await import("../lib/build/ai");
+    const { callClaude, callClaudeMultimodal, RESUME_PARSER_SYSTEM_PROMPT } = await import("../lib/build/ai");
 
-    const reply = await callClaude({
-      systemPrompt: RESUME_PARSER_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: text.value }],
-      maxTokens: 4096,
-      cacheSystem: true,
-    });
+    let reply;
+    if (hasImage) {
+      const mt = String(req.body.imageMediaType || "image/jpeg");
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+      if (!allowed.includes(mt)) return fail(res, 400, "unsupported_image_type", { allowed });
+      // Cap the base64 payload at ~6 MB to stay well under Express's
+      // 1 MB JSON limit unless the caller explicitly bumped it. The
+      // route's app-level json limit is 1 MB — frontend should
+      // downscale before send. We surface a clean error if not.
+      if (req.body.imageBase64.length > 8_500_000) {
+        return fail(res, 413, "image_too_large", { maxBytesBase64: 8_500_000 });
+      }
+      reply = await callClaudeMultimodal({
+        systemPrompt: RESUME_PARSER_SYSTEM_PROMPT,
+        userContent: [
+          { type: "image", source: { type: "base64", media_type: mt, data: String(req.body.imageBase64) } },
+          { type: "text", text: "Распарси это резюме в строгий JSON по схеме AEVION Resume Schema v2." },
+        ],
+        maxTokens: 4096,
+        cacheSystem: true,
+      });
+    } else {
+      const text = vString(req.body?.text, "text", { min: 20, max: 60_000 });
+      if (!text.ok) return fail(res, 400, text.error);
+      reply = await callClaude({
+        systemPrompt: RESUME_PARSER_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: text.value }],
+        maxTokens: 4096,
+        cacheSystem: true,
+      });
+    }
 
     // Defensive parse — strip ```json fences if the model added them.
     const stripped = reply.text

@@ -29,7 +29,9 @@ const app = express();
 const PORT = process.env.PORT || 4001;
 
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+// 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
+// Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
+app.use(express.json({ limit: "10mb" }));
 
 // Health-check
 app.get("/health", (_req, res) => {

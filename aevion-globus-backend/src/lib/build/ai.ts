@@ -7,6 +7,13 @@ const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+export type MultimodalUserBlock =
+  | { type: "text"; text: string }
+  | {
+      type: "image";
+      source: { type: "base64"; media_type: string; data: string };
+    };
+
 export type ClaudeReply = {
   text: string;
   inputTokens: number;
@@ -35,6 +42,38 @@ export async function callClaude(opts: {
     system,
     messages: opts.messages.map((m) => ({ role: m.role, content: m.content })),
   };
+
+  return callClaudeRaw(body);
+}
+
+/** Vision-capable variant: accept a single user turn with multimodal content. */
+export async function callClaudeMultimodal(opts: {
+  systemPrompt: string;
+  userContent: MultimodalUserBlock[];
+  maxTokens?: number;
+  model?: string;
+  cacheSystem?: boolean;
+}): Promise<ClaudeReply> {
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
+
+  const system = opts.cacheSystem
+    ? [{ type: "text", text: opts.systemPrompt, cache_control: { type: "ephemeral" } }]
+    : opts.systemPrompt;
+
+  const body = {
+    model: opts.model || DEFAULT_MODEL,
+    max_tokens: opts.maxTokens ?? 4096,
+    system,
+    messages: [{ role: "user" as const, content: opts.userContent }],
+  };
+
+  return callClaudeRaw(body);
+}
+
+async function callClaudeRaw(body: Record<string, unknown>): Promise<ClaudeReply> {
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
 
   const r = await fetch(ANTHROPIC_URL, {
     method: "POST",

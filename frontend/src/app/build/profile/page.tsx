@@ -13,6 +13,8 @@ import {
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { VoiceInput } from "@/components/build/VoiceInput";
+import { ResumeImporter } from "@/components/build/ResumeImporter";
+import { AiCoachChat } from "@/components/build/AiCoachChat";
 
 export default function ProfilePage() {
   return (
@@ -98,6 +100,17 @@ function ProfileBody() {
           <p className="mb-5 text-sm text-slate-400">
             Tell clients and project owners who you are. Required to apply for vacancies.
           </p>
+
+          <div className="mb-4">
+            <ResumeImporter
+              onApplied={async () => {
+                const m = await buildApi.me().catch(() => ({ profile: null }));
+                setProfile(m.profile);
+                loadResume();
+              }}
+            />
+          </div>
+
           {error && <p className="mb-4 text-sm text-rose-300">{error}</p>}
           <div className="rounded-xl border border-white/10 bg-white/5 p-6">
             <ProfileForm initial={profile} onSaved={(p) => setProfile(p)} />
@@ -150,6 +163,11 @@ function ProfileBody() {
           </ul>
         )}
       </aside>
+
+      <section className="lg:col-span-3">
+        <h2 className="mb-3 mt-2 text-lg font-semibold text-white">Ask the AI coach</h2>
+        <AiCoachChat height={420} />
+      </section>
     </div>
   );
 }

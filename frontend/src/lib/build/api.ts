@@ -487,11 +487,11 @@ export const buildApi = {
       reply: string;
       usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
     }>("POST", "/api/build/ai/consult", { messages }),
-  aiParseResume: (text: string) =>
+  aiParseResume: (input: { text: string } | { imageBase64: string; imageMediaType: string }) =>
     call<{
       parsed: Record<string, unknown>;
       usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
-    }>("POST", "/api/build/ai/parse-resume", { text }),
+    }>("POST", "/api/build/ai/parse-resume", input),
 
   // Plan usage
   myUsage: () =>

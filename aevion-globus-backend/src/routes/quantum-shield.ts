@@ -39,6 +39,7 @@ const RESERVED_IDS = new Set([
   "verify",
   "reconstruct",
   "create",
+  "witness",
 ]);
 
 let ensuredTable = false;
@@ -77,6 +78,34 @@ async function ensureShieldTable(): Promise<void> {
   );
   await pool.query(
     `CREATE INDEX IF NOT EXISTS "QuantumShield_ownerUserId_idx" ON "QuantumShield" ("ownerUserId");`,
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QuantumShieldIdempotency" (
+      "id" TEXT PRIMARY KEY,
+      "shieldId" TEXT NOT NULL,
+      "idempotencyKey" TEXT NOT NULL,
+      "result" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("shieldId", "idempotencyKey")
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QuantumShieldIdempotency_createdAt_idx" ON "QuantumShieldIdempotency" ("createdAt");`,
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QuantumShieldDistribution" (
+      "shieldId" TEXT NOT NULL,
+      "shardIndex" INT NOT NULL,
+      "sssShare" TEXT NOT NULL,
+      "hmac" TEXT NOT NULL,
+      "hmacKeyVersion" INT NOT NULL,
+      "witnessCid" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("shieldId", "shardIndex")
+    );
+  `);
+  await pool.query(
+    `ALTER TABLE "QuantumShield" ADD COLUMN IF NOT EXISTS "distribution_policy" TEXT NOT NULL DEFAULT 'legacy_all_local';`,
   );
   ensuredTable = true;
 }
@@ -226,12 +255,13 @@ async function handleCreate(req: Request, res: Response): Promise<void> {
   try {
     await ensureShieldTable();
     const auth = verifyBearerOptional(req);
-    const { objectId, objectTitle, payload, threshold, totalShards } = req.body as {
+    const { objectId, objectTitle, payload, threshold, totalShards, distribution } = req.body as {
       objectId?: string;
       objectTitle?: string;
       payload?: unknown;
       threshold?: number;
       totalShards?: number;
+      distribution?: "legacy_all_local" | "distributed_v2";
     };
     try {
       const created = await createShieldRecord(pool, {
@@ -241,6 +271,7 @@ async function handleCreate(req: Request, res: Response): Promise<void> {
         threshold,
         totalShards,
         ownerUserId: auth?.sub || null,
+        distribution,
       });
       res.status(201).json(created);
     } catch (e: unknown) {
@@ -305,7 +336,7 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
   try {
     await ensureShieldTable();
     const { rows } = await pool.query(
-      `SELECT "id","objectId","objectTitle","algorithm","threshold","totalShards","publicKey","signature","status","legacy","hmac_key_version","verifiedCount","lastVerifiedAt","createdAt"
+      `SELECT "id","objectId","objectTitle","algorithm","threshold","totalShards","publicKey","signature","status","legacy","hmac_key_version","verifiedCount","lastVerifiedAt","distribution_policy","createdAt"
        FROM "QuantumShield" WHERE "id" = $1`,
       [req.params.id],
     );
@@ -313,6 +344,14 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
       return res.status(404).json({ error: "Shield record not found" });
     }
     const r = rows[0] as Record<string, unknown>;
+    let witnessCid: string | null = null;
+    if (r.distribution_policy === "distributed_v2") {
+      const w = await pool.query(
+        `SELECT "witnessCid" FROM "QuantumShieldDistribution" WHERE "shieldId" = $1 AND "shardIndex" = 3`,
+        [r.id],
+      );
+      witnessCid = (w.rows?.[0]?.witnessCid as string | null) ?? null;
+    }
     // Public projection: no shards, no ownerUserId. Just enough to render
     // a shareable verify card.
     res.setHeader("Cache-Control", "public, max-age=60");
@@ -330,6 +369,9 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
       hmacKeyVersion: r.hmac_key_version ?? 1,
       verifiedCount: r.verifiedCount ?? 0,
       lastVerifiedAt: r.lastVerifiedAt ?? null,
+      distribution: r.distribution_policy ?? "legacy_all_local",
+      witnessCid,
+      witnessUrl: witnessCid ? `/api/quantum-shield/${r.id}/witness` : null,
       createdAt: r.createdAt,
       verifyUrl: `/quantum-shield/${r.id}`,
     });
@@ -373,6 +415,50 @@ quantumShieldRouter.get("/:id", async (req, res) => {
 });
 
 /**
+ * GET /:id/witness
+ *
+ * Public retrieval of the witness shard (only available for `distributed_v2`
+ * records). Returns the shard JSON + its content-addressed CID. Anyone can
+ * fetch this — combined with the author's offline shard 1, the work can be
+ * reconstructed by a third party without trusting AEVION.
+ */
+quantumShieldRouter.get("/:id/witness", async (req, res) => {
+  if (RESERVED_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  try {
+    await ensureShieldTable();
+    const { rows } = await pool.query(
+      `SELECT "shieldId","shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid","createdAt"
+       FROM "QuantumShieldDistribution" WHERE "shieldId" = $1 AND "shardIndex" = 3`,
+      [req.params.id],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "No witness shard for this record" });
+    }
+    const w = rows[0] as Record<string, unknown>;
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.json({
+      shieldId: w.shieldId,
+      shard: {
+        index: w.shardIndex,
+        sssShare: w.sssShare,
+        hmac: w.hmac,
+        hmacKeyVersion: w.hmacKeyVersion,
+      },
+      cid: w.witnessCid,
+      createdAt: w.createdAt,
+    });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] witness error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Failed to fetch witness shard" });
+  }
+});
+
+/**
  * POST /:id/reconstruct
  *
  * Full Shamir Lagrange reconstruction + Ed25519 probe-sign verification.
@@ -385,6 +471,43 @@ quantumShieldRouter.post("/:id/reconstruct", async (req, res) => {
     return res.status(404).json({ error: "Not found" });
   }
   if (!rateLimit(reconstructRateLimiter, req, res)) return;
+
+  /* Idempotency-Key: same shieldId + same key returns the cached verdict
+   * without re-running Lagrange or bumping verifiedCount. Length-bound to
+   * keep the index sane. Different payload shapes under the same key are
+   * NOT validated here — the verdict is whatever the first call decided.
+   * That's fine: the caller's intent for a given (shield,key) pair is "I
+   * already asked this question; give me the same answer." */
+  const idemRaw = (req.headers["idempotency-key"] || req.headers["Idempotency-Key"]) as
+    | string
+    | undefined;
+  const idemKey =
+    typeof idemRaw === "string" && /^[a-zA-Z0-9._:-]{8,128}$/.test(idemRaw)
+      ? idemRaw
+      : null;
+
+  if (idemKey) {
+    try {
+      await ensureShieldTable();
+      const cached = await pool.query(
+        `SELECT "result" FROM "QuantumShieldIdempotency" WHERE "shieldId" = $1 AND "idempotencyKey" = $2`,
+        [req.params.id, idemKey],
+      );
+      if (cached.rows.length > 0) {
+        const cachedResult = JSON.parse(cached.rows[0].result as string);
+        return res.status(cachedResult.__status || 200).json({
+          ...cachedResult,
+          idempotent: "replayed",
+        });
+      }
+    } catch (err) {
+      // If lookup fails (e.g. fresh DB), fall through to a normal call.
+      console.warn(
+        "[QuantumShield] idempotency lookup failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
 
   const shardsInput = Array.isArray((req.body as { shards?: unknown[] }).shards)
     ? ((req.body as { shards: unknown[] }).shards as Array<Record<string, unknown>>)
@@ -455,12 +578,30 @@ quantumShieldRouter.post("/:id/reconstruct", async (req, res) => {
       [req.params.id],
     );
 
-    return res.status(200).json({
+    const success = {
       valid: true,
       reconstructed: true,
       shieldId: req.params.id,
       verifiedAt: new Date().toISOString(),
-    });
+    };
+    if (idemKey) {
+      try {
+        await pool.query(
+          `INSERT INTO "QuantumShieldIdempotency" ("id","shieldId","idempotencyKey","result")
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT ("shieldId","idempotencyKey") DO NOTHING`,
+          [
+            crypto.randomUUID(),
+            req.params.id,
+            idemKey,
+            JSON.stringify({ ...success, __status: 200 }),
+          ],
+        );
+      } catch {
+        /* race / DB hiccup — non-fatal, response still goes out */
+      }
+    }
+    return res.status(200).json(success);
   } catch (err) {
     console.error(
       `[QuantumShield] reconstruct error: ${err instanceof Error ? err.message : String(err)}`,

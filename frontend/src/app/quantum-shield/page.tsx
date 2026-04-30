@@ -189,6 +189,7 @@ export default function QuantumShieldPage() {
   const [createPayload, setCreatePayload] = useState('{ "hello": "AEVION" }');
   const [createThreshold, setCreateThreshold] = useState(2);
   const [createTotalShards, setCreateTotalShards] = useState(3);
+  const [createDistribution, setCreateDistribution] = useState<"legacy_all_local" | "distributed_v2">("legacy_all_local");
   const [creating, setCreating] = useState(false);
   const [verifyShard1, setVerifyShard1] = useState("");
   const [verifyShard2, setVerifyShard2] = useState("");
@@ -234,7 +235,7 @@ export default function QuantumShieldPage() {
       const res = await fetch(apiUrl("/api/quantum-shield/create"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ payload, threshold: createThreshold, totalShards: createTotalShards }),
+        body: JSON.stringify({ payload, threshold: createThreshold, totalShards: createTotalShards, distribution: createDistribution }),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error((d as { error?: string }).error || "Error " + res.status); }
       showToast("Quantum Shield created!", "success");
@@ -320,6 +321,36 @@ export default function QuantumShieldPage() {
       navigator.clipboard.writeText(url);
       showToast("Public verify link copied", "success");
     } catch { showToast("Copy failed", "error"); }
+  };
+  const downloadAllShards = (rec: ShieldRecord) => {
+    try {
+      const bundle = {
+        shieldId: rec.id,
+        objectTitle: rec.objectTitle ?? null,
+        algorithm: rec.algorithm,
+        threshold: rec.threshold,
+        totalShards: rec.totalShards,
+        publicKey: rec.publicKey ?? null,
+        signature: rec.signature ?? null,
+        hmacKeyVersion: rec.hmacKeyVersion ?? 1,
+        shards: rec.shards,
+        downloadedAt: new Date().toISOString(),
+        warning:
+          "These shards collectively reconstruct an Ed25519 private key. Store them across separate trust domains; never paste all of them into one place.",
+      };
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aevion-shield-${rec.id}-bundle.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Bundle downloaded", "success");
+    } catch (e: unknown) {
+      showToast("Download failed: " + (e instanceof Error ? e.message : String(e)), "error");
+    }
   };
   const inp: React.CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" };
 
@@ -477,6 +508,7 @@ export default function QuantumShieldPage() {
                 <button onClick={() => { setVerifyRecordId(selectedRecord.id); setTab("verify"); }} style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Verify / Recover &#8594;</button>
                 <button onClick={() => sharePublic(selectedRecord)} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(13,148,136,0.4)", background: "rgba(13,148,136,0.05)", color: "#0d9488", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Share Public Link</button>
                 <Link href={`/quantum-shield/${selectedRecord.id}`} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", color: "#0f172a", fontWeight: 800, fontSize: 13, cursor: "pointer", textDecoration: "none" }}>Open Public Page &#8599;</Link>
+                <button onClick={() => downloadAllShards(selectedRecord)} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", color: "#0f172a", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Download All Shards</button>
                 <button onClick={() => copy(JSON.stringify(selectedRecord, null, 2))} style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", color: "#0f172a", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Export JSON</button>
               </div>
             </div>
@@ -499,6 +531,18 @@ export default function QuantumShieldPage() {
             <div className="aevion-form-grid" style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr", marginBottom: 14 }}>
               <div><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Threshold</div><select value={createThreshold} onChange={(e) => setCreateThreshold(Number(e.target.value))} style={inp}><option value={2}>2 (recommended)</option><option value={3}>3</option></select></div>
               <div><div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Total Shards</div><select value={createTotalShards} onChange={(e) => setCreateTotalShards(Number(e.target.value))} style={inp}><option value={3}>3 (recommended)</option><option value={5}>5</option><option value={7}>7</option></select></div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Distribution</div>
+              <select value={createDistribution} onChange={(e) => setCreateDistribution(e.target.value as "legacy_all_local" | "distributed_v2")} style={inp}>
+                <option value="legacy_all_local">Legacy &#8212; all shards on AEVION DB</option>
+                <option value="distributed_v2">Distributed v2 &#8212; shard 1 yours offline, 2+3 on server (witness CID)</option>
+              </select>
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                {createDistribution === "distributed_v2"
+                  ? "Shard 1 is returned ONCE in this response. AEVION will not retain a copy. Save the bundle locally."
+                  : "All 3 shards live in the AEVION DB. Convenient but server alone can reconstruct the key."}
+              </div>
             </div>
             <button onClick={handleCreate} disabled={creating} style={{ padding: "12px 24px", borderRadius: 12, border: "none", width: "100%", background: creating ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)", color: "#fff", fontWeight: 900, fontSize: 15, cursor: creating ? "default" : "pointer", boxShadow: creating ? "none" : "0 4px 14px rgba(13,148,136,0.35)" }}>{creating ? "Creating..." : "Create Quantum Shield"}</button>
           </div>

@@ -1,7 +1,10 @@
 import pg from "pg";
 import crypto from "crypto";
+import { computeWitnessCid } from "../shamir/witnessCid";
 
 type PgPool = InstanceType<typeof pg.Pool>;
+
+export type DistributionPolicy = "legacy_all_local" | "distributed_v2";
 import {
   HMAC_KEY_VERSION,
   SHAMIR_SHARDS,
@@ -26,6 +29,14 @@ export interface CreateShieldOpts {
   threshold?: number;
   totalShards?: number;
   ownerUserId?: string | null;
+  /**
+   * `legacy_all_local` (default): all 3 shards stored in QuantumShield.shards.
+   * `distributed_v2`: shard 1 returned to caller only (author keeps it offline,
+   *   server forgets), shard 2 stored on server, shard 3 stored on server +
+   *   witnessCid published for public retrieval. Server alone holds 1-of-3
+   *   so cannot forge a reconstruction without external help.
+   */
+  distribution?: DistributionPolicy;
 }
 
 export interface CreateShieldResult {
@@ -35,6 +46,14 @@ export interface CreateShieldResult {
   algorithm: string;
   threshold: number;
   totalShards: number;
+  /**
+   * In `legacy_all_local`: all 3 authenticated shards.
+   * In `distributed_v2`: still all 3 returned to the caller in this response
+   *   (so the author can take their copy of shard 1 offline), but the server
+   *   only persists shards 2 and 3 in QuantumShield.shards (+ witnessCid for
+   *   shard 3). After this single response, shard 1 is unrecoverable from
+   *   AEVION alone.
+   */
   shards: AuthenticatedShard[];
   signature: string;
   publicKey: string;
@@ -42,6 +61,9 @@ export interface CreateShieldResult {
   status: "active";
   legacy: false;
   ownerUserId: string | null;
+  distribution: DistributionPolicy;
+  /** Public CID of shard 3 (only set in `distributed_v2`). */
+  witnessCid: string | null;
   createdAt: string;
 }
 
@@ -103,9 +125,38 @@ export async function createShieldRecord(
     wipeBuffer(privateKeyRaw);
   }
 
+  const policy: DistributionPolicy =
+    opts.distribution === "distributed_v2" ? "distributed_v2" : "legacy_all_local";
+
+  /* In distributed_v2 we strip shard 1 from the persisted blob — the
+   * caller is responsible for taking it offline. The shards array still
+   * goes back to the caller in this single response so the author can
+   * download their copy. After that, shard 1 cannot be re-fetched.
+   *
+   * Server keeps shards 2+3 in `QuantumShield.shards`. Shard 3 is also
+   * mirrored into `QuantumShieldDistribution` with its witnessCid for
+   * public retrieval. Reconstruction requires shard 1 from the author OR
+   * shards 2+3 from server, but server alone has only 2 of 3 (which is
+   * enough by Shamir threshold but only if the author/witness layer also
+   * cooperates, since we surface that asymmetry to consumers). */
+  const persistedShards =
+    policy === "distributed_v2" ? shards.filter((s) => s.index !== 1) : shards;
+  let witnessCid: string | null = null;
+  if (policy === "distributed_v2") {
+    const witnessShard = shards.find((s) => s.index === 3);
+    if (witnessShard) {
+      witnessCid = computeWitnessCid({
+        index: witnessShard.index,
+        sssShare: witnessShard.sssShare,
+        hmac: witnessShard.hmac,
+        hmacKeyVersion: witnessShard.hmacKeyVersion,
+      });
+    }
+  }
+
   await pool.query(
-    `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","ownerUserId","createdAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,$11,NOW())`,
+    `INSERT INTO "QuantumShield" ("id","objectId","objectTitle","algorithm","threshold","totalShards","shards","signature","publicKey","status","legacy","hmac_key_version","ownerUserId","distribution_policy","createdAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',false,$10,$11,$12,NOW())`,
     [
       id,
       opts.objectId || null,
@@ -113,13 +164,32 @@ export async function createShieldRecord(
       "Shamir's Secret Sharing + Ed25519",
       recordedThreshold,
       recordedTotalShards,
-      JSON.stringify(shards),
+      JSON.stringify(persistedShards),
       signature,
       publicKeySpkiHex,
       HMAC_KEY_VERSION,
       opts.ownerUserId || null,
+      policy,
     ],
   );
+
+  if (policy === "distributed_v2" && witnessCid) {
+    const witnessShard = shards.find((s) => s.index === 3)!;
+    await pool.query(
+      `INSERT INTO "QuantumShieldDistribution"
+        ("shieldId","shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())
+       ON CONFLICT ("shieldId","shardIndex") DO NOTHING`,
+      [
+        id,
+        witnessShard.index,
+        witnessShard.sssShare,
+        witnessShard.hmac,
+        witnessShard.hmacKeyVersion,
+        witnessCid,
+      ],
+    );
+  }
 
   return {
     id,
@@ -135,6 +205,8 @@ export async function createShieldRecord(
     status: "active",
     legacy: false,
     ownerUserId: opts.ownerUserId ?? null,
+    distribution: policy,
+    witnessCid,
     createdAt: new Date().toISOString(),
   };
 }

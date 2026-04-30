@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
+import { paginate, parsePageOpts } from "../lib/pagination";
 import { verifyWebhookSig } from "../lib/webhookSig";
 import {
   chessPrizes,
@@ -36,7 +37,8 @@ cyberchessRouter.get("/results", requireAuth, async (req, res) => {
   const items = chessPrizes
     .filter((x) => x.email === email)
     .sort((a, b) => (a.finalizedAt < b.finalizedAt ? 1 : -1));
-  res.json({ items });
+  const { page, nextCursor } = paginate(items, parsePageOpts(req));
+  res.json({ items: page, total: items.length, nextCursor });
 });
 
 cyberchessRouter.get("/results.csv", requireAuth, async (req, res) => {

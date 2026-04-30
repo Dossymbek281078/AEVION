@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
+import { paginate, parsePageOpts } from "../lib/pagination";
 import { verifyWebhookSig } from "../lib/webhookSig";
 import {
   ensureEcosystemLoaded,
@@ -39,7 +40,8 @@ qrightRoyaltiesRouter.get("/royalties", requireAuth, async (req, res) => {
   const items = royaltyEvents
     .filter((x) => x.email === email)
     .sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1));
-  res.json({ items });
+  const { page, nextCursor } = paginate(items, parsePageOpts(req));
+  res.json({ items: page, total: items.length, nextCursor });
 });
 
 qrightRoyaltiesRouter.get("/royalties.csv", requireAuth, async (req, res) => {

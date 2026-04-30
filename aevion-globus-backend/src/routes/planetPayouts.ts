@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
+import { paginate, parsePageOpts } from "../lib/pagination";
 import { verifyWebhookSig } from "../lib/webhookSig";
 import {
   ensureEcosystemLoaded,
@@ -38,7 +39,8 @@ planetPayoutsRouter.get("/payouts", requireAuth, async (req, res) => {
   const items = planetCerts
     .filter((x) => x.email === email)
     .sort((a, b) => (a.certifiedAt < b.certifiedAt ? 1 : -1));
-  res.json({ items });
+  const { page, nextCursor } = paginate(items, parsePageOpts(req));
+  res.json({ items: page, total: items.length, nextCursor });
 });
 
 planetPayoutsRouter.get("/payouts.csv", requireAuth, async (req, res) => {

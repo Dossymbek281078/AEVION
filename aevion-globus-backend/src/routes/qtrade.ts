@@ -493,6 +493,91 @@ qtradeRouter.get("/statement.pdf", async (req, res, next) => {
       doc.fontSize(10).font("Helvetica").fillColor("#64748b").text("No operations in selected period.", 50, y);
     }
 
+    // Ecosystem income section — royalties / chess prizes / planet certs
+    // for the same window, scoped to the caller's email. Lazy-imported so
+    // the qtrade route doesn't hard-couple to ecosystem persistence at
+    // module load.
+    try {
+      const { ensureEcosystemLoaded, royaltyEvents, chessPrizes, planetCerts } = await import("./ecosystem");
+      await ensureEcosystemLoaded();
+      const myRoyalties = royaltyEvents.filter((x) => x.email === owner && Date.parse(x.paidAt) >= cutoff);
+      const myPrizes = chessPrizes.filter((x) => x.email === owner && Date.parse(x.finalizedAt) >= cutoff);
+      const myCerts = planetCerts.filter((x) => x.email === owner && Date.parse(x.certifiedAt) >= cutoff);
+      const totalEco = [...myRoyalties, ...myPrizes, ...myCerts].reduce((s, x) => s + x.amount, 0);
+
+      if (myRoyalties.length + myPrizes.length + myCerts.length > 0) {
+        // Section header — page-break aware.
+        if (y > doc.page.height - 140) {
+          doc.addPage();
+          y = 50;
+        } else {
+          y += 18;
+        }
+        doc.rect(50, y, W, 1).fill("#e2e8f0");
+        y += 12;
+        doc.fontSize(11).font("Helvetica-Bold").fillColor("#7c3aed").text("ECOSYSTEM INCOME (same period)", 50, y);
+        y += 16;
+        doc.fontSize(9).font("Helvetica").fillColor("#475569").text(
+          `${myRoyalties.length} royalty event(s) · ${myPrizes.length} prize(s) · ${myCerts.length} certification(s) · total ${totalEco.toFixed(2)} AEC`,
+          50,
+          y,
+        );
+        y += 18;
+
+        // Column headers
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#64748b");
+        doc.text("DATE", 50, y);
+        doc.text("SOURCE", 130, y);
+        doc.text("DETAIL", 200, y);
+        doc.text("AMOUNT", 460, y, { width: 90, align: "right" });
+        y += 14;
+        doc.rect(50, y, W, 0.5).fill("#cbd5e1");
+        y += 6;
+
+        const ecoRows: Array<{ date: string; source: string; detail: string; amount: number }> = [
+          ...myRoyalties.map((x) => ({
+            date: x.paidAt,
+            source: "royalty",
+            detail: `${x.productKey} · ${x.period}`,
+            amount: x.amount,
+          })),
+          ...myPrizes.map((x) => ({
+            date: x.finalizedAt,
+            source: "prize",
+            detail: `${x.tournamentId} · place ${x.place}`,
+            amount: x.amount,
+          })),
+          ...myCerts.map((x) => ({
+            date: x.certifiedAt,
+            source: "cert",
+            detail: x.artifactVersionId,
+            amount: x.amount,
+          })),
+        ].sort((a, b) => (a.date < b.date ? -1 : 1));
+
+        for (const r of ecoRows) {
+          if (y > doc.page.height - 80) {
+            doc.addPage();
+            y = 50;
+          }
+          const dt = new Date(r.date).toISOString().replace("T", " ").slice(0, 16);
+          doc.fillColor("#0f172a").font("Courier").fontSize(8).text(dt, 50, y, { width: 75 });
+          doc.font("Helvetica").fontSize(9).text(r.source, 130, y);
+          doc.font("Courier").fontSize(8).text(r.detail, 200, y, { width: 250 });
+          doc.font("Helvetica-Bold").fontSize(9).fillColor("#16a34a").text(
+            `+${r.amount.toFixed(2)}`,
+            460,
+            y,
+            { width: 90, align: "right" },
+          );
+          y += 13;
+        }
+      }
+    } catch (eEco) {
+      // Ecosystem table is informational; never fail the whole PDF for it.
+      console.warn("[statement] ecosystem section skipped:", eEco);
+    }
+
     // Page numbers in the bottom margin
     const range = doc.bufferedPageRange();
     for (let i = 0; i < range.count; i++) {

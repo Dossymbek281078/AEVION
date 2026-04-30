@@ -78,6 +78,7 @@ export function ProfileForm({
     initial?.safetyTrainingValid ?? false,
   );
   const [safetyTrainingUntil, setSafetyTrainingUntil] = useState(initial?.safetyTrainingUntil ?? "");
+  const [introVideoUrl, setIntroVideoUrl] = useState(initial?.introVideoUrl ?? "");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +155,7 @@ export function ProfileForm({
         medicalCheckUntil: medicalCheckUntil.trim() || null,
         safetyTrainingValid,
         safetyTrainingUntil: safetyTrainingUntil.trim() || null,
+        introVideoUrl: introVideoUrl.trim() || null,
       });
       setSavedAt(new Date().toISOString());
       onSaved?.(saved);
@@ -210,6 +212,15 @@ export function ProfileForm({
             onChange={(e) => setPhotoUrl(e.target.value)}
             maxLength={2000}
             placeholder="https://…"
+            className="input-build"
+          />
+        </Field>
+        <Field label="🎬 Intro video URL (YouTube / Vimeo / mp4)">
+          <input
+            value={introVideoUrl}
+            onChange={(e) => setIntroVideoUrl(e.target.value)}
+            maxLength={500}
+            placeholder="https://youtu.be/… — 30s pitch makes you 10× more memorable"
             className="input-build"
           />
         </Field>

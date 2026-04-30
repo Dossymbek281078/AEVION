@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { VideoEmbed } from "@/components/build/VideoEmbed";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ type Bundle = {
   medicalCheckUntil: string | null;
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
+  introVideoUrl: string | null;
   email: string | null;
   experiences: {
     id: string;
@@ -187,6 +189,12 @@ export default async function PublicProfilePage({ params }: Props) {
             )}
           </div>
         </header>
+
+        {data.introVideoUrl && (
+          <Section title="Intro video">
+            <VideoEmbed url={data.introVideoUrl} />
+          </Section>
+        )}
 
         {data.summary && (
           <Section title="Summary">

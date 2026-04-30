@@ -135,6 +135,10 @@ export async function ensureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "medicalCheckUntil" TEXT;`);
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "safetyTrainingValid" BOOLEAN NOT NULL DEFAULT FALSE;`);
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "safetyTrainingUntil" TEXT;`);
+  // Video intro: 30-second pitch URL (YouTube / Vimeo / direct mp4) shown
+  // on the public profile. Replaces HH "wall of text" cover letters with
+  // a face + voice — recruiters skim 10× faster.
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "introVideoUrl" TEXT;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (

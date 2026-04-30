@@ -60,6 +60,7 @@ export type BuildProfile = {
   medicalCheckUntil: string | null;
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
+  introVideoUrl: string | null;
 };
 
 export type BuildExperience = {
@@ -380,6 +381,7 @@ export const buildApi = {
     medicalCheckUntil?: string | null;
     safetyTrainingValid?: boolean;
     safetyTrainingUntil?: string | null;
+    introVideoUrl?: string | null;
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),

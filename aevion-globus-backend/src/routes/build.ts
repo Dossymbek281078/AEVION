@@ -195,6 +195,9 @@ buildRouter.post("/profiles", async (req, res) => {
     const safetyTrainingUntil = req.body?.safetyTrainingUntil == null
       ? null
       : String(req.body.safetyTrainingUntil).trim().slice(0, 32) || null;
+    const introVideoUrl = req.body?.introVideoUrl == null
+      ? null
+      : String(req.body.introVideoUrl).trim().slice(0, 500) || null;
 
     const id = crypto.randomUUID();
     const result = await pool.query(
@@ -207,9 +210,9 @@ buildRouter.post("/profiles", async (req, res) => {
           "driversLicense","shiftPreference","availabilityType","readyFromDate",
           "preferredLocationsJson","toolsOwnedJson",
           "medicalCheckValid","medicalCheckUntil",
-          "safetyTrainingValid","safetyTrainingUntil")
+          "safetyTrainingValid","safetyTrainingUntil","introVideoUrl")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
+               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
        ON CONFLICT ("userId") DO UPDATE SET
          "name" = EXCLUDED."name",
          "phone" = EXCLUDED."phone",
@@ -240,6 +243,7 @@ buildRouter.post("/profiles", async (req, res) => {
          "medicalCheckUntil" = EXCLUDED."medicalCheckUntil",
          "safetyTrainingValid" = EXCLUDED."safetyTrainingValid",
          "safetyTrainingUntil" = EXCLUDED."safetyTrainingUntil",
+         "introVideoUrl" = EXCLUDED."introVideoUrl",
          "updatedAt" = NOW()
        RETURNING *`,
       [
@@ -274,6 +278,7 @@ buildRouter.post("/profiles", async (req, res) => {
         medicalCheckUntil,
         safetyTrainingValid,
         safetyTrainingUntil,
+        introVideoUrl,
       ],
     );
 

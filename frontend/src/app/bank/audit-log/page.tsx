@@ -23,22 +23,55 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { apiUrl } from "@/lib/apiBase";
 import { useAuthMe } from "../_hooks/useAuthMe";
 import { useBank } from "../_hooks/useBank";
 import { loadSignatures, SIGNATURE_EVENT, type SignedOperation } from "../_lib/signatures";
 import type { Operation } from "../_lib/types";
 
-type Kind = "all" | "topup" | "transfer";
+type Kind = "all" | "topup" | "transfer" | "royalty" | "prize" | "cert";
+
+type RowKind = "topup" | "transfer" | "royalty" | "prize" | "cert";
 
 type Row = {
   id: string;
   ts: string;
-  kind: "topup" | "transfer";
+  kind: RowKind;
   direction: "in" | "out" | "topup";
   amount: number;
   counterparty: string | null;
   signature: SignedOperation | null;
 };
+
+const KIND_VALUES: Kind[] = ["all", "topup", "transfer", "royalty", "prize", "cert"];
+
+type RoyaltyRow = { id: string; productKey: string; period: string; amount: number; paidAt: string };
+type PrizeRow = { id: string; tournamentId: string; place: number; amount: number; finalizedAt: string };
+type CertRow = { id: string; artifactVersionId: string; amount: number; certifiedAt: string };
+
+const ECOSYSTEM_TOKEN_KEY = "aevion_auth_token_v1";
+
+async function fetchEcosystem<T>(path: string): Promise<T[]> {
+  if (typeof window === "undefined") return [];
+  let token = "";
+  try {
+    token = localStorage.getItem(ECOSYSTEM_TOKEN_KEY) || "";
+  } catch {
+    return [];
+  }
+  if (!token) return [];
+  try {
+    const r = await fetch(apiUrl(path), {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return Array.isArray(j?.items) ? (j.items as T[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function todayPlus(days: number): string {
   const d = new Date();
@@ -78,7 +111,7 @@ function readQueryFilters(): { kind: Kind; from: string; to: string; search: str
   try {
     const sp = new URLSearchParams(window.location.search);
     const kindRaw = sp.get("kind");
-    const kind: Kind = kindRaw === "topup" || kindRaw === "transfer" || kindRaw === "all" ? kindRaw : "all";
+    const kind: Kind = (KIND_VALUES as string[]).includes(kindRaw ?? "") ? (kindRaw as Kind) : "all";
     const from = sp.get("from") || todayPlus(-30);
     const to = sp.get("to") || todayPlus(0);
     const search = sp.get("q") || "";
@@ -92,6 +125,9 @@ export default function AuditLogPage() {
   const { token, me, checked } = useAuthMe();
   const { account, operations, loading } = useBank(me, () => void 0);
   const [signatures, setSignatures] = useState<SignedOperation[]>([]);
+  const [royalties, setRoyalties] = useState<RoyaltyRow[]>([]);
+  const [prizes, setPrizes] = useState<PrizeRow[]>([]);
+  const [certs, setCerts] = useState<CertRow[]>([]);
   const initial = typeof window !== "undefined" ? readQueryFilters() : null;
   const [kind, setKind] = useState<Kind>(initial?.kind ?? "all");
   const [from, setFrom] = useState<string>(initial?.from ?? todayPlus(-30));
@@ -113,6 +149,33 @@ export default function AuditLogPage() {
       }
     };
   }, []);
+
+  // Ecosystem ledgers — refetched whenever auth state flips. Quietly returns
+  // empty arrays for anonymous viewers + on network errors so the page still
+  // renders the qtrade slice.
+  useEffect(() => {
+    if (!token) {
+      setRoyalties([]);
+      setPrizes([]);
+      setCerts([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const [r, p, c] = await Promise.all([
+        fetchEcosystem<RoyaltyRow>("/api/qright/royalties"),
+        fetchEcosystem<PrizeRow>("/api/cyberchess/results"),
+        fetchEcosystem<CertRow>("/api/planet/payouts"),
+      ]);
+      if (cancelled) return;
+      setRoyalties(r);
+      setPrizes(p);
+      setCerts(c);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   // Mirror filter state into the URL so a shared link reproduces the same view.
   // We use replaceState (no history pollution) and skip if nothing changed.
@@ -148,28 +211,68 @@ export default function AuditLogPage() {
   const rows: Row[] = useMemo(() => {
     if (!account) return [];
     const sigById = new Map(signatures.map((s) => [s.id, s]));
-    return (operations as Operation[])
-      .map((op): Row => {
-        const direction: Row["direction"] =
-          op.kind === "topup" ? "topup" : op.from === account.id ? "out" : "in";
-        const counterparty =
-          op.kind === "topup"
-            ? null
-            : op.from === account.id
-            ? op.to
-            : op.from;
-        return {
-          id: op.id,
-          ts: op.createdAt || "",
-          kind: op.kind,
-          direction,
-          amount: Number(op.amount) || 0,
-          counterparty,
-          signature: sigById.get(op.id) ?? null,
-        };
-      })
-      .sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
-  }, [operations, signatures, account]);
+    const opRows: Row[] = (operations as Operation[]).map((op): Row => {
+      const direction: Row["direction"] =
+        op.kind === "topup" ? "topup" : op.from === account.id ? "out" : "in";
+      const counterparty =
+        op.kind === "topup"
+          ? null
+          : op.from === account.id
+          ? op.to
+          : op.from;
+      return {
+        id: op.id,
+        ts: op.createdAt || "",
+        kind: op.kind,
+        direction,
+        amount: Number(op.amount) || 0,
+        counterparty,
+        signature: sigById.get(op.id) ?? null,
+      };
+    });
+
+    // Ecosystem rows. All inflows; signature is null because the events
+    // were minted by trusted webhooks server-side, not signed locally
+    // through QSign. Counterparty is the source artefact (album, tournament,
+    // certified version) so a regulator can trace to the originating event.
+    const ecoRows: Row[] = [
+      ...royalties.map(
+        (r): Row => ({
+          id: r.id,
+          ts: r.paidAt,
+          kind: "royalty",
+          direction: "in",
+          amount: r.amount,
+          counterparty: `${r.productKey} · ${r.period}`,
+          signature: null,
+        }),
+      ),
+      ...prizes.map(
+        (p): Row => ({
+          id: p.id,
+          ts: p.finalizedAt,
+          kind: "prize",
+          direction: "in",
+          amount: p.amount,
+          counterparty: `${p.tournamentId} · place ${p.place}`,
+          signature: null,
+        }),
+      ),
+      ...certs.map(
+        (c): Row => ({
+          id: c.id,
+          ts: c.certifiedAt,
+          kind: "cert",
+          direction: "in",
+          amount: c.amount,
+          counterparty: c.artifactVersionId,
+          signature: null,
+        }),
+      ),
+    ];
+
+    return [...opRows, ...ecoRows].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  }, [operations, signatures, account, royalties, prizes, certs]);
 
   const filtered: Row[] = useMemo(() => {
     const fromTs = from ? new Date(from + "T00:00:00").getTime() : 0;
@@ -411,6 +514,9 @@ export default function AuditLogPage() {
               <option value="all">All</option>
               <option value="topup">Top-up</option>
               <option value="transfer">Transfer</option>
+              <option value="royalty">Royalty</option>
+              <option value="prize">Chess prize</option>
+              <option value="cert">Planet cert</option>
             </select>
           </label>
           <label style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>

@@ -337,6 +337,12 @@ code {
   100% { opacity: 0; transform: scale(0.45) rotate(-12deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)) brightness(0.7); }
 }
 
+@keyframes cc-ghost-pop {
+  0%   { transform: scale(0.92); }
+  60%  { transform: scale(1.18); }
+  100% { transform: scale(1.12); }
+}
+
 /* ── CyberChess utility classes ───────────────────────── */
 
 .cc-focus-ring:focus-visible {

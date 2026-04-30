@@ -347,11 +347,13 @@ type CellProps={
 const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,pmIdx}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
+  // Visceral grab — piece lifts визуально на нажатии: scale 1.18 + сильная тень + glow.
+  const isLifted=(iS||iPS)&&!isDragOrigin;
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
-    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.15s"}}>
+    style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.12s"}}>
     {iV&&!hasPiece&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
-    {hasPiece&&<div style={{width:"88%",height:"88%",transform:iS||iPS?"scale(1.08)":"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.12s, opacity 0.12s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
+    {hasPiece&&<div style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
   </div>;
 });
@@ -385,6 +387,26 @@ export default function CyberChessPage(){
   const[promo,sPromo]=useState<{from:Square;to:Square}|null>(null);
   const[pms,sPms]=useState<Pre[]>([]);
   const[pmSel,sPmSel]=useState<Square|null>(null);
+  // Scratch / Analysis-during-play: отдельный Chess-инстанс для разбора
+  // вариантов пока соперник думает. Real game нетронут; выход из scratch
+  // возвращает к актуальной позиции.
+  const[scratchOn,sScratchOn]=useState(false);
+  const[scratchGame,sScratchGame]=useState<Chess|null>(null);
+  const[scratchHist,sScratchHist]=useState<string[]>([]);
+  const[scratchBk,sScratchBk]=useState(0);
+  void scratchBk;
+  const[scratchSel,sScratchSel]=useState<Square|null>(null);
+  const[scratchVm,sScratchVm]=useState<Set<string>>(new Set());
+  const[scratchLm,sScratchLm]=useState<{from:string;to:string}|null>(null);
+  const enterScratch=useCallback(()=>{
+    try{const g=new Chess(game.fen());sScratchGame(g);sScratchHist([]);sScratchSel(null);sScratchVm(new Set());sScratchLm(null);sScratchOn(true);sScratchBk(k=>k+1)}catch{}
+  },[game]);
+  const resetScratch=useCallback(()=>{
+    try{const g=new Chess(game.fen());sScratchGame(g);sScratchHist([]);sScratchSel(null);sScratchVm(new Set());sScratchLm(null);sScratchBk(k=>k+1)}catch{}
+  },[game]);
+  const exitScratch=useCallback(()=>{
+    sScratchOn(false);sScratchGame(null);sScratchHist([]);sScratchSel(null);sScratchVm(new Set());sScratchLm(null);
+  },[]);
   const pmsRef=useRef<Pre[]>([]);
   const pmSelRef=useRef<Square|null>(null);
   useEffect(()=>{pmsRef.current=pms},[pms]);
@@ -886,8 +908,7 @@ export default function CyberChessPage(){
   useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
   // Terminate Stockfish worker on unmount so the WASM process doesn't outlive the page.
   useEffect(()=>()=>{try{sfR.current?.terminate()}catch{};sfR.current=null},[]);
-  // Live eval on position change - for play/coach/analysis tabs
-  // Hardened: 8s timeout + abort on cleanup (prevents stuck worker when user scrolls history fast)
+  // Live eval on position change.
   useEffect(()=>{
     if(setup||!sfR.current?.ready())return;
     if(tab!=="analysis"&&tab!=="play"&&tab!=="coach")return;
@@ -895,17 +916,31 @@ export default function CyberChessPage(){
     if(tab!=="analysis"&&think)return;
     let done=false;
     const sign=game.turn()==="w"?1:-1;
-    const to=setTimeout(()=>{
-      if(done)return;
+    // Defer eval до idle, чтобы не блокировать UI на момент ходa.
+    const idleId=typeof window!=="undefined"&&"requestIdleCallback" in window
+      ?(window as any).requestIdleCallback(()=>{
+        if(done||!sfR.current?.ready())return;
+        sfR.current.eval(game.fen(),15,(cp,mate)=>{
+          if(done)return;
+          sEvalCp(cp*sign);sEvalMate(mate*sign);
+        },()=>{done=true});
+      },{timeout:200})
+      :setTimeout(()=>{
+        if(done||!sfR.current?.ready())return;
+        sfR.current.eval(game.fen(),15,(cp,mate)=>{
+          if(done)return;
+          sEvalCp(cp*sign);sEvalMate(mate*sign);
+        },()=>{done=true});
+      },150);
+    return()=>{
       done=true;
-      console.warn("[auto-eval] timeout 8s — abort, keep previous eval");
+      try{
+        if(typeof window!=="undefined"&&"cancelIdleCallback" in window&&typeof idleId==="number")
+          (window as any).cancelIdleCallback(idleId);
+        else if(idleId)clearTimeout(idleId as any);
+      }catch{}
       sfR.current?.stop();
-    },8000);
-    sfR.current.eval(game.fen(),15,(cp,mate)=>{
-      if(done)return;
-      sEvalCp(cp*sign);sEvalMate(mate*sign);
-    },()=>{done=true;clearTimeout(to)});
-    return()=>{done=true;clearTimeout(to);sfR.current?.stop()};
+    };
   },[bk,tab,setup,think,over,sfOk]);
 
   // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
@@ -1161,11 +1196,9 @@ export default function CyberChessPage(){
     if(mv.captured){
       const cc=pc(mv.captured,mv.color==="w"?"b":"w");
       if(mv.color===pCol)sCapB(x=>[...x,cc]);else sCapW(x=>[...x,cc]);
-      // Trigger capture animation на cell взятия. En-passant: cell на оригинальном rank пешки.
       const capColor=mv.color==="w"?"b":"w";
       let capSq:Square=mv.to;
       if(mv.flags?.includes("e")){
-        // En-passant — captured pawn was on rank ahead/behind 'to'
         const r=parseInt(mv.to[1]);
         const epR=mv.color==="w"?r-1:r+1;
         capSq=`${mv.to[0]}${epR}` as Square;
@@ -1982,6 +2015,33 @@ export default function CyberChessPage(){
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
+    // SCRATCH режим — клик-логика как у analysis tab, но на scratchGame.
+    if(scratchOn&&scratchGame){
+      const p=scratchGame.get(sq);
+      const side=scratchGame.turn();
+      if(scratchSel){
+        if(scratchVm.has(sq)){
+          try{
+            const moves=scratchGame.moves({square:scratchSel,verbose:true});
+            const matched=moves.find(m=>m.to===sq);
+            const promoNeeded=!!matched?.promotion;
+            const mv=scratchGame.move({from:scratchSel,to:sq,promotion:promoNeeded?"q":undefined});
+            if(mv){
+              sScratchHist(h=>[...h,mv.san]);
+              sScratchLm({from:mv.from,to:mv.to});
+              sScratchSel(null);sScratchVm(new Set());
+              sScratchBk(k=>k+1);
+              snd(mv.captured?"capture":mv.san.includes("O-")?"castle":scratchGame.isCheck()?"check":"move");
+            }
+          }catch{}
+          return;
+        }
+        if(p&&p.color===side){sScratchSel(sq);sScratchVm(new Set(scratchGame.moves({square:sq,verbose:true}).map(m=>m.to)));return}
+        sScratchSel(null);sScratchVm(new Set());return;
+      }
+      if(p&&p.color===side){sScratchSel(sq);sScratchVm(new Set(scratchGame.moves({square:sq,verbose:true}).map(m=>m.to)))}
+      return;
+    }
     // ── BOARD EDITOR MODE (Coach tab) ──
     if(editorMode){
       try{
@@ -2080,13 +2140,38 @@ export default function CyberChessPage(){
       sSel(null);sVm(new Set());return;
     }
     if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}
-  },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab,editorMode,editorPiece,editorTurn,showToast]);
+  },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab,editorMode,editorPiece,editorTurn,showToast,scratchOn,scratchGame,scratchSel,scratchVm,autoQueen]);
 
   /* ── Pointer-events drag (replaces unreliable HTML5 drag) ── */
-  const dragRef=useRef<{from:Square;sx:number;sy:number;active:boolean;pid:number}|null>(null);
+  // Перф: ghost-позиция обновлялась через setState на каждый pointermove (60+ Hz),
+  // что вызывало re-render всего CyberChessPage и feel залипания.
+  // Теперь: state хранит ТОЛЬКО from (mount/unmount), позицию пишем напрямую в DOM
+  // через ghostRef + rAF — нулевая нагрузка на React per pixel.
+  // sx/sy — стартовая позиция курсора, ox/oy — смещение от ЦЕНТРА исходной ячейки
+  // до точки клика (для lichess-like grab: фигура остаётся под пальцем, а не телепортируется).
+  // Snap-to-cursor-center (как у lichess/chess.com): фигура «отлипает» в руку, а не висит
+  // там, где её схватили. Это даёт ощущение поднятия. Для этого ox/oy = 0 — никакого
+  // offset не сохраняем, центр фигуры всегда под курсором. Кеш bRect/cellW для быстрого
+  // hit-test'а: elementsFromPoint на каждый pointermove делал layout read и тормозил.
+  const dragRef=useRef<{from:Square;sx:number;sy:number;active:boolean;pid:number;bRect:{l:number;t:number;w:number;h:number;cw:number;flip:boolean}}|null>(null);
   const recentDragRef=useRef<number>(0);
-  const[ghost,sGhost]=useState<{from:Square;x:number;y:number}|null>(null);
+  const[ghostFrom,sGhostFrom]=useState<Square|null>(null);
+  const ghostRef=useRef<HTMLDivElement|null>(null);
+  const ghostPosRef=useRef<{x:number;y:number}>({x:0,y:0});
+  const ghostRafRef=useRef<number|null>(null);
+  const dragHoverRef=useRef<Square|null>(null);
   const[dragHover,sDragHover]=useState<Square|null>(null);
+  const flushGhost=useCallback(()=>{
+    ghostRafRef.current=null;
+    const el=ghostRef.current;if(!el)return;
+    const{x,y}=ghostPosRef.current;
+    // GPU-compositor positioning: translate3d не триггерит layout, в отличие от left/top.
+    // -50%,-50% центрирует элемент на (x,y) с учётом его собственных размеров.
+    el.style.transform=`translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+  },[]);
+  const cancelGhostRaf=useCallback(()=>{
+    if(ghostRafRef.current!==null){cancelAnimationFrame(ghostRafRef.current);ghostRafRef.current=null;}
+  },[]);
   const sqFromPoint=(x:number,y:number):Square|null=>{
     if(typeof document==="undefined")return null;
     const els=document.elementsFromPoint(x,y) as HTMLElement[];
@@ -2096,52 +2181,122 @@ export default function CyberChessPage(){
     }
     return null;
   };
+  // Быстрый hit-test через кешированный rect доски — без layout-read'ов.
+  // Используется на каждом pointermove (горячий путь). 100x быстрее elementsFromPoint.
+  const sqFromCachedRect=(x:number,y:number,bRect:{l:number;t:number;cw:number;flip:boolean}):Square|null=>{
+    const fx=Math.floor((x-bRect.l)/bRect.cw);
+    const fy=Math.floor((y-bRect.t)/bRect.cw);
+    if(fx<0||fx>7||fy<0||fy>7)return null;
+    const file=bRect.flip?7-fx:fx;
+    const rank=bRect.flip?fy:7-fy;
+    return `${FILES[file]}${rank+1}` as Square;
+  };
   const onBoardDown=(e:React.PointerEvent)=>{
     if(e.button!==0)return;
     const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
-    const p=game.get(sq);
+    // SCRATCH: своя свободная доска. Можно двигать любой цвет.
+    if(scratchOn&&scratchGame){
+      const p=scratchGame.get(sq);
+      if(!p||p.color!==scratchGame.turn())return;
+      e.preventDefault();
+      const boardEl=e.currentTarget as HTMLElement;
+      const br=boardEl.getBoundingClientRect();
+      const bRect={l:br.left,t:br.top,w:br.width,h:br.height,cw:br.width/8,flip};
+      dragRef.current={from:sq,sx:e.clientX,sy:e.clientY,active:false,pid:e.pointerId,bRect};
+      try{boardEl.setPointerCapture(e.pointerId);}catch{}
+      sScratchSel(sq);
+      sScratchVm(new Set(scratchGame.moves({square:sq,verbose:true}).map(m=>m.to)));
+      return;
+    }
+    // Premove chain: когда не твой ход и есть очередь премувов, проверяем
+    // ВИРТУАЛЬНУЮ доску (game + applied premoves), чтобы можно было перетащить
+    // фигуру из позиции, в которой она будет находиться после уже стоящих премувов.
+    const isPremoveMode=tab!=="analysis"&&game.turn()!==pCol&&on&&!over;
+    const checkBoard=isPremoveMode?virtualGame:game;
+    const p=checkBoard.get(sq);
     const side=tab==="analysis"?game.turn():pCol;
     const canDrag=!!p&&(tab==="analysis"?true:p.color===side)&&!over;
     if(!canDrag)return;
-    dragRef.current={from:sq,sx:e.clientX,sy:e.clientY,active:false,pid:e.pointerId};
-    try{(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);}catch{}
+    // КРИТИЧНО: preventDefault на pointerdown глушит дефолтные браузерные жесты
+    // (Windows pen press-and-hold, precision touchpad "pan to scroll", text-selection
+    // drag), которые иначе срабатывают через ~1сек и вызывают pointercancel.
+    // Без этого drag прерывается mid-flight на Windows.
+    e.preventDefault();
+    // Кешируем bounding rect доски один раз на pointerdown — потом используем для
+    // математического hit-test'а вместо elementsFromPoint (тот делает layout read
+    // на каждом move, видимо тормозит drag-feel).
+    const boardEl=e.currentTarget as HTMLElement;
+    const br=boardEl.getBoundingClientRect();
+    const bRect={l:br.left,t:br.top,w:br.width,h:br.height,cw:br.width/8,flip};
+    dragRef.current={from:sq,sx:e.clientX,sy:e.clientY,active:false,pid:e.pointerId,bRect};
+    try{boardEl.setPointerCapture(e.pointerId);}catch{}
+    // Selection + dots — мгновенно на нажатии (lichess-style), а не после движения.
+    const isMyTurn=tab==="analysis"||game.turn()===pCol;
+    if(isMyTurn){
+      sSel(sq);
+      sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));
+    }else if(on){sPmSel(sq);}
   };
   const onBoardMove=(e:React.PointerEvent)=>{
     const d=dragRef.current;if(!d||d.pid!==e.pointerId)return;
     const dx=e.clientX-d.sx,dy=e.clientY-d.sy;
-    // Threshold 3px — snappier activation (touch и мышь чувствительнее).
-    if(!d.active&&Math.hypot(dx,dy)>3){
+    // Threshold 4px — даёт время увидеть «отлипание» (scale-up на origin клетке через
+    // cubic-bezier overshoot, ~80ms). При 1px ghost появлялся раньше чем глаз успевал
+    // зарегистрировать pickup — feel'a "поднял в руку" не было.
+    if(!d.active&&Math.hypot(dx,dy)>4){
       d.active=true;
-      const p=game.get(d.from);const isMyTurn=tab==="analysis"||game.turn()===pCol;
-      if(p&&isMyTurn){
-        sSel(d.from);
-        sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:d.from,verbose:true}),dicePieceType):game.moves({square:d.from,verbose:true})).map(m=>m.to)));
-      }else if(p&&on){sPmSel(d.from);}
+      ghostPosRef.current={x:e.clientX,y:e.clientY};
+      sGhostFrom(d.from);
+      if(typeof document!=="undefined")document.body.style.cursor="grabbing";
     }
     if(d.active){
-      sGhost({from:d.from,x:e.clientX,y:e.clientY});
-      // Hover halo — подсвечиваем cell под курсором (lichess-style).
-      const hover=sqFromPoint(e.clientX,e.clientY);
-      sDragHover(hover&&hover!==d.from?hover:null);
+      ghostPosRef.current={x:e.clientX,y:e.clientY};
+      if(ghostRafRef.current===null)ghostRafRef.current=requestAnimationFrame(flushGhost);
+      // sqFromCachedRect: math-only, без layout reads. Раньше elementsFromPoint
+      // вызывался на каждом move (60+ Hz) и сбивал rendering pipeline.
+      const hover=sqFromCachedRect(e.clientX,e.clientY,d.bRect);
+      const target=hover&&hover!==d.from?hover:null;
+      if(target!==dragHoverRef.current){dragHoverRef.current=target;sDragHover(target);}
     }
   };
   const onBoardUp=(e:React.PointerEvent)=>{
-    const d=dragRef.current;dragRef.current=null;sGhost(null);sDragHover(null);
+    const d=dragRef.current;dragRef.current=null;
+    cancelGhostRaf();sGhostFrom(null);
+    if(dragHoverRef.current!==null){dragHoverRef.current=null;sDragHover(null);}
+    if(typeof document!=="undefined")document.body.style.cursor="";
     try{(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);}catch{}
     if(!d||!d.active)return;
     recentDragRef.current=Date.now();
     const to=sqFromPoint(e.clientX,e.clientY);if(!to||to===d.from)return;
     const f=d.from;
+    // SCRATCH: коммит на отдельный chess instance, не трогая real game.
+    if(scratchOn&&scratchGame){
+      const moves=scratchGame.moves({square:f,verbose:true});
+      const matched=moves.find(m=>m.to===to);
+      if(matched){
+        try{
+          const promoNeeded=!!matched.promotion;
+          const mv=scratchGame.move({from:f,to,promotion:promoNeeded?"q":undefined});
+          if(mv){
+            sScratchHist(h=>[...h,mv.san]);
+            sScratchLm({from:mv.from,to:mv.to});
+            sScratchSel(null);sScratchVm(new Set());
+            sScratchBk(k=>k+1);
+            snd(mv.captured?"capture":mv.san.includes("O-")?"castle":scratchGame.isCheck()?"check":"move");
+          }
+        }catch{}
+      }else{sScratchSel(null);sScratchVm(new Set());}
+      return;
+    }
     if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){
       if(pmsRef.current.length>=pmLim)return;
-      const p=game.get(f);const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
+      // Promo check от ВИРТУАЛЬНОЙ доски — фигура могла оказаться на f
+      // в результате уже стоящих премувов.
+      const p=virtualGame.get(f);
+      const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
       if(p?.type==="p"&&to[1]===promoRank)pre.pr="q";
       sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return;
     }
-    // КРИТИЧНО: vm — это state из закрытия предыдущего render'а. setSel/setVm в
-    // pointermove ещё не закоммичены в момент pointerup (между двумя event handlers
-    // в одном tick React не успевает rerender'ить). Поэтому пересчитываем легальные
-    // ходы из game напрямую — единственный надёжный источник истины.
     const legal=(variant==="diceblade"&&dicePieceType
       ?filterMovesByDice(game.moves({square:f,verbose:true}),dicePieceType)
       :game.moves({square:f,verbose:true}));
@@ -2155,7 +2310,42 @@ export default function CyberChessPage(){
       else exec(f,to);
     }else{sSel(null);sVm(new Set());}
   };
-  const onBoardCancel=(_e:React.PointerEvent)=>{dragRef.current=null;sGhost(null);sDragHover(null);};
+  const onBoardCancel=(_e:React.PointerEvent)=>{
+    // Salvage: если drag был активен и есть легальная цель под последним курсором —
+    // коммитим как обычный pointerup. preventDefault на pointerdown обычно глушит
+    // pointercancel, но если жест всё-таки прорвётся (Windows pen, multi-touch и т.п.),
+    // мы не теряем ход.
+    const d=dragRef.current;
+    if(d&&d.active){
+      const{x,y}=ghostPosRef.current;
+      const to=sqFromPoint(x,y);
+      if(to&&to!==d.from){
+        const f=d.from;
+        if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){
+          if(pmsRef.current.length<pmLim){
+            const pp=virtualGame.get(f);const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
+            if(pp?.type==="p"&&to[1]===promoRank)pre.pr="q";
+            sPms(v=>[...v,pre]);sPmSel(null);snd("premove");
+          }
+        }else{
+          const legal=(variant==="diceblade"&&dicePieceType
+            ?filterMovesByDice(game.moves({square:f,verbose:true}),dicePieceType)
+            :game.moves({square:f,verbose:true}));
+          const matched=legal.find(m=>m.to===to);
+          if(matched){
+            recentDragRef.current=Date.now();
+            const mp=game.get(f);
+            if(mp?.type==="p"&&(to[1]==="1"||to[1]==="8")){
+              if(autoQueen)exec(f,to,"q");else sPromo({from:f,to});
+            }else exec(f,to);
+          }
+        }
+      }
+    }
+    dragRef.current=null;cancelGhostRaf();sGhostFrom(null);
+    if(dragHoverRef.current!==null){dragHoverRef.current=null;sDragHover(null);}
+    if(typeof document!=="undefined")document.body.style.cursor="";
+  };
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;
     // Determine starting FEN based on variant
@@ -2490,7 +2680,13 @@ export default function CyberChessPage(){
       return g;
     }catch{return game;}
   },[game,bk,pms,pCol]);
-  const bd=virtualGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
+  // Scratch — отдельный inst отображается вместо virtualGame.
+  const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
+  const bd=renderGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
+  // Эффективные sel/vm/lm: в scratch — свои; иначе — обычные.
+  const effSel=scratchOn?scratchSel:sel;
+  const effVm=scratchOn?scratchVm:vm;
+  const effLm=scratchOn?scratchLm:lm;
 
   const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:13,fontWeight:700,cursor:"pointer"}}>{label}</button>);
 
@@ -3424,12 +3620,9 @@ export default function CyberChessPage(){
             <div onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel}
               onClick={e=>{
                 if(Date.now()-recentDragRef.current<150)return;
-                // ВАЖНО: после setPointerCapture(parent) click event target = parent,
-                // не cell. closest вверх не найдёт data-sq. Используем elementFromPoint
-                // по координатам клика — это ловит cell под курсором независимо от capture.
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
-                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
-                if(annotActive&&(arrows.length>0||sqHL.length>0))clearAnnotations();
+                // Левый клик чистит размышляющие стрелки/хайлайты во всех режимах.
+                if(arrows.length>0||sqHL.length>0)clearAnnotations();
                 click(sq);
               }}
               onMouseDown={e=>{
@@ -3441,26 +3634,22 @@ export default function CyberChessPage(){
                 if(e.button!==2)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
                 const start=rcStartRef.current;rcStartRef.current=null;
-                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
-                if(!annotActive||!start)return;
+                if(!start)return;
                 const col=annotColor(e);
-                if(start===sq){
-                  sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
-                }else{
+                // Right-click DRAG (start≠sq) → стрелка-размышление. Работает ВО ВСЕХ режимах
+                // включая ход соперника, как у lichess/chess.com.
+                if(start!==sq){
                   sArrows(a=>{const i=a.findIndex(x=>x.from===start&&x.to===sq&&x.c===col);if(i>=0)return a.filter((_,j)=>j!==i);return [...a,{from:start,to:sq,c:col}]});
+                  return;
                 }
-              }}
-              onContextMenu={e=>{
-                e.preventDefault();e.stopPropagation();
-                const annotActive=tab==="analysis"||!!over||(tab==="coach"&&!on);
-                if(annotActive)return;
-                const sq=sqFromPoint(e.clientX,e.clientY);
-                if(!sq){if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null);return;}
+                // Right-click на тот же квадрат: если на нём премув — удалить премув
+                // (старая полезная фича). Иначе — toggle highlight.
                 const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
                 if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
-                if(pms.length>0){sPms(p=>p.slice(0,-1))}else if(pmSel){sPmSel(null)}
+                sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
-              style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none"}}>
+              onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
+              style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
                 const tm:ThreatMap=computeThreatMap(bd as any);
@@ -3524,11 +3713,12 @@ export default function CyberChessPage(){
               })()}
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
                 const realP=game.get(sq);
-                const isShadow=!!(pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color));
-                const iS=sel===sq,iV=vm.has(sq),iCp=iV&&!!p,iL=!!(lm&&(lm.from===sq||lm.to===sq)),iCk=!!(chk&&p?.type==="k"&&p.color===game.turn()),iPM=pmSet.has(sq),iPS=pmSel===sq;
+                const isShadow=!scratchOn&&!!(pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color));
+                const turnRef=scratchOn&&scratchGame?scratchGame.turn():game.turn();
+                const iS=effSel===sq,iV=effVm.has(sq),iCp=iV&&!!p,iL=!!(effLm&&(effLm.from===sq||effLm.to===sq)),iCk=!!(chk&&p?.type==="k"&&p.color===turnRef),iPM=!scratchOn&&pmSet.has(sq),iPS=!scratchOn&&pmSel===sq;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
-                const isDragOrigin=ghost?.from===sq;
+                const isDragOrigin=ghostFrom===sq;
                 const isAnimDest=moveAnim?.to===sq;
                 return <Cell key={sq} sq={sq}
                   pieceType={(p?.type as any)||null}
@@ -3558,8 +3748,11 @@ export default function CyberChessPage(){
                 const ringCol=isLegal?"#10b981":"#94a3b8";
                 return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
               })()}
-              {/* Ghost piece following pointer during drag */}
-              {ghost&&(()=>{const gp=game.get(ghost.from);if(!gp)return null;return <div style={{position:"fixed",left:ghost.x,top:ghost.y,width:"clamp(60px,9vw,90px)",height:"clamp(60px,9vw,90px)",transform:"translate(-50%,-50%) scale(1.05)",pointerEvents:"none",zIndex:1000,filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.45))"}}><Piece type={gp.type} color={gp.color}/></div>;})()}
+              {/* Ghost piece following pointer during drag.
+                  Outer div: GPU-композитная позиция через translate3d (обновляется в flushGhost).
+                  Inner div: pop-анимация при mount'е — даёт визуальное «отлипание от доски».
+                  willChange: transform — даёт браузеру upfront create compositor layer. */}
+              {ghostFrom&&(()=>{const gp=game.get(ghostFrom);if(!gp)return null;const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(64px,9vw,96px)",height:"clamp(64px,9vw,96px)",transform:`translate3d(${gx}px, ${gy}px, 0) translate(-50%, -50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform"}}><div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}><Piece type={gp.type} color={gp.color}/></div></div>;})()}
 
               {/* Move slide animation — летящая фигура поверх board */}
               {moveAnim&&(()=>{
@@ -4210,12 +4403,39 @@ export default function CyberChessPage(){
             </div>);
           })()}
 
-          {pms.length>0&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+          {/* Scratch / Analysis-during-play — варианты пока соперник думает */}
+          {tab==="play"&&on&&!over&&!setup&&<div style={{padding:"8px 12px",borderRadius:8,background:scratchOn?"linear-gradient(135deg,#fef3c7,#fde68a)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:`1px solid ${scratchOn?"#fbbf24":"#c4b5fd"}`}}>
+            {!scratchOn?<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+              <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                <span style={{fontSize:13,fontWeight:800,letterSpacing:"0.05em",color:T.purple}}>🔍 Анализ варианта</span>
+                <span style={{fontSize:10,color:T.dim,fontStyle:"italic"}}>Двигай за обе стороны не ломая партию</span>
+              </div>
+              <button onClick={enterScratch} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.3,boxShadow:"0 2px 6px rgba(124,58,237,0.3)"}}>Войти →</button>
+            </div>:<div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                <span style={{fontSize:13,fontWeight:900,letterSpacing:"0.08em",color:"#92400e"}}>🔍 РЕЖИМ АНАЛИЗА</span>
+                <div style={{display:"flex",gap:5}}>
+                  <button onClick={resetScratch} title="Сбросить к актуальной позиции" style={{padding:"4px 10px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",fontSize:11,fontWeight:800,cursor:"pointer"}}>↺ Сброс</button>
+                  <button onClick={exitScratch} title="Вернуться к партии" style={{padding:"4px 10px",borderRadius:6,border:"none",background:T.danger,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Выйти</button>
+                </div>
+              </div>
+              {scratchHist.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"4px 0"}}>{scratchHist.map((s,i)=><span key={i} style={{padding:"1px 5px",borderRadius:3,background:"rgba(255,255,255,0.6)",color:"#92400e",fontSize:11,fontWeight:700,fontFamily:"monospace"}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{s}</span>)}</div>}
+              <span style={{fontSize:10,color:"#78350f",fontStyle:"italic"}}>Партия идёт параллельно · таймеры тикают · соперник может сходить</span>
+            </div>}
+          </div>}
+
+          {pms.length>0&&!scratchOn&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <span style={{fontSize:13,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.blue}}>⚡ Premove queue · {pms.length}</span>
-              <span style={{fontSize:8,color:T.dim,fontStyle:"italic"}}>ПКМ · Esc</span>
+              <button onClick={()=>{sPms([]);sPmSel(null);snd("premove");}} title="Очистить все премувы (Esc)" style={{padding:"3px 9px",borderRadius:6,border:"1px solid #fecaca",background:"#fff5f5",color:T.danger,fontSize:11,fontWeight:800,cursor:"pointer",letterSpacing:0.3}}>✕ Очистить все</button>
             </div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{pms.map((p,i)=><span key={i} style={{padding:"2px 6px",borderRadius:4,fontFamily:"monospace",fontSize:14,fontWeight:700,background:"#fff",color:T.blue,border:"1px solid #dbeafe"}}>{p.from}→{p.to}</span>)}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{pms.map((p,i)=>(
+              <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 4px 2px 8px",borderRadius:5,fontFamily:"monospace",fontSize:13,fontWeight:700,background:"#fff",color:T.blue,border:"1px solid #dbeafe"}}>
+                <span>{p.from}→{p.to}</span>
+                <button onClick={()=>{sPms(v=>v.filter((_,j)=>j!==i));snd("premove");}} title={`Удалить премув ${p.from}→${p.to}`} style={{display:"flex",alignItems:"center",justifyContent:"center",width:18,height:18,borderRadius:9,border:"none",background:"transparent",color:T.dim,fontSize:12,fontWeight:900,cursor:"pointer",lineHeight:1,padding:0}} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fee2e2";(e.currentTarget as HTMLElement).style.color=T.danger}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=T.dim}}>✕</button>
+              </span>
+            ))}</div>
+            <div style={{fontSize:9.5,color:T.dim,fontStyle:"italic",marginTop:5}}>ПКМ по клетке премува · ✕ на чипе · Esc — всё снять</div>
           </div>}
 
           {(capB.length>0||capW.length>0)&&tab==="analysis"&&<div style={{padding:"8px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>

@@ -262,6 +262,53 @@ buildRouter.get("/projects/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/projects/:id/public — read-only, PII-stripped, cacheable
+// Public sharable view for /build/p/[id] SSR. Hides email/phone, keeps name/city.
+buildRouter.get("/projects/:id/public", async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const project = await pool.query(
+      `SELECT "id","title","description","budget","status","city","clientId","createdAt","updatedAt"
+       FROM "BuildProject" WHERE "id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (project.rowCount === 0) return fail(res, 404, "project_not_found");
+
+    const [vacancies, files, client] = await Promise.all([
+      pool.query(
+        `SELECT v."id", v."title", v."description", v."salary", v."status", v."createdAt",
+                (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount"
+         FROM "BuildVacancy" v
+         WHERE v."projectId" = $1
+         ORDER BY v."createdAt" DESC`,
+        [id],
+      ),
+      pool.query(
+        `SELECT "id","url","name","mimeType","sizeBytes","createdAt"
+         FROM "BuildFile" WHERE "projectId" = $1 ORDER BY "createdAt" DESC`,
+        [id],
+      ),
+      pool.query(
+        `SELECT u."name", p."city", p."buildRole"
+         FROM "AEVIONUser" u
+         LEFT JOIN "BuildProfile" p ON p."userId" = u."id"
+         WHERE u."id" = $1 LIMIT 1`,
+        [project.rows[0].clientId],
+      ),
+    ]);
+
+    res.setHeader("Cache-Control", "public, max-age=60");
+    return ok(res, {
+      project: project.rows[0],
+      vacancies: vacancies.rows,
+      files: files.rows,
+      client: client.rows[0] || null,
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "project_public_failed", { details: (err as Error).message });
+  }
+});
+
 // PATCH /api/build/projects/:id — owner-only
 buildRouter.patch("/projects/:id", async (req, res) => {
   try {

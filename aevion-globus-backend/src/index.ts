@@ -217,6 +217,9 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Project + vacancies + files + client" },
         patch: { summary: "Update project (owner or admin)" },
       },
+      "/api/build/projects/{id}/public": {
+        get: { summary: "Public PII-stripped view (cache 60s) — feeds /build/p/{id} SSR" },
+      },
       "/api/build/vacancies": { post: { summary: "Create vacancy (project owner only)" } },
       "/api/build/vacancies/by-project/{id}": { get: { summary: "Vacancies for a project" } },
       "/api/build/vacancies/{id}": { get: { summary: "Vacancy detail + project link" } },

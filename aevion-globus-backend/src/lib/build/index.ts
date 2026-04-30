@@ -101,6 +101,52 @@ export async function ensureBuildTables(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildProfile_role_idx" ON "BuildProfile" ("buildRole");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildProfile_city_idx" ON "BuildProfile" ("city");`);
 
+  // Resume-style fields. Added with ADD COLUMN IF NOT EXISTS so the
+  // base CREATE TABLE above stays the legacy minimal shape and existing
+  // installs migrate forward without a separate migration tool.
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "title" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "summary" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "skillsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "languagesJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "salaryMin" INTEGER;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "salaryMax" INTEGER;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "salaryCurrency" TEXT DEFAULT 'RUB';`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availability" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "experienceYears" INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "photoUrl" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "openToWork" BOOLEAN NOT NULL DEFAULT FALSE;`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildExperience" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "company" TEXT NOT NULL,
+      "city" TEXT,
+      "fromDate" TEXT,
+      "toDate" TEXT,
+      "current" BOOLEAN NOT NULL DEFAULT FALSE,
+      "description" TEXT,
+      "sortOrder" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildExperience_user_idx" ON "BuildExperience" ("userId", "sortOrder", "createdAt");`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildEducation" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "institution" TEXT NOT NULL,
+      "degree" TEXT,
+      "field" TEXT,
+      "fromYear" INTEGER,
+      "toYear" INTEGER,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildEducation_user_idx" ON "BuildEducation" ("userId", "createdAt" DESC);`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildProject" (
       "id" TEXT PRIMARY KEY,

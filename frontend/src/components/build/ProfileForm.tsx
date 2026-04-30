@@ -23,9 +23,52 @@ export function ProfileForm({
   const [buildRole, setBuildRole] = useState<BuildRole>(
     (initial?.buildRole as BuildRole) ?? "CLIENT",
   );
+
+  // Resume fields
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [summary, setSummary] = useState(initial?.summary ?? "");
+  const [skills, setSkills] = useState<string[]>(initial?.skills ?? []);
+  const [skillInput, setSkillInput] = useState("");
+  const [languages, setLanguages] = useState<string[]>(initial?.languages ?? []);
+  const [languageInput, setLanguageInput] = useState("");
+  const [salaryMin, setSalaryMin] = useState<string>(
+    initial?.salaryMin != null ? String(initial.salaryMin) : "",
+  );
+  const [salaryMax, setSalaryMax] = useState<string>(
+    initial?.salaryMax != null ? String(initial.salaryMax) : "",
+  );
+  const [salaryCurrency, setSalaryCurrency] = useState(initial?.salaryCurrency ?? "RUB");
+  const [availability, setAvailability] = useState(initial?.availability ?? "");
+  const [experienceYears, setExperienceYears] = useState<string>(
+    initial?.experienceYears != null ? String(initial.experienceYears) : "0",
+  );
+  const [photoUrl, setPhotoUrl] = useState(initial?.photoUrl ?? "");
+  const [openToWork, setOpenToWork] = useState<boolean>(initial?.openToWork ?? false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  function addSkill() {
+    const v = skillInput.trim();
+    if (!v) return;
+    if (skills.includes(v)) {
+      setSkillInput("");
+      return;
+    }
+    setSkills([...skills, v].slice(0, 50));
+    setSkillInput("");
+  }
+  function addLanguage() {
+    const v = languageInput.trim();
+    if (!v) return;
+    if (languages.includes(v)) {
+      setLanguageInput("");
+      return;
+    }
+    setLanguages([...languages, v].slice(0, 20));
+    setLanguageInput("");
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +81,17 @@ export function ProfileForm({
         city: city.trim() || null,
         description: description.trim() || null,
         buildRole,
+        title: title.trim() || null,
+        summary: summary.trim() || null,
+        skills,
+        languages,
+        salaryMin: salaryMin ? Number(salaryMin) : null,
+        salaryMax: salaryMax ? Number(salaryMax) : null,
+        salaryCurrency: salaryCurrency || "RUB",
+        availability: availability.trim() || null,
+        experienceYears: experienceYears ? Number(experienceYears) : 0,
+        photoUrl: photoUrl.trim() || null,
+        openToWork,
       });
       setSavedAt(new Date().toISOString());
       onSaved?.(saved);
@@ -49,7 +103,8 @@ export function ProfileForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
+    <form onSubmit={submit} className="space-y-6">
+      <SectionTitle title="Identity" />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Display name" required>
           <input
@@ -61,12 +116,12 @@ export function ProfileForm({
             className="input-build"
           />
         </Field>
-        <Field label="Phone">
+        <Field label="Headline / job title">
           <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            maxLength={32}
-            placeholder="+1 555 0100"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={200}
+            placeholder="e.g. Senior welder, 8 years"
             className="input-build"
           />
         </Field>
@@ -75,6 +130,24 @@ export function ProfileForm({
             value={city}
             onChange={(e) => setCity(e.target.value)}
             maxLength={100}
+            className="input-build"
+          />
+        </Field>
+        <Field label="Phone">
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            maxLength={32}
+            placeholder="+7 700 000 0000"
+            className="input-build"
+          />
+        </Field>
+        <Field label="Photo URL">
+          <input
+            value={photoUrl}
+            onChange={(e) => setPhotoUrl(e.target.value)}
+            maxLength={2000}
+            placeholder="https://…"
             className="input-build"
           />
         </Field>
@@ -99,13 +172,162 @@ export function ProfileForm({
         </Field>
       </div>
 
-      <Field label="About">
+      <SectionTitle title="Resume" hint="Visible on your public profile (/build/u/[id])." />
+
+      <Field label="Summary">
+        <textarea
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          rows={4}
+          maxLength={4000}
+          placeholder="2–3 lines about yourself: specialisation, key projects, what you're looking for."
+          className="input-build"
+        />
+      </Field>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Skills (press Enter to add)">
+          <div className="flex flex-wrap gap-1.5 rounded-lg border border-white/10 bg-white/5 p-2">
+            {skills.map((s) => (
+              <span
+                key={s}
+                className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-200"
+              >
+                {s}
+                <button
+                  type="button"
+                  onClick={() => setSkills(skills.filter((x) => x !== s))}
+                  className="text-emerald-200/60 hover:text-emerald-200"
+                  aria-label={`Remove ${s}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              value={skillInput}
+              onChange={(e) => setSkillInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addSkill();
+                }
+              }}
+              onBlur={addSkill}
+              placeholder={skills.length === 0 ? "Welding, AutoCAD, Lifting permit…" : ""}
+              className="flex-1 min-w-[120px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+            />
+          </div>
+        </Field>
+
+        <Field label="Languages">
+          <div className="flex flex-wrap gap-1.5 rounded-lg border border-white/10 bg-white/5 p-2">
+            {languages.map((l) => (
+              <span
+                key={l}
+                className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-xs text-sky-200"
+              >
+                {l}
+                <button
+                  type="button"
+                  onClick={() => setLanguages(languages.filter((x) => x !== l))}
+                  className="text-sky-200/60 hover:text-sky-200"
+                  aria-label={`Remove ${l}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              value={languageInput}
+              onChange={(e) => setLanguageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addLanguage();
+                }
+              }}
+              onBlur={addLanguage}
+              placeholder={languages.length === 0 ? "Russian native, English B2…" : ""}
+              className="flex-1 min-w-[120px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+            />
+          </div>
+        </Field>
+
+        <Field label="Years of experience">
+          <input
+            type="number"
+            min={0}
+            max={80}
+            value={experienceYears}
+            onChange={(e) => setExperienceYears(e.target.value.replace(/[^\d]/g, ""))}
+            className="input-build"
+          />
+        </Field>
+
+        <Field label="Availability">
+          <input
+            value={availability}
+            onChange={(e) => setAvailability(e.target.value)}
+            maxLength={100}
+            placeholder="Immediately / 2 weeks / part-time"
+            className="input-build"
+          />
+        </Field>
+
+        <Field label="Salary expectation — min">
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              value={salaryMin}
+              onChange={(e) => setSalaryMin(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="0"
+              className="input-build flex-1"
+            />
+            <select
+              value={salaryCurrency}
+              onChange={(e) => setSalaryCurrency(e.target.value)}
+              className="input-build w-24"
+            >
+              <option value="RUB">RUB</option>
+              <option value="USD">USD</option>
+              <option value="KZT">KZT</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+        </Field>
+        <Field label="Salary expectation — max">
+          <input
+            type="number"
+            min={0}
+            value={salaryMax}
+            onChange={(e) => setSalaryMax(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="optional"
+            className="input-build"
+          />
+        </Field>
+      </div>
+
+      <Field label="">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-200">
+          <input
+            type="checkbox"
+            checked={openToWork}
+            onChange={(e) => setOpenToWork(e.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-white/5 accent-emerald-500"
+          />
+          <span>Open to work — show me in talent search</span>
+        </label>
+      </Field>
+
+      <Field label="About (long-form)">
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={5}
           maxLength={4000}
-          placeholder="Experience, specialisations, references…"
+          placeholder="References, certifications, equipment owned, recent projects…"
           className="input-build"
         />
       </Field>
@@ -140,6 +362,15 @@ export function ProfileForm({
   );
 }
 
+function SectionTitle({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="border-b border-white/10 pb-1">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</h3>
+      {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
 function Field({
   label,
   required,
@@ -151,9 +382,13 @@ function Field({
 }) {
   return (
     <label className="block text-sm font-medium text-slate-200">
-      {label}
-      {required && <span className="ml-0.5 text-rose-400">*</span>}
-      <div className="mt-1.5">{children}</div>
+      {label && (
+        <>
+          {label}
+          {required && <span className="ml-0.5 text-rose-400">*</span>}
+        </>
+      )}
+      <div className={label ? "mt-1.5" : ""}>{children}</div>
     </label>
   );
 }

@@ -52,9 +52,18 @@ buildRouter.get("/users/me", async (req, res) => {
       [auth.sub],
     );
 
+    const rawProfile = p.rows[0] || null;
+    const profile = rawProfile
+      ? {
+          ...rawProfile,
+          skills: safeParseJson(rawProfile.skillsJson, [] as string[]),
+          languages: safeParseJson(rawProfile.languagesJson, [] as string[]),
+        }
+      : null;
+
     return ok(res, {
       user: u.rows[0],
-      profile: p.rows[0] || null,
+      profile,
     });
   } catch (err: unknown) {
     return fail(res, 500, "users_me_failed", { details: (err as Error).message });
@@ -94,16 +103,66 @@ buildRouter.post("/profiles", async (req, res) => {
       return fail(res, 403, "admin_role_not_self_assignable");
     }
 
+    // Resume-style fields (all optional).
+    const title = req.body?.title == null
+      ? null
+      : (vString(req.body.title, "title", { max: 200, allowEmpty: true }).ok
+          ? String(req.body.title).trim() || null
+          : null);
+    const summary = req.body?.summary == null
+      ? null
+      : (vString(req.body.summary, "summary", { max: 4000, allowEmpty: true }).ok
+          ? String(req.body.summary).trim() || null
+          : null);
+    const skills = Array.isArray(req.body?.skills)
+      ? req.body.skills.map((s: unknown) => String(s).trim()).filter((s: string) => s.length > 0 && s.length <= 60).slice(0, 50)
+      : [];
+    const languages = Array.isArray(req.body?.languages)
+      ? req.body.languages.map((s: unknown) => String(s).trim()).filter((s: string) => s.length > 0 && s.length <= 60).slice(0, 20)
+      : [];
+    const salaryMin = req.body?.salaryMin == null ? null : Number(req.body.salaryMin);
+    const salaryMax = req.body?.salaryMax == null ? null : Number(req.body.salaryMax);
+    if (salaryMin != null && (!Number.isFinite(salaryMin) || salaryMin < 0)) return fail(res, 400, "salaryMin_invalid");
+    if (salaryMax != null && (!Number.isFinite(salaryMax) || salaryMax < 0)) return fail(res, 400, "salaryMax_invalid");
+    const salaryCurrency = typeof req.body?.salaryCurrency === "string"
+      ? req.body.salaryCurrency.trim().slice(0, 8) || "RUB"
+      : "RUB";
+    const availability = req.body?.availability == null
+      ? null
+      : String(req.body.availability).trim().slice(0, 100) || null;
+    const experienceYears = req.body?.experienceYears == null
+      ? 0
+      : Math.max(0, Math.min(80, Math.round(Number(req.body.experienceYears) || 0)));
+    const photoUrl = req.body?.photoUrl == null
+      ? null
+      : String(req.body.photoUrl).trim().slice(0, 2000) || null;
+    const openToWork = req.body?.openToWork === true || req.body?.openToWork === "true";
+
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildProfile" ("id","userId","name","phone","city","description","buildRole")
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO "BuildProfile"
+         ("id","userId","name","phone","city","description","buildRole",
+          "title","summary","skillsJson","languagesJson",
+          "salaryMin","salaryMax","salaryCurrency","availability",
+          "experienceYears","photoUrl","openToWork")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        ON CONFLICT ("userId") DO UPDATE SET
          "name" = EXCLUDED."name",
          "phone" = EXCLUDED."phone",
          "city" = EXCLUDED."city",
          "description" = EXCLUDED."description",
          "buildRole" = EXCLUDED."buildRole",
+         "title" = EXCLUDED."title",
+         "summary" = EXCLUDED."summary",
+         "skillsJson" = EXCLUDED."skillsJson",
+         "languagesJson" = EXCLUDED."languagesJson",
+         "salaryMin" = EXCLUDED."salaryMin",
+         "salaryMax" = EXCLUDED."salaryMax",
+         "salaryCurrency" = EXCLUDED."salaryCurrency",
+         "availability" = EXCLUDED."availability",
+         "experienceYears" = EXCLUDED."experienceYears",
+         "photoUrl" = EXCLUDED."photoUrl",
+         "openToWork" = EXCLUDED."openToWork",
          "updatedAt" = NOW()
        RETURNING *`,
       [
@@ -114,21 +173,43 @@ buildRouter.post("/profiles", async (req, res) => {
         city.value || null,
         description.value || null,
         role.value,
+        title,
+        summary,
+        JSON.stringify(skills),
+        JSON.stringify(languages),
+        salaryMin != null ? Math.round(salaryMin) : null,
+        salaryMax != null ? Math.round(salaryMax) : null,
+        salaryCurrency,
+        availability,
+        experienceYears,
+        photoUrl,
+        openToWork,
       ],
     );
 
-    return ok(res, result.rows[0], 201);
+    const row = result.rows[0];
+    return ok(res, {
+      ...row,
+      skills: safeParseJson(row.skillsJson, [] as string[]),
+      languages: safeParseJson(row.languagesJson, [] as string[]),
+    }, 201);
   } catch (err: unknown) {
     return fail(res, 500, "profile_upsert_failed", { details: (err as Error).message });
   }
 });
 
 // GET /api/build/profiles/:id — public profile by userId
+// Returns full resume bundle: profile + experiences + education.
+// Email is included but no phone — phone stays internal until user
+// explicitly shares contact via DM.
 buildRouter.get("/profiles/:id", async (req, res) => {
   try {
     const id = String(req.params.id);
     const result = await pool.query(
       `SELECT p."id", p."userId", p."name", p."city", p."description", p."buildRole", p."createdAt",
+              p."title", p."summary", p."skillsJson", p."languagesJson",
+              p."salaryMin", p."salaryMax", p."salaryCurrency", p."availability",
+              p."experienceYears", p."photoUrl", p."openToWork",
               u."email"
        FROM "BuildProfile" p
        LEFT JOIN "AEVIONUser" u ON u."id" = p."userId"
@@ -137,9 +218,126 @@ buildRouter.get("/profiles/:id", async (req, res) => {
       [id],
     );
     if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
-    return ok(res, result.rows[0]);
+
+    const [exp, edu] = await Promise.all([
+      pool.query(
+        `SELECT * FROM "BuildExperience" WHERE "userId" = $1
+         ORDER BY "current" DESC, "sortOrder" ASC, "createdAt" DESC`,
+        [id],
+      ),
+      pool.query(
+        `SELECT * FROM "BuildEducation" WHERE "userId" = $1
+         ORDER BY COALESCE("toYear",9999) DESC, "createdAt" DESC`,
+        [id],
+      ),
+    ]);
+
+    const row = result.rows[0];
+    res.setHeader("Cache-Control", "public, max-age=60");
+    return ok(res, {
+      ...row,
+      skills: safeParseJson(row.skillsJson, [] as string[]),
+      languages: safeParseJson(row.languagesJson, [] as string[]),
+      experiences: exp.rows,
+      education: edu.rows,
+    });
   } catch (err: unknown) {
     return fail(res, 500, "profile_fetch_failed", { details: (err as Error).message });
+  }
+});
+
+// ── Experience CRUD ──────────────────────────────────────────────────
+
+// POST /api/build/experiences — add an experience entry
+buildRouter.post("/experiences", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const title = vString(req.body?.title, "title", { min: 1, max: 200 });
+    if (!title.ok) return fail(res, 400, title.error);
+    const company = vString(req.body?.company, "company", { min: 1, max: 200 });
+    if (!company.ok) return fail(res, 400, company.error);
+
+    const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 100) || null;
+    const fromDate = req.body?.fromDate == null ? null : String(req.body.fromDate).trim().slice(0, 32) || null;
+    const toDate = req.body?.toDate == null ? null : String(req.body.toDate).trim().slice(0, 32) || null;
+    const current = req.body?.current === true || req.body?.current === "true";
+    const description = req.body?.description == null
+      ? null
+      : String(req.body.description).trim().slice(0, 4000) || null;
+
+    const id = crypto.randomUUID();
+    const result = await pool.query(
+      `INSERT INTO "BuildExperience" ("id","userId","title","company","city","fromDate","toDate","current","description")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [id, auth.sub, title.value, company.value, city, fromDate, current ? null : toDate, current, description],
+    );
+    return ok(res, result.rows[0], 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "experience_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/experiences/:id — owner only
+buildRouter.delete("/experiences/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const row = await pool.query(`SELECT "userId" FROM "BuildExperience" WHERE "id" = $1`, [id]);
+    if (row.rowCount === 0) return fail(res, 404, "experience_not_found");
+    if (row.rows[0].userId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+    await pool.query(`DELETE FROM "BuildExperience" WHERE "id" = $1`, [id]);
+    return ok(res, { id, deleted: true });
+  } catch (err: unknown) {
+    return fail(res, 500, "experience_delete_failed", { details: (err as Error).message });
+  }
+});
+
+// ── Education CRUD ───────────────────────────────────────────────────
+
+// POST /api/build/education — add an education entry
+buildRouter.post("/education", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const institution = vString(req.body?.institution, "institution", { min: 1, max: 200 });
+    if (!institution.ok) return fail(res, 400, institution.error);
+
+    const degree = req.body?.degree == null ? null : String(req.body.degree).trim().slice(0, 100) || null;
+    const field = req.body?.field == null ? null : String(req.body.field).trim().slice(0, 200) || null;
+    const fromYear = req.body?.fromYear == null ? null : Math.round(Number(req.body.fromYear));
+    const toYear = req.body?.toYear == null ? null : Math.round(Number(req.body.toYear));
+    if (fromYear != null && (!Number.isFinite(fromYear) || fromYear < 1900 || fromYear > 2100)) return fail(res, 400, "fromYear_invalid");
+    if (toYear != null && (!Number.isFinite(toYear) || toYear < 1900 || toYear > 2100)) return fail(res, 400, "toYear_invalid");
+
+    const id = crypto.randomUUID();
+    const result = await pool.query(
+      `INSERT INTO "BuildEducation" ("id","userId","institution","degree","field","fromYear","toYear")
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [id, auth.sub, institution.value, degree, field, fromYear, toYear],
+    );
+    return ok(res, result.rows[0], 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "education_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/education/:id — owner only
+buildRouter.delete("/education/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const row = await pool.query(`SELECT "userId" FROM "BuildEducation" WHERE "id" = $1`, [id]);
+    if (row.rowCount === 0) return fail(res, 404, "education_not_found");
+    if (row.rows[0].userId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+    await pool.query(`DELETE FROM "BuildEducation" WHERE "id" = $1`, [id]);
+    return ok(res, { id, deleted: true });
+  } catch (err: unknown) {
+    return fail(res, 500, "education_delete_failed", { details: (err as Error).message });
   }
 });
 

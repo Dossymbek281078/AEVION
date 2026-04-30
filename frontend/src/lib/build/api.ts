@@ -20,6 +20,49 @@ export type BuildProfile = {
   buildRole: BuildRole;
   createdAt: string;
   updatedAt: string;
+  // Resume fields
+  title: string | null;
+  summary: string | null;
+  skills: string[];
+  languages: string[];
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  availability: string | null;
+  experienceYears: number;
+  photoUrl: string | null;
+  openToWork: boolean;
+};
+
+export type BuildExperience = {
+  id: string;
+  userId: string;
+  title: string;
+  company: string;
+  city: string | null;
+  fromDate: string | null;
+  toDate: string | null;
+  current: boolean;
+  description: string | null;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type BuildEducation = {
+  id: string;
+  userId: string;
+  institution: string;
+  degree: string | null;
+  field: string | null;
+  fromYear: number | null;
+  toYear: number | null;
+  createdAt: string;
+};
+
+export type BuildResumeBundle = BuildProfile & {
+  email: string | null;
+  experiences: BuildExperience[];
+  education: BuildEducation[];
 };
 
 export type BuildProject = {
@@ -198,9 +241,40 @@ export const buildApi = {
     city?: string | null;
     description?: string | null;
     buildRole?: BuildRole;
+    title?: string | null;
+    summary?: string | null;
+    skills?: string[];
+    languages?: string[];
+    salaryMin?: number | null;
+    salaryMax?: number | null;
+    salaryCurrency?: string | null;
+    availability?: string | null;
+    experienceYears?: number;
+    photoUrl?: string | null;
+    openToWork?: boolean;
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
-    call<BuildProfile & { email: string | null }>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
+    call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
+  addExperience: (input: {
+    title: string;
+    company: string;
+    city?: string | null;
+    fromDate?: string | null;
+    toDate?: string | null;
+    current?: boolean;
+    description?: string | null;
+  }) => call<BuildExperience>("POST", "/api/build/experiences", input),
+  deleteExperience: (id: string) =>
+    call<{ id: string; deleted: boolean }>("DELETE", `/api/build/experiences/${encodeURIComponent(id)}`),
+  addEducation: (input: {
+    institution: string;
+    degree?: string | null;
+    field?: string | null;
+    fromYear?: number | null;
+    toYear?: number | null;
+  }) => call<BuildEducation>("POST", "/api/build/education", input),
+  deleteEducation: (id: string) =>
+    call<{ id: string; deleted: boolean }>("DELETE", `/api/build/education/${encodeURIComponent(id)}`),
 
   // Projects
   listProjects: (q?: { status?: ProjectStatus; q?: string; mine?: boolean; limit?: number }) => {

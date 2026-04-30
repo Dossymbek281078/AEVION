@@ -208,7 +208,13 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/health": { get: { summary: "QBuild health + enum dictionaries" } },
       "/api/build/users/me": { get: { summary: "Current user + build profile" } },
       "/api/build/profiles": { post: { summary: "Upsert own build profile" } },
-      "/api/build/profiles/{id}": { get: { summary: "Public profile by userId" } },
+      "/api/build/profiles/{id}": {
+        get: { summary: "Public resume bundle (profile + skills/languages + experiences + education) — cache 60s" },
+      },
+      "/api/build/experiences": { post: { summary: "Add a work experience entry to own profile" } },
+      "/api/build/experiences/{id}": { delete: { summary: "Delete experience (owner only)" } },
+      "/api/build/education": { post: { summary: "Add an education entry to own profile" } },
+      "/api/build/education/{id}": { delete: { summary: "Delete education entry (owner only)" } },
       "/api/build/projects": {
         get: { summary: "List projects (?status=&q=&mine=1&limit=)" },
         post: { summary: "Create project (Bearer required)" },

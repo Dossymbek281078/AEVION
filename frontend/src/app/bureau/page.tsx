@@ -21,6 +21,7 @@ type Certificate = {
   verificationLevel?: "anonymous" | "verified";
   verifiedName?: string | null;
   verifiedAt?: string | null;
+  shieldId?: string | null;
 };
 
 const KIND_ICONS: Record<string, string> = {
@@ -378,6 +379,15 @@ export default function BureauPage() {
                     )}
                     <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Link</button>
                     <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy ID</button>
+                    {cert.shieldId && (
+                      <Link
+                        href={`/quantum-shield/${cert.shieldId}`}
+                        title={`Quantum Shield ${cert.shieldId}`}
+                        style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(13,148,136,0.1)", color: "#0d9488", textDecoration: "none", fontWeight: 800, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(13,148,136,0.25)" }}
+                      >
+                        🛡️ Shield
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

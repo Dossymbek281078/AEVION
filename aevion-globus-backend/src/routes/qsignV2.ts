@@ -26,6 +26,10 @@ import {
   DILITHIUM_KID_PREVIEW,
   DILITHIUM_KID_REAL,
 } from "../lib/qsignV2/dilithium";
+import {
+  createShieldRecord,
+  ensureShieldTableShared,
+} from "../lib/qshield/createRecord";
 
 /* ───────── rate limits ─────────
  * Per-IP token-bucket style windows guarding the two expensive write paths.
@@ -969,6 +973,37 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       issuerEmail: auth.email,
     });
 
+    /* Optional QShield link — caller opts in via body.shield === true.
+     * Failure here MUST NOT fail the signature itself; we log and return
+     * shieldError so the caller can surface a partial-success state. */
+    let shieldOut:
+      | { id: string; publicKey: string; threshold: number; totalShards: number; createdAt: string }
+      | null = null;
+    let shieldErr: string | null = null;
+    if (body.shield === true) {
+      try {
+        await ensureShieldTableShared(pool);
+        const created = await createShieldRecord(pool, {
+          objectId: id,
+          objectTitle: typeof body.shieldTitle === "string"
+            ? body.shieldTitle.slice(0, 80)
+            : `QSign ${id.slice(0, 8)}`,
+          payload: { qsignId: id, payloadHash },
+          ownerUserId: auth.sub,
+        });
+        shieldOut = {
+          id: created.id,
+          publicKey: created.publicKey,
+          threshold: created.threshold,
+          totalShards: created.totalShards,
+          createdAt: created.createdAt,
+        };
+      } catch (shieldE: any) {
+        shieldErr = shieldE?.message || String(shieldE);
+        console.error(`[qsign v2] [req=${reqId(req)}] qshield link failed`, shieldE);
+      }
+    }
+
     res.status(201).json({
       id,
       algoVersion: ALGO_VERSION,
@@ -998,6 +1033,8 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
             lng: geo.lng,
           }
         : null,
+      qshield: shieldOut,
+      shieldError: shieldErr,
       createdAt: new Date().toISOString(),
       verifyUrl: `/api/qsign/v2/verify/${id}`,
       publicUrl: `/qsign/verify/${id}`,

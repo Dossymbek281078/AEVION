@@ -682,7 +682,7 @@ function safeProductKeyPrefix(raw: unknown): string | null {
 planetComplianceRouter.get("/stats", async (req, res) => {
   try {
     await ensurePlanetTables();
-    const [sym, voters, subs, versions, certified] = await Promise.all([
+    const [sym, voters, subs, versions, certified, shielded] = await Promise.all([
       pool.query(
         `SELECT COUNT(DISTINCT "userId")::int AS n FROM "PlanetCodeSymbolHistory" WHERE "validUntil" IS NULL`,
       ),
@@ -692,6 +692,13 @@ planetComplianceRouter.get("/stats", async (req, res) => {
       pool.query(
         `SELECT COUNT(*)::int AS n FROM "PlanetArtifactVersion" WHERE "certificateId" IS NOT NULL`,
       ),
+      // QuantumShield active count — wrapped in a try/catch via SQL to avoid
+      // 500-ing /stats if the table does not yet exist on a fresh deploy.
+      pool
+        .query(
+          `SELECT COUNT(*)::int AS n FROM "QuantumShield" WHERE "status" = 'active'`,
+        )
+        .catch(() => ({ rows: [{ n: 0 }] }) as { rows: Array<{ n: number }> }),
     ]);
 
     const eligibleParticipants = Number(sym.rows[0]?.n ?? 0);
@@ -744,12 +751,15 @@ planetComplianceRouter.get("/stats", async (req, res) => {
       submissions: Number(subs.rows[0]?.n ?? 0),
       artifactVersions: Number(versions.rows[0]?.n ?? 0),
       certifiedArtifactVersions: Number(certified.rows[0]?.n ?? 0),
+      shieldedObjects: Number(shielded.rows[0]?.n ?? 0),
       scopedToProductKeyPrefix: scoped,
       definitions: {
         eligibleParticipants:
           "Пользователи с активным Planet CodeSymbol (запись в PlanetCodeSymbolHistory с validUntil IS NULL). Кандидат на метрику Y для «проголосовало X из Y».",
         distinctVotersAllTime:
           "Уникальные userId, хотя бы раз голосовавшие по любому артефакту Planet.",
+        shieldedObjects:
+          "Активные записи Quantum Shield (Shamir 2-of-3 + Ed25519). Падает на 0 если таблица ещё не создана на этом окружении.",
         scopedToProductKeyPrefix:
           "Если передан query productKeyPrefix (безопасный префикс), дополнительно считаются submission/versions только с PlanetSubmission.productKey LIKE prefix||'%'.",
       },

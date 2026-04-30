@@ -6,11 +6,13 @@ import { useI18n } from "@/lib/i18n";
 import { SubrouteFooter } from "../_components/SubrouteFooter";
 
 // Investor / developer-facing snapshot of the AEVION Bank API surface.
-// This is a hand-curated docs view — the source of truth for live shapes
-// is /api/openapi.json on the backend. Linked at the top.
+// Source of truth for live shapes is /api/openapi.json on the backend
+// (linked at the top). This file is hand-curated so it can ship i18n,
+// curl examples with substituted vars, and group endpoints into the
+// flow that matches the marketing/investor narrative.
 //
-// Each endpoint shows: method+path, one-line purpose, curl example, sample
-// response. Copy buttons on the curl examples.
+// Each endpoint shows: method+path, one-line purpose, optional note,
+// curl example, sample response. Copy buttons on the curl examples.
 
 type Method = "GET" | "POST";
 
@@ -18,9 +20,10 @@ type Endpoint = {
   method: Method;
   path: string;
   summaryKey: string;
+  noteKey?: string;
+  authKey?: string;
   exampleCurl: string;
   exampleResponse: string;
-  authed?: boolean;
 };
 
 const BASE = "$BASE";
@@ -52,10 +55,10 @@ const ENDPOINTS: Array<{ groupKey: string; items: Endpoint[] }> = [
         method: "GET",
         path: "/api/auth/me",
         summaryKey: "api.ep.me.summary",
+        authKey: "api.bearer",
         exampleCurl: `curl ${BASE}/api/auth/me \\
   -H 'Authorization: Bearer ${TOKEN}'`,
         exampleResponse: `{ "id": "usr_...", "email": "lana@...", "name": "Lana", "role": "user" }`,
-        authed: true,
       },
     ],
   },
@@ -66,41 +69,55 @@ const ENDPOINTS: Array<{ groupKey: string; items: Endpoint[] }> = [
         method: "GET",
         path: "/api/qtrade/accounts",
         summaryKey: "api.ep.accounts.summary",
+        authKey: "api.bearer",
         exampleCurl: `curl ${BASE}/api/qtrade/accounts \\
   -H 'Authorization: Bearer ${TOKEN}'`,
-        exampleResponse: `[{ "id": "acc_x9", "balance": 142.50, "currency": "AEC", "createdAt": "..." }]`,
-        authed: true,
+        exampleResponse: `{ "items": [{ "id": "acc_x9", "balance": 142.50, "currency": "AEC", "createdAt": "..." }] }`,
+      },
+      {
+        method: "GET",
+        path: "/api/qtrade/accounts/lookup",
+        summaryKey: "api.ep.lookup.summary",
+        authKey: "api.bearer",
+        exampleCurl: `curl '${BASE}/api/qtrade/accounts/lookup?email=bob@example.com' \\
+  -H 'Authorization: Bearer ${TOKEN}'`,
+        exampleResponse: `{ "id": "acc_y2", "owner": "bob@example.com" }`,
       },
       {
         method: "POST",
         path: "/api/qtrade/topup",
         summaryKey: "api.ep.topup.summary",
+        noteKey: "api.note.idempotency",
+        authKey: "api.bearer",
         exampleCurl: `curl -X POST ${BASE}/api/qtrade/topup \\
   -H 'Authorization: Bearer ${TOKEN}' \\
   -H 'Content-Type: application/json' \\
+  -H 'Idempotency-Key: topup-2026-04-30-001' \\
   -d '{"accountId":"acc_x9","amount":100}'`,
         exampleResponse: `{ "id": "op_...", "balance": 242.50, "updatedAt": "..." }`,
-        authed: true,
       },
       {
         method: "POST",
         path: "/api/qtrade/transfer",
         summaryKey: "api.ep.transfer.summary",
+        noteKey: "api.note.idempotency",
+        authKey: "api.bearer",
         exampleCurl: `curl -X POST ${BASE}/api/qtrade/transfer \\
   -H 'Authorization: Bearer ${TOKEN}' \\
   -H 'Content-Type: application/json' \\
+  -H 'Idempotency-Key: trf-2026-04-30-001' \\
   -d '{"from":"acc_x9","to":"acc_y2","amount":25}'`,
         exampleResponse: `{ "id": "trf_...", "from": "acc_x9", "to": "acc_y2", "amount": 25 }`,
-        authed: true,
       },
       {
         method: "GET",
         path: "/api/qtrade/operations",
         summaryKey: "api.ep.operations.summary",
-        exampleCurl: `curl ${BASE}/api/qtrade/operations \\
+        noteKey: "api.note.cursor",
+        authKey: "api.bearer",
+        exampleCurl: `curl '${BASE}/api/qtrade/operations?limit=20' \\
   -H 'Authorization: Bearer ${TOKEN}'`,
-        exampleResponse: `[{ "id": "op_...", "kind": "transfer", "amount": 25, "from": "...", "to": "...", "createdAt": "..." }]`,
-        authed: true,
+        exampleResponse: `{ "items": [{ "id": "op_...", "kind": "transfer", "amount": 25, "from": "...", "to": "...", "createdAt": "..." }], "nextCursor": "op_..." }`,
       },
     ],
   },
@@ -111,12 +128,12 @@ const ENDPOINTS: Array<{ groupKey: string; items: Endpoint[] }> = [
         method: "POST",
         path: "/api/qsign/sign",
         summaryKey: "api.ep.sign.summary",
+        authKey: "api.bearer",
         exampleCurl: `curl -X POST ${BASE}/api/qsign/sign \\
   -H 'Authorization: Bearer ${TOKEN}' \\
   -H 'Content-Type: application/json' \\
   -d '{"payload":{"intent":"transfer","amount":25}}'`,
         exampleResponse: `{ "payload": {...}, "signature": "0xfeed...", "algo": "Ed25519", "createdAt": "..." }`,
-        authed: true,
       },
       {
         method: "POST",
@@ -130,25 +147,115 @@ const ENDPOINTS: Array<{ groupKey: string; items: Endpoint[] }> = [
     ],
   },
   {
-    groupKey: "api.group.ecosystem",
+    groupKey: "api.group.ecosystemEarnings",
+    items: [
+      {
+        method: "GET",
+        path: "/api/ecosystem/earnings",
+        summaryKey: "api.ep.ecosystemEarnings.summary",
+        authKey: "api.bearer",
+        exampleCurl: `curl ${BASE}/api/ecosystem/earnings \\
+  -H 'Authorization: Bearer ${TOKEN}'`,
+        exampleResponse: `{ "totals": { "qright": 12.50, "cyberchess": 30.00, "planet": 3.00, "all": 45.50 }, "perSource": [ { "source": "qright", "amount": 12.50, "count": 2, "last": "..." }, { "source": "cyberchess", ... }, { "source": "planet", ... } ] }`,
+      },
+      {
+        method: "GET",
+        path: "/api/qright/royalties",
+        summaryKey: "api.ep.qrightRoyalties.summary",
+        authKey: "api.bearer",
+        exampleCurl: `curl ${BASE}/api/qright/royalties \\
+  -H 'Authorization: Bearer ${TOKEN}'`,
+        exampleResponse: `{ "items": [{ "id": "roy_...", "productKey": "album-x", "period": "2026-Q1", "amount": 12.34, "paidAt": "..." }] }`,
+      },
+      {
+        method: "GET",
+        path: "/api/cyberchess/results",
+        summaryKey: "api.ep.chessResults.summary",
+        authKey: "api.bearer",
+        exampleCurl: `curl ${BASE}/api/cyberchess/results \\
+  -H 'Authorization: Bearer ${TOKEN}'`,
+        exampleResponse: `{ "items": [{ "id": "prize_...", "tournamentId": "tour_...", "place": 1, "amount": 25, "finalizedAt": "..." }] }`,
+      },
+      {
+        method: "GET",
+        path: "/api/cyberchess/upcoming",
+        summaryKey: "api.ep.chessUpcoming.summary",
+        authKey: "api.public",
+        exampleCurl: `curl ${BASE}/api/cyberchess/upcoming`,
+        exampleResponse: `{ "items": [{ "id": "tour_...", "startsAt": "...", "format": "Swiss · 3+2 · 7 rounds", "prizePool": 250, "entries": 32, "capacity": 64 }] }`,
+      },
+      {
+        method: "GET",
+        path: "/api/planet/payouts",
+        summaryKey: "api.ep.planetPayouts.summary",
+        authKey: "api.bearer",
+        exampleCurl: `curl ${BASE}/api/planet/payouts \\
+  -H 'Authorization: Bearer ${TOKEN}'`,
+        exampleResponse: `{ "items": [{ "id": "pcert_...", "artifactVersionId": "art_v1", "amount": 3, "certifiedAt": "..." }] }`,
+      },
+    ],
+  },
+  {
+    groupKey: "api.group.exports",
     items: [
       {
         method: "GET",
         path: "/api/planet/stats",
         summaryKey: "api.ep.planetStats.summary",
+        authKey: "api.bearer",
         exampleCurl: `curl ${BASE}/api/planet/stats \\
   -H 'Authorization: Bearer ${TOKEN}'`,
         exampleResponse: `{ "totalArtifacts": 12, "verifiedCount": 8, "trustWeight": 0.62 }`,
-        authed: true,
       },
       {
         method: "GET",
         path: "/api/qtrade/operations.csv",
         summaryKey: "api.ep.operationsCsv.summary",
+        authKey: "api.bearer",
         exampleCurl: `curl ${BASE}/api/qtrade/operations.csv \\
   -H 'Authorization: Bearer ${TOKEN}' -o operations.csv`,
         exampleResponse: `(text/csv) id,kind,amount,from,to,createdAt\\nop_...,transfer,25,...,...,...\\n`,
-        authed: true,
+      },
+    ],
+  },
+  {
+    groupKey: "api.group.webhooks",
+    items: [
+      {
+        method: "POST",
+        path: "/api/qright/royalties/verify-webhook",
+        summaryKey: "api.ep.qrightVerifyWebhook.summary",
+        noteKey: "api.note.webhookIdem",
+        authKey: "api.auth.qrightSecret",
+        exampleCurl: `curl -X POST ${BASE}/api/qright/royalties/verify-webhook \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-QRight-Secret: $QRIGHT_WEBHOOK_SECRET' \\
+  -d '{"eventId":"evt_001","email":"creator@example.com","productKey":"album-x","period":"2026-Q1","amount":12.34}'`,
+        exampleResponse: `{ "replayed": false, "id": "roy_...", "eventId": "evt_001", "paidAt": "..." }`,
+      },
+      {
+        method: "POST",
+        path: "/api/cyberchess/tournament-finalized",
+        summaryKey: "api.ep.chessTournamentFinalized.summary",
+        noteKey: "api.note.chessIdem",
+        authKey: "api.auth.chessSecret",
+        exampleCurl: `curl -X POST ${BASE}/api/cyberchess/tournament-finalized \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-CyberChess-Secret: $CYBERCHESS_WEBHOOK_SECRET' \\
+  -d '{"tournamentId":"tour_001","podium":[{"email":"a@x.com","place":1,"amount":25},{"email":"b@x.com","place":2,"amount":15}]}'`,
+        exampleResponse: `{ "tournamentId": "tour_001", "recorded": [...], "replayed": [], "finalizedAt": "..." }`,
+      },
+      {
+        method: "POST",
+        path: "/api/planet/payouts/certify-webhook",
+        summaryKey: "api.ep.planetCertifyWebhook.summary",
+        noteKey: "api.note.webhookIdem",
+        authKey: "api.auth.planetSecret",
+        exampleCurl: `curl -X POST ${BASE}/api/planet/payouts/certify-webhook \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-Planet-Secret: $PLANET_WEBHOOK_SECRET' \\
+  -d '{"eventId":"cert_001","email":"creator@example.com","artifactVersionId":"art_v1","amount":3}'`,
+        exampleResponse: `{ "replayed": false, "id": "pcert_...", "eventId": "cert_001", "certifiedAt": "..." }`,
       },
     ],
   },
@@ -294,7 +401,7 @@ export default function BankApiDocsPage() {
         <span style={{ flex: 1, minWidth: 280, lineHeight: 1.55 }}>
           <strong>Live demo in 30 seconds.</strong>{" "}
           Open <code style={{ background: "rgba(15,23,42,0.05)", padding: "1px 6px", borderRadius: 4 }}>/bank?investor=1</code> to
-          auto-provision a demo account, run the 11-step smoke runner, and land on a printable
+          auto-provision a demo account, run the 14-step smoke runner, and land on a printable
           signed receipt — no signup required, all calls hit the same endpoints documented below.
         </span>
       </aside>
@@ -352,7 +459,7 @@ export default function BankApiDocsPage() {
                     {ep.method}
                   </span>
                   <code style={{ fontSize: 13, fontWeight: 800, fontFamily: "ui-monospace, monospace", color: "#0f172a" }}>{ep.path}</code>
-                  {ep.authed ? (
+                  {ep.authKey ? (
                     <span
                       style={{
                         fontSize: 9,
@@ -363,13 +470,30 @@ export default function BankApiDocsPage() {
                         borderRadius: 999,
                         background: "rgba(15,23,42,0.06)",
                         color: "#475569",
+                        fontFamily: "ui-monospace, monospace",
                       }}
                     >
-                      {t("api.bearer")}
+                      {t(ep.authKey)}
                     </span>
                   ) : null}
                 </header>
-                <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>{t(ep.summaryKey)}</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginBottom: ep.noteKey ? 4 : 10 }}>{t(ep.summaryKey)}</div>
+                {ep.noteKey ? (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#7c3aed",
+                      background: "rgba(124,58,237,0.06)",
+                      borderLeft: "2px solid rgba(124,58,237,0.40)",
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      marginBottom: 10,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {t(ep.noteKey)}
+                  </div>
+                ) : null}
                 <CodeBlock
                   label={t("api.curl")}
                   code={curl}

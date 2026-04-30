@@ -180,7 +180,26 @@ export default function AuditLogPage() {
       const t = r.ts ? new Date(r.ts).getTime() : 0;
       if (t && (t < fromTs || t > toTs)) return false;
       if (q) {
-        const hay = `${r.id} ${r.counterparty ?? ""}`.toLowerCase();
+        // Match across the full visible row + signature payload so a query
+        // like "0xfeed", "12.50", "topup", "in", "acc_x9" or any nested
+        // intent value all narrow the table.
+        const sigHash = r.signature?.signature ?? "";
+        const sigAlgo = r.signature?.algo ?? "";
+        const sigPayload = r.signature?.payload
+          ? Object.values(r.signature.payload).map((v) => String(v)).join(" ")
+          : "";
+        const hay = [
+          r.id,
+          r.counterparty ?? "",
+          r.kind,
+          r.direction,
+          String(r.amount),
+          sigHash,
+          sigAlgo,
+          sigPayload,
+        ]
+          .join(" ")
+          .toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -413,12 +432,13 @@ export default function AuditLogPage() {
             />
           </label>
           <label style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>
-            Search id / counterparty
+            Search any field
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="acc_… or op_…"
+              placeholder="acc_… · op_… · 12.50 · topup · 0xfeed…"
+              title="Matches across id, counterparty, kind, direction, amount, signature hash + payload"
               style={{ display: "block", marginTop: 4, width: "100%", padding: 8, borderRadius: 8, border: "1px solid rgba(15,23,42,0.18)" }}
             />
           </label>

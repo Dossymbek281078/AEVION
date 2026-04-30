@@ -13,6 +13,12 @@ import {
 import type { GlobusProject } from "../types/globus";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import {
+  ensureModuleWebhookTables,
+  fireModuleWebhook,
+  MODULE_WEBHOOK_EVENTS,
+  type ModuleWebhookEvent,
+} from "../lib/modules/webhooks";
 
 export const modulesRouter = Router();
 
@@ -716,6 +722,22 @@ modulesRouter.patch("/admin/:id", async (req, res) => {
       ]
     );
 
+    // Fire webhook AFTER the audit row lands so subscribers can correlate
+    // by `at`. Two distinct events:
+    //   - `module.override.cleared` — the entire override row was dropped
+    //   - `module.override.set`     — fields added or updated
+    // The latter covers both "first time set" and "edit existing" — keep it
+    // simple, the diff is in the payload.
+    const webhookEvent: ModuleWebhookEvent = !after.hadOverride
+      ? "module.override.cleared"
+      : "module.override.set";
+    fireModuleWebhook(pool, webhookEvent, {
+      moduleId: id,
+      before,
+      after,
+      at: new Date().toISOString(),
+    });
+
     res.json({
       moduleId: id,
       before,
@@ -771,5 +793,260 @@ modulesRouter.get("/admin/audit", async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: "audit failed", details: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tier 3 — webhooks (admin-managed) + public RSS
+// ─────────────────────────────────────────────────────────────────────────
+
+// 🔹 POST /admin/webhooks — register a subscription. Body:
+//      { url: string, events?: string[] | "*", label?: string }
+//    Returns the generated id + secret. SECRET IS RETURNED ONLY ONCE.
+modulesRouter.post("/admin/webhooks", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ error: "url must be http(s)://" });
+    }
+    if (url.length > 2000) {
+      return res.status(400).json({ error: "url too long" });
+    }
+    const label = typeof req.body?.label === "string" ? req.body.label.slice(0, 200) : null;
+
+    const rawEvents = req.body?.events;
+    let events: string;
+    if (rawEvents === undefined || rawEvents === null || rawEvents === "*") {
+      events = "*";
+    } else if (Array.isArray(rawEvents)) {
+      const cleaned = rawEvents
+        .filter((e): e is string => typeof e === "string")
+        .map((e) => e.trim())
+        .filter(Boolean);
+      const unknown = cleaned.find(
+        (e) => e !== "*" && !MODULE_WEBHOOK_EVENTS.includes(e as ModuleWebhookEvent)
+      );
+      if (unknown) {
+        return res.status(400).json({
+          error: "unknown event",
+          unknown,
+          allowed: ["*", ...MODULE_WEBHOOK_EVENTS],
+        });
+      }
+      events = cleaned.length ? cleaned.join(",") : "*";
+    } else {
+      return res.status(400).json({ error: "events must be array or '*'" });
+    }
+
+    const id = crypto.randomUUID();
+    const secret = crypto.randomBytes(32).toString("hex");
+    await pool.query(
+      `INSERT INTO "ModuleWebhook" ("id","url","secret","events","label","createdBy")
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, url, secret, events, label, auth?.email || auth?.sub || null]
+    );
+
+    res.status(201).json({
+      id,
+      url,
+      events,
+      label,
+      // Returned ONLY in the create response. Subsequent reads omit it.
+      secret,
+      active: true,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook create failed", details: err.message });
+  }
+});
+
+// 🔹 GET /admin/webhooks — list subscriptions (no secrets).
+modulesRouter.get("/admin/webhooks", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const r = await pool.query(
+      `SELECT "id","url","events","label","active","createdAt","createdBy",
+              "lastFiredAt","lastError","failureCount"
+       FROM "ModuleWebhook"
+       ORDER BY "createdAt" DESC`
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      total: r.rowCount,
+      items: r.rows.map((row: any) => ({
+        id: row.id,
+        url: row.url,
+        events: row.events,
+        label: row.label,
+        active: row.active,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+        createdBy: row.createdBy,
+        lastFiredAt:
+          row.lastFiredAt instanceof Date ? row.lastFiredAt.toISOString() : row.lastFiredAt,
+        lastError: row.lastError,
+        failureCount: row.failureCount,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook list failed", details: err.message });
+  }
+});
+
+// 🔹 DELETE /admin/webhooks/:id — hard-delete subscription + its delivery log.
+modulesRouter.delete("/admin/webhooks/:id", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const id = String(req.params.id);
+    const del = await pool.query(`DELETE FROM "ModuleWebhook" WHERE "id" = $1`, [id]);
+    if (del.rowCount === 0) {
+      return res.status(404).json({ error: "webhook not found" });
+    }
+    await pool.query(`DELETE FROM "ModuleWebhookDelivery" WHERE "webhookId" = $1`, [id]);
+    res.json({ id, deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook delete failed", details: err.message });
+  }
+});
+
+// 🔹 GET /admin/webhooks/:id/deliveries — recent deliveries for one
+//    subscription. Useful for "did the receiver ack last week's flip?"
+modulesRouter.get("/admin/webhooks/:id/deliveries", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 50;
+    const r = await pool.query(
+      `SELECT "id","event","moduleId","succeeded","statusCode","errorMessage","durationMs","createdAt"
+       FROM "ModuleWebhookDelivery"
+       WHERE "webhookId" = $1
+       ORDER BY "createdAt" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      total: r.rowCount,
+      items: r.rows.map((row: any) => ({
+        id: row.id,
+        event: row.event,
+        moduleId: row.moduleId,
+        succeeded: row.succeeded,
+        statusCode: row.statusCode,
+        errorMessage: row.errorMessage,
+        durationMs: row.durationMs,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "deliveries failed", details: err.message });
+  }
+});
+
+// 🔹 GET /changelog.rss — public RSS 2.0 feed of override flips.
+//    Aimed at journalists / investors / partners who'd rather follow
+//    launches in their reader than poll JSON. No actor (PII), same content
+//    as /changelog.
+modulesRouter.get("/changelog.rss", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureModulesTables();
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+    const r = await pool.query(
+      `SELECT "id","moduleId","oldState","newState","at"
+       FROM "ModuleStateChange"
+       ORDER BY "at" DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/modules/changelog.rss`;
+    const siteUrl = `${proto}://${host}/modules`;
+
+    function esc(s: string): string {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    function describe(row: any): string {
+      const before = row.oldState || {};
+      const after = row.newState || {};
+      const parts: string[] = [];
+      if (before.status !== after.status) parts.push(`status: ${before.status} → ${after.status}`);
+      if (before.tier !== after.tier) parts.push(`tier: ${before.tier} → ${after.tier}`);
+      if (before.hint !== after.hint) parts.push(`hint changed`);
+      if (parts.length === 0 && !before.hadOverride && after.hadOverride) {
+        return "Admin override applied.";
+      }
+      if (parts.length === 0 && before.hadOverride && !after.hadOverride) {
+        return "Admin override cleared.";
+      }
+      return parts.join("; ") || "Override changed.";
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const title = `${row.moduleId} — ${describe(row)}`;
+        const guid = `aevion-modules-${row.id}`;
+        const link = `${proto}://${host}/modules/${encodeURIComponent(row.moduleId)}`;
+        return `    <item>
+      <title>${esc(title)}</title>
+      <link>${esc(link)}</link>
+      <guid isPermaLink="false">${esc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${esc(describe(row))}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION modules — changelog</title>
+    <link>${esc(siteUrl)}</link>
+    <atom:link href="${esc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Live tier and status changes across the AEVION module ecosystem.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "rss failed", details: err.message });
   }
 });

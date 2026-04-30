@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
+import { stableStringify } from "../lib/stableStringify";
 
 // Server-side proxy that fires synthetic partner webhooks against the
 // backend's own /api/qright/royalties/verify-webhook,
@@ -105,6 +106,95 @@ bankTestRouter.post("/test-webhook/planet", requireAuth, async (req, res, next) 
     });
     const body = await r.json().catch(() => ({}));
     res.status(r.status).json({ kind: "planet", upstreamStatus: r.status, eventId, email, amount, response: body });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// HMAC self-test — fires all three webhooks via the new HMAC-signed path
+// (X-Aevion-Timestamp + X-Aevion-Signature) instead of the legacy bearer
+// header. Exposed for /bank/diagnostics so ops can verify the HMAC path
+// works end-to-end on a deploy without leaking secrets to the browser.
+//
+// Each sub-result includes the upstream HTTP status: 201/200 means HMAC
+// signing + server-side verification both succeeded; 401 means the
+// computed signature didn't match (typically a secret-rotation drift).
+bankTestRouter.post("/hmac-self-test", requireAuth, async (req, res, next) => {
+  async function fire(
+    kind: "qright" | "chess" | "planet",
+    path: string,
+    body: object,
+    secret: string,
+  ): Promise<{ kind: string; status: number; mode: "hmac"; replayed: boolean }> {
+    const ts = Math.floor(Date.now() / 1000);
+    const stable = stableStringify(body);
+    const sig = createHmac("sha256", secret).update(`${ts}.${stable}`).digest("hex");
+    const r = await fetch(`${SELF_BASE}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Aevion-Timestamp": String(ts),
+        "X-Aevion-Signature": sig,
+      },
+      // The wire-body must match what we signed — emit the same stable
+      // serialization rather than re-stringifying via JSON.stringify.
+      body: stable,
+    });
+    const j = await r.json().catch(() => ({}));
+    return { kind, status: r.status, mode: "hmac", replayed: !!j?.replayed };
+  }
+
+  try {
+    const email = ownerEmail(req);
+    const results = [];
+
+    results.push(
+      await fire(
+        "qright",
+        "/api/qright/royalties/verify-webhook",
+        {
+          eventId: `hmac_self_${Date.now()}_${shortId()}`,
+          email,
+          productKey: `hmac-album-${shortId()}`,
+          period: "2026-Q2",
+          amount: 4.5,
+        },
+        QRIGHT_SECRET,
+      ),
+    );
+
+    results.push(
+      await fire(
+        "chess",
+        "/api/cyberchess/tournament-finalized",
+        {
+          tournamentId: `hmac_tour_${Date.now()}_${shortId()}`,
+          podium: [{ email, place: 1, amount: 22 }],
+        },
+        CHESS_SECRET,
+      ),
+    );
+
+    results.push(
+      await fire(
+        "planet",
+        "/api/planet/payouts/certify-webhook",
+        {
+          eventId: `hmac_planet_${Date.now()}_${shortId()}`,
+          email,
+          artifactVersionId: `hmac_art_${shortId()}`,
+          amount: 1.5,
+        },
+        PLANET_SECRET,
+      ),
+    );
+
+    const allOk = results.every((r) => r.status >= 200 && r.status < 300);
+    res.status(allOk ? 200 : 502).json({
+      ok: allOk,
+      checkedAt: new Date().toISOString(),
+      results,
+    });
   } catch (e) {
     next(e);
   }

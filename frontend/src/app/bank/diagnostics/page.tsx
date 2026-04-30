@@ -191,6 +191,8 @@ export default function BankDiagnosticsPage() {
   const [populating, setPopulating] = useState(false);
   const [populateLog, setPopulateLog] = useState<string[]>([]);
   const [sentryTestState, setSentryTestState] = useState<"idle" | "fired" | "no-dsn">("idle");
+  const [hmacTestState, setHmacTestState] = useState<"idle" | "running" | "ok" | "fail">("idle");
+  const [hmacTestDetail, setHmacTestDetail] = useState<string>("");
 
   useEffect(() => {
     setToken(readToken());
@@ -279,6 +281,47 @@ export default function BankDiagnosticsPage() {
     const id = window.setInterval(() => void runProbes(), autoRefreshSec * 1000);
     return () => window.clearInterval(id);
   }, [autoRefreshSec, runProbes]);
+
+  const fireHmacSelfTest = useCallback(async () => {
+    if (hmacTestState === "running") return;
+    const t = readToken();
+    if (!t) {
+      setHmacTestState("fail");
+      setHmacTestDetail("no auth token — sign in first");
+      return;
+    }
+    setHmacTestState("running");
+    setHmacTestDetail("");
+    try {
+      const r = await fetch(apiUrl("/api/bank/hmac-self-test"), {
+        method: "POST",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
+      });
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.ok) {
+        const summary = (j.results || [])
+          .map(
+            (x: { kind: string; status: number; replayed: boolean }) =>
+              `${x.kind}=${x.status}${x.replayed ? "(replay)" : ""}`,
+          )
+          .join(", ");
+        setHmacTestState("ok");
+        setHmacTestDetail(`all webhooks accepted HMAC signature: ${summary}`);
+      } else {
+        setHmacTestState("fail");
+        setHmacTestDetail(
+          j?.results
+            ? `partial: ${(j.results as Array<{ kind: string; status: number }>).map((x) => `${x.kind}=${x.status}`).join(", ")}`
+            : `http ${r.status}`,
+        );
+      }
+    } catch (err) {
+      setHmacTestState("fail");
+      setHmacTestDetail(err instanceof Error ? err.message : "network error");
+    }
+    void runProbes();
+  }, [hmacTestState, runProbes]);
 
   const fireSentryTest = useCallback(() => {
     const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
@@ -768,6 +811,42 @@ export default function BankDiagnosticsPage() {
               </table>
             </div>
           )}
+        </Section>
+
+        <Section
+          title="HMAC webhook self-test"
+          subtitle="Server-side: signs a fresh payload with each webhook secret and POSTs it via X-Aevion-Signature + X-Aevion-Timestamp. Verifies the HMAC verification path works end-to-end on this deploy. No secrets leave the backend."
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={fireHmacSelfTest}
+              disabled={hmacTestState === "running"}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 9,
+                fontSize: 13,
+                fontWeight: 800,
+                background: "linear-gradient(135deg, rgba(124,58,237,0.10), rgba(13,148,136,0.10))",
+                color: "#5b21b6",
+                border: "1px solid rgba(124,58,237,0.30)",
+                cursor: hmacTestState === "running" ? "wait" : "pointer",
+                opacity: hmacTestState === "running" ? 0.7 : 1,
+              }}
+            >
+              {hmacTestState === "running" ? "Signing + verifying…" : "✦ Run HMAC self-test"}
+            </button>
+            {hmacTestState === "ok" ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#16a34a" }}>
+                {hmacTestDetail || "verified"}
+              </span>
+            ) : null}
+            {hmacTestState === "fail" ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#dc2626" }}>
+                {hmacTestDetail || "failed"}
+              </span>
+            ) : null}
+          </div>
         </Section>
 
         <Section

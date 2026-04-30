@@ -243,6 +243,76 @@ async function main() {
     pass("distributed_v2", `id=${dvId} cid=${r.data.witnessCid.slice(0, 16)}… server holds shards ${stored.join("+")}`);
   }
 
+  // 7d — audit endpoint returns at least one entry (we just did create + reconstruct)
+  {
+    const r = await jsonFetch("GET", `/api/quantum-shield/${shieldId}/audit?limit=10`, { token });
+    if (!r.ok) return fail("audit", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    const entries = r.data?.entries || [];
+    if (!Array.isArray(entries) || entries.length < 1)
+      return fail("audit", `expected >=1 entries, got ${entries.length}`);
+    const events = new Set(entries.map((e) => e.event));
+    if (!events.has("create"))
+      return fail("audit", "missing 'create' event");
+    pass("audit", `entries=${entries.length} events=${[...events].join("+")}`);
+  }
+
+  // 7e — webhook subscription create + list + delete
+  {
+    const created = await jsonFetch("POST", "/api/quantum-shield/webhooks", {
+      token,
+      body: { url: "https://example.invalid/qshield-hook", events: "*" },
+    });
+    if (created.status !== 201) return fail("webhook.create", `HTTP ${created.status}`);
+    if (!created.data?.id?.startsWith("qsw-")) return fail("webhook.create", "missing id");
+    if (!created.data?.secret || created.data.secret.length < 16)
+      return fail("webhook.create", "missing secret");
+    const wid = created.data.id;
+
+    const list = await jsonFetch("GET", "/api/quantum-shield/webhooks", { token });
+    if (!list.ok) return fail("webhook.list", `HTTP ${list.status}`);
+    const found = (list.data?.webhooks || []).find((w) => w.id === wid);
+    if (!found) return fail("webhook.list", `${wid} missing from list`);
+
+    const del = await jsonFetch("DELETE", `/api/quantum-shield/webhooks/${wid}`, { token });
+    if (!del.ok) return fail("webhook.delete", `HTTP ${del.status}`);
+    pass("webhooks", `created+listed+deleted ${wid}`);
+  }
+
+  // 7f — revoke + status check
+  {
+    const r = await jsonFetch("POST", `/api/quantum-shield/${shieldId}/revoke`, {
+      token,
+      body: { reason: "smoke test" },
+    });
+    if (!r.ok) return fail("revoke", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (r.data?.status !== "revoked") return fail("revoke", `unexpected status ${r.data?.status}`);
+
+    // re-revoke must be idempotent
+    const r2 = await jsonFetch("POST", `/api/quantum-shield/${shieldId}/revoke`, {
+      token,
+      body: { reason: "duplicate" },
+    });
+    if (r2.data?.status !== "already-revoked")
+      return fail("revoke.idempotent", `expected already-revoked, got ${r2.data?.status}`);
+
+    const pub = await jsonFetch("GET", `/api/quantum-shield/${shieldId}/public`);
+    if (pub.data?.status !== "revoked")
+      return fail("revoke.publicReflects", `public still shows ${pub.data?.status}`);
+    pass("revoke", `idempotent re-revoke confirmed; public reflects status=revoked`);
+  }
+
+  // 7g — metrics endpoint returns Prometheus exposition
+  {
+    const res = await fetch(`${BASE}/api/quantum-shield/metrics`);
+    const text = await res.text();
+    if (!res.ok) return fail("metrics", `HTTP ${res.status}`);
+    if (!text.includes("qshield_records_total"))
+      return fail("metrics", "missing qshield_records_total metric");
+    if (!text.includes("# TYPE"))
+      return fail("metrics", "missing # TYPE prometheus comment");
+    pass("metrics", `${text.split("\n").length} lines, found qshield_* metrics`);
+  }
+
   // 8 — delete (owner can)
   if (!SKIP_DELETE) {
     const r = await jsonFetch("DELETE", `/api/quantum-shield/${shieldId}`, { token });

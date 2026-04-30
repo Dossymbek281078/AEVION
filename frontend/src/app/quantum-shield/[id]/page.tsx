@@ -9,6 +9,13 @@ import { PipelineSteps } from "@/components/PipelineSteps";
 import { useToast } from "@/components/ToastProvider";
 import { apiUrl } from "@/lib/apiBase";
 
+type AuditEntry = {
+  id: string;
+  event: string;
+  actorUserId: string | null;
+  createdAt: string;
+};
+
 type PublicView = {
   id: string;
   objectId?: string | null;
@@ -23,6 +30,11 @@ type PublicView = {
   hmacKeyVersion?: number;
   verifiedCount?: number;
   lastVerifiedAt?: string | null;
+  distribution?: string;
+  witnessCid?: string | null;
+  witnessUrl?: string | null;
+  ownerUserId?: string | null;
+  auditSnippet?: AuditEntry[];
   createdAt: string;
 };
 
@@ -48,7 +60,23 @@ export default function QuantumShieldPublicPage() {
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch(apiUrl(`/api/quantum-shield/${encodeURIComponent(id)}/public`));
+        // If the user happens to be logged in, send the bearer so the server
+        // can include the audit-snippet (owner-only). Anonymous callers get
+        // the cached public projection.
+        const headers: Record<string, string> = {};
+        try {
+          const tok =
+            typeof window !== "undefined"
+              ? localStorage.getItem("aevion_token") || localStorage.getItem("aevion_jwt")
+              : null;
+          if (tok) headers.Authorization = `Bearer ${tok}`;
+        } catch {
+          /* localStorage may be blocked */
+        }
+        const res = await fetch(
+          apiUrl(`/api/quantum-shield/${encodeURIComponent(id)}/public`),
+          { headers },
+        );
         if (!res.ok) throw new Error("HTTP " + res.status);
         const d = (await res.json()) as PublicView;
         if (!cancelled) {
@@ -268,6 +296,39 @@ export default function QuantumShieldPublicPage() {
                 <b>Verification model:</b> shards are NOT exposed publicly. Reconstruction requires {data.threshold} of {data.totalShards} authenticated shards via <code>POST /api/quantum-shield/{data.id}/reconstruct</code>. The server runs Lagrange interpolation, derives the Ed25519 private key, signs a probe message, and verifies against the public key shown above — never exposing the key itself.
               </div>
             </div>
+
+            {Array.isArray(data.auditSnippet) && data.auditSnippet.length > 0 && (
+              <div style={{ borderRadius: 16, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.03), rgba(79,70,229,0.03))", padding: 20, marginBottom: 16 }}>
+                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10, color: "#3730a3", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 16 }} aria-hidden>&#128203;</span>
+                  Recent activity
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "#6366f1", background: "rgba(99,102,241,0.1)", padding: "2px 8px", borderRadius: 6, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>OWNER ONLY</span>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {data.auditSnippet.map((entry) => {
+                    const eventColor =
+                      entry.event === "create" ? "#0d9488"
+                      : entry.event === "reconstruct" ? "#3b82f6"
+                      : entry.event === "revoke" ? "#dc2626"
+                      : entry.event === "delete" ? "#94a3b8"
+                      : "#64748b";
+                    return (
+                      <div key={entry.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 8, background: "rgba(15,23,42,0.02)", border: "1px solid rgba(15,23,42,0.06)", flexWrap: "wrap" as const, gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: eventColor + "20", color: eventColor, letterSpacing: "0.04em", textTransform: "uppercase" as const }}>{entry.event}</span>
+                          {entry.actorUserId && (
+                            <span style={{ fontSize: 10, fontFamily: "monospace", color: "#475569" }}>actor: {entry.actorUserId.slice(0, 8)}…</span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
+                          {new Date(entry.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", padding: 24, marginBottom: 16 }}>
               <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 6, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>

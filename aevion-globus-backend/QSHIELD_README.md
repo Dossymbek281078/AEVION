@@ -12,17 +12,55 @@ Mounted at `/api/quantum-shield`. Independent of `/api/qsign/*` and `/api/pipeli
 |---|---|---|---|
 | `GET` | `/health` | — | Liveness, total/active/legacy/distributed counters |
 | `GET` | `/openapi.json` | — | OpenAPI 3.0 spec |
+| `GET` | `/metrics` | — | Prometheus exposition (text/plain) |
 | `GET` | `/stats` | — | Aggregate stats |
 | `POST` | `/` (or `/create`) | optional bearer | Create record (sets `ownerUserId` if bearer present) |
 | `GET` | `/` (or `/records`) | optional bearer | Paginated list (`?mine=1` filters to caller) |
-| `GET` | `/:id/public` | — | Shareable JSON (no shards leaked) |
+| `GET` | `/:id/public` | optional bearer | Shareable JSON (no shards leaked); owner+ gets `auditSnippet` |
 | `GET` | `/:id/witness` | — | Witness shard + CID (only `distributed_v2` records) |
 | `GET` | `/:id` | — | Full record (includes server-held shards) |
 | `POST` | `/:id/reconstruct` | — | Lagrange + Ed25519 probe-sign verify; honors `Idempotency-Key` |
 | `POST` | `/:id/verify` | — | Re-checks per-shard HMACs (does NOT reconstruct the key) |
-| `DELETE` | `/:id` | bearer (owner OR admin) | Soft-remove |
+| `POST` | `/:id/revoke` | bearer (owner\|admin) | Mark `status='revoked'`, idempotent re-revoke with `reason` |
+| `GET` | `/:id/audit` | bearer (owner\|admin) | Paginated audit log entries |
+| `DELETE` | `/:id` | bearer (owner\|admin) | Hard-remove |
+| `POST` | `/webhooks` | bearer | Create subscription (returns generated secret) |
+| `GET` | `/webhooks` | bearer | List my subscriptions |
+| `GET` | `/webhooks/:id/deliveries` | bearer (owner\|admin) | Recent delivery log |
+| `DELETE` | `/webhooks/:id` | bearer (owner\|admin) | Remove subscription |
 
 Rate limits (per IP): create `20/min`, verify/reconstruct `60-30/min`.
+
+## Webhooks
+
+Subscribers receive POST with body `{ event, timestamp, data }` and headers:
+
+```
+X-QShield-Event:        shield.created | shield.reconstructed | shield.revoked | shield.deleted
+X-QShield-Signature:    HMAC-SHA256 hex over the raw body, using your secret
+X-QShield-Webhook-Id:   qsw-<id>
+X-QShield-Delivery-Id:  uuid
+```
+
+Verify with: `crypto.createHmac("sha256", secret).update(rawBody).digest("hex")` and `timingSafeEqual` against `X-QShield-Signature`.
+
+Fire-and-forget (no automatic retries; see delivery log via `GET /webhooks/:id/deliveries`).
+
+## Sentry
+
+If `SENTRY_DSN` is set AND `@sentry/node` is installed, all 5xx code paths in shield routes capture exceptions with `service=quantum-shield` tags. Otherwise it's a silent no-op — no crash, no log spam.
+
+## TypeScript SDK
+
+Zero-dependency client published from `aevion-globus-backend/sdk/qshield-client`:
+
+```ts
+import { QShieldClient, parseShardSource } from "@aevion/qshield-client";
+const qs = new QShieldClient({ baseUrl, token });
+const verdict = await qs.reconstruct(id, parseShardSource(loadedJson), { idempotencyKey });
+```
+
+CLI: `npx @aevion/qshield-client reconstruct <id> shard1.json bundle.json`. See `sdk/qshield-client/README.md`.
 
 ---
 

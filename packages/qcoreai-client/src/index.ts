@@ -64,6 +64,12 @@ export type RunOptions = {
   strategy?: Strategy;
   /** Per-role provider/model/temperature overrides. */
   overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+  /**
+   * Per-role custom system prompts. Either reference a saved prompt by id
+   * (must be owned or public) or pass content inline. Wins over the role's
+   * default prompt when present.
+   */
+  promptOverrides?: Partial<Record<ConfigRoleId, { promptId?: string; content?: string }>>;
   /** Number of critic→writer revision rounds in sequential. 0..2, default 0. */
   maxRevisions?: number;
   /** Reuse an existing session (multi-turn context). */
@@ -264,6 +270,7 @@ export class QCoreClient {
       userInput: opts.input,
       strategy: opts.strategy || "sequential",
       overrides: opts.overrides,
+      promptOverrides: opts.promptOverrides,
       maxRevisions: opts.maxRevisions,
       sessionId: opts.sessionId,
       attachmentIds: opts.attachmentIds,

@@ -841,6 +841,35 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     critic: parseAgentOverride(req.body?.overrides?.critic),
   };
 
+  // V6-P integration: promptOverrides — { role: { promptId? OR content? } }
+  // Either reference a saved prompt by id (owner-scoped fetch) or pass content
+  // inline. The result is merged into overrides[role].systemPrompt so the
+  // orchestrator picks it up via existing AgentOverride.systemPrompt path.
+  const rawPromptOverrides = req.body?.promptOverrides;
+  if (rawPromptOverrides && typeof rawPromptOverrides === "object") {
+    const roles = ["analyst", "writer", "writerB", "critic"] as const;
+    for (const role of roles) {
+      const entry = rawPromptOverrides[role];
+      if (!entry || typeof entry !== "object") continue;
+      let content: string | null = null;
+      if (typeof entry.content === "string" && entry.content.trim()) {
+        content = entry.content.slice(0, 16000);
+      } else if (typeof entry.promptId === "string" && entry.promptId) {
+        try {
+          const p = await getPrompt(entry.promptId);
+          // Owner-only fetch unless prompt is public — same gate as /prompts/:id
+          if (p && (p.isPublic || (userId && p.ownerUserId === userId))) {
+            content = p.content;
+          }
+        } catch { /* ignore — fall through with no override */ }
+      }
+      if (content) {
+        const cur = overrides[role] || {};
+        overrides[role] = { ...cur, systemPrompt: content };
+      }
+    }
+  }
+
   // Pre-fetch any QRight attachments the user wants the agents to reason
   // against. Pulled BEFORE the SSE stream opens so we can fail fast (bad
   // ID list) and so the Analyst sees them on its very first prompt.

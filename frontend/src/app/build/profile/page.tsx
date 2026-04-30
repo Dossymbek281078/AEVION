@@ -12,6 +12,7 @@ import {
   type BuildEducation,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { VoiceInput } from "@/components/build/VoiceInput";
 
 export default function ProfilePage() {
   return (
@@ -275,6 +276,11 @@ function ExperienceEditor({
             rows={2}
             placeholder="What did you do? (optional)"
             className="input-resume"
+          />
+          <VoiceInput
+            onAppend={(chunk) =>
+              setDescription((prev) => (prev ? prev.trim() + " " + chunk : chunk))
+            }
           />
           {err && <p className="text-xs text-rose-300">{err}</p>}
           <div className="flex justify-end gap-2">

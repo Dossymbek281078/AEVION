@@ -8,6 +8,7 @@ import {
   type ShiftPreference,
   type AvailabilityType,
 } from "@/lib/build/api";
+import { VoiceInput } from "./VoiceInput";
 
 const SHIFTS: ShiftPreference[] = ["DAY", "NIGHT", "FLEX", "ANY"];
 const AVAILS: AvailabilityType[] = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"];
@@ -236,14 +237,26 @@ export function ProfileForm({
       <SectionTitle title="Resume" hint="Visible on your public profile (/build/u/[id])." />
 
       <Field label="Summary">
-        <textarea
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          rows={4}
-          maxLength={4000}
-          placeholder="2–3 lines about yourself: specialisation, key projects, what you're looking for."
-          className="input-build"
-        />
+        <div className="space-y-1.5">
+          <textarea
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            rows={4}
+            maxLength={4000}
+            placeholder="2–3 lines about yourself: specialisation, key projects, what you're looking for."
+            className="input-build"
+          />
+          <div className="flex items-center justify-between">
+            <VoiceInput
+              onAppend={(chunk) =>
+                setSummary((prev) => (prev ? prev.trim() + " " + chunk : chunk))
+              }
+            />
+            <span className="text-[10px] text-slate-500">
+              Voice → finalized speech appends to the field. Lang switcher next to the mic.
+            </span>
+          </div>
+        </div>
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -557,14 +570,21 @@ export function ProfileForm({
       </div>
 
       <Field label="About (long-form)">
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={5}
-          maxLength={4000}
-          placeholder="References, certifications, equipment owned, recent projects…"
-          className="input-build"
-        />
+        <div className="space-y-1.5">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={5}
+            maxLength={4000}
+            placeholder="References, certifications, equipment owned, recent projects…"
+            className="input-build"
+          />
+          <VoiceInput
+            onAppend={(chunk) =>
+              setDescription((prev) => (prev ? prev.trim() + " " + chunk : chunk))
+            }
+          />
+        </div>
       </Field>
 
       {error && <p className="text-sm text-rose-300">{error}</p>}

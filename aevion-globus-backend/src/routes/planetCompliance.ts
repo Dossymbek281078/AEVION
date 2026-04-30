@@ -11,10 +11,22 @@ import {
 import { getPool } from "../lib/dbPool";
 import { stableStringify } from "../lib/stableStringify";
 import { buildMerkleTree, merkleProofForLeaf, sortedIndex, verifyMerkleProof } from "../lib/merkle";
+import { rateLimit } from "../lib/rateLimit";
+// Reuse the privacy-aware Referer hostname bucket from QRight Tier 2 — same
+// behaviour, same lowercasing/www-strip, "(direct)" fallback.
+import { refererHost } from "../lib/qrightHelpers";
 
 export const planetComplianceRouter = Router();
 
 const pool = getPool();
+
+// Public surfaces (embed JSON, badge SVG, transparency) are loaded by
+// third-party sites; they get a higher cap than the owner/admin reads.
+const planetEmbedRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 240,
+  keyPrefix: "planet:embed",
+});
 
 let ensuredTables = false;
 async function ensurePlanetTables() {
@@ -108,7 +120,301 @@ async function ensurePlanetTables() {
     ALTER TABLE "PlanetArtifactVersion" ADD COLUMN IF NOT EXISTS "mediaIndexJson" JSONB;
   `);
 
+  // Tier 2 (v1.2 of Planet) — public embed/badge counters + closed-set
+  // revoke reason + provenance. revokedAt and revokeReason already exist
+  // from Phase 1 of Planet, so ALTER is additive only.
+  await pool.query(`
+    ALTER TABLE "PlanetCertificate" ADD COLUMN IF NOT EXISTS "revokeReasonCode" TEXT;
+    ALTER TABLE "PlanetCertificate" ADD COLUMN IF NOT EXISTS "revokedBy" TEXT;
+    ALTER TABLE "PlanetCertificate" ADD COLUMN IF NOT EXISTS "embedFetches" BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE "PlanetCertificate" ADD COLUMN IF NOT EXISTS "lastFetchedAt" TIMESTAMPTZ;
+  `);
+
+  // Daily fetch buckets per certificate — drives the future sparkline UI.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PlanetCertFetchDaily" (
+      "certificateId" TEXT NOT NULL,
+      "day" DATE NOT NULL,
+      "fetches" BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY ("certificateId", "day")
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PlanetCertFetchDaily_day_idx" ON "PlanetCertFetchDaily" ("day");`
+  );
+
+  // Per-Referer hostname bucket — identical privacy semantics as QRight
+  // (hostname only, no path/UA/IP, "(direct)" fallback).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PlanetCertFetchSource" (
+      "certificateId" TEXT NOT NULL,
+      "sourceHost" TEXT NOT NULL,
+      "day" DATE NOT NULL,
+      "fetches" BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY ("certificateId", "sourceHost", "day")
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PlanetCertFetchSource_cert_day_idx" ON "PlanetCertFetchSource" ("certificateId", "day");`
+  );
+
+  // Append-only audit log for privileged actions (owner.revoke,
+  // admin.revoke, admin.bulk-revoke). Same shape as QRight's audit log
+  // for operator muscle-memory.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PlanetAuditLog" (
+      "id" TEXT PRIMARY KEY,
+      "actor" TEXT,
+      "action" TEXT NOT NULL,
+      "targetId" TEXT,
+      "payload" JSONB,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PlanetAuditLog_at_idx" ON "PlanetAuditLog" ("at" DESC);`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PlanetAuditLog_action_idx" ON "PlanetAuditLog" ("action");`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PlanetAuditLog_target_idx" ON "PlanetAuditLog" ("targetId");`
+  );
+
+  // Owner-configured outgoing webhooks + per-attempt delivery log.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PlanetWebhook" (
+      "id" TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "url" TEXT NOT NULL,
+      "secret" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "lastDeliveredAt" TIMESTAMPTZ,
+      "lastFailedAt" TIMESTAMPTZ,
+      "lastError" TEXT
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PlanetWebhook_owner_idx" ON "PlanetWebhook" ("ownerUserId");`
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PlanetWebhookDelivery" (
+      "id" TEXT PRIMARY KEY,
+      "webhookId" TEXT NOT NULL,
+      "certificateId" TEXT,
+      "eventType" TEXT NOT NULL,
+      "requestBody" TEXT NOT NULL,
+      "statusCode" INTEGER,
+      "ok" BOOLEAN NOT NULL DEFAULT FALSE,
+      "error" TEXT,
+      "deliveredAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "isRetry" BOOLEAN NOT NULL DEFAULT FALSE
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PlanetWebhookDelivery_webhook_idx" ON "PlanetWebhookDelivery" ("webhookId", "deliveredAt" DESC);`
+  );
+
   ensuredTables = true;
+}
+
+// Closed-set revoke reasons — same vocabulary as QRight so operators
+// don't have to learn a second ontology.
+const PLANET_REVOKE_REASON_CODES = new Set([
+  "license-conflict",
+  "withdrawn",
+  "dispute",
+  "mistake",
+  "superseded",
+  "other",
+  // Admin-only:
+  "admin-takedown",
+]);
+
+// Admin allowlist by email (ENV) + JWT role=admin. Empty = no email-based
+// admins (only role=admin works).
+function getPlanetAdminEmailAllowlist(): Set<string> {
+  const raw = (process.env.PLANET_ADMIN_EMAILS || "").trim();
+  if (!raw) return new Set<string>();
+  return new Set(
+    raw.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
+  );
+}
+
+function isPlanetAdmin(auth: { role?: string; email?: string } | null): boolean {
+  if (!auth) return false;
+  if (auth.role === "admin") return true;
+  if (!auth.email) return false;
+  return getPlanetAdminEmailAllowlist().has(auth.email.toLowerCase());
+}
+
+// Best-effort counter bump — never blocks the public response.
+function bumpPlanetCertCounters(
+  req: { headers: Record<string, string | string[] | undefined> },
+  certificateId: string
+): void {
+  pool
+    .query(
+      `UPDATE "PlanetCertificate"
+       SET "embedFetches" = "embedFetches" + 1, "lastFetchedAt" = NOW()
+       WHERE "id" = $1`,
+      [certificateId]
+    )
+    .catch(() => {});
+  pool
+    .query(
+      `INSERT INTO "PlanetCertFetchDaily" ("certificateId", "day", "fetches")
+       VALUES ($1, CURRENT_DATE, 1)
+       ON CONFLICT ("certificateId", "day")
+       DO UPDATE SET "fetches" = "PlanetCertFetchDaily"."fetches" + 1`,
+      [certificateId]
+    )
+    .catch(() => {});
+  const host = refererHost(req);
+  pool
+    .query(
+      `INSERT INTO "PlanetCertFetchSource" ("certificateId", "sourceHost", "day", "fetches")
+       VALUES ($1, $2, CURRENT_DATE, 1)
+       ON CONFLICT ("certificateId", "sourceHost", "day")
+       DO UPDATE SET "fetches" = "PlanetCertFetchSource"."fetches" + 1`,
+      [certificateId, host]
+    )
+    .catch(() => {});
+}
+
+// Append an audit row. Fire-and-forget (never blocks the user-facing action).
+function recordPlanetAudit(
+  actor: string | null,
+  action: string,
+  targetId: string | null,
+  payload: Record<string, unknown> | null
+): void {
+  pool
+    .query(
+      `INSERT INTO "PlanetAuditLog" ("id", "actor", "action", "targetId", "payload")
+       VALUES ($1, $2, $3, $4, $5)`,
+      [crypto.randomUUID(), actor, action, targetId, payload ? JSON.stringify(payload) : null]
+    )
+    .catch((err: Error) => {
+      console.warn(`[planet] audit insert failed action=${action}:`, err.message);
+    });
+}
+
+// Single webhook delivery: sign, POST, persist log row, update last* counters.
+// Mirrors the QRight implementation; never throws.
+async function attemptPlanetWebhookDelivery(opts: {
+  webhookId: string;
+  url: string;
+  secret: string;
+  body: string;
+  eventType: string;
+  certificateId: string | null;
+  isRetry: boolean;
+}): Promise<{ ok: boolean; statusCode: number | null; error: string | null }> {
+  const sig = crypto.createHmac("sha256", opts.secret).update(opts.body).digest("hex");
+  let ok = false;
+  let statusCode: number | null = null;
+  let error: string | null = null;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch(opts.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "AEVION-Planet-Webhook/1.0",
+        "X-AEVION-Event": opts.eventType,
+        "X-AEVION-Signature": `sha256=${sig}`,
+      },
+      body: opts.body,
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    statusCode = r.status;
+    ok = r.ok;
+    if (!r.ok) error = `HTTP ${r.status}`;
+  } catch (err) {
+    error = (err as Error).message.slice(0, 500);
+  }
+  pool
+    .query(
+      `INSERT INTO "PlanetWebhookDelivery"
+         ("id", "webhookId", "certificateId", "eventType", "requestBody", "statusCode", "ok", "error", "isRetry")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        crypto.randomUUID(),
+        opts.webhookId,
+        opts.certificateId,
+        opts.eventType,
+        opts.body,
+        statusCode,
+        ok,
+        error,
+        opts.isRetry,
+      ]
+    )
+    .catch(() => {});
+  if (ok) {
+    pool
+      .query(
+        `UPDATE "PlanetWebhook" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
+        [opts.webhookId]
+      )
+      .catch(() => {});
+  } else {
+    pool
+      .query(
+        `UPDATE "PlanetWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
+        [opts.webhookId, error || "delivery failed"]
+      )
+      .catch(() => {});
+  }
+  return { ok, statusCode, error };
+}
+
+// Fan out a certificate-revoke event to every webhook the cert's owner
+// has registered. Best-effort.
+function triggerPlanetRevokeWebhooks(
+  certificateId: string,
+  ownerId: string,
+  payload: {
+    revokedAt: string;
+    reasonCode: string | null;
+    reason: string | null;
+    revokedBy: "owner" | "admin";
+  }
+): void {
+  pool
+    .query(
+      `SELECT "id", "url", "secret"
+       FROM "PlanetWebhook" WHERE "ownerUserId" = $1`,
+      [ownerId]
+    )
+    .then(async (result: { rows: { id: string; url: string; secret: string }[] }) => {
+      for (const wh of result.rows) {
+        const body = JSON.stringify({
+          event: "planet.certificate.revoked",
+          certificateId,
+          revokedAt: payload.revokedAt,
+          reasonCode: payload.reasonCode,
+          reason: payload.reason,
+          revokedBy: payload.revokedBy,
+          deliveredAt: new Date().toISOString(),
+        });
+        await attemptPlanetWebhookDelivery({
+          webhookId: wh.id,
+          url: wh.url,
+          secret: wh.secret,
+          body,
+          eventType: "planet.certificate.revoked",
+          certificateId,
+          isRetry: false,
+        });
+      }
+    })
+    .catch((err: Error) => {
+      console.warn(`[planet] webhook fanout failed for ${certificateId}:`, err.message);
+    });
 }
 
 function sha256Hex(s: string): string {
@@ -2068,5 +2374,986 @@ planetComplianceRouter.get("/artifacts/:artifactVersionId/votes/my-proof", async
     verifyOk: ok,
     codeSymbol: voteR.rows[0].codeSymbol,
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tier 2 (Planet v1.2) — public embed surfaces
+// ─────────────────────────────────────────────────────────────────────────
+
+// 🔹 GET /certificates/:certId/embed — sanitized JSON for third-party embeds
+//    Drops the privatePayloadJson, evidence, and signature internals; surfaces
+//    only what's safe to render on someone else's site. CORS open, ETag/304.
+planetComplianceRouter.get("/certificates/:certId/embed", planetEmbedRateLimit, async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const certId = String(req.params.certId);
+
+    // JOIN with the artifact version + submission so the embed can show
+    // a human-meaningful title and link back to the public artifact page.
+    const result = await pool.query(
+      `SELECT c."id", c."status", c."createdAt", c."revokedAt",
+              c."revokeReason", c."revokeReasonCode",
+              v."id" AS "artifactVersionId", v."artifactType", v."versionNo",
+              v."canonicalArtifactHash", s."title" AS "submissionTitle"
+       FROM "PlanetCertificate" c
+       LEFT JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       LEFT JOIN "PlanetSubmission" s ON s."id" = v."submissionId"
+       WHERE c."id" = $1
+       LIMIT 1`,
+      [certId]
+    );
+
+    if (result.rowCount === 0) {
+      res.setHeader("Cache-Control", "public, max-age=30");
+      return res.status(404).json({ id: certId, status: "not_found" });
+    }
+
+    const row = result.rows[0] as {
+      id: string;
+      status: string;
+      createdAt: Date | string;
+      revokedAt: Date | string | null;
+      revokeReason: string | null;
+      revokeReasonCode: string | null;
+      artifactVersionId: string | null;
+      artifactType: string | null;
+      versionNo: number | null;
+      canonicalArtifactHash: string | null;
+      submissionTitle: string | null;
+    };
+
+    const createdAtMs =
+      row.createdAt instanceof Date
+        ? row.createdAt.getTime()
+        : new Date(row.createdAt).getTime();
+    const revokedAtMs = row.revokedAt
+      ? row.revokedAt instanceof Date
+        ? row.revokedAt.getTime()
+        : new Date(row.revokedAt).getTime()
+      : 0;
+    const etag = `W/"planet-cert-${row.id}-${createdAtMs}-${revokedAtMs}"`;
+
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=120");
+      return res.status(304).end();
+    }
+
+    bumpPlanetCertCounters(req, row.id);
+    res.setHeader("ETag", etag);
+    res.setHeader("Cache-Control", "public, max-age=120");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      id: row.id,
+      status: row.revokedAt ? "revoked" : row.status,
+      title: row.submissionTitle,
+      artifactType: row.artifactType,
+      versionNo: row.versionNo,
+      canonicalArtifactHash: row.canonicalArtifactHash,
+      canonicalArtifactHashPrefix: row.canonicalArtifactHash?.slice(0, 16) || null,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      revokedAt: row.revokedAt
+        ? row.revokedAt instanceof Date
+          ? row.revokedAt.toISOString()
+          : row.revokedAt
+        : null,
+      revokeReason: row.revokeReason,
+      revokeReasonCode: row.revokeReasonCode,
+      artifactVersionId: row.artifactVersionId,
+      verifyUrl: row.artifactVersionId
+        ? `/planet/artifact/${row.artifactVersionId}`
+        : null,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: "DB error",
+      code: err.code,
+      details: err.message,
+    });
+  }
+});
+
+// 🔹 GET /certificates/:certId/badge.svg — shields.io-style badge
+//    Two-segment: "AEVION PLANET" + status. Theme via ?theme=dark|light.
+//    Flips to red on revoke.
+planetComplianceRouter.get("/certificates/:certId/badge.svg", planetEmbedRateLimit, async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const certId = String(req.params.certId);
+    const theme = String(req.query.theme || "dark").toLowerCase() === "light" ? "light" : "dark";
+
+    const result = await pool.query(
+      `SELECT c."id", c."createdAt", c."revokedAt", v."artifactType"
+       FROM "PlanetCertificate" c
+       LEFT JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       WHERE c."id" = $1 LIMIT 1`,
+      [certId]
+    );
+
+    function svgShell(left: string, right: string, rightFill: string): string {
+      const padX = 8;
+      const charW = 6.6;
+      const lW = Math.max(70, Math.round(left.length * charW + padX * 2));
+      const rW = Math.max(70, Math.round(right.length * charW + padX * 2));
+      const total = lW + rW;
+      const leftFill = theme === "light" ? "#e2e8f0" : "#1e293b";
+      const leftText = theme === "light" ? "#0f172a" : "#e2e8f0";
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${total}" height="22" role="img" aria-label="${escapeXml(
+        left
+      )}: ${escapeXml(right)}">
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#fff" stop-opacity=".08"/>
+    <stop offset="1" stop-opacity=".08"/>
+  </linearGradient>
+  <rect width="${total}" height="22" rx="4" fill="${leftFill}"/>
+  <rect x="${lW}" width="${rW}" height="22" rx="4" fill="${rightFill}"/>
+  <rect x="${lW - 4}" width="8" height="22" fill="${rightFill}"/>
+  <rect width="${total}" height="22" rx="4" fill="url(#s)"/>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" font-weight="700">
+    <text x="${lW / 2}" y="15" fill="${leftText}">${escapeXml(left)}</text>
+    <text x="${lW + rW / 2}" y="15">${escapeXml(right)}</text>
+  </g>
+</svg>`;
+    }
+
+    function escapeXml(s: string): string {
+      return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    if (result.rowCount === 0) {
+      res.setHeader("Cache-Control", "public, max-age=30");
+      return res.send(svgShell("AEVION PLANET", "not found", "#94a3b8"));
+    }
+
+    const row = result.rows[0] as {
+      id: string;
+      createdAt: Date | string;
+      revokedAt: Date | string | null;
+      artifactType: string | null;
+    };
+    const createdAt =
+      row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt);
+    const revokedAtMs = row.revokedAt
+      ? row.revokedAt instanceof Date
+        ? row.revokedAt.getTime()
+        : new Date(row.revokedAt).getTime()
+      : 0;
+    const etag = `W/"planet-badge-${row.id}-${createdAt.getTime()}-${revokedAtMs}-${theme}"`;
+
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.status(304).end();
+    }
+
+    const dateLabel = createdAt.toISOString().slice(0, 10);
+    bumpPlanetCertCounters(req, row.id);
+
+    if (row.revokedAt) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.send(svgShell("AEVION PLANET", `REVOKED · ${dateLabel}`, "#dc2626"));
+    }
+
+    const right = `${(row.artifactType || "cert").toUpperCase()} · ${dateLabel}`;
+    res.setHeader("ETag", etag);
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svgShell("AEVION PLANET", right, "#0d9488"));
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 GET /transparency — public aggregate. Totals + revoke breakdown
+//    + by artifact type. CORS open, 5-min cache. Safe to render on the
+//    homepage / pitch deck.
+planetComplianceRouter.get("/transparency", planetEmbedRateLimit, async (_req, res) => {
+  try {
+    await ensurePlanetTables();
+
+    const totalsP = pool.query(
+      `SELECT
+         COUNT(*)::bigint AS "total",
+         COUNT(*) FILTER (WHERE "revokedAt" IS NULL)::bigint AS "active",
+         COUNT(*) FILTER (WHERE "revokedAt" IS NOT NULL)::bigint AS "revoked",
+         MIN("createdAt") AS "firstAt",
+         MAX("createdAt") AS "lastAt"
+       FROM "PlanetCertificate"`
+    );
+    const reasonsP = pool.query(
+      `SELECT COALESCE("revokeReasonCode", 'unspecified') AS "code",
+              COUNT(*)::bigint AS "count"
+       FROM "PlanetCertificate"
+       WHERE "revokedAt" IS NOT NULL
+       GROUP BY 1
+       ORDER BY 2 DESC`
+    );
+    const typesP = pool.query(
+      `SELECT v."artifactType" AS "type", COUNT(*)::bigint AS "count"
+       FROM "PlanetCertificate" c
+       JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       GROUP BY 1
+       ORDER BY 2 DESC`
+    );
+
+    const [totals, reasons, types] = await Promise.all([totalsP, reasonsP, typesP]);
+    const t = totals.rows[0] as {
+      total: string | number;
+      active: string | number;
+      revoked: string | number;
+      firstAt: Date | string | null;
+      lastAt: Date | string | null;
+    };
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      generatedAt: new Date().toISOString(),
+      totals: {
+        certificates: Number(t.total) || 0,
+        active: Number(t.active) || 0,
+        revoked: Number(t.revoked) || 0,
+        firstIssuedAt: t.firstAt
+          ? t.firstAt instanceof Date
+            ? t.firstAt.toISOString()
+            : t.firstAt
+          : null,
+        lastIssuedAt: t.lastAt
+          ? t.lastAt instanceof Date
+            ? t.lastAt.toISOString()
+            : t.lastAt
+          : null,
+      },
+      revokesByReasonCode: reasons.rows.map(
+        (r: { code: string; count: string | number }) => ({
+          code: r.code,
+          count: Number(r.count) || 0,
+        })
+      ),
+      certificatesByArtifactType: types.rows.map(
+        (r: { type: string; count: string | number }) => ({
+          type: r.type,
+          count: Number(r.count) || 0,
+        })
+      ),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tier 2 — owner revoke + admin tooling
+// ─────────────────────────────────────────────────────────────────────────
+
+// 🔹 POST /certificates/:certId/revoke — owner-only certificate revoke
+//    Closed-set reasonCode (excludes admin-takedown). Original cert is kept;
+//    revokedAt + revokeReason* are populated. Embed + badge surfaces flip
+//    to revoked state. Owner webhooks fire.
+planetComplianceRouter.post("/certificates/:certId/revoke", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+
+    const certId = String(req.params.certId);
+    const reason = String(req.body?.reason || "").slice(0, 500) || null;
+    const reasonCodeRaw = String(req.body?.reasonCode || "").trim();
+    const reasonCode = reasonCodeRaw || null;
+    if (reasonCode === "admin-takedown") {
+      return res.status(403).json({ error: "admin-takedown is reserved for admins" });
+    }
+    if (reasonCode && !PLANET_REVOKE_REASON_CODES.has(reasonCode)) {
+      return res.status(400).json({
+        error: "Unknown reasonCode",
+        allowed: Array.from(PLANET_REVOKE_REASON_CODES).filter((c) => c !== "admin-takedown"),
+      });
+    }
+
+    const owned = await pool.query(
+      `SELECT "id", "ownerId", "revokedAt" FROM "PlanetCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    if (owned.rowCount === 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    const cert = owned.rows[0] as {
+      id: string;
+      ownerId: string;
+      revokedAt: Date | string | null;
+    };
+    if (cert.ownerId !== auth.sub) {
+      return res.status(403).json({ error: "Not your certificate" });
+    }
+    if (cert.revokedAt) {
+      return res.status(409).json({ error: "Already revoked" });
+    }
+
+    const now = new Date().toISOString();
+    await pool.query(
+      `UPDATE "PlanetCertificate"
+         SET "revokedAt" = NOW(),
+             "revokeReason" = $2,
+             "revokeReasonCode" = $3,
+             "revokedBy" = 'owner'
+       WHERE "id" = $1`,
+      [certId, reason, reasonCode]
+    );
+
+    recordPlanetAudit(auth.email || auth.sub || null, "owner.revoke", certId, {
+      reasonCode,
+      reason,
+    });
+    triggerPlanetRevokeWebhooks(certId, cert.ownerId, {
+      revokedAt: now,
+      reasonCode,
+      reason,
+      revokedBy: "owner",
+    });
+
+    res.json({ id: certId, revokedAt: now, reasonCode, revokedBy: "owner" });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 GET /admin/whoami — admin probe (lets the frontend gate views)
+planetComplianceRouter.get("/admin/whoami", (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+  res.json({
+    isAdmin: isPlanetAdmin(auth),
+    email: auth.email || null,
+    role: auth.role || null,
+  });
+});
+
+// 🔹 GET /admin/certificates — list all (admin-only). Filters: status, q.
+planetComplianceRouter.get("/admin/certificates", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!isPlanetAdmin(auth)) return res.status(403).json({ error: "Admin role required" });
+
+    const status = String(req.query.status || "").trim();
+    const q = String(req.query.q || "").trim();
+    const limitRaw = parseInt(String(req.query.limit || "100"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 100;
+
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (status === "active") conds.push(`c."revokedAt" IS NULL`);
+    else if (status === "revoked") conds.push(`c."revokedAt" IS NOT NULL`);
+    if (q.length >= 2) {
+      params.push(`%${q}%`);
+      conds.push(`(s."title" ILIKE $${params.length} OR c."id" ILIKE $${params.length})`);
+    }
+    params.push(limit);
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const r = await pool.query(
+      `SELECT c."id", c."ownerId", c."status", c."createdAt",
+              c."revokedAt", c."revokeReason", c."revokeReasonCode", c."revokedBy",
+              c."embedFetches", c."lastFetchedAt",
+              v."id" AS "artifactVersionId", v."artifactType", v."versionNo",
+              s."title" AS "submissionTitle"
+       FROM "PlanetCertificate" c
+       LEFT JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       LEFT JOIN "PlanetSubmission" s ON s."id" = v."submissionId"
+       ${where}
+       ORDER BY c."createdAt" DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      total: r.rowCount,
+      items: r.rows.map((row: any) => ({
+        id: row.id,
+        ownerId: row.ownerId,
+        status: row.status,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+        revokedAt: row.revokedAt
+          ? row.revokedAt instanceof Date
+            ? row.revokedAt.toISOString()
+            : row.revokedAt
+          : null,
+        revokeReason: row.revokeReason,
+        revokeReasonCode: row.revokeReasonCode,
+        revokedBy: row.revokedBy,
+        embedFetches: Number(row.embedFetches) || 0,
+        lastFetchedAt: row.lastFetchedAt
+          ? row.lastFetchedAt instanceof Date
+            ? row.lastFetchedAt.toISOString()
+            : row.lastFetchedAt
+          : null,
+        artifactVersionId: row.artifactVersionId,
+        artifactType: row.artifactType,
+        versionNo: row.versionNo,
+        submissionTitle: row.submissionTitle,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 GET /admin/certificates.csv — admin-only CSV export mirroring the
+//    on-screen view. RFC 4180 escaping.
+planetComplianceRouter.get("/admin/certificates.csv", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!isPlanetAdmin(auth)) return res.status(403).json({ error: "Admin role required" });
+
+    const status = String(req.query.status || "").trim();
+    const q = String(req.query.q || "").trim();
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (status === "active") conds.push(`c."revokedAt" IS NULL`);
+    else if (status === "revoked") conds.push(`c."revokedAt" IS NOT NULL`);
+    if (q.length >= 2) {
+      params.push(`%${q}%`);
+      conds.push(`(s."title" ILIKE $${params.length} OR c."id" ILIKE $${params.length})`);
+    }
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const r = await pool.query(
+      `SELECT c."id", c."ownerId", c."createdAt", c."revokedAt",
+              c."revokeReasonCode", c."revokeReason", c."revokedBy",
+              c."embedFetches", c."lastFetchedAt",
+              v."artifactType", v."versionNo", s."title" AS "submissionTitle"
+       FROM "PlanetCertificate" c
+       LEFT JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       LEFT JOIN "PlanetSubmission" s ON s."id" = v."submissionId"
+       ${where}
+       ORDER BY c."createdAt" DESC`,
+      params
+    );
+
+    function csvCell(v: unknown): string {
+      if (v === null || v === undefined) return "";
+      const s = v instanceof Date ? v.toISOString() : String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }
+    const header = [
+      "id",
+      "ownerId",
+      "title",
+      "artifactType",
+      "versionNo",
+      "createdAt",
+      "revokedAt",
+      "revokeReasonCode",
+      "revokeReason",
+      "revokedBy",
+      "embedFetches",
+      "lastFetchedAt",
+    ].join(",");
+    const lines = r.rows.map((row: any) =>
+      [
+        row.id,
+        row.ownerId,
+        row.submissionTitle,
+        row.artifactType,
+        row.versionNo,
+        row.createdAt,
+        row.revokedAt,
+        row.revokeReasonCode,
+        row.revokeReason,
+        row.revokedBy,
+        row.embedFetches,
+        row.lastFetchedAt,
+      ]
+        .map(csvCell)
+        .join(",")
+    );
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="planet-certificates-${new Date().toISOString().slice(0, 10)}.csv"`
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.send([header, ...lines].join("\r\n"));
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 POST /admin/certificates/:certId/revoke — admin force-revoke.
+//    Bypasses ownership check. Audit-logged. Webhooks fire to the owner.
+planetComplianceRouter.post("/admin/certificates/:certId/revoke", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!isPlanetAdmin(auth)) return res.status(403).json({ error: "Admin role required" });
+
+    const certId = String(req.params.certId);
+    const reason = String(req.body?.reason || "").slice(0, 500) || null;
+    const reasonCodeRaw = String(req.body?.reasonCode || "admin-takedown").trim();
+    const reasonCode = reasonCodeRaw || "admin-takedown";
+    if (!PLANET_REVOKE_REASON_CODES.has(reasonCode)) {
+      return res.status(400).json({
+        error: "Unknown reasonCode",
+        allowed: Array.from(PLANET_REVOKE_REASON_CODES),
+      });
+    }
+
+    const cur = await pool.query(
+      `SELECT "id", "ownerId", "revokedAt" FROM "PlanetCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    if (cur.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    const row = cur.rows[0] as { id: string; ownerId: string; revokedAt: Date | string | null };
+    if (row.revokedAt) return res.status(409).json({ error: "Already revoked" });
+
+    const now = new Date().toISOString();
+    await pool.query(
+      `UPDATE "PlanetCertificate"
+         SET "revokedAt" = NOW(),
+             "revokeReason" = $2,
+             "revokeReasonCode" = $3,
+             "revokedBy" = 'admin'
+       WHERE "id" = $1`,
+      [certId, reason, reasonCode]
+    );
+
+    console.warn(
+      `[planet] admin force-revoke id=${certId} by=${auth.email || auth.sub} code=${reasonCode}`
+    );
+    recordPlanetAudit(auth.email || auth.sub || null, "admin.revoke", certId, {
+      reasonCode,
+      reason,
+      ownerId: row.ownerId,
+    });
+    triggerPlanetRevokeWebhooks(certId, row.ownerId, {
+      revokedAt: now,
+      reasonCode,
+      reason,
+      revokedBy: "admin",
+    });
+
+    res.json({ id: certId, revokedAt: now, reasonCode, revokedBy: "admin" });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 POST /admin/certificates/revoke-bulk — admin bulk force-revoke.
+//    Up to 200 ids per request. Returns per-bucket partition.
+const PLANET_BULK_LIMIT = 200;
+planetComplianceRouter.post("/admin/certificates/revoke-bulk", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!isPlanetAdmin(auth)) return res.status(403).json({ error: "Admin role required" });
+
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map((x: unknown) => String(x)) : [];
+    if (ids.length === 0) return res.status(400).json({ error: "ids[] required" });
+    if (ids.length > PLANET_BULK_LIMIT) {
+      return res.status(400).json({ error: `at most ${PLANET_BULK_LIMIT} ids per request` });
+    }
+    const reason = String(req.body?.reason || "").slice(0, 500) || null;
+    const reasonCodeRaw = String(req.body?.reasonCode || "admin-takedown").trim();
+    const reasonCode = reasonCodeRaw || "admin-takedown";
+    if (!PLANET_REVOKE_REASON_CODES.has(reasonCode)) {
+      return res.status(400).json({ error: "Unknown reasonCode" });
+    }
+
+    // Snapshot current state so we can partition input.
+    const existing = await pool.query(
+      `SELECT "id", "ownerId", "revokedAt"
+       FROM "PlanetCertificate"
+       WHERE "id" = ANY($1::text[])`,
+      [ids]
+    );
+    const known = new Map<string, { ownerId: string; revokedAt: Date | string | null }>();
+    for (const r of existing.rows as { id: string; ownerId: string; revokedAt: any }[]) {
+      known.set(r.id, { ownerId: r.ownerId, revokedAt: r.revokedAt });
+    }
+    const notFound: string[] = [];
+    const alreadyRevoked: string[] = [];
+    const toRevoke: { id: string; ownerId: string }[] = [];
+    for (const id of ids) {
+      const k = known.get(id);
+      if (!k) notFound.push(id);
+      else if (k.revokedAt) alreadyRevoked.push(id);
+      else toRevoke.push({ id, ownerId: k.ownerId });
+    }
+
+    let revoked: string[] = [];
+    if (toRevoke.length > 0) {
+      const targetIds = toRevoke.map((x) => x.id);
+      const upd = await pool.query(
+        `UPDATE "PlanetCertificate"
+           SET "revokedAt" = NOW(),
+               "revokeReason" = $2,
+               "revokeReasonCode" = $3,
+               "revokedBy" = 'admin'
+         WHERE "id" = ANY($1::text[]) AND "revokedAt" IS NULL
+         RETURNING "id"`,
+        [targetIds, reason, reasonCode]
+      );
+      revoked = (upd.rows as { id: string }[]).map((r) => r.id);
+    }
+
+    const now = new Date().toISOString();
+    recordPlanetAudit(auth.email || auth.sub || null, "admin.bulk-revoke", null, {
+      reasonCode,
+      reason,
+      input: ids,
+      revoked,
+      alreadyRevoked,
+      notFound,
+    });
+    for (const r of toRevoke) {
+      if (revoked.includes(r.id)) {
+        triggerPlanetRevokeWebhooks(r.id, r.ownerId, {
+          revokedAt: now,
+          reasonCode,
+          reason,
+          revokedBy: "admin",
+        });
+      }
+    }
+
+    res.json({ revoked, alreadyRevoked, notFound, reasonCode });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 GET /admin/audit — paginated audit reader.
+planetComplianceRouter.get("/admin/audit", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!isPlanetAdmin(auth)) return res.status(403).json({ error: "Admin role required" });
+
+    const limitRaw = parseInt(String(req.query.limit || "100"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 100;
+    const action = String(req.query.action || "").trim();
+    const targetId = String(req.query.targetId || "").trim();
+
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (action) {
+      params.push(action);
+      conds.push(`"action" = $${params.length}`);
+    }
+    if (targetId) {
+      params.push(targetId);
+      conds.push(`"targetId" = $${params.length}`);
+    }
+    params.push(limit);
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const r = await pool.query(
+      `SELECT id, actor, action, "targetId", payload, at
+       FROM "PlanetAuditLog"
+       ${where}
+       ORDER BY "at" DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      total: r.rowCount,
+      filter: { action: action || null, targetId: targetId || null, limit },
+      items: r.rows.map(
+        (row: { id: string; actor: string | null; action: string; targetId: string | null; payload: unknown; at: Date | string }) => ({
+          id: row.id,
+          actor: row.actor,
+          action: row.action,
+          targetId: row.targetId,
+          payload: row.payload,
+          at: row.at instanceof Date ? row.at.toISOString() : row.at,
+        })
+      ),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 GET /admin/sources — top embed source hosts across all certificates.
+planetComplianceRouter.get("/admin/sources", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!isPlanetAdmin(auth)) return res.status(403).json({ error: "Admin role required" });
+
+    const daysRaw = parseInt(String(req.query.days || "30"), 10);
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, daysRaw)) : 30;
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 50;
+
+    const r = await pool.query(
+      `SELECT "sourceHost",
+              SUM("fetches")::bigint AS total,
+              COUNT(DISTINCT "certificateId")::int AS certificates
+       FROM "PlanetCertFetchSource"
+       WHERE "day" >= (CURRENT_DATE - ($1::int * INTERVAL '1 day'))
+       GROUP BY "sourceHost"
+       ORDER BY total DESC
+       LIMIT $2`,
+      [days, limit]
+    );
+    const rows = r.rows.map(
+      (row: { sourceHost: string; total: string | number; certificates: number }) => ({
+        host: row.sourceHost,
+        totalFetches: Number(row.total) || 0,
+        uniqueCertificates: Number(row.certificates) || 0,
+      })
+    );
+    const totalFetches = rows.reduce(
+      (acc: number, x: { totalFetches: number }) => acc + x.totalFetches,
+      0
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      days,
+      uniqueHosts: rows.length,
+      totalFetches,
+      hosts: rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tier 2 — owner-configured outgoing webhooks
+// ─────────────────────────────────────────────────────────────────────────
+
+const PLANET_WEBHOOK_CAP = 10;
+
+// 🔹 GET /webhooks — list mine. Secret redacted to a 6-char prefix.
+planetComplianceRouter.get("/webhooks", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const r = await pool.query(
+      `SELECT "id", "url", "secret", "createdAt", "lastDeliveredAt", "lastFailedAt", "lastError"
+       FROM "PlanetWebhook"
+       WHERE "ownerUserId" = $1
+       ORDER BY "createdAt" DESC`,
+      [auth.sub]
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      cap: PLANET_WEBHOOK_CAP,
+      items: r.rows.map((row: any) => ({
+        id: row.id,
+        url: row.url,
+        secretPrefix: typeof row.secret === "string" ? row.secret.slice(0, 6) : "",
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+        lastDeliveredAt: row.lastDeliveredAt
+          ? row.lastDeliveredAt instanceof Date
+            ? row.lastDeliveredAt.toISOString()
+            : row.lastDeliveredAt
+          : null,
+        lastFailedAt: row.lastFailedAt
+          ? row.lastFailedAt instanceof Date
+            ? row.lastFailedAt.toISOString()
+            : row.lastFailedAt
+          : null,
+        lastError: row.lastError,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 POST /webhooks — add. Returns the secret ONCE (never displayed again).
+planetComplianceRouter.post("/webhooks", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const url = String(req.body?.url || "").trim();
+    if (!url || url.length > 500) {
+      return res.status(400).json({ error: "url required (≤ 500 chars)" });
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ error: "url must start with http:// or https://" });
+    }
+    const cnt = await pool.query(
+      `SELECT COUNT(*)::int AS c FROM "PlanetWebhook" WHERE "ownerUserId" = $1`,
+      [auth.sub]
+    );
+    if ((cnt.rows[0] as { c: number }).c >= PLANET_WEBHOOK_CAP) {
+      return res.status(400).json({ error: `webhook cap reached (${PLANET_WEBHOOK_CAP}/owner)` });
+    }
+    const id = crypto.randomUUID();
+    const secret = crypto.randomBytes(16).toString("hex");
+    await pool.query(
+      `INSERT INTO "PlanetWebhook" ("id", "ownerUserId", "url", "secret") VALUES ($1, $2, $3, $4)`,
+      [id, auth.sub, url, secret]
+    );
+    res.status(201).json({ id, url, secret });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 DELETE /webhooks/:id — owner-scoped. 404-mask "not yours" identically.
+planetComplianceRouter.delete("/webhooks/:id", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const r = await pool.query(
+      `DELETE FROM "PlanetWebhook" WHERE "id" = $1 AND "ownerUserId" = $2`,
+      [id, auth.sub]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    res.json({ id, deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 PATCH /webhooks/:id — edit URL without rotating secret.
+planetComplianceRouter.patch("/webhooks/:id", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const url = String(req.body?.url || "").trim();
+    if (!url || url.length > 500) {
+      return res.status(400).json({ error: "url required (≤ 500 chars)" });
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ error: "url must start with http:// or https://" });
+    }
+    const r = await pool.query(
+      `UPDATE "PlanetWebhook"
+         SET "url" = $1
+       WHERE "id" = $2 AND "ownerUserId" = $3
+       RETURNING "id", "url"`,
+      [url, id, auth.sub]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    res.json({ id: r.rows[0].id, url: r.rows[0].url, updated: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 GET /webhooks/:id/deliveries — owner-scoped delivery log.
+planetComplianceRouter.get("/webhooks/:id/deliveries", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const own = await pool.query(
+      `SELECT "id" FROM "PlanetWebhook" WHERE "id" = $1 AND "ownerUserId" = $2 LIMIT 1`,
+      [id, auth.sub]
+    );
+    if (own.rowCount === 0) return res.status(404).json({ error: "Not found" });
+
+    const r = await pool.query(
+      `SELECT "id", "certificateId", "eventType", "requestBody", "statusCode", "ok", "error", "deliveredAt", "isRetry"
+       FROM "PlanetWebhookDelivery"
+       WHERE "webhookId" = $1
+       ORDER BY "deliveredAt" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      webhookId: id,
+      total: r.rowCount,
+      items: r.rows.map((row: any) => ({
+        id: row.id,
+        certificateId: row.certificateId,
+        eventType: row.eventType,
+        requestBody: row.requestBody,
+        statusCode: row.statusCode,
+        ok: row.ok,
+        error: row.error,
+        deliveredAt:
+          row.deliveredAt instanceof Date ? row.deliveredAt.toISOString() : row.deliveredAt,
+        isRetry: row.isRetry,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// 🔹 POST /webhooks/:id/retry/:deliveryId — re-issue original body.
+planetComplianceRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const webhookId = String(req.params.id);
+    const deliveryId = String(req.params.deliveryId);
+
+    const lookup = await pool.query(
+      `SELECT w."id" AS "webhookId", w."url", w."secret",
+              d."requestBody", d."eventType", d."certificateId"
+       FROM "PlanetWebhook" w
+       JOIN "PlanetWebhookDelivery" d ON d."webhookId" = w."id"
+       WHERE w."id" = $1 AND w."ownerUserId" = $2 AND d."id" = $3
+       LIMIT 1`,
+      [webhookId, auth.sub, deliveryId]
+    );
+    if (lookup.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    const row = lookup.rows[0] as {
+      webhookId: string;
+      url: string;
+      secret: string;
+      requestBody: string;
+      eventType: string;
+      certificateId: string | null;
+    };
+
+    const result = await attemptPlanetWebhookDelivery({
+      webhookId: row.webhookId,
+      url: row.url,
+      secret: row.secret,
+      body: row.requestBody,
+      eventType: row.eventType,
+      certificateId: row.certificateId,
+      isRetry: true,
+    });
+    res.json({
+      webhookId,
+      retriedDeliveryId: deliveryId,
+      ok: result.ok,
+      statusCode: result.statusCode,
+      error: result.error,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
 });
 

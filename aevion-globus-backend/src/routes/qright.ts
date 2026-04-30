@@ -238,53 +238,9 @@ function recordAudit(
     });
 }
 
-// Validate and normalize a SRI-like ?expected-hash=<sha256> query param.
-// Embeds pass the contentHash they were originally built around so that any
-// drift on the server (re-issued under same id, or DB tampering) is detected
-// by the third-party page WITHOUT trusting the embed JSON itself. Returns the
-// normalized lowercase hex if syntactically valid (64 hex chars), else null.
-// We accept both `expected-hash` and `expectedHash` for ergonomics.
-function readExpectedHash(query: Record<string, unknown>): string | null {
-  const raw = query["expected-hash"] ?? query["expectedHash"];
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim().toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(trimmed)) return null;
-  return trimmed;
-}
-
-// Constant-time string compare for hex hashes — defends against the (very
-// unlikely) timing-oracle on the embed surface. Both inputs assumed lowercase
-// hex of the same length; falls back to false on length mismatch.
-function timingSafeHexEq(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  try {
-    return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
-  } catch {
-    return false;
-  }
-}
-
-// Extract a privacy-safe bucket key from the Referer header.
-// We keep only the hostname (no path, no query, no port, no protocol)
-// and lowercase + strip leading "www." so example.com and www.example.com
-// share a row. Anything that doesn't parse → "(direct)".
-function refererHost(req: { headers: Record<string, string | string[] | undefined> }): string {
-  const raw = req.headers["referer"] || req.headers["referrer"];
-  const ref = Array.isArray(raw) ? raw[0] : raw;
-  if (!ref || typeof ref !== "string") return "(direct)";
-  try {
-    const u = new URL(ref);
-    let host = u.hostname.toLowerCase();
-    if (host.startsWith("www.")) host = host.slice(4);
-    if (!host) return "(direct)";
-    // Defensive cap — a malformed/abusive Referer with a 2 KB hostname
-    // shouldn't be allowed to bloat the row.
-    return host.slice(0, 253);
-  } catch {
-    return "(direct)";
-  }
-}
+// Pure helpers (no DB / no IO) live in src/lib/qrightHelpers.ts so vitest
+// can exercise them in isolation. Imported here unchanged.
+import { readExpectedHash, timingSafeHexEq, refererHost } from "../lib/qrightHelpers";
 
 // Best-effort counter bump — fire-and-forget. Errors here must never break
 // the embed/badge response, since these endpoints are loaded by third parties.

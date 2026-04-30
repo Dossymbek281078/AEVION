@@ -158,9 +158,11 @@ export default function PricingPage() {
 function LoyaltyBanner() {
   const token = useBuildAuth((s) => s.token);
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.loyaltyMe>> | null>(null);
+  const [cashback, setCashback] = useState<Awaited<ReturnType<typeof buildApi.loyaltyCashback>> | null>(null);
   useEffect(() => {
     if (!token) return;
     buildApi.loyaltyMe().then(setData).catch(() => {});
+    buildApi.loyaltyCashback().then(setCashback).catch(() => {});
   }, [token]);
 
   return (
@@ -216,6 +218,26 @@ function LoyaltyBanner() {
       <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
         💎 +2% AEV cashback на любой платёж
       </div>
+      {cashback && cashback.entries > 0 && (
+        <div className="mt-4 grid gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:grid-cols-3">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-emerald-300">Earned cashback</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-200">
+              {cashback.totalAev.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} AEV
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-emerald-300">PAID-заказов</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-200">{cashback.entries}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-emerald-300">Текущая ставка</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-200">
+              {(cashback.cashbackBps / 100).toFixed(0)}%
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

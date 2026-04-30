@@ -387,6 +387,40 @@ export async function ensureBuildTables(): Promise<void> {
     );
   `);
 
+  // BuildCashback: append-only AEV cashback ledger. Every PAID order
+  // mints 2% AEV (cashbackBps from /loyalty). orderId is unique so the
+  // mint is idempotent — paying the same order twice never doubles
+  // the credit.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildCashback" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "orderId" TEXT NOT NULL UNIQUE,
+      "orderKind" TEXT NOT NULL,
+      "orderAmount" DOUBLE PRECISION NOT NULL,
+      "orderCurrency" TEXT NOT NULL,
+      "cashbackAev" DOUBLE PRECISION NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildCashback_user_idx" ON "BuildCashback" ("userId", "createdAt" DESC);`);
+
+  // BuildLead: email captures from /build/why-aevion landing for the
+  // pre-launch / city-by-city marketing list. We don't tie to user
+  // accounts — leads might predate registration.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildLead" (
+      "id" TEXT PRIMARY KEY,
+      "email" TEXT NOT NULL,
+      "city" TEXT,
+      "locale" TEXT NOT NULL DEFAULT 'ru',
+      "source" TEXT NOT NULL DEFAULT 'why-aevion',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildLead_email_source_uniq" ON "BuildLead" (lower("email"), "source");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildLead_created_idx" ON "BuildLead" ("createdAt" DESC);`);
+
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.
   await pool.query(

@@ -583,6 +583,21 @@ export const buildApi = {
       nextTierBps: number | null;
       tiers: { atHires: number; bps: number; label: string }[];
     }>("GET", "/api/build/loyalty/me"),
+  loyaltyCashback: () =>
+    call<{
+      totalAev: number;
+      entries: number;
+      cashbackBps: number;
+      ledger: {
+        id: string;
+        orderId: string;
+        orderKind: string;
+        orderAmount: number;
+        orderCurrency: string;
+        cashbackAev: number;
+        createdAt: string;
+      }[];
+    }>("GET", "/api/build/loyalty/cashback"),
 
     // Trial tasks
   proposeTrialTask: (input: {

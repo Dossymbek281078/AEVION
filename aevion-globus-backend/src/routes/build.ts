@@ -2898,6 +2898,31 @@ buildRouter.post("/orders/:id/pay", async (req, res) => {
       // pay-before-feature semantics; for now boosts go live immediately
       // (PAID just clears the bill).
 
+      // AEV cashback: 2% of PAID order amount → BuildCashback ledger.
+      // Idempotent via UNIQUE(orderId): re-running pay never double-credits.
+      // We mint at conversion 1 unit of order currency = 1 AEV-unit-eq for
+      // simplicity in v1; real fx wiring lands later when the cashback
+      // wallet sync hits.
+      const orderAmount = Number(row.amount) || 0;
+      if (orderAmount > 0) {
+        const cashbackAev = Math.round(orderAmount * 0.02 * 1_000_000) / 1_000_000;
+        await pool.query(
+          `INSERT INTO "BuildCashback"
+             ("id","userId","orderId","orderKind","orderAmount","orderCurrency","cashbackAev")
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT ("orderId") DO NOTHING`,
+          [
+            crypto.randomUUID(),
+            row.userId,
+            row.id,
+            row.kind,
+            orderAmount,
+            row.currency || "RUB",
+            cashbackAev,
+          ],
+        );
+      }
+
       await pool.query("COMMIT");
       return ok(res, { order: updated.rows[0] });
     } catch (innerErr) {
@@ -2906,6 +2931,38 @@ buildRouter.post("/orders/:id/pay", async (req, res) => {
     }
   } catch (err: unknown) {
     return fail(res, 500, "order_pay_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/loyalty/cashback — totals + recent ledger entries.
+// Surfaces "Earned cashback" tile on /build/pricing and downstream
+// for the "Your AEV from QBuild" widget.
+buildRouter.get("/loyalty/cashback", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const totals = await pool.query(
+      `SELECT
+         COALESCE(SUM("cashbackAev"),0)::float8 AS "totalAev",
+         COUNT(*)::int AS "entries"
+       FROM "BuildCashback" WHERE "userId" = $1`,
+      [auth.sub],
+    );
+    const tail = await pool.query(
+      `SELECT "id","orderId","orderKind","orderAmount","orderCurrency","cashbackAev","createdAt"
+       FROM "BuildCashback" WHERE "userId" = $1
+       ORDER BY "createdAt" DESC LIMIT 25`,
+      [auth.sub],
+    );
+    return ok(res, {
+      totalAev: Number(totals.rows[0]?.totalAev ?? 0),
+      entries: Number(totals.rows[0]?.entries ?? 0),
+      cashbackBps: 200,
+      ledger: tail.rows,
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "cashback_failed", { details: (err as Error).message });
   }
 });
 

@@ -7,6 +7,7 @@ import {
   buildApi,
   type BuildPlan,
   type BuildSubscription,
+  type BuildOrderRow,
   type PlanKey,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
@@ -29,10 +30,19 @@ export default function PricingPage() {
 
   const [plans, setPlans] = useState<BuildPlan[]>([]);
   const [sub, setSub] = useState<BuildSubscription | null>(null);
+  const [orders, setOrders] = useState<BuildOrderRow[]>([]);
   const [cycle, setCycle] = useState<Cycle>("MONTHLY");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<PlanKey | null>(null);
+
+  const refreshOrders = async () => {
+    if (!token) return;
+    try {
+      const r = await buildApi.myOrders();
+      setOrders(r.items);
+    } catch {}
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -40,11 +50,13 @@ export default function PricingPage() {
     Promise.all([
       buildApi.listPlans(),
       token ? buildApi.mySubscription().catch(() => ({ subscription: null })) : Promise.resolve({ subscription: null }),
+      token ? buildApi.myOrders().catch(() => ({ items: [] as BuildOrderRow[], total: 0 })) : Promise.resolve({ items: [] as BuildOrderRow[], total: 0 }),
     ])
-      .then(([p, s]) => {
+      .then(([p, s, o]) => {
         if (cancelled) return;
         setPlans(p.items);
         setSub(s.subscription);
+        setOrders(o.items);
       })
       .catch((e) => !cancelled && setError((e as Error).message))
       .finally(() => !cancelled && setLoading(false));
@@ -62,10 +74,32 @@ export default function PricingPage() {
     try {
       const r = await buildApi.startSubscription(planKey);
       setSub(r.subscription);
+      await refreshOrders();
+      if (r.subscription.status === "PENDING") {
+        // Auto-scroll the user to the order ledger so they see the
+        // Pay button immediately after Choose-plan.
+        setTimeout(() => {
+          document.getElementById("orders")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      }
     } catch (e) {
       alert((e as Error).message);
     } finally {
       setBusyKey(null);
+    }
+  }
+
+  async function pay(orderId: string) {
+    try {
+      await buildApi.payOrder(orderId);
+      const [s, o] = await Promise.all([
+        buildApi.mySubscription().catch(() => ({ subscription: null })),
+        buildApi.myOrders().catch(() => ({ items: [] as BuildOrderRow[], total: 0 })),
+      ]);
+      setSub(s.subscription);
+      setOrders(o.items);
+    } catch (e) {
+      alert((e as Error).message);
     }
   }
 
@@ -113,8 +147,72 @@ export default function PricingPage() {
 
       <ComparisonTable plans={plans} />
       <AddOns />
+      {token && orders.length > 0 && <OrdersLedger orders={orders} onPay={pay} />}
       <Faq />
     </BuildShell>
+  );
+}
+
+function OrdersLedger({
+  orders,
+  onPay,
+}: {
+  orders: BuildOrderRow[];
+  onPay: (id: string) => void;
+}) {
+  return (
+    <section id="orders" className="mt-12">
+      <h2 className="text-lg font-bold text-white">Your orders</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        Subscription starts and boost charges land here. Use «Pay (test)» below to flip a pending order to PAID — that's the stub
+        for the future Stripe / YooKassa webhook.
+      </p>
+      <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="bg-white/5 text-xs uppercase tracking-wider text-slate-400">
+            <tr>
+              <th className="px-4 py-2.5">Created</th>
+              <th className="px-4 py-2.5">Kind</th>
+              <th className="px-4 py-2.5">Amount</th>
+              <th className="px-4 py-2.5">Status</th>
+              <th className="px-4 py-2.5"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {orders.map((o) => {
+              const tone =
+                o.status === "PAID"
+                  ? "text-emerald-300"
+                  : o.status === "PENDING"
+                    ? "text-amber-300"
+                    : "text-slate-400";
+              return (
+                <tr key={o.id} className="text-slate-200">
+                  <td className="px-4 py-2.5 text-xs text-slate-400">
+                    {new Date(o.createdAt).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-2.5">{o.kind}</td>
+                  <td className="px-4 py-2.5">
+                    {o.amount > 0 ? `${o.amount.toLocaleString("ru-RU")} ${o.currency}` : "—"}
+                  </td>
+                  <td className={`px-4 py-2.5 font-semibold ${tone}`}>{o.status}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    {o.status === "PENDING" && o.amount > 0 && (
+                      <button
+                        onClick={() => onPay(o.id)}
+                        className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-950 hover:bg-emerald-400"
+                      >
+                        Pay (test)
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

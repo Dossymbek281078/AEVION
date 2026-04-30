@@ -266,6 +266,12 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/subscriptions/start": {
         post: { summary: "Start/switch plan — FREE/PPHIRE → ACTIVE; PRO/AGENCY → PENDING (awaiting payment provider)" },
       },
+      "/api/build/orders/me": {
+        get: { summary: "Order ledger for the current bearer (last 50)" },
+      },
+      "/api/build/orders/{id}/pay": {
+        post: { summary: "Mark an order PAID (stub — replace with payment provider webhook). SUB_START orders also activate the linked subscription." },
+      },
     },
   });
 });

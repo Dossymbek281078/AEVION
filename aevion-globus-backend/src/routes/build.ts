@@ -1571,6 +1571,80 @@ buildRouter.post("/subscriptions/start", async (req, res) => {
   }
 });
 
+// GET /api/build/orders/me — order ledger for the bearer
+buildRouter.get("/orders/me", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const result = await pool.query(
+      `SELECT * FROM "BuildOrder" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 50`,
+      [auth.sub],
+    );
+    return ok(res, { items: result.rows, total: result.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "orders_me_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/orders/:id/pay — stub for the payment provider step.
+//   This is the only place that flips an order PENDING → PAID. When
+//   the order references a SUB_START, the linked subscription also
+//   flips PENDING → ACTIVE (and any prior ACTIVE sub for the same
+//   user is canceled, matching the partial-unique index).
+//   In production this would be webhook-driven from Stripe / YooKassa /
+//   etc. — for now we accept a direct call from the bearer who owns
+//   the order, so the e2e flow is testable end-to-end.
+buildRouter.post("/orders/:id/pay", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const order = await pool.query(`SELECT * FROM "BuildOrder" WHERE "id" = $1 LIMIT 1`, [id]);
+    if (order.rowCount === 0) return fail(res, 404, "order_not_found");
+    const row = order.rows[0];
+    if (row.userId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+    if (row.status === "PAID") return ok(res, { order: row, alreadyPaid: true });
+    if (row.status !== "PENDING") return fail(res, 400, `order_not_payable`, { currentStatus: row.status });
+
+    await pool.query("BEGIN");
+    try {
+      const updated = await pool.query(
+        `UPDATE "BuildOrder" SET "status" = 'PAID' WHERE "id" = $1 RETURNING *`,
+        [id],
+      );
+
+      // Side-effects keyed by order kind.
+      if (row.kind === "SUB_START" && row.ref) {
+        // Cancel any other ACTIVE sub first to honor the unique-active index.
+        await pool.query(
+          `UPDATE "BuildSubscription" SET "status" = 'CANCELED', "endsAt" = NOW()
+           WHERE "userId" = $1 AND "status" = 'ACTIVE' AND "id" <> $2`,
+          [row.userId, row.ref],
+        );
+        await pool.query(
+          `UPDATE "BuildSubscription" SET "status" = 'ACTIVE', "startedAt" = NOW()
+           WHERE "id" = $1`,
+          [row.ref],
+        );
+      }
+      // BOOST orders: nothing to flip — the BuildBoost row was inserted at
+      // boost-time. We could add an "active" flag later if we want strict
+      // pay-before-feature semantics; for now boosts go live immediately
+      // (PAID just clears the bill).
+
+      await pool.query("COMMIT");
+      return ok(res, { order: updated.rows[0] });
+    } catch (innerErr) {
+      await pool.query("ROLLBACK");
+      throw innerErr;
+    }
+  } catch (err: unknown) {
+    return fail(res, 500, "order_pay_failed", { details: (err as Error).message });
+  }
+});
+
 // Health probe — no auth, no DB roundtrip beyond the bootstrap middleware.
 buildRouter.get("/health", (_req, res) => {
   return ok(res, {

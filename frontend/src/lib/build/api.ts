@@ -185,6 +185,18 @@ export type BuildPlan = {
   sortOrder: number;
 };
 
+export type BuildOrderRow = {
+  id: string;
+  userId: string;
+  kind: "SUB_START" | "BOOST" | "TALENT_DAY_PASS" | "HIRE_FEE";
+  ref: string | null;
+  amount: number;
+  currency: string;
+  status: "PENDING" | "PAID" | "CANCELED" | "REFUNDED";
+  metaJson: string;
+  createdAt: string;
+};
+
 export type BuildSubscription = {
   id: string;
   userId: string;
@@ -451,6 +463,13 @@ export const buildApi = {
       "POST",
       "/api/build/subscriptions/start",
       { planKey },
+    ),
+  myOrders: () =>
+    call<{ items: BuildOrderRow[]; total: number }>("GET", "/api/build/orders/me"),
+  payOrder: (id: string) =>
+    call<{ order: BuildOrderRow; alreadyPaid?: boolean }>(
+      "POST",
+      `/api/build/orders/${encodeURIComponent(id)}/pay`,
     ),
 
   // Notifications

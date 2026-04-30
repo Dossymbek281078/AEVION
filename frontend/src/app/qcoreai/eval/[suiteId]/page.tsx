@@ -643,42 +643,55 @@ export default function QCoreEvalSuitePage() {
                   <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}>Score</th>
                   <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}>Passed</th>
                   <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}>Cost</th>
+                  <th style={{ padding: "8px 12px", textAlign: "right", color: "#475569", fontWeight: 500 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {runs.map((r) => (
-                  <tr
-                    key={r.id}
-                    onClick={() => setActiveRun(r)}
-                    style={{ cursor: "pointer", borderTop: "1px solid #f1f5f9" }}
-                  >
-                    <td style={{ padding: "8px 12px", color: "#475569" }}>{fmtDate(r.startedAt)}</td>
-                    <td style={{ padding: "8px 12px" }}>
-                      <span
-                        style={{
-                          padding: "2px 7px",
-                          borderRadius: 4,
-                          fontSize: 11,
-                          background:
-                            r.status === "done" ? "#f0fdf4" :
-                            r.status === "running" ? "#f0fdfa" :
-                            r.status === "error" ? "#fef2f2" : "#f1f5f9",
-                          color:
-                            r.status === "done" ? "#15803d" :
-                            r.status === "running" ? "#0d9488" :
-                            r.status === "error" ? "#991b1b" : "#475569",
-                        }}
-                      >
-                        {r.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600 }}>{fmtScore(r.score)}</td>
-                    <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569" }}>
-                      {r.passedCases}/{r.totalCases}
-                    </td>
-                    <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569" }}>{fmtMoney(r.totalCostUsd)}</td>
-                  </tr>
-                ))}
+                {runs.map((r, i) => {
+                  const prev = runs[i + 1];
+                  return (
+                    <tr
+                      key={r.id}
+                      style={{ borderTop: "1px solid #f1f5f9" }}
+                    >
+                      <td style={{ padding: "8px 12px", color: "#475569", cursor: "pointer" }} onClick={() => setActiveRun(r)}>{fmtDate(r.startedAt)}</td>
+                      <td style={{ padding: "8px 12px", cursor: "pointer" }} onClick={() => setActiveRun(r)}>
+                        <span
+                          style={{
+                            padding: "2px 7px",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            background:
+                              r.status === "done" ? "#f0fdf4" :
+                              r.status === "running" ? "#f0fdfa" :
+                              r.status === "error" ? "#fef2f2" : "#f1f5f9",
+                            color:
+                              r.status === "done" ? "#15803d" :
+                              r.status === "running" ? "#0d9488" :
+                              r.status === "error" ? "#991b1b" : "#475569",
+                          }}
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600, cursor: "pointer" }} onClick={() => setActiveRun(r)}>{fmtScore(r.score)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569", cursor: "pointer" }} onClick={() => setActiveRun(r)}>
+                        {r.passedCases}/{r.totalCases}
+                      </td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: "#475569", cursor: "pointer" }} onClick={() => setActiveRun(r)}>{fmtMoney(r.totalCostUsd)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                        {prev && r.status === "done" && prev.status === "done" && (
+                          <Link
+                            href={`/qcoreai/eval/${suiteId}/compare?a=${prev.id}&b=${r.id}`}
+                            style={{ fontSize: 11, color: "#0d9488", textDecoration: "none", whiteSpace: "nowrap" }}
+                          >
+                            Compare ↔
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

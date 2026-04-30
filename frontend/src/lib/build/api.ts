@@ -198,6 +198,29 @@ export const buildApi = {
     call<BuildProject>("PATCH", `/api/build/projects/${encodeURIComponent(id)}`, patch),
 
   // Vacancies
+  listVacancies: (q?: {
+    status?: VacancyStatus;
+    projectStatus?: ProjectStatus;
+    q?: string;
+    city?: string;
+    minSalary?: number;
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (q?.status) params.set("status", q.status);
+    if (q?.projectStatus) params.set("projectStatus", q.projectStatus);
+    if (q?.q) params.set("q", q.q);
+    if (q?.city) params.set("city", q.city);
+    if (q?.minSalary != null) params.set("minSalary", String(q.minSalary));
+    if (q?.limit) params.set("limit", String(q.limit));
+    const qs = params.toString();
+    return call<{ items: (BuildVacancy & { projectCity?: string | null })[]; total: number }>(
+      "GET",
+      `/api/build/vacancies${qs ? "?" + qs : ""}`,
+      undefined,
+      { auth: false },
+    );
+  },
   createVacancy: (input: { projectId: string; title: string; description: string; salary?: number }) =>
     call<BuildVacancy>("POST", "/api/build/vacancies", input),
   vacanciesByProject: (projectId: string) =>

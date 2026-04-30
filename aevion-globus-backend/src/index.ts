@@ -220,7 +220,10 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/projects/{id}/public": {
         get: { summary: "Public PII-stripped view (cache 60s) — feeds /build/p/{id} SSR" },
       },
-      "/api/build/vacancies": { post: { summary: "Create vacancy (project owner only)" } },
+      "/api/build/vacancies": {
+        get: { summary: "Cross-project vacancies feed (?status=&projectStatus=&q=&city=&minSalary=&limit=)" },
+        post: { summary: "Create vacancy (project owner only)" },
+      },
       "/api/build/vacancies/by-project/{id}": { get: { summary: "Vacancies for a project" } },
       "/api/build/vacancies/{id}": { get: { summary: "Vacancy detail + project link" } },
       "/api/build/applications": { post: { summary: "Apply to vacancy (Bearer required)" } },

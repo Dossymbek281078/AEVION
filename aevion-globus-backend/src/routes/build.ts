@@ -417,6 +417,63 @@ buildRouter.post("/vacancies", async (req, res) => {
   }
 });
 
+// GET /api/build/vacancies — cross-project feed with filters
+// Query: ?status=OPEN|CLOSED · ?q=text · ?city=Almaty · ?minSalary=N
+//        ?projectStatus=OPEN|IN_PROGRESS|DONE · ?limit=1..100 (default 50)
+// Public (no auth). Joins project for title/city/status badges.
+buildRouter.get("/vacancies", async (req, res) => {
+  try {
+    const params: unknown[] = [];
+    const where: string[] = [];
+
+    if (typeof req.query.status === "string") {
+      const v = vEnum(req.query.status, "status", VACANCY_STATUSES);
+      if (!v.ok) return fail(res, 400, v.error);
+      params.push(v.value);
+      where.push(`v."status" = $${params.length}`);
+    }
+    if (typeof req.query.projectStatus === "string") {
+      const v = vEnum(req.query.projectStatus, "projectStatus", PROJECT_STATUSES);
+      if (!v.ok) return fail(res, 400, v.error);
+      params.push(v.value);
+      where.push(`p."status" = $${params.length}`);
+    }
+    if (typeof req.query.q === "string" && req.query.q.trim()) {
+      params.push(`%${req.query.q.trim()}%`);
+      where.push(`(v."title" ILIKE $${params.length} OR v."description" ILIKE $${params.length})`);
+    }
+    if (typeof req.query.city === "string" && req.query.city.trim()) {
+      params.push(req.query.city.trim());
+      where.push(`p."city" ILIKE $${params.length}`);
+    }
+    if (req.query.minSalary !== undefined) {
+      const v = vNumber(req.query.minSalary, "minSalary", { min: 0, max: 1e12 });
+      if (!v.ok) return fail(res, 400, v.error);
+      params.push(v.value);
+      where.push(`v."salary" >= $${params.length}`);
+    }
+
+    const limitRaw = req.query.limit !== undefined ? vNumber(req.query.limit, "limit", { min: 1, max: 100 }) : { ok: true as const, value: 50 };
+    if (limitRaw.ok === false) return fail(res, 400, limitRaw.error);
+    params.push(limitRaw.value);
+
+    const result = await pool.query(
+      `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
+              p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY v."createdAt" DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return ok(res, { items: result.rows, total: result.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancies_feed_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/by-project/:id
 buildRouter.get("/vacancies/by-project/:id", async (req, res) => {
   try {

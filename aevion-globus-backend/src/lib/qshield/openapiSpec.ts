@@ -313,5 +313,161 @@ export const QSHIELD_OPENAPI = {
         },
       },
     },
+    "/{id}/revoke": {
+      post: {
+        tags: ["reconstruct"],
+        summary: "Mark record as revoked (owner or admin)",
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { reason: { type: "string", maxLength: 500 } },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Revoked or already-revoked" },
+          "401": { description: "Auth required" },
+          "403": { description: "Forbidden" },
+          "404": { description: "Not found" },
+        },
+      },
+    },
+    "/{id}/audit": {
+      get: {
+        tags: ["reconstruct"],
+        summary: "Audit log entries for a record (owner or admin)",
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
+          { name: "offset", in: "query", schema: { type: "integer" } },
+        ],
+        responses: {
+          "200": {
+            description: "Paginated audit feed",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    shieldId: { type: "string" },
+                    entries: { type: "array", items: { type: "object" } },
+                    limit: { type: "integer" },
+                    offset: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Auth required" },
+          "403": { description: "Forbidden" },
+          "404": { description: "Not found" },
+        },
+      },
+    },
+    "/webhooks": {
+      post: {
+        tags: ["public"],
+        summary: "Subscribe to shield events for the calling user",
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["url"],
+                properties: {
+                  url: { type: "string", format: "uri" },
+                  events: {
+                    oneOf: [
+                      { type: "string", enum: ["*"] },
+                      { type: "string" },
+                      {
+                        type: "array",
+                        items: {
+                          type: "string",
+                          enum: [
+                            "shield.created",
+                            "shield.reconstructed",
+                            "shield.revoked",
+                            "shield.deleted",
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                  secret: { type: "string", minLength: 16 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Subscription created (returns generated secret)" },
+          "400": { description: "Invalid url / events" },
+          "401": { description: "Auth required" },
+        },
+      },
+      get: {
+        tags: ["public"],
+        summary: "List webhook subscriptions for the calling user",
+        security: [{ BearerAuth: [] }],
+        responses: { "200": { description: "List" } },
+      },
+    },
+    "/webhooks/{id}": {
+      delete: {
+        tags: ["public"],
+        summary: "Delete webhook subscription",
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": { description: "Deleted" },
+          "401": { description: "Auth required" },
+          "403": { description: "Forbidden" },
+          "404": { description: "Not found" },
+        },
+      },
+    },
+    "/webhooks/{id}/deliveries": {
+      get: {
+        tags: ["public"],
+        summary: "Recent webhook delivery log",
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
+        ],
+        responses: {
+          "200": { description: "List of deliveries" },
+          "401": { description: "Auth required" },
+          "403": { description: "Forbidden" },
+          "404": { description: "Not found" },
+        },
+      },
+    },
+    "/metrics": {
+      get: {
+        tags: ["health"],
+        summary: "Prometheus exposition format",
+        responses: {
+          "200": {
+            description: "text/plain prometheus exposition",
+            content: { "text/plain": { schema: { type: "string" } } },
+          },
+        },
+      },
+    },
   },
 } as const;

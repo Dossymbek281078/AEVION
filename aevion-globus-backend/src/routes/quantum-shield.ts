@@ -18,6 +18,12 @@ import {
 import { createShieldRecord } from "../lib/qshield/createRecord";
 import { QSHIELD_OPENAPI } from "../lib/qshield/openapiSpec";
 import {
+  ensureWebhookTables,
+  fireShieldWebhook,
+  type ShieldWebhookEvent,
+} from "../lib/qshield/webhooks";
+import { captureShieldError } from "../lib/qshield/sentry";
+import {
   clientIp,
   createInMemoryRateLimiter,
 } from "../lib/rateLimit/inMemoryWindow";
@@ -44,6 +50,7 @@ const RESERVED_IDS = new Set([
   "revoke",
   "audit",
   "metrics",
+  "webhooks",
   "openapi.json",
 ]);
 
@@ -240,6 +247,160 @@ quantumShieldRouter.get("/health", async (_req, res) => {
       err instanceof Error ? err.message : String(err),
     );
     res.status(500).json({ status: "error", service: "quantum-shield" });
+  }
+});
+
+/**
+ * Webhook CRUD — owners manage their own delivery subscriptions.
+ *
+ * POST /webhooks  body: { url, events?, secret? }   → 201 { id, secret }
+ * GET  /webhooks                                    → list mine
+ * GET  /webhooks/:id/deliveries                     → recent delivery log
+ * DELETE /webhooks/:id                              → remove
+ */
+quantumShieldRouter.post("/webhooks", async (req, res) => {
+  try {
+    await ensureWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const body = (req.body || {}) as {
+      url?: unknown;
+      events?: unknown;
+      secret?: unknown;
+    };
+    if (typeof body.url !== "string" || !/^https?:\/\//i.test(body.url)) {
+      return res.status(400).json({ error: "url must be http(s)://..." });
+    }
+    const VALID_EVENTS: ShieldWebhookEvent[] = [
+      "shield.created",
+      "shield.reconstructed",
+      "shield.revoked",
+      "shield.deleted",
+    ];
+    let events: string;
+    if (body.events === undefined || body.events === "*") {
+      events = "*";
+    } else if (typeof body.events === "string") {
+      events = body.events;
+    } else if (Array.isArray(body.events)) {
+      const list = body.events
+        .filter((e: unknown): e is string => typeof e === "string")
+        .filter((e) => (VALID_EVENTS as string[]).includes(e));
+      if (list.length === 0) {
+        return res.status(400).json({
+          error: "events must be '*' or include at least one of: " + VALID_EVENTS.join(", "),
+        });
+      }
+      events = list.join(",");
+    } else {
+      return res.status(400).json({ error: "events must be a string or array" });
+    }
+    const secret =
+      typeof body.secret === "string" && body.secret.length >= 16
+        ? body.secret
+        : crypto.randomBytes(24).toString("hex");
+    const id = "qsw-" + crypto.randomBytes(8).toString("hex");
+    await pool.query(
+      `INSERT INTO "QuantumShieldWebhook"
+        ("id","ownerUserId","url","secret","events","active","createdAt")
+       VALUES ($1,$2,$3,$4,$5,TRUE,NOW())`,
+      [id, auth.sub, body.url, secret, events],
+    );
+    res.status(201).json({ id, url: body.url, events, secret, active: true });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] webhook create error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Failed to create webhook" });
+  }
+});
+
+quantumShieldRouter.get("/webhooks", async (req, res) => {
+  try {
+    await ensureWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const { rows } = await pool.query(
+      `SELECT "id","url","events","active","createdAt","lastFiredAt","failureCount"
+       FROM "QuantumShieldWebhook" WHERE "ownerUserId" = $1
+       ORDER BY "createdAt" DESC`,
+      [auth.sub],
+    );
+    res.json({ webhooks: rows });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] webhook list error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Failed to list webhooks" });
+  }
+});
+
+quantumShieldRouter.get("/webhooks/:id/deliveries", async (req, res) => {
+  try {
+    await ensureWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const owner = await pool.query(
+      `SELECT "ownerUserId" FROM "QuantumShieldWebhook" WHERE "id" = $1`,
+      [req.params.id],
+    );
+    if (owner.rows.length === 0) {
+      return res.status(404).json({ error: "Webhook not found" });
+    }
+    if ((owner.rows[0] as { ownerUserId: string }).ownerUserId !== auth.sub && auth.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+    const { rows } = await pool.query(
+      `SELECT "id","event","succeeded","statusCode","errorMessage","durationMs","createdAt"
+       FROM "QuantumShieldWebhookDelivery"
+       WHERE "webhookId" = $1
+       ORDER BY "createdAt" DESC LIMIT $2`,
+      [req.params.id, limit],
+    );
+    res.json({ webhookId: req.params.id, deliveries: rows });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] webhook deliveries error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Failed to fetch deliveries" });
+  }
+});
+
+quantumShieldRouter.delete("/webhooks/:id", async (req, res) => {
+  try {
+    await ensureWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const owner = await pool.query(
+      `SELECT "ownerUserId" FROM "QuantumShieldWebhook" WHERE "id" = $1`,
+      [req.params.id],
+    );
+    if (owner.rows.length === 0) {
+      return res.status(404).json({ error: "Webhook not found" });
+    }
+    if ((owner.rows[0] as { ownerUserId: string }).ownerUserId !== auth.sub && auth.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    await pool.query(`DELETE FROM "QuantumShieldWebhook" WHERE "id" = $1`, [req.params.id]);
+    res.json({ success: true, deleted: req.params.id });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] webhook delete error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Failed to delete webhook" });
   }
 });
 
@@ -451,6 +612,15 @@ async function handleCreate(req: Request, res: Response): Promise<void> {
         totalShards: created.totalShards,
         objectId: created.objectId,
       }, auth?.sub || null);
+      fireShieldWebhook(pool, created.ownerUserId, "shield.created", {
+        id: created.id,
+        objectTitle: created.objectTitle,
+        distribution: created.distribution,
+        threshold: created.threshold,
+        totalShards: created.totalShards,
+        publicKey: created.publicKey,
+        witnessCid: created.witnessCid,
+      });
       res.status(201).json(created);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -514,7 +684,7 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
   try {
     await ensureShieldTable();
     const { rows } = await pool.query(
-      `SELECT "id","objectId","objectTitle","algorithm","threshold","totalShards","publicKey","signature","status","legacy","hmac_key_version","verifiedCount","lastVerifiedAt","distribution_policy","createdAt"
+      `SELECT "id","objectId","objectTitle","algorithm","threshold","totalShards","publicKey","signature","status","legacy","hmac_key_version","verifiedCount","lastVerifiedAt","distribution_policy","ownerUserId","createdAt"
        FROM "QuantumShield" WHERE "id" = $1`,
       [req.params.id],
     );
@@ -530,9 +700,35 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
       );
       witnessCid = (w.rows?.[0]?.witnessCid as string | null) ?? null;
     }
-    // Public projection: no shards, no ownerUserId. Just enough to render
-    // a shareable verify card.
-    res.setHeader("Cache-Control", "public, max-age=60");
+
+    // If the caller is the owner OR an admin, surface a short audit-trail
+    // snippet so dashboards have one less round trip. Public-anonymous
+    // projection still has no audit (privacy + cache).
+    const auth = verifyBearerOptional(req);
+    const isOwner = !!auth?.sub && r.ownerUserId === auth.sub;
+    const isAdmin = auth?.role === "admin";
+    let auditSnippet: Array<Record<string, unknown>> | null = null;
+    if (isOwner || isAdmin) {
+      try {
+        const a = await pool.query(
+          `SELECT "id","event","actorUserId","createdAt"
+           FROM "QuantumShieldAudit" WHERE "shieldId" = $1
+           ORDER BY "createdAt" DESC LIMIT 5`,
+          [r.id],
+        );
+        auditSnippet = a.rows;
+      } catch {
+        /* non-fatal — table may be missing on legacy deployment */
+      }
+    }
+
+    // Public projection: no shards, no ownerUserId for anon callers.
+    // Cache only for anonymous responses — owner snippet must not leak.
+    if (auditSnippet === null) {
+      res.setHeader("Cache-Control", "public, max-age=60");
+    } else {
+      res.setHeader("Cache-Control", "private, no-store");
+    }
     res.json({
       id: r.id,
       objectId: r.objectId,
@@ -552,12 +748,16 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
       witnessUrl: witnessCid ? `/api/quantum-shield/${r.id}/witness` : null,
       createdAt: r.createdAt,
       verifyUrl: `/quantum-shield/${r.id}`,
+      // Owner-only fields:
+      ownerUserId: isOwner || isAdmin ? r.ownerUserId : undefined,
+      auditSnippet: auditSnippet ?? undefined,
     });
   } catch (err) {
     console.error(
       "[QuantumShield] public error:",
       err instanceof Error ? err.message : String(err),
     );
+    captureShieldError(err, { route: "public", shieldId: req.params.id });
     res.status(500).json({ error: "Failed to fetch public view" });
   }
 });
@@ -763,6 +963,19 @@ quantumShieldRouter.post("/:id/reconstruct", async (req, res) => {
       verifiedAt: new Date().toISOString(),
     };
     void audit(req.params.id, "reconstruct", req, { shardCount: shardsInput.length, idempotent: !!idemKey });
+    {
+      const ownerLookup = await pool.query(
+        `SELECT "ownerUserId" FROM "QuantumShield" WHERE "id" = $1`,
+        [req.params.id],
+      );
+      const owner = (ownerLookup.rows?.[0] as { ownerUserId: string | null } | undefined)
+        ?.ownerUserId;
+      fireShieldWebhook(pool, owner, "shield.reconstructed", {
+        id: req.params.id,
+        shardCount: shardsInput.length,
+        idempotent: !!idemKey,
+      });
+    }
     if (idemKey) {
       try {
         await pool.query(
@@ -785,6 +998,7 @@ quantumShieldRouter.post("/:id/reconstruct", async (req, res) => {
     console.error(
       `[QuantumShield] reconstruct error: ${err instanceof Error ? err.message : String(err)}`,
     );
+    captureShieldError(err, { route: "reconstruct", shieldId: req.params.id });
     return res.status(500).json({
       valid: false,
       reconstructed: false,
@@ -971,6 +1185,12 @@ quantumShieldRouter.post("/:id/revoke", async (req, res) => {
       [req.params.id],
     );
     void audit(req.params.id, "revoke", req, { reason, admin: isAdmin, owner: isOwner }, auth.sub);
+    fireShieldWebhook(pool, row.ownerUserId, "shield.revoked", {
+      id: req.params.id,
+      reason,
+      admin: isAdmin,
+      owner: isOwner,
+    });
     res.json({
       success: true,
       shieldId: req.params.id,
@@ -982,6 +1202,7 @@ quantumShieldRouter.post("/:id/revoke", async (req, res) => {
       "[QuantumShield] revoke error:",
       err instanceof Error ? err.message : String(err),
     );
+    captureShieldError(err, { route: "revoke", shieldId: req.params.id });
     res.status(500).json({ error: "Failed to revoke shield record" });
   }
 });
@@ -1068,12 +1289,18 @@ quantumShieldRouter.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Shield record not found" });
     }
     void audit(req.params.id, "delete", req, { admin: isAdmin, owner: isOwner }, auth?.sub || null);
+    fireShieldWebhook(pool, ownerUserId, "shield.deleted", {
+      id: req.params.id,
+      admin: isAdmin,
+      owner: isOwner,
+    });
     res.json({ success: true, deleted: req.params.id });
   } catch (err) {
     console.error(
       "[QuantumShield] delete error:",
       err instanceof Error ? err.message : String(err),
     );
+    captureShieldError(err, { route: "delete", shieldId: req.params.id, actorUserId: verifyBearerOptional(req)?.sub });
     res.status(500).json({ error: "Failed to delete shield record" });
   }
 });

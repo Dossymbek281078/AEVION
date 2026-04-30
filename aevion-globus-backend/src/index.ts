@@ -19,6 +19,7 @@ import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { cyberchessRouter } from "./routes/cyberchess";
 import { planetPayoutsRouter } from "./routes/planetPayouts";
 import { bankTestRouter } from "./routes/bankTest";
+import { metricsRouter } from "./routes/metrics";
 import { initSentry, captureException, isSentryEnabled } from "./lib/sentry";
 import { openapiSpec } from "./lib/openapiSpec";
 import { projects } from "./data/projects";
@@ -117,6 +118,9 @@ app.use("/api/planet", planetPayoutsRouter);
 // Internal: synthetic webhook dispatcher used by /bank/diagnostics.
 // Every route is requireAuth + scopes the synthesized event to the caller.
 app.use("/api/bank", bankTestRouter);
+
+// Prometheus metrics. Public unless METRICS_TOKEN is set in env.
+app.use("/api/metrics", metricsRouter);
 
 app.use(
   (

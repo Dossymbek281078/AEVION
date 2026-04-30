@@ -350,6 +350,21 @@ type CachedReply = { status: number; body: unknown; storedAt: number };
 const idemCache = new Map<string, CachedReply>();
 const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
 
+// Counts read by /api/metrics. Reads are cheap; we don't snapshot.
+export function getQtradeMetrics(): {
+  accounts: number;
+  transfers: number;
+  operations: number;
+  idemCache: number;
+} {
+  return {
+    accounts: accounts.length,
+    transfers: transfers.length,
+    operations: operations.length,
+    idemCache: idemCache.size,
+  };
+}
+
 function gcIdem(): void {
   const cutoff = Date.now() - IDEM_TTL_MS;
   for (const [k, v] of idemCache) {

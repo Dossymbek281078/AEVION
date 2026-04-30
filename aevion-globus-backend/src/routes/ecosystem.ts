@@ -67,6 +67,18 @@ export const royaltyEvents: RoyaltyEvent[] = [];
 export const chessPrizes: ChessPrize[] = [];
 export const planetCerts: PlanetCert[] = [];
 
+export function getEcosystemMetrics(): {
+  royaltyEvents: number;
+  chessPrizes: number;
+  planetCerts: number;
+} {
+  return {
+    royaltyEvents: royaltyEvents.length,
+    chessPrizes: chessPrizes.length,
+    planetCerts: planetCerts.length,
+  };
+}
+
 const STORE_REL = "ecosystem.json";
 
 let loaded = false;

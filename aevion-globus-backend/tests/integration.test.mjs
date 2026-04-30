@@ -37,6 +37,7 @@ const { ecosystemRouter } = await import("../dist/routes/ecosystem.js");
 const { qrightRoyaltiesRouter } = await import("../dist/routes/qrightRoyalties.js");
 const { cyberchessRouter } = await import("../dist/routes/cyberchess.js");
 const { planetPayoutsRouter } = await import("../dist/routes/planetPayouts.js");
+const { metricsRouter } = await import("../dist/routes/metrics.js");
 
 function tokenFor(email) {
   return jwt.sign({ sub: `u_${email}`, email, role: "user" }, process.env.AUTH_JWT_SECRET, { expiresIn: "1h" });
@@ -53,6 +54,7 @@ before(async () => {
   app.use("/api/qright", qrightRoyaltiesRouter);
   app.use("/api/cyberchess", cyberchessRouter);
   app.use("/api/planet", planetPayoutsRouter);
+  app.use("/api/metrics", metricsRouter);
   await new Promise((resolve) => {
     server = app.listen(0, () => {
       const addr = server.address();
@@ -239,6 +241,16 @@ describe("ecosystem + royalties + chess + planet", () => {
   it("/cyberchess/upcoming is public", async () => {
     const r = await get("/api/cyberchess/upcoming");
     assert.equal(r.status, 200);
+  });
+
+  it("/metrics returns Prometheus text with the expected gauges", async () => {
+    const r = await get("/api/metrics");
+    assert.equal(r.status, 200);
+    assert.ok((r.headers.get("content-type") || "").startsWith("text/plain"));
+    const text = await r.text();
+    assert.match(text, /aevion_accounts_total \d+/);
+    assert.match(text, /aevion_uptime_seconds \d+/);
+    assert.match(text, /aevion_sentry_enabled \d/);
   });
 
   it("planet webhook + payouts round-trip", async () => {

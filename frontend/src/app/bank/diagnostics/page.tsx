@@ -185,6 +185,7 @@ export default function BankDiagnosticsPage() {
   const autoRanRef = useRef(false);
   const [webhookResults, setWebhookResults] = useState<WebhookResult[]>([]);
   const [firingKind, setFiringKind] = useState<WebhookKind | null>(null);
+  const [autoRefreshSec, setAutoRefreshSec] = useState<0 | 30 | 60>(0);
 
   useEffect(() => {
     setToken(readToken());
@@ -267,6 +268,12 @@ export default function BankDiagnosticsPage() {
     autoRanRef.current = true;
     void runProbes();
   }, [runProbes]);
+
+  useEffect(() => {
+    if (autoRefreshSec === 0) return;
+    const id = window.setInterval(() => void runProbes(), autoRefreshSec * 1000);
+    return () => window.clearInterval(id);
+  }, [autoRefreshSec, runProbes]);
 
   const fireWebhook = useCallback(
     async (kind: WebhookKind) => {
@@ -470,6 +477,26 @@ export default function BankDiagnosticsPage() {
               Last run: {new Date(lastRunAt).toLocaleTimeString()}
             </span>
           ) : null}
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#475569", fontWeight: 600 }}>
+            Auto:
+            <select
+              value={autoRefreshSec}
+              onChange={(e) => setAutoRefreshSec(Number(e.target.value) as 0 | 30 | 60)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.18)",
+                fontSize: 12,
+                fontWeight: 700,
+                background: "#fff",
+                color: "#0f172a",
+              }}
+            >
+              <option value={0}>off</option>
+              <option value={30}>every 30s</option>
+              <option value={60}>every 60s</option>
+            </select>
+          </label>
         </div>
 
         <Section title="Endpoint probes" subtitle="Each probe runs in parallel; latency is wall-clock from request start to response.">

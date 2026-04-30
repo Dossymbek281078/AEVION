@@ -4,7 +4,7 @@ import { csvFromRows } from "../lib/csv";
 import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 import { requireAuth } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
-import { consumeDailyCap } from "../lib/dailyCap";
+import { consumeDailyCap, peekDailyCap } from "../lib/dailyCap";
 
 export const qtradeRouter = Router();
 
@@ -237,6 +237,21 @@ qtradeRouter.get("/summary", (req, res) => {
     totalBalance,
     totalTransferVolume,
     totalTopupVolume,
+  });
+});
+
+// =======================
+// Daily-cap status (read-only). Lets the wallet UI render a progress
+// strip so users see remaining headroom before they hit a 429.
+// =======================
+qtradeRouter.get("/cap-status", (req, res) => {
+  const owner = ownerEmail(req);
+  const topup = peekDailyCap(owner, "topup");
+  const transfer = peekDailyCap(owner, "transfer");
+  res.json({
+    topup,
+    transfer,
+    resetsAtIso: new Date(Date.now() + topup.remainingSec * 1000).toISOString(),
   });
 });
 

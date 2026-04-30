@@ -74,6 +74,19 @@ export function consumeDailyCap(email: string, kind: CapKind, amount: number, no
   return { ok: true, used: next, cap, remainingSec: retryInSec };
 }
 
+// Read the current bucket state without consuming any capacity. Used by
+// the GET /api/qtrade/cap-status surface so the UI can show a progress
+// bar before the user hits 429.
+export function peekDailyCap(email: string, kind: CapKind, now = Date.now()): { used: number; cap: number; remainingSec: number } {
+  const cap = capFor(kind);
+  const key = `${email.toLowerCase()}|${kind}|${dayKey(now)}`;
+  const cur = buckets.get(key);
+  const used = cur && cur.resetsAt > now ? cur.used : 0;
+  const reset = nextMidnightUtc(now);
+  const remainingSec = Math.max(1, Math.ceil((reset - now) / 1000));
+  return { used, cap, remainingSec };
+}
+
 // Test helpers — only for the integration test suite.
 export function _resetDailyCaps(): void {
   buckets.clear();

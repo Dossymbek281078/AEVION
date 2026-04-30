@@ -34,7 +34,25 @@ initSentry();
 const app = express();
 const PORT = process.env.PORT || 4001;
 
-app.use(cors());
+// CORS: if CORS_ALLOWED_ORIGINS is set (comma-separated), only those
+// origins can call. Otherwise we keep the test-net default of fully
+// permissive CORS so dev + investor demos work without env wiring.
+function buildCorsOptions(): cors.CorsOptions {
+  const raw = process.env.CORS_ALLOWED_ORIGINS;
+  if (!raw || !raw.trim()) return {};
+  const allowed = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return {
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // same-origin / curl / server-to-server
+      if (allowed.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not in CORS_ALLOWED_ORIGINS`));
+    },
+    credentials: true,
+  };
+}
+
+const corsOptions = buildCorsOptions();
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Health-check
@@ -141,8 +159,12 @@ app.use(
 );
 
 app.listen(PORT, () => {
+  const corsNote = process.env.CORS_ALLOWED_ORIGINS
+    ? ` (cors restricted)`
+    : ` (cors open)`;
   console.log(
     `AEVION Globus Backend запущен на порту ${PORT}` +
-      (isSentryEnabled() ? " (sentry on)" : ""),
+      (isSentryEnabled() ? " (sentry on)" : "") +
+      corsNote,
   );
 });

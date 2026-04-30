@@ -272,6 +272,19 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/build/ai/parse-resume": {
         post: { summary: "Parse free-form resume text into AEVION Resume Schema v2 JSON" },
       },
+      "/api/build/trial-tasks": {
+        post: { summary: "Recruiter proposes a paid trial task tied to an application" },
+      },
+      "/api/build/trial-tasks/{id}/accept": { post: { summary: "Candidate accepts (PROPOSED→ACCEPTED)" } },
+      "/api/build/trial-tasks/{id}/submit": { post: { summary: "Candidate submits work (ACCEPTED→SUBMITTED)" } },
+      "/api/build/trial-tasks/{id}/approve": {
+        post: { summary: "Recruiter approves + creates PENDING TRIAL_PAYOUT order (SUBMITTED→APPROVED)" },
+      },
+      "/api/build/trial-tasks/{id}/reject": { post: { summary: "Either side rejects at appropriate stage" } },
+      "/api/build/trial-tasks/by-application/{applicationId}": {
+        get: { summary: "List trial tasks for an application (party only)" },
+      },
+      "/api/build/trial-tasks/my": { get: { summary: "Bearer's tasks (both as candidate and recruiter)" } },
       "/api/build/bookmarks": {
         get: { summary: "List my bookmarks (kind=VACANCY|CANDIDATE), hydrated with target" },
         post: { summary: "Toggle bookmark (kind+targetId). Idempotent: re-post removes." },

@@ -15,6 +15,7 @@ import { useBuildAuth } from "@/lib/build/auth";
 import { VoiceInput } from "@/components/build/VoiceInput";
 import { ResumeImporter } from "@/components/build/ResumeImporter";
 import { AiCoachChat } from "@/components/build/AiCoachChat";
+import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 
 export default function ProfilePage() {
   return (
@@ -158,6 +159,11 @@ function ProfileBody() {
                 <div className="mt-2 text-xs text-slate-500">
                   {new Date(a.createdAt).toLocaleDateString()}
                 </div>
+                <TrialTaskBlock
+                  applicationId={a.id}
+                  isRecruiter={false}
+                  isCandidate
+                />
               </li>
             ))}
           </ul>

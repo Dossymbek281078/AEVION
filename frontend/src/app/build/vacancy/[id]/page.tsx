@@ -5,6 +5,7 @@ import { use } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ApplicationForm } from "@/components/build/ApplicationForm";
+import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import {
   buildApi,
   type BuildVacancy,
@@ -135,11 +136,16 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   No applications yet.
                 </p>
               ) : (
-                <ul className="space-y-3">
+                <div className="space-y-3">
                   {applications.map((a) => (
-                    <ApplicationRow key={a.id} app={a} onChanged={refresh} />
+                    <div key={a.id}>
+                      <ul className="space-y-3">
+                        <ApplicationRow app={a} onChanged={refresh} />
+                      </ul>
+                      <TrialTaskBlock applicationId={a.id} isRecruiter isCandidate={false} onChanged={refresh} />
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           )}

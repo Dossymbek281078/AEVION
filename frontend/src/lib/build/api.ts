@@ -214,6 +214,27 @@ export type BuildPlan = {
   sortOrder: number;
 };
 
+export type TrialTaskStatus = "PROPOSED" | "ACCEPTED" | "SUBMITTED" | "APPROVED" | "REJECTED";
+
+export type BuildTrialTask = {
+  id: string;
+  applicationId: string;
+  vacancyId: string;
+  recruiterId: string;
+  candidateId: string;
+  title: string;
+  description: string;
+  paymentAmount: number;
+  paymentCurrency: string;
+  status: TrialTaskStatus;
+  submissionUrl: string | null;
+  submissionNote: string | null;
+  rejectReason: string | null;
+  payoutOrderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type BuildBookmark = {
   id: string;
   userId: string;
@@ -527,6 +548,36 @@ export const buildApi = {
       parsed: Record<string, unknown>;
       usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
     }>("POST", "/api/build/ai/parse-resume", input),
+
+    // Trial tasks
+  proposeTrialTask: (input: {
+    applicationId: string;
+    title: string;
+    description: string;
+    paymentAmount?: number;
+    paymentCurrency?: string;
+  }) => call<BuildTrialTask>("POST", "/api/build/trial-tasks", input),
+  acceptTrialTask: (id: string) =>
+    call<BuildTrialTask>("POST", `/api/build/trial-tasks/${encodeURIComponent(id)}/accept`),
+  submitTrialTask: (id: string, input: { submissionUrl?: string | null; submissionNote?: string | null }) =>
+    call<BuildTrialTask>("POST", `/api/build/trial-tasks/${encodeURIComponent(id)}/submit`, input),
+  approveTrialTask: (id: string) =>
+    call<{ trialTask: BuildTrialTask; payoutOrderId: string; payoutStatus: string }>(
+      "POST",
+      `/api/build/trial-tasks/${encodeURIComponent(id)}/approve`,
+    ),
+  rejectTrialTask: (id: string, reason?: string) =>
+    call<BuildTrialTask>("POST", `/api/build/trial-tasks/${encodeURIComponent(id)}/reject`, { reason }),
+  trialTasksByApplication: (applicationId: string) =>
+    call<{ items: BuildTrialTask[]; total: number }>(
+      "GET",
+      `/api/build/trial-tasks/by-application/${encodeURIComponent(applicationId)}`,
+    ),
+  myTrialTasks: () =>
+    call<{ items: (BuildTrialTask & { vacancyTitle?: string; projectTitle?: string })[]; total: number }>(
+      "GET",
+      "/api/build/trial-tasks/my",
+    ),
 
   // Plan usage
   myUsage: () =>

@@ -294,6 +294,39 @@ export async function ensureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildOrder_user_idx" ON "BuildOrder" ("userId", "createdAt" DESC);`);
 
+  // BuildTrialTask: paid trial work proposed by a recruiter to a
+  // specific applicant. Replaces the HH "shoot a CV → maybe call →
+  // ghost" anti-pattern with "small paid test → real signal both
+  // ways". Lifecycle:
+  //   PROPOSED (recruiter creates) → ACCEPTED (candidate takes it)
+  //                                → REJECTED (candidate declines)
+  //   ACCEPTED → SUBMITTED (candidate hands work in)
+  //   SUBMITTED → APPROVED (recruiter pays out + offers job)
+  //              → REJECTED (recruiter rejects work, no pay)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildTrialTask" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "vacancyId" TEXT NOT NULL,
+      "recruiterId" TEXT NOT NULL,
+      "candidateId" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "description" TEXT NOT NULL,
+      "paymentAmount" INTEGER NOT NULL DEFAULT 0,
+      "paymentCurrency" TEXT NOT NULL DEFAULT 'RUB',
+      "status" TEXT NOT NULL DEFAULT 'PROPOSED',
+      "submissionUrl" TEXT,
+      "submissionNote" TEXT,
+      "rejectReason" TEXT,
+      "payoutOrderId" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildTrialTask_application_idx" ON "BuildTrialTask" ("applicationId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildTrialTask_candidate_idx" ON "BuildTrialTask" ("candidateId", "status");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildTrialTask_recruiter_idx" ON "BuildTrialTask" ("recruiterId", "status");`);
+
   // BuildBookmark: per-user star list. Polymorphic — kind tells you
   // what targetId points at (a vacancy id or a userId).
   await pool.query(`
@@ -531,6 +564,7 @@ export async function maybeCleanupExpiredBoosts(): Promise<number> {
 }
 
 export const SUBSCRIPTION_STATUSES = ["ACTIVE", "CANCELED", "PENDING"] as const;
-export const ORDER_KINDS = ["SUB_START", "BOOST", "TALENT_DAY_PASS", "HIRE_FEE"] as const;
+export const ORDER_KINDS = ["SUB_START", "BOOST", "TALENT_DAY_PASS", "HIRE_FEE", "TRIAL_PAYOUT"] as const;
+export const TRIAL_TASK_STATUSES = ["PROPOSED", "ACCEPTED", "SUBMITTED", "APPROVED", "REJECTED"] as const;
 export const ORDER_STATUSES = ["PENDING", "PAID", "CANCELED", "REFUNDED"] as const;
 export const BOOKMARK_KINDS = ["VACANCY", "CANDIDATE"] as const;

@@ -1890,6 +1890,109 @@ healthaiRouter.get("/population/:profileId", async (req, res) => {
   });
 });
 
+/**
+ * Doctor referral — список clinic-партнёров (демо-каталог) с фильтрацией по
+ * стране/типу и сортировкой. Реальная интеграция с записью на приём — отложена
+ * (нужен партнёрский договор), но контракт UI/SDK уже стабилен.
+ */
+type DoctorReferral = {
+  id: string;
+  name: string;
+  country: string;
+  city: string;
+  specialty: "general" | "psychiatry" | "cardiology" | "endocrinology" | "ob_gyn";
+  telemedicine: boolean;
+  phone?: string;
+  url?: string;
+  emergency?: boolean;
+};
+
+const DOCTOR_REFERRALS: DoctorReferral[] = [
+  {
+    id: "ref-ru-103",
+    name: "Скорая помощь / Ambulance",
+    country: "RU",
+    city: "*",
+    specialty: "general",
+    telemedicine: false,
+    phone: "103",
+    emergency: true,
+  },
+  {
+    id: "ref-kz-103",
+    name: "Жедел жәрдем / Скорая",
+    country: "KZ",
+    city: "*",
+    specialty: "general",
+    telemedicine: false,
+    phone: "103",
+    emergency: true,
+  },
+  {
+    id: "ref-us-911",
+    name: "Emergency Services",
+    country: "US",
+    city: "*",
+    specialty: "general",
+    telemedicine: false,
+    phone: "911",
+    emergency: true,
+  },
+  {
+    id: "ref-ru-mh-hotline",
+    name: "Телефон доверия (24/7)",
+    country: "RU",
+    city: "*",
+    specialty: "psychiatry",
+    telemedicine: true,
+    phone: "8-800-2000-122",
+  },
+  {
+    id: "ref-kz-mh-hotline",
+    name: "Психологическая помощь",
+    country: "KZ",
+    city: "*",
+    specialty: "psychiatry",
+    telemedicine: true,
+    phone: "150",
+  },
+  {
+    id: "ref-us-988",
+    name: "988 Suicide & Crisis Lifeline",
+    country: "US",
+    city: "*",
+    specialty: "psychiatry",
+    telemedicine: true,
+    phone: "988",
+  },
+  {
+    id: "ref-global-telehealth",
+    name: "AEVION Telehealth Partner Network",
+    country: "*",
+    city: "*",
+    specialty: "general",
+    telemedicine: true,
+    url: "https://aevion.com/healthai/telehealth",
+  },
+];
+
+healthaiRouter.get("/referrals", async (req, res) => {
+  const country = (req.query.country as string | undefined)?.toUpperCase();
+  const specialty = req.query.specialty as DoctorReferral["specialty"] | undefined;
+  const emergency = req.query.emergency === "1";
+  const list = DOCTOR_REFERRALS.filter((r) => {
+    if (country && r.country !== "*" && r.country !== country) return false;
+    if (specialty && r.specialty !== specialty) return false;
+    if (emergency && !r.emergency) return false;
+    return true;
+  });
+  res.json({
+    referrals: list,
+    disclaimer:
+      "Список партнёров AEVION HealthAI. AEVION не оказывает медицинских услуг и не заменяет приём врача.",
+  });
+});
+
 healthaiRouter.get("/leaderboard", async (_req, res) => {
   const ids = await store.allProfileIdsWithLogs();
   const board: Array<{ profileId: string; streak: number; logs: number }> = [];

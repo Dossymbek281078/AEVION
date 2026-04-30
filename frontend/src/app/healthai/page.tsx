@@ -141,6 +141,21 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   cycle_save: { en: "Save", ru: "Сохранить" },
   cycle_recent: { en: "Recent days", ru: "Последние дни" },
+  referral_title: { en: "Need a doctor?", ru: "Нужен врач?" },
+  referral_subtitle: {
+    en: "AEVION partner network. Tap an emergency line if symptoms are severe.",
+    ru: "Сеть партнёров AEVION. При тяжёлых симптомах — вызывайте экстренную линию.",
+  },
+  referral_emergency_only: { en: "Emergency only", ru: "Только экстренные" },
+  referral_call: { en: "Call", ru: "Позвонить" },
+  referral_open: { en: "Open", ru: "Открыть" },
+  referral_loading: { en: "Loading…", ru: "Загрузка…" },
+  referral_empty: { en: "No referrals matched.", ru: "Партнёров не найдено." },
+  referral_disclaimer: {
+    en: "AEVION does not provide medical care and is not a substitute for a doctor.",
+    ru: "AEVION не оказывает мед. услуг и не заменяет приём врача.",
+  },
+  referral_country_label: { en: "Country", ru: "Страна" },
   notif_title: { en: "Daily reminder", ru: "Ежедневное напоминание" },
   notif_subtitle: {
     en: "Browser notification at 9:00 PM if you haven't logged today.",
@@ -543,6 +558,20 @@ export default function HealthAIPage() {
   const [lang, setLang] = useState<Lang>("en");
   const [notifPerm, setNotifPerm] = useState<"unsupported" | "default" | "granted" | "denied">("default");
   const [notifOptIn, setNotifOptIn] = useState(false);
+  type Referral = {
+    id: string;
+    name: string;
+    country: string;
+    city: string;
+    specialty: "general" | "psychiatry" | "cardiology" | "endocrinology" | "ob_gyn";
+    telemedicine: boolean;
+    phone?: string;
+    url?: string;
+    emergency?: boolean;
+  };
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [referralsLoading, setReferralsLoading] = useState(false);
+  const [referralCountry, setReferralCountry] = useState<string>("");
   useEffect(() => {
     setLang(detectLocale());
     if (typeof window !== "undefined") {
@@ -793,6 +822,27 @@ export default function HealthAIPage() {
       setRisks(j);
     } catch {}
   }, []);
+
+  const loadReferrals = useCallback(
+    async (opts?: { country?: string; specialty?: string; emergencyOnly?: boolean }) => {
+      setReferralsLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (opts?.country) params.set("country", opts.country);
+        if (opts?.specialty) params.set("specialty", opts.specialty);
+        if (opts?.emergencyOnly) params.set("emergency", "1");
+        const r = await fetch(
+          `${BACKEND}/api/healthai/referrals${params.toString() ? `?${params.toString()}` : ""}`,
+        );
+        if (!r.ok) return;
+        const j = await r.json();
+        setReferrals(Array.isArray(j.referrals) ? j.referrals : []);
+      } finally {
+        setReferralsLoading(false);
+      }
+    },
+    [],
+  );
 
   const loadPopulation = useCallback(async (profileId: string) => {
     try {
@@ -1881,6 +1931,25 @@ export default function HealthAIPage() {
             {lastCheck ? (
               <>
                 <CheckCard check={lastCheck} lang={lang} />
+                {lastCheck.matched.some((m) => m.urgency === "urgent") ? (
+                  <ReferralCard
+                    lang={lang}
+                    referrals={referrals}
+                    loading={referralsLoading}
+                    country={referralCountry}
+                    onCountry={(c) => {
+                      setReferralCountry(c);
+                      void loadReferrals({ country: c, emergencyOnly: true });
+                    }}
+                    onLoad={() =>
+                      loadReferrals({
+                        country: referralCountry || undefined,
+                        emergencyOnly: true,
+                      })
+                    }
+                    emergencyMode
+                  />
+                ) : null}
                 <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                   <button
                     type="button"
@@ -2614,38 +2683,62 @@ export default function HealthAIPage() {
                         </div>
                       ) : null}
                       {phq9Result.suicideFlag ? (
-                        <div
-                          style={{
-                            padding: 12,
-                            borderRadius: 8,
-                            background: "rgba(248,113,113,0.18)",
-                            border: "1px solid rgba(248,113,113,0.55)",
-                            marginTop: 8,
-                          }}
-                        >
+                        <>
                           <div
                             style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              color: "#fecaca",
-                              marginBottom: 4,
-                              letterSpacing: "0.05em",
-                              textTransform: "uppercase",
+                              padding: 12,
+                              borderRadius: 8,
+                              background: "rgba(248,113,113,0.18)",
+                              border: "1px solid rgba(248,113,113,0.55)",
+                              marginTop: 8,
                             }}
                           >
-                            ⚠ {t("phq9_suicide_warning", lang)}
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 800,
+                                color: "#fecaca",
+                                marginBottom: 4,
+                                letterSpacing: "0.05em",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              ⚠ {t("phq9_suicide_warning", lang)}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "#fecaca",
+                                lineHeight: 1.55,
+                              }}
+                            >
+                              {phq9Result.suicideAdvice ||
+                                "Q9 > 0 — необходима неотложная консультация специалиста."}
+                            </div>
                           </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              color: "#fecaca",
-                              lineHeight: 1.55,
-                            }}
-                          >
-                            {phq9Result.suicideAdvice ||
-                              "Q9 > 0 — необходима неотложная консультация специалиста."}
+                          <div style={{ marginTop: 8 }}>
+                            <ReferralCard
+                              lang={lang}
+                              referrals={referrals}
+                              loading={referralsLoading}
+                              country={referralCountry}
+                              onCountry={(c) => {
+                                setReferralCountry(c);
+                                void loadReferrals({
+                                  country: c,
+                                  specialty: "psychiatry",
+                                });
+                              }}
+                              onLoad={() =>
+                                loadReferrals({
+                                  country: referralCountry || undefined,
+                                  specialty: "psychiatry",
+                                })
+                              }
+                              emergencyMode
+                            />
                           </div>
-                        </div>
+                        </>
                       ) : null}
                       <div
                         style={{
@@ -3270,6 +3363,185 @@ function Card({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+    </div>
+  );
+}
+
+type ReferralCardProps = {
+  lang: Lang;
+  referrals: Array<{
+    id: string;
+    name: string;
+    country: string;
+    city: string;
+    specialty: string;
+    telemedicine: boolean;
+    phone?: string;
+    url?: string;
+    emergency?: boolean;
+  }>;
+  loading: boolean;
+  country: string;
+  onCountry: (c: string) => void;
+  onLoad: () => void;
+  emergencyMode?: boolean;
+};
+
+function ReferralCard({
+  lang,
+  referrals,
+  loading,
+  country,
+  onCountry,
+  onLoad,
+  emergencyMode,
+}: ReferralCardProps) {
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: 12,
+        background: emergencyMode
+          ? "rgba(248,113,113,0.10)"
+          : "rgba(20,28,46,0.55)",
+        border: emergencyMode
+          ? "1px solid rgba(248,113,113,0.45)"
+          : "1px solid rgba(165,180,252,0.22)",
+        borderRadius: 10,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+        <h3 style={{ ...sectionTitle, marginBottom: 0, color: emergencyMode ? "#fecaca" : "#a5b4fc" }}>
+          {emergencyMode ? "🚑 " : "🏥 "}
+          {t("referral_title", lang)}
+        </h3>
+        <div style={{ display: "flex", gap: 4 }}>
+          {(["", "RU", "KZ", "US"] as const).map((c) => {
+            const active = country === c;
+            return (
+              <button
+                key={c || "any"}
+                type="button"
+                onClick={() => onCountry(c)}
+                style={{
+                  padding: "3px 8px",
+                  fontSize: 10,
+                  background: active ? "rgba(94,234,212,0.22)" : "rgba(20,28,46,0.6)",
+                  color: active ? "#5eead4" : "#94a3b8",
+                  border: "1px solid",
+                  borderColor: active ? "rgba(94,234,212,0.45)" : "rgba(120,160,220,0.18)",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                }}
+              >
+                {c || "ANY"}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 10, lineHeight: 1.5 }}>
+        {t("referral_subtitle", lang)}
+      </div>
+      {referrals.length === 0 ? (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={onLoad}
+            disabled={loading}
+            style={{
+              padding: "6px 12px",
+              background: "rgba(94,234,212,0.18)",
+              color: "#5eead4",
+              border: "1px solid rgba(94,234,212,0.45)",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: 12,
+            }}
+          >
+            {loading ? t("referral_loading", lang) : t("referral_open", lang)}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {referrals.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 10px",
+                background: r.emergency ? "rgba(248,113,113,0.10)" : "rgba(8,12,24,0.6)",
+                border: r.emergency
+                  ? "1px solid rgba(248,113,113,0.35)"
+                  : "1px solid rgba(120,160,220,0.16)",
+                borderRadius: 6,
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+                <span style={{ color: "#e2e8f8", fontSize: 12, fontWeight: 700 }}>
+                  {r.emergency ? "⚠ " : ""}
+                  {r.name}
+                </span>
+                <span style={{ color: "#94a3b8", fontSize: 10 }}>
+                  {r.country === "*" ? "Global" : r.country}
+                  {" · "}
+                  {r.specialty}
+                  {r.telemedicine ? " · 📞" : ""}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {r.phone ? (
+                  <a
+                    href={`tel:${r.phone.replace(/[^0-9+]/g, "")}`}
+                    style={{
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      background: r.emergency ? "rgba(248,113,113,0.22)" : "rgba(94,234,212,0.18)",
+                      color: r.emergency ? "#fecaca" : "#5eead4",
+                      border: "1px solid",
+                      borderColor: r.emergency ? "rgba(248,113,113,0.5)" : "rgba(94,234,212,0.45)",
+                      borderRadius: 5,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    {t("referral_call", lang)} {r.phone}
+                  </a>
+                ) : null}
+                {r.url ? (
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      background: "rgba(120,160,220,0.18)",
+                      color: "#cbd5e1",
+                      border: "1px solid rgba(120,160,220,0.45)",
+                      borderRadius: 5,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    {t("referral_open", lang)} ↗
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ marginTop: 8, fontSize: 9, color: "#64748b", fontStyle: "italic" }}>
+        {t("referral_disclaimer", lang)}
+      </div>
     </div>
   );
 }

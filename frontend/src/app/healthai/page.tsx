@@ -140,6 +140,13 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   cycle_save: { en: "Save", ru: "Сохранить" },
   cycle_recent: { en: "Recent days", ru: "Последние дни" },
+  plan_history: { en: "Plan history", ru: "История планов" },
+  plan_history_empty: {
+    en: "Older plans will appear here when you regenerate.",
+    ru: "Старые планы появятся здесь после регенерации.",
+  },
+  plan_open_snapshot: { en: "Open", ru: "Открыть" },
+  plan_current: { en: "Current", ru: "Текущий" },
   tab_screener: { en: "Screener", ru: "Скрининг" },
   phq9_title: { en: "PHQ-9 depression screener", ru: "PHQ-9 — скрининг депрессии" },
   phq9_subtitle: {
@@ -567,7 +574,13 @@ export default function HealthAIPage() {
   };
   const [plan, setPlan] = useState<Plan | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
-  const [planMeta, setPlanMeta] = useState<{ generatedAt: string } | null>(null);
+  const [planMeta, setPlanMeta] = useState<{ generatedAt: string; snapshotId?: string } | null>(null);
+  const [planHistory, setPlanHistory] = useState<Array<{
+    id: string;
+    generatedAt: string;
+    bmi?: number | null;
+    goalsCount: number;
+  }>>([]);
 
   // Log draft
   const [logSleep, setLogSleep] = useState("");
@@ -910,6 +923,32 @@ export default function HealthAIPage() {
     }
   };
 
+  const loadPlanHistory = useCallback(async (pid: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/plan/history/${pid}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      setPlanHistory(Array.isArray(j.snapshots) ? j.snapshots : []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const loadPlanSnapshot = useCallback(async (snapshotId: string) => {
+    setPlanBusy(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/plan/snapshot/${snapshotId}`);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.plan) {
+        setPlan(j.plan);
+        setPlanMeta({ generatedAt: j.generatedAt, snapshotId: j.id });
+      }
+    } finally {
+      setPlanBusy(false);
+    }
+  }, []);
+
   const generatePlan = useCallback(async () => {
     if (!profileIdRef.current) return;
     setPlanBusy(true);
@@ -921,12 +960,13 @@ export default function HealthAIPage() {
       const j = await r.json();
       if (j.plan) {
         setPlan(j.plan);
-        setPlanMeta({ generatedAt: j.generatedAt });
+        setPlanMeta({ generatedAt: j.generatedAt, snapshotId: j.snapshotId });
       }
     } finally {
       setPlanBusy(false);
+      if (profileIdRef.current) void loadPlanHistory(profileIdRef.current);
     }
-  }, []);
+  }, [loadPlanHistory]);
 
   // Auto-generate при первом открытии Plan tab.
   useEffect(() => {
@@ -934,6 +974,13 @@ export default function HealthAIPage() {
       void generatePlan();
     }
   }, [tab, plan, planBusy, generatePlan]);
+
+  // Lazy-load plan history при открытии Plan tab.
+  useEffect(() => {
+    if (tab === "plan" && profileIdRef.current && planHistory.length === 0) {
+      void loadPlanHistory(profileIdRef.current);
+    }
+  }, [tab, planHistory.length, loadPlanHistory]);
 
   // Lazy load cycle на открытии cycle tab.
   useEffect(() => {
@@ -2511,6 +2558,103 @@ export default function HealthAIPage() {
                     {new Date(planMeta.generatedAt).toLocaleString()}
                   </div>
                 ) : null}
+
+                <div
+                  style={{
+                    marginTop: 18,
+                    paddingTop: 14,
+                    borderTop: "1px solid rgba(120,160,220,0.18)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: "#a5b4fc",
+                      letterSpacing: "0.05em",
+                      textTransform: "uppercase",
+                      marginBottom: 8,
+                    }}
+                  >
+                    📜 {t("plan_history", lang)}
+                  </div>
+                  {planHistory.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>
+                      {t("plan_history_empty", lang)}
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {planHistory.map((s) => {
+                        const isCurrent = planMeta?.snapshotId === s.id;
+                        return (
+                          <div
+                            key={s.id}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              padding: "8px 10px",
+                              background: isCurrent
+                                ? "rgba(94,234,212,0.12)"
+                                : "rgba(20,28,46,0.6)",
+                              border: isCurrent
+                                ? "1px solid rgba(94,234,212,0.45)"
+                                : "1px solid rgba(120,160,220,0.16)",
+                              borderRadius: 6,
+                              fontSize: 12,
+                            }}
+                          >
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              <span style={{ color: "#e2e8f8", fontWeight: 600 }}>
+                                {new Date(s.generatedAt).toLocaleString()}
+                                {isCurrent ? (
+                                  <span
+                                    style={{
+                                      marginLeft: 8,
+                                      fontSize: 9,
+                                      padding: "1px 6px",
+                                      background: "rgba(94,234,212,0.25)",
+                                      color: "#5eead4",
+                                      borderRadius: 4,
+                                      letterSpacing: "0.05em",
+                                      textTransform: "uppercase",
+                                      fontWeight: 800,
+                                    }}
+                                  >
+                                    {t("plan_current", lang)}
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span style={{ color: "#94a3b8", fontSize: 10 }}>
+                                {s.bmi != null ? `BMI ${s.bmi.toFixed(1)}` : "—"} ·{" "}
+                                {s.goalsCount} goals
+                              </span>
+                            </div>
+                            {!isCurrent ? (
+                              <button
+                                type="button"
+                                onClick={() => loadPlanSnapshot(s.id)}
+                                disabled={planBusy}
+                                style={{
+                                  padding: "5px 10px",
+                                  fontSize: 11,
+                                  background: "rgba(120,160,220,0.18)",
+                                  color: "#cbd5e1",
+                                  border: "1px solid rgba(120,160,220,0.45)",
+                                  borderRadius: 5,
+                                  cursor: planBusy ? "not-allowed" : "pointer",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {t("plan_open_snapshot", lang)}
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </Card>

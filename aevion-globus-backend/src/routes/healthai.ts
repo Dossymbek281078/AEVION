@@ -84,6 +84,7 @@ const profilesMem = new Map<string, HealthProfile>();
 const checksMem = new Map<string, SymptomCheck[]>();
 const logsMem = new Map<string, DailyLog[]>();
 const cyclesMem = new Map<string, CycleEntry[]>();
+const planSnapshotsMem = new Map<string, any[]>();
 
 /**
  * Hybrid store: Prisma если есть DATABASE_URL и таблицы доступны, иначе
@@ -365,6 +366,82 @@ const store = {
     else list.unshift(c);
     cyclesMem.set(c.profileId, list);
     return c;
+  },
+  async addPlanSnapshot(s: {
+    id: string;
+    profileId: string;
+    plan: unknown;
+    bmi?: number | null;
+    avgSleep7d?: number | null;
+    avgMood7d?: number | null;
+    generatedAt: string;
+  }): Promise<void> {
+    await ensureDb();
+    if (useDb && prisma) {
+      await prisma.planSnapshot.create({
+        data: {
+          id: s.id,
+          profileId: s.profileId,
+          plan: s.plan as any,
+          bmi: s.bmi ?? null,
+          avgSleep7d: s.avgSleep7d ?? null,
+          avgMood7d: s.avgMood7d ?? null,
+          generatedAt: new Date(s.generatedAt),
+        },
+      });
+      return;
+    }
+    const list = planSnapshotsMem.get(s.profileId) || [];
+    list.unshift(s as any);
+    if (list.length > 50) list.length = 50;
+    planSnapshotsMem.set(s.profileId, list);
+  },
+  async listPlanSnapshots(profileId: string, limit = 30): Promise<any[]> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.planSnapshot.findMany({
+        where: { profileId },
+        orderBy: { generatedAt: "desc" },
+        take: limit,
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        profileId: r.profileId,
+        plan: r.plan,
+        bmi: r.bmi == null ? null : Number(r.bmi),
+        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
+        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
+        generatedAt:
+          r.generatedAt instanceof Date
+            ? r.generatedAt.toISOString()
+            : r.generatedAt,
+      }));
+    }
+    return (planSnapshotsMem.get(profileId) || []).slice(0, limit);
+  },
+  async getPlanSnapshot(id: string): Promise<any | null> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.planSnapshot.findUnique({ where: { id } });
+      if (!r) return null;
+      return {
+        id: r.id,
+        profileId: r.profileId,
+        plan: r.plan,
+        bmi: r.bmi == null ? null : Number(r.bmi),
+        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
+        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
+        generatedAt:
+          r.generatedAt instanceof Date
+            ? r.generatedAt.toISOString()
+            : r.generatedAt,
+      };
+    }
+    for (const list of planSnapshotsMem.values()) {
+      const found = list.find((x) => x.id === id);
+      if (found) return found;
+    }
+    return null;
   },
   async allProfileIdsWithLogs(): Promise<string[]> {
     await ensureDb();
@@ -1612,17 +1689,52 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
     rationale,
   };
 
+  const generatedAt = nowIso();
+  const snapshotId = newId("plan");
+  void store
+    .addPlanSnapshot({
+      id: snapshotId,
+      profileId,
+      plan,
+      bmi: bmiVal || null,
+      avgSleep7d: avgSleep,
+      avgMood7d: avgMood,
+      generatedAt,
+    })
+    .catch(() => {});
+
   res.json({
     plan,
+    snapshotId,
     bmi: bmiVal,
     avgSleep7d: avgSleep,
     avgMood7d: avgMood,
     avgExercise7d: avgExercise,
     phq9: phq9 ? { score: phq9.score, severity: phq9.severity } : null,
     gad7: gad7 ? { score: gad7.score, severity: gad7.severity } : null,
-    generatedAt: nowIso(),
+    generatedAt,
     disclaimer: DISCLAIMER,
   });
+});
+
+healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Response) => {
+  const list = await store.listPlanSnapshots(req.params.profileId);
+  res.json({
+    snapshots: list.map((s) => ({
+      id: s.id,
+      generatedAt: s.generatedAt,
+      bmi: s.bmi,
+      avgSleep7d: s.avgSleep7d,
+      avgMood7d: s.avgMood7d,
+      goalsCount: Array.isArray(s.plan?.goals) ? s.plan.goals.length : 0,
+    })),
+  });
+});
+
+healthaiRouter.get("/plan/snapshot/:id", async (req: Request, res: Response) => {
+  const snap = await store.getPlanSnapshot(req.params.id);
+  if (!snap) return res.status(404).json({ error: "snapshot-not-found" });
+  res.json(snap);
 });
 
 /** Полный экспорт профиля для врача (или для backup). */

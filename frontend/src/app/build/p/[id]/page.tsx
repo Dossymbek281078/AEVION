@@ -41,6 +41,7 @@ type PublicClient = {
   name: string | null;
   city: string | null;
   buildRole: string | null;
+  verifiedAt: string | null;
 };
 type PublicView = {
   project: PublicProject;
@@ -229,7 +230,27 @@ export default async function PublicProjectPage({ params }: Props) {
             {client?.name && (
               <div>
                 <div style={dt}>Client</div>
-                <p style={dd}>{client.name}{client.buildRole ? ` · ${client.buildRole}` : ""}</p>
+                <p style={dd}>
+                  {client.name}
+                  {client.buildRole ? ` · ${client.buildRole}` : ""}
+                  {client.verifiedAt && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        background: "rgba(56,189,248,0.18)",
+                        color: "#bae6fd",
+                        fontSize: 10,
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      ✓ verified
+                    </span>
+                  )}
+                </p>
               </div>
             )}
             <div>

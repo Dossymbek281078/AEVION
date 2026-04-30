@@ -21,6 +21,8 @@ type Bundle = {
   experienceYears: number;
   photoUrl: string | null;
   openToWork: boolean;
+  verifiedAt: string | null;
+  verifiedReason: string | null;
   email: string | null;
   experiences: {
     id: string;
@@ -136,6 +138,14 @@ export default async function PublicProfilePage({ params }: Props) {
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold text-white">{data.name}</h1>
+              {data.verifiedAt && (
+                <span
+                  title={data.verifiedReason ?? undefined}
+                  className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-200"
+                >
+                  ✓ Verified
+                </span>
+              )}
               {data.openToWork && (
                 <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
                   Open to work

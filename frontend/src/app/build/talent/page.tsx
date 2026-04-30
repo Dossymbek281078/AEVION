@@ -260,6 +260,14 @@ function TalentCard({ talent }: { talent: TalentRow }) {
             <div className="truncate font-semibold text-white group-hover:text-emerald-200">
               {talent.name}
             </div>
+            {talent.verifiedAt && (
+              <span
+                title={`Verified ${new Date(talent.verifiedAt).toLocaleDateString()}`}
+                className="shrink-0 rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-sky-200"
+              >
+                ✓ verified
+              </span>
+            )}
             {talent.openToWork && (
               <span className="shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
                 open

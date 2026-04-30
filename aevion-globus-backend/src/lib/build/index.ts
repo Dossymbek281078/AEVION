@@ -115,6 +115,8 @@ export async function ensureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "experienceYears" INTEGER NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "photoUrl" TEXT;`);
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "openToWork" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "verifiedAt" TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "verifiedReason" TEXT;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (

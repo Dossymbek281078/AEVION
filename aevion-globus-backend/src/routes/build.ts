@@ -215,6 +215,7 @@ buildRouter.get("/profiles/:id", async (req, res) => {
               p."title", p."summary", p."skillsJson", p."languagesJson",
               p."salaryMin", p."salaryMax", p."salaryCurrency", p."availability",
               p."experienceYears", p."photoUrl", p."openToWork",
+              p."verifiedAt", p."verifiedReason",
               u."email"
        FROM "BuildProfile" p
        LEFT JOIN "AEVIONUser" u ON u."id" = p."userId"
@@ -340,7 +341,7 @@ buildRouter.get("/profiles/search", async (req, res) => {
               p."title", p."summary", p."skillsJson", p."languagesJson",
               p."salaryMin", p."salaryMax", p."salaryCurrency",
               p."availability", p."experienceYears", p."photoUrl",
-              p."openToWork", p."updatedAt"
+              p."openToWork", p."verifiedAt", p."updatedAt"
        FROM "BuildProfile" p
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY p."openToWork" DESC, p."updatedAt" DESC
@@ -355,6 +356,56 @@ buildRouter.get("/profiles/search", async (req, res) => {
     return ok(res, { items, total: result.rowCount });
   } catch (err: unknown) {
     return fail(res, 500, "profiles_search_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/profiles/:id/verify — admin-only mark as verified
+//   Body: { reason: "kyc-docs" | "qsign-signed-license" | string }
+//   Plays the role of "Verified Employer" / "Verified Worker" badge.
+//   Once we wire QSign signing of legal docs, this becomes the call
+//   that runs after a successful signature check.
+buildRouter.post("/profiles/:id/verify", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const id = String(req.params.id);
+    const reason = req.body?.reason == null
+      ? null
+      : String(req.body.reason).trim().slice(0, 200) || null;
+
+    const result = await pool.query(
+      `UPDATE "BuildProfile"
+         SET "verifiedAt" = NOW(), "verifiedReason" = $2, "updatedAt" = NOW()
+       WHERE "userId" = $1 RETURNING *`,
+      [id, reason],
+    );
+    if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
+    return ok(res, result.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "profile_verify_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/profiles/:id/verify — admin-only revoke verification
+buildRouter.delete("/profiles/:id/verify", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const id = String(req.params.id);
+    const result = await pool.query(
+      `UPDATE "BuildProfile"
+         SET "verifiedAt" = NULL, "verifiedReason" = NULL, "updatedAt" = NOW()
+       WHERE "userId" = $1 RETURNING *`,
+      [id],
+    );
+    if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
+    return ok(res, result.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "profile_unverify_failed", { details: (err as Error).message });
   }
 });
 
@@ -601,7 +652,7 @@ buildRouter.get("/projects/:id/public", async (req, res) => {
         [id],
       ),
       pool.query(
-        `SELECT u."name", p."city", p."buildRole"
+        `SELECT u."name", p."city", p."buildRole", p."verifiedAt"
          FROM "AEVIONUser" u
          LEFT JOIN "BuildProfile" p ON p."userId" = u."id"
          WHERE u."id" = $1 LIMIT 1`,

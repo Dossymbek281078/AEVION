@@ -32,6 +32,8 @@ export type BuildProfile = {
   experienceYears: number;
   photoUrl: string | null;
   openToWork: boolean;
+  verifiedAt: string | null;
+  verifiedReason: string | null;
 };
 
 export type BuildExperience = {
@@ -75,6 +77,7 @@ export type TalentRow = {
   experienceYears: number;
   photoUrl: string | null;
   openToWork: boolean;
+  verifiedAt: string | null;
   updatedAt: string;
 };
 

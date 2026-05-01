@@ -13,6 +13,17 @@ import {
 import type { GlobusProject } from "../types/globus";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import {
+  ensureModuleWebhookTables,
+  fireModuleWebhook,
+  MODULE_WEBHOOK_EVENTS,
+  type ModuleWebhookEvent,
+} from "../lib/modules/webhooks";
+import {
+  recordModuleHit,
+  loadTrending,
+  type TrendingWindow,
+} from "../lib/modules/hits";
 
 export const modulesRouter = Router();
 
@@ -218,6 +229,9 @@ modulesRouter.get("/:id/meta", (req, res) => {
 // 🔹 GET /registry — filtered + searchable registry. Public.
 //    Filters: tier, status, kind, q (matches name/code/id/description/tags).
 //    `tier` and `status` filter against the EFFECTIVE values (post-override).
+//    Sort: ?sort=trending[&window=24h|7d] — orders matches by hit count
+//    descending (window default 24h). Modules without hits sink below
+//    those with hits.
 modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
   try {
     const enriched = await loadAllEnriched();
@@ -225,6 +239,9 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
     const status = String(req.query.status || "").trim();
     const kind = String(req.query.kind || "").trim();
     const q = String(req.query.q || "").trim().toLowerCase();
+    const sort = String(req.query.sort || "").trim().toLowerCase();
+    const windowRaw = String(req.query.window || "24h").trim().toLowerCase();
+    const window: TrendingWindow = windowRaw === "7d" ? "7d" : "24h";
     const limitRaw = parseInt(String(req.query.limit || "100"), 10);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 100;
 
@@ -247,8 +264,26 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
       return true;
     });
 
+    let items = filtered;
+    let trendingHits: Record<string, number> | null = null;
+    if (sort === "trending") {
+      const trending = await loadTrending(pool, window, 500);
+      trendingHits = Object.fromEntries(trending.map((t) => [t.moduleId, t.hits]));
+      items = [...filtered].sort((a, b) => {
+        const ha = trendingHits![a.id] || 0;
+        const hb = trendingHits![b.id] || 0;
+        if (hb !== ha) return hb - ha;
+        return a.priority - b.priority;
+      });
+    }
+
+    const sliced = items.slice(0, limit);
+    const decorated = trendingHits
+      ? sliced.map((p) => ({ ...p, hits: trendingHits![p.id] || 0 }))
+      : sliced;
+
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "public, max-age=60");
+    res.setHeader("Cache-Control", sort === "trending" ? "public, max-age=30" : "public, max-age=60");
     res.json({
       generatedAt: new Date().toISOString(),
       total: enriched.length,
@@ -259,8 +294,10 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
         kind: kind || null,
         q: q || null,
         limit,
+        sort: sort || null,
+        window: sort === "trending" ? window : null,
       },
-      items: filtered.slice(0, limit),
+      items: decorated,
     });
   } catch (err: any) {
     res.status(500).json({ error: "registry failed", details: err.message });
@@ -354,6 +391,10 @@ modulesRouter.get("/stats", modulesEmbedRateLimit, async (_req, res) => {
       if (p.runtime.primaryPath) withPath++;
       if (p.override) overridden++;
     }
+    const [trending24h, trending7d] = await Promise.all([
+      loadTrending(pool, "24h", 5),
+      loadTrending(pool, "7d", 5),
+    ]);
     res.setHeader("Cache-Control", "public, max-age=300");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.json({
@@ -365,9 +406,51 @@ modulesRouter.get("/stats", modulesEmbedRateLimit, async (_req, res) => {
       byTier,
       byStatus,
       byKind,
+      trending24h,
+      trending7d,
     });
   } catch (err: any) {
     res.status(500).json({ error: "stats failed", details: err.message });
+  }
+});
+
+// 🔹 GET /trending — top modules by public hit count (embed/badge/detail).
+//    ?window=24h|7d (default 24h) · ?limit=1..50 (default 10)
+//    Returns [{ moduleId, code, name, hits, effectiveTier }] joined with
+//    registry data so dashboards can render labels without a second call.
+modulesRouter.get("/trending", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    const windowRaw = String(req.query.window || "24h").trim().toLowerCase();
+    const window: TrendingWindow = windowRaw === "7d" ? "7d" : "24h";
+    const limitRaw = parseInt(String(req.query.limit || "10"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 10;
+    const trending = await loadTrending(pool, window, limit);
+    const overrides = await loadOverrides();
+    const enriched = enrichProjects(projects).map((p) => applyOverride(p, overrides.get(p.id)));
+    const byId = new Map(enriched.map((p) => [p.id, p]));
+    const items = trending.map((t) => {
+      const p = byId.get(t.moduleId);
+      return {
+        moduleId: t.moduleId,
+        hits: t.hits,
+        code: p?.code || null,
+        name: p?.name || null,
+        kind: p?.kind || null,
+        effectiveTier: p?.effectiveTier || null,
+        effectiveStatus: p?.effectiveStatus || null,
+        primaryPath: p?.runtime.primaryPath || null,
+      };
+    });
+    res.setHeader("Cache-Control", "public, max-age=120");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      generatedAt: new Date().toISOString(),
+      window,
+      total: items.length,
+      items,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "trending failed", details: err.message });
   }
 });
 
@@ -383,6 +466,7 @@ modulesRouter.get("/:id/embed", modulesEmbedRateLimit, async (req, res) => {
     }
     const overrides = await loadOverrides();
     const p = applyOverride(enrichProject(base), overrides.get(id));
+    recordModuleHit(pool, id, "embed");
     const etag = `W/"modules-embed-${id}-${p.override?.updatedAt || p.updatedAt}"`;
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -409,6 +493,48 @@ modulesRouter.get("/:id/embed", modulesEmbedRateLimit, async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: "embed failed", details: err.message });
+  }
+});
+
+// 🔹 GET /:id/detail — public, full sanitized record for a single module.
+//    Superset of /:id/embed (adds description, priority, base tier/hint and
+//    override metadata) so the /modules/[id] page can render without
+//    fan-out to /registry and stripping the rest. No PII (no actor).
+modulesRouter.get("/:id/detail", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const base = projects.find((p) => p.id === id);
+    if (!base) {
+      res.setHeader("Cache-Control", "public, max-age=30");
+      return res.status(404).json({ id, status: "not_found" });
+    }
+    const overrides = await loadOverrides();
+    const p = applyOverride(enrichProject(base), overrides.get(id));
+    recordModuleHit(pool, id, "detail");
+    res.setHeader("Cache-Control", "public, max-age=120");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      description: p.description,
+      kind: p.kind,
+      priority: p.priority,
+      tags: p.tags || [],
+      effectiveStatus: p.effectiveStatus,
+      effectiveTier: p.effectiveTier,
+      effectiveHint: p.effectiveHint,
+      baseStatus: p.status,
+      baseTier: p.runtime.tier,
+      baseHint: p.runtime.hint,
+      primaryPath: p.runtime.primaryPath,
+      apiHints: p.runtime.apiHints || [],
+      isOverridden: !!p.override,
+      overrideUpdatedAt: p.override?.updatedAt || null,
+      updatedAt: p.updatedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "detail failed", details: err.message });
   }
 });
 
@@ -465,6 +591,7 @@ modulesRouter.get("/:id/badge.svg", modulesEmbedRateLimit, async (req, res) => {
     }
     const overrides = await loadOverrides();
     const p = applyOverride(enrichProject(base), overrides.get(id));
+    recordModuleHit(pool, id, "badge");
     const etag = `W/"modules-badge-${id}-${p.effectiveTier}-${p.effectiveStatus}-${theme}"`;
     if (req.headers["if-none-match"] === etag) {
       res.setHeader("ETag", etag);
@@ -520,22 +647,38 @@ modulesRouter.get("/dependency-graph", modulesEmbedRateLimit, async (_req, res) 
 });
 
 // 🔹 GET /changelog — public changelog of admin overrides (recent first).
+//    Optional ?moduleId= scopes to a single module — used by /modules/[id]
+//    detail page to render that module's own history without pulling 200
+//    rows of unrelated noise.
 modulesRouter.get("/changelog", modulesEmbedRateLimit, async (req, res) => {
   try {
     await ensureModulesTables();
     const limitRaw = parseInt(String(req.query.limit || "50"), 10);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+    const moduleId = String(req.query.moduleId || "").trim();
+
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (moduleId) {
+      params.push(moduleId);
+      conds.push(`"moduleId" = $${params.length}`);
+    }
+    params.push(limit);
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
     const r = await pool.query(
       `SELECT "id","moduleId","oldState","newState","at"
        FROM "ModuleStateChange"
+       ${where}
        ORDER BY "at" DESC
-       LIMIT $1`,
-      [limit]
+       LIMIT $${params.length}`,
+      params
     );
     res.setHeader("Cache-Control", "public, max-age=300");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.json({
       total: r.rowCount,
+      filter: { moduleId: moduleId || null, limit },
       // Public changelog deliberately omits actor (PII).
       items: r.rows.map((row: any) => ({
         id: row.id,
@@ -659,6 +802,22 @@ modulesRouter.patch("/admin/:id", async (req, res) => {
       ]
     );
 
+    // Fire webhook AFTER the audit row lands so subscribers can correlate
+    // by `at`. Two distinct events:
+    //   - `module.override.cleared` — the entire override row was dropped
+    //   - `module.override.set`     — fields added or updated
+    // The latter covers both "first time set" and "edit existing" — keep it
+    // simple, the diff is in the payload.
+    const webhookEvent: ModuleWebhookEvent = !after.hadOverride
+      ? "module.override.cleared"
+      : "module.override.set";
+    fireModuleWebhook(pool, webhookEvent, {
+      moduleId: id,
+      before,
+      after,
+      at: new Date().toISOString(),
+    });
+
     res.json({
       moduleId: id,
       before,
@@ -714,5 +873,260 @@ modulesRouter.get("/admin/audit", async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: "audit failed", details: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tier 3 — webhooks (admin-managed) + public RSS
+// ─────────────────────────────────────────────────────────────────────────
+
+// 🔹 POST /admin/webhooks — register a subscription. Body:
+//      { url: string, events?: string[] | "*", label?: string }
+//    Returns the generated id + secret. SECRET IS RETURNED ONLY ONCE.
+modulesRouter.post("/admin/webhooks", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ error: "url must be http(s)://" });
+    }
+    if (url.length > 2000) {
+      return res.status(400).json({ error: "url too long" });
+    }
+    const label = typeof req.body?.label === "string" ? req.body.label.slice(0, 200) : null;
+
+    const rawEvents = req.body?.events;
+    let events: string;
+    if (rawEvents === undefined || rawEvents === null || rawEvents === "*") {
+      events = "*";
+    } else if (Array.isArray(rawEvents)) {
+      const cleaned = rawEvents
+        .filter((e): e is string => typeof e === "string")
+        .map((e) => e.trim())
+        .filter(Boolean);
+      const unknown = cleaned.find(
+        (e) => e !== "*" && !MODULE_WEBHOOK_EVENTS.includes(e as ModuleWebhookEvent)
+      );
+      if (unknown) {
+        return res.status(400).json({
+          error: "unknown event",
+          unknown,
+          allowed: ["*", ...MODULE_WEBHOOK_EVENTS],
+        });
+      }
+      events = cleaned.length ? cleaned.join(",") : "*";
+    } else {
+      return res.status(400).json({ error: "events must be array or '*'" });
+    }
+
+    const id = crypto.randomUUID();
+    const secret = crypto.randomBytes(32).toString("hex");
+    await pool.query(
+      `INSERT INTO "ModuleWebhook" ("id","url","secret","events","label","createdBy")
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, url, secret, events, label, auth?.email || auth?.sub || null]
+    );
+
+    res.status(201).json({
+      id,
+      url,
+      events,
+      label,
+      // Returned ONLY in the create response. Subsequent reads omit it.
+      secret,
+      active: true,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook create failed", details: err.message });
+  }
+});
+
+// 🔹 GET /admin/webhooks — list subscriptions (no secrets).
+modulesRouter.get("/admin/webhooks", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const r = await pool.query(
+      `SELECT "id","url","events","label","active","createdAt","createdBy",
+              "lastFiredAt","lastError","failureCount"
+       FROM "ModuleWebhook"
+       ORDER BY "createdAt" DESC`
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      total: r.rowCount,
+      items: r.rows.map((row: any) => ({
+        id: row.id,
+        url: row.url,
+        events: row.events,
+        label: row.label,
+        active: row.active,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+        createdBy: row.createdBy,
+        lastFiredAt:
+          row.lastFiredAt instanceof Date ? row.lastFiredAt.toISOString() : row.lastFiredAt,
+        lastError: row.lastError,
+        failureCount: row.failureCount,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook list failed", details: err.message });
+  }
+});
+
+// 🔹 DELETE /admin/webhooks/:id — hard-delete subscription + its delivery log.
+modulesRouter.delete("/admin/webhooks/:id", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const id = String(req.params.id);
+    const del = await pool.query(`DELETE FROM "ModuleWebhook" WHERE "id" = $1`, [id]);
+    if (del.rowCount === 0) {
+      return res.status(404).json({ error: "webhook not found" });
+    }
+    await pool.query(`DELETE FROM "ModuleWebhookDelivery" WHERE "webhookId" = $1`, [id]);
+    res.json({ id, deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook delete failed", details: err.message });
+  }
+});
+
+// 🔹 GET /admin/webhooks/:id/deliveries — recent deliveries for one
+//    subscription. Useful for "did the receiver ack last week's flip?"
+modulesRouter.get("/admin/webhooks/:id/deliveries", async (req, res) => {
+  try {
+    await ensureModuleWebhookTables(pool);
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 50;
+    const r = await pool.query(
+      `SELECT "id","event","moduleId","succeeded","statusCode","errorMessage","durationMs","createdAt"
+       FROM "ModuleWebhookDelivery"
+       WHERE "webhookId" = $1
+       ORDER BY "createdAt" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      total: r.rowCount,
+      items: r.rows.map((row: any) => ({
+        id: row.id,
+        event: row.event,
+        moduleId: row.moduleId,
+        succeeded: row.succeeded,
+        statusCode: row.statusCode,
+        errorMessage: row.errorMessage,
+        durationMs: row.durationMs,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "deliveries failed", details: err.message });
+  }
+});
+
+// 🔹 GET /changelog.rss — public RSS 2.0 feed of override flips.
+//    Aimed at journalists / investors / partners who'd rather follow
+//    launches in their reader than poll JSON. No actor (PII), same content
+//    as /changelog.
+modulesRouter.get("/changelog.rss", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureModulesTables();
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+    const r = await pool.query(
+      `SELECT "id","moduleId","oldState","newState","at"
+       FROM "ModuleStateChange"
+       ORDER BY "at" DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/modules/changelog.rss`;
+    const siteUrl = `${proto}://${host}/modules`;
+
+    function esc(s: string): string {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    function describe(row: any): string {
+      const before = row.oldState || {};
+      const after = row.newState || {};
+      const parts: string[] = [];
+      if (before.status !== after.status) parts.push(`status: ${before.status} → ${after.status}`);
+      if (before.tier !== after.tier) parts.push(`tier: ${before.tier} → ${after.tier}`);
+      if (before.hint !== after.hint) parts.push(`hint changed`);
+      if (parts.length === 0 && !before.hadOverride && after.hadOverride) {
+        return "Admin override applied.";
+      }
+      if (parts.length === 0 && before.hadOverride && !after.hadOverride) {
+        return "Admin override cleared.";
+      }
+      return parts.join("; ") || "Override changed.";
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const title = `${row.moduleId} — ${describe(row)}`;
+        const guid = `aevion-modules-${row.id}`;
+        const link = `${proto}://${host}/modules/${encodeURIComponent(row.moduleId)}`;
+        return `    <item>
+      <title>${esc(title)}</title>
+      <link>${esc(link)}</link>
+      <guid isPermaLink="false">${esc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${esc(describe(row))}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION modules — changelog</title>
+    <link>${esc(siteUrl)}</link>
+    <atom:link href="${esc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Live tier and status changes across the AEVION module ecosystem.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "rss failed", details: err.message });
   }
 });

@@ -7,6 +7,10 @@ import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { AiImprove } from "@/components/build/AiImprove";
 import {
+  EligibleReviewsBlock,
+  ReviewsByProjectSection,
+} from "@/components/build/ReviewsSection";
+import {
   buildApi,
   type BuildVacancy,
   type BuildProject,
@@ -165,6 +169,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           {isOwner && <OwnerFileUpload projectId={project.id} onUploaded={refresh} />}
         </aside>
       </div>
+
+      {me && <EligibleReviewsBlock scopeProjectId={project.id} />}
+      <ReviewsByProjectSection projectId={project.id} />
     </BuildShell>
   );
 }

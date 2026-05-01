@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type TalentRow, type BuildRole } from "@/lib/build/api";
 import { BookmarkButton } from "@/components/build/BookmarkButton";
+import { StarsDisplay } from "@/components/build/StarRating";
 
 const ROLE_FILTERS: { value: BuildRole | "ALL"; label: string }[] = [
   { value: "ALL", label: "Any role" },
@@ -278,10 +279,18 @@ function TalentCard({ talent }: { talent: TalentRow }) {
           {talent.title && (
             <div className="mt-0.5 truncate text-sm text-emerald-200/80">{talent.title}</div>
           )}
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-400">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400">
             {talent.city && <span>📍 {talent.city}</span>}
             {talent.experienceYears > 0 && <span>⏱ {talent.experienceYears}y</span>}
             <span>{talent.buildRole}</span>
+            {typeof talent.reviewCount === "number" && talent.reviewCount > 0 && (
+              <StarsDisplay
+                value={talent.avgRating ?? 0}
+                size="sm"
+                showValue
+                reviewCount={talent.reviewCount}
+              />
+            )}
           </div>
         </div>
         {(talent.salaryMin || talent.salaryMax) && (

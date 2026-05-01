@@ -328,6 +328,66 @@ async function main() {
     ok("health counters", `v=${h.vacancies} c=${h.candidates} p=${h.projects}`);
   } else return fail("health counters", `status=${r.status}`);
 
+  // 30a. Review eligibility — both sides should now be eligible (we have
+  // an ACCEPTED application). Client sees worker; worker sees client.
+  r = await call("GET", "/api/build/reviews/eligible", null, clientToken);
+  let elig = unwrap(r);
+  if (is2xx(r) && Array.isArray(elig?.items) && elig.items.some((p) => p.revieweeId === workerId)) {
+    ok("client eligible to review worker");
+  } else return fail("client eligible", `status=${r.status} got=${JSON.stringify(elig)}`);
+
+  r = await call("GET", "/api/build/reviews/eligible", null, workerToken);
+  elig = unwrap(r);
+  if (is2xx(r) && Array.isArray(elig?.items) && elig.items.some((p) => p.revieweeId === clientId)) {
+    ok("worker eligible to review client");
+  } else return fail("worker eligible", `status=${r.status} got=${JSON.stringify(elig)}`);
+
+  // 30b. Client posts a 5-star review of worker; worker posts 4-star of client.
+  r = await call("POST", "/api/build/reviews", {
+    projectId,
+    revieweeId: workerId,
+    rating: 5,
+    comment: "Smoke worker delivered on time, great communication.",
+  }, clientToken);
+  if (r.status === 201 && unwrap(r)?.direction === "CLIENT_TO_WORKER") {
+    ok("client → worker review (5★)");
+  } else return fail("client→worker review", `status=${r.status} ${r.body?.error || ""}`);
+
+  r = await call("POST", "/api/build/reviews", {
+    projectId,
+    revieweeId: clientId,
+    rating: 4,
+    comment: "Clear scope, paid promptly. Would work again.",
+  }, workerToken);
+  if (r.status === 201 && unwrap(r)?.direction === "WORKER_TO_CLIENT") {
+    ok("worker → client review (4★)");
+  } else return fail("worker→client review", `status=${r.status} ${r.body?.error || ""}`);
+
+  // 30c. Double-post is rejected (409 already_reviewed).
+  r = await call("POST", "/api/build/reviews", {
+    projectId,
+    revieweeId: workerId,
+    rating: 1,
+    comment: "duplicate attempt",
+  }, clientToken);
+  if (r.status === 409 && r.body?.error === "already_reviewed") {
+    ok("duplicate review rejected (409)");
+  } else return fail("duplicate review", `status=${r.status} expected 409`);
+
+  // 30d. Public list returns both. Avg = (5+4)/2 = 4.5 for client (he got 4)
+  // and 5.0 for worker. We pick worker — should be 5.0.
+  r = await call("GET", `/api/build/reviews/by-user/${encodeURIComponent(workerId)}`);
+  if (is2xx(r) && unwrap(r)?.total === 1 && unwrap(r)?.avgRating === 5) {
+    ok("public reviews/by-user (worker) avg=5★");
+  } else return fail("reviews/by-user", `status=${r.status} got=${JSON.stringify(unwrap(r))}`);
+
+  // 30e. Profile bundle now exposes avgRating + reviewCount.
+  r = await call("GET", `/api/build/profiles/${encodeURIComponent(workerId)}`);
+  const prof = unwrap(r);
+  if (is2xx(r) && prof?.reviewCount === 1 && prof?.avgRating === 5) {
+    ok("profile aggregates avgRating+reviewCount");
+  } else return fail("profile rating agg", `status=${r.status} got=avg=${prof?.avgRating} count=${prof?.reviewCount}`);
+
   // 31. Payment webhook — local-mode (no secret env). Pay an existing
   // PENDING order via the webhook path. We need a fresh PENDING order
   // since earlier flow may have already paid one. Fire a sub-start to

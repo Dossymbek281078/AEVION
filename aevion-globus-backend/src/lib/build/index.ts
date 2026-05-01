@@ -435,6 +435,33 @@ export async function ensureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildLead" ADD COLUMN IF NOT EXISTS "utmSource" TEXT;`);
   await pool.query(`ALTER TABLE "BuildLead" ADD COLUMN IF NOT EXISTS "utmCampaign" TEXT;`);
 
+  // BuildReview: post-engagement rating + comment. Eligibility window is
+  // enforced at the route layer, not via FK constraints, so we can later
+  // amend the rules (e.g. allow only after project=DONE) without a
+  // migration. UNIQUE(projectId,reviewerId,revieweeId) prevents double-
+  // posting; one (reviewer→reviewee) per project. Direction is recorded
+  // explicitly so we can render "client → worker" vs "worker → client"
+  // labels even when a review is read in isolation.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildReview" (
+      "id" TEXT PRIMARY KEY,
+      "projectId" TEXT NOT NULL,
+      "reviewerId" TEXT NOT NULL,
+      "revieweeId" TEXT NOT NULL,
+      "direction" TEXT NOT NULL,
+      "rating" INTEGER NOT NULL,
+      "comment" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildReview_pair_uniq"
+    ON "BuildReview" ("projectId", "reviewerId", "revieweeId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildReview_reviewee_idx"
+    ON "BuildReview" ("revieweeId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildReview_project_idx"
+    ON "BuildReview" ("projectId", "createdAt" DESC);`);
+
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.
   await pool.query(

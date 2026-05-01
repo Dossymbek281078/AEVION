@@ -106,12 +106,16 @@ export type TalentRow = {
   openToWork: boolean;
   verifiedAt: string | null;
   updatedAt: string;
+  avgRating?: number;
+  reviewCount?: number;
 };
 
 export type BuildResumeBundle = BuildProfile & {
   email: string | null;
   experiences: BuildExperience[];
   education: BuildEducation[];
+  avgRating?: number;
+  reviewCount?: number;
 };
 
 export type BuildProject = {
@@ -214,6 +218,33 @@ export type PlanKey = "FREE" | "PRO" | "AGENCY" | "PPHIRE";
 export type SubscriptionStatus = "ACTIVE" | "CANCELED" | "PENDING";
 
 export type TierKey = "DEFAULT" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM";
+
+// ── Reviews ──────────────────────────────────────────────────────────
+
+export type ReviewDirection = "CLIENT_TO_WORKER" | "WORKER_TO_CLIENT";
+
+export type BuildReview = {
+  id: string;
+  projectId: string;
+  reviewerId: string;
+  revieweeId: string;
+  direction: ReviewDirection;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  reviewerName?: string | null;
+  revieweeName?: string | null;
+  projectTitle?: string | null;
+};
+
+export type ReviewEligibilityRow = {
+  projectId: string;
+  projectTitle: string | null;
+  revieweeId: string;
+  revieweeName: string | null;
+  direction: ReviewDirection;
+};
 
 export type BuildPlan = {
   key: PlanKey;
@@ -629,6 +660,38 @@ export const buildApi = {
       nextTierBps: number | null;
       tiers: { key: TierKey; atHires: number; bps: number; label: string }[];
     }>("GET", "/api/build/loyalty/me"),
+  // Reviews
+  submitReview: (input: {
+    projectId: string;
+    revieweeId: string;
+    rating: number;
+    comment?: string | null;
+  }) => call<BuildReview>("POST", "/api/build/reviews", input),
+  reviewsByUser: (userId: string, limit = 50, offset = 0) =>
+    call<{
+      items: BuildReview[];
+      total: number;
+      avgRating: number;
+      limit: number;
+      offset: number;
+    }>(
+      "GET",
+      `/api/build/reviews/by-user/${encodeURIComponent(userId)}?limit=${limit}&offset=${offset}`,
+      undefined,
+      { auth: false },
+    ),
+  reviewsByProject: (projectId: string) =>
+    call<{ items: BuildReview[]; total: number }>(
+      "GET",
+      `/api/build/reviews/by-project/${encodeURIComponent(projectId)}`,
+      undefined,
+      { auth: false },
+    ),
+  eligibleReviews: () =>
+    call<{ items: ReviewEligibilityRow[]; total: number }>(
+      "GET",
+      "/api/build/reviews/eligible",
+    ),
   loyaltyTiers: () =>
     call<{
       items: {

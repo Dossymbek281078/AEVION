@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { VideoEmbed } from "@/components/build/VideoEmbed";
+import { StarsDisplay } from "@/components/build/StarRating";
+import { ReviewsByUserSection } from "@/components/build/ReviewsSection";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,8 @@ type Bundle = {
   safetyTrainingUntil: string | null;
   introVideoUrl: string | null;
   email: string | null;
+  avgRating?: number;
+  reviewCount?: number;
   experiences: {
     id: string;
     title: string;
@@ -181,6 +185,16 @@ export default async function PublicProfilePage({ params }: Props) {
               {data.availability && <span>🟢 {data.availability}</span>}
               <span>💼 {data.buildRole}</span>
             </div>
+            {typeof data.reviewCount === "number" && data.reviewCount > 0 && (
+              <div className="mt-2">
+                <StarsDisplay
+                  value={data.avgRating ?? 0}
+                  size="md"
+                  showValue
+                  reviewCount={data.reviewCount}
+                />
+              </div>
+            )}
             {(data.salaryMin || data.salaryMax) && (
               <div className="mt-2 text-sm text-slate-200">
                 <span className="text-slate-400">Salary expectation: </span>
@@ -391,6 +405,12 @@ export default async function PublicProfilePage({ params }: Props) {
             <p className="whitespace-pre-wrap text-sm text-slate-300">{data.description}</p>
           </Section>
         )}
+
+        <ReviewsByUserSection
+          userId={id}
+          initialAvg={data.avgRating}
+          initialCount={data.reviewCount}
+        />
       </div>
     </main>
   );

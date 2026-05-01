@@ -18,6 +18,14 @@ export const qrightRouter = Router();
 
 const pool = getPool();
 
+qrightRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "qright",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 const objectsRateLimit = rateLimit({
   windowMs: 60_000,
   max: 60,

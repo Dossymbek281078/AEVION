@@ -6,42 +6,32 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https
 const TIERS = ["free", "pro", "business", "enterprise"];
 const INDUSTRIES = ["banks", "startups", "government", "creators", "law-firms"];
 
-const STATIC_ROUTES = [
-  "",
-  "/auth",
-  "/awards",
-  "/bank",
-  "/bureau",
-  "/cyberchess",
-  "/demo",
-  "/help",
-  "/multichat-engine",
-  "/planet",
-  "/pricing",
-  "/pricing/affiliate",
-  "/pricing/affiliate-dashboard",
-  "/pricing/api-pricing",
-  "/pricing/calculator/embed",
-  "/pricing/cases",
-  "/pricing/changelog",
-  "/pricing/compare",
-  "/pricing/contact",
-  "/pricing/edu",
-  "/pricing/glossary",
-  "/pricing/integrations",
-  "/pricing/migrations",
-  "/pricing/partners",
-  "/pricing/partners-portal",
-  "/pricing/refund-policy",
-  "/pricing/roadmap",
-  "/pricing/security",
-  "/privacy",
-  "/qcoreai",
-  "/qright",
-  "/qsign",
-  "/qtrade",
-  "/quantum-shield",
-  "/terms",
+const TOP_LEVEL_ROUTES: Array<{
+  path: string;
+  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
+  priority: number;
+}> = [
+  { path: "/", changeFrequency: "daily", priority: 1.0 },
+  { path: "/modules", changeFrequency: "daily", priority: 0.9 },
+  { path: "/qright", changeFrequency: "daily", priority: 0.9 },
+  { path: "/qright/transparency", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/bureau", changeFrequency: "daily", priority: 0.9 },
+  { path: "/bureau/transparency", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/planet", changeFrequency: "daily", priority: 0.8 },
+  { path: "/awards", changeFrequency: "daily", priority: 0.8 },
+  { path: "/qcoreai", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/cyberchess", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments", changeFrequency: "weekly", priority: 0.9 },
+  { path: "/payments/links", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/methods", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/webhooks", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/settlements", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/subscriptions", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/compliance", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/api", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/audit", changeFrequency: "weekly", priority: 0.6 },
 ];
 
 async function fetchCaseIds(): Promise<string[]> {

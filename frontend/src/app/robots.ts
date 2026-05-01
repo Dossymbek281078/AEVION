@@ -8,10 +8,12 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/auth", "/api/", "/_next/"],
+        disallow: ["/admin/", "/api/", "/api-backend/", "/pay/", "/r/", "/account/", "/_next/"],
       },
     ],
-    sitemap: `${BASE_URL}/sitemap.xml`,
-    host: BASE_URL,
+    sitemap: [
+      `${origin}/sitemap.xml`,
+      `${origin}/api-backend/api/aevion/sitemap.xml`,
+    ],
   };
 }

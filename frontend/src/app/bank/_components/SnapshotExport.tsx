@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { achievementStats, evaluateAchievements } from "../_lib/achievements";
 import { loadAdvance } from "../_lib/advance";
@@ -37,6 +37,19 @@ export function SnapshotExport({
   const { settings: biometric } = useBiometric();
   const { code } = useCurrency();
   const [busy, setBusy] = useState<"svg" | "text" | null>(null);
+  // Filled in after mount so the snapshot date doesn't differ between
+  // server and client when the share-card preview renders before any
+  // user gesture.
+  const [generatedAt, setGeneratedAt] = useState<string>("");
+  useEffect(() => {
+    setGeneratedAt(
+      new Date().toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+    );
+  }, []);
 
   const snapshot = useMemo<SnapshotData>(() => {
     const trust = computeEcosystemTrustScore(
@@ -84,11 +97,7 @@ export function SnapshotExport({
 
     return {
       accountIdShort: account.id.slice(0, 14),
-      generatedAt: new Date().toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
+      generatedAt,
       balanceLabel: formatCurrency(account.balance, code, { decimals: 2 }),
       currencyCode: code,
       trustScore: trust.score,
@@ -101,7 +110,7 @@ export function SnapshotExport({
       peerBestValue: best ? topPercentLabel(best.percentile) : "",
       peerRanks: peers,
     };
-  }, [account, operations, royalty, chess, ecosystem, biometric, code, t]);
+  }, [account, operations, royalty, chess, ecosystem, biometric, code, t, generatedAt]);
 
   const onDownload = () => {
     setBusy("svg");

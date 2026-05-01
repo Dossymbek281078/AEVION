@@ -1502,6 +1502,23 @@ export default function QCoreMultiAgentPage() {
                   📊 Analytics
                 </Link>
                 <Link
+                  href="/qcoreai/workspaces"
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Share sessions with teammates"
+                >
+                  ⊞ Workspaces
+                </Link>
+                <Link
                   href="/qcoreai"
                   style={{
                     padding: "8px 12px",
@@ -3111,6 +3128,34 @@ function RoleConfigCard({
           background: "#fff", fontSize: 11, fontFamily: "monospace", boxSizing: "border-box",
         }}
       />
+      {value.systemPrompt && (
+        <button
+          onClick={async () => {
+            const name = window.prompt(`Save this prompt to library as (role: ${role.id}):`);
+            if (!name?.trim()) return;
+            try {
+              const res = await fetch(apiUrl("/api/qcoreai/prompts"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...bearerHeader() },
+                body: JSON.stringify({ name: name.trim(), role: role.id, content: value.systemPrompt }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+              if (onPromptChange && data.prompt?.id) onPromptChange(data.prompt.id);
+              alert(`Saved to library: "${name.trim()}"`);
+            } catch (e: any) {
+              alert(e?.message || "Save failed");
+            }
+          }}
+          style={{
+            marginTop: 4, padding: "4px 10px", borderRadius: 6,
+            border: "1px solid rgba(6,182,212,0.4)", background: "rgba(6,182,212,0.08)",
+            color: "#0e7490", fontSize: 10, fontWeight: 700, cursor: "pointer",
+          }}
+        >
+          + Save to library
+        </button>
+      )}
     </div>
   );
 }

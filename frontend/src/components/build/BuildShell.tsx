@@ -9,7 +9,12 @@ import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/
 const NAV: { href: string; label: string }[] = [
   { href: "/build", label: "Projects" },
   { href: "/build/vacancies", label: "Vacancies" },
+  { href: "/build/available", label: "🟢 Available Now" },
   { href: "/build/talent", label: "Talent" },
+  { href: "/build/team-requests", label: "Teams" },
+  { href: "/build/communities", label: "Communities" },
+  { href: "/build/shifts", label: "Shifts" },
+  { href: "/build/video", label: "Video" },
   { href: "/build/coach", label: "AI Coach" },
   { href: "/build/saved", label: "Saved" },
   { href: "/build/create-project", label: "New project" },

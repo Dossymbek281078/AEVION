@@ -38,18 +38,25 @@
 - `FamousGames.tsx` → `masters.ts`
 - `page_v33_backup.tsx` (старый снапшот, не использовался)
 
+### Re-ported после merge
+
+- ✅ **`Repertoire.tsx`** (2026-05-01, commit `31b745f`) — RepertoireModal вновь в page.tsx: state + persist, R-хоткей, кнопка «📚 Репертуар» в панели Аналитики (показывает кол-во линий + uses), запись в Help-модал. `onPlayMove` играет ход из сохранённой книги.
+
 ### Orphan-файлы из main, ждут re-port в новый page.tsx
 
 Эти компоненты лежат в `frontend/src/app/cyberchess/`, но `page.tsx` их не импортирует (chess-tournaments переписал page.tsx с нуля и эти фичи туда не попали). **Полезные — порт следующей сессией:**
 
-- `Repertoire.tsx` (📚 personal opening repertoire с per-line stats, R-хоткей) — **HIGH VALUE, должен вернуться**.
-- `P2P.tsx` (🌐 friend play через WebRTC + PeerJS, ?room= deeplinks) — **HIGH VALUE**.
-- `BoardArt.tsx` (5 SVG art overlays — Hokusai/Эйфель/шанырак/персидская геометрия/Klimt).
-- `DailyMission.tsx` (4-target daily plan).
+- `P2P.tsx` (🌐 friend play через WebRTC + PeerJS, ?room= deeplinks) — **HIGH VALUE**. Tricky: hook завязан на game state, нужна аккуратная интеграция (override moves когда в P2P-сессии).
+- `BoardArt.tsx` (5 SVG art overlays — Hokusai/Эйфель/шанырак/персидская геометрия/Klimt). Нужен absolute-overlay внутри board container — найти правильный JSX-контейнер.
+- `DailyMission.tsx` (4-target daily plan). Возможно, частично перекрывается с `brilliancy.ts` Daily Hunt.
 - `CoachPredictions.tsx` (top-3 opponent moves widget).
 - `WhatIfButton.tsx` (per-multipv Coach explanation).
-- `gameShare.ts` (SVG share image для соцсетей).
-- `studio/` (Studio Mode со streamers + Twitch chat overlay + PiP мини-шахматы).
+- `gameShare.ts` (SVG share image для соцсетей). Возможно, перекрывается с `reelsGen.ts`.
+- `studio/` (Studio Mode со streamers + Twitch chat overlay + PiP мини-шахматы). Это subroute `/cyberchess/studio` — может работать независимо, нужно проверить что не сломано.
+
+### Известные UI-висяки в page.tsx
+
+- **Opening Trainer modal** (`showOpeningTrainer` state, modal at line ~5726) — нет триггера-кнопки нигде в UI. Модал unreachable. Нужна кнопка типа Repertoire.
 
 ### Roadmap (после merge)
 

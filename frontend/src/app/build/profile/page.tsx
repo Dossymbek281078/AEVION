@@ -82,6 +82,11 @@ function ProfileBody() {
   }, [loadResume]);
 
   if (loading) return <p className="text-sm text-slate-400">Loading…</p>;
+  if (error) return (
+    <p className="rounded-md border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+      Failed to load profile: {error}
+    </p>
+  );
 
   return (
     <div className="grid gap-8 lg:grid-cols-3">

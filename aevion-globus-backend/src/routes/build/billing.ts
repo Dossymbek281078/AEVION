@@ -124,7 +124,11 @@ billingRouter.post("/subscriptions/start", async (req, res) => {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
-    const planKey = vEnum(req.body?.planKey, "planKey", PLAN_KEYS);
+    const planKey = vEnum(
+      typeof req.body?.planKey === "string" ? req.body.planKey.slice(0, 50) : req.body?.planKey,
+      "planKey",
+      PLAN_KEYS,
+    );
     if (!planKey.ok) return fail(res, 400, planKey.error);
 
     const plan = await pool.query(

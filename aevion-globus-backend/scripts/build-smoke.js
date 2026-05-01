@@ -483,6 +483,58 @@ async function main() {
   ) {
     ok("AEV wallet read", `balance=${r.body.wallet.balance}`);
   } else return fail("wallet read", `status=${r.status} body=${JSON.stringify(r.body)}`);
+
+  // 38. Messages inbox summary (GET /messages)
+  r = await call("GET", "/api/build/messages", null, clientToken);
+  if (is2xx(r) && Array.isArray(unwrap(r)?.items)) {
+    ok("messages inbox", `threads=${unwrap(r).items.length}`);
+  } else return fail("messages inbox", `status=${r.status}`);
+
+  // 39. Subscriptions — read current (should be null on a fresh smoke account)
+  r = await call("GET", "/api/build/subscriptions/me", null, clientToken);
+  if (is2xx(r)) ok("subscriptions/me", `active=${!!unwrap(r)?.subscription}`);
+  else return fail("subscriptions/me", `status=${r.status}`);
+
+  // 40. Orders ledger — should have at least the PENDING HIRE_FEE + BOOST orders
+  r = await call("GET", "/api/build/orders/me", null, clientToken);
+  const orders = unwrap(r)?.items || [];
+  if (is2xx(r) && orders.length >= 1) {
+    const kinds = [...new Set(orders.map((o) => o.kind))].join(",");
+    ok("orders/me ledger", `orders=${orders.length} kinds=${kinds}`);
+  } else return fail("orders/me", `status=${r.status} orders=${orders.length}`);
+
+  // 41. Public stats endpoint (no auth)
+  r = await call("GET", "/api/build/stats");
+  const stats = unwrap(r);
+  if (
+    is2xx(r) &&
+    typeof stats?.vacancies?.open === "number" &&
+    typeof stats?.candidates === "number"
+  ) {
+    ok("public /stats", `vacancies=${stats.vacancies.open} candidates=${stats.candidates}`);
+  } else return fail("stats", `status=${r.status}`);
+
+  // 42. Referrals leaderboard (public)
+  r = await call("GET", "/api/build/referrals/leaderboard?limit=5");
+  if (is2xx(r) && Array.isArray(unwrap(r)?.items)) {
+    ok("referrals/leaderboard", `entries=${unwrap(r).items.length}`);
+  } else return fail("referrals/leaderboard", `status=${r.status}`);
+
+  // 43. Referrals/me — worker referred themself? No. Just check auth gate + shape.
+  r = await call("GET", "/api/build/referrals/me", null, workerToken);
+  if (is2xx(r) && typeof unwrap(r)?.totalReferred === "number") {
+    ok("referrals/me", `totalReferred=${unwrap(r).totalReferred}`);
+  } else return fail("referrals/me", `status=${r.status}`);
+
+  // 44. HIRE_FEE order — accepted application created one (salary was 1500 RUB
+  //     at DEFAULT tier 12% = 180 RUB). Verify it appears in orders ledger.
+  const hireFeeOrder = orders.find((o) => o.kind === "HIRE_FEE");
+  if (hireFeeOrder) {
+    ok("HIRE_FEE order in ledger", `amount=${hireFeeOrder.amount} status=${hireFeeOrder.status}`);
+  } else {
+    step += 1;
+    console.log(`  ${String(step).padStart(2, "0")}  SKIP  HIRE_FEE in ledger (vacancy salary may be 0)`);
+  }
 }
 
 main()

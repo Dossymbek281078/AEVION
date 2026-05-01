@@ -89,6 +89,15 @@ export default function AdminModulesPage() {
   const [draftHint, setDraftHint] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Bulk-edit state
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<string>("__skip");
+  const [bulkTier, setBulkTier] = useState<string>("__skip");
+  const [bulkHint, setBulkHint] = useState<string>("__skip");
+  const [bulkHintValue, setBulkHintValue] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   // Webhooks state
   const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
   const [webhooksLoading, setWebhooksLoading] = useState(false);
@@ -276,6 +285,68 @@ export default function AdminModulesPage() {
     setDraftHint(m.override?.hint || "");
   };
 
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelected(new Set(items.map((m) => m.id)));
+  };
+  const clearSelection = () => setSelected(new Set());
+
+  const openBulk = () => {
+    setBulkStatus("__skip");
+    setBulkTier("__skip");
+    setBulkHint("__skip");
+    setBulkHintValue("");
+    setBulkOpen(true);
+  };
+
+  const submitBulk = async () => {
+    if (selected.size === 0) return;
+    // "__skip" means "don't include this field in the patch — leave it
+    // alone for each row". "__clear" means "send null — clear the override
+    // for every selected row". Any other value is the explicit value to set.
+    const buildBody = () => {
+      const items = Array.from(selected).map((id) => {
+        const o: Record<string, unknown> = { id };
+        if (bulkStatus !== "__skip") o.status = bulkStatus === "__clear" ? null : bulkStatus;
+        if (bulkTier !== "__skip") o.tier = bulkTier === "__clear" ? null : bulkTier;
+        if (bulkHint !== "__skip")
+          o.hint = bulkHint === "__clear" ? null : bulkHintValue.trim() || null;
+        return o;
+      });
+      return { items };
+    };
+    setBulkBusy(true);
+    try {
+      const r = await fetch(apiUrl("/api/modules/admin/bulk"), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(buildBody()),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        showToast(`Updated ${d.updated} modules`, "success");
+        setBulkOpen(false);
+        clearSelection();
+        load();
+        loadAudit();
+      } else {
+        showToast(`Bulk failed: ${d.error || r.status}${d.id ? ` (${d.id})` : ""}`, "error");
+      }
+    } catch (e) {
+      showToast(`Bulk failed: ${(e as Error).message}`, "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const submitEdit = async () => {
     if (!target) return;
     setBusy(true);
@@ -343,26 +414,109 @@ export default function AdminModulesPage() {
 
           {whoami?.isAdmin && (
             <>
+              {/* Bulk action bar — appears whenever any rows are checked */}
+              {selected.size > 0 && (
+                <div
+                  style={{
+                    ...card,
+                    padding: "10px 14px",
+                    marginBottom: 10,
+                    background: "linear-gradient(135deg, rgba(13,148,136,0.08), rgba(37,99,235,0.06))",
+                    borderColor: "rgba(13,148,136,0.3)",
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
+                    {selected.size} selected
+                  </span>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    onClick={selectAllVisible}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      color: "#475569",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Select all ({items.length})
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      color: "#475569",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={openBulk}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: 6,
+                      border: "none",
+                      background: "#0d9488",
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Bulk edit →
+                  </button>
+                </div>
+              )}
+
               {loading ? (
                 <div style={{ ...card, textAlign: "center", color: "#94a3b8" }}>Loading…</div>
               ) : (
                 <div style={{ display: "grid", gap: 8 }}>
                   {items.map((m) => {
                     const overridden = !!m.override;
+                    const isSelected = selected.has(m.id);
                     return (
                       <div
                         key={m.id}
                         style={{
                           ...card,
                           padding: "12px 14px",
-                          borderColor: overridden ? "rgba(234,88,12,0.35)" : "rgba(15,23,42,0.1)",
-                          background: overridden ? "rgba(255,247,237,0.5)" : "#fff",
+                          borderColor: isSelected
+                            ? "rgba(13,148,136,0.5)"
+                            : overridden
+                              ? "rgba(234,88,12,0.35)"
+                              : "rgba(15,23,42,0.1)",
+                          background: isSelected
+                            ? "rgba(13,148,136,0.06)"
+                            : overridden
+                              ? "rgba(255,247,237,0.5)"
+                              : "#fff",
                           display: "grid",
-                          gridTemplateColumns: "1fr auto",
+                          gridTemplateColumns: "auto 1fr auto",
                           gap: 12,
                           alignItems: "center",
                         }}
                       >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(m.id)}
+                          aria-label={`Select ${m.code}`}
+                          style={{ cursor: "pointer", width: 16, height: 16 }}
+                        />
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                             <span style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>
@@ -825,6 +979,123 @@ export default function AdminModulesPage() {
                 style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
               >
                 Saved, close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk edit dialog — leave a field on "Skip" to keep it untouched
+          per row; pick "Clear override" to drop that field on every selected
+          row; pick a value to set it everywhere. */}
+      {bulkOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !bulkBusy) setBulkOpen(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 560 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>
+              Bulk edit · {selected.size} module{selected.size === 1 ? "" : "s"}
+            </div>
+            <div style={{ fontSize: 12, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+              <strong>Skip</strong> = leave that field unchanged per row.{" "}
+              <strong>Clear override</strong> = drop the override of that field on every selected row.{" "}
+              Anything else = set that value everywhere.
+            </div>
+
+            <label style={{ ...labelStyle, display: "block", marginBottom: 6 }}>Status</label>
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, marginBottom: 12 }}
+            >
+              <option value="__skip">(Skip)</option>
+              <option value="__clear">(Clear override)</option>
+              {STATUS_OPTIONS.filter((s) => s).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ ...labelStyle, display: "block", marginBottom: 6 }}>Tier</label>
+            <select
+              value={bulkTier}
+              onChange={(e) => setBulkTier(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, marginBottom: 12 }}
+            >
+              <option value="__skip">(Skip)</option>
+              <option value="__clear">(Clear override)</option>
+              {TIER_OPTIONS.filter((s) => s).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ ...labelStyle, display: "block", marginBottom: 6 }}>Hint</label>
+            <select
+              value={bulkHint}
+              onChange={(e) => setBulkHint(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, marginBottom: 8 }}
+            >
+              <option value="__skip">(Skip)</option>
+              <option value="__clear">(Clear override)</option>
+              <option value="__set">Set value below</option>
+            </select>
+            {bulkHint === "__set" && (
+              <input
+                value={bulkHintValue}
+                onChange={(e) => setBulkHintValue(e.target.value.slice(0, 500))}
+                placeholder="Hint to apply to all selected"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, marginBottom: 14 }}
+              />
+            )}
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+              <button
+                onClick={() => setBulkOpen(false)}
+                disabled={bulkBusy}
+                style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontWeight: 700, fontSize: 13, cursor: bulkBusy ? "not-allowed" : "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitBulk}
+                disabled={
+                  bulkBusy ||
+                  (bulkStatus === "__skip" && bulkTier === "__skip" && bulkHint === "__skip")
+                }
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#0d9488",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  cursor: bulkBusy ? "not-allowed" : "pointer",
+                  opacity:
+                    bulkBusy ||
+                    (bulkStatus === "__skip" && bulkTier === "__skip" && bulkHint === "__skip")
+                      ? 0.5
+                      : 1,
+                }}
+              >
+                {bulkBusy ? "Applying…" : `Apply to ${selected.size}`}
               </button>
             </div>
           </div>

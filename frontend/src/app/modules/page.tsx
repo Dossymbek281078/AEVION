@@ -126,14 +126,32 @@ async function loadTags(): Promise<TagsResponse | null> {
   }
 }
 
+// Computed once at module load — getApiBase() is cheap and Metadata is
+// not request-scoped here. The OG card is generated from live registry
+// counts, so the share preview always reflects the current ecosystem.
+const _OG = `${getApiBase()}/api/modules/og.svg`;
+const _RSS = `${getApiBase()}/api/modules/changelog.rss`;
+
 export const metadata: Metadata = {
   title: "AEVION ecosystem modules",
   description:
     "27 nodes of the AEVION ecosystem with live tier and status. Filter by tier, status, kind, or search by name.",
+  alternates: {
+    types: {
+      "application/rss+xml": _RSS,
+    },
+  },
   openGraph: {
     type: "article",
     title: "AEVION ecosystem modules",
     description: "27 nodes with live tier and status — filter, search, export CSV.",
+    images: [{ url: _OG, width: 1200, height: 630, alt: "AEVION ecosystem modules" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AEVION ecosystem modules",
+    description: "27 nodes with live tier and status — filter, search, export CSV.",
+    images: [_OG],
   },
 };
 

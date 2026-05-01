@@ -81,6 +81,7 @@ import {
   pinSession,
   removeSessionFromWorkspace,
   removeWorkspaceMember,
+  updateWorkspace,
   renameSession,
   renameSessionIfDefault,
   searchRuns,
@@ -1750,17 +1751,13 @@ qcoreaiRouter.patch("/workspaces/:id", workspaceLimiter, async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { name, description } = req.body || {};
     const ws = await getWorkspace(req.params.id, auth.sub);
-    if (!ws) return res.status(404).json({ error: "workspace not found" });
-    if (ws.ownerId !== auth.sub) return res.status(403).json({ error: "only the owner can rename a workspace" });
-    const updates: string[] = [];
-    const values: any[] = [req.params.id];
-    if (typeof name === "string" && name.trim()) { values.push(name.trim().slice(0, 80)); updates.push(`"name"=$${values.length}`); }
-    if (description !== undefined) { values.push(typeof description === "string" ? description.trim().slice(0, 400) : null); updates.push(`"description"=$${values.length}`); }
-    if (updates.length === 0) return res.status(400).json({ error: "name or description required" });
-    const { getPool } = await import("../lib/dbPool");
-    const pool = getPool();
-    const r = await pool.query(`UPDATE "QCoreWorkspace" SET ${updates.join(",")}, "updatedAt"=NOW() WHERE "id"=$1 RETURNING *`, values);
-    res.json({ workspace: r.rows[0] });
+    if (name === undefined && description === undefined) return res.status(400).json({ error: "name or description required" });
+    const updated = await updateWorkspace(req.params.id, auth.sub, {
+      name: typeof name === "string" ? name : undefined,
+      description: description !== undefined ? (typeof description === "string" ? description : null) : undefined,
+    });
+    if (!updated) return res.status(404).json({ error: "workspace not found or forbidden" });
+    res.json({ workspace: updated });
   } catch (err: any) {
     res.status(500).json({ error: "patch workspace failed", details: err?.message });
   }

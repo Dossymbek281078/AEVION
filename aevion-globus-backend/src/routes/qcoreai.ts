@@ -1,5 +1,21 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
+import { verifyBearerOptional } from "../lib/authJwt";
+import { rateLimit } from "../lib/rateLimit";
+import { recordChatTurn } from "../lib/chatHistory";
+
 export const qcoreaiRouter = Router();
+
+// 30 chat calls / min per authenticated user OR per IP for anon.
+// Tuned to the LLM provider's typical RPM ceilings — anything more
+// will queue at the upstream anyway, better to surface 429 here.
+const chatLimiter = rateLimit({
+  capacity: 30,
+  refillPerSec: 30 / 60,
+  keyFn: (req: Request) => {
+    const sub = verifyBearerOptional(req)?.sub;
+    return sub ? `user:${sub}` : `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+  },
+});
 
 type ChatMessage = { role: string; content: string };
 
@@ -218,18 +234,32 @@ async function callProvider(providerId: string, messages: ChatMessage[], model: 
 }
 
 /* ═══ POST /api/qcoreai/chat ═══ */
-qcoreaiRouter.post("/chat", async (req, res) => {
+qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
   try {
     const messages = sanitizeMessages(req.body?.messages);
     if (!messages) {
       return res.status(400).json({ error: "messages required" });
     }
 
+    const auth = verifyBearerOptional(req);
+    const conversationId =
+      typeof req.body?.conversationId === "string" ? req.body.conversationId : null;
+
     const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
     const providerId = resolveProvider(requestedProvider);
 
+    // Persist the latest user turn (best-effort, doesn't block on failure).
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser && auth) {
+      await recordChatTurn({
+        userId: auth.sub,
+        conversationId,
+        role: "user",
+        content: lastUser.content,
+      });
+    }
+
     if (providerId === "stub") {
-      const lastUser = [...messages].reverse().find((m) => m.role === "user");
       return res.json({
         mode: "stub",
         provider: "none",
@@ -245,6 +275,19 @@ qcoreaiRouter.post("/chat", async (req, res) => {
 
     const result = await callProvider(providerId, messages, modelName, temperature);
 
+    if (auth) {
+      await recordChatTurn({
+        userId: auth.sub,
+        conversationId,
+        role: "assistant",
+        content: result.reply,
+        provider: provider.name,
+        model: result.model,
+        tokensIn: result.usage?.input_tokens ?? result.usage?.prompt_tokens ?? null,
+        tokensOut: result.usage?.output_tokens ?? result.usage?.completion_tokens ?? null,
+      });
+    }
+
     res.json({
       mode: providerId,
       provider: provider.name,
@@ -256,6 +299,25 @@ qcoreaiRouter.post("/chat", async (req, res) => {
     const msg = err instanceof Error ? err.message : "chat failed";
     console.error("[QCoreAI] error:", msg);
     res.status(500).json({ error: msg });
+  }
+});
+
+/* ═══ GET /api/qcoreai/history ═══
+ * Returns the caller's persisted turns, optionally filtered by
+ * ?conversationId=. Auth required — own history only.
+ */
+qcoreaiRouter.get("/history", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const conversationId =
+    typeof req.query.conversationId === "string" ? req.query.conversationId : undefined;
+  const limit = Number(req.query.limit) || 100;
+  try {
+    const { listChatTurns } = await import("../lib/chatHistory");
+    const items = await listChatTurns({ userId: auth.sub, conversationId, limit });
+    res.json({ items, total: items.length });
+  } catch (err: unknown) {
+    res.status(500).json({ error: "history load failed", details: err instanceof Error ? err.message : String(err) });
   }
 });
 

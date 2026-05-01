@@ -2,7 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { getJwtSecret } from "../lib/authJwt";
+import { getJwtSecret, invalidateTokenVersionCache } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
@@ -20,6 +20,7 @@ function signToken(payload: {
   sub: string;
   email: string;
   role: string;
+  tv?: number;
 }) {
   const secret = getJwtSecret();
   const expiresIn = process.env.AUTH_JWT_EXPIRES_IN || "7d";
@@ -81,7 +82,7 @@ authRouter.post("/register", registerLimiter, async (req, res) => {
       [id, email, passwordHash, name, role]
     );
 
-    const token = signToken({ sub: id, email, role });
+    const token = signToken({ sub: id, email, role, tv: 0 });
     res.status(201).json({
       token,
       user: { id, email, name, role },
@@ -108,7 +109,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT "id","email","name","role","passwordHash" FROM "AEVIONUser" WHERE "email"=$1`,
+      `SELECT "id","email","name","role","passwordHash","tokenVersion" FROM "AEVIONUser" WHERE "email"=$1`,
       [email]
     );
 
@@ -118,13 +119,44 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
-    const token = signToken({ sub: user.id, email: user.email, role: user.role });
+    const token = signToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      tv: Number(user.tokenVersion ?? 0),
+    });
     res.json({
       token,
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
     });
   } catch (err: any) {
     res.status(500).json({ error: "login failed", details: err?.message });
+  }
+});
+
+// ======================
+// Sign out everywhere — bumps tokenVersion, invalidates all live JWTs
+// for this user. The current request's JWT is rejected on the very
+// next call (cache TTL ≤10s on remote nodes, immediate on this node).
+// ======================
+authRouter.post("/sign-out-everywhere", async (req, res) => {
+  try {
+    const payload: any = requireAuth(req, res);
+    if (!payload) return;
+    await ensureUsersTable(pool);
+    const r = await pool.query(
+      `UPDATE "AEVIONUser"
+       SET "tokenVersion" = "tokenVersion" + 1
+       WHERE "id" = $1
+       RETURNING "tokenVersion"`,
+      [payload.sub],
+    );
+    const next = r.rows?.[0]?.tokenVersion;
+    if (next == null) return res.status(404).json({ error: "user not found" });
+    invalidateTokenVersionCache(payload.sub);
+    res.json({ ok: true, tokenVersion: Number(next) });
+  } catch (err: any) {
+    res.status(500).json({ error: "sign-out-everywhere failed", details: err?.message });
   }
 });
 

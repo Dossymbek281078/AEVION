@@ -139,6 +139,23 @@ export interface SmetaSection {
   positions: SmetaPosition[];
 }
 
+/** Реквизиты шапки ЛСР по НДЦС РК 8.01-08-2022 Форма 4*. */
+export interface LsrMeta {
+  strojkaTitle?: string;
+  strojkaCode?: string;
+  objectTitle?: string;
+  objectCode?: string;
+  lsrNumber?: string;
+  /** Основание: РП, альбом, чертёж. */
+  osnovanje?: string;
+  /** "Наименование работ" в шапке. */
+  worksTitle?: string;
+  /** Дата уровня цен: "декабрь 2025 г." */
+  priceDate?: string;
+  /** Составил (ФИО студента). */
+  author?: string;
+}
+
 /** Локальная сметная расчёт — основная единица студенческой работы. */
 export interface Lsr {
   id: string;
@@ -150,6 +167,8 @@ export interface Lsr {
   indexQuarter: string;
   indexRegion: string;
   sections: SmetaSection[];
+  /** Реквизиты шапки (студент заполняет в учебных целях). */
+  meta?: LsrMeta;
   /** Создано/изменено для UI. */
   createdAt: string;
   updatedAt: string;
@@ -176,6 +195,8 @@ export interface PositionCalc {
     materials: number;
     direct: number;
   };
+  /** Текущая стоимость единицы нормы (current.direct / volume). */
+  unitPrice: number;
 }
 
 /** Результат расчёта раздела. */

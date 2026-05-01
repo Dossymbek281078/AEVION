@@ -107,6 +107,7 @@ export function calcPosition(
       materials: curMat,
       direct: curDirect,
     },
+    unitPrice: position.volume > 0 ? curDirect / position.volume : 0,
   };
 }
 

@@ -10,7 +10,7 @@ interface Props {
 
 export function RateSearch({ onPick }: Props) {
   const [query, setQuery] = useState("");
-  const results = useMemo(() => searchRates(query, 50), [query]);
+  const results = useMemo(() => searchRates(query, query.trim() ? 100 : 40), [query]);
 
   return (
     <div className="flex flex-col gap-2">

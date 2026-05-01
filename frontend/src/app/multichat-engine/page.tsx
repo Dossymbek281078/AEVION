@@ -1076,6 +1076,33 @@ export default function MultichatEnginePage() {
     });
   }, []);
 
+  /* Global keyboard shortcuts:
+   *   ⌘/Ctrl + K  → focus first panel's textarea
+   *   ⌘/Ctrl + /  → toggle compact mode
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      const key = e.key.toLowerCase();
+      if (key === "k") {
+        e.preventDefault();
+        const ta = document.querySelector<HTMLTextAreaElement>(
+          "[data-mc-role] textarea"
+        );
+        if (ta) ta.focus();
+        return;
+      }
+      if (key === "/") {
+        e.preventDefault();
+        toggleCompact();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleCompact]);
+
   /* Saved workspaces — named bundles in localStorage */
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loadMenuOpen, setLoadMenuOpen] = useState(false);
@@ -1144,6 +1171,14 @@ export default function MultichatEnginePage() {
     url.searchParams.delete("demo");
     url.searchParams.set("ws", encoded);
     const link = url.toString();
+    const sizeKb = link.length / 1024;
+    // 6 KB warning — most browsers cap effective URL at ~8 KB
+    if (sizeKb > 6) {
+      const ok = window.confirm(
+        `Share link is ${sizeKb.toFixed(1)} KB — some browsers cap URLs at ~8 KB and the link may break. Try Save (workspace) instead, or continue?`
+      );
+      if (!ok) return;
+    }
     let copied = false;
     try {
       await navigator.clipboard.writeText(link);
@@ -1152,7 +1187,7 @@ export default function MultichatEnginePage() {
       /* clipboard API unavailable — fall through */
     }
     if (copied) {
-      window.alert(`Share link copied to clipboard (${(link.length / 1024).toFixed(1)} KB).`);
+      window.alert(`Share link copied to clipboard (${sizeKb.toFixed(1)} KB).`);
     } else {
       window.prompt("Copy this share link:", link);
     }
@@ -1303,6 +1338,19 @@ export default function MultichatEnginePage() {
         target.model,
         history
       );
+      const trimmedReply = (reply ?? "").trim();
+      if (!trimmedReply) {
+        // Provider returned nothing — restore busy=false, leave history intact
+        setAgents((curS) =>
+          curS.map((a) => (a.id === target.id ? { ...a, busy: false } : a))
+        );
+        if (typeof window !== "undefined") {
+          window.alert(
+            "Summarisation returned an empty reply — original conversation kept. Try again, switch model, or check the provider key."
+          );
+        }
+        return;
+      }
       setAgents((curS) =>
         curS.map((a) => {
           if (a.id !== target.id) return a;
@@ -1312,7 +1360,7 @@ export default function MultichatEnginePage() {
             messages: [
               {
                 role: "assistant",
-                content: `📝 Summary of ${original.length} prior messages\n\n${reply}`,
+                content: `📝 Summary of ${original.length} prior messages\n\n${trimmedReply}`,
               },
             ],
             busy: false,
@@ -1614,11 +1662,11 @@ export default function MultichatEnginePage() {
       <section
         style={{
           position: "relative",
-          minHeight: "78vh",
+          minHeight: compactMode ? "auto" : "78vh",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
-          padding: "48px 24px 56px",
+          padding: compactMode ? "20px 24px 24px" : "48px 24px 56px",
           overflow: "hidden",
         }}
       >
@@ -1679,10 +1727,10 @@ export default function MultichatEnginePage() {
           </p>
           <h1
             style={{
-              fontSize: "clamp(32px, 6vw, 56px)",
+              fontSize: compactMode ? "clamp(20px, 3vw, 28px)" : "clamp(32px, 6vw, 56px)",
               fontWeight: 900,
               lineHeight: 1.05,
-              margin: "0 0 20px",
+              margin: compactMode ? "0 0 6px" : "0 0 20px",
               letterSpacing: "-0.04em",
               background: "linear-gradient(120deg, #fff 0%, #99f6e4 45%, #7dd3fc 100%)",
               WebkitBackgroundClip: "text",
@@ -1698,6 +1746,7 @@ export default function MultichatEnginePage() {
           </h1>
           <p
             style={{
+              display: compactMode ? "none" : "block",
               fontSize: "clamp(16px, 2.4vw, 20px)",
               lineHeight: 1.55,
               maxWidth: 760,
@@ -1711,7 +1760,7 @@ export default function MultichatEnginePage() {
           <div
             style={{
               marginTop: 32,
-              display: "grid",
+              display: compactMode ? "none" : "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
               gap: 14,
             }}
@@ -1741,7 +1790,7 @@ export default function MultichatEnginePage() {
             })}
           </div>
 
-          <div style={{ marginTop: 28, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ marginTop: 28, display: compactMode ? "none" : "flex", gap: 12, flexWrap: "wrap" }}>
             <a
               href="#live"
               style={{
@@ -2124,7 +2173,20 @@ export default function MultichatEnginePage() {
                   letterSpacing: "0.02em",
                 }}
               >
-                📐 {compactMode ? "Full" : "Compact"}
+                📐 {compactMode ? "Full" : "Compact"}{" "}
+                <kbd
+                  style={{
+                    marginLeft: 4,
+                    padding: "1px 5px",
+                    borderRadius: 4,
+                    border: "1px solid currentColor",
+                    fontSize: 9,
+                    opacity: 0.6,
+                    fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                  }}
+                >
+                  ⌘/
+                </kbd>
               </button>
               <div style={{ position: "relative" }}>
                 <button
@@ -2848,6 +2910,39 @@ function AgentPanel(props: {
             </div>
             <div style={{ fontSize: 12, color: "#64748b" }}>
               {t("mc.panel.empty.desc")}
+            </div>
+            <div
+              style={{
+                marginTop: 14,
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(94,234,212,0.25)",
+                background: "rgba(13,148,136,0.08)",
+                fontSize: 11,
+                color: "#94a3b8",
+                lineHeight: 1.6,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                textAlign: "left",
+              }}
+            >
+              <div style={{ color: "#5eead4", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: 9 }}>
+                Try
+              </div>
+              <div>
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#fbbf24" }}>@all</span>{" "}
+                how big is the AEVION TAM?
+              </div>
+              <div>
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#fbbf24" }}>@finance</span>{" "}
+                — relay one panel into another
+              </div>
+              <div style={{ color: "#64748b" }}>
+                or pick a <span style={{ color: "#cbd5e1" }}>preset</span> above ·{" "}
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", color: "#cbd5e1" }}>?demo=1</span>{" "}
+                for samples
+              </div>
             </div>
           </div>
         ) : (

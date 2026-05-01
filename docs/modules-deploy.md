@@ -57,6 +57,21 @@ curl -s "$HOST/api/modules/trending?window=7d&limit=10" | jq
 
 # 10b. Trending-sorted registry — pin hot modules to the top
 curl -s "$HOST/api/modules/registry?sort=trending&window=24h" | jq '.items[].id'
+
+# 11. Tag taxonomy (Tier 3 amplifier) — distinct tags with counts, sorted hot first
+curl -s "$HOST/api/modules/tags" | jq '.items[:10]'
+
+# 11b. Tag-filtered registry
+curl -s "$HOST/api/modules/registry?tag=ai" | jq '.items[].id'
+
+# 12. Per-module RSS — for partners who only follow one product
+curl -s "$HOST/api/modules/qright/changelog.rss" | head -20
+
+# 13. Sitemap (search engines / SEO)
+curl -s "$HOST/api/modules/sitemap.xml" | head -30
+
+# 14. OG SVG card — used by /modules/[id] og:image / twitter:image
+curl -s "$HOST/api/modules/qright/og.svg" -o /tmp/og.svg
 ```
 
 ## Admin endpoints (Bearer required + admin gate)
@@ -119,8 +134,8 @@ if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) reject();
 
 ## Frontend pages
 
-- **`/modules`** — public browser (server component, EN/RU). Tier/status/kind filters + free-text search + CSV download button + 4-stat headline cards + Tier 3 trending strip (top 5 modules by 24h hits) + sort toggle (priority / trending). Each card shows tier color chip, status, kind badge, override marker, tags, primary path, API hints, plus "Embed badge" and "Detail" buttons.
-- **`/modules/[id]`** — Tier 3 detail page (server component, EN/RU). Identity + live state with base→effective diff, surfaces, inline badge previews (dark/light), outgoing API dependency edges, full per-module changelog with diff view. CTA: open primary path.
+- **`/modules`** — public browser (server component, EN/RU). Tier/status/kind filters + free-text search + CSV download button + 4-stat headline cards + Tier 3 trending strip (top 5 modules by 24h hits) + sort toggle (priority / trending) + **Tier 3 amplifier tag-chip strip** (top 14 tags with counts, click toggles `?tag=`). Each card shows tier color chip, status, kind badge, override marker, tags, primary path, API hints, plus "Embed badge" and "Detail" buttons.
+- **`/modules/[id]`** — Tier 3 detail page (server component, EN/RU). Identity + live state with base→effective diff, surfaces, inline badge previews (dark/light), outgoing API dependency edges, full per-module changelog with diff view. CTA: open primary path. **Tier 3 amplifier:** clickable tag chips link to `/modules?tag=`, per-module RSS link in History header, JSON-LD (BreadcrumbList + WebPage) for SEO, og:image / twitter:image meta pointing at `/og.svg` so social shares render with live tier/status colors.
 - **`/modules/[id]/badge`** — embed configurator. Live SVG preview, dark/light theme toggle, copy-able snippets (Markdown for README badges, HTML `<img>`, direct URL, JS fetch).
 - **`/admin/modules`** — registry with per-row "Edit override" modal (status / tier / hint dropdowns, blank = clear that field). Audit log section at the bottom with diff details. Webhook subscriptions managed via API (see above).
 
@@ -143,7 +158,9 @@ The original three endpoints (`GET /status`, `GET /:id/health`, `GET /:id/meta`)
 - [ ] First request to `/api/modules/registry` after deploy creates `ModuleState*` tables (`\dt "ModuleState*"` should list both)
 - [ ] First webhook create / fire bootstraps `ModuleWebhook` + `ModuleWebhookDelivery` tables (`\dt "ModuleWebhook*"`)
 - [ ] First request to `/api/modules/<id>/embed` (or `/badge.svg`, `/detail`) creates `ModuleHit` (`\dt "ModuleHit"`)
-- [ ] Public smoke 1-10 pass (registry, CSV, stats, embed, badge.svg, dependency-graph, changelog, detail, RSS, trending)
+- [ ] Public smoke 1-14 pass (registry, CSV, stats, embed, badge.svg, dependency-graph, changelog, detail, RSS, trending, tags, per-module RSS, sitemap, og.svg)
+- [ ] `curl $HOST/api/modules/sitemap.xml | xmllint --noout -` validates as XML
+- [ ] `curl $HOST/api/modules/qright/og.svg | head -1` returns `<svg …>` (Discord/Slack/LinkedIn share preview should render with tier-coloured accent bar)
 - [ ] Admin probe returns `{ isAdmin: true }` for an allowlisted user
 - [ ] Override edit → audit row appears in `/admin/modules` audit log + `/api/modules/changelog` (without actor)
 - [ ] Override edit → if a `ModuleWebhook` exists, delivery row lands in `/admin/webhooks/<id>/deliveries`

@@ -65,6 +65,11 @@ type TrendingResponse = {
   items: TrendingItem[];
 };
 
+type TagsResponse = {
+  total: number;
+  items: { tag: string; count: number }[];
+};
+
 type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -103,6 +108,19 @@ async function loadTrending(window: "24h" | "7d"): Promise<TrendingResponse | nu
     });
     if (!r.ok) return null;
     return (await r.json()) as TrendingResponse;
+  } catch {
+    return null;
+  }
+}
+
+async function loadTags(): Promise<TagsResponse | null> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/modules/tags`, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) return null;
+    return (await r.json()) as TagsResponse;
   } catch {
     return null;
   }
@@ -173,6 +191,9 @@ const COPY = {
     sortLabel: "Sort:",
     sortDefault: "Priority",
     sortTrending: "Trending 24h",
+    tagsLabel: "Tags:",
+    tagAll: "All",
+    tagClear: "Clear tag",
   },
   ru: {
     title: "Модули экосистемы AEVION",
@@ -199,11 +220,14 @@ const COPY = {
     sortLabel: "Сортировка:",
     sortDefault: "По приоритету",
     sortTrending: "Тренд 24ч",
+    tagsLabel: "Теги:",
+    tagAll: "Все",
+    tagClear: "Сбросить тег",
   },
 } as const;
 
 function buildHref(
-  current: { tier?: string; status?: string; kind?: string; q?: string; sort?: string },
+  current: { tier?: string; status?: string; kind?: string; q?: string; sort?: string; tag?: string },
   override: Partial<typeof current>
 ): string {
   const merged = { ...current, ...override };
@@ -227,6 +251,7 @@ export default async function ModulesPage({ searchParams }: Props) {
   const kind = typeof sp.kind === "string" ? sp.kind : "";
   const q = typeof sp.q === "string" ? sp.q : "";
   const sort = typeof sp.sort === "string" && sp.sort === "trending" ? "trending" : "";
+  const tag = typeof sp.tag === "string" ? sp.tag.toLowerCase() : "";
 
   const params = new URLSearchParams();
   if (tier) params.set("tier", tier);
@@ -234,12 +259,14 @@ export default async function ModulesPage({ searchParams }: Props) {
   if (kind) params.set("kind", kind);
   if (q) params.set("q", q);
   if (sort) params.set("sort", sort);
+  if (tag) params.set("tag", tag);
   params.set("limit", "200");
 
-  const [registry, stats, trending] = await Promise.all([
+  const [registry, stats, trending, tagsList] = await Promise.all([
     loadRegistry(params),
     loadStats(),
     loadTrending("24h"),
+    loadTags(),
   ]);
   // CSV href mirrors the same filter set sans sort (CSV is order-agnostic).
   const csvParams = new URLSearchParams(params);
@@ -259,7 +286,7 @@ export default async function ModulesPage({ searchParams }: Props) {
     );
   }
 
-  const current = { tier, status, kind, q, sort };
+  const current = { tier, status, kind, q, sort, tag };
 
   return (
     <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "32px 16px" }}>
@@ -295,6 +322,10 @@ export default async function ModulesPage({ searchParams }: Props) {
 
         {/* Trending strip — surfaced above filters because it's the freshest signal */}
         <TrendingStrip trending={trending} t={t} />
+
+        {/* Tag chips — discovery surface for the taxonomy. Active chip pulls
+            ?tag= into the URL; clicking it again clears. */}
+        <TagsStrip tags={tagsList} active={tag} current={current} t={t} />
 
         {/* Filters */}
         <div style={{ ...card, marginBottom: 18 }}>
@@ -353,6 +384,7 @@ export default async function ModulesPage({ searchParams }: Props) {
               {status && <input type="hidden" name="status" value={status} />}
               {kind && <input type="hidden" name="kind" value={kind} />}
               {sort && <input type="hidden" name="sort" value={sort} />}
+              {tag && <input type="hidden" name="tag" value={tag} />}
               <input
                 name="q"
                 defaultValue={q}
@@ -495,6 +527,92 @@ function TrendingStrip({
             </Link>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function TagsStrip({
+  tags,
+  active,
+  current,
+  t,
+}: {
+  tags: TagsResponse | null;
+  active: string;
+  current: { tier?: string; status?: string; kind?: string; q?: string; sort?: string; tag?: string };
+  t: Record<string, string>;
+}) {
+  if (!tags || tags.items.length === 0) return null;
+  // Cap at 14 chips so the strip stays single-row on most viewports; rest
+  // remain reachable via search.
+  const top = tags.items.slice(0, 14);
+  return (
+    <div style={{ ...card, marginBottom: 18, padding: "12px 14px" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", minWidth: 60 }}>
+          {t.tagsLabel}
+        </span>
+        {!active && (
+          <span
+            style={{
+              padding: "4px 10px",
+              borderRadius: 999,
+              border: "1px solid rgba(15,23,42,0.15)",
+              background: "#0f172a",
+              color: "#fff",
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: "monospace",
+            }}
+          >
+            {t.tagAll}
+          </span>
+        )}
+        {top.map((tt) => {
+          const isActive = active === tt.tag;
+          // Active chip: clicking it again clears the tag filter.
+          const href = buildHref(current, { tag: isActive ? "" : tt.tag });
+          return (
+            <Link
+              key={tt.tag}
+              href={href}
+              style={{
+                padding: "4px 10px",
+                borderRadius: 999,
+                border: `1px solid ${isActive ? "#0d9488" : "rgba(15,23,42,0.15)"}`,
+                background: isActive ? "#0d9488" : "#fff",
+                color: isActive ? "#fff" : "#475569",
+                fontSize: 11,
+                fontWeight: 700,
+                textDecoration: "none",
+                fontFamily: "monospace",
+              }}
+            >
+              #{tt.tag}{" "}
+              <span style={{ color: isActive ? "rgba(255,255,255,0.7)" : "#94a3b8", fontSize: 10 }}>
+                {tt.count}
+              </span>
+            </Link>
+          );
+        })}
+        {active && (
+          <Link
+            href={buildHref(current, { tag: "" })}
+            style={{
+              marginLeft: "auto",
+              padding: "4px 10px",
+              borderRadius: 6,
+              border: "1px solid rgba(185,28,28,0.3)",
+              color: "#b91c1c",
+              fontSize: 11,
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            {t.tagClear} ✕
+          </Link>
+        )}
       </div>
     </div>
   );

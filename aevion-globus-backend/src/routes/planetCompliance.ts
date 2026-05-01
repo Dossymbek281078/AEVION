@@ -3325,3 +3325,324 @@ planetComplianceRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) 
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — OG cards, sitemap, per-cert RSS
+// ─────────────────────────────────────────────────────────────────────────
+
+function planetEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function planetWrap(text: string, perLine: number, maxLines: number): string[] {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    if ((current + " " + w).trim().length > perLine) {
+      if (current) lines.push(current);
+      current = w;
+      if (lines.length >= maxLines - 1) break;
+    } else {
+      current = (current + " " + w).trim();
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  const consumed = lines.join(" ").split(/\s+/).filter(Boolean).length;
+  if (consumed < words.length && lines.length === maxLines) {
+    lines[maxLines - 1] = (lines[maxLines - 1] || "").replace(/\s+\S+$/, "") + "…";
+  }
+  return lines;
+}
+
+// 🔹 GET /og.svg — index card. Totals from PlanetCertificate.
+planetComplianceRouter.get("/og.svg", planetEmbedRateLimit, async (_req, res) => {
+  try {
+    await ensurePlanetTables();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT COUNT(*)::int AS "n",
+              SUM(CASE WHEN "revokedAt" IS NULL AND "status"='active' THEN 1 ELSE 0 END)::int AS "active",
+              SUM(CASE WHEN "revokedAt" IS NOT NULL OR "status"='revoked' THEN 1 ELSE 0 END)::int AS "revoked"
+       FROM "PlanetCertificate"`
+    );
+    const t = (totals.rows[0] || {}) as Record<string, number>;
+    const total = t.n || 0;
+    const active = t.active || 0;
+    const revoked = t.revoked || 0;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION PLANET</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${planetEsc(String(total))} certificates</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Compliance proofs — vote-snapshotted, content-hashed.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#0d9488" fill-opacity="0.15" stroke="#0d9488" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#5eead4">${planetEsc(String(active))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#a5f3fc">ACTIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#dc2626" fill-opacity="0.15" stroke="#dc2626" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#fca5a5">${planetEsc(String(revoked))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / planet</text>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "index og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /certificates/:certId/og.svg — per-cert card.
+planetComplianceRouter.get("/certificates/:certId/og.svg", planetEmbedRateLimit, async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const certId = String(req.params.certId);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const r = await pool.query(
+      `SELECT c."id", c."status", c."revokedAt",
+              v."artifactType", s."title" AS "submissionTitle"
+       FROM "PlanetCertificate" c
+       LEFT JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       LEFT JOIN "PlanetSubmission" s ON s."id" = v."submissionId"
+       WHERE c."id" = $1
+       LIMIT 1`,
+      [certId]
+    );
+    if (r.rowCount === 0) {
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="320" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="900" fill="#e2e8f0">Certificate not found</text>
+  <text x="60" y="380" font-family="ui-monospace, monospace" font-size="24" fill="#64748b">${planetEsc(certId)}</text>
+</svg>`;
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(fallback);
+    }
+    const row = r.rows[0] as Record<string, unknown>;
+    const isRevoked = !!row.revokedAt || row.status === "revoked";
+    const accent = isRevoked ? "#dc2626" : "#0d9488";
+    const label = isRevoked ? "REVOKED" : "ACTIVE";
+    const titleLines = planetWrap(String(row.submissionTitle || certId), 24, 2);
+    const subLine = `${row.artifactType || "compliance artifact"} · planet certificate`;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${accent}"/>
+      <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION PLANET</text>
+    <g transform="translate(60, 170)">
+      ${titleLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 92}" font-size="80" font-weight="900" letter-spacing="-2">${planetEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, ${170 + titleLines.length * 92 + 40})">
+      <text font-size="28" font-weight="500" fill="#cbd5e1" font-family="ui-monospace, monospace">${planetEsc(subLine)}</text>
+    </g>
+    <g transform="translate(60, 540)">
+      <rect width="${label.length * 18 + 56}" height="44" rx="22" fill="${accent}" fill-opacity="0.18" stroke="${accent}" stroke-width="2"/>
+      <text x="22" y="30" font-size="22" font-weight="900" fill="${accent}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${planetEsc(label)}</text>
+    </g>
+    <g transform="translate(${1200 - 60}, 540)" text-anchor="end">
+      <text font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">${planetEsc(certId.slice(0, 18))}</text>
+    </g>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "cert og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /certificates/:certId/changelog.rss — RSS 2.0 of admin events
+//    on one Planet certificate (revocations, etc.) from PlanetAuditLog.
+planetComplianceRouter.get("/certificates/:certId/changelog.rss", planetEmbedRateLimit, async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const certId = String(req.params.certId);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/planet/certificates/${encodeURIComponent(certId)}/changelog.rss`;
+
+    const certRow = await pool.query(
+      `SELECT c."artifactVersionId", s."title" AS "submissionTitle"
+       FROM "PlanetCertificate" c
+       LEFT JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       LEFT JOIN "PlanetSubmission" s ON s."id" = v."submissionId"
+       WHERE c."id" = $1 LIMIT 1`,
+      [certId]
+    );
+    const certTitle = certRow.rows[0]?.submissionTitle || certId;
+    const artifactVersionId = certRow.rows[0]?.artifactVersionId;
+    const siteUrl = artifactVersionId
+      ? `${proto}://${host}/planet/artifact/${encodeURIComponent(artifactVersionId)}`
+      : `${proto}://${host}/planet`;
+
+    const r = await pool.query(
+      `SELECT "id","actor","action","payload","at"
+       FROM "PlanetAuditLog"
+       WHERE "targetId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [certId, limit]
+    );
+
+    function describe(row: any): string {
+      const p = row.payload || {};
+      const reason = p.reason ? ` — ${p.reason}` : "";
+      const actor = row.actor ? ` by ${row.actor}` : "";
+      switch (row.action) {
+        case "cert.revoke":
+        case "admin.revoke":
+          return `Revoked${actor}${reason}`;
+        default:
+          return `${row.action || "Planet event"}${actor}`;
+      }
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${certTitle} — ${summary}`;
+        const guid = `aevion-planet-${row.id}`;
+        return `    <item>
+      <title>${planetEsc(title)}</title>
+      <link>${planetEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${planetEsc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${planetEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION Planet · ${planetEsc(String(certTitle))} — events</title>
+    <link>${planetEsc(siteUrl)}</link>
+    <atom:link href="${planetEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Admin events for AEVION Planet certificate ${planetEsc(certId)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "cert rss failed", details: err.message });
+  }
+});
+
+// 🔹 GET /sitemap.xml — covers /planet, /planet/transparency, every
+//    public artifact page (/planet/artifact/:artifactVersionId) for
+//    artifacts whose certificate is active.
+planetComplianceRouter.get("/sitemap.xml", planetEmbedRateLimit, async (req, res) => {
+  try {
+    await ensurePlanetTables();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT v."id" AS "artifactVersionId", c."createdAt"
+       FROM "PlanetCertificate" c
+       JOIN "PlanetArtifactVersion" v ON v."id" = c."artifactVersionId"
+       WHERE c."status" = 'active' AND c."revokedAt" IS NULL
+       ORDER BY c."createdAt" DESC
+       LIMIT 5000`
+    );
+
+    const urls: string[] = [];
+    urls.push(`  <url>
+    <loc>${planetEsc(origin)}/planet</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`);
+    urls.push(`  <url>
+    <loc>${planetEsc(origin)}/planet/transparency</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    for (const row of r.rows as any[]) {
+      const lastmodSrc = row.createdAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${planetEsc(origin)}/planet/artifact/${planetEsc(String(row.artifactVersionId))}</loc>
+    <lastmod>${planetEsc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=600");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "sitemap failed", details: err.message });
+  }
+});
+

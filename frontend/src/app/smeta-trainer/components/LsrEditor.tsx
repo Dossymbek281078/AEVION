@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Lsr, LsrMeta, Rate, SmetaPosition } from "../lib/types";
+import type { Lsr, LsrMeta, Rate, SmetaPosition, AppliedCoefficient } from "../lib/types";
 import { calcLsr } from "../lib/calc";
 import { runAiAdvisor } from "../lib/ai";
 import { findObject } from "../lib/corpus";
 import { useLocalSmeta } from "../lib/useLocalSmeta";
 import { RateSearch } from "./RateSearch";
 import { AiPanel } from "./AiPanel";
+import { GeomHint } from "./GeomHint";
 import { LsrFormHeader } from "./LsrFormHeader";
 import { LsrFormTable } from "./LsrFormTable";
 import { SsrView } from "./SsrView";
@@ -92,6 +93,18 @@ export function LsrEditor({ initialLsr }: Props) {
     setLsr((prev) => ({ ...prev, meta, updatedAt: new Date().toISOString() }));
   }
 
+  function updateCoefs(sectionId: string, positionId: string, coefs: AppliedCoefficient[]) {
+    setLsr((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) =>
+        s.id === sectionId
+          ? { ...s, positions: s.positions.map((p) => p.id === positionId ? { ...p, coefficients: coefs } : p) }
+          : s
+      ),
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
   function updatePosition(
     sectionId: string,
     posId: string,
@@ -171,13 +184,16 @@ export function LsrEditor({ initialLsr }: Props) {
           <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">
             Поиск расценок
           </div>
-          <div className="text-[10px] text-slate-400 mb-1">
+          <div className="text-[10px] text-slate-400 mb-1.5">
             → в раздел:{" "}
             <span className="text-slate-600 font-medium truncate">
               {lsr.sections.find((s) => s.id === activeSectionId)?.title ?? "—"}
             </span>
           </div>
-          <RateSearch onPick={addPosition} />
+          <GeomHint object={learningObject} />
+          <div className="mt-1.5">
+            <RateSearch onPick={addPosition} />
+          </div>
         </div>
 
         {/* Статус сохранения */}
@@ -242,6 +258,7 @@ export function LsrEditor({ initialLsr }: Props) {
                 notices={notices}
                 onChangeVolume={changeVolume}
                 onRemove={removePosition}
+                onUpdateCoefs={updateCoefs}
               />
             </div>
           )}

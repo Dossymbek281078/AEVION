@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useProgress } from "../lib/useProgress";
+import { applyDemoFill } from "../lib/demoFill";
 import { LsrEditor } from "./LsrEditor";
 import type { Lsr } from "../lib/types";
 
@@ -48,6 +49,16 @@ export function Level2View() {
   const { setLevel } = useProgress();
   const [showTask, setShowTask] = useState(true);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [lsr, setLsr] = useState(INITIAL_LSR);
+  const [demoApplied, setDemoApplied] = useState(false);
+
+  function handleDemo() {
+    if (confirm("Заполнить смету примером? Текущие данные будут заменены демо-данными.")) {
+      setLsr(applyDemoFill(INITIAL_LSR));
+      setDemoApplied(true);
+      setCompletedSteps(new Set([1, 2, 3, 4, 5, 6, 7]));
+    }
+  }
 
   function toggleStep(id: number) {
     setCompletedSteps((prev) => {
@@ -94,8 +105,14 @@ export function Level2View() {
               </label>
             ))}
 
-            <div className="pt-3 mt-2 border-t border-amber-200">
-              <div className="text-[10px] text-amber-700 mb-2">
+            <div className="pt-3 mt-2 border-t border-amber-200 space-y-2">
+              <button
+                onClick={handleDemo}
+                className="w-full py-1.5 bg-amber-100 text-amber-800 text-xs font-medium rounded border border-amber-300 hover:bg-amber-200"
+              >
+                {demoApplied ? "✓ Пример применён" : "👁 Показать пример заполнения"}
+              </button>
+              <div className="text-[10px] text-amber-700">
                 Выполнено: {completedSteps.size}/{STEPS.length} шагов
               </div>
               <button
@@ -106,7 +123,7 @@ export function Level2View() {
                 Сдать на зачёт
               </button>
               {!allDone && (
-                <div className="text-[10px] text-slate-400 mt-1 text-center">
+                <div className="text-[10px] text-slate-400 text-center">
                   Отметьте минимум 6 шагов
                 </div>
               )}
@@ -124,7 +141,7 @@ export function Level2View() {
           </div>
         )}
         <div className="flex-1 overflow-hidden">
-          <LsrEditor initialLsr={INITIAL_LSR} />
+          <LsrEditor initialLsr={lsr} />
         </div>
       </div>
     </div>

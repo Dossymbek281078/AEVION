@@ -9,6 +9,7 @@ import {
   vEnum,
   safeParseJson,
   APPLICATION_STATUSES,
+  getRecruiterTier,
 } from "../../lib/build";
 
 export const applicationsRouter = Router();
@@ -201,7 +202,10 @@ applicationsRouter.get("/by-vacancy/:id", async (req, res) => {
   }
 });
 
-// PATCH /api/build/applications/:id — owner accepts/rejects
+// PATCH /api/build/applications/:id — owner accepts/rejects.
+// On ACCEPT: creates an idempotent HIRE_FEE BuildOrder (amount = salary ×
+// hireFeeBps / 10000) for the recruiter. Fee is tier-adjusted at the
+// moment of hire, not at order payment time.
 applicationsRouter.patch("/:id", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
@@ -212,7 +216,8 @@ applicationsRouter.patch("/:id", async (req, res) => {
     if (!status.ok) return fail(res, 400, status.error);
 
     const row = await pool.query(
-      `SELECT a."id", a."userId", p."clientId"
+      `SELECT a."id", a."userId", a."vacancyId", p."clientId",
+              v."salary", v."salaryCurrency"
        FROM "BuildApplication" a
        LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
@@ -220,13 +225,64 @@ applicationsRouter.patch("/:id", async (req, res) => {
       [id],
     );
     if (row.rowCount === 0) return fail(res, 404, "application_not_found");
-    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "only_vacancy_owner_can_update");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_update");
+    }
 
     const result = await pool.query(
       `UPDATE "BuildApplication" SET "status" = $1, "updatedAt" = NOW() WHERE "id" = $2 RETURNING *`,
       [status.value, id],
     );
-    return ok(res, result.rows[0]);
+
+    let hireOrder: Record<string, unknown> | null = null;
+    if (status.value === "ACCEPTED") {
+      const app = row.rows[0];
+      const salary = Number(app.salary) || 0;
+      const currency = String(app.salaryCurrency || "RUB");
+
+      // Idempotent: skip if a HIRE_FEE order already exists for this application.
+      const existing = await pool.query(
+        `SELECT "id" FROM "BuildOrder" WHERE "kind" = 'HIRE_FEE' AND "ref" = $1 LIMIT 1`,
+        [id],
+      );
+
+      if ((existing.rowCount ?? 0) === 0) {
+        const { tier } = await getRecruiterTier(auth.sub);
+        const feeAmount = Math.round(salary * (tier.hireFeeBps / 10000));
+
+        const orderId = crypto.randomUUID();
+        const orderResult = await pool.query(
+          `INSERT INTO "BuildOrder"
+             ("id","userId","kind","ref","amount","currency","status","metaJson")
+           VALUES ($1,$2,'HIRE_FEE',$3,$4,$5,'PENDING',$6)
+           RETURNING *`,
+          [
+            orderId,
+            auth.sub,
+            id,
+            feeAmount,
+            currency,
+            JSON.stringify({
+              applicationId: id,
+              vacancyId: app.vacancyId,
+              candidateId: app.userId,
+              salary,
+              hireFeeBps: tier.hireFeeBps,
+              tierKey: tier.key,
+            }),
+          ],
+        );
+        hireOrder = orderResult.rows[0];
+      } else {
+        const o = await pool.query(
+          `SELECT * FROM "BuildOrder" WHERE "id" = $1`,
+          [existing.rows[0].id],
+        );
+        hireOrder = o.rows[0];
+      }
+    }
+
+    return ok(res, { ...result.rows[0], hireOrder });
   } catch (err: unknown) {
     return fail(res, 500, "application_update_failed", { details: (err as Error).message });
   }

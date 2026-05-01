@@ -14,6 +14,7 @@ type Certificate = {
   author: string;
   location?: string | null;
   contentHash: string;
+  fileHash?: string | null;
   algorithm: string;
   protectedAt: string;
   verifiedCount: number;
@@ -152,7 +153,7 @@ export default function BureauPage() {
     let out = certificates;
     if (q) {
       out = out.filter((c) => {
-        const hay = [c.title, c.author, c.contentHash, c.location || ""].join(" ").toLowerCase();
+        const hay = [c.title, c.author, c.contentHash, c.fileHash || "", c.location || ""].join(" ").toLowerCase();
         return hay.includes(q);
       });
     }

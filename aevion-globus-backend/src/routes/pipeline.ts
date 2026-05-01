@@ -210,6 +210,15 @@ async function ensureTables(): Promise<void> {
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsUpgradedAt" TIMESTAMPTZ;`,
   );
+  // fileHash: SHA-256 of raw file bytes, supplied client-side when the user
+  // uploads a file. Stored alongside contentHash (which is the canonical
+  // text-field hash) so prior-art search can match either.
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "fileHash" TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "fileHash" TEXT;`,
+  );
 
   // Tier 2: append-only admin audit (force-revoke, etc).
   await pool.query(`
@@ -370,6 +379,7 @@ pipelineRouter.post("/protect", async (req, res) => {
       city,
       authorPublicKey,
       authorSignature,
+      fileHash,
     } = req.body;
 
     if (!title || !description) {
@@ -377,6 +387,10 @@ pipelineRouter.post("/protect", async (req, res) => {
         .status(400)
         .json({ error: "title and description are required" });
     }
+    if (fileHash !== undefined && fileHash !== null && !/^[a-f0-9]{64}$/i.test(String(fileHash))) {
+      return res.status(400).json({ error: "fileHash must be a 64-character lowercase hex SHA-256" });
+    }
+    const safeFileHash: string | null = fileHash ? String(fileHash).toLowerCase() : null;
 
     const user = await resolveUser(req);
     const authorName = ownerName || user.name || null;
@@ -482,14 +496,15 @@ pipelineRouter.post("/protect", async (req, res) => {
       await client.query("BEGIN");
 
       await client.query(
-        `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","fileHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
         [
           objectId,
           title,
           description,
           effectiveKind,
           contentHash,
+          safeFileHash,
           authorName,
           authorEmail,
           authorUserId,
@@ -540,8 +555,8 @@ pipelineRouter.post("/protect", async (req, res) => {
       );
 
       await client.query(
-        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19,$20,$21,$22,$23,$24)`,
+        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25)`,
         [
           certId,
           objectId,
@@ -554,6 +569,7 @@ pipelineRouter.post("/protect", async (req, res) => {
           country || null,
           city || null,
           contentHash,
+          safeFileHash,
           signatureHmac,
           signatureEd25519,
           publicKeySpkiHex,
@@ -1301,7 +1317,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     await ensureTables();
 
     const { rows } = await pool.query(
-      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
+      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","fileHash","algorithm","status","protectedAt","verifiedCount"
        FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`,
     );
 
@@ -1313,6 +1329,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         author: r.authorName || "Anonymous",
         location: [r.city, r.country].filter(Boolean).join(", ") || null,
         contentHash: r.contentHash,
+        fileHash: r.fileHash || null,
         algorithm: r.algorithm,
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,

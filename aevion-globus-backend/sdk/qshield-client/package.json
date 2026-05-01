@@ -1,0 +1,54 @@
+{
+  "name": "@aevion/qshield-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for AEVION Quantum Shield — Shamir 2-of-3 + Ed25519 record store with idempotent reconstruction, audit log, revoke, and witness CIDs.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "bin": {
+    "qshield": "./cli.js"
+  },
+  "files": [
+    "index.ts",
+    "index.js",
+    "index.d.ts",
+    "cli.ts",
+    "cli.js",
+    "README.md"
+  ],
+  "keywords": [
+    "aevion",
+    "qshield",
+    "quantum-shield",
+    "shamir",
+    "secret-sharing",
+    "ed25519",
+    "key-distribution",
+    "ipfs-cid",
+    "compliance"
+  ],
+  "homepage": "https://aevion.com/quantum-shield",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "aevion-globus-backend/sdk/qshield-client"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc index.ts cli.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck",
+    "build:esm": "tsc index.ts cli.ts --declaration --target es2020 --module es2020 --strict --skipLibCheck --outDir esm"
+  }
+}

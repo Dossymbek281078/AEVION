@@ -22,3 +22,17 @@ export function verifyBearerOptional(req: Request): JwtPayload | null {
     return null;
   }
 }
+
+/**
+ * Verify a raw token string (e.g. from a WebSocket `?token=` query).
+ * Browsers can't set Authorization on WebSocket upgrade — query params are
+ * the standard workaround. Returns null on missing/invalid.
+ */
+export function verifyBearerToken(token: string | null | undefined): JwtPayload | null {
+  if (!token) return null;
+  try {
+    return jwt.verify(token, getJwtSecret()) as JwtPayload;
+  } catch {
+    return null;
+  }
+}

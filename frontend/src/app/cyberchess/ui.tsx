@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import { COLOR, RADIUS, SHADOW, MOTION, SPACE, Z } from "./theme";
 
 /* ═══════════════════════════════════════════════════════════
@@ -78,9 +78,21 @@ export function Btn({ variant = "secondary", size = "md", full, loading, disable
         transition: `background ${MOTION.fast} ${MOTION.ease}, transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.fast} ${MOTION.ease}`,
         ...variantStyle(variant, !!active), ...style,
       }}
+      onMouseEnter={e => {
+        if (disabled || loading) return;
+        const el = e.currentTarget as HTMLButtonElement;
+        el.style.transform = "translateY(-1px)";
+        const cur = el.style.boxShadow;
+        if (!cur) el.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
+      }}
       onMouseDown={e => { if (!disabled && !loading) (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.97)"; }}
-      onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = ""; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = ""; }}
+      onMouseUp={e => { if (!disabled && !loading) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLButtonElement;
+        el.style.transform = "";
+        // Reset only if we set it (heuristic: variant-secondary with no explicit shadow)
+        if (el.style.boxShadow === "0 4px 12px rgba(0,0,0,0.08)") el.style.boxShadow = "";
+      }}
     >
       {loading ? <Spinner size={sz.fs} /> : icon}
       {children}
@@ -94,26 +106,41 @@ export function Btn({ variant = "secondary", size = "md", full, loading, disable
    ═══════════════════════════════════════════════════════════ */
 
 export function Card({ children, padding = SPACE[4], radius = RADIUS.lg,
-  elevation = "sm", tone = "surface1", style, onClick }:
+  elevation = "sm", tone = "surface1", style, onClick, className }:
   { children: React.ReactNode; padding?: number; radius?: number;
     elevation?: "none"|"sm"|"md"|"lg"; tone?: "surface1"|"surface2"|"surface3"|"glass";
-    style?: React.CSSProperties; onClick?: () => void; }) {
+    style?: React.CSSProperties; onClick?: () => void; className?: string; }) {
   const bg = tone === "glass" ? COLOR.surfaceGlass :
              tone === "surface2" ? COLOR.surface2 :
              tone === "surface3" ? COLOR.surface3 : COLOR.surface1;
   const sh = elevation === "none" ? "none" :
              elevation === "lg" ? SHADOW.lg :
              elevation === "md" ? SHADOW.md : SHADOW.sm;
+  // When className is set (e.g. cc-launch-card), the CSS class owns hover/transition,
+  // so we skip the JS mouseenter/mouseleave inline transform handlers — otherwise
+  // the inline writes win and the CSS hover is dead.
+  const cssOwnsHover = !!className;
   return (
     <div
+      className={className}
       onClick={onClick}
+      onMouseEnter={onClick && !cssOwnsHover ? e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.transform = "translateY(-2px)";
+        el.style.boxShadow = SHADOW.md;
+      } : undefined}
+      onMouseLeave={onClick && !cssOwnsHover ? e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.transform = "";
+        el.style.boxShadow = sh;
+      } : undefined}
       style={{
         background: bg, border: `1px solid ${COLOR.border}`,
         borderRadius: radius, padding, boxShadow: sh,
         backdropFilter: tone === "glass" ? "blur(10px)" : undefined,
         WebkitBackdropFilter: tone === "glass" ? "blur(10px)" : undefined,
         cursor: onClick ? "pointer" : undefined,
-        transition: `box-shadow ${MOTION.base} ${MOTION.ease}, transform ${MOTION.base} ${MOTION.ease}`,
+        transition: cssOwnsHover ? undefined : `box-shadow ${MOTION.base} ${MOTION.ease}, transform ${MOTION.base} ${MOTION.ease}`,
         ...style,
       }}
     >
@@ -186,8 +213,10 @@ export function Tabs<V extends string>({ value, onChange, tabs, variant = "pill"
             className="cc-focus-ring cc-touch"
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
-              padding: pad, fontSize: fs, fontWeight: 700,
-              background: active ? (isUnder ? "transparent" : COLOR.surface1) : "transparent",
+              padding: pad, fontSize: fs, fontWeight: active ? 800 : 700,
+              background: active
+                ? (isUnder ? "transparent" : `linear-gradient(135deg, ${COLOR.surface1}, ${COLOR.surface2})`)
+                : "transparent",
               color: active ? (isUnder ? COLOR.brand : COLOR.text) : COLOR.textDim,
               border: "none",
               borderBottom: isUnder ? `2px solid ${active ? COLOR.brand : "transparent"}` : "none",
@@ -196,6 +225,18 @@ export function Tabs<V extends string>({ value, onChange, tabs, variant = "pill"
               boxShadow: active && isSeg ? SHADOW.sm : "none",
               transition: `all ${MOTION.fast} ${MOTION.ease}`,
               whiteSpace: "nowrap",
+            }}
+            onMouseEnter={e => {
+              if (active) return;
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.color = COLOR.text;
+              if (!isUnder) el.style.background = COLOR.surface2;
+            }}
+            onMouseLeave={e => {
+              if (active) return;
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.color = COLOR.textDim;
+              if (!isUnder) el.style.background = "transparent";
             }}
           >
             {t.icon}{t.label}
@@ -327,10 +368,38 @@ export function Modal({ open, onClose, title, children, footer, size = "md",
    Tooltip
    ═══════════════════════════════════════════════════════════ */
 
-export function Tooltip({ label, children, placement = "top" }:
-  { label: string; children: React.ReactElement; placement?: "top"|"bottom"|"left"|"right" }) {
-  // Keep it simple: delegate to native title; rich tooltip impl can come later.
-  return React.cloneElement(children as any, { title: label });
+export function Tooltip({ label, children, placement = "top", delay = 350 }:
+  { label: React.ReactNode; children: React.ReactNode; placement?: "top"|"bottom"|"left"|"right"; delay?: number }) {
+  const [show, setShow] = useState(false);
+  const timer = useRef<any>(null);
+  if (label === undefined || label === null || label === "") return <>{children}</>;
+  const show$ = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setShow(true), delay); };
+  const hide$ = () => { clearTimeout(timer.current); setShow(false); };
+  const pos: React.CSSProperties =
+    placement === "bottom" ? { top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" } :
+    placement === "left"   ? { right: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" } :
+    placement === "right"  ? { left: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" } :
+                             { bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" };
+  return (
+    <span
+      onMouseEnter={show$} onMouseLeave={hide$}
+      onFocus={show$} onBlur={hide$}
+      style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
+    >
+      {children}
+      {show && (
+        <span role="tooltip" style={{
+          position: "absolute", ...pos,
+          background: COLOR.text, color: COLOR.textInv,
+          fontSize: 12, fontWeight: 600, lineHeight: 1.35,
+          padding: "6px 10px", borderRadius: RADIUS.md, boxShadow: SHADOW.md,
+          pointerEvents: "none", zIndex: Z.dropdown,
+          whiteSpace: "normal", maxWidth: 260, width: "max-content",
+          animation: `cc-tip-in ${MOTION.fast} ${MOTION.easeOut}`,
+        }}>{label}</span>
+      )}
+    </span>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -436,6 +505,49 @@ export function ChessyFloat({ amount, onDone }: { amount: number; onDone: () => 
       aria-live="polite"
     >
       +{amount} <Icon.Coin width={24} height={24} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Confetti — fires when player wins. Pure CSS, no deps.
+   Self-cleans after 3s via onDone.
+   ═══════════════════════════════════════════════════════════ */
+
+export function Confetti({ onDone, count = 80 }: { onDone: () => void; count?: number }) {
+  const timer = useRef<any>(null);
+  useEffect(() => {
+    timer.current = setTimeout(onDone, 3200);
+    return () => clearTimeout(timer.current);
+  }, [onDone]);
+  // Generate pieces once on mount (stable refs prevent re-render flicker)
+  const pieces = useRef<Array<{ left: number; delay: number; color: string; rotate: number; sway: number }>>([]);
+  if (pieces.current.length === 0) {
+    const colors = ["#fbbf24", "#10b981", "#3b82f6", "#a855f7", "#ec4899", "#ef4444", "#f97316"];
+    for (let i = 0; i < count; i++) {
+      pieces.current.push({
+        left: Math.random() * 100,
+        delay: Math.random() * 600,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotate: Math.random() * 360,
+        sway: (Math.random() - 0.5) * 200,
+      });
+    }
+  }
+  return (
+    <div className="cc-confetti" aria-hidden="true">
+      {pieces.current.map((p, i) => (
+        <span
+          key={i}
+          className="cc-confetti-piece"
+          style={{
+            left: `${p.left}vw`,
+            background: p.color,
+            animationDelay: `${p.delay}ms`,
+            transform: `rotate(${p.rotate}deg) translateX(${p.sway}px)`,
+          }}
+        />
+      ))}
     </div>
   );
 }

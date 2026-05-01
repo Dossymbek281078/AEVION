@@ -57,6 +57,9 @@ const INITIAL_PROBES: Probe[] = [
   { key: "chessResults", label: "CyberChess results", path: "/api/cyberchess/results", needsAuth: true, ok2xxOnly: true, status: "pending" },
   { key: "chessUpcoming", label: "CyberChess upcoming", path: "/api/cyberchess/upcoming", needsAuth: false, status: "pending" },
   { key: "planetPayouts", label: "Planet payouts", path: "/api/planet/payouts", needsAuth: true, ok2xxOnly: true, status: "pending" },
+  { key: "qcoreHistory", label: "QCoreAI chat history", path: "/api/qcoreai/history?limit=1", needsAuth: true, ok2xxOnly: true, status: "pending" },
+  { key: "multichatList", label: "Multichat conversations", path: "/api/multichat/conversations", needsAuth: true, ok2xxOnly: true, status: "pending" },
+  { key: "oauthProviders", label: "OAuth providers", path: "/api/auth/oauth/providers", needsAuth: false, ok2xxOnly: true, status: "pending" },
 ];
 
 function readToken(): string {

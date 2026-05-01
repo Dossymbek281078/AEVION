@@ -73,6 +73,7 @@ const INITIAL_STEPS: Step[] = [
   { key: "capStatus", label: "GET /api/qtrade/cap-status (peek shape)", status: "pending" },
   { key: "hmacSelfTest", label: "POST /api/bank/hmac-self-test (HMAC end-to-end)", status: "pending" },
   { key: "cursorPagination", label: "GET /api/qright/royalties?limit=1 (cursor shape)", status: "pending" },
+  { key: "multichatRoundtrip", label: "POST /api/multichat/conversations (round-trip)", status: "pending" },
 ];
 
 function readToken(): string {
@@ -557,6 +558,46 @@ export default function BankSmokePage() {
         }
       } catch (e: any) {
         failAndStop("cursorPagination", `network: ${e?.message || "unknown"}`);
+      }
+      if (cancelRef.current) return;
+
+      // 19. Multichat round-trip — create a conversation then list to
+      // confirm it shows up. Doesn't dispatch (would require LLM keys);
+      // just exercises the persistence + JWT scoping contract.
+      update("multichatRoundtrip", { status: "running" });
+      try {
+        const create = await fetchJson("/api/multichat/conversations", {
+          method: "POST",
+          token: ctx.token,
+          body: JSON.stringify({ title: `smoke ${new Date().toISOString().slice(11, 19)}` }),
+        });
+        if (!create.res.ok || typeof create.data?.id !== "string") {
+          failAndStop(
+            "multichatRoundtrip",
+            create.data?.error || `conversation create failed (${create.res.status})`,
+            create.res.status,
+          );
+        } else {
+          const list = await fetchJson("/api/multichat/conversations", { token: ctx.token });
+          const items = Array.isArray(list.data?.items) ? list.data.items : [];
+          const found = items.some((x: any) => x?.id === create.data.id);
+          if (list.res.ok && found) {
+            update("multichatRoundtrip", {
+              status: "pass",
+              ms: create.ms + list.ms,
+              http: list.res.status,
+              detail: `created ${create.data.id.slice(0, 14)}…, listed ${items.length} conv${items.length === 1 ? "" : "s"}`,
+            });
+          } else {
+            failAndStop(
+              "multichatRoundtrip",
+              `created ${create.data.id} but list endpoint didn't surface it`,
+              list.res.status,
+            );
+          }
+        }
+      } catch (e: any) {
+        failAndStop("multichatRoundtrip", `network: ${e?.message || "unknown"}`);
       }
     } finally {
       setTotalMs(Math.round(performance.now() - t0));

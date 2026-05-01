@@ -137,6 +137,9 @@ export default function QRightPage() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileHashing, setFileHashing] = useState(false);
   const [fileDragOver, setFileDragOver] = useState(false);
+  const [priorArtResult, setPriorArtResult] = useState<
+    null | "checking" | "clear" | { title: string; id: string; author: string }
+  >(null);
 
   const [processingStep, setProcessingStep] = useState(0);
   const [result, setResult] = useState<PipelineResult | null>(null);
@@ -303,6 +306,7 @@ export default function QRightPage() {
     setFileHashing(true);
     setFileHash(null);
     setFileName(file.name);
+    setPriorArtResult(null);
     try {
       const buf = await file.arrayBuffer();
       const digest = await crypto.subtle.digest("SHA-256", buf);
@@ -310,6 +314,27 @@ export default function QRightPage() {
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
       setFileHash(hex);
+      // Inline prior-art check against bureau registry.
+      setPriorArtResult("checking");
+      try {
+        const r = await fetch(apiUrl("/api/pipeline/certificates"));
+        if (r.ok) {
+          const data = await r.json();
+          const match = (data.certificates || []).find(
+            (c: { contentHash: string; fileHash?: string | null; title: string; id: string; authorName?: string }) =>
+              c.fileHash === hex || c.contentHash === hex
+          );
+          setPriorArtResult(
+            match
+              ? { title: match.title, id: match.id, author: match.authorName || "Anonymous" }
+              : "clear"
+          );
+        } else {
+          setPriorArtResult("clear");
+        }
+      } catch {
+        setPriorArtResult("clear");
+      }
     } catch {
       showToast("Could not hash file", "error");
     } finally {
@@ -827,31 +852,54 @@ export default function QRightPage() {
                 <div style={{ marginTop: 10, fontSize: 12, color: "#0d9488" }}>⏳ Computing SHA-256…</div>
               )}
               {fileHash && !fileHashing && (
-                <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
-                  <div style={{ flex: "1 1 0", minWidth: 0 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" as const, marginBottom: 2 }}>
-                      {fileName} · SHA-256
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+                    <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" as const, marginBottom: 2 }}>
+                        {fileName} · SHA-256
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>
+                        {fileHash}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>
-                      {fileHash}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <Link
-                      href={`/bureau#registry`}
-                      target="_blank"
-                      style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.3)", background: "rgba(13,148,136,0.06)", color: "#0d9488", textDecoration: "none", fontSize: 11, fontWeight: 700 }}
-                    >
-                      🔎 Prior-art
-                    </Link>
                     <button
                       type="button"
-                      onClick={() => { setFileHash(null); setFileName(null); }}
-                      style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                      onClick={() => { setFileHash(null); setFileName(null); setPriorArtResult(null); }}
+                      style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
                     >
                       ✕ Clear
                     </button>
                   </div>
+
+                  {/* Prior-art result */}
+                  {priorArtResult === "checking" && (
+                    <div style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span> Checking bureau registry for prior art…
+                    </div>
+                  )}
+                  {priorArtResult === "clear" && (
+                    <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.25)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 16 }}>✅</span>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#065f46" }}>No prior art found</div>
+                        <div style={{ fontSize: 11, color: "#6b7280" }}>This file is unique in the AEVION registry — safe to register.</div>
+                      </div>
+                    </div>
+                  )}
+                  {priorArtResult && priorArtResult !== "checking" && priorArtResult !== "clear" && (
+                    <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.25)", display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#991b1b" }}>Prior art detected</div>
+                        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                          Identical content already registered as <b>&ldquo;{priorArtResult.title}&rdquo;</b> by {priorArtResult.author}.
+                        </div>
+                        <Link href={`/verify/${priorArtResult.id}`} target="_blank" style={{ fontSize: 11, color: "#dc2626", fontWeight: 700, textDecoration: "underline", marginTop: 4, display: "inline-block" }}>
+                          View existing certificate →
+                        </Link>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

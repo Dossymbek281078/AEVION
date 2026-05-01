@@ -65,6 +65,7 @@ type DashboardData = {
 };
 
 const TOKEN_KEY = "aevion_auth_token_v1";
+const WAITLIST_KEY = "aevion_notarized_waitlist_v1";
 
 type SortMode = "newest" | "oldest" | "verified";
 
@@ -81,6 +82,24 @@ export default function BureauPage() {
   const [verifiedOnly, setVerifiedOnly] = useState(false);
 
   const [authed, setAuthed] = useState(false);
+
+  // Notarized tier waitlist.
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistDone, setWaitlistDone] = useState(() => {
+    try { return !!localStorage.getItem(WAITLIST_KEY); } catch { return false; }
+  });
+  const [waitlistBusy, setWaitlistBusy] = useState(false);
+  const submitWaitlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistEmail.trim() || waitlistDone) return;
+    setWaitlistBusy(true);
+    // Store locally — no backend endpoint yet; will wire up when Notarized goes live.
+    try { localStorage.setItem(WAITLIST_KEY, waitlistEmail.trim()); } catch {}
+    await new Promise((r) => setTimeout(r, 600));
+    setWaitlistDone(true);
+    setWaitlistBusy(false);
+    showToast("You're on the waitlist!", "success");
+  };
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
 
   const authHeaders = (): HeadersInit => {
@@ -339,7 +358,7 @@ export default function BureauPage() {
                 cta: null as { label: string; href: string } | null,
               },
             ].map((tier) => (
-              <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
+              <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
                   <span style={{ fontSize: 10, fontWeight: 800, color: tier.badgeColor }}>{tier.badge}</span>
@@ -350,6 +369,31 @@ export default function BureauPage() {
                   <Link href={tier.cta.href} style={{ marginTop: 6, padding: "8px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12, textAlign: "center" as const }}>
                     {tier.cta.label}
                   </Link>
+                )}
+                {tier.name === "Notarized" && (
+                  waitlistDone ? (
+                    <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)", fontSize: 11, color: "#4f46e5", fontWeight: 700, textAlign: "center" as const }}>
+                      ✓ You&apos;re on the list — we&apos;ll email you when Notarized launches.
+                    </div>
+                  ) : (
+                    <form onSubmit={submitWaitlist} style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                      <input
+                        type="email"
+                        required
+                        value={waitlistEmail}
+                        onChange={(e) => setWaitlistEmail(e.target.value)}
+                        placeholder="your@email.com"
+                        style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(99,102,241,0.25)", fontSize: 12, outline: "none", minWidth: 0 }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={waitlistBusy}
+                        style={{ padding: "7px 12px", borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", border: "none", fontWeight: 800, fontSize: 12, cursor: waitlistBusy ? "default" : "pointer", opacity: waitlistBusy ? 0.7 : 1, whiteSpace: "nowrap" as const }}
+                      >
+                        {waitlistBusy ? "…" : "Notify me"}
+                      </button>
+                    </form>
+                  )
                 )}
               </div>
             ))}
@@ -530,12 +574,23 @@ export default function BureauPage() {
                     </div>
                   </div>
 
-                  <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
-                      <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                    <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
+                        <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
+                      </div>
+                      <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
                     </div>
-                    <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
+                    {cert.fileHash && (
+                      <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(13,148,136,0.03)", border: "1px solid rgba(13,148,136,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#0d9488", textTransform: "uppercase" as const }}>📎 File Hash (SHA-256)</div>
+                          <div style={{ fontSize: 11, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>{cert.fileHash}</div>
+                        </div>
+                        <button onClick={() => copy(cert.fileHash!, "File Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.2)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#0d9488", flexShrink: 0 }}>Copy</button>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

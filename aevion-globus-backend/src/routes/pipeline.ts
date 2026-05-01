@@ -1215,6 +1215,7 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         email: cert.authorEmail || null,
         location: [cert.city, cert.country].filter(Boolean).join(", ") || null,
         contentHash: cert.contentHash,
+        fileHash: cert.fileHash || null,
         signatureHmac: cert.signatureHmac,
         signatureEd25519: cert.signatureEd25519
           ? cert.signatureEd25519.slice(0, 64) + "..."

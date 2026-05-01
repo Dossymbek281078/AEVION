@@ -136,13 +136,12 @@ export async function createAccount(owner: string): Promise<Account> {
   );
 }
 
+// Walks the cursor chain so callers see complete history rather than the
+// first 50 rows. Bounded by fetchAllPages' MAX_PAGES * PAGE_LIMIT ceiling.
+// For new wallets this is one round-trip — same cost as before.
 export async function listOperations(): Promise<Operation[]> {
-  const data = await request<{ items: Operation[] }>(
-    "/api/qtrade/operations",
-    { headers: authHeaders() },
-    "Load operations failed",
-  );
-  return Array.isArray(data.items) ? data.items : [];
+  const { items } = await fetchAllPages<Operation>("/api/qtrade/operations");
+  return items;
 }
 
 // Walks a cursor-paginated GET endpoint until exhausted.

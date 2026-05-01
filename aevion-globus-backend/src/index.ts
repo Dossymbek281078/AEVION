@@ -20,9 +20,9 @@ import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
-import { aevRouter } from "./routes/aev";
-import { buildRouter } from "./routes/build";
-import { aevionHubRouter } from "./routes/aevion-hub";
+import { pricingRouter } from "./routes/pricing";
+import { checkoutRouter } from "./routes/checkout";
+import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -205,111 +205,65 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
       "/api/qtrade/topup": { post: { summary: "Top up balance" } },
       "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
-      "/api/aev/wallet/{deviceId}": { get: { summary: "AEV wallet snapshot" } },
-      "/api/aev/wallet/{deviceId}/sync": { post: { summary: "Idempotent wallet upsert (last-writer-wins on balance, max() on lifetime counters)" } },
-      "/api/aev/wallet/{deviceId}/mint": { post: { summary: "Append mint entry, debit cap, credit balance + lifetimeMined" } },
-      "/api/aev/wallet/{deviceId}/spend": { post: { summary: "Append spend entry, debit balance, credit lifetimeSpent" } },
-      "/api/aev/ledger/{deviceId}": { get: { summary: "Append-only ledger tail (?limit=1..1000, default 100, newest first)" } },
-      "/api/aev/stats": { get: { summary: "Global AEV aggregates (wallets, totalMined/Spent/Balance, capRemaining of 21M)" } },
-      "/api/build/health": { get: { summary: "QBuild health + enum dictionaries" } },
-      "/api/build/users/me": { get: { summary: "Current user + build profile" } },
-      "/api/build/profiles": { post: { summary: "Upsert own build profile" } },
-      "/api/build/profiles/{id}": {
-        get: { summary: "Public resume bundle (profile + skills/languages + experiences + education) — cache 60s" },
+      "/api/pricing": { get: { summary: "Full pricing payload (tiers + modules + bundles)" } },
+      "/api/pricing/tiers": { get: { summary: "List pricing tiers" } },
+      "/api/pricing/tiers/{id}": { get: { summary: "Single tier detail" } },
+      "/api/pricing/modules": { get: { summary: "Per-module add-on prices" } },
+      "/api/pricing/modules/{id}": { get: { summary: "Single module pricing" } },
+      "/api/pricing/bundles": { get: { summary: "Bundled module suites" } },
+      "/api/pricing/quote": {
+        post: { summary: "Build a price quote: tier + modules + seats + period" },
       },
-      "/api/build/profiles/search": {
-        get: { summary: "Talent search (?q=&skill=a,b,c&city=&role=&minExp=&openToWork=1&limit=) — Bearer required" },
+      "/api/pricing/lead": {
+        post: { summary: "Submit a sales lead (Enterprise / industry contact form)" },
       },
-      "/api/build/profiles/{id}/verify": {
-        post: { summary: "Mark profile as verified (admin only)" },
-        delete: { summary: "Revoke verification (admin only)" },
+      "/api/pricing/leads/count": {
+        get: { summary: "Total leads count (no content exposed)" },
       },
-      "/api/build/profiles/{id}/resume.pdf": {
-        get: { summary: "Public PDF render of the AEVION Resume Schema v2 (PII-stripped, cache 60s)" },
+      "/api/pricing/checkout/session": {
+        post: { summary: "Create Stripe Checkout session (or stub if no STRIPE_SECRET_KEY)" },
       },
-      "/api/build/experiences": { post: { summary: "Add a work experience entry to own profile" } },
-      "/api/build/experiences/{id}": { delete: { summary: "Delete experience (owner only)" } },
-      "/api/build/education": { post: { summary: "Add an education entry to own profile" } },
-      "/api/build/education/{id}": { delete: { summary: "Delete education entry (owner only)" } },
-      "/api/build/projects": {
-        get: { summary: "List projects (?status=&q=&mine=1&limit=)" },
-        post: { summary: "Create project (Bearer required)" },
+      "/api/pricing/checkout/webhook": {
+        post: { summary: "Stripe webhook receiver (verifies stripe-signature in real mode)" },
       },
-      "/api/build/projects/{id}": {
-        get: { summary: "Project + vacancies + files + client" },
-        patch: { summary: "Update project (owner or admin)" },
+      "/api/pricing/checkout/healthz": {
+        get: { summary: "Checkout mode probe: real/stub + webhook readiness" },
       },
-      "/api/build/projects/{id}/public": {
-        get: { summary: "Public PII-stripped view (cache 60s) — feeds /build/p/{id} SSR" },
+      "/api/pricing/events": {
+        post: { summary: "Ingest analytics event (page_view, cta_click, etc)" },
       },
-      "/api/build/vacancies": {
-        get: { summary: "Cross-project vacancies feed (?status=&projectStatus=&q=&city=&minSalary=&limit=)" },
-        post: { summary: "Create vacancy (project owner only)" },
+      "/api/pricing/events/summary": {
+        get: { summary: "Aggregated metrics — admin token required" },
       },
-      "/api/build/vacancies/by-project/{id}": { get: { summary: "Vacancies for a project" } },
-      "/api/build/vacancies/{id}": {
-        get: { summary: "Vacancy detail + project link + boostUntil" },
-        patch: { summary: "Toggle vacancy status OPEN/CLOSED (project owner or admin)" },
+      "/api/pricing/events/recent": {
+        get: { summary: "Last N events — admin token required" },
       },
-      "/api/build/vacancies/{id}/boost": {
-        post: { summary: "Boost (featured-pin) a vacancy for N days. Free if plan boosts left, else PENDING order at 990₽/week." },
+      "/api/pricing/leads": {
+        get: { summary: "List recent leads — admin token required" },
       },
-      "/api/build/vacancies/{id}/match-candidates": {
-        get: { summary: "Top 20 candidates from talent pool ranked by skill-coverage match (vacancy owner only)" },
+      "/api/pricing/promo": {
+        get: { summary: "Public list of active promo codes" },
       },
-      "/api/build/applications": { post: { summary: "Apply to vacancy (Bearer required)" } },
-      "/api/build/applications/my": { get: { summary: "My applications" } },
-      "/api/build/applications/by-vacancy/{id}": { get: { summary: "Vacancy applications (owner only)" } },
-      "/api/build/applications/{id}": { patch: { summary: "Accept/reject application (owner only)" } },
-      "/api/build/messages": {
-        get: { summary: "Inbox summary (latest msg per peer)" },
-        post: { summary: "Send DM" },
+      "/api/pricing/promo/validate": {
+        post: { summary: "Validate a promo code against a tier (no charge)" },
       },
-      "/api/build/messages/{userId}": { get: { summary: "Full thread between current user and peer" } },
-      "/api/build/files/upload": { post: { summary: "Register externally-uploaded file (project owner only)" } },
-      "/api/build/notifications/summary": {
-        get: { summary: "Header-bell counts: unreadMessages + pendingApplications + applicationUpdates (Bearer required)" },
+      "/api/pricing/testimonials": {
+        get: { summary: "Public customer testimonials (filterable)" },
       },
-      "/api/build/ai/consult": {
-        post: { summary: "QBuild AI career coach (Anthropic Haiku, profile + open vacancies in cached system prompt)" },
+      "/api/pricing/trust": {
+        get: { summary: "Trust signals: numbers + compliance badges" },
       },
-      "/api/build/ai/parse-resume": {
-        post: { summary: "Parse free-form resume text into AEVION Resume Schema v2 JSON" },
+      "/api/pricing/newsletter": {
+        post: { summary: "Newsletter signup (email only)" },
       },
-      "/api/build/trial-tasks": {
-        post: { summary: "Recruiter proposes a paid trial task tied to an application" },
+      "/api/pricing/newsletter/count": {
+        get: { summary: "Total newsletter subscribers count" },
       },
-      "/api/build/trial-tasks/{id}/accept": { post: { summary: "Candidate accepts (PROPOSED→ACCEPTED)" } },
-      "/api/build/trial-tasks/{id}/submit": { post: { summary: "Candidate submits work (ACCEPTED→SUBMITTED)" } },
-      "/api/build/trial-tasks/{id}/approve": {
-        post: { summary: "Recruiter approves + creates PENDING TRIAL_PAYOUT order (SUBMITTED→APPROVED)" },
+      "/api/pricing/checkout/subscriptions/count": {
+        get: { summary: "Total provisioned subscriptions count" },
       },
-      "/api/build/trial-tasks/{id}/reject": { post: { summary: "Either side rejects at appropriate stage" } },
-      "/api/build/trial-tasks/by-application/{applicationId}": {
-        get: { summary: "List trial tasks for an application (party only)" },
-      },
-      "/api/build/trial-tasks/my": { get: { summary: "Bearer's tasks (both as candidate and recruiter)" } },
-      "/api/build/bookmarks": {
-        get: { summary: "List my bookmarks (kind=VACANCY|CANDIDATE), hydrated with target" },
-        post: { summary: "Toggle bookmark (kind+targetId). Idempotent: re-post removes." },
-      },
-      "/api/build/usage/me": {
-        get: { summary: "Plan + month-to-date counters + remaining slots (Bearer required)" },
-      },
-      "/api/build/plans": {
-        get: { summary: "Public catalog of subscription plans (cache 300s)" },
-      },
-      "/api/build/subscriptions/me": {
-        get: { summary: "Current ACTIVE subscription for the bearer (or null)" },
-      },
-      "/api/build/subscriptions/start": {
-        post: { summary: "Start/switch plan — FREE/PPHIRE → ACTIVE; PRO/AGENCY → PENDING (awaiting payment provider)" },
-      },
-      "/api/build/orders/me": {
-        get: { summary: "Order ledger for the current bearer (last 50)" },
-      },
-      "/api/build/orders/{id}/pay": {
-        post: { summary: "Mark an order PAID (stub — replace with payment provider webhook). SUB_START orders also activate the linked subscription." },
+      "/api/pricing/roadmap": {
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
     },
   });
@@ -336,6 +290,13 @@ app.use("/api/pipeline", pipelineRouter);
 app.use("/api/bureau", bureauRouter);
 app.use("/api/build", buildRouter);
 app.use("/api/coach", coachRouter);
+
+// ==========================
+// Pricing / GTM
+// ==========================
+app.use("/api/pricing", pricingRouter);
+app.use("/api/pricing/checkout", checkoutRouter);
+app.use("/api/pricing/events", eventsRouter);
 // ==========================
 // Auth
 // ==========================

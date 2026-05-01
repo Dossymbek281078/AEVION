@@ -2,6 +2,12 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
+import {
+  loadTournaments,
+  markTournamentFinalized,
+  saveTournament,
+  type Tournament,
+} from "../lib/ecosystemStore";
 import { paginate, parsePageOpts } from "../lib/pagination";
 import { verifyWebhookSig } from "../lib/webhookSig";
 import {
@@ -54,17 +60,11 @@ cyberchessRouter.get("/results.csv", requireAuth, async (req, res) => {
   sendCsv(res, "cyberchess-results", rows);
 });
 
-// Public list of upcoming tournaments anyone can register for.
-// In-memory seed so the UI has something to display before the chess service
-// pushes real entries via the webhook below.
-const upcomingTournaments: Array<{
-  id: string;
-  startsAt: string;
-  format: string;
-  prizePool: number;
-  entries: number;
-  capacity: number;
-}> = [
+// Demo tournaments seeded once at first read when the store is empty,
+// so the UI always has something visible without forcing partners to
+// pre-populate. Persistence lives in ecosystemStore (Postgres or JSON
+// file) — survives restarts and webhook-driven status changes.
+const DEMO_SEED: Tournament[] = [
   {
     id: "tour_demo_swiss_001",
     startsAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
@@ -72,6 +72,7 @@ const upcomingTournaments: Array<{
     prizePool: 250,
     entries: 32,
     capacity: 64,
+    status: "upcoming",
   },
   {
     id: "tour_demo_arena_002",
@@ -80,11 +81,28 @@ const upcomingTournaments: Array<{
     prizePool: 100,
     entries: 14,
     capacity: 100,
+    status: "upcoming",
   },
 ];
 
-cyberchessRouter.get("/upcoming", (_req, res) => {
-  res.json({ items: upcomingTournaments });
+let demoSeeded = false;
+async function ensureDemoSeed(): Promise<void> {
+  if (demoSeeded) return;
+  demoSeeded = true;
+  const existing = await loadTournaments();
+  if (existing.length === 0) {
+    for (const t of DEMO_SEED) await saveTournament(t);
+  }
+}
+
+cyberchessRouter.get("/upcoming", async (_req, res) => {
+  try {
+    await ensureDemoSeed();
+    const items = await loadTournaments();
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "tournaments load failed", details: err?.message });
+  }
 });
 
 // Webhook called by the tournament service when a tournament finalizes.
@@ -147,9 +165,13 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     recorded.push({ id: prize.id, email: prize.email, place: prize.place, amount: prize.amount });
   }
 
-  // Drop the tournament from upcoming once finalized.
-  const idx = upcomingTournaments.findIndex((x) => x.id === tournamentId);
-  if (idx >= 0) upcomingTournaments.splice(idx, 1);
+  // Mark the tournament finalized in persistent storage so it stops
+  // appearing in /upcoming. Idempotent — safe even if the same webhook
+  // arrives multiple times (the chess prize dedup above already covers
+  // double-recording on retry).
+  await markTournamentFinalized(tournamentId).catch((err) => {
+    console.error("[cyberchess] markTournamentFinalized failed", err);
+  });
 
   if (recorded.length > 0) scheduleEcosystemPersist();
 

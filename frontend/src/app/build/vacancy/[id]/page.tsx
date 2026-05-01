@@ -420,8 +420,14 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
             onClick={async () => {
               setBusy(true);
               try {
-                await buildApi.updateApplication(app.id, "ACCEPTED");
+                const r = await buildApi.updateApplication(app.id, "ACCEPTED");
                 onChanged();
+                if (r.hireOrder && r.hireOrder.amount > 0) {
+                  // Surface the hire fee so the recruiter knows to pay it.
+                  alert(
+                    `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в разделе «Мои заказы».`,
+                  );
+                }
               } finally {
                 setBusy(false);
               }

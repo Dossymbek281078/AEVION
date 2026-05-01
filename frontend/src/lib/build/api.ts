@@ -578,7 +578,11 @@ export const buildApi = {
       `/api/build/applications/by-vacancy/${encodeURIComponent(vacancyId)}`,
     ),
   updateApplication: (id: string, status: ApplicationStatus) =>
-    call<BuildApplication>("PATCH", `/api/build/applications/${encodeURIComponent(id)}`, { status }),
+    call<BuildApplication & { hireOrder: BuildOrderRow | null }>(
+      "PATCH",
+      `/api/build/applications/${encodeURIComponent(id)}`,
+      { status },
+    ),
 
   // Messages
   inbox: () => call<{ items: BuildInboxRow[]; total: number }>("GET", "/api/build/messages"),
@@ -883,6 +887,8 @@ export const buildApi = {
       applicationUpdates: number;
       total: number;
     }>("GET", "/api/build/notifications/summary"),
+  notificationsRead: (senderId: string) =>
+    call<{ markedRead: number }>("POST", "/api/build/notifications/read", { senderId }),
 
   // Files
   uploadFile: (input: {

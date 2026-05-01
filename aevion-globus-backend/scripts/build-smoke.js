@@ -159,10 +159,24 @@ async function main() {
   if (is2xx(r) && notif?.pendingApplications >= 1) ok("client notifications", `pending=${notif.pendingApplications}`);
   else return fail("client notifications", `status=${r.status} body=${JSON.stringify(r.body)}`);
 
-  // 12. owner accepts the application
+  // 12. owner accepts the application — response now includes hireOrder
   r = await call("PATCH", `/api/build/applications/${applicationId}`, { status: "ACCEPTED" }, clientToken);
-  if (is2xx(r) && unwrap(r)?.status === "ACCEPTED") ok("owner accepts application");
-  else return fail("accept", `status=${r.status}`);
+  const acceptData = unwrap(r);
+  if (is2xx(r) && acceptData?.status === "ACCEPTED") {
+    const hireNote = acceptData.hireOrder
+      ? `hireOrder=${acceptData.hireOrder.id.slice(0, 8)}… amount=${acceptData.hireOrder.amount}`
+      : "hireOrder=null (salary=0)";
+    ok("owner accepts application", hireNote);
+  } else return fail("accept", `status=${r.status}`);
+
+  // 12a. HIRE_FEE order idempotent — second accept must not create a duplicate
+  r = await call("PATCH", `/api/build/applications/${applicationId}`, { status: "ACCEPTED" }, clientToken);
+  const reaccept = unwrap(r);
+  if (is2xx(r) && reaccept?.status === "ACCEPTED") {
+    const sameOrder = !acceptData.hireOrder || reaccept.hireOrder?.id === acceptData.hireOrder?.id;
+    if (sameOrder) ok("hire fee idempotent on re-accept");
+    else return fail("hire fee idempotent", "second accept created a new HIRE_FEE order");
+  } else return fail("re-accept", `status=${r.status}`);
 
   // 13. worker sees applicationUpdates
   r = await call("GET", "/api/build/notifications/summary", null, workerToken);

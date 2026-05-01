@@ -50,6 +50,8 @@ function MessagesBody() {
   function selectPeer(peerId: string) {
     setActive(peerId);
     router.replace(`/build/messages?to=${encodeURIComponent(peerId)}`);
+    // Mark inbound messages from this sender as read (fire-and-forget).
+    buildApi.notificationsRead(peerId).catch(() => {});
   }
 
   const activePeer = inbox.find((p) => p.peerId === active);

@@ -128,6 +128,30 @@ messagingRouter.post("/files/upload", async (req, res) => {
   }
 });
 
+// POST /api/build/notifications/read — mark messages from a sender as read.
+// Body: { senderId: string }. Used by the notification badge to clear the
+// unread count after the user opens a thread.
+messagingRouter.post("/notifications/read", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const senderId = typeof req.body?.senderId === "string" ? req.body.senderId.trim() : null;
+    if (!senderId) return fail(res, 400, "senderId_required");
+
+    const result = await pool.query(
+      `UPDATE "BuildMessage"
+         SET "readAt" = NOW()
+       WHERE "receiverId" = $1 AND "senderId" = $2 AND "readAt" IS NULL
+       RETURNING "id"`,
+      [auth.sub, senderId],
+    );
+    return ok(res, { markedRead: result.rowCount ?? 0 });
+  } catch (err: unknown) {
+    return fail(res, 500, "notifications_read_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/notifications/summary
 messagingRouter.get("/notifications/summary", async (req, res) => {
   try {

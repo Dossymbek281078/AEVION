@@ -49,6 +49,7 @@ export function SiteHeader() {
             { href: "/awards", label: "Awards" },
             { href: "/bank", label: "Bank" },
             { href: "/cyberchess", label: "Chess" },
+            { href: "/pricing", label: "Pricing" },
           ].map((x) => (
             <Link key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
               {x.label}

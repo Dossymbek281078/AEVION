@@ -79,10 +79,15 @@ export function vEnum<T extends string>(
 // ── DB bootstrap ─────────────────────────────────────────────────────
 
 const pool = getPool();
-let ensured = false;
+let _initPromise: Promise<void> | null = null;
 
-export async function ensureBuildTables(): Promise<void> {
-  if (ensured) return;
+export function ensureBuildTables(): Promise<void> {
+  if (_initPromise) return _initPromise;
+  _initPromise = _doEnsureBuildTables();
+  return _initPromise;
+}
+
+async function _doEnsureBuildTables(): Promise<void> {
   await ensureUsersTable(pool); // BuildProfile.userId references AEVIONUser.id
 
   await pool.query(`
@@ -510,7 +515,6 @@ export async function ensureBuildTables(): Promise<void> {
     ],
   );
 
-  ensured = true;
 }
 
 export const buildPool = pool;

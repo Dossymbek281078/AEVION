@@ -1,6 +1,81 @@
-# AEVION CyberChess — HANDOFF (2026-04-26 → 04-27 night session)
+# AEVION CyberChess — HANDOFF (живой)
 
-Этот документ — точка входа для продолжения работы на другом ноутбуке.
+> **Последнее обновление:** 2026-05-01 — слил `chess-tournaments` в `main`. Tournaments / Variants / Brilliancy / GhostMode / Leaderboards / Coach Knowledge / 18 новых модулей теперь на main. См. раздел «Состояние после merge 2026-05-01».
+
+---
+
+## Состояние после merge 2026-05-01
+
+### Что добавилось (chess-tournaments → main)
+
+**22 новых модуля в `frontend/src/app/cyberchess/`:**
+
+- `tournament.ts` + `MultiPanel.tsx` — knockout-турниры на 8 ботов (killer #6). Persona-aware bracket, призы, тренировка против "the one who beat me last time".
+- `variants.ts` (633 строки) — 11 вариантов: Chess960 (Fischer Random), KingOfTheHill, ThreeCheck, Atomic, KnightRiders, PawnApocalypse, TwinKings, Reinforcement (random army), BuildArmy (drafted army), CrazyHouse, PowerDrop. Daily Variant Challenge + per-variant stats + per-variant achievements.
+- `brilliancy.ts` — Daily Brilliancy Hunt: историческая позиция, найди brilliant move (!!) — система подсказок, simulated leaderboard, рейтинг.
+- `ghostMode.ts` — игра против "призраков" известных мастеров (Capablanca / Tal / Petrosian / etc.) с воспроизведением их стиля.
+- `leaderboards.ts` — simulated global rankings (rapid/blitz/bullet/puzzle), find-my-rank, top-around-me board.
+- `coachKnowledge.ts` (525 строк) + `CoachKnowledgeModal.tsx` — структурированная база знаний для Coach (positional/tactical/endgame/openings).
+- `coachPhase.ts` — auto-detect фазы партии (opening/middlegame/endgame) с per-phase tips.
+- `personality.ts` — chess personality quiz, выдаёт стиль (Tal / Petrosian / Karpov / Kasparov / Carlsen).
+- `boardEditor.ts` — собственный editor позиций (FEN ↔ board grid), валидация.
+- `coordTrainer.ts` — тренировка координат клеток (a1/h8/etc.), session leaderboard.
+- `positionWhisper.ts` — text-to-speech описание позиции для accessibility.
+- `powerDrop.ts` — drop-pool логика (для CrazyHouse / PowerDrop вариантов).
+- `reelsGen.ts` (342 строки) — auto-генерация highlight-reel SVG из партии (best moves / blunders / finish).
+- `styleCloner.ts` — анализ Lichess партий пользователя → "style profile" → AI клонирует твой стиль.
+- `threatMap.ts` — overlay угроз / защит на доске.
+- `masters.ts` — refactored Famous Games (replaced `FamousGames.tsx`).
+- `openingExplorer.ts` — refactored Opening Explorer (replaced `OpeningExplorer.tsx`).
+- `tablebase.ts` — refactored Tablebase (replaced `Tablebase.tsx`).
+- `insights.ts` — пост-партийная аналитика, weakness detection.
+- `symbols.tsx` — система иконок/badges/crests для UI.
+
+### Файлы удалены при cleanup
+
+- `OpeningExplorer.tsx` → `openingExplorer.ts`
+- `Tablebase.tsx` → `tablebase.ts`
+- `FamousGames.tsx` → `masters.ts`
+- `page_v33_backup.tsx` (старый снапшот, не использовался)
+
+### Orphan-файлы из main, ждут re-port в новый page.tsx
+
+Эти компоненты лежат в `frontend/src/app/cyberchess/`, но `page.tsx` их не импортирует (chess-tournaments переписал page.tsx с нуля и эти фичи туда не попали). **Полезные — порт следующей сессией:**
+
+- `Repertoire.tsx` (📚 personal opening repertoire с per-line stats, R-хоткей) — **HIGH VALUE, должен вернуться**.
+- `P2P.tsx` (🌐 friend play через WebRTC + PeerJS, ?room= deeplinks) — **HIGH VALUE**.
+- `BoardArt.tsx` (5 SVG art overlays — Hokusai/Эйфель/шанырак/персидская геометрия/Klimt).
+- `DailyMission.tsx` (4-target daily plan).
+- `CoachPredictions.tsx` (top-3 opponent moves widget).
+- `WhatIfButton.tsx` (per-multipv Coach explanation).
+- `gameShare.ts` (SVG share image для соцсетей).
+- `studio/` (Studio Mode со streamers + Twitch chat overlay + PiP мини-шахматы).
+
+### Roadmap (после merge)
+
+**Приоритет 1 (быстрые wins):**
+- [ ] Re-port `Repertoire.tsx` в новый page.tsx (модал + state + R-хоткей + match-bar в opening detection card).
+- [ ] Re-port `P2P.tsx` (route param `?room=`, WebRTC через useP2P, override game state в P2P-режиме).
+- [ ] Re-port `BoardArt.tsx` (overlay + slider opacity, persist в `aevion_board_art_v1`).
+- [ ] Re-port Studio mode (отдельный subroute `/cyberchess/studio`).
+
+**Приоритет 2:**
+- [ ] Tournament Mode UI polish — bracket visualization, persona quotes after wins/losses.
+- [ ] Variants UX — per-variant tutorial overlays, win-condition animations (KOTH center pulse, ThreeCheck counter, etc.).
+- [ ] Brilliancy Hunt — добавить ежедневное напоминание-уведомление если streak ≥ 3.
+- [ ] Speech-to-move через Whisper API (на сервере) — заменит Web Speech, точнее.
+- [ ] Replay studio polish — `reelsGen.ts` существует, нужен UI для шеринга.
+
+**Приоритет 3 (амбициозное):**
+- [ ] AR-режим через WebXR.
+- [ ] Voice + face emotion — Coach реагирует на blunder.
+- [ ] Глобальная P2P-лестница без центрального сервера.
+
+---
+
+## Историческая часть — ночная сессия 2026-04-26 → 04-27
+
+> Этот раздел описывает СОСТОЯНИЕ ДО merge chess-tournaments. Часть фич перекрыта/заменена — для актуального состояния смотри раздел выше.
 
 ---
 

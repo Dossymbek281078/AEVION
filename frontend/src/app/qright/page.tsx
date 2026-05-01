@@ -131,6 +131,13 @@ export default function QRightPage() {
   const [city, setCity] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
+  // File-hash: SHA-256 of uploaded file bytes (optional, sent alongside the
+  // canonical text-field contentHash so prior-art search can match actual files).
+  const [fileHash, setFileHash] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileHashing, setFileHashing] = useState(false);
+  const [fileDragOver, setFileDragOver] = useState(false);
+
   const [processingStep, setProcessingStep] = useState(0);
   const [result, setResult] = useState<PipelineResult | null>(null);
 
@@ -292,6 +299,24 @@ export default function QRightPage() {
     reader.readAsText(file);
   };
 
+  const hashFile = async (file: File) => {
+    setFileHashing(true);
+    setFileHash(null);
+    setFileName(file.name);
+    try {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buf);
+      const hex = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      setFileHash(hex);
+    } catch {
+      showToast("Could not hash file", "error");
+    } finally {
+      setFileHashing(false);
+    }
+  };
+
   const authHeaders = (): HeadersInit => {
     try {
       const raw = localStorage.getItem(TOKEN_KEY);
@@ -375,6 +400,7 @@ export default function QRightPage() {
           ownerEmail: ownerEmail.trim() || undefined,
           country: country.trim() || undefined,
           city: city.trim() || undefined,
+          fileHash: fileHash || undefined,
           ...cosignFields,
         }),
       });
@@ -758,6 +784,77 @@ export default function QRightPage() {
                 </div>
               </div>
             )}
+
+            {/* ── File hash widget ── */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setFileDragOver(true); }}
+              onDragLeave={() => setFileDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setFileDragOver(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) hashFile(f);
+              }}
+              style={{
+                borderRadius: 14,
+                border: `2px dashed ${fileDragOver ? "#0d9488" : fileHash ? "rgba(13,148,136,0.4)" : "rgba(15,23,42,0.15)"}`,
+                background: fileDragOver ? "rgba(13,148,136,0.04)" : fileHash ? "rgba(13,148,136,0.02)" : "#fafafa",
+                padding: "16px 18px",
+                transition: "border-color 0.15s, background 0.15s",
+                marginBottom: 4,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" as const }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 2 }}>
+                    📎 Attach a file <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>(optional)</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
+                    Drop any file to compute its SHA-256 fingerprint — stored alongside your certificate as proof the exact file existed at this timestamp.
+                  </div>
+                </div>
+                <label style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 12, fontWeight: 700, color: "#334155", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+                  Browse…
+                  <input
+                    type="file"
+                    style={{ display: "none" }}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) hashFile(f); }}
+                  />
+                </label>
+              </div>
+
+              {fileHashing && (
+                <div style={{ marginTop: 10, fontSize: 12, color: "#0d9488" }}>⏳ Computing SHA-256…</div>
+              )}
+              {fileHash && !fileHashing && (
+                <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+                  <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" as const, marginBottom: 2 }}>
+                      {fileName} · SHA-256
+                    </div>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>
+                      {fileHash}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <Link
+                      href={`/bureau#registry`}
+                      target="_blank"
+                      style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.3)", background: "rgba(13,148,136,0.06)", color: "#0d9488", textDecoration: "none", fontSize: 11, fontWeight: 700 }}
+                    >
+                      🔎 Prior-art
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => { setFileHash(null); setFileName(null); }}
+                      style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                    >
+                      ✕ Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
               <div>

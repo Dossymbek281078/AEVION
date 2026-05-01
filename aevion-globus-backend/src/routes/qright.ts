@@ -1861,3 +1861,219 @@ qrightRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) => {
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — index OG, sitemap, per-object RSS
+// (Per-object OG is already provided by frontend/.../opengraph-image.tsx
+//  so we don't duplicate it here.)
+// ─────────────────────────────────────────────────────────────────────────
+
+function qrEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// 🔹 GET /og.svg — index card. Pulls live counters so a paste of /qright
+//    reflects current state.
+qrightRouter.get("/og.svg", embedRateLimit, async (_req, res) => {
+  try {
+    await ensureQRightTable();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT COUNT(*) AS "total", COUNT("revokedAt") AS "revoked" FROM "QRightObject"`
+    );
+    const t = totals.rows[0] as { total: string; revoked: string };
+    const total = Number(t.total) || 0;
+    const revoked = Number(t.revoked) || 0;
+    const active = total - revoked;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QRIGHT</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${qrEsc(String(total))} registrations</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Independent IP registry — provable, instant, ownerless.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#0d9488" fill-opacity="0.15" stroke="#0d9488" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#5eead4">${qrEsc(String(active))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#a5f3fc">ACTIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#dc2626" fill-opacity="0.15" stroke="#dc2626" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#fca5a5">${qrEsc(String(revoked))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / qright</text>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "index og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /objects/:id/changelog.rss — RSS 2.0 of audit events for one
+//    QRight object. Sourced from QRightAuditLog with targetId === id.
+qrightRouter.get("/objects/:id/changelog.rss", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/qright/object/${encodeURIComponent(id)}`;
+
+    const objRow = await pool.query(
+      `SELECT "title" FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    const objTitle = objRow.rows[0]?.title || id;
+
+    const r = await pool.query(
+      `SELECT "id","actor","action","payload","at"
+       FROM "QRightAuditLog"
+       WHERE "targetId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    function describe(row: any): string {
+      const p = row.payload || {};
+      const reason = p.reason ? ` — ${p.reason}` : "";
+      const actor = row.actor ? ` by ${row.actor}` : "";
+      switch (row.action) {
+        case "object.revoke":
+        case "admin.revoke":
+          return `Revoked${actor}${reason}`;
+        case "object.create":
+          return `Registered${actor}`;
+        default:
+          return `${row.action || "QRight event"}${actor}`;
+      }
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${objTitle} — ${summary}`;
+        const guid = `aevion-qright-${row.id}`;
+        return `    <item>
+      <title>${qrEsc(title)}</title>
+      <link>${qrEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${qrEsc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${qrEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION QRight · ${qrEsc(String(objTitle))} — events</title>
+    <link>${qrEsc(siteUrl)}</link>
+    <atom:link href="${qrEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Audit events for AEVION QRight object ${qrEsc(id)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "object rss failed", details: err.message });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap for the QRight surface. Covers /qright,
+//    /qright/transparency, and a page per non-revoked object.
+qrightRouter.get("/sitemap.xml", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT "id","createdAt"
+       FROM "QRightObject"
+       WHERE "revokedAt" IS NULL
+       ORDER BY "createdAt" DESC
+       LIMIT 5000`
+    );
+
+    const urls: string[] = [];
+    urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`);
+    urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright/transparency</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    for (const row of r.rows as any[]) {
+      const lastmodSrc = row.createdAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright/object/${qrEsc(String(row.id))}</loc>
+    <lastmod>${qrEsc(lastmod)}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=600");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "sitemap failed", details: err.message });
+  }
+});

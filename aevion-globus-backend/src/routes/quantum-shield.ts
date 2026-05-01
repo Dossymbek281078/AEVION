@@ -55,6 +55,8 @@ const RESERVED_IDS = new Set([
   "openapi.json",
   "transparency",
   "admin",
+  "og.svg",
+  "sitemap.xml",
 ]);
 
 let ensuredTable = false;
@@ -638,6 +640,305 @@ quantumShieldRouter.get("/admin/audit", async (req, res) => {
     args
   );
   res.json({ items: r.rows });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — OG cards, sitemap, per-shield RSS
+// ─────────────────────────────────────────────────────────────────────────
+
+function qsEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function qsWrap(text: string, perLine: number, maxLines: number): string[] {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    if ((current + " " + w).trim().length > perLine) {
+      if (current) lines.push(current);
+      current = w;
+      if (lines.length >= maxLines - 1) break;
+    } else {
+      current = (current + " " + w).trim();
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  const consumed = lines.join(" ").split(/\s+/).filter(Boolean).length;
+  if (consumed < words.length && lines.length === maxLines) {
+    lines[maxLines - 1] = (lines[maxLines - 1] || "").replace(/\s+\S+$/, "") + "…";
+  }
+  return lines;
+}
+
+// 🔹 GET /og.svg — index card (totals + active + revoked).
+quantumShieldRouter.get("/og.svg", async (_req, res) => {
+  try {
+    await ensureShieldTable();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT COUNT(*)::int AS "n",
+              SUM(CASE WHEN "status"='active' THEN 1 ELSE 0 END)::int AS "active",
+              SUM(CASE WHEN "status"='revoked' THEN 1 ELSE 0 END)::int AS "revoked"
+       FROM "QuantumShield"`
+    );
+    const t = (totals.rows[0] || {}) as Record<string, number>;
+    const total = t.n || 0;
+    const active = t.active || 0;
+    const revoked = t.revoked || 0;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QUANTUM SHIELD</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${qsEsc(String(total))} shields</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Threshold cryptography — Shamir + Ed25519 + witness mesh.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#0d9488" fill-opacity="0.15" stroke="#0d9488" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#0d9488">${qsEsc(String(active))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#5eead4">ACTIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#dc2626" fill-opacity="0.15" stroke="#dc2626" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#fca5a5">${qsEsc(String(revoked))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / quantum-shield</text>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err) {
+    res.status(500).json({ error: "index og failed", details: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// 🔹 GET /:id/og.svg — per-shield card. Status colour, algorithm + threshold.
+quantumShieldRouter.get("/:id/og.svg", async (req, res) => {
+  if (RESERVED_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  try {
+    await ensureShieldTable();
+    const id = String(req.params.id);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const r = await pool.query(
+      `SELECT "id","objectTitle","algorithm","threshold","totalShards","status","distribution_policy"
+       FROM "QuantumShield" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    if (r.rowCount === 0) {
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="320" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="900" fill="#e2e8f0">Shield not found</text>
+  <text x="60" y="380" font-family="ui-monospace, monospace" font-size="24" fill="#64748b">${qsEsc(id)}</text>
+</svg>`;
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(fallback);
+    }
+    const row = r.rows[0] as Record<string, unknown>;
+    const status = String(row.status || "active");
+    const isRevoked = status === "revoked";
+    const accent = isRevoked ? "#dc2626" : "#7c3aed";
+    const label = isRevoked ? "REVOKED" : "ACTIVE";
+    const titleLines = qsWrap(String(row.objectTitle || id), 24, 2);
+    const subLine = `${row.algorithm || "shield"} · ${row.threshold}-of-${row.totalShards} · ${row.distribution_policy || "legacy_all_local"}`;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${accent}"/>
+      <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QUANTUM SHIELD</text>
+    <g transform="translate(60, 170)">
+      ${titleLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 92}" font-size="80" font-weight="900" letter-spacing="-2">${qsEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, ${170 + titleLines.length * 92 + 40})">
+      <text font-size="28" font-weight="500" fill="#cbd5e1" font-family="ui-monospace, monospace">${qsEsc(subLine)}</text>
+    </g>
+    <g transform="translate(60, 540)">
+      <rect width="${label.length * 18 + 56}" height="44" rx="22" fill="${accent}" fill-opacity="0.18" stroke="${accent}" stroke-width="2"/>
+      <text x="22" y="30" font-size="22" font-weight="900" fill="${accent}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${qsEsc(label)}</text>
+    </g>
+    <g transform="translate(${1200 - 60}, 540)" text-anchor="end">
+      <text font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">${qsEsc(id.slice(0, 18))}</text>
+    </g>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err) {
+    res.status(500).json({ error: "shield og failed", details: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// 🔹 GET /:id/changelog.rss — RSS 2.0 of audit events for one shield.
+quantumShieldRouter.get("/:id/changelog.rss", async (req, res) => {
+  if (RESERVED_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  try {
+    await ensureShieldTable();
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/quantum-shield/${encodeURIComponent(id)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/quantum-shield/${encodeURIComponent(id)}`;
+
+    const shieldRow = await pool.query(
+      `SELECT "objectTitle" FROM "QuantumShield" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    const shieldTitle = shieldRow.rows[0]?.objectTitle || id;
+
+    const r = await pool.query(
+      `SELECT "id","event","actorUserId","details","createdAt"
+       FROM "QuantumShieldAudit"
+       WHERE "shieldId" = $1
+       ORDER BY "createdAt" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    function describe(row: Record<string, unknown>): string {
+      const ev = String(row.event || "shield.event");
+      const actor = row.actorUserId ? ` by ${row.actorUserId}` : "";
+      return `${ev}${actor}`;
+    }
+
+    const items = r.rows
+      .map((row: Record<string, unknown>) => {
+        const at = row.createdAt instanceof Date ? row.createdAt : new Date(String(row.createdAt));
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${shieldTitle} — ${summary}`;
+        const guid = `aevion-qshield-${row.id}`;
+        return `    <item>
+      <title>${qsEsc(title)}</title>
+      <link>${qsEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${qsEsc(String(guid))}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${qsEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].createdAt instanceof Date ? r.rows[0].createdAt : new Date(String(r.rows[0].createdAt))).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION Quantum Shield · ${qsEsc(String(shieldTitle))} — events</title>
+    <link>${qsEsc(siteUrl)}</link>
+    <atom:link href="${qsEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Audit events for AEVION Quantum Shield ${qsEsc(id)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err) {
+    res.status(500).json({ error: "shield rss failed", details: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap of /quantum-shield/:id for active shields.
+quantumShieldRouter.get("/sitemap.xml", async (req, res) => {
+  try {
+    await ensureShieldTable();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT "id","createdAt"
+       FROM "QuantumShield"
+       WHERE "status" = 'active'
+       ORDER BY "createdAt" DESC
+       LIMIT 5000`
+    );
+
+    const urls: string[] = [];
+    urls.push(`  <url>
+    <loc>${qsEsc(origin)}/quantum-shield</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`);
+    for (const row of r.rows as Record<string, unknown>[]) {
+      const lastmodSrc = row.createdAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${qsEsc(origin)}/quantum-shield/${qsEsc(String(row.id))}</loc>
+    <lastmod>${qsEsc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=600");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err) {
+    res.status(500).json({ error: "sitemap failed", details: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 /* ── List handler (reused by / and /records) ── */

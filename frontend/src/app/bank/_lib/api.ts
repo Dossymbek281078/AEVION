@@ -145,6 +145,51 @@ export async function listOperations(): Promise<Operation[]> {
   return Array.isArray(data.items) ? data.items : [];
 }
 
+// Walks a cursor-paginated GET endpoint until exhausted.
+// Caps at MAX_PAGES * 200 rows so a runaway server can't hang the UI.
+// Returns { items, total } — total is the server-reported count when
+// available (ecosystem routes), otherwise the materialised length.
+const PAGE_LIMIT = 200;
+const MAX_PAGES = 20;
+
+export async function fetchAllPages<T>(
+  path: string,
+): Promise<{ items: T[]; total: number; truncated: boolean }> {
+  const out: T[] = [];
+  let cursor: string | null = null;
+  let serverTotal: number | null = null;
+  let truncated = false;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const sep = path.includes("?") ? "&" : "?";
+    const cursorPart = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    const qs = `${path}${sep}limit=${PAGE_LIMIT}${cursorPart}`;
+
+    let data: { items?: T[]; nextCursor?: string | null; total?: number } | null;
+    try {
+      data = await request<{ items?: T[]; nextCursor?: string | null; total?: number }>(
+        qs,
+        { headers: authHeaders() },
+        `Load ${path} failed`,
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.kind === "http") return { items: out, total: out.length, truncated };
+      throw err;
+    }
+
+    const items = Array.isArray(data?.items) ? (data!.items as T[]) : [];
+    out.push(...items);
+    if (typeof data?.total === "number") serverTotal = data.total;
+
+    const next = data?.nextCursor ?? null;
+    if (!next) return { items: out, total: serverTotal ?? out.length, truncated };
+    cursor = next;
+  }
+
+  truncated = true;
+  return { items: out, total: serverTotal ?? out.length, truncated };
+}
+
 export async function topUp(
   accountId: string,
   amount: number,

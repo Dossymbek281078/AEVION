@@ -18,11 +18,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import { apiUrl } from "@/lib/apiBase";
-import { listAccounts, listOperations } from "../_lib/api";
+import { fetchAllPages, listAccounts } from "../_lib/api";
 import type { Account, Operation } from "../_lib/types";
-
-const TOKEN_KEY = "aevion_auth_token_v1";
 
 type Source = "topup" | "transfer-in" | "transfer-out" | "royalty" | "prize" | "cert";
 
@@ -45,42 +42,19 @@ const SOURCE_META: Record<Source, { label: string; color: string; tone: string }
   cert: { label: "Planet cert", color: "#d97706", tone: "rgba(217,119,6,0.10)" },
 };
 
-function readToken(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return localStorage.getItem(TOKEN_KEY) || "";
-  } catch {
-    return "";
-  }
-}
-
-async function authedJson<T>(path: string): Promise<T | null> {
-  const t = readToken();
-  if (!t) return null;
-  try {
-    const r = await fetch(apiUrl(path), {
-      headers: { Authorization: `Bearer ${t}` },
-      cache: "no-store",
-    });
-    if (!r.ok) return null;
-    return (await r.json()) as T;
-  } catch {
-    return null;
-  }
-}
+type Royalty = { id: string; productKey: string; period: string; amount: number; paidAt: string };
+type Prize = { id: string; tournamentId: string; place: number; amount: number; finalizedAt: string };
+type Cert = { id: string; artifactVersionId: string; amount: number; certifiedAt: string };
 
 export default function BankIncomePage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
-  const [royalties, setRoyalties] = useState<
-    Array<{ id: string; productKey: string; period: string; amount: number; paidAt: string }>
-  >([]);
-  const [prizes, setPrizes] = useState<
-    Array<{ id: string; tournamentId: string; place: number; amount: number; finalizedAt: string }>
-  >([]);
-  const [certs, setCerts] = useState<Array<{ id: string; artifactVersionId: string; amount: number; certifiedAt: string }>>([]);
+  const [royalties, setRoyalties] = useState<Royalty[]>([]);
+  const [prizes, setPrizes] = useState<Prize[]>([]);
+  const [certs, setCerts] = useState<Cert[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<SourceFilter>("all");
+  const [truncated, setTruncated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,23 +62,18 @@ export default function BankIncomePage() {
       try {
         const [a, o, r, p, c] = await Promise.all([
           listAccounts(),
-          listOperations(),
-          authedJson<{ items: Array<{ id: string; productKey: string; period: string; amount: number; paidAt: string }> }>(
-            "/api/qright/royalties",
-          ),
-          authedJson<{
-            items: Array<{ id: string; tournamentId: string; place: number; amount: number; finalizedAt: string }>;
-          }>("/api/cyberchess/results"),
-          authedJson<{ items: Array<{ id: string; artifactVersionId: string; amount: number; certifiedAt: string }> }>(
-            "/api/planet/payouts",
-          ),
+          fetchAllPages<Operation>("/api/qtrade/operations").catch(() => ({ items: [], total: 0, truncated: false })),
+          fetchAllPages<Royalty>("/api/qright/royalties").catch(() => ({ items: [], total: 0, truncated: false })),
+          fetchAllPages<Prize>("/api/cyberchess/results").catch(() => ({ items: [], total: 0, truncated: false })),
+          fetchAllPages<Cert>("/api/planet/payouts").catch(() => ({ items: [], total: 0, truncated: false })),
         ]);
         if (cancelled) return;
         setAccounts(a);
-        setOperations(o);
-        setRoyalties(r?.items ?? []);
-        setPrizes(p?.items ?? []);
-        setCerts(c?.items ?? []);
+        setOperations(o.items);
+        setRoyalties(r.items);
+        setPrizes(p.items);
+        setCerts(c.items);
+        setTruncated(o.truncated || r.truncated || p.truncated || c.truncated);
       } catch {
         // empty state handled below
       } finally {
@@ -226,6 +195,23 @@ export default function BankIncomePage() {
           <Tile label="Outflow" value={`${totals.outflow.toFixed(2)} AEC`} color="#dc2626" />
           <Tile label="Rows" value={String(rows.length)} color="#0f172a" />
         </section>
+
+        {truncated ? (
+          <div
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(217,119,6,0.30)",
+              background: "rgba(217,119,6,0.08)",
+              color: "#92400e",
+              fontSize: 12,
+              fontWeight: 700,
+              margin: "0 0 12px",
+            }}
+          >
+            History truncated at the page-walking ceiling. Use the per-source CSV exports below for the complete record.
+          </div>
+        ) : null}
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "0 0 18px" }}>
           {SOURCES.map((s) => {

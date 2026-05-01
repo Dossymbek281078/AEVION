@@ -23,7 +23,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import { apiUrl } from "@/lib/apiBase";
+import { fetchAllPages } from "../_lib/api";
 import { useAuthMe } from "../_hooks/useAuthMe";
 import { useBank } from "../_hooks/useBank";
 import { loadSignatures, SIGNATURE_EVENT, type SignedOperation } from "../_lib/signatures";
@@ -50,25 +50,11 @@ type RoyaltyRow = { id: string; productKey: string; period: string; amount: numb
 type PrizeRow = { id: string; tournamentId: string; place: number; amount: number; finalizedAt: string };
 type CertRow = { id: string; artifactVersionId: string; amount: number; certifiedAt: string };
 
-const ECOSYSTEM_TOKEN_KEY = "aevion_auth_token_v1";
-
 async function fetchEcosystem<T>(path: string): Promise<T[]> {
   if (typeof window === "undefined") return [];
-  let token = "";
   try {
-    token = localStorage.getItem(ECOSYSTEM_TOKEN_KEY) || "";
-  } catch {
-    return [];
-  }
-  if (!token) return [];
-  try {
-    const r = await fetch(apiUrl(path), {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!r.ok) return [];
-    const j = await r.json();
-    return Array.isArray(j?.items) ? (j.items as T[]) : [];
+    const { items } = await fetchAllPages<T>(path);
+    return items;
   } catch {
     return [];
   }

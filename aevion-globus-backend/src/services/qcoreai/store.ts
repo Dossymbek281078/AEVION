@@ -23,6 +23,7 @@ export type SessionRow = {
   userId: string | null;
   title: string;
   mode: string;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -109,6 +110,7 @@ export async function createSession(opts: {
       userId: opts.userId ?? null,
       title,
       mode,
+      pinned: false,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -195,19 +197,22 @@ export async function listSessions(userId: string | null, limit = 50): Promise<S
   if (!isDbReady()) {
     const all = Array.from(memSessions.values());
     const filtered = all.filter((s) => (userId ? s.userId === userId : s.userId == null));
-    filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    filtered.sort((a, b) => {
+      if (b.pinned !== a.pinned) return b.pinned ? 1 : -1;
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
     return filtered.slice(0, lim);
   }
 
   if (userId) {
     const r = await pool.query(
-      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "updatedAt" DESC LIMIT $2`,
+      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $2`,
       [userId, lim]
     );
     return r.rows as SessionRow[];
   }
   const r = await pool.query(
-    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "updatedAt" DESC LIMIT $1`,
+    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $1`,
     [lim]
   );
   return r.rows as SessionRow[];
@@ -273,6 +278,28 @@ export async function renameSession(
   const r = await pool.query(
     `UPDATE "QCoreSession" SET "title"=$2, "updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
     [id, clean]
+  );
+  return (r.rows?.[0] as SessionRow) ?? null;
+}
+
+export async function pinSession(
+  id: string,
+  userId: string | null,
+  pinned: boolean
+): Promise<SessionRow | null> {
+  const session = await getSession(id, userId);
+  if (!session) return null;
+
+  if (!isDbReady()) {
+    session.pinned = pinned;
+    session.updatedAt = nowIso();
+    memSessions.set(id, session);
+    return session;
+  }
+
+  const r = await pool.query(
+    `UPDATE "QCoreSession" SET "pinned"=$2, "updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
+    [id, pinned]
   );
   return (r.rows?.[0] as SessionRow) ?? null;
 }

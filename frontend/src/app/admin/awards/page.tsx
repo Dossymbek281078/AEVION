@@ -94,6 +94,10 @@ export default function AdminAwardsPage() {
   const [disqualifyReason, setDisqualifyReason] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [finalizeBusy, setFinalizeBusy] = useState<string | null>(null);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<"qualify" | "disqualify">("qualify");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const authHeaders = useCallback((): HeadersInit => {
     try {
@@ -270,6 +274,38 @@ export default function AdminAwardsPage() {
       }
     } finally {
       setActionBusy(false);
+    }
+  };
+
+  const runBulk = async () => {
+    if (bulkSelected.size === 0) return showToast("select at least one entry", "error");
+    if (bulkSelected.size > 100) return showToast("max 100 entries per call", "error");
+    if (bulkAction === "disqualify" && !bulkReason.trim()) {
+      return showToast("reason required for disqualify", "error");
+    }
+    setBulkBusy(true);
+    try {
+      const items = Array.from(bulkSelected).map((entryId) => ({
+        entryId,
+        action: bulkAction,
+        reason: bulkAction === "disqualify" ? bulkReason.trim() : undefined,
+      }));
+      const r = await fetch(apiUrl(`/api/awards/admin/entries/bulk`), {
+        method: "PATCH",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        return showToast(`Bulk failed: ${d.error || r.status}`, "error");
+      }
+      showToast(`Applied ${d.applied}/${d.total}`, "success");
+      setBulkSelected(new Set());
+      setBulkReason("");
+      loadEntries();
+      loadAudit();
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -495,19 +531,134 @@ export default function AdminAwardsPage() {
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: 6 }}>
+                    {/* Bulk action bar — appears when ≥1 entry is selected */}
+                    {bulkSelected.size > 0 && (
+                      <div
+                        style={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 5,
+                          background: "#0f172a",
+                          color: "#fff",
+                          borderRadius: 8,
+                          padding: "10px 12px",
+                          display: "grid",
+                          gridTemplateColumns: "auto 140px 1fr auto",
+                          gap: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 800 }}>
+                          {bulkSelected.size} selected
+                          <button
+                            onClick={() => setBulkSelected(new Set())}
+                            style={{
+                              marginLeft: 10,
+                              padding: "3px 8px",
+                              borderRadius: 4,
+                              border: "1px solid rgba(255,255,255,0.3)",
+                              background: "transparent",
+                              color: "#cbd5e1",
+                              fontSize: 10,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                            }}
+                          >
+                            clear
+                          </button>
+                        </div>
+                        <select
+                          value={bulkAction}
+                          onChange={(e) => setBulkAction(e.target.value as "qualify" | "disqualify")}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            border: "1px solid rgba(255,255,255,0.2)",
+                            background: "#1e293b",
+                            color: "#fff",
+                            fontSize: 12,
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          <option value="qualify">qualify</option>
+                          <option value="disqualify">disqualify</option>
+                        </select>
+                        {bulkAction === "disqualify" ? (
+                          <input
+                            placeholder="Reason (required)"
+                            value={bulkReason}
+                            onChange={(e) => setBulkReason(e.target.value)}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "1px solid rgba(255,255,255,0.2)",
+                              background: "#1e293b",
+                              color: "#fff",
+                              fontSize: 12,
+                            }}
+                          />
+                        ) : (
+                          <div style={{ fontSize: 11, color: "#94a3b8" }}>Apply to {bulkSelected.size} entries.</div>
+                        )}
+                        <button
+                          onClick={runBulk}
+                          disabled={bulkBusy}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: 6,
+                            border: "none",
+                            background: bulkAction === "qualify" ? "#0d9488" : "#dc2626",
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: bulkBusy ? "not-allowed" : "pointer",
+                            opacity: bulkBusy ? 0.6 : 1,
+                          }}
+                        >
+                          {bulkBusy ? "Applying…" : "Apply"}
+                        </button>
+                      </div>
+                    )}
+                    {/* Select all */}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "0 4px" }}>
+                      <input
+                        type="checkbox"
+                        checked={entries.length > 0 && bulkSelected.size === entries.length}
+                        onChange={(e) => {
+                          if (e.target.checked) setBulkSelected(new Set(entries.map((x) => x.id)));
+                          else setBulkSelected(new Set());
+                        }}
+                        style={{ cursor: "pointer" }}
+                      />
+                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>Select all on page</span>
+                    </div>
                     {entries.map((e) => (
                       <div
                         key={e.id}
                         style={{
                           padding: "10px 12px",
                           borderRadius: 8,
-                          border: "1px solid rgba(15,23,42,0.08)",
+                          border: bulkSelected.has(e.id)
+                            ? "1px solid rgba(13,148,136,0.5)"
+                            : "1px solid rgba(15,23,42,0.08)",
+                          background: bulkSelected.has(e.id) ? "rgba(13,148,136,0.04)" : "#fff",
                           display: "grid",
-                          gridTemplateColumns: "1fr auto",
+                          gridTemplateColumns: "auto 1fr auto",
                           gap: 10,
                           alignItems: "center",
                         }}
                       >
+                        <input
+                          type="checkbox"
+                          checked={bulkSelected.has(e.id)}
+                          onChange={(ev) => {
+                            const next = new Set(bulkSelected);
+                            if (ev.target.checked) next.add(e.id);
+                            else next.delete(e.id);
+                            setBulkSelected(next);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        />
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>
                             {e.submissionTitle}

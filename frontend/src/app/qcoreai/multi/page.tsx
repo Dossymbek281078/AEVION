@@ -250,6 +250,24 @@ function bearerHeader(): HeadersInit {
   }
 }
 
+async function downloadRun(runId: string, format: "md" | "json") {
+  try {
+    const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/export?format=${format}`), {
+      headers: bearerHeader(),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qcore-run-${runId.slice(0, 8)}.${format === "md" ? "md" : "json"}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch { /* silent */ }
+}
+
 /** Read SSE stream from a fetch Response, yielding parsed JSON payloads. */
 async function* readSSE<T = unknown>(body: ReadableStream<Uint8Array>): AsyncGenerator<T> {
   const reader = body.getReader();
@@ -317,7 +335,7 @@ export default function QCoreMultiAgentPage() {
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
   const [strategy, setStrategy] = useState<Strategy>("sequential");
-  const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
+  const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string; systemPrompt?: string }>>({
     analyst: { provider: "", model: "" },
     writer: { provider: "", model: "" },
     writerB: { provider: "", model: "" },
@@ -2969,8 +2987,8 @@ function RoleConfigCard({
   strategy: Strategy;
   providers: ProviderInfo[];
   pricing: PricingRow[];
-  value: { provider: string; model: string };
-  onChange: (v: { provider: string; model: string }) => void;
+  value: { provider: string; model: string; systemPrompt?: string };
+  onChange: (v: { provider: string; model: string; systemPrompt?: string }) => void;
   promptId?: string;
   onPromptChange?: (id: string) => void;
   availablePrompts?: Array<{ id: string; name: string; role: string; version: number }>;
@@ -3014,7 +3032,7 @@ function RoleConfigCard({
         onChange={(e) => {
           const nextProv = e.target.value;
           const p = providers.find((pp) => pp.id === nextProv);
-          onChange({ provider: nextProv, model: p?.defaultModel || "" });
+          onChange({ ...value, provider: nextProv, model: p?.defaultModel || "" });
         }}
         style={{
           width: "100%", padding: "6px 8px", borderRadius: 8,
@@ -3033,7 +3051,7 @@ function RoleConfigCard({
       </label>
       <select
         value={value.model}
-        onChange={(e) => onChange({ provider: value.provider, model: e.target.value })}
+        onChange={(e) => onChange({ ...value, model: e.target.value })}
         disabled={!availableModels.length}
         style={{
           width: "100%", padding: "6px 8px", borderRadius: 8,
@@ -3079,6 +3097,20 @@ function RoleConfigCard({
           )}
         </>
       )}
+      <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#475569", marginTop: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        Override system prompt
+      </label>
+      <textarea
+        value={value.systemPrompt || ""}
+        onChange={(e) => onChange({ ...value, systemPrompt: e.target.value })}
+        placeholder="Leave blank to use role default…"
+        rows={3}
+        style={{
+          width: "100%", padding: "6px 8px", borderRadius: 8, resize: "vertical",
+          border: value.systemPrompt ? "1px solid rgba(6,182,212,0.5)" : "1px solid rgba(15,23,42,0.15)",
+          background: "#fff", fontSize: 11, fontFamily: "monospace", boxSizing: "border-box",
+        }}
+      />
     </div>
   );
 }
@@ -3722,30 +3754,28 @@ function RunCard({
                     🔗 Share
                   </button>
                 ) : null}
-                <a
-                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
-                  target="_blank" rel="noreferrer"
+                <button
+                  onClick={() => downloadRun(run.id, "md")}
                   style={{
                     padding: "5px 10px", borderRadius: 8,
                     background: "#fff", border: "1px solid #cbd5e1",
-                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
                   }}
                   title="Download as Markdown"
                 >
                   ⬇ Markdown
-                </a>
-                <a
-                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=json`}
-                  target="_blank" rel="noreferrer"
+                </button>
+                <button
+                  onClick={() => downloadRun(run.id, "json")}
                   style={{
                     padding: "5px 10px", borderRadius: 8,
                     background: "#fff", border: "1px solid #cbd5e1",
-                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
                   }}
                   title="Download as JSON"
                 >
                   ⬇ JSON
-                </a>
+                </button>
               </>
             )}
             {!hasAgents && run.finalContent && onLoadDetails && (

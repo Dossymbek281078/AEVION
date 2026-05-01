@@ -63,17 +63,16 @@ export default function VerifyOfflinePage() {
 
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 20px 60px" }}>
         <h1 style={{ fontSize: 24, fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>
-          Verify a certificate offline
+          Verify without AEVION
           <InfoTip
             label="Offline verification"
             text="Drop an AEVION bundle JSON. All checks run in your browser using SHA-256 and Ed25519 — no network call to AEVION. If the math passes, the certificate is authentic regardless of whether AEVION still exists."
           />
         </h1>
         <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, marginBottom: 24 }}>
-          A verification bundle is a single <code style={{ fontSize: 12, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code> file
-          containing every proof needed to authenticate an AEVION certificate independently.
-          This page runs every check locally — no network call to AEVION — so the certificate
-          remains verifiable forever, even if our servers go dark.
+          Drop a verification bundle (<code style={{ fontSize: 12, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code>) and your browser will replay every cryptographic check locally — SHA-256, AEVION&apos;s Ed25519 signature, the author co-signature, and the OpenTimestamps Bitcoin proof.
+          {' '}
+          <b>Zero network calls to AEVION.</b> If the math passes, the certificate is authentic — even if these servers were taken offline a decade ago.
         </p>
 
         {state.stage === "idle" && (
@@ -272,11 +271,16 @@ function ResultView({
             <span style={{ fontSize: 18, marginRight: 6 }} aria-hidden>₿</span>
             Mathematically anchored to Bitcoin
           </div>
-          <div style={{ fontSize: 11, color: "#7c2d12", lineHeight: 1.6 }}>
-            For full mathematical proof of timestamp, decode <code>proofs.openTimestamps.proofBase64</code> with any
-            OpenTimestamps client (e.g. <code>ots-cli verify proof.ots</code>) and check it against a Bitcoin block
-            explorer. Once a proof is confirmed at a block height, the certificate&apos;s prior existence is
-            mathematically irrefutable — Bitcoin itself is the trust anchor.
+          <div style={{ fontSize: 11, color: "#7c2d12", lineHeight: 1.6, marginBottom: 8 }}>
+            The bundle carries an OpenTimestamps proof under <code>proofs.openTimestamps.proofBase64</code>. Decode that base64 to a <code>.ots</code> file, then verify it against a Bitcoin node — no AEVION, no third-party calendar trust required:
+          </div>
+          <pre style={{ margin: 0, padding: "10px 12px", borderRadius: 8, background: "#1c1917", color: "#fde68a", fontSize: 11, fontFamily: "monospace", overflow: "auto", lineHeight: 1.5 }}>
+{`# install: pip install opentimestamps-client
+echo "<proofBase64>" | base64 -d > proof.ots
+ots verify proof.ots   # checks against your local Bitcoin node`}
+          </pre>
+          <div style={{ fontSize: 11, color: "#7c2d12", lineHeight: 1.6, marginTop: 8 }}>
+            Once OTS confirms the proof at a block height, the certificate&apos;s prior existence is mathematically irrefutable — Bitcoin&apos;s proof-of-work is the trust anchor, not us.
           </div>
         </div>
       )}

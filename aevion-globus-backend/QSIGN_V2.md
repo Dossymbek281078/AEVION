@@ -18,14 +18,20 @@ Mounted at `/api/qsign/v2` (see `src/index.ts`). Legacy v1 stays at
 | GET    | `/health`                         | —       | —          | Liveness + active kids                        |
 | GET    | `/stats`                          | —       | —          | Public aggregate metrics (totals, last 24h, countries, keys) |
 | GET    | `/recent?limit=N`                 | —       | —          | Sanitized recent signatures feed (1..20 items) |
-| POST   | `/sign`                           | Bearer  | 60/min/IP  | Create + persist a signature                  |
-| POST   | `/verify`                         | —       | —          | Stateless verify of `{payload, sig, ...}`     |
+| POST   | `/sign`                           | Bearer  | 60/min/IP  | Create + persist a signature (HMAC + Ed25519 + Dilithium preview slot) |
+| POST   | `/sign/batch`                     | Bearer  | 60/min/IP  | Bulk sign up to 50 payloads in one call       |
+| POST   | `/verify`                         | —       | —          | Stateless verify of `{payload, sig, ...}` (optional `signatureDilithium` round-trip) |
 | GET    | `/verify/:id`                     | —       | —          | DB-backed verify by signature id              |
 | GET    | `/:id/public`                     | —       | —          | Public JSON for shareable verify page         |
+| GET    | `/:id/pdf`                        | —       | —          | Self-contained PDF stamp with QR (`?accent`, `?title`, `?subtitle`, `?download=1`) |
 | POST   | `/revoke/:id`                     | Bearer  | 10/min/IP  | Revoke (issuer or admin); optional causal link |
 | GET    | `/keys`                           | —       | —          | JWKS-like key list (no secrets)               |
 | GET    | `/keys/:kid`                      | —       | —          | Single key detail                             |
 | POST   | `/keys/rotate`                    | Admin   | 5/min/IP   | Rotate active key; old → retired              |
+| GET    | `/audit?event&limit&offset`       | Bearer  | —          | Per-user paginated event log (sign + revoke unioned) |
+| GET    | `/webhooks`                       | Bearer  | —          | List my webhooks                              |
+| POST   | `/webhooks`                       | Bearer  | —          | Create webhook (returns one-time secret)      |
+| DELETE | `/webhooks/:id`                   | Bearer  | —          | Delete one of my webhooks                     |
 
 Admin role: set `role='admin'` on the `AEVIONUser` row; the JWT carries
 `role` after next login.
@@ -215,14 +221,166 @@ time, and the id needed to open the public verify page.
 
 ---
 
+## 6b. Dilithium preview slot (post-quantum reservation)
+
+Every signature ships with a `dilithium` block in the response that
+reserves the API surface for ML-DSA-65 post-quantum signatures. **It is
+NOT a real PQ signature in v2.0** — the `digest` field is a deterministic
+SHA-512 fingerprint of `canonical || kid`, which clients can use to
+round-trip-verify the slot was emitted at sign time. v2.1 will replace
+`digest` with `signature` + add `publicKey`, leaving the same JSON shape.
+
+```json
+{
+  "dilithium": {
+    "algo": "ML-DSA-65",
+    "kid": "qsign-dilithium-mldsa65-preview-v1",
+    "mode": "preview",
+    "digest": "<128 hex chars — sha512(canonical||kid)>",
+    "valid": true,
+    "note": "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures..."
+  }
+}
+```
+
+Pass `signatureDilithium` to `POST /verify` to assert the digest
+round-trips bit-for-bit (the response will include `dilithium.valid`).
+
+---
+
+## 6c. Bulk signing — `/sign/batch`
+
+Sign up to 50 payloads in one auth round trip. Same active kids for every
+item. Returns 207 Multi-Status when some fail; 201 when all succeed.
+
+```bash
+curl -s -X POST $BASE/api/qsign/v2/sign/batch \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "items": [
+      { "hello": "AEVION 1" },
+      { "payload": { "hello": "AEVION 2" }, "gps": { "lat": 43.2, "lng": 76.9 } },
+      { "hello": "AEVION 3" }
+    ]
+  }' | jq
+# {
+#   "total": 3, "succeeded": 3, "failed": 0,
+#   "hmacKid": "qsign-hmac-v1", "ed25519Kid": "qsign-ed25519-v1",
+#   "results": [{"ok":true,"id":"…"}, …]
+# }
+```
+
+Items can be raw payloads OR `{ payload, gps? }` envelopes (mixable in
+the same array).
+
+---
+
+## 6d. Audit log — `/audit`
+
+Per-user paginated event log. Returns sign + revoke events touching the
+caller, ordered by event time DESC. Use for compliance export and
+customer-facing activity views.
+
+```bash
+curl -s "$BASE/api/qsign/v2/audit?limit=20&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Filter to revokes only:
+curl -s "$BASE/api/qsign/v2/audit?event=revoke&limit=50" \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+Event shape:
+
+```json
+{
+  "event": "sign" | "revoke",
+  "signatureId": "…",
+  "revocationId": null | "…",
+  "at": "2026-04-28T12:00:00.000Z",
+  "hmacKid": "qsign-hmac-v1",
+  "ed25519Kid": "qsign-ed25519-v1",
+  "payloadHash": "…",
+  "country": "KZ",
+  "reason": null | "…",
+  "causalSignatureId": null | "…",
+  "revokerUserId": null | "…",
+  "publicUrl": "/qsign/verify/…"
+}
+```
+
+---
+
+## 6e. Webhooks — `/webhooks`
+
+Per-user HTTP callbacks fired on `sign` + `revoke` events. Quota: 10
+webhooks per user. Body of every delivery is HMAC-SHA256 signed with the
+per-webhook secret; receivers verify the `X-QSign-Signature` header.
+
+```bash
+# Create — secret is shown ONCE
+curl -s -X POST $BASE/api/qsign/v2/webhooks \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://your-app.example.com/qsign","events":["sign","revoke"]}' | jq
+# { "id": "…", "url": "…", "events": ["sign","revoke"], "active": true,
+#   "secret": "<save this>", "notice": "Save the secret — shown ONCE." }
+
+# List
+curl -s $BASE/api/qsign/v2/webhooks -H "Authorization: Bearer $TOKEN" | jq
+
+# Delete
+curl -s -X DELETE $BASE/api/qsign/v2/webhooks/<id> \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+Receiver-side verification (Node):
+
+```js
+const expected = crypto
+  .createHmac("sha256", WEBHOOK_SECRET)
+  .update(rawBody, "utf8")
+  .digest("hex");
+const ok = crypto.timingSafeEqual(
+  Buffer.from(expected, "hex"),
+  Buffer.from(req.headers["x-qsign-signature"], "hex"),
+);
+```
+
+---
+
+## 6f. Rate-limit response headers
+
+`/sign`, `/sign/batch`, `/revoke`, and `/keys/rotate` are guarded by
+`express-rate-limit` with `standardHeaders: true`. Every response
+includes:
+
+```
+RateLimit-Limit:     60
+RateLimit-Remaining: 59
+RateLimit-Reset:     53
+```
+
+(`Reset` is seconds until the window resets, not a Unix timestamp.) The
+Studio reads these on every sign and surfaces a "X/60 left · resets in
+Ns" chip — see `frontend/src/app/qsign/page.tsx`.
+
+---
+
 ## 7. Frontend surfaces
 
 - `/qsign` — Studio: sign + stateless verify, live canonical preview,
-  SHA-256 hash, GPS opt-in, dual signatures + Ed25519 public key.
+  SHA-256 hash, GPS opt-in, dual signatures + Ed25519 public key,
+  Dilithium preview row, sign rate-limit chip, "Hash a file" drag-in,
+  webhook management card.
 - `/qsign/verify/[id]` — SSR public page: status banner, QR, OG metadata,
   payload, per-algo validity, issuer, geo.
 - `/qsign/keys` — Key registry browser: timeline per algorithm, active
-  highlighted, Ed25519 public keys copyable, rotation docs.
+  highlighted, Ed25519 public keys copyable, rotation docs, admin
+  rotation form.
+- `/qsign/embed` — embeddable verify badge + sign-button widgets for
+  partner sites; postMessage handshake for cross-origin sign flows.
 
 ---
 

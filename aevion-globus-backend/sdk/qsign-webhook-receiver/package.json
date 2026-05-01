@@ -1,0 +1,46 @@
+{
+  "name": "@aevion/qsign-webhook-receiver",
+  "version": "1.0.0",
+  "description": "Drop-in HMAC verifier for AEVION QSign v2 webhook deliveries — pure function + Express middleware.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": ["index.ts", "index.js", "index.d.ts", "README.md", "LICENSE"],
+  "keywords": [
+    "aevion",
+    "qsign",
+    "webhook",
+    "hmac",
+    "verify",
+    "express",
+    "middleware"
+  ],
+  "homepage": "https://aevion.com/qsign",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "aevion-globus-backend/sdk/qsign-webhook-receiver"
+  },
+  "license": "MIT",
+  "author": "AEVION",
+  "engines": {
+    "node": ">=14"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck",
+    "prepublishOnly": "npm run build"
+  }
+}

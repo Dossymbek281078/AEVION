@@ -41,6 +41,19 @@ export type RunRow = {
   shareToken: string | null;
   startedAt: string;
   finishedAt: string | null;
+  tags?: string[];
+};
+
+export type SearchHit = {
+  runId: string;
+  sessionId: string;
+  sessionTitle: string;
+  strategy: string | null;
+  status: string;
+  startedAt: string;
+  totalCostUsd: number | null;
+  preview: string;
+  matched: "input" | "final" | "title" | "tag";
 };
 
 export type MessageRow = {
@@ -722,6 +735,440 @@ function analyticsFromMemory(userId: string | null, scope: "mine" | "anonymous")
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Agent marketplace — shared presets (V4-E)
+
+   Lets a user publish their saved agent preset (strategy + per-role
+   provider/model) so others can browse and import it into their personal
+   localStorage presets bar. Owner-only delete. Read-only browse for the
+   public — auth required only to publish, delete, or import (so we can
+   bump importCount per user).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type SharedPresetRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  strategy: string;
+  overrides: any;
+  isPublic: boolean;
+  importCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memSharedPresets = new Map<string, SharedPresetRow>();
+
+export async function createSharedPreset(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  strategy?: string;
+  overrides?: any;
+  isPublic?: boolean;
+}): Promise<SharedPresetRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (opts.name || "").trim().slice(0, 80);
+  if (!name) throw new Error("preset name required");
+  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
+  const strategy = opts.strategy === "parallel" || opts.strategy === "debate" ? opts.strategy : "sequential";
+  const overrides = opts.overrides && typeof opts.overrides === "object" ? opts.overrides : {};
+  const isPublic = opts.isPublic !== false;
+
+  if (!isDbReady()) {
+    const row: SharedPresetRow = {
+      id,
+      ownerUserId: opts.ownerUserId,
+      name,
+      description,
+      strategy,
+      overrides,
+      isPublic,
+      importCount: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memSharedPresets.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreSharedPreset"
+       ("id","ownerUserId","name","description","strategy","overrides","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)
+     RETURNING *`,
+    [id, opts.ownerUserId, name, description, strategy, JSON.stringify(overrides), isPublic]
+  );
+  return r.rows[0] as SharedPresetRow;
+}
+
+export async function listPublicSharedPresets(query?: string, limit = 30): Promise<SharedPresetRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  const q = (query || "").trim();
+
+  if (!isDbReady()) {
+    let rows = Array.from(memSharedPresets.values()).filter((p) => p.isPublic);
+    if (q) {
+      const ql = q.toLowerCase();
+      rows = rows.filter(
+        (p) => p.name.toLowerCase().includes(ql) || (p.description || "").toLowerCase().includes(ql)
+      );
+    }
+    rows.sort(
+      (a, b) =>
+        b.importCount - a.importCount || b.updatedAt.localeCompare(a.updatedAt)
+    );
+    return rows.slice(0, lim);
+  }
+
+  if (q) {
+    const r = await pool.query(
+      `SELECT * FROM "QCoreSharedPreset"
+        WHERE "isPublic" = TRUE
+          AND ("name" ILIKE $1 OR "description" ILIKE $1)
+        ORDER BY "importCount" DESC, "updatedAt" DESC
+        LIMIT $2`,
+      [`%${q}%`, lim]
+    );
+    return r.rows as SharedPresetRow[];
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreSharedPreset"
+      WHERE "isPublic" = TRUE
+      ORDER BY "importCount" DESC, "updatedAt" DESC
+      LIMIT $1`,
+    [lim]
+  );
+  return r.rows as SharedPresetRow[];
+}
+
+export async function getSharedPreset(id: string): Promise<SharedPresetRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memSharedPresets.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreSharedPreset" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as SharedPresetRow) || null;
+}
+
+export async function importSharedPreset(id: string): Promise<SharedPresetRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const p = memSharedPresets.get(id);
+    if (!p || !p.isPublic) return null;
+    p.importCount += 1;
+    p.updatedAt = nowIso();
+    return p;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreSharedPreset"
+        SET "importCount" = "importCount" + 1,
+            "updatedAt"   = NOW()
+      WHERE "id"=$1 AND "isPublic"=TRUE
+      RETURNING *`,
+    [id]
+  );
+  return (r.rows?.[0] as SharedPresetRow) || null;
+}
+
+export async function deleteSharedPreset(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const p = memSharedPresets.get(id);
+    if (!p || p.ownerUserId !== userId) return false;
+    memSharedPresets.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreSharedPreset" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Refinement / search / tagging extras
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Highest ordering value for a run, or 0 if no messages — used to append refinement messages. */
+export async function getMaxOrdering(runId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const list = memMessagesByRun.get(runId) || [];
+    return list.reduce((m, r) => (r.ordering > m ? r.ordering : m), 0);
+  }
+  const r = await pool.query(
+    `SELECT COALESCE(MAX("ordering"), 0)::int AS m FROM "QCoreMessage" WHERE "runId"=$1`,
+    [runId]
+  );
+  return Number(r.rows?.[0]?.m ?? 0);
+}
+
+/** Apply refinement on top of a finished run: replace finalContent, accumulate cost/duration. */
+export async function applyRefinement(opts: {
+  runId: string;
+  finalContent: string;
+  addCostUsd: number;
+  addDurationMs: number;
+}): Promise<RunRow | null> {
+  await ensureQCoreTables(pool);
+
+  if (!isDbReady()) {
+    const r = memRuns.get(opts.runId);
+    if (!r) return null;
+    r.finalContent = opts.finalContent;
+    r.totalCostUsd = (r.totalCostUsd ?? 0) + opts.addCostUsd;
+    r.totalDurationMs = (r.totalDurationMs ?? 0) + opts.addDurationMs;
+    return r;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreRun"
+        SET "finalContent"=$2,
+            "totalCostUsd"=COALESCE("totalCostUsd",0)+$3,
+            "totalDurationMs"=COALESCE("totalDurationMs",0)+$4
+      WHERE "id"=$1
+      RETURNING *`,
+    [opts.runId, opts.finalContent, opts.addCostUsd, opts.addDurationMs]
+  );
+  return (r.rows?.[0] as RunRow) || null;
+}
+
+/** Replace a run's tags. Owner-checked, normalized (trim/dedupe/cap 16x32). */
+export async function setRunTags(
+  runId: string,
+  userId: string | null,
+  tags: string[]
+): Promise<RunRow | null> {
+  const run = await getRun(runId);
+  if (!run) return null;
+  const session = await getSession(run.sessionId, userId);
+  if (!session) return null;
+
+  const cleaned = Array.from(
+    new Set(
+      tags
+        .map((t) => (typeof t === "string" ? t.trim().slice(0, 32) : ""))
+        .filter((t) => t.length > 0)
+    )
+  ).slice(0, 16);
+
+  if (!isDbReady()) {
+    run.tags = cleaned;
+    memRuns.set(runId, run);
+    return run;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreRun" SET "tags"=$2 WHERE "id"=$1 RETURNING *`,
+    [runId, cleaned]
+  );
+  return (r.rows?.[0] as RunRow) || null;
+}
+
+/** Substring search across the user's runs — userInput / finalContent / session.title / tags. */
+export async function searchRuns(
+  userId: string | null,
+  query: string,
+  limit = 30
+): Promise<SearchHit[]> {
+  await ensureQCoreTables(pool);
+  const q = (query || "").trim();
+  if (!q) return [];
+  const lim = Math.max(1, Math.min(100, limit));
+
+  const buildPreview = (hay: string, needle: string): string => {
+    const lower = hay.toLowerCase();
+    const idx = lower.indexOf(needle.toLowerCase());
+    if (idx < 0) return hay.slice(0, 160);
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(hay.length, idx + needle.length + 80);
+    const slice = hay.slice(start, end).replace(/\s+/g, " ");
+    return (start > 0 ? "…" : "") + slice + (end < hay.length ? "…" : "");
+  };
+
+  if (!isDbReady()) {
+    const sessions = Array.from(memSessions.values()).filter((s) =>
+      userId ? s.userId === userId : s.userId == null
+    );
+    const sessionById = new Map(sessions.map((s) => [s.id, s]));
+    const hits: SearchHit[] = [];
+    const ql = q.toLowerCase();
+    for (const r of memRuns.values()) {
+      const session = sessionById.get(r.sessionId);
+      if (!session) continue;
+      const inInput = (r.userInput || "").toLowerCase().includes(ql);
+      const inFinal = (r.finalContent || "").toLowerCase().includes(ql);
+      const inTitle = (session.title || "").toLowerCase().includes(ql);
+      const inTags = (r.tags || []).some((t) => t.toLowerCase().includes(ql));
+      if (!inInput && !inFinal && !inTitle && !inTags) continue;
+      const preview = inInput
+        ? buildPreview(r.userInput, q)
+        : inFinal
+        ? buildPreview(r.finalContent || "", q)
+        : inTags
+        ? `tag · ${(r.tags || []).find((t) => t.toLowerCase().includes(ql))}`
+        : (session.title || "");
+      hits.push({
+        runId: r.id,
+        sessionId: r.sessionId,
+        sessionTitle: session.title || "",
+        strategy: r.strategy || null,
+        status: r.status,
+        startedAt: r.startedAt,
+        totalCostUsd: r.totalCostUsd ?? null,
+        preview,
+        matched: inInput ? "input" : inFinal ? "final" : inTags ? "tag" : "title",
+      });
+    }
+    hits.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return hits.slice(0, lim);
+  }
+
+  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const params: any[] = userId ? [userId, `%${q}%`, lim] : [`%${q}%`, lim];
+  const qParam = userId ? `$2` : `$1`;
+  const limParam = userId ? `$3` : `$2`;
+  const r = await pool.query(
+    `SELECT r."id" AS "runId", r."sessionId", r."strategy", r."status",
+            r."startedAt", r."totalCostUsd",
+            r."userInput", r."finalContent", r."tags",
+            s."title" AS "sessionTitle",
+            CASE
+              WHEN r."userInput" ILIKE ${qParam} THEN 'input'
+              WHEN r."finalContent" ILIKE ${qParam} THEN 'final'
+              WHEN EXISTS (SELECT 1 FROM unnest(r."tags") t WHERE t ILIKE ${qParam}) THEN 'tag'
+              ELSE 'title'
+            END AS matched
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate}
+        AND ( r."userInput" ILIKE ${qParam}
+           OR r."finalContent" ILIKE ${qParam}
+           OR s."title" ILIKE ${qParam}
+           OR EXISTS (SELECT 1 FROM unnest(r."tags") t WHERE t ILIKE ${qParam}) )
+      ORDER BY r."startedAt" DESC
+      LIMIT ${limParam}`,
+    params
+  );
+  return r.rows.map((row: any) => {
+    const matched = row.matched as "input" | "final" | "title" | "tag";
+    const preview =
+      matched === "input"
+        ? buildPreview(row.userInput || "", q)
+        : matched === "final"
+        ? buildPreview(row.finalContent || "", q)
+        : matched === "tag"
+        ? `tag · ${(row.tags || []).find((t: string) => t.toLowerCase().includes(q.toLowerCase())) || ""}`
+        : (row.sessionTitle || "");
+    return {
+      runId: row.runId,
+      sessionId: row.sessionId,
+      sessionTitle: row.sessionTitle || "",
+      strategy: row.strategy,
+      status: row.status,
+      startedAt: row.startedAt,
+      totalCostUsd: row.totalCostUsd ?? null,
+      preview,
+      matched,
+    };
+  });
+}
+
+/** Top tags across the user's runs — drives the sidebar chip strip. */
+export async function getTopUserTags(
+  userId: string | null,
+  limit = 20
+): Promise<Array<{ tag: string; count: number }>> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+
+  if (!isDbReady()) {
+    const sessionIds = new Set(
+      Array.from(memSessions.values())
+        .filter((s) => (userId ? s.userId === userId : s.userId == null))
+        .map((s) => s.id)
+    );
+    const counts = new Map<string, number>();
+    for (const r of memRuns.values()) {
+      if (!sessionIds.has(r.sessionId)) continue;
+      for (const t of r.tags || []) {
+        counts.set(t, (counts.get(t) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, lim)
+      .map(([tag, count]) => ({ tag, count }));
+  }
+
+  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const params: any[] = userId ? [userId, lim] : [lim];
+  const limParam = userId ? `$2` : `$1`;
+  const r = await pool.query(
+    `SELECT t AS tag, COUNT(*)::int AS count
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id" = r."sessionId",
+            unnest(r."tags") AS t
+      WHERE ${userPredicate}
+      GROUP BY t
+      ORDER BY count DESC, t ASC
+      LIMIT ${limParam}`,
+    params
+  );
+  return r.rows.map((row: any) => ({ tag: String(row.tag), count: Number(row.count) }));
+}
+
+/** Daily cost/run timeseries for analytics — last `days` calendar days. */
+export async function getCostTimeseries(
+  userId: string | null,
+  days = 30
+): Promise<Array<{ date: string; runs: number; costUsd: number }>> {
+  await ensureQCoreTables(pool);
+  const d = Math.max(1, Math.min(365, days));
+
+  if (!isDbReady()) {
+    const sessionIds = new Set(
+      Array.from(memSessions.values())
+        .filter((s) => (userId ? s.userId === userId : s.userId == null))
+        .map((s) => s.id)
+    );
+    const buckets = new Map<string, { runs: number; costUsd: number }>();
+    const cutoff = Date.now() - d * 86_400_000;
+    for (const r of memRuns.values()) {
+      if (!sessionIds.has(r.sessionId)) continue;
+      const t = Date.parse(r.startedAt);
+      if (!Number.isFinite(t) || t < cutoff) continue;
+      const date = new Date(t).toISOString().slice(0, 10);
+      const cur = buckets.get(date) || { runs: 0, costUsd: 0 };
+      cur.runs += 1;
+      cur.costUsd += r.totalCostUsd ?? 0;
+      buckets.set(date, cur);
+    }
+    return Array.from(buckets.entries())
+      .map(([date, v]) => ({ date, runs: v.runs, costUsd: v.costUsd }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const userPredicate = userId ? `s."userId" = $1` : `s."userId" IS NULL`;
+  const params: any[] = userId ? [userId] : [];
+  const r = await pool.query(
+    `SELECT to_char(date_trunc('day', r."startedAt"), 'YYYY-MM-DD') AS date,
+            COUNT(*)::int AS runs,
+            COALESCE(SUM(r."totalCostUsd"), 0)::float8 AS "costUsd"
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id" = r."sessionId"
+      WHERE ${userPredicate}
+        AND r."startedAt" >= NOW() - INTERVAL '${d} days'
+      GROUP BY date
+      ORDER BY date ASC`,
+    params
+  );
+  return r.rows.map((row: any) => ({
+    date: String(row.date),
+    runs: Number(row.runs),
+    costUsd: Number(row.costUsd),
+  }));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    History (for follow-up turns)
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -733,4 +1180,664 @@ export async function buildHistoryContext(sessionId: string, maxTurns = 6): Prom
     if (run.finalContent) out.push({ role: "assistant", content: run.finalContent });
   }
   return out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Eval harness
+   ═══════════════════════════════════════════════════════════════════════
+   A suite holds a list of test cases (input + judge config). A run executes
+   each case through the orchestrator, applies the per-case judge, and
+   aggregates a 0..1 score so the user can track regressions over time. */
+
+export type EvalJudge =
+  | { type: "contains"; needle: string; caseSensitive?: boolean }
+  | { type: "equals"; expected: string; caseSensitive?: boolean; trim?: boolean }
+  | { type: "regex"; pattern: string; flags?: string }
+  | { type: "min_length"; chars: number }
+  | { type: "max_length"; chars: number }
+  | { type: "not_contains"; needle: string; caseSensitive?: boolean }
+  | { type: "llm_judge"; rubric: string; provider?: string; model?: string; passThreshold?: number };
+
+export type EvalCase = {
+  id: string;
+  name?: string;
+  input: string;
+  judge: EvalJudge;
+  weight?: number;
+};
+
+export type EvalSuiteRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  strategy: string;
+  overrides: any;
+  cases: EvalCase[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EvalCaseResult = {
+  caseId: string;
+  caseName: string;
+  passed: boolean;
+  judgeKind: string;
+  reason: string;
+  output: string;
+  costUsd: number;
+  durationMs: number;
+  runId?: string | null;
+  error?: string;
+};
+
+export type EvalRunRow = {
+  id: string;
+  suiteId: string;
+  ownerUserId: string;
+  status: "running" | "done" | "error" | "aborted";
+  score: number | null;
+  totalCases: number;
+  passedCases: number;
+  totalCostUsd: number;
+  results: EvalCaseResult[];
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+const memEvalSuites = new Map<string, EvalSuiteRow>();
+const memEvalRuns = new Map<string, EvalRunRow>();
+
+function normalizeStrategy(s?: string): string {
+  return s === "parallel" || s === "debate" ? s : "sequential";
+}
+
+function normalizeCases(cases: any): EvalCase[] {
+  if (!Array.isArray(cases)) return [];
+  const out: EvalCase[] = [];
+  for (const c of cases) {
+    if (!c || typeof c !== "object") continue;
+    const id = String(c.id || crypto.randomUUID()).slice(0, 64);
+    const input = String(c.input ?? "").slice(0, 4000);
+    if (!input.trim()) continue;
+    const j = c.judge || {};
+    let judge: EvalJudge | null = null;
+    if (j.type === "contains" && typeof j.needle === "string") {
+      judge = { type: "contains", needle: String(j.needle).slice(0, 500), caseSensitive: !!j.caseSensitive };
+    } else if (j.type === "not_contains" && typeof j.needle === "string") {
+      judge = { type: "not_contains", needle: String(j.needle).slice(0, 500), caseSensitive: !!j.caseSensitive };
+    } else if (j.type === "equals" && typeof j.expected === "string") {
+      judge = { type: "equals", expected: String(j.expected).slice(0, 4000), caseSensitive: !!j.caseSensitive, trim: j.trim !== false };
+    } else if (j.type === "regex" && typeof j.pattern === "string") {
+      judge = { type: "regex", pattern: String(j.pattern).slice(0, 500), flags: typeof j.flags === "string" ? j.flags.slice(0, 8) : "" };
+    } else if (j.type === "min_length" && Number.isFinite(Number(j.chars))) {
+      judge = { type: "min_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
+    } else if (j.type === "max_length" && Number.isFinite(Number(j.chars))) {
+      judge = { type: "max_length", chars: Math.max(0, Math.min(100000, Number(j.chars))) };
+    } else if (j.type === "llm_judge" && typeof j.rubric === "string" && j.rubric.trim()) {
+      const passThreshold = Number(j.passThreshold);
+      judge = {
+        type: "llm_judge",
+        rubric: String(j.rubric).slice(0, 4000),
+        provider: typeof j.provider === "string" ? j.provider.slice(0, 32) : undefined,
+        model: typeof j.model === "string" ? j.model.slice(0, 64) : undefined,
+        passThreshold: Number.isFinite(passThreshold) ? Math.max(0, Math.min(1, passThreshold)) : undefined,
+      };
+    } else {
+      continue;
+    }
+    const weight = Number.isFinite(Number(c.weight)) ? Math.max(0, Math.min(100, Number(c.weight))) : 1;
+    const name = c.name ? String(c.name).slice(0, 80) : `Case ${id.slice(0, 6)}`;
+    out.push({ id, name, input, judge, weight });
+    if (out.length >= 200) break;
+  }
+  return out;
+}
+
+export async function createEvalSuite(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  strategy?: string;
+  overrides?: any;
+  cases?: any;
+}): Promise<EvalSuiteRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (opts.name || "").trim().slice(0, 80) || "Untitled suite";
+  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
+  const strategy = normalizeStrategy(opts.strategy);
+  const overrides = opts.overrides && typeof opts.overrides === "object" ? opts.overrides : {};
+  const cases = normalizeCases(opts.cases);
+
+  if (!isDbReady()) {
+    const row: EvalSuiteRow = {
+      id,
+      ownerUserId: opts.ownerUserId,
+      name,
+      description,
+      strategy,
+      overrides,
+      cases,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memEvalSuites.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreEvalSuite"
+       ("id","ownerUserId","name","description","strategy","overrides","cases")
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)
+     RETURNING *`,
+    [id, opts.ownerUserId, name, description, strategy, JSON.stringify(overrides), JSON.stringify(cases)]
+  );
+  return r.rows[0] as EvalSuiteRow;
+}
+
+export async function listEvalSuites(userId: string, limit = 50): Promise<EvalSuiteRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(200, limit));
+  if (!isDbReady()) {
+    return Array.from(memEvalSuites.values())
+      .filter((s) => s.ownerUserId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, lim);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreEvalSuite"
+      WHERE "ownerUserId" = $1
+      ORDER BY "updatedAt" DESC
+      LIMIT $2`,
+    [userId, lim]
+  );
+  return r.rows as EvalSuiteRow[];
+}
+
+export async function getEvalSuite(id: string): Promise<EvalSuiteRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memEvalSuites.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreEvalSuite" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as EvalSuiteRow) || null;
+}
+
+export async function updateEvalSuite(
+  id: string,
+  userId: string,
+  patch: { name?: string; description?: string | null; strategy?: string; overrides?: any; cases?: any }
+): Promise<EvalSuiteRow | null> {
+  await ensureQCoreTables(pool);
+
+  if (!isDbReady()) {
+    const cur = memEvalSuites.get(id);
+    if (!cur || cur.ownerUserId !== userId) return null;
+    if (patch.name != null) cur.name = String(patch.name).trim().slice(0, 80) || cur.name;
+    if (patch.description !== undefined)
+      cur.description = patch.description ? String(patch.description).trim().slice(0, 400) : null;
+    if (patch.strategy) cur.strategy = normalizeStrategy(patch.strategy);
+    if (patch.overrides && typeof patch.overrides === "object") cur.overrides = patch.overrides;
+    if (patch.cases !== undefined) cur.cases = normalizeCases(patch.cases);
+    cur.updatedAt = nowIso();
+    return cur;
+  }
+
+  const sets: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (patch.name != null) {
+    const v = String(patch.name).trim().slice(0, 80);
+    if (v) {
+      sets.push(`"name"=$${i++}`);
+      params.push(v);
+    }
+  }
+  if (patch.description !== undefined) {
+    sets.push(`"description"=$${i++}`);
+    params.push(patch.description ? String(patch.description).trim().slice(0, 400) : null);
+  }
+  if (patch.strategy) {
+    sets.push(`"strategy"=$${i++}`);
+    params.push(normalizeStrategy(patch.strategy));
+  }
+  if (patch.overrides && typeof patch.overrides === "object") {
+    sets.push(`"overrides"=$${i++}::jsonb`);
+    params.push(JSON.stringify(patch.overrides));
+  }
+  if (patch.cases !== undefined) {
+    sets.push(`"cases"=$${i++}::jsonb`);
+    params.push(JSON.stringify(normalizeCases(patch.cases)));
+  }
+  if (!sets.length) return getEvalSuite(id);
+  sets.push(`"updatedAt"=NOW()`);
+  params.push(id, userId);
+  const r = await pool.query(
+    `UPDATE "QCoreEvalSuite" SET ${sets.join(", ")}
+      WHERE "id"=$${i++} AND "ownerUserId"=$${i++}
+      RETURNING *`,
+    params
+  );
+  return (r.rows?.[0] as EvalSuiteRow) || null;
+}
+
+export async function deleteEvalSuite(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memEvalSuites.get(id);
+    if (!s || s.ownerUserId !== userId) return false;
+    memEvalSuites.delete(id);
+    for (const [runId, run] of memEvalRuns) {
+      if (run.suiteId === id) memEvalRuns.delete(runId);
+    }
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreEvalSuite" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function createEvalRun(opts: {
+  suiteId: string;
+  ownerUserId: string;
+  totalCases: number;
+}): Promise<EvalRunRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  if (!isDbReady()) {
+    const row: EvalRunRow = {
+      id,
+      suiteId: opts.suiteId,
+      ownerUserId: opts.ownerUserId,
+      status: "running",
+      score: null,
+      totalCases: opts.totalCases,
+      passedCases: 0,
+      totalCostUsd: 0,
+      results: [],
+      errorMessage: null,
+      startedAt: nowIso(),
+      completedAt: null,
+    };
+    memEvalRuns.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreEvalRun"
+       ("id","suiteId","ownerUserId","status","totalCases","passedCases","totalCostUsd","results")
+     VALUES ($1,$2,$3,'running',$4,0,0,'[]'::jsonb)
+     RETURNING *`,
+    [id, opts.suiteId, opts.ownerUserId, opts.totalCases]
+  );
+  return r.rows[0] as EvalRunRow;
+}
+
+export async function updateEvalRun(
+  id: string,
+  patch: Partial<Omit<EvalRunRow, "id" | "suiteId" | "ownerUserId" | "startedAt">>
+): Promise<EvalRunRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const cur = memEvalRuns.get(id);
+    if (!cur) return null;
+    Object.assign(cur, patch);
+    return cur;
+  }
+  const sets: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (patch.status !== undefined) { sets.push(`"status"=$${i++}`); params.push(patch.status); }
+  if (patch.score !== undefined) { sets.push(`"score"=$${i++}`); params.push(patch.score); }
+  if (patch.passedCases !== undefined) { sets.push(`"passedCases"=$${i++}`); params.push(patch.passedCases); }
+  if (patch.totalCostUsd !== undefined) { sets.push(`"totalCostUsd"=$${i++}`); params.push(patch.totalCostUsd); }
+  if (patch.results !== undefined) { sets.push(`"results"=$${i++}::jsonb`); params.push(JSON.stringify(patch.results)); }
+  if (patch.errorMessage !== undefined) { sets.push(`"errorMessage"=$${i++}`); params.push(patch.errorMessage); }
+  if (patch.completedAt !== undefined) { sets.push(`"completedAt"=$${i++}`); params.push(patch.completedAt); }
+  if (!sets.length) return getEvalRun(id);
+  params.push(id);
+  const r = await pool.query(
+    `UPDATE "QCoreEvalRun" SET ${sets.join(", ")}
+      WHERE "id"=$${i++}
+      RETURNING *`,
+    params
+  );
+  return (r.rows?.[0] as EvalRunRow) || null;
+}
+
+export async function getEvalRun(id: string): Promise<EvalRunRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memEvalRuns.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreEvalRun" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as EvalRunRow) || null;
+}
+
+export async function listSuiteRuns(suiteId: string, limit = 30): Promise<EvalRunRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  if (!isDbReady()) {
+    return Array.from(memEvalRuns.values())
+      .filter((r) => r.suiteId === suiteId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, lim);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreEvalRun"
+      WHERE "suiteId"=$1
+      ORDER BY "startedAt" DESC
+      LIMIT $2`,
+    [suiteId, lim]
+  );
+  return r.rows as EvalRunRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompts library (V6-P)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type PromptRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  role: string;
+  content: string;
+  version: number;
+  parentPromptId: string | null;
+  isPublic: boolean;
+  importCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memPrompts = new Map<string, PromptRow>();
+
+const VALID_PROMPT_ROLES = new Set(["analyst", "writer", "writerB", "critic", "judge", "system"]);
+
+function normalizePromptRole(role: any): string {
+  if (typeof role !== "string") return "writer";
+  return VALID_PROMPT_ROLES.has(role) ? role : "writer";
+}
+
+export async function createPrompt(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  role?: string;
+  content: string;
+  parentPromptId?: string | null;
+  isPublic?: boolean;
+}): Promise<PromptRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (opts.name || "").trim().slice(0, 80);
+  if (!name) throw new Error("prompt name required");
+  const content = (opts.content || "").slice(0, 16000);
+  if (!content.trim()) throw new Error("prompt content required");
+  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
+  const role = normalizePromptRole(opts.role);
+  const isPublic = opts.isPublic === true;
+  const parentPromptId = opts.parentPromptId ? String(opts.parentPromptId) : null;
+
+  // Compute version: parent.version + 1, default 1.
+  let version = 1;
+  if (parentPromptId) {
+    const parent = await getPrompt(parentPromptId);
+    if (parent) version = (parent.version || 1) + 1;
+  }
+
+  if (!isDbReady()) {
+    const row: PromptRow = {
+      id,
+      ownerUserId: opts.ownerUserId,
+      name,
+      description,
+      role,
+      content,
+      version,
+      parentPromptId,
+      isPublic,
+      importCount: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memPrompts.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCorePrompt"
+       ("id","ownerUserId","name","description","role","content","version","parentPromptId","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     RETURNING *`,
+    [id, opts.ownerUserId, name, description, role, content, version, parentPromptId, isPublic]
+  );
+  return r.rows[0] as PromptRow;
+}
+
+export async function getPrompt(id: string): Promise<PromptRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memPrompts.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCorePrompt" WHERE "id"=$1`, [id]);
+  return (r.rows?.[0] as PromptRow) || null;
+}
+
+export async function listPrompts(userId: string, limit = 100): Promise<PromptRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(500, limit));
+  if (!isDbReady()) {
+    return Array.from(memPrompts.values())
+      .filter((p) => p.ownerUserId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, lim);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCorePrompt"
+      WHERE "ownerUserId"=$1
+      ORDER BY "updatedAt" DESC
+      LIMIT $2`,
+    [userId, lim]
+  );
+  return r.rows as PromptRow[];
+}
+
+export async function listPublicPrompts(query?: string, limit = 30): Promise<PromptRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  const q = (query || "").trim();
+
+  if (!isDbReady()) {
+    let rows = Array.from(memPrompts.values()).filter((p) => p.isPublic);
+    if (q) {
+      const ql = q.toLowerCase();
+      rows = rows.filter(
+        (p) =>
+          p.name.toLowerCase().includes(ql) ||
+          (p.description || "").toLowerCase().includes(ql) ||
+          p.content.toLowerCase().includes(ql)
+      );
+    }
+    rows.sort((a, b) => b.importCount - a.importCount || b.updatedAt.localeCompare(a.updatedAt));
+    return rows.slice(0, lim);
+  }
+  if (q) {
+    const r = await pool.query(
+      `SELECT * FROM "QCorePrompt"
+        WHERE "isPublic"=TRUE
+          AND ("name" ILIKE $1 OR "description" ILIKE $1 OR "content" ILIKE $1)
+        ORDER BY "importCount" DESC, "updatedAt" DESC
+        LIMIT $2`,
+      [`%${q}%`, lim]
+    );
+    return r.rows as PromptRow[];
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCorePrompt"
+      WHERE "isPublic"=TRUE
+      ORDER BY "importCount" DESC, "updatedAt" DESC
+      LIMIT $1`,
+    [lim]
+  );
+  return r.rows as PromptRow[];
+}
+
+export async function updatePrompt(
+  id: string,
+  userId: string,
+  patch: { name?: string; description?: string | null; role?: string; isPublic?: boolean }
+): Promise<PromptRow | null> {
+  await ensureQCoreTables(pool);
+
+  if (!isDbReady()) {
+    const cur = memPrompts.get(id);
+    if (!cur || cur.ownerUserId !== userId) return null;
+    if (patch.name != null) {
+      const v = String(patch.name).trim().slice(0, 80);
+      if (v) cur.name = v;
+    }
+    if (patch.description !== undefined)
+      cur.description = patch.description ? String(patch.description).trim().slice(0, 400) : null;
+    if (patch.role != null) cur.role = normalizePromptRole(patch.role);
+    if (patch.isPublic != null) cur.isPublic = patch.isPublic === true;
+    cur.updatedAt = nowIso();
+    return cur;
+  }
+
+  const sets: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (patch.name != null) {
+    const v = String(patch.name).trim().slice(0, 80);
+    if (v) {
+      sets.push(`"name"=$${i++}`);
+      params.push(v);
+    }
+  }
+  if (patch.description !== undefined) {
+    sets.push(`"description"=$${i++}`);
+    params.push(patch.description ? String(patch.description).trim().slice(0, 400) : null);
+  }
+  if (patch.role != null) {
+    sets.push(`"role"=$${i++}`);
+    params.push(normalizePromptRole(patch.role));
+  }
+  if (patch.isPublic != null) {
+    sets.push(`"isPublic"=$${i++}`);
+    params.push(patch.isPublic === true);
+  }
+  if (!sets.length) return getPrompt(id);
+  sets.push(`"updatedAt"=NOW()`);
+  params.push(id, userId);
+  const r = await pool.query(
+    `UPDATE "QCorePrompt" SET ${sets.join(", ")}
+      WHERE "id"=$${i++} AND "ownerUserId"=$${i++}
+      RETURNING *`,
+    params
+  );
+  return (r.rows?.[0] as PromptRow) || null;
+}
+
+export async function deletePrompt(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const p = memPrompts.get(id);
+    if (!p || p.ownerUserId !== userId) return false;
+    memPrompts.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCorePrompt" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Fork an existing prompt — creates a child version. Owner's own prompts
+ * are forkable freely (creates next version in the chain). Public prompts
+ * by other users get the importCount bumped + a fresh root for the forker.
+ */
+export async function forkPrompt(
+  parentId: string,
+  forkerUserId: string,
+  patch: { content?: string; name?: string }
+): Promise<PromptRow | null> {
+  const parent = await getPrompt(parentId);
+  if (!parent) return null;
+
+  const isOwn = parent.ownerUserId === forkerUserId;
+  const isAccessible = isOwn || parent.isPublic;
+  if (!isAccessible) return null;
+
+  if (!isOwn) {
+    // Bump parent.importCount.
+    if (!isDbReady()) {
+      parent.importCount += 1;
+      parent.updatedAt = nowIso();
+    } else {
+      await pool.query(
+        `UPDATE "QCorePrompt" SET "importCount" = "importCount" + 1, "updatedAt"=NOW() WHERE "id"=$1`,
+        [parentId]
+      );
+    }
+  }
+
+  return createPrompt({
+    ownerUserId: forkerUserId,
+    name: patch.name?.trim() || `${parent.name} (fork)`,
+    description: parent.description,
+    role: parent.role,
+    content: patch.content?.trim() ? patch.content.slice(0, 16000) : parent.content,
+    parentPromptId: isOwn ? parent.id : null,
+    isPublic: false,
+  });
+}
+
+/** Returns the version chain for a prompt: ancestors + descendants. */
+export async function getPromptVersionChain(rootId: string): Promise<PromptRow[]> {
+  await ensureQCoreTables(pool);
+  // Walk up to root, then collect all descendants.
+  const visited = new Set<string>();
+  const chain: PromptRow[] = [];
+
+  // Walk ancestors.
+  let cur = await getPrompt(rootId);
+  while (cur && !visited.has(cur.id)) {
+    visited.add(cur.id);
+    chain.unshift(cur);
+    if (!cur.parentPromptId) break;
+    cur = await getPrompt(cur.parentPromptId);
+  }
+
+  // BFS descendants from every node already in the chain (each ancestor +
+  // the original target). We keep visited for dedup, but the queue starts
+  // populated so descendants of nodes deeper than the root are reachable.
+  if (!chain.length) return [];
+
+  if (!isDbReady()) {
+    const all = Array.from(memPrompts.values());
+    const queue: PromptRow[] = [...chain];
+    while (queue.length) {
+      const node = queue.shift()!;
+      const children = all.filter((p) => p.parentPromptId === node.id && !visited.has(p.id));
+      for (const c of children) {
+        visited.add(c.id);
+        chain.push(c);
+        queue.push(c);
+      }
+    }
+    return chain.sort((a, b) => a.version - b.version);
+  }
+
+  const queue: PromptRow[] = [...chain];
+  while (queue.length) {
+    const node = queue.shift()!;
+    const r = await pool.query(`SELECT * FROM "QCorePrompt" WHERE "parentPromptId"=$1`, [node.id]);
+    for (const child of r.rows as PromptRow[]) {
+      if (visited.has(child.id)) continue;
+      visited.add(child.id);
+      chain.push(child);
+      queue.push(child);
+    }
+  }
+  return chain.sort((a, b) => a.version - b.version);
 }

@@ -60,6 +60,15 @@ type Health = {
   activeKeys: { hmac: string; ed25519: string };
 };
 
+type DilithiumPreview = {
+  algo: "ML-DSA-65";
+  kid: string;
+  mode: "preview";
+  digest: string;
+  valid: boolean | null;
+  note: string;
+};
+
 type SignResponse = {
   id: string;
   algoVersion: string;
@@ -68,6 +77,7 @@ type SignResponse = {
   payloadCanonical: string;
   hmac: { kid: string; algo: string; signature: string };
   ed25519: { kid: string; algo: string; signature: string; publicKey: string };
+  dilithium: DilithiumPreview | null;
   issuer: { userId: string | null; email: string | null };
   geo: {
     source: string | null;
@@ -88,7 +98,14 @@ type VerifyResponse = {
   payloadHash: string;
   hmac: { kid: string; valid: boolean };
   ed25519: { kid: string | null; valid: boolean | null };
+  dilithium: DilithiumPreview | null;
   stateless?: boolean;
+};
+
+type RateLimitInfo = {
+  limit: number;
+  remaining: number;
+  resetAt: number | null;
 };
 
 type StatsResponse = {
@@ -113,6 +130,17 @@ type RecentItem = {
   revoked: boolean;
   country: string | null;
   publicUrl: string;
+};
+
+type Webhook = {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  createdAt: string | null;
+  lastFiredAt: string | null;
+  lastStatus: number | null;
+  lastError: string | null;
 };
 
 type RecentResponse = {
@@ -207,6 +235,19 @@ export default function QSignPage() {
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState<SignResponse | null>(null);
   const [hashAtSign, setHashAtSign] = useState<string>("");
+  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
+  const [, setRateTick] = useState(0);
+  const [hashingFile, setHashingFile] = useState(false);
+
+  // webhooks
+  const [webhooks, setWebhooks] = useState<Webhook[] | null>(null);
+  const [webhookUrlInput, setWebhookUrlInput] = useState("");
+  const [creatingWebhook, setCreatingWebhook] = useState(false);
+  const [newWebhookSecret, setNewWebhookSecret] = useState<{
+    id: string;
+    secret: string;
+  } | null>(null);
+  const [sdkLang, setSdkLang] = useState<"curl" | "ts" | "python">("curl");
 
   // verify pane
   const [verifyPayload, setVerifyPayload] = useState("");
@@ -242,6 +283,17 @@ export default function QSignPage() {
       .then((d: Health) => setHealth(d))
       .catch(() => setHealth(null));
   }, []);
+
+  /* — tick countdown timer for rate-limit reset, only while a rate-limit
+   * window is known. The 1s tick triggers re-render via setRateTick so the
+   * "resets in Ns" text stays current; the actual reset value is read from
+   * RateLimit-Reset response headers and stored in `rateLimit.resetAt`.
+   */
+  useEffect(() => {
+    if (!rateLimit?.resetAt) return;
+    const t = setInterval(() => setRateTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [rateLimit?.resetAt]);
 
   /* — live stats + recent feed (refetched after every successful sign) — */
   const loadMetrics = () => {
@@ -284,6 +336,139 @@ export default function QSignPage() {
 
   const hashDrift =
     !!signed && !!hashAtSign && !!payloadHash && hashAtSign !== payloadHash;
+
+  /* — webhooks: list / create / delete —
+   * The list endpoint is auth-gated; we only fetch when a token is present.
+   * Create returns a one-time `secret` that we surface in a banner — once
+   * the user dismisses it the secret is unrecoverable, matching the
+   * server's "shown once" contract.
+   */
+  const loadWebhooks = async (currentToken?: string) => {
+    const t = (currentToken ?? token).trim();
+    if (!t) {
+      setWebhooks(null);
+      return;
+    }
+    try {
+      const r = await fetch(apiUrl("/api/qsign/v2/webhooks"), {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!r.ok) {
+        setWebhooks(null);
+        return;
+      }
+      const d = await r.json();
+      setWebhooks(d.webhooks || []);
+    } catch {
+      setWebhooks(null);
+    }
+  };
+
+  useEffect(() => {
+    if (token) loadWebhooks(token);
+    else setWebhooks(null);
+  }, [token]);
+
+  const createWebhook = async () => {
+    if (!token.trim()) {
+      showToast("Sign in first", "error");
+      return;
+    }
+    const url = webhookUrlInput.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      showToast("URL must start with http(s)://", "error");
+      return;
+    }
+    setCreatingWebhook(true);
+    try {
+      const r = await fetch(apiUrl("/api/qsign/v2/webhooks"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token.trim()}`,
+        },
+        body: JSON.stringify({ url, events: ["sign", "revoke"] }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showToast(d?.error || `Create failed (${r.status})`, "error");
+        return;
+      }
+      setNewWebhookSecret({ id: d.id, secret: d.secret });
+      setWebhookUrlInput("");
+      await loadWebhooks();
+      showToast("Webhook created — copy the secret now", "success");
+    } catch (e: any) {
+      showToast("Create error: " + (e?.message || String(e)), "error");
+    } finally {
+      setCreatingWebhook(false);
+    }
+  };
+
+  const deleteWebhook = async (id: string) => {
+    if (!token.trim()) return;
+    try {
+      const r = await fetch(apiUrl(`/api/qsign/v2/webhooks/${id}`), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        showToast(d?.error || `Delete failed (${r.status})`, "error");
+        return;
+      }
+      await loadWebhooks();
+      showToast("Webhook deleted", "success");
+    } catch (e: any) {
+      showToast("Delete error: " + (e?.message || String(e)), "error");
+    }
+  };
+
+  /* — hash a file client-side and load it as a sign-ready payload —
+   * Reads the entire file into memory and SHA-256s it via WebCrypto. The
+   * payload becomes a JSON envelope { type, name, size, mime, sha256,
+   * signedAt } that the server signs as-is — the file itself never leaves
+   * the browser. Suits documents, images, audio, anything whose integrity
+   * matters but whose contents are private.
+   *
+   * Memory cap: 50MB. Larger files would block the main thread and ESM
+   * crypto can't stream digests.
+   */
+  const FILE_MAX_BYTES = 50 * 1024 * 1024;
+  const hashFile = async (file: File) => {
+    if (file.size > FILE_MAX_BYTES) {
+      showToast(
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB > 50MB cap)`,
+        "error",
+      );
+      return;
+    }
+    setHashingFile(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buf);
+      const hex = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const envelope = {
+        type: "file",
+        name: file.name,
+        size: file.size,
+        mime: file.type || "application/octet-stream",
+        sha256: hex,
+        signedAt: new Date().toISOString(),
+      };
+      setPayloadText(JSON.stringify(envelope, null, 2));
+      setPayloadOrigin(
+        `file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
+      );
+      showToast(`Hashed ${file.name}`, "success");
+    } catch (e: any) {
+      showToast(`Hash failed: ${e?.message || String(e)}`, "error");
+    } finally {
+      setHashingFile(false);
+    }
+  };
 
   const requestGps = () => {
     if (!("geolocation" in navigator)) {
@@ -344,6 +529,28 @@ export default function QSignPage() {
         },
         body: JSON.stringify(body),
       });
+      // RateLimit-* headers are exposed by express-rate-limit when standardHeaders=true.
+      // CORS-cross-origin reads require Access-Control-Expose-Headers on the server, so
+      // when fetched same-origin (Vercel→Vercel rewrite or local dev) values arrive; on
+      // cross-origin they may be null and the card simply won't render.
+      const limitH = res.headers.get("RateLimit-Limit");
+      const remH = res.headers.get("RateLimit-Remaining");
+      const resetH = res.headers.get("RateLimit-Reset");
+      if (limitH && remH) {
+        const limit = Number(limitH);
+        const remaining = Number(remH);
+        const resetSec = resetH ? Number(resetH) : null;
+        if (Number.isFinite(limit) && Number.isFinite(remaining)) {
+          setRateLimit({
+            limit,
+            remaining,
+            resetAt:
+              resetSec !== null && Number.isFinite(resetSec)
+                ? Date.now() + resetSec * 1000
+                : null,
+          });
+        }
+      }
       const data = await res.json();
       if (!res.ok) {
         showToast(data?.error || `Sign failed (${res.status})`, "error");
@@ -703,25 +910,52 @@ export default function QSignPage() {
                 }}
               >
                 <div style={label}>Payload (JSON)</div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPayloadText(JSON.stringify(SAMPLE_PAYLOAD, null, 2))
-                  }
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#0d9488",
-                    cursor: "pointer",
-                    padding: 0,
-                    textTransform: "none",
-                    letterSpacing: 0,
-                  }}
-                >
-                  Load sample
-                </button>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <label
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: hashingFile ? "#94a3b8" : "#6366f1",
+                      cursor: hashingFile ? "default" : "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    {hashingFile ? "Hashing…" : "📎 Hash a file"}
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          void hashFile(f);
+                          e.target.value = "";
+                        }
+                      }}
+                      disabled={hashingFile}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPayloadText(JSON.stringify(SAMPLE_PAYLOAD, null, 2))
+                    }
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#0d9488",
+                      cursor: "pointer",
+                      padding: 0,
+                      textTransform: "none",
+                      letterSpacing: 0,
+                    }}
+                  >
+                    Load sample
+                  </button>
+                </div>
               </div>
               <textarea
                 value={payloadText}
@@ -909,6 +1143,48 @@ export default function QSignPage() {
               {signing ? "Signing…" : "Sign with HMAC + Ed25519"}
             </button>
 
+            {rateLimit
+              ? (() => {
+                  const secsLeft =
+                    rateLimit.resetAt !== null
+                      ? Math.max(0, Math.round((rateLimit.resetAt - Date.now()) / 1000))
+                      : null;
+                  const low = rateLimit.remaining <= 5;
+                  return (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        background: low ? "rgba(220,38,38,0.06)" : "#f1f5f9",
+                        border: low
+                          ? "1px solid rgba(220,38,38,0.25)"
+                          : "1px solid rgba(15,23,42,0.06)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        fontSize: 11,
+                      }}
+                    >
+                      <span style={{ color: "#64748b", fontWeight: 700 }}>
+                        Sign rate limit (per IP)
+                      </span>
+                      <span
+                        style={{
+                          ...mono,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: low ? "#b91c1c" : "#0f172a",
+                        }}
+                      >
+                        {rateLimit.remaining}/{rateLimit.limit} left
+                        {secsLeft !== null ? ` · resets in ${secsLeft}s` : ""}
+                      </span>
+                    </div>
+                  );
+                })()
+              : null}
+
             {/* signed result */}
             {signed ? (
               <div
@@ -939,6 +1215,46 @@ export default function QSignPage() {
                     value={signed.ed25519.publicKey}
                     onCopy={() => copy(signed.ed25519.publicKey, "Public key")}
                   />
+                  {signed.dilithium ? (
+                    <div
+                      style={{
+                        padding: 10,
+                        borderRadius: 8,
+                        background: "rgba(99,102,241,0.06)",
+                        border: "1px dashed rgba(99,102,241,0.35)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#4338ca" }}>
+                          ML-DSA-65 (Dilithium-3) · {signed.dilithium.mode}
+                        </div>
+                        <span style={chip("rgba(99,102,241,0.18)", "#4338ca")}>
+                          PQ slot reserved
+                        </span>
+                      </div>
+                      <code
+                        style={{
+                          ...mono,
+                          fontSize: 10,
+                          wordBreak: "break-all",
+                          color: "#475569",
+                        }}
+                      >
+                        digest: {signed.dilithium.digest.slice(0, 64)}…
+                      </code>
+                      <div style={{ marginTop: 4, fontSize: 10, color: "#64748b" }}>
+                        Real post-quantum signature lands in v2.1; current digest is a
+                        deterministic SHA-512 fingerprint of canonical||kid.
+                      </div>
+                    </div>
+                  ) : null}
                   {signed.geo ? (
                     <div style={{ fontSize: 11, color: "#475569" }}>
                       geo: {signed.geo.source}
@@ -973,6 +1289,43 @@ export default function QSignPage() {
                   >
                     Open public verify page →
                   </Link>
+                  <button
+                    onClick={() => {
+                      const verifyAbs =
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/qsign/verify/${signed.id}`
+                          : signed.publicUrl;
+                      copy(verifyAbs, "Verify link");
+                    }}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Copy link
+                  </button>
+                  <a
+                    href={apiUrl(`/api/qsign/v2/${signed.id}/pdf?download=1`)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                      color: "#0f172a",
+                    }}
+                  >
+                    Download PDF
+                  </a>
                   <button
                     onClick={() => copy(JSON.stringify(signed, null, 2), "Full response")}
                     style={{
@@ -1122,6 +1475,27 @@ export default function QSignPage() {
                       </strong>
                     </div>
                   ) : null}
+                  {verifyResult.dilithium ? (
+                    <div>
+                      Dilithium-3 (preview):{" "}
+                      <strong
+                        style={{
+                          color:
+                            verifyResult.dilithium.valid === null
+                              ? "#64748b"
+                              : verifyResult.dilithium.valid
+                              ? "#4338ca"
+                              : "#b91c1c",
+                        }}
+                      >
+                        {verifyResult.dilithium.valid === null
+                          ? "not checked"
+                          : verifyResult.dilithium.valid
+                          ? "preview-ok"
+                          : "preview-mismatch"}
+                      </strong>
+                    </div>
+                  ) : null}
                   <div style={{ ...mono, color: "#64748b", fontSize: 11 }}>
                     hash: {verifyResult.payloadHash}
                   </div>
@@ -1225,6 +1599,352 @@ export default function QSignPage() {
           </div>
         ) : null}
 
+        {/* ─── Webhooks (auth-gated) ─── */}
+        {token ? (
+          <div style={{ marginTop: 24, ...card }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 15 }}>Webhooks</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  HTTP callbacks fired on <code>sign</code> + <code>revoke</code>{" "}
+                  events for your signatures. Body is HMAC-SHA256 signed via the
+                  webhook secret; receivers verify the <code>X-QSign-Signature</code> header.
+                </div>
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "#64748b",
+                  fontFamily: "monospace",
+                }}
+              >
+                {webhooks ? `${webhooks.length}/10 used` : "—"}
+              </span>
+            </div>
+
+            {newWebhookSecret ? (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "rgba(245,158,11,0.08)",
+                  border: "1px solid rgba(245,158,11,0.4)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: "#92400e",
+                    marginBottom: 6,
+                  }}
+                >
+                  ⚠ Save this secret — it is shown ONCE
+                </div>
+                <code
+                  style={{
+                    ...mono,
+                    fontSize: 11,
+                    wordBreak: "break-all",
+                    display: "block",
+                    background: "#fff",
+                    padding: 8,
+                    borderRadius: 6,
+                    border: "1px solid rgba(245,158,11,0.3)",
+                    color: "#0f172a",
+                  }}
+                >
+                  {newWebhookSecret.secret}
+                </code>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    onClick={() =>
+                      copy(newWebhookSecret.secret, "Webhook secret")
+                    }
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Copy secret
+                  </button>
+                  <button
+                    onClick={() => setNewWebhookSecret(null)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#0f172a",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    I saved it — dismiss
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+              <input
+                value={webhookUrlInput}
+                onChange={(e) => setWebhookUrlInput(e.target.value)}
+                placeholder="https://your-app.example.com/qsign-webhook"
+                style={{ ...inputStyle, ...mono, fontSize: 12, flex: 1, minWidth: 240 }}
+              />
+              <button
+                onClick={createWebhook}
+                disabled={creatingWebhook || !webhookUrlInput.trim()}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  background:
+                    creatingWebhook || !webhookUrlInput.trim() ? "#94a3b8" : "#6366f1",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor:
+                    creatingWebhook || !webhookUrlInput.trim() ? "default" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {creatingWebhook ? "Creating…" : "Add webhook"}
+              </button>
+            </div>
+
+            {webhooks === null ? (
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading…</div>
+            ) : webhooks.length === 0 ? (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#64748b",
+                  fontStyle: "italic",
+                  padding: "16px 0",
+                }}
+              >
+                No webhooks yet. Add one above to start receiving sign / revoke events.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {webhooks.map((wh) => (
+                  <div
+                    key={wh.id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto auto",
+                      gap: 12,
+                      alignItems: "center",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                      border: "1px solid rgba(15,23,42,0.05)",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          ...mono,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#0f172a",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {wh.url}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+                        events: {wh.events.join(", ")}
+                        {wh.lastFiredAt
+                          ? ` · last fired ${new Date(wh.lastFiredAt).toISOString().slice(0, 19).replace("T", " ")}${wh.lastStatus ? ` (HTTP ${wh.lastStatus})` : ""}`
+                          : " · never fired"}
+                        {wh.lastError ? ` · err: ${wh.lastError.slice(0, 60)}` : ""}
+                      </div>
+                    </div>
+                    <span
+                      style={chip(
+                        wh.active ? "rgba(16,185,129,0.12)" : "rgba(148,163,184,0.18)",
+                        wh.active ? "#047857" : "#475569",
+                      )}
+                    >
+                      {wh.active ? "active" : "off"}
+                    </span>
+                    <button
+                      onClick={() => deleteWebhook(wh.id)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(220,38,38,0.25)",
+                        background: "#fff",
+                        color: "#b91c1c",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* ─── Use the API (SDK examples) ─── */}
+        <div style={{ marginTop: 24, ...card }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 10,
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 15 }}>Use the API</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                Live snippets — copy and paste. Replace{" "}
+                <code style={mono}>$TOKEN</code> with your bearer.
+                {signed ? (
+                  <>
+                    {" "}
+                    Signature id <code style={mono}>{signed.id.slice(0, 8)}…</code> from
+                    your latest sign is preserved.
+                  </>
+                ) : null}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {(["curl", "ts", "python"] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => setSdkLang(lang)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(15,23,42,0.15)",
+                    background: sdkLang === lang ? "#0f172a" : "#fff",
+                    color: sdkLang === lang ? "#fff" : "#0f172a",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {lang === "curl" ? "curl" : lang === "ts" ? "TypeScript" : "Python"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <pre
+            style={{
+              ...mono,
+              background: "#0f172a",
+              color: "#e2e8f0",
+              padding: 14,
+              borderRadius: 10,
+              fontSize: 11.5,
+              overflowX: "auto",
+              margin: 0,
+              lineHeight: 1.6,
+            }}
+          >
+            {sdkLang === "curl"
+              ? buildCurlSnippet(signed)
+              : sdkLang === "ts"
+                ? buildTsSnippet(signed)
+                : buildPythonSnippet(signed)}
+          </pre>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() =>
+                copy(
+                  sdkLang === "curl"
+                    ? buildCurlSnippet(signed)
+                    : sdkLang === "ts"
+                      ? buildTsSnippet(signed)
+                      : buildPythonSnippet(signed),
+                  "Snippet",
+                )
+              }
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Copy snippet
+            </button>
+            <a
+              href={apiUrl("/api/qsign/v2/openapi.json")}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#0f172a",
+                textDecoration: "none",
+              }}
+            >
+              OpenAPI 3.0 spec ↗
+            </a>
+            <a
+              href="https://github.com/Dossymbek281078/AEVION/tree/main/aevion-globus-backend/sdk"
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.15)",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#0f172a",
+                textDecoration: "none",
+              }}
+            >
+              SDK packages ↗
+            </a>
+          </div>
+        </div>
+
         {/* ─── How it works ─── */}
         <div
           style={{
@@ -1273,6 +1993,119 @@ export default function QSignPage() {
       </ProductPageShell>
     </main>
   );
+}
+
+/* ───────── SDK snippet builders ─────────
+ * Live code samples shown in the "Use the API" card. When the user has
+ * just signed a payload, the latest signature id flows into the verify
+ * URL examples so partners see a real working call rather than a stub.
+ */
+
+function buildCurlSnippet(signed: SignResponse | null): string {
+  const sigId = signed?.id ?? "<signature-id>";
+  const hmacKid = signed?.hmac.kid ?? "qsign-hmac-v1";
+  return `# 1. health
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/health | jq
+
+# 2. sign (idempotent)
+curl -s -X POST https://aevion-production-a70c.up.railway.app/api/qsign/v2/sign \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: order-2026-04-28-001" \\
+  -d '{"payload":{"artifact":"invoice-001","amount":1500.00,"currency":"USD"}}' | jq
+
+# 3. public verify (no auth)
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/${sigId}/public | jq
+
+# 4. PDF stamp
+curl -sL "https://aevion-production-a70c.up.railway.app/api/qsign/v2/${sigId}/pdf?download=1" \\
+  -o signed-${sigId.slice(0, 8)}.pdf
+
+# 5. recent activity
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/audit?limit=20 \\
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 6. Prometheus metrics scrape
+curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/metrics`;
+}
+
+function buildTsSnippet(signed: SignResponse | null): string {
+  const sigId = signed?.id ?? "<signature-id>";
+  return `// npm install @aevion/qsign-client
+import { QSignClient } from "@aevion/qsign-client";
+
+const qsign = new QSignClient({
+  baseUrl: "https://aevion-production-a70c.up.railway.app/api/qsign/v2",
+  token: process.env.AEVION_TOKEN,
+});
+
+// Sign — idempotent retries return the same id
+const sig = await qsign.sign(
+  { artifact: "invoice-001", amount: 1500.00, currency: "USD" },
+  { idempotencyKey: "order-2026-04-28-001" },
+);
+console.log(sig.id, sig.publicUrl);
+
+// Verify (stateless)
+const r = await qsign.verify({
+  payload: { artifact: "invoice-001", amount: 1500.00, currency: "USD" },
+  hmacKid: sig.hmac.kid,
+  signatureHmac: sig.hmac.signature,
+  ed25519Kid: sig.ed25519?.kid,
+  signatureEd25519: sig.ed25519?.signature,
+});
+console.log("valid:", r.valid);
+
+// DB-backed verify (includes revocation status)
+const live = await qsign.verifyById("${sigId}");
+console.log("revoked:", live.revoked);
+
+// Audit log
+const audit = await qsign.listAudit({ event: "sign", limit: 20 });
+audit.items.forEach((e) => console.log(e.at, e.signatureId));
+
+// Webhooks
+const wh = await qsign.createWebhook("https://your-app.example.com/qsign-events");
+console.log("save secret ONCE:", wh.secret);`;
+}
+
+function buildPythonSnippet(signed: SignResponse | null): string {
+  const sigId = signed?.id ?? "<signature-id>";
+  return `# pip install requests
+import os, requests
+
+BASE = "https://aevion-production-a70c.up.railway.app/api/qsign/v2"
+TOKEN = os.environ["AEVION_TOKEN"]
+H = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+# 1. sign — Idempotency-Key makes retries safe
+r = requests.post(
+    f"{BASE}/sign",
+    json={"payload": {"artifact": "invoice-001", "amount": 1500.0, "currency": "USD"}},
+    headers={**H, "Idempotency-Key": "order-2026-04-28-001"},
+)
+sig = r.json()
+print(sig["id"], sig["publicUrl"])
+
+# 2. verify (stateless)
+v = requests.post(f"{BASE}/verify", json={
+    "payload": {"artifact": "invoice-001", "amount": 1500.0, "currency": "USD"},
+    "hmacKid": sig["hmac"]["kid"],
+    "signatureHmac": sig["hmac"]["signature"],
+    "ed25519Kid": sig["ed25519"]["kid"],
+    "signatureEd25519": sig["ed25519"]["signature"],
+}).json()
+print("valid:", v["valid"])
+
+# 3. DB-backed verify
+live = requests.get(f"{BASE}/verify/${sigId}").json()
+print("revoked:", live["revoked"])
+
+# 4. Webhook receiver — verify X-QSign-Signature
+import hmac, hashlib
+def verify_qsign_webhook(raw_body: bytes, header_sig: str, secret: str) -> bool:
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header_sig.lower())`;
 }
 
 /* ───────── sub-components ───────── */

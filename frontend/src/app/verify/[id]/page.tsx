@@ -38,6 +38,7 @@ type VerifyData = {
     keyRotatedSinceSigning?: boolean;
     quantumShieldStatus: string;
     shieldLegacy?: boolean;
+    shieldId?: string | null;
     shards: number;
     threshold: number;
     authorCosign?:
@@ -224,8 +225,8 @@ export default function VerifyPage() {
           </div>
           <div style={{ fontSize: 14, color: "#475569" }}>
             {allChecksPass
-              ? "This certificate is authentic and the protected work's integrity is confirmed."
-              : "Some integrity checks did not pass. See details below."}
+              ? "Every cryptographic layer matches. The work below was registered by the named author at the time shown, and no field has been altered since."
+              : "One or more integrity layers did not match. The per-layer breakdown below shows exactly which check failed and what it means."}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
             Verified at {new Date(data.verifiedAt).toLocaleString()} · Check #{data.stats.verifiedCount}
@@ -244,16 +245,19 @@ export default function VerifyPage() {
           </div>
           <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 6, fontSize: 12, color: "#0f172a", lineHeight: 1.6 }}>
             <li>
-              <b>Status banner</b> above tells you if the certificate passed every check.
+              <b>Status banner</b> above is the one-line verdict — green only if every applicable layer matched.
             </li>
             <li>
-              The <b>Integrity Checks</b> grid breaks the verdict into per-layer results — content hash, HMAC, Shamir, and key version.
+              <b>Integrity Checks</b> break that verdict apart: content hash, HMAC (with key version), Shamir shielding, and the author&apos;s own co-signature. Each tile is one independent test.
             </li>
             <li>
-              <b>Shard Distribution</b> shows where the three Shamir shards live; only two are needed to recover.
+              <b>Shard Distribution</b> shows where the Ed25519 private key was split. AEVION holds at most 1 of 3, so we cannot forge or recover this key alone.
             </li>
             <li>
-              <b>Bitcoin Anchor</b> proves <i>when</i> the certificate existed — verifiable without trusting AEVION.
+              <b>Bitcoin Anchor</b> records <i>when</i> the certificate existed — settled by Bitcoin&apos;s proof-of-work, not by us.
+            </li>
+            <li>
+              <b>Independent of AEVION</b> at the bottom downloads a self-contained bundle — verify offline today, in 10 years, on any machine.
             </li>
           </ol>
         </div>
@@ -349,7 +353,7 @@ export default function VerifyPage() {
               Cryptographic Proof
               <InfoTip
                 label="Cryptographic Proof"
-                text="Five tamper-evident fields. Each one independently links the certificate to the protected work — change any byte and at least one of these will stop matching."
+                text="Three derived proofs (SHA-256 content hash, HMAC signature, Ed25519 signature) plus the algorithm and certificate ID for context. Tamper with any registered field and at least one of the three derived values stops matching."
               />
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
@@ -503,6 +507,24 @@ export default function VerifyPage() {
                 </div>
               ))}
             </div>
+
+            {integrity.shieldId && (
+              <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 10, background: "linear-gradient(135deg, rgba(13,148,136,0.06), rgba(59,130,246,0.04))", border: "1px solid rgba(13,148,136,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" as const, gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 18 }} aria-hidden>🛡️</span>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e" }}>Linked Quantum Shield record</div>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", color: "#475569", marginTop: 2 }}>{integrity.shieldId}</div>
+                  </div>
+                </div>
+                <a
+                  href={`/quantum-shield/${integrity.shieldId}`}
+                  style={{ padding: "8px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontSize: 12, fontWeight: 800 }}
+                >
+                  View Shield →
+                </a>
+              </div>
+            )}
           </div>
         </div>
 
@@ -762,9 +784,7 @@ export default function VerifyPage() {
             />
           </div>
           <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.55, marginBottom: 10 }}>
-            Download a self-contained verification bundle. If AEVION ever goes offline,
-            this single file plus a browser is enough to prove the certificate&apos;s
-            authenticity — Bitcoin and Ed25519 are the trust anchors, not us.
+            Most platforms&apos; certificates die when the platform dies. Ours don&apos;t. Download the bundle below — one <code style={{ fontSize: 11, padding: "1px 5px", background: "rgba(99,102,241,0.12)", borderRadius: 4 }}>.json</code> with every proof — then drop it into the offline verifier on any machine, any year. Bitcoin and Ed25519 are the trust anchors. We&apos;re replaceable; the math is not.
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a
@@ -797,7 +817,7 @@ export default function VerifyPage() {
             🛡️ Protect Your Own Work
           </a>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 12 }}>
-            AEVION Digital IP Bureau · Powered by SHA-256, Ed25519, and 2-of-3 Shamir&apos;s Secret Sharing
+            AEVION Digital IP Bureau · SHA-256 · Ed25519 · Shamir 2-of-3 · OpenTimestamps + Bitcoin
           </div>
         </div>
       </div>

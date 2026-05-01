@@ -97,6 +97,8 @@ type RunState = {
   agentConfig?: any;
   persisted?: boolean;
   shareToken?: string | null;
+  /** Free-form tags attached by the owner (PATCH /runs/:id/tags). */
+  tags?: string[];
 };
 
 type SessionSummary = {
@@ -320,6 +322,16 @@ export default function QCoreMultiAgentPage() {
     writerB: { provider: "", model: "" },
     critic: { provider: "", model: "" },
   });
+  // V6-P integration: per-role custom system prompt selection. Holds the
+  // promptId that the orchestrator will fetch + inject as systemPrompt for
+  // that role. Empty string = use the role's default prompt.
+  const [promptSelections, setPromptSelections] = useState<Record<ConfigRoleId, string>>({
+    analyst: "",
+    writer: "",
+    writerB: "",
+    critic: "",
+  });
+  const [userPrompts, setUserPrompts] = useState<Array<{ id: string; name: string; role: string; version: number }>>([]);
   const [maxRevisions, setMaxRevisions] = useState(1);
   // Optional spend cap per run (USD). 0 = no cap. Persisted in localStorage
   // so investors don't accidentally start a $5 run during a demo.
@@ -329,6 +341,21 @@ export default function QCoreMultiAgentPage() {
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
+  // V4-E agent marketplace
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const [marketplacePresets, setMarketplacePresets] = useState<Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    strategy: string;
+    overrides: any;
+    importCount: number;
+    updatedAt: string;
+  }>>([]);
+  const [marketplaceQuery, setMarketplaceQuery] = useState("");
+  const [marketplaceBusy, setMarketplaceBusy] = useState(false);
+  const [marketplaceShareFor, setMarketplaceShareFor] = useState<string | null>(null);
+  const [marketplaceShareDesc, setMarketplaceShareDesc] = useState("");
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   // Per-user webhook config (auth-required). null = not loaded yet,
   // undefined = loaded but user has no webhook set.
@@ -354,6 +381,18 @@ export default function QCoreMultiAgentPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  // Sidebar quick-find + tag chip strip (feat/qcore-extras 2026-04-29).
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<Array<{
+    runId: string; sessionId: string; sessionTitle: string;
+    matched: "input" | "final" | "title" | "tag"; preview: string;
+  }>>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [topTags, setTopTags] = useState<Array<{ tag: string; count: number }>>([]);
+  // Inline refine state per-run.
+  const [refineOpen, setRefineOpen] = useState<string | null>(null);
+  const [refineText, setRefineText] = useState<string>("");
+  const [refineBusy, setRefineBusy] = useState<boolean>(false);
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -407,6 +446,35 @@ export default function QCoreMultiAgentPage() {
       }
     })();
   }, []);
+
+  /* ── Lazy-load user's prompts when config panel opens ── */
+  useEffect(() => {
+    if (!configOpen) return;
+    if (typeof window === "undefined") return;
+    const headers = bearerHeader();
+    if (!("Authorization" in headers)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/qcoreai/prompts?limit=200"), { headers });
+        if (!r.ok || cancelled) return;
+        const data = await r.json();
+        if (!cancelled) {
+          setUserPrompts(
+            (data.items || []).map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              role: p.role,
+              version: p.version,
+            }))
+          );
+        }
+      } catch {
+        /* ignore — prompts panel just stays empty */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [configOpen]);
 
   /* ── Lazy-load personal webhook config when config panel opens ── */
   useEffect(() => {
@@ -574,6 +642,77 @@ export default function QCoreMultiAgentPage() {
     persistPresets(presets.filter((p) => p.id !== id));
   }, [presets, persistPresets]);
 
+  /* ── V4-E Agent marketplace ── */
+  const loadMarketplace = useCallback(async (q?: string) => {
+    setMarketplaceBusy(true);
+    try {
+      const url = q
+        ? apiUrl(`/api/qcoreai/presets/public?q=${encodeURIComponent(q)}`)
+        : apiUrl(`/api/qcoreai/presets/public`);
+      const res = await fetch(url, { headers: bearerHeader() });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.items)) setMarketplacePresets(data.items);
+    } catch { /* ignore */ } finally {
+      setMarketplaceBusy(false);
+    }
+  }, []);
+
+  const importMarketplacePreset = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/presets/${encodeURIComponent(id)}/import`), {
+        method: "POST",
+        headers: bearerHeader(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.preset) throw new Error(data?.error || "import failed");
+      const p = data.preset;
+      // Add to localStorage presets — generate new local id, suffix collisions.
+      const existingNames = new Set(presets.map((x) => x.name));
+      let name = p.name;
+      let n = 2;
+      while (existingNames.has(name)) name = `${p.name} (${n++})`;
+      const next: AgentPreset[] = [
+        ...presets,
+        {
+          id: crypto.randomUUID(),
+          name,
+          strategy: (p.strategy === "parallel" || p.strategy === "debate" ? p.strategy : "sequential") as Strategy,
+          overrides: (p.overrides && typeof p.overrides === "object" ? p.overrides : {}) as AgentPreset["overrides"],
+          maxRevisions: typeof p.maxRevisions === "number" ? p.maxRevisions : 1,
+        },
+      ];
+      persistPresets(next);
+      // Refresh the list (importCount bumped server-side).
+      void loadMarketplace(marketplaceQuery);
+    } catch (e: any) {
+      setGlobalError(e?.message || "import failed");
+    }
+  }, [presets, persistPresets, marketplaceQuery, loadMarketplace]);
+
+  const sharePresetToMarketplace = useCallback(async (preset: AgentPreset, description: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/presets/share`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({
+          name: preset.name,
+          description: description.trim() || null,
+          strategy: preset.strategy,
+          overrides: preset.overrides,
+          isPublic: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setMarketplaceShareFor(null);
+      setMarketplaceShareDesc("");
+      // Refresh to show our new entry.
+      if (marketplaceOpen) void loadMarketplace(marketplaceQuery);
+    } catch (e: any) {
+      setGlobalError(e?.message || "share failed");
+    }
+  }, [marketplaceOpen, marketplaceQuery, loadMarketplace]);
+
   /* ── Auto-scroll on new chunks (only if user is at the bottom) ── */
   useEffect(() => {
     const el = timelineRef.current;
@@ -589,6 +728,51 @@ export default function QCoreMultiAgentPage() {
     if (!el) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     userScrolledUpRef.current = distFromBottom > 80;
+  }, []);
+
+  /* ── Sidebar quick-find: debounced search across all the user's runs. ── */
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchBusy(false);
+      return;
+    }
+    setSearchBusy(true);
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(q)}`),
+          { headers: bearerHeader(), signal: ctrl.signal }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.items)) setSearchResults(data.items);
+        else setSearchResults([]);
+      } catch {
+        /* aborted or network */
+      } finally {
+        setSearchBusy(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [searchQuery]);
+
+  /* ── Load top tags chip strip on mount. ── */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/qcoreai/tags?limit=20`), {
+          headers: bearerHeader(),
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.items)) setTopTags(data.items);
+      } catch { /* ignore */ }
+    })();
   }, []);
 
   /* ── Load a session's runs when selected ── */
@@ -615,6 +799,7 @@ export default function QCoreMultiAgentPage() {
         agentConfig: r.agentConfig ?? undefined,
         persisted: true,
         shareToken: r.shareToken ?? null,
+        tags: Array.isArray(r.tags) ? r.tags : [],
       }));
       setRuns(hydrated);
       setActiveSessionId(sessionId);
@@ -795,6 +980,15 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
+      // V6-P integration: send promptOverrides if user picked custom prompts.
+      const promptOverridesBody: Record<string, { promptId: string }> = {};
+      (Object.keys(promptSelections) as ConfigRoleId[]).forEach((role) => {
+        const id = promptSelections[role];
+        if (id) promptOverridesBody[role] = { promptId: id };
+      });
+      if (Object.keys(promptOverridesBody).length > 0) {
+        body.promptOverrides = promptOverridesBody;
+      }
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...bearerHeader() },
@@ -1149,6 +1343,66 @@ export default function QCoreMultiAgentPage() {
     send(run.userInput, { strategy: nextStrategy, overrides: nextOverrides, maxRevisions: nextMaxRev });
   }, [send, strategy, overrides, maxRevisions]);
 
+  /** Apply a one-pass refinement on top of a finished run. */
+  const refineRun = useCallback(async (runId: string, instruction: string) => {
+    const trimmed = instruction.trim();
+    if (!trimmed) return;
+    setRefineBusy(true);
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/refine`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ instruction: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setRuns((prev) =>
+        prev.map((r) =>
+          r.id === runId
+            ? {
+                ...r,
+                finalContent: data.content,
+                totalCostUsd: data.runTotalCostUsd ?? r.totalCostUsd,
+                totalDurationMs: data.runTotalDurationMs ?? r.totalDurationMs,
+              }
+            : r
+        )
+      );
+      setRefineOpen(null);
+      setRefineText("");
+    } catch (e: any) {
+      setGlobalError(e?.message || "refine failed");
+    } finally {
+      setRefineBusy(false);
+    }
+  }, []);
+
+  /** Replace a run's tags via PATCH and refresh chip strip. */
+  const updateRunTags = useCallback(async (runId: string, tags: string[]) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/tags`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ tags }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setRuns((prev) =>
+        prev.map((r) => (r.id === runId ? { ...r, tags: data.tags || [] } : r))
+      );
+      // Refresh top-tags chip ranking.
+      try {
+        const r2 = await fetch(apiUrl(`/api/qcoreai/tags?limit=20`), {
+          headers: bearerHeader(),
+        });
+        const d2 = await r2.json().catch(() => ({}));
+        if (Array.isArray(d2?.items)) setTopTags(d2.items);
+      } catch { /* ignore */ }
+    } catch (e: any) {
+      setGlobalError(e?.message || "set tags failed");
+    }
+  }, []);
+
   const configuredProviders = useMemo(() => providers.filter((p) => p.configured), [providers]);
   const anyConfigured = configuredProviders.length > 0;
 
@@ -1425,6 +1679,25 @@ export default function QCoreMultiAgentPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => { setMarketplaceShareFor(p.id); setMarketplaceShareDesc(""); }}
+                    aria-label={`Share preset ${p.name}`}
+                    title="Share to community marketplace"
+                    style={{
+                      border: "none",
+                      borderLeft: "1px solid rgba(255,255,255,0.15)",
+                      background: "transparent",
+                      color: "rgba(13,148,136,0.85)",
+                      padding: "0 7px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      lineHeight: 1,
+                      fontWeight: 700,
+                    }}
+                  >
+                    🌐
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => deletePreset(p.id)}
                     aria-label={`Delete preset ${p.name}`}
                     title="Delete preset"
@@ -1520,7 +1793,220 @@ export default function QCoreMultiAgentPage() {
                   + Save current
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !marketplaceOpen;
+                  setMarketplaceOpen(next);
+                  if (next && marketplacePresets.length === 0) void loadMarketplace();
+                }}
+                title="Browse community-shared agent presets"
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 8,
+                  border: marketplaceOpen
+                    ? "1px solid rgba(13,148,136,0.7)"
+                    : "1px dashed rgba(13,148,136,0.5)",
+                  background: marketplaceOpen ? "rgba(13,148,136,0.2)" : "transparent",
+                  color: "rgba(13,148,136,0.95)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🌐 Browse community
+              </button>
             </div>
+
+            {/* Share-preset modal-ish row — appears when user clicks 🌐 on a saved preset */}
+            {marketplaceShareFor && (() => {
+              const p = presets.find((x) => x.id === marketplaceShareFor);
+              if (!p) return null;
+              return (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 10,
+                    background: "rgba(13,148,136,0.12)",
+                    border: "1px solid rgba(13,148,136,0.4)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    color: "#e2e8f0",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>
+                    Share preset <span style={{ color: "#5eead4" }}>{p.name}</span> to community
+                  </div>
+                  <textarea
+                    value={marketplaceShareDesc}
+                    onChange={(e) => setMarketplaceShareDesc(e.target.value)}
+                    placeholder="Optional description: when to use this preset, model rationale, etc."
+                    maxLength={400}
+                    rows={2}
+                    style={{
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.95)",
+                      color: "#0f172a",
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      outline: "none",
+                      resize: "vertical",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button
+                      onClick={() => sharePresetToMarketplace(p, marketplaceShareDesc)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "#0d9488",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Share publicly
+                    </button>
+                    <button
+                      onClick={() => { setMarketplaceShareFor(null); setMarketplaceShareDesc(""); }}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "transparent",
+                        color: "rgba(255,255,255,0.7)",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <span style={{ fontSize: 10, color: "rgba(226,232,240,0.6)" }}>
+                      Auth required. Public until you delete it.
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Browse community panel */}
+            {marketplaceOpen && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "rgba(15,23,42,0.4)",
+                  border: "1px solid rgba(13,148,136,0.3)",
+                  color: "#e2e8f0",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                  <input
+                    type="search"
+                    value={marketplaceQuery}
+                    onChange={(e) => {
+                      setMarketplaceQuery(e.target.value);
+                      // Debounced via simple timeout — recreate on keystroke.
+                      window.clearTimeout((window as any).__qcoreMarketTimer);
+                      (window as any).__qcoreMarketTimer = window.setTimeout(
+                        () => loadMarketplace(e.target.value),
+                        250
+                      );
+                    }}
+                    placeholder="Search community presets…"
+                    style={{
+                      flex: 1,
+                      padding: "5px 10px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.95)",
+                      color: "#0f172a",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      outline: "none",
+                    }}
+                  />
+                  <span style={{ fontSize: 11, color: "rgba(226,232,240,0.6)" }}>
+                    {marketplaceBusy ? "…" : `${marketplacePresets.length} preset${marketplacePresets.length === 1 ? "" : "s"}`}
+                  </span>
+                </div>
+                {marketplacePresets.length === 0 && !marketplaceBusy ? (
+                  <div style={{ fontSize: 12, color: "rgba(226,232,240,0.5)", padding: "12px 4px", fontStyle: "italic" }}>
+                    No public presets yet. Be the first — save a lineup, click 🌐 to share.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+                    {marketplacePresets.map((mp) => (
+                      <div
+                        key={mp.id}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "rgba(15,23,42,0.5)",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 700, fontSize: 12, color: "#fff" }}>{mp.name}</span>
+                            <span
+                              style={{
+                                fontSize: 9,
+                                fontWeight: 700,
+                                padding: "1px 6px",
+                                borderRadius: 999,
+                                background: "rgba(13,148,136,0.2)",
+                                color: "#5eead4",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {mp.strategy}
+                            </span>
+                            <span style={{ fontSize: 10, color: "rgba(226,232,240,0.5)" }}>
+                              ↑ {mp.importCount}
+                            </span>
+                          </div>
+                          {mp.description && (
+                            <div style={{ marginTop: 3, fontSize: 11, color: "rgba(226,232,240,0.7)", lineHeight: 1.4 }}>
+                              {mp.description}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => importMarketplacePreset(mp.id)}
+                          title="Import to your saved presets"
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(13,148,136,0.5)",
+                            background: "rgba(13,148,136,0.2)",
+                            color: "#5eead4",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ↓ Import
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {configOpen && (
@@ -1550,6 +2036,9 @@ export default function QCoreMultiAgentPage() {
                       pricing={pricing}
                       value={overrides[r.id]}
                       onChange={(v) => setOverrides((prev) => ({ ...prev, [r.id]: v }))}
+                      promptId={promptSelections[r.id] || ""}
+                      onPromptChange={(id) => setPromptSelections((prev) => ({ ...prev, [r.id]: id }))}
+                      availablePrompts={userPrompts.filter((p) => p.role === r.id || p.role === "writer" || p.role === "system")}
                     />
                   ))}
               </div>
@@ -1921,6 +2410,177 @@ export default function QCoreMultiAgentPage() {
             >
               + New session
             </button>
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search runs… (text, tags)"
+                style={{
+                  width: "100%",
+                  padding: "8px 32px 8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#0f172a",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  style={{
+                    position: "absolute",
+                    right: 6,
+                    top: 6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    border: "none",
+                    background: "transparent",
+                    color: "#94a3b8",
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {topTags.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 4,
+                  marginBottom: 10,
+                  paddingBottom: 8,
+                  borderBottom: "1px dashed rgba(15,23,42,0.08)",
+                }}
+              >
+                {topTags.slice(0, 12).map((t) => {
+                  const active = searchQuery.trim().toLowerCase() === t.tag.toLowerCase();
+                  return (
+                    <button
+                      key={t.tag}
+                      type="button"
+                      onClick={() => setSearchQuery(active ? "" : t.tag)}
+                      title={`${t.count} run${t.count === 1 ? "" : "s"} tagged "${t.tag}"`}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1px solid #0f766e"
+                          : "1px solid rgba(13,148,136,0.25)",
+                        background: active ? "#0f766e" : "rgba(13,148,136,0.06)",
+                        color: active ? "#fff" : "#0f766e",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {t.tag}
+                      <span
+                        style={{
+                          marginLeft: 4,
+                          opacity: 0.6,
+                          fontWeight: 500,
+                          fontSize: 9,
+                        }}
+                      >
+                        {t.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {searchQuery.trim() && (
+              <div style={{ marginBottom: 12 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    padding: "4px 6px 6px",
+                  }}
+                >
+                  Search {searchBusy ? "…" : `(${searchResults.length})`}
+                </div>
+                {!searchBusy && searchResults.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px" }}>
+                    No matches.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {searchResults.map((hit) => (
+                      <button
+                        key={hit.runId}
+                        onClick={() => loadSession(hit.sessionId)}
+                        title={hit.preview}
+                        style={{
+                          textAlign: "left",
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(13,148,136,0.2)",
+                          background:
+                            activeSessionId === hit.sessionId ? "rgba(13,148,136,0.08)" : "#fff",
+                          color: "#0f172a",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 11,
+                            color: "#0f766e",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              flex: 1,
+                            }}
+                          >
+                            {hit.sessionTitle || "(untitled)"}
+                          </span>
+                          <span style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase" }}>
+                            {hit.matched}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 11,
+                            color: "#475569",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {hit.preview}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "8px 6px 4px" }}>
               Sessions
             </div>
@@ -2014,6 +2674,14 @@ export default function QCoreMultiAgentPage() {
                     onEdit={() => editAndResend(run)}
                     onShare={() => shareRun(run.id)}
                     onUnshare={() => unshareRun(run.id)}
+                    onUpdateTags={(tags: string[]) => updateRunTags(run.id, tags)}
+                    refineOpen={refineOpen === run.id}
+                    refineText={refineOpen === run.id ? refineText : ""}
+                    refineBusy={refineOpen === run.id ? refineBusy : false}
+                    onOpenRefine={() => { setRefineOpen(run.id); setRefineText(""); }}
+                    onChangeRefineText={setRefineText}
+                    onCancelRefine={() => { setRefineOpen(null); setRefineText(""); }}
+                    onApplyRefine={() => refineRun(run.id, refineText)}
                   />
                 ))
               )}
@@ -2259,6 +2927,9 @@ function RoleConfigCard({
   pricing,
   value,
   onChange,
+  promptId,
+  onPromptChange,
+  availablePrompts,
 }: {
   role: RoleDefault;
   strategy: Strategy;
@@ -2266,6 +2937,9 @@ function RoleConfigCard({
   pricing: PricingRow[];
   value: { provider: string; model: string };
   onChange: (v: { provider: string; model: string }) => void;
+  promptId?: string;
+  onPromptChange?: (id: string) => void;
+  availablePrompts?: Array<{ id: string; name: string; role: string; version: number }>;
 }) {
   const s = roleSlotStyle(role.id, strategy);
   const label = roleSlotLabel(role.id, strategy);
@@ -2342,6 +3016,34 @@ function RoleConfigCard({
         <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>
           <b>${priceRow.inputPer1M.toFixed(2)}</b>/M input · <b>${priceRow.outputPer1M.toFixed(2)}</b>/M output
         </div>
+      )}
+      {onPromptChange && (
+        <>
+          <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#475569", marginTop: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Custom prompt
+          </label>
+          <select
+            value={promptId || ""}
+            onChange={(e) => onPromptChange(e.target.value)}
+            style={{
+              width: "100%", padding: "6px 8px", borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.15)", background: "#fff",
+              fontSize: 12,
+            }}
+          >
+            <option value="">— role default —</option>
+            {(availablePrompts || []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · v{p.version} ({p.role})
+              </option>
+            ))}
+          </select>
+          {(!availablePrompts || availablePrompts.length === 0) && (
+            <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+              No prompts yet — create at <a href="/qcoreai/prompts" style={{ color: "#4f46e5" }}>/qcoreai/prompts</a>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -2481,6 +3183,14 @@ function RunCard({
   onEdit,
   onShare,
   onUnshare,
+  onUpdateTags,
+  refineOpen,
+  refineText,
+  refineBusy,
+  onOpenRefine,
+  onChangeRefineText,
+  onCancelRefine,
+  onApplyRefine,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
@@ -2488,9 +3198,20 @@ function RunCard({
   onEdit?: () => void;
   onShare?: () => void;
   onUnshare?: () => void;
+  onUpdateTags?: (tags: string[]) => void;
+  refineOpen?: boolean;
+  refineText?: string;
+  refineBusy?: boolean;
+  onOpenRefine?: () => void;
+  onChangeRefineText?: (text: string) => void;
+  onCancelRefine?: () => void;
+  onApplyRefine?: () => void;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
+  const [tagInput, setTagInput] = useState<string>("");
+  const [tagInputOpen, setTagInputOpen] = useState<boolean>(false);
+  const tags = run.tags || [];
   const stats = runStats(run);
   const displayStrategy = (run.strategy as Strategy) || "sequential";
   const totalDur = run.totalDurationMs ?? stats.durationMs;
@@ -2592,7 +3313,107 @@ function RunCard({
       )}
 
       {/* Final */}
-      {run.finalContent && <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />}
+      {run.finalContent && (
+        <>
+          <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />
+          {run.status !== "running" && onOpenRefine && !refineOpen && (
+            <button
+              onClick={onOpenRefine}
+              title="One-pass surgical edit on top of this answer"
+              style={{
+                marginTop: 6,
+                alignSelf: "flex-start",
+                padding: "4px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "rgba(124,58,237,0.06)",
+                color: "#6d28d9",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              ✎ Refine
+            </button>
+          )}
+          {refineOpen && (
+            <div
+              style={{
+                marginTop: 6,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "rgba(124,58,237,0.04)",
+                borderRadius: 10,
+                padding: 10,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <textarea
+                value={refineText || ""}
+                onChange={(e) => onChangeRefineText && onChangeRefineText(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    onApplyRefine && onApplyRefine();
+                  } else if (e.key === "Escape") {
+                    onCancelRefine && onCancelRefine();
+                  }
+                }}
+                placeholder="e.g. Add a TL;DR section at the top, tighten the conclusion, fix the table…"
+                disabled={refineBusy}
+                rows={3}
+                style={{
+                  resize: "vertical",
+                  borderRadius: 8,
+                  border: "1px solid rgba(124,58,237,0.25)",
+                  padding: "8px 10px",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  background: "#fff",
+                  color: "#0f172a",
+                  outline: "none",
+                  minHeight: 60,
+                }}
+              />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  onClick={onApplyRefine}
+                  disabled={refineBusy || !(refineText || "").trim()}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 8,
+                    background: refineBusy ? "#a78bfa" : "#7c3aed",
+                    color: "#fff",
+                    border: "none",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: refineBusy ? "default" : "pointer",
+                  }}
+                >
+                  {refineBusy ? "Refining…" : "Apply (⌘/Ctrl+Enter)"}
+                </button>
+                <button
+                  onClick={onCancelRefine}
+                  disabled={refineBusy}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    background: "#fff",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel (Esc)
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Error */}
       {run.error && !run.finalContent && (
@@ -2668,6 +3489,106 @@ function RunCard({
             💲 {formatMoney(totalCost)}
           </span>
 
+          {/* Tag chips + + Tag input — owner-only edit, displayed for everyone. */}
+          {run.persisted && run.id && !run.id.startsWith("tmp_") && (
+            <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+              {tags.map((t) => (
+                <span
+                  key={t}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3,
+                    padding: "2px 6px 2px 8px",
+                    borderRadius: 999,
+                    background: "rgba(13,148,136,0.08)",
+                    border: "1px solid rgba(13,148,136,0.25)",
+                    color: "#0f766e",
+                    fontSize: 10,
+                    fontWeight: 700,
+                  }}
+                >
+                  {t}
+                  {onUpdateTags && (
+                    <button
+                      onClick={() => onUpdateTags(tags.filter((x) => x !== t))}
+                      title={`Remove "${t}"`}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#0f766e",
+                        cursor: "pointer",
+                        fontSize: 11,
+                        padding: 0,
+                        lineHeight: 1,
+                        opacity: 0.6,
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+              {onUpdateTags && tags.length < 16 && (
+                tagInputOpen ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onBlur={() => {
+                      const v = tagInput.trim();
+                      if (v && !tags.includes(v)) onUpdateTags([...tags, v]);
+                      setTagInput("");
+                      setTagInputOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const v = tagInput.trim();
+                        if (v && !tags.includes(v)) onUpdateTags([...tags, v]);
+                        setTagInput("");
+                        setTagInputOpen(false);
+                      } else if (e.key === "Escape") {
+                        setTagInput("");
+                        setTagInputOpen(false);
+                      }
+                    }}
+                    placeholder="tag…"
+                    maxLength={32}
+                    style={{
+                      width: 80,
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(13,148,136,0.4)",
+                      background: "#fff",
+                      fontSize: 10,
+                      color: "#0f766e",
+                      fontWeight: 600,
+                      outline: "none",
+                    }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setTagInputOpen(true)}
+                    title="Add a tag"
+                    style={{
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      border: "1px dashed rgba(13,148,136,0.35)",
+                      background: "transparent",
+                      color: "#0f766e",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + Tag
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
             {onEdit && run.status !== "running" && (
               <button
@@ -2711,6 +3632,35 @@ function RunCard({
                     >
                       🔗 Public
                     </a>
+                    <button
+                      onClick={async () => {
+                        const origin = typeof window !== "undefined" ? window.location.origin : "";
+                        const snippet =
+                          `<iframe\n` +
+                          `  src="${origin}/qcoreai/embed/${run.shareToken}?theme=light"\n` +
+                          `  width="100%"\n` +
+                          `  height="520"\n` +
+                          `  frameborder="0"\n` +
+                          `  loading="lazy"\n` +
+                          `  title="QCoreAI run"\n` +
+                          `  style="border:1px solid rgba(15,23,42,0.1); border-radius:14px;"\n` +
+                          `></iframe>`;
+                        try {
+                          await navigator.clipboard.writeText(snippet);
+                          alert("Iframe snippet copied!\n\nTip: pass ?theme=dark&compact=1 to render minimal/dark.");
+                        } catch {
+                          window.prompt("Copy this iframe snippet:", snippet);
+                        }
+                      }}
+                      title="Copy embed iframe snippet to clipboard"
+                      style={{
+                        padding: "5px 10px", borderRadius: 8,
+                        background: "rgba(13,148,136,0.08)", border: "1px solid rgba(13,148,136,0.3)",
+                        color: "#0f766e", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      &lt;/&gt; Embed
+                    </button>
                     {onUnshare && (
                       <button
                         onClick={onUnshare}

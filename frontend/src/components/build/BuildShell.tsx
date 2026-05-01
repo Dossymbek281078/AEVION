@@ -16,8 +16,17 @@ const NAV: { href: string; label: string }[] = [
   { href: "/build/profile", label: "Profile" },
   { href: "/build/messages", label: "Messages" },
   { href: "/build/pricing", label: "Pricing" },
+  { href: "/build/loyalty", label: "Loyalty" },
   { href: "/build/why-aevion", label: "Why us" },
 ];
+
+const TIER_CHIP: Record<string, { className: string; emoji: string }> = {
+  DEFAULT: { className: "border-white/10 bg-white/5 text-slate-300", emoji: "🪨" },
+  BRONZE: { className: "border-amber-700/40 bg-amber-700/15 text-amber-200", emoji: "🥉" },
+  SILVER: { className: "border-slate-400/40 bg-slate-400/15 text-slate-100", emoji: "🥈" },
+  GOLD: { className: "border-yellow-400/40 bg-yellow-500/15 text-yellow-100", emoji: "🥇" },
+  PLATINUM: { className: "border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-100", emoji: "💎" },
+};
 
 export function BuildShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -63,6 +72,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                   </Link>
                 )}
                 <PlanBadge />
+                <TierBadge />
                 <NotificationBell />
                 <span className="hidden text-slate-400 sm:inline">{user.email}</span>
                 <button
@@ -202,6 +212,42 @@ function PlanBadge() {
       title="Your current plan — click to compare or upgrade"
     >
       {planKey === "PPHIRE" ? "Pay-per-Hire" : planKey}
+    </Link>
+  );
+}
+
+function TierBadge() {
+  const token = useBuildAuth((s) => s.token);
+  const [tier, setTier] = useState<{ key: string; label: string } | null>(null);
+
+  useEffect(() => {
+    if (!token) {
+      setTier(null);
+      return;
+    }
+    let cancelled = false;
+    buildApi
+      .loyaltyMe()
+      .then((r) => {
+        if (!cancelled && r.tier) setTier({ key: r.tier.key, label: r.tier.label });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // Hide on Default — most users start there, the chip would just be noise.
+  if (!tier || tier.key === "DEFAULT") return null;
+  const theme = TIER_CHIP[tier.key] ?? TIER_CHIP.DEFAULT;
+  return (
+    <Link
+      href="/build/loyalty"
+      title={`AEV Loyalty · ${tier.label} tier`}
+      className={`hidden items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:inline-flex ${theme.className}`}
+    >
+      <span aria-hidden>{theme.emoji}</span>
+      <span>{tier.label}</span>
     </Link>
   );
 }

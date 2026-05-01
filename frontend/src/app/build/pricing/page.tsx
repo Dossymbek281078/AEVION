@@ -31,6 +31,8 @@ export default function PricingPage() {
   const [plans, setPlans] = useState<BuildPlan[]>([]);
   const [sub, setSub] = useState<BuildSubscription | null>(null);
   const [orders, setOrders] = useState<BuildOrderRow[]>([]);
+  const [tierDiscountBps, setTierDiscountBps] = useState(0);
+  const [tierLabel, setTierLabel] = useState<string | null>(null);
   const [cycle, setCycle] = useState<Cycle>("MONTHLY");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,12 +53,17 @@ export default function PricingPage() {
       buildApi.listPlans(),
       token ? buildApi.mySubscription().catch(() => ({ subscription: null })) : Promise.resolve({ subscription: null }),
       token ? buildApi.myOrders().catch(() => ({ items: [] as BuildOrderRow[], total: 0 })) : Promise.resolve({ items: [] as BuildOrderRow[], total: 0 }),
+      token ? buildApi.loyaltyMe().catch(() => null) : Promise.resolve(null),
     ])
-      .then(([p, s, o]) => {
+      .then(([p, s, o, l]) => {
         if (cancelled) return;
         setPlans(p.items);
         setSub(s.subscription);
         setOrders(o.items);
+        if (l?.tier) {
+          setTierDiscountBps(l.tier.subDiscountBps);
+          setTierLabel(l.tier.label);
+        }
       })
       .catch((e) => !cancelled && setError((e as Error).message))
       .finally(() => !cancelled && setLoading(false));
@@ -140,6 +147,8 @@ export default function PricingPage() {
               isCurrent={sub?.planKey === p.key && sub.status === "ACTIVE"}
               busy={busyKey === p.key}
               onStart={() => start(p.key)}
+              tierDiscountBps={tierDiscountBps}
+              tierLabel={tierLabel}
             />
           ))}
         </div>
@@ -199,35 +208,44 @@ function LoyaltyBanner() {
   const token = useBuildAuth((s) => s.token);
   const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.loyaltyMe>> | null>(null);
   const [cashback, setCashback] = useState<Awaited<ReturnType<typeof buildApi.loyaltyCashback>> | null>(null);
+  const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof buildApi.loyaltyTiers>>["items"]>([]);
   useEffect(() => {
+    buildApi.loyaltyTiers().then((r) => setCatalog(r.items)).catch(() => {});
     if (!token) return;
     buildApi.loyaltyMe().then(setData).catch(() => {});
     buildApi.loyaltyCashback().then(setCashback).catch(() => {});
   }, [token]);
 
+  const visibleTiers = catalog.length > 0 ? catalog : [];
+
   return (
     <section className="mt-12 rounded-2xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-slate-900 to-slate-900 px-6 py-8 sm:px-10">
-      <div className="text-xs font-bold uppercase tracking-wider text-fuchsia-300">
-        Loyalty · pay only when you hire
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wider text-fuchsia-300">
+            Loyalty · 5 tiers, automatic
+          </div>
+          <h2 className="mt-2 text-2xl font-bold text-white">
+            Чем больше нанимаете — тем меньше комиссия и больше cashback
+          </h2>
+        </div>
+        <Link
+          href="/build/loyalty"
+          className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
+        >
+          Все benefits →
+        </Link>
       </div>
-      <h2 className="mt-2 text-2xl font-bold text-white">
-        Чем больше нанимаете — тем меньше комиссия
-      </h2>
-      <p className="mt-2 max-w-2xl text-sm text-slate-300">
-        Pay-per-Hire начинается с <span className="font-semibold text-fuchsia-200">12%</span> (vs HH-агентство 15–25%) и снижается по мере того, как кандидаты выходят на работу. Плюс <span className="font-semibold text-fuchsia-200">2% AEV cashback</span> на каждый PAID заказ — copyуется в ваш AEV-кошелёк.
+      <p className="mt-2 max-w-3xl text-sm text-slate-300">
+        Pay-per-Hire стартует с <span className="font-semibold text-fuchsia-200">12%</span> и опускается до <span className="font-semibold text-fuchsia-200">4%</span> на Platinum. Cashback растёт <span className="font-semibold text-emerald-200">2% → 5%</span>. Скидка на подписку до <span className="font-semibold text-cyan-200">−25%</span>. Всё применяется автоматически.
       </p>
-      <div className="mt-5 grid gap-3 sm:grid-cols-4">
-        {[
-          { hires: 0, pct: 12, label: "Default" },
-          { hires: 3, pct: 10, label: "Bronze" },
-          { hires: 10, pct: 8, label: "Silver" },
-          { hires: 25, pct: 6, label: "Gold" },
-        ].map((t) => {
-          const reached = data ? data.hires >= t.hires : false;
-          const current = data ? data.hireFeePct === t.pct : t.hires === 0;
+      <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {visibleTiers.map((t) => {
+          const reached = data ? data.hires >= t.minHires : false;
+          const current = data ? data.tier?.key === t.key : t.minHires === 0;
           return (
             <div
-              key={t.hires}
+              key={t.key}
               className={`rounded-xl border p-4 text-sm ${
                 current
                   ? "border-fuchsia-400 bg-fuchsia-500/15 text-white"
@@ -238,11 +256,21 @@ function LoyaltyBanner() {
             >
               <div className="text-xs font-semibold uppercase tracking-wider">
                 {t.label}
-                {current && <span className="ml-1 text-fuchsia-200">— ваш уровень</span>}
+                {current && <span className="ml-1 text-fuchsia-200">— вы</span>}
               </div>
-              <div className="mt-1 text-3xl font-bold">{t.pct}%</div>
+              <div className="mt-1 text-3xl font-bold">{t.hireFeePct}%</div>
               <div className="text-xs text-slate-400">
-                {t.hires === 0 ? "С первого найма" : `с ${t.hires} наймов`}
+                {t.minHires === 0 ? "С первого найма" : `с ${t.minHires} наймов`}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
+                <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200">
+                  +{(t.cashbackBps / 100).toFixed(1)}% cashback
+                </span>
+                {t.subDiscountBps > 0 && (
+                  <span className="rounded-full bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200">
+                    −{t.subDiscountBps / 100}% sub
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -250,13 +278,14 @@ function LoyaltyBanner() {
       </div>
       {data && (
         <div className="mt-4 text-xs text-fuchsia-100/80">
-          У вас уже {data.hires} закрытых наймов на платформе.
-          {data.nextTierAt != null &&
-            ` До следующего уровня (${(data.nextTierBps! / 100).toFixed(0)}%) — ещё ${data.nextTierAt - data.hires}.`}
+          У вас уже {data.hires} закрытых наймов · текущий уровень{" "}
+          <span className="font-semibold text-white">{data.tier.label}</span>
+          {data.next &&
+            ` · до ${data.next.label} ещё ${data.next.hiresToNext} (${data.next.progressPct}%).`}
         </div>
       )}
       <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
-        💎 +2% AEV cashback на любой платёж
+        💎 {data ? `+${(data.tier.cashbackBps / 100).toFixed(1)}%` : "+2%"} AEV cashback на любой платёж
       </div>
       {cashback && cashback.entries > 0 && (
         <div className="mt-4 space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
@@ -416,17 +445,29 @@ function PlanCard({
   isCurrent,
   busy,
   onStart,
+  tierDiscountBps,
+  tierLabel,
 }: {
   plan: BuildPlan & { yearly: number };
   cycle: Cycle;
   isCurrent: boolean;
   busy: boolean;
   onStart: () => void;
+  tierDiscountBps: number;
+  tierLabel: string | null;
 }) {
   const isPro = plan.key === "PRO";
   const isPPH = plan.key === "PPHIRE";
   const showPrice = !isPPH;
-  const priceMonthly = cycle === "YEARLY" ? Math.round(plan.yearly / 12) : plan.priceMonthly;
+  const baseMonthly = cycle === "YEARLY" ? Math.round(plan.yearly / 12) : plan.priceMonthly;
+  // Apply loyalty-tier discount on top of yearly cycle. Both stack
+  // multiplicatively: yearly already gives ~17% off, tier shaves more.
+  const discountFactor =
+    tierDiscountBps > 0 ? Math.max(0, 10000 - tierDiscountBps) / 10000 : 1;
+  const priceMonthly =
+    plan.priceMonthly > 0 ? Math.round(baseMonthly * discountFactor) : baseMonthly;
+  const hasDiscount =
+    plan.priceMonthly > 0 && tierDiscountBps > 0 && priceMonthly < baseMonthly;
 
   return (
     <div
@@ -454,12 +495,24 @@ function PlanCard({
             <div className="text-xs text-slate-400">forever</div>
           </>
         ) : (
-          <>
-            <div className="text-3xl font-extrabold text-white">
-              {priceMonthly.toLocaleString("ru-RU")} ₽
+          <div>
+            <div className="flex items-baseline gap-2">
+              <div className="text-3xl font-extrabold text-white">
+                {priceMonthly.toLocaleString("ru-RU")} ₽
+              </div>
+              {hasDiscount && (
+                <div className="text-sm text-slate-500 line-through">
+                  {baseMonthly.toLocaleString("ru-RU")}
+                </div>
+              )}
+              <div className="text-xs text-slate-400">/ month</div>
             </div>
-            <div className="text-xs text-slate-400">/ month</div>
-          </>
+            {hasDiscount && tierLabel && (
+              <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-200">
+                <span>{tierLabel} −{tierDiscountBps / 100}%</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

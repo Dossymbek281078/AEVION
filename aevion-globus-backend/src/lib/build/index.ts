@@ -598,6 +598,154 @@ export function isUnlimited(planLimit: number): boolean {
   return planLimit === -1;
 }
 
+// ── Recruiter Loyalty Tiers ─────────────────────────────────────────
+// Single source of truth for tier thresholds and benefits. Used by
+// /loyalty/me, /loyalty/tiers, markOrderPaid (cashback rate), and
+// /subscriptions/start (sub discount). Hires-based: an "ACCEPTED"
+// application on the recruiter's project counts as 1 hire, plus an
+// "APPROVED" trial-task. Edit one place — every consumer follows.
+
+export type RecruiterTierKey = "DEFAULT" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM";
+
+export type RecruiterTier = {
+  key: RecruiterTierKey;
+  label: string;
+  minHires: number;
+  hireFeeBps: number;       // applied to HIRE_FEE orders
+  cashbackBps: number;      // mint rate on PAID orders (was hardcoded 200)
+  subDiscountBps: number;   // discount applied to subscription priceMonthly
+  boostSlotsBonus: number;  // extra monthly boost slots on top of the plan
+  perks: string[];          // marketing copy for the tier card
+};
+
+export const RECRUITER_TIERS: readonly RecruiterTier[] = [
+  {
+    key: "DEFAULT",
+    label: "Default",
+    minHires: 0,
+    hireFeeBps: 1200,
+    cashbackBps: 200,
+    subDiscountBps: 0,
+    boostSlotsBonus: 0,
+    perks: ["Базовая 12% hire-fee", "2% AEV cashback на каждый PAID order"],
+  },
+  {
+    key: "BRONZE",
+    label: "Bronze",
+    minHires: 3,
+    hireFeeBps: 1000,
+    cashbackBps: 250,
+    subDiscountBps: 500,
+    boostSlotsBonus: 1,
+    perks: [
+      "Hire-fee снижается до 10%",
+      "2.5% AEV cashback (вместо 2%)",
+      "−5% к подписке",
+      "+1 boost-слот в месяц",
+    ],
+  },
+  {
+    key: "SILVER",
+    label: "Silver",
+    minHires: 10,
+    hireFeeBps: 800,
+    cashbackBps: 300,
+    subDiscountBps: 1000,
+    boostSlotsBonus: 3,
+    perks: [
+      "Hire-fee 8%",
+      "3% AEV cashback",
+      "−10% к подписке",
+      "+3 boost-слота в месяц",
+      "Приоритетная поддержка",
+    ],
+  },
+  {
+    key: "GOLD",
+    label: "Gold",
+    minHires: 25,
+    hireFeeBps: 600,
+    cashbackBps: 400,
+    subDiscountBps: 1500,
+    boostSlotsBonus: 6,
+    perks: [
+      "Hire-fee 6%",
+      "4% AEV cashback",
+      "−15% к подписке",
+      "+6 boost-слотов в месяц",
+      "Бейдж Gold-recruiter в карточке",
+      "Verified Employer бесплатно",
+    ],
+  },
+  {
+    key: "PLATINUM",
+    label: "Platinum",
+    minHires: 50,
+    hireFeeBps: 400,
+    cashbackBps: 500,
+    subDiscountBps: 2500,
+    boostSlotsBonus: 12,
+    perks: [
+      "Hire-fee 4% (на 67% дешевле HH)",
+      "5% AEV cashback",
+      "−25% к подписке",
+      "+12 boost-слотов в месяц",
+      "Persistent featured-pin для одной активной вакансии",
+      "Dedicated success manager",
+      "Платиновый бейдж в карточке вакансии",
+    ],
+  },
+] as const;
+
+/** Pick the tier matching a hire count. Always returns a tier (DEFAULT for 0). */
+export function computeRecruiterTier(hires: number): RecruiterTier {
+  const safe = Math.max(0, Math.floor(hires) || 0);
+  let match: RecruiterTier = RECRUITER_TIERS[0];
+  for (const t of RECRUITER_TIERS) {
+    if (safe >= t.minHires) match = t;
+  }
+  return match;
+}
+
+/** Next tier above the given one, or null if already at the top. */
+export function nextRecruiterTier(current: RecruiterTier): RecruiterTier | null {
+  const idx = RECRUITER_TIERS.findIndex((t) => t.key === current.key);
+  return idx >= 0 && idx < RECRUITER_TIERS.length - 1 ? RECRUITER_TIERS[idx + 1] : null;
+}
+
+/** Apply a basis-points discount to an integer minor-unit amount (e.g. RUB). */
+export function applyBpsDiscount(amount: number, discountBps: number): number {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  if (!Number.isFinite(discountBps) || discountBps <= 0) return Math.round(amount);
+  const factor = Math.max(0, 10000 - Math.floor(discountBps)) / 10000;
+  return Math.round(amount * factor);
+}
+
+/** Resolve the active tier for a recruiter by counting their hires. */
+export async function getRecruiterTier(userId: string): Promise<{
+  tier: RecruiterTier;
+  hires: number;
+}> {
+  const [accepted, trial] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(DISTINCT a."id")::int AS "count"
+       FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE p."clientId" = $1 AND a."status" = 'ACCEPTED'`,
+      [userId],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS "count"
+       FROM "BuildTrialTask"
+       WHERE "recruiterId" = $1 AND "status" = 'APPROVED'`,
+      [userId],
+    ),
+  ]);
+  const hires = Number(accepted.rows[0]?.count ?? 0) + Number(trial.rows[0]?.count ?? 0);
+  return { tier: computeRecruiterTier(hires), hires };
+}
+
 // ── Periodic cleanup ────────────────────────────────────────────────
 // Expired BuildBoost rows accumulate forever — every read query already
 // filters endsAt > NOW(), but we still want to keep the table compact.

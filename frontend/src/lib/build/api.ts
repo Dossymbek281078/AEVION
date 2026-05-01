@@ -213,6 +213,8 @@ export type BuildFile = {
 export type PlanKey = "FREE" | "PRO" | "AGENCY" | "PPHIRE";
 export type SubscriptionStatus = "ACTIVE" | "CANCELED" | "PENDING";
 
+export type TierKey = "DEFAULT" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM";
+
 export type BuildPlan = {
   key: PlanKey;
   name: string;
@@ -595,14 +597,54 @@ export const buildApi = {
   loyaltyMe: () =>
     call<{
       hires: number;
+      tier: {
+        key: TierKey;
+        label: string;
+        hireFeeBps: number;
+        hireFeePct: number;
+        cashbackBps: number;
+        cashbackPct: number;
+        subDiscountBps: number;
+        subDiscountPct: number;
+        boostSlotsBonus: number;
+        perks: string[];
+      };
+      next: {
+        key: TierKey;
+        label: string;
+        minHires: number;
+        hireFeeBps: number;
+        hireFeePct: number;
+        cashbackBps: number;
+        subDiscountBps: number;
+        hiresToNext: number;
+        progressPct: number;
+      } | null;
+      // Backward-compat top-level fields (deprecated — read tier.* instead)
       hireFeeBps: number;
       hireFeePct: number;
       cashbackBps: number;
       cashbackPct: number;
       nextTierAt: number | null;
       nextTierBps: number | null;
-      tiers: { atHires: number; bps: number; label: string }[];
+      tiers: { key: TierKey; atHires: number; bps: number; label: string }[];
     }>("GET", "/api/build/loyalty/me"),
+  loyaltyTiers: () =>
+    call<{
+      items: {
+        key: TierKey;
+        label: string;
+        minHires: number;
+        hireFeeBps: number;
+        hireFeePct: number;
+        cashbackBps: number;
+        cashbackPct: number;
+        subDiscountBps: number;
+        subDiscountPct: number;
+        boostSlotsBonus: number;
+        perks: string[];
+      }[];
+    }>("GET", "/api/build/loyalty/tiers", undefined, { auth: false }),
   submitLead: (input: {
     email: string;
     city?: string;

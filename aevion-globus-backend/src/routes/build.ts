@@ -25,6 +25,11 @@ import {
   bumpUsage,
   currentMonthKey,
   isUnlimited,
+  RECRUITER_TIERS,
+  computeRecruiterTier,
+  nextRecruiterTier,
+  applyBpsDiscount,
+  getRecruiterTier,
 } from "../lib/build";
 
 export const buildRouter = Router();
@@ -2687,59 +2692,86 @@ buildRouter.get("/loyalty/me", async (req, res) => {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
-    // Count distinct ACCEPTED applications on vacancies whose project
-    // belongs to this recruiter — that's the canonical "hire" signal.
-    const acceptedQ = await pool.query(
-      `SELECT COUNT(DISTINCT a."id")::int AS "count"
-       FROM "BuildApplication" a
-       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
-       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
-       WHERE p."clientId" = $1 AND a."status" = 'ACCEPTED'`,
-      [auth.sub],
-    );
-    const trialQ = await pool.query(
-      `SELECT COUNT(*)::int AS "count"
-       FROM "BuildTrialTask"
-       WHERE "recruiterId" = $1 AND "status" = 'APPROVED'`,
-      [auth.sub],
-    );
-    const hires =
-      Number(acceptedQ.rows[0]?.count ?? 0) + Number(trialQ.rows[0]?.count ?? 0);
-
-    let hireFeeBps = 1200;
-    let nextTierAt: number | null = 3;
-    let nextTierBps: number | null = 1000;
-    if (hires >= 25) {
-      hireFeeBps = 600;
-      nextTierAt = null;
-      nextTierBps = null;
-    } else if (hires >= 10) {
-      hireFeeBps = 800;
-      nextTierAt = 25;
-      nextTierBps = 600;
-    } else if (hires >= 3) {
-      hireFeeBps = 1000;
-      nextTierAt = 10;
-      nextTierBps = 800;
-    }
+    const { tier, hires } = await getRecruiterTier(auth.sub);
+    const next = nextRecruiterTier(tier);
+    const hiresToNext = next ? Math.max(0, next.minHires - hires) : 0;
+    const progressPct = next
+      ? Math.min(
+          100,
+          Math.round(((hires - tier.minHires) / (next.minHires - tier.minHires)) * 100),
+        )
+      : 100;
 
     return ok(res, {
       hires,
-      hireFeeBps,
-      hireFeePct: hireFeeBps / 100,
-      cashbackBps: 200, // 2% AEV cashback on every PAID order
-      cashbackPct: 2,
-      nextTierAt,
-      nextTierBps,
-      tiers: [
-        { atHires: 0, bps: 1200, label: "Default" },
-        { atHires: 3, bps: 1000, label: "Bronze" },
-        { atHires: 10, bps: 800, label: "Silver" },
-        { atHires: 25, bps: 600, label: "Gold" },
-      ],
+      tier: {
+        key: tier.key,
+        label: tier.label,
+        hireFeeBps: tier.hireFeeBps,
+        hireFeePct: tier.hireFeeBps / 100,
+        cashbackBps: tier.cashbackBps,
+        cashbackPct: tier.cashbackBps / 100,
+        subDiscountBps: tier.subDiscountBps,
+        subDiscountPct: tier.subDiscountBps / 100,
+        boostSlotsBonus: tier.boostSlotsBonus,
+        perks: tier.perks,
+      },
+      next: next
+        ? {
+            key: next.key,
+            label: next.label,
+            minHires: next.minHires,
+            hireFeeBps: next.hireFeeBps,
+            hireFeePct: next.hireFeeBps / 100,
+            cashbackBps: next.cashbackBps,
+            subDiscountBps: next.subDiscountBps,
+            hiresToNext,
+            progressPct,
+          }
+        : null,
+
+      // Backward-compat top-level fields (older UI reads these directly)
+      hireFeeBps: tier.hireFeeBps,
+      hireFeePct: tier.hireFeeBps / 100,
+      cashbackBps: tier.cashbackBps,
+      cashbackPct: tier.cashbackBps / 100,
+      nextTierAt: next ? next.minHires : null,
+      nextTierBps: next ? next.hireFeeBps : null,
+
+      tiers: RECRUITER_TIERS.map((t) => ({
+        key: t.key,
+        atHires: t.minHires,
+        bps: t.hireFeeBps,
+        label: t.label,
+      })),
     });
   } catch (err: unknown) {
     return fail(res, 500, "loyalty_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/loyalty/tiers — public, no-auth catalog of all tiers
+// with their thresholds and benefits. Used by /build/loyalty landing
+// and the /build/pricing comparison table.
+buildRouter.get("/loyalty/tiers", async (_req, res) => {
+  try {
+    return ok(res, {
+      items: RECRUITER_TIERS.map((t) => ({
+        key: t.key,
+        label: t.label,
+        minHires: t.minHires,
+        hireFeeBps: t.hireFeeBps,
+        hireFeePct: t.hireFeeBps / 100,
+        cashbackBps: t.cashbackBps,
+        cashbackPct: t.cashbackBps / 100,
+        subDiscountBps: t.subDiscountBps,
+        subDiscountPct: t.subDiscountBps / 100,
+        boostSlotsBonus: t.boostSlotsBonus,
+        perks: t.perks,
+      })),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "tiers_failed", { details: (err as Error).message });
   }
 });
 
@@ -3042,6 +3074,14 @@ buildRouter.post("/subscriptions/start", async (req, res) => {
     if (plan.rowCount === 0) return fail(res, 404, "plan_not_found");
     const planRow = plan.rows[0];
 
+    // Apply loyalty-tier discount on the subscription price. FREE plan
+    // (priceMonthly = 0) is unaffected. Discount is locked in at the
+    // moment of order creation — re-up after promotion to a higher tier
+    // benefits the next order, not the running one.
+    const { tier: payerTier } = await getRecruiterTier(auth.sub);
+    const baseAmount = Number(planRow.priceMonthly) || 0;
+    const discountedAmount = applyBpsDiscount(baseAmount, payerTier.subDiscountBps);
+
     const isFreeStart = planRow.priceMonthly === 0;
     const subStatus = isFreeStart ? "ACTIVE" : "PENDING";
     const orderStatus = isFreeStart ? "PAID" : "PENDING";
@@ -3071,10 +3111,16 @@ buildRouter.post("/subscriptions/start", async (req, res) => {
           orderId,
           auth.sub,
           subId,
-          planRow.priceMonthly,
+          discountedAmount,
           planRow.currency,
           orderStatus,
-          JSON.stringify({ planKey: planKey.value }),
+          JSON.stringify({
+            planKey: planKey.value,
+            tierKey: payerTier.key,
+            baseAmount,
+            tierDiscountBps: payerTier.subDiscountBps,
+            tierDiscountAmount: baseAmount - discountedAmount,
+          }),
         ],
       );
 
@@ -3185,7 +3231,13 @@ async function markOrderPaid(
 
     const orderAmount = Number(row.amount) || 0;
     if (orderAmount > 0) {
-      const cashbackAev = Math.round(orderAmount * 0.02 * 1_000_000) / 1_000_000;
+      // Tier-based cashback rate. Default tier still mints 2%; Bronze
+      // 2.5%, Silver 3%, Gold 4%, Platinum 5%. Inside the same DB
+      // transaction so a paying user's tier is the one snapshotted
+      // alongside the order being marked paid.
+      const { tier } = await getRecruiterTier(row.userId);
+      const rate = tier.cashbackBps / 10000;
+      const cashbackAev = Math.round(orderAmount * rate * 1_000_000) / 1_000_000;
       await pool.query(
         `INSERT INTO "BuildCashback"
            ("id","userId","orderId","orderKind","orderAmount","orderCurrency","cashbackAev")

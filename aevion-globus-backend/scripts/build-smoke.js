@@ -271,6 +271,33 @@ async function main() {
     ok("loyalty cashback ledger", `totalAev=${unwrap(r).totalAev}`);
   } else return fail("loyalty cashback", `status=${r.status}`);
 
+  // 28a. Public tier catalog — must list all 5 tiers in order.
+  r = await call("GET", "/api/build/loyalty/tiers");
+  const tiers = unwrap(r)?.items;
+  const expectedKeys = ["DEFAULT", "BRONZE", "SILVER", "GOLD", "PLATINUM"];
+  if (
+    is2xx(r) &&
+    Array.isArray(tiers) &&
+    tiers.length === 5 &&
+    tiers.every((t, i) => t.key === expectedKeys[i])
+  ) {
+    ok("public loyalty/tiers catalog", `tiers=${tiers.map((t) => t.key).join(",")}`);
+  } else return fail("loyalty/tiers", `status=${r.status} got=${JSON.stringify(tiers)}`);
+
+  // 28b. Authenticated /loyalty/me — client has 1 ACCEPTED hire by now,
+  // so tier should be DEFAULT (Bronze starts at 3) and `next` points at Bronze.
+  r = await call("GET", "/api/build/loyalty/me", null, clientToken);
+  const me = unwrap(r);
+  if (
+    is2xx(r) &&
+    me?.tier?.key === "DEFAULT" &&
+    me?.tier?.cashbackBps === 200 &&
+    me?.next?.key === "BRONZE" &&
+    typeof me?.next?.progressPct === "number"
+  ) {
+    ok("loyalty/me has tier+next", `hires=${me.hires} progress=${me.next.progressPct}%`);
+  } else return fail("loyalty/me", `status=${r.status} got=${JSON.stringify(me)}`);
+
   // 29. PATCH experience description — owner-only update path.
   // First, find any experience this worker added during the smoke flow.
   // (The smoke script earlier in main creates 1 experience for the worker

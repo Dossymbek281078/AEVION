@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "Sign in to AEVION — one identity for the whole Trust OS",
@@ -23,8 +26,8 @@ const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Sign in", item: "https://aevion.app/auth" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Sign in", item: `${SITE}/auth` },
   ],
 };
 

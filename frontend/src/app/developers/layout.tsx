@@ -1,3 +1,7 @@
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
+
 const techArticleJsonLd = {
   "@context": "https://schema.org",
   "@type": "TechArticle",
@@ -8,16 +12,16 @@ const techArticleJsonLd = {
   inLanguage: ["en"],
   proficiencyLevel: "Beginner",
   about: ["AEVION", "REST API", "TypeScript SDK", "Webhooks", "OpenAPI"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/developers" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/developers` },
 };
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Developers", item: "https://aevion.app/developers" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Developers", item: `${SITE}/developers` },
   ],
 };
 
@@ -26,7 +30,7 @@ const apiReferenceJsonLd = {
   "@type": "APIReference",
   name: "AEVION REST API",
   description: "Public REST API across QRight, QSign, Bureau, Planet, QTrade and Quantum Shield modules.",
-  url: "https://aevion.app/api/openapi.json",
+  url: `${SITE}/api/openapi.json`,
   programmingModel: "REST",
   targetPlatform: "Web",
 };

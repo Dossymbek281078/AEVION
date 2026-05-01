@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClientProviders } from "@/components/ClientProviders";
+import { getSiteUrl } from "@/lib/siteUrl";
 import "./globals.css";
+
+const SITE = getSiteUrl();
 
 export const viewport: Viewport = {
   themeColor: [
@@ -24,7 +27,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://aevion.app"),
+  metadataBase: new URL(SITE),
   title: {
     default: "AEVION — Trust infrastructure for digital assets & IP",
     template: "%s · AEVION",
@@ -49,11 +52,11 @@ const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "AEVION",
-  url: "https://aevion.app",
-  logo: "https://aevion.app/icon.png",
+  url: SITE,
+  logo: `${SITE}/icon.png`,
   description:
     "Trust infrastructure for digital assets and intellectual property. IP registry (QRight), cryptographic signatures (QSign), patent bureau, compliance certification (Planet), awards, digital banking.",
-  sameAs: ["https://aevion.app/pitch"],
+  sameAs: [`${SITE}/pitch`],
   contactPoint: [
     { "@type": "ContactPoint", contactType: "investor relations", email: "yahiin1978@gmail.com", areaServed: "Worldwide" },
   ],
@@ -63,12 +66,12 @@ const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "AEVION",
-  url: "https://aevion.app",
+  url: SITE,
   inLanguage: ["en", "ru", "kk"],
   publisher: { "@type": "Organization", name: "AEVION" },
   potentialAction: {
     "@type": "SearchAction",
-    target: { "@type": "EntryPoint", urlTemplate: "https://aevion.app/help?q={search_term_string}" },
+    target: { "@type": "EntryPoint", urlTemplate: `${SITE}/help?q={search_term_string}` },
     "query-input": "required name=search_term_string",
   },
 };

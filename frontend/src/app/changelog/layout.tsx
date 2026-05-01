@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION Changelog — public timeline of releases",
@@ -22,8 +25,8 @@ const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Changelog", item: "https://aevion.app/changelog" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Changelog", item: `${SITE}/changelog` },
   ],
 };
 
@@ -35,8 +38,8 @@ const articleJsonLd = {
   description: "Cross-module release timeline. Every entry pins a date, a kind (feat / fix / docs) and the surfaces that shipped.",
   inLanguage: ["en"],
   about: ["AEVION", "Release Notes", "Product Changelog"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/changelog" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/changelog` },
 };
 
 export default function ChangelogLayout({ children }: { children: React.ReactNode }) {

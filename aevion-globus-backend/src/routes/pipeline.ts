@@ -2304,3 +2304,316 @@ pipelineRouter.get("/admin/audit", async (req, res) => {
   );
   res.json({ items: r.rows });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — OG cards, sitemap, per-cert RSS
+// (Pipeline has no /pipeline/* frontend; public cert page lives at
+//  /bureau/cert/:certId since both surfaces share IPCertificate.)
+// ─────────────────────────────────────────────────────────────────────────
+
+function pipelineEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function pipelineWrap(text: string, perLine: number, maxLines: number): string[] {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    if ((current + " " + w).trim().length > perLine) {
+      if (current) lines.push(current);
+      current = w;
+      if (lines.length >= maxLines - 1) break;
+    } else {
+      current = (current + " " + w).trim();
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  const consumed = lines.join(" ").split(/\s+/).filter(Boolean).length;
+  if (consumed < words.length && lines.length === maxLines) {
+    lines[maxLines - 1] = (lines[maxLines - 1] || "").replace(/\s+\S+$/, "") + "…";
+  }
+  return lines;
+}
+
+// 🔹 GET /certificate/:certId/og.svg — 1200x630 social-share card.
+//    Status drives accent (green=active, red=revoked).
+pipelineRouter.get("/certificate/:certId/og.svg", async (req, res) => {
+  try {
+    await ensureTables();
+    const certId = String(req.params.certId);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const r = await pool.query(
+      `SELECT "id","title","kind","authorName","status","protectedAt","country"
+       FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    if (r.rowCount === 0) {
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="320" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="900" fill="#e2e8f0">Certificate not found</text>
+  <text x="60" y="380" font-family="ui-monospace, monospace" font-size="24" fill="#64748b">${pipelineEsc(certId)}</text>
+</svg>`;
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(fallback);
+    }
+    const row = r.rows[0] as any;
+    const status = String(row.status || "active");
+    const isRevoked = status === "revoked";
+    const accent = isRevoked ? "#dc2626" : "#16a34a";
+    const label = isRevoked ? "REVOKED" : "ACTIVE";
+    const titleLines = pipelineWrap(row.title || certId, 24, 2);
+    const protectedAt = row.protectedAt
+      ? (row.protectedAt instanceof Date ? row.protectedAt.toISOString() : String(row.protectedAt)).slice(0, 10)
+      : null;
+    const subLine = [
+      row.authorName ? `by ${row.authorName}` : "anonymous author",
+      row.kind ? `kind=${row.kind}` : null,
+      row.country ? row.country : null,
+      protectedAt ? `protected ${protectedAt}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const subLines = pipelineWrap(subLine, 60, 2);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${accent}"/>
+      <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION PIPELINE</text>
+    <g transform="translate(60, 170)">
+      ${titleLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 92}" font-size="80" font-weight="900" letter-spacing="-2">${pipelineEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, ${170 + titleLines.length * 92 + 40})">
+      ${subLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 38}" font-size="28" font-weight="500" fill="#cbd5e1">${pipelineEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, 540)">
+      <rect width="${label.length * 18 + 56}" height="44" rx="22" fill="${accent}" fill-opacity="0.18" stroke="${accent}" stroke-width="2"/>
+      <text x="22" y="30" font-size="22" font-weight="900" fill="${accent}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${pipelineEsc(label)}</text>
+    </g>
+    <g transform="translate(${1200 - 60}, 540)" text-anchor="end">
+      <text font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">${pipelineEsc(certId.slice(0, 18))}</text>
+    </g>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "cert og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /og.svg — index-page social-share card (totals + active + revoked).
+pipelineRouter.get("/og.svg", async (_req, res) => {
+  try {
+    await ensureTables();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT COUNT(*)::int AS "n",
+              SUM(CASE WHEN "status"='active' THEN 1 ELSE 0 END)::int AS "active",
+              SUM(CASE WHEN "status"='revoked' THEN 1 ELSE 0 END)::int AS "revoked"
+       FROM "IPCertificate"`
+    );
+    const t = (totals.rows[0] || {}) as any;
+    const total = t.n || 0;
+    const active = t.active || 0;
+    const revoked = t.revoked || 0;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#16a34a"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION PIPELINE</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${pipelineEsc(String(total))} certificates</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Tamper-evident IP protection — HMAC + Ed25519 + OTS.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#16a34a" fill-opacity="0.15" stroke="#16a34a" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#16a34a">${pipelineEsc(String(active))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#86efac">ACTIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#dc2626" fill-opacity="0.15" stroke="#dc2626" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#fca5a5">${pipelineEsc(String(revoked))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / pipeline</text>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "index og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /certificate/:certId/changelog.rss — RSS 2.0 of admin events
+//    (force-revoke etc.) sourced from PipelineAuditLog.
+pipelineRouter.get("/certificate/:certId/changelog.rss", async (req, res) => {
+  try {
+    await ensureTables();
+    const certId = String(req.params.certId);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/pipeline/certificate/${encodeURIComponent(certId)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/bureau/cert/${encodeURIComponent(certId)}`;
+
+    const certRow = await pool.query(
+      `SELECT "title" FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    const certTitle = certRow.rows[0]?.title || certId;
+
+    const r = await pool.query(
+      `SELECT "id","action","actor","payload","at"
+       FROM "PipelineAuditLog"
+       WHERE "certId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [certId, limit]
+    );
+
+    function describe(row: any): string {
+      const p = row.payload || {};
+      switch (row.action) {
+        case "admin.revoke-cert":
+          return `Force-revoked by ${row.actor || "admin"}${p.reason ? ` — ${p.reason}` : ""}`;
+        default:
+          return row.action || "Pipeline event";
+      }
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${certTitle} — ${summary}`;
+        const guid = `aevion-pipeline-${row.id}`;
+        return `    <item>
+      <title>${pipelineEsc(title)}</title>
+      <link>${pipelineEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${pipelineEsc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${pipelineEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION Pipeline · ${pipelineEsc(certTitle)} — events</title>
+    <link>${pipelineEsc(siteUrl)}</link>
+    <atom:link href="${pipelineEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Admin events for AEVION Pipeline certificate ${pipelineEsc(certId)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "cert rss failed", details: err.message });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap. Pipeline has no /pipeline/* frontend, so
+//    each cert links to its public Bureau page (/bureau/cert/:id). Limited
+//    to active certs (revoked → de-indexed).
+pipelineRouter.get("/sitemap.xml", async (req, res) => {
+  try {
+    await ensureTables();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT "id","protectedAt"
+       FROM "IPCertificate"
+       WHERE "status" = 'active'
+       ORDER BY "protectedAt" DESC
+       LIMIT 5000`
+    );
+
+    const urls: string[] = [];
+    for (const row of r.rows as any[]) {
+      const lastmodSrc = row.protectedAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${pipelineEsc(origin)}/bureau/cert/${pipelineEsc(row.id)}</loc>
+    <lastmod>${pipelineEsc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=600");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "sitemap failed", details: err.message });
+  }
+});

@@ -122,7 +122,7 @@ if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) reject();
 - **`/modules`** — public browser (server component, EN/RU). Tier/status/kind filters + free-text search + CSV download button + 4-stat headline cards + Tier 3 trending strip (top 5 modules by 24h hits) + sort toggle (priority / trending). Each card shows tier color chip, status, kind badge, override marker, tags, primary path, API hints, plus "Embed badge" and "Detail" buttons.
 - **`/modules/[id]`** — Tier 3 detail page (server component, EN/RU). Identity + live state with base→effective diff, surfaces, inline badge previews (dark/light), outgoing API dependency edges, full per-module changelog with diff view. CTA: open primary path.
 - **`/modules/[id]/badge`** — embed configurator. Live SVG preview, dark/light theme toggle, copy-able snippets (Markdown for README badges, HTML `<img>`, direct URL, JS fetch).
-- **`/admin/modules`** — registry with per-row "Edit override" modal (status / tier / hint dropdowns, blank = clear that field). Audit log section at the bottom with diff details. Webhook subscriptions managed via API (see above).
+- **`/admin/modules`** — registry with per-row "Edit override" modal (status / tier / hint dropdowns, blank = clear that field). Audit log section in the middle with diff details. **Webhook subscriptions panel at the bottom**: create form (URL + events + label), per-row inline delivery log toggle, secret revealed once on creation with copy-to-clipboard, delete button per row, failure count badge.
 
 ## Effective state semantics
 

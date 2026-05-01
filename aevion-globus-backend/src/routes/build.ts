@@ -5,6 +5,7 @@ import {
   ensureBuildTables,
   maybeCleanupExpiredBoosts,
 } from "../lib/build";
+// v1 sub-routers
 import { profilesRouter } from "./build/profiles";
 import { projectsRouter } from "./build/projects";
 import { vacanciesRouter } from "./build/vacancies";
@@ -21,48 +22,25 @@ import { statsRouter } from "./build/stats";
 import { adminRouter } from "./build/admin";
 import { leadsRouter } from "./build/leads";
 import { healthRouter } from "./build/health";
+// v2 killer-feature sub-routers
+import { availabilityRouter } from "./build/availability";
+import { salaryStatsRouter } from "./build/salary-stats";
+import { portfolioPhotosRouter } from "./build/portfolio-photos";
+import { communitiesRouter } from "./build/communities";
+import { teamHiringRouter } from "./build/team-hiring";
+import { shiftsRouter } from "./build/shifts";
+import { documentsRouter } from "./build/documents";
+import { videoRoomsRouter } from "./build/video-rooms";
+import { contractsRouter } from "./build/contracts";
 
 export const buildRouter = Router();
 
-// Global: 120 requests per minute per IP across all /api/build/* endpoints.
-// Sub-limiter for high-abuse surfaces is applied at the route level below.
-const globalLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 120,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "rate_limit_exceeded" },
-});
+const globalLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "rate_limit_exceeded" } });
+const messageLimiter = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "message_rate_limit_exceeded" } });
+const leadsLimiter = rateLimit({ windowMs: 60_000, max: 5, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "leads_rate_limit_exceeded" } });
+const applyLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "apply_rate_limit_exceeded" } });
+const communityMsgLimiter = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "community_rate_limit_exceeded" } });
 
-// Tighter per-IP limits on public/write-heavy endpoints.
-// DMs: 30/min — prevents DM spam without blocking normal chat.
-const messageLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "message_rate_limit_exceeded" },
-});
-
-// Leads: 5/min — public endpoint, protects against bulk scraping/flooding.
-const leadsLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "leads_rate_limit_exceeded" },
-});
-
-// Applications: 10/min — applying to many vacancies too fast is a red flag.
-const applyLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "apply_rate_limit_exceeded" },
-});
-
-// Ensure tables exist on first request; fire-and-forget boost cleanup.
 buildRouter.use(async (_req, res, next) => {
   try {
     await ensureBuildTables();
@@ -76,13 +54,12 @@ buildRouter.use(async (_req, res, next) => {
 
 buildRouter.use(globalLimiter);
 
+// ── v1 routes ──────────────────────────────────────────────────────────
 buildRouter.use("/", profilesRouter);
 buildRouter.use("/projects", projectsRouter);
 buildRouter.use("/vacancies", vacanciesRouter);
-// Apply limiter before the router so it fires on POST /applications
 buildRouter.post("/applications", applyLimiter);
 buildRouter.use("/applications", applicationsRouter);
-// Message limiter on POST /messages only (GET thread/inbox is read-only)
 buildRouter.post("/messages", messageLimiter);
 buildRouter.use("/", messagingRouter);
 buildRouter.use("/trial-tasks", trialTasksRouter);
@@ -94,7 +71,18 @@ buildRouter.use("/loyalty", loyaltyRouter);
 buildRouter.use("/referrals", referralsRouter);
 buildRouter.use("/stats", statsRouter);
 buildRouter.use("/admin", adminRouter);
-// Lead limiter on POST /leads only (public endpoint)
 buildRouter.post("/leads", leadsLimiter);
 buildRouter.use("/leads", leadsRouter);
 buildRouter.use("/health", healthRouter);
+
+// ── v2 killer features ─────────────────────────────────────────────────
+buildRouter.use("/availability", availabilityRouter);
+buildRouter.use("/salary-stats", salaryStatsRouter);
+buildRouter.use("/portfolio/photos", portfolioPhotosRouter);
+buildRouter.post("/communities/:slug/messages", communityMsgLimiter);
+buildRouter.use("/communities", communitiesRouter);
+buildRouter.use("/team-requests", teamHiringRouter);
+buildRouter.use("/shifts", shiftsRouter);
+buildRouter.use("/documents", documentsRouter);
+buildRouter.use("/video", videoRoomsRouter);
+buildRouter.use("/applications", contractsRouter);

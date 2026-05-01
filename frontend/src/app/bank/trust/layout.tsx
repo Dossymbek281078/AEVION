@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "Trust Score — AEVION Bank",
@@ -28,10 +31,10 @@ const articleJsonLd = {
     "How AEVION Bank computes your Trust Score across 8 factors — banking activity, network, IP portfolio, ecosystem participation. The reputation that gates credit.",
   inLanguage: ["en", "ru", "kk"],
   about: ["Trust Score", "Reputation", "AEVION Bank", "Credit"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
   mainEntityOfPage: {
     "@type": "WebPage",
-    "@id": "https://aevion.app/bank/trust",
+    "@id": `${SITE}/bank/trust`,
   },
 };
 

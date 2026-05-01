@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION Music Awards — premium for AI and digital music",
@@ -25,17 +28,17 @@ const articleJsonLd = {
     "AEVION Music Awards: submit through Planet (artifact type music), get a compliance certificate and AEC payout into AEVION Bank.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Music Awards", "AI Music", "Creator Economy", "QRight", "Planet Validators"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/awards/music" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/awards/music` },
 };
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Awards", item: "https://aevion.app/awards" },
-    { "@type": "ListItem", position: 3, name: "Music", item: "https://aevion.app/awards/music" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Awards", item: `${SITE}/awards` },
+    { "@type": "ListItem", position: 3, name: "Music", item: `${SITE}/awards/music` },
   ],
 };
 
@@ -99,14 +102,14 @@ const howToJsonLd = {
       position: 1,
       name: "Register authorship in QRight",
       text: "Upload the master to QRight to capture SHA-256 fingerprint, HMAC signature and Quantum Shield key derivation. This locks the authorship timestamp on-chain before anyone else sees the track.",
-      url: "https://aevion.app/qright",
+      url: `${SITE}/qright`,
     },
     {
       "@type": "HowToStep",
       position: 2,
       name: "Open Planet → submit artifact",
       text: "On Planet choose artifact type 'music', attach the QRight reference and the public preview. Add credits, language tags and any sample provenance.",
-      url: "https://aevion.app/planet",
+      url: `${SITE}/planet`,
     },
     {
       "@type": "HowToStep",
@@ -125,7 +128,7 @@ const howToJsonLd = {
       position: 5,
       name: "AEC payout into AEVION Bank",
       text: "Winners receive AEC straight into their AEVION Bank wallet. Funds become immediately routable — Autopilot, savings goals, P2P, or off-ramp.",
-      url: "https://aevion.app/bank",
+      url: `${SITE}/bank`,
     },
   ],
 };

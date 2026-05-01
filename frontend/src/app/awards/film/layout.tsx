@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION Film Awards — premium for AI and digital cinema",
@@ -25,17 +28,17 @@ const articleJsonLd = {
     "AEVION Film Awards: submit through Planet (artifact type film), pass validator quorum, get a compliance certificate and AEC payout into AEVION Bank.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Film Awards", "AI Film", "Digital Cinema", "Creator Economy", "QRight", "Planet Validators"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/awards/film" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/awards/film` },
 };
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Awards", item: "https://aevion.app/awards" },
-    { "@type": "ListItem", position: 3, name: "Film", item: "https://aevion.app/awards/film" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Awards", item: `${SITE}/awards` },
+    { "@type": "ListItem", position: 3, name: "Film", item: `${SITE}/awards/film` },
   ],
 };
 
@@ -99,14 +102,14 @@ const howToJsonLd = {
       position: 1,
       name: "Register authorship in QRight",
       text: "Hash the film master in QRight (SHA-256 + HMAC + Quantum Shield). For multi-track films register each cut you want individually attributed (director's cut, festival cut, theatrical cut).",
-      url: "https://aevion.app/qright",
+      url: `${SITE}/qright`,
     },
     {
       "@type": "HowToStep",
       position: 2,
       name: "Open Planet → submit artifact",
       text: "On Planet choose artifact type 'film', attach the QRight reference, the public 30s preview, and the full master link (HLS or MP4). Add credits, country, language tags, and AI-tool disclosure.",
-      url: "https://aevion.app/planet",
+      url: `${SITE}/planet`,
     },
     {
       "@type": "HowToStep",
@@ -125,7 +128,7 @@ const howToJsonLd = {
       position: 5,
       name: "AEC payout into AEVION Bank",
       text: "Winners receive AEC into the AEVION Bank wallet. The Planet artifact page becomes the public award proof — citable in pitch decks, distribution deals and festival applications.",
-      url: "https://aevion.app/bank",
+      url: `${SITE}/bank`,
     },
   ],
 };

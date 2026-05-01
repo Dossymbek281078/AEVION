@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 const techArticleJsonLd = {
   "@context": "https://schema.org",
@@ -11,10 +14,10 @@ const techArticleJsonLd = {
   proficiencyLevel: "Intermediate",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Bank", "REST API", "Wallet API", "QSign", "JWT"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
   mainEntityOfPage: {
     "@type": "WebPage",
-    "@id": "https://aevion.app/bank/api",
+    "@id": `${SITE}/bank/api`,
   },
 };
 

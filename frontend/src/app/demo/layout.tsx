@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION · Live ecosystem demo — 27 nodes, one trust pipeline",
@@ -27,16 +30,16 @@ const articleJsonLd = {
     "Walk every AEVION module: registry → signature → bureau → compliance → wallet. Live API metrics, real backend, real data. From idea to court-grade certificate in 90 seconds.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION", "Trust Infrastructure", "QRight", "QSign", "Bureau", "Planet", "Bank"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/demo" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/demo` },
 };
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Demo", item: "https://aevion.app/demo" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Demo", item: `${SITE}/demo` },
   ],
 };
 

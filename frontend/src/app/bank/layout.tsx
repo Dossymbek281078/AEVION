@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { SentryInit } from "./_components/SentryInit";
 import { TestModeBanner } from "./_components/TestModeBanner";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION Bank — wallet · royalties · trust-gated credit",
@@ -23,14 +26,14 @@ const webAppJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
   name: "AEVION Bank",
-  url: "https://aevion.app/bank",
+  url: `${SITE}/bank`,
   applicationCategory: "FinanceApplication",
   operatingSystem: "Web (Chrome, Safari, Firefox, Edge); installable PWA",
   inLanguage: ["en", "ru", "kk"],
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   description:
     "Unified wallet for AEC credits, automatic royalties from IP usage, savings goals, recurring payments, salary advance gated by Trust Score. Multilingual EN/RU/KK.",
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
 };
 
 export default function BankLayout({ children }: { children: React.ReactNode }) {

@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION Awards · Music & Film recognition with AEC payouts",
@@ -23,16 +26,16 @@ const articleJsonLd = {
     "AEVION Awards hub: creative recognition wired to QRight authorship, Planet validator quorum and Bank AEC payouts. Music wave 1, film wave 2.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Awards", "Music Awards", "Film Awards", "Creator Economy", "Planet Validators"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/awards" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/awards` },
 };
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Awards", item: "https://aevion.app/awards" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Awards", item: `${SITE}/awards` },
   ],
 };
 

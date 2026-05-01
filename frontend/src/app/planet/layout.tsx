@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION Planet — validator network for AI artifacts",
@@ -28,16 +31,16 @@ const articleJsonLd = {
     "AEVION Planet is a transparent on-chain quorum: validators independently sign verdicts on AI artifact submissions. Powers Awards, Royalties and the QRight authorship rail.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Planet", "Validator Network", "On-chain Verdicts", "AI Provenance", "QRight"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/planet" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/planet` },
 };
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Planet", item: "https://aevion.app/planet" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Planet", item: `${SITE}/planet` },
   ],
 };
 

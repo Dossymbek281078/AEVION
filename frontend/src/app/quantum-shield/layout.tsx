@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION Quantum Shield — Shamir's Secret Sharing + Ed25519 protection",
@@ -29,16 +32,16 @@ const articleJsonLd = {
   inLanguage: ["en", "ru", "kk"],
   proficiencyLevel: "Expert",
   about: ["Cryptography", "Shamir's Secret Sharing", "Ed25519", "Post-Quantum", "Key Management"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/quantum-shield" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/quantum-shield` },
 };
 
 const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Quantum Shield", item: "https://aevion.app/quantum-shield" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Quantum Shield", item: `${SITE}/quantum-shield` },
   ],
 };
 

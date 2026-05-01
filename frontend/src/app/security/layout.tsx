@@ -1,3 +1,7 @@
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
+
 const articleJsonLd = {
   "@context": "https://schema.org",
   "@type": "Article",
@@ -7,8 +11,8 @@ const articleJsonLd = {
     "Six-layer platform security overview: Quantum Shield key management, Ed25519 signatures, identity scope, validator quorum, audit trails and public vulnerability disclosure.",
   inLanguage: ["en"],
   about: ["AEVION", "Platform Security", "Cryptography", "Compliance", "Audit"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
-  mainEntityOfPage: { "@type": "WebPage", "@id": "https://aevion.app/security" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/security` },
 };
 
 const faqJsonLd = {
@@ -62,8 +66,8 @@ const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Security", item: "https://aevion.app/security" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Security", item: `${SITE}/security` },
   ],
 };
 

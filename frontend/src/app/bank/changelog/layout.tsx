@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 const articleJsonLd = {
   "@context": "https://schema.org",
@@ -10,10 +13,10 @@ const articleJsonLd = {
     "Public timeline of every shipped AEVION Bank feature — wallet, savings, royalties, recurring payments, security, social, and developer surfaces.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Bank", "Changelog", "Release notes"],
-  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  publisher: { "@type": "Organization", name: "AEVION", url: SITE },
   mainEntityOfPage: {
     "@type": "WebPage",
-    "@id": "https://aevion.app/bank/changelog",
+    "@id": `${SITE}/bank/changelog`,
   },
 };
 

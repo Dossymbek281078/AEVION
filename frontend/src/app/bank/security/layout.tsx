@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { BreadcrumbsJsonLd } from "../_components/BreadcrumbsJsonLd";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "Security — AEVION Bank",
@@ -31,11 +34,11 @@ const articleJsonLd = {
   publisher: {
     "@type": "Organization",
     name: "AEVION",
-    url: "https://aevion.app",
+    url: SITE,
   },
   mainEntityOfPage: {
     "@type": "WebPage",
-    "@id": "https://aevion.app/bank/security",
+    "@id": `${SITE}/bank/security`,
   },
 };
 

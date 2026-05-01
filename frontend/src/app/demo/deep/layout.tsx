@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
+
+const SITE = getSiteUrl();
 
 export const metadata: Metadata = {
   title: "AEVION · Deep demo — architecture & data flows",
@@ -22,9 +25,9 @@ const breadcrumbJsonLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "AEVION", item: "https://aevion.app" },
-    { "@type": "ListItem", position: 2, name: "Demo", item: "https://aevion.app/demo" },
-    { "@type": "ListItem", position: 3, name: "Deep", item: "https://aevion.app/demo/deep" },
+    { "@type": "ListItem", position: 1, name: "AEVION", item: SITE },
+    { "@type": "ListItem", position: 2, name: "Demo", item: `${SITE}/demo` },
+    { "@type": "ListItem", position: 3, name: "Deep", item: `${SITE}/demo/deep` },
   ],
 };
 

@@ -28,6 +28,14 @@ export const planetComplianceRouter = Router();
 
 const pool = getPool();
 
+planetComplianceRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "planet",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Public surfaces (embed JSON, badge SVG, transparency) are loaded by
 // third-party sites; they get a higher cap than the owner/admin reads.
 const planetEmbedRateLimit = rateLimit({

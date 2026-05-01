@@ -1,0 +1,24 @@
+{
+  "name": "@aevion/bureau-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for AEVION Bureau — verified-author KYC tier upgrade, organizations, embed/badge for certificates.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "exports": { ".": { "types": "./index.d.ts", "default": "./index.js" } },
+  "files": ["index.ts", "index.js", "index.d.ts", "README.md"],
+  "keywords": ["aevion", "bureau", "kyc", "verified-author", "embed-widget"],
+  "homepage": "https://aevion.com/bureau",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "aevion-globus-backend/sdk/bureau-client"
+  },
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "peerDependencies": {},
+  "devDependencies": { "typescript": "^5.0.0" },
+  "scripts": {
+    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck"
+  }
+}

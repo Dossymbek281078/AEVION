@@ -149,6 +149,8 @@ aevionHubRouter.get("/openapi.json", (req, res) => {
           "@aevion/qshield-client",
           "@aevion/pipeline-client",
           "@aevion/qright-client",
+          "@aevion/planet-client",
+          "@aevion/bureau-client",
         ],
         docs: "https://aevion.com/docs/sdk",
       },

@@ -648,6 +648,48 @@
         { "kind": "defect-act", "title": "Дефектная ведомость №12-2026" },
         { "kind": "kp", "title": "3 КП на ламинат 33 класса" }
       ]
+    },
+    {
+      "id": "school-47-wing-b",
+      "title": "Крыло Б школы №47 — отделочные работы",
+      "type": "капремонт",
+      "region": "Алматы",
+      "description": "Сквозной кейс уровня 2. Крыло Б: 4 этажа × 8 классных комнат = 32 помещения. Школа 1980 г.п., функционирует (ремонт в каникулы). Финансирование — местный бюджет Алматы.",
+      "lessonRef": "уровень-2-простая-лср",
+      "geometry": {
+        "kind": "room",
+        "length": 7.5,
+        "width": 6.5,
+        "height": 3.2,
+        "openings": [
+          { "kind": "window", "width": 1.4, "height": 1.6, "count": 2 },
+          { "kind": "door", "width": 0.9, "height": 2.1, "count": 1 }
+        ]
+      },
+      "attachments": [
+        { "kind": "drawing", "title": "Планы крыла Б, 1–4 этажи (М 1:100)" },
+        { "kind": "defect-act", "title": "Дефектная ведомость — отделочные работы крыла Б" },
+        { "kind": "kp", "title": "3 КП на антивандальный линолеум для школ" },
+        { "kind": "vor", "title": "ВОР к ЛСР «Отделочные работы крыла Б»" }
+      ],
+      "_wingData": {
+        "floorsCount": 4,
+        "roomsPerFloor": 8,
+        "roomsTotal": 32,
+        "roomLength": 7.5,
+        "roomWidth": 6.5,
+        "roomHeight": 3.2,
+        "windowsPerRoom": 2,
+        "windowWidth": 1.4,
+        "windowHeight": 1.6,
+        "doorsPerRoom": 1,
+        "doorWidth": 0.9,
+        "doorHeight": 2.1,
+        "corridorLength": 42,
+        "corridorWidth": 2.4,
+        "totalFloorArea": 1800,
+        "note": "Площадь 1800 м² включает классы + коридоры + лестничные клетки"
+      }
     }
   ]
 }

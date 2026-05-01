@@ -120,6 +120,19 @@ export interface SmetaPosition {
   coefficients: AppliedCoefficient[];
   /** Заметка студента (откуда объём, обоснование). */
   note?: string;
+  /** Формула подсчёта объёма для ВОР (студент заполняет). */
+  formula?: string;
+  /** Ссылка на чертёж/страницу ВОР. */
+  drawingRef?: string;
+}
+
+/** Период выполнения работ для КС-2. */
+export interface Ks2Period {
+  id: string;
+  /** Название периода: "Июнь 2026", "Июль 2026" и т.д. */
+  name: string;
+  /** Фактически выполненные объёмы: positionId → объём за период. */
+  volumes: Record<string, number>;
 }
 
 /** Применённый коэффициент условий производства работ. */

@@ -388,31 +388,87 @@ async function main() {
     ok("profile aggregates avgRating+reviewCount");
   } else return fail("profile rating agg", `status=${r.status} got=avg=${prof?.avgRating} count=${prof?.reviewCount}`);
 
-  // 31. Payment webhook — local-mode (no secret env). Pay an existing
-  // PENDING order via the webhook path. We need a fresh PENDING order
-  // since earlier flow may have already paid one. Fire a sub-start to
-  // create one.
-  // (only if a vacancy/sub flow created BuildOrder rows earlier — skip
-  // if none)
-  r = await call("GET", "/api/build/orders/me", null, clientToken);
-  const orders = unwrap(r)?.items || [];
-  const pendingOrder = orders.find((o) => o.status === "PENDING");
-  if (pendingOrder) {
-    r = await call("POST", "/api/build/webhooks/payment", {
-      event: "payment.succeeded",
-      orderId: pendingOrder.id,
-      providerId: `smoke-${RUN}`,
-    });
-    if (is2xx(r) && unwrap(r)?.processed === true) {
-      ok("webhook payment.succeeded", `orderId=${pendingOrder.id.slice(0, 8)}…`);
-    } else return fail("webhook payment", `status=${r.status} ${r.body?.code || ""}`);
-  } else {
-    step += 1;
-    console.log(`  ${String(step).padStart(2, "0")}  SKIP  webhook payment (no PENDING orders)`);
-  }
+  // 31. Force a paid BOOST order — produces a deterministic PENDING
+  // BuildOrder we can then walk through webhook → cashback mint → claim
+  // → AEV wallet credit. Boost cost is 990 RUB × ceil(days/7).
+  r = await call("POST", `/api/build/vacancies/${vacancyId}/boost`, {
+    days: 7,
+    paid: true,
+  }, clientToken);
+  const boost = unwrap(r);
+  if (r.status === 201 && boost?.orderId && boost?.source === "PAID") {
+    ok("paid boost creates PENDING order", `order=${boost.orderId.slice(0, 8)}…`);
+  } else return fail("paid boost", `status=${r.status} body=${JSON.stringify(r.body)}`);
+  const boostOrderId = boost.orderId;
 
-  // suppress unused-variable warning for clientId
-  void clientId;
+  // 32. Webhook marks the boost order PAID → mint cashback row.
+  r = await call("POST", "/api/build/webhooks/payment", {
+    event: "payment.succeeded",
+    orderId: boostOrderId,
+    providerId: `smoke-${RUN}`,
+  });
+  if (is2xx(r) && unwrap(r)?.processed === true) {
+    ok("webhook payment.succeeded", `orderId=${boostOrderId.slice(0, 8)}…`);
+  } else return fail("webhook payment", `status=${r.status} ${r.body?.code || ""}`);
+
+  // 33. Cashback ledger picked up the new entry. Client is on DEFAULT
+  // tier (cashbackBps=200) and the boost order is 990 RUB × 1 week →
+  // expected cashbackAev = 990 × 0.02 = 19.8 AEV.
+  r = await call("GET", "/api/build/loyalty/cashback", null, clientToken);
+  const ledgerBundle = unwrap(r);
+  const minted = (ledgerBundle?.ledger || []).find((e) => e.orderId === boostOrderId);
+  const expectedCashback = 19.8;
+  if (is2xx(r) && minted && Math.abs(minted.cashbackAev - expectedCashback) < 0.001) {
+    ok("BuildCashback minted at DEFAULT tier (2%)", `aev=${minted.cashbackAev}`);
+  } else return fail("cashback mint", `status=${r.status} got=${JSON.stringify(minted)}`);
+
+  // 34. Claim — flips PENDING rows to CLAIMED, returns total claimable.
+  const deviceId = `smoke-${RUN}`;
+  r = await call("POST", "/api/build/loyalty/cashback/claim", {
+    deviceId,
+  }, clientToken);
+  const claim = unwrap(r);
+  if (
+    is2xx(r) &&
+    claim?.claimedRows >= 1 &&
+    Math.abs((claim?.claimedAev || 0) - expectedCashback) < 0.001
+  ) {
+    ok("cashback claim", `rows=${claim.claimedRows} aev=${claim.claimedAev}`);
+  } else return fail("cashback claim", `status=${r.status} got=${JSON.stringify(claim)}`);
+
+  // 35. Re-claim is idempotent — no PENDING rows left.
+  r = await call("POST", "/api/build/loyalty/cashback/claim", {
+    deviceId,
+  }, clientToken);
+  const reclaim = unwrap(r);
+  if (is2xx(r) && reclaim?.claimedRows === 0 && (reclaim?.claimedAev || 0) === 0) {
+    ok("re-claim is no-op (idempotent)");
+  } else return fail("re-claim idempotent", `status=${r.status} got=${JSON.stringify(reclaim)}`);
+
+  // 36. Credit the claimed AEV to the wallet. The wallet API lives on
+  // /api/aev/* and uses raw JSON envelope (not the build {success,data}).
+  r = await call("POST", `/api/aev/wallet/${encodeURIComponent(deviceId)}/mint`, {
+    amount: claim.claimedAev,
+    sourceModule: "qbuild-cashback",
+    sourceAction: "claim",
+  });
+  if (
+    is2xx(r) &&
+    r.body?.ok === true &&
+    Math.abs((r.body?.wallet?.balance || 0) - expectedCashback) < 0.001
+  ) {
+    ok("AEV wallet mint", `balance=${r.body.wallet.balance}`);
+  } else return fail("wallet mint", `status=${r.status} body=${JSON.stringify(r.body)}`);
+
+  // 37. Read-back confirms the running balance.
+  r = await call("GET", `/api/aev/wallet/${encodeURIComponent(deviceId)}`);
+  if (
+    is2xx(r) &&
+    r.body?.ok === true &&
+    (r.body?.wallet?.balance || 0) >= expectedCashback
+  ) {
+    ok("AEV wallet read", `balance=${r.body.wallet.balance}`);
+  } else return fail("wallet read", `status=${r.status} body=${JSON.stringify(r.body)}`);
 }
 
 main()

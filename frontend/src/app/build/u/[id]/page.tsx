@@ -4,8 +4,71 @@ import { getApiBase } from "@/lib/apiBase";
 import { VideoEmbed } from "@/components/build/VideoEmbed";
 import { StarsDisplay } from "@/components/build/StarRating";
 import { ReviewsByUserSection } from "@/components/build/ReviewsSection";
+import { VideoCallButton } from "@/components/build/VideoCallButton";
 
 export const dynamic = "force-dynamic";
+
+type PortfolioPhoto = {
+  id: string;
+  url: string;
+  caption: string | null;
+  projectType: string | null;
+  sortOrder: number;
+};
+
+type DocBadge = {
+  id: string;
+  docType: string;
+  status: string;
+  verifiedAt: string | null;
+};
+
+type SalaryStats = {
+  workerExpectations: { p50: number | null; currency: string };
+  employerOffers: { p50: number | null; currency: string };
+};
+
+const DOC_LABEL: Record<string, string> = {
+  WELDER: "🔥 Сварщик",
+  ELECTRICIAN: "⚡ Электрик",
+  DRIVER_LICENSE: "🚗 Права",
+  MEDICAL: "🏥 Медкомиссия",
+  SAFETY: "⛑ Охрана труда",
+  PLUMBER: "🔧 Сантехник",
+  ENGINEER: "🔩 Инженер",
+  OTHER: "📄 Документ",
+};
+
+async function loadPhotos(id: string): Promise<PortfolioPhoto[]> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/build/portfolio/photos/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return [];
+    const json = await res.json() as { success: boolean; data?: { items: PortfolioPhoto[] } };
+    return json?.data?.items ?? [];
+  } catch { return []; }
+}
+
+async function loadDocs(id: string): Promise<DocBadge[]> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/build/documents/user/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return [];
+    const json = await res.json() as { success: boolean; data?: { items: DocBadge[] } };
+    return json?.data?.items ?? [];
+  } catch { return []; }
+}
+
+async function loadSalaryStats(title: string | null, city: string | null): Promise<SalaryStats | null> {
+  if (!title && !city) return null;
+  try {
+    const params = new URLSearchParams();
+    if (title) params.set("q", title);
+    if (city) params.set("city", city);
+    const res = await fetch(`${getApiBase()}/api/build/salary-stats?${params}`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const json = await res.json() as { success: boolean; data?: SalaryStats };
+    return json?.data ?? null;
+  } catch { return null; }
+}
 
 type Bundle = {
   userId: string;
@@ -121,7 +184,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PublicProfilePage({ params }: Props) {
   const { id } = await params;
-  const data = await load(id);
+  const [data, photos, docs, salaryStats] = await Promise.all([
+    load(id),
+    loadPhotos(id),
+    loadDocs(id),
+    load(id).then((d) => d ? loadSalaryStats(d.title, d.city) : null),
+  ]);
 
   if (!data) {
     return (
@@ -201,8 +269,64 @@ export default async function PublicProfilePage({ params }: Props) {
                 <span className="font-medium text-emerald-200">{fmtSalary(data)}</span>
               </div>
             )}
+
+            {/* Verified document badges */}
+            {docs.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {docs.map((doc) => (
+                  <span key={doc.id} className="rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 text-[10px] font-bold text-teal-200">
+                    ✓ {DOC_LABEL[doc.docType] ?? doc.docType}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* Video call button */}
+          <VideoCallButton guestId={id} guestName={data.name} />
         </header>
+
+        {/* Salary market rate widget */}
+        {salaryStats && (salaryStats.workerExpectations.p50 || salaryStats.employerOffers.p50) && (
+          <section className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400">💡 Рынок — медиана зарплат</h2>
+            <div className="flex flex-wrap gap-6 text-sm">
+              {salaryStats.workerExpectations.p50 && (
+                <div>
+                  <p className="text-xs text-slate-400">Ожидания работников</p>
+                  <p className="text-lg font-bold text-white">{salaryStats.workerExpectations.p50.toLocaleString()} {salaryStats.workerExpectations.currency}</p>
+                </div>
+              )}
+              {salaryStats.employerOffers.p50 && (
+                <div>
+                  <p className="text-xs text-slate-400">Предложения работодателей</p>
+                  <p className="text-lg font-bold text-emerald-300">{salaryStats.employerOffers.p50.toLocaleString()} {salaryStats.employerOffers.currency}</p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Photo portfolio */}
+        {photos.length > 0 && (
+          <section className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-6">
+            <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">📸 Портфолио объектов</h2>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {photos.map((photo) => (
+                <a key={photo.id} href={photo.url} target="_blank" rel="noreferrer" className="group relative block overflow-hidden rounded-xl aspect-video bg-slate-800">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.url} alt={photo.caption ?? "Portfolio photo"} className="h-full w-full object-cover transition group-hover:scale-105" />
+                  {(photo.caption || photo.projectType) && (
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 px-2 py-2">
+                      {photo.projectType && <p className="text-[10px] text-slate-400">{photo.projectType}</p>}
+                      {photo.caption && <p className="text-xs text-white line-clamp-2">{photo.caption}</p>}
+                    </div>
+                  )}
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
 
         {data.introVideoUrl && (
           <Section title="Intro video">

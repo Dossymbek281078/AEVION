@@ -454,6 +454,19 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
             Reject
           </button>
         )}
+        {app.status === "ACCEPTED" && (
+          <button
+            onClick={async () => {
+              try {
+                const r = await buildApi.generateContract(app.id);
+                window.open(r.qsignUrl, "_blank", "noreferrer");
+              } catch {/**/}
+            }}
+            className="rounded-md border border-teal-500/30 bg-teal-500/10 px-3 py-1.5 text-xs font-medium text-teal-200 hover:bg-teal-500/20"
+          >
+            📄 Договор (QSign)
+          </button>
+        )}
       </div>
       {aiOpen && aiDetails && (
         <div className="mt-3 space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs">

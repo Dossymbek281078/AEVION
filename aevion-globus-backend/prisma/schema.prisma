@@ -12,6 +12,9 @@ model QRightObject {
   description  String
   kind         String
   contentHash  String
+  /// SHA-256 of raw file bytes, supplied client-side. Stored alongside
+  /// contentHash for file-level prior-art lookup. Nullable for text-only registrations.
+  fileHash     String?
   ownerName    String?
   ownerEmail   String?
   ownerUserId  String?
@@ -45,6 +48,7 @@ model QCoreSession {
   userId    String?
   title     String   @default("New session")
   mode      String   @default("multi-agent")
+  pinned    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 

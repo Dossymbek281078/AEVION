@@ -93,23 +93,58 @@ function fmtNum(v: number | null | undefined) {
    Page
    ═══════════════════════════════════════════════════════════════════════ */
 
+type TimeseriesPoint = { date: string; runs: number; costUsd: number };
+type TagCount = { tag: string; count: number };
+
 export default function QCoreAnalyticsPage() {
   const [data, setData] = useState<Analytics | null>(null);
+  const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
+  const [topTags, setTopTags] = useState<TagCount[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     setError(null);
     try {
-      const res = await fetch(apiUrl("/api/qcoreai/analytics"), { headers: bearerHeader() });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      const [aRes, tsRes, tagRes] = await Promise.all([
+        fetch(apiUrl("/api/qcoreai/analytics"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/timeseries?days=30"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/tags?limit=15"), { headers: bearerHeader() }),
+      ]);
+      const json = await aRes.json();
+      if (!aRes.ok) throw new Error(json?.error || `HTTP ${aRes.status}`);
       setData(json);
+      const tsJson = await tsRes.json().catch(() => ({}));
+      if (Array.isArray(tsJson?.items)) setTimeseries(tsJson.items);
+      const tagJson = await tagRes.json().catch(() => ({}));
+      if (Array.isArray(tagJson?.items)) setTopTags(tagJson.items);
     } catch (e: any) {
       setError(e?.message || "Failed to load analytics");
     }
   };
 
   useEffect(() => { refresh(); }, []);
+
+  /* Linear regression on the last min(14, n) days to project the next 7 days. */
+  const forecast = useMemo(() => {
+    const tail = timeseries.slice(-14);
+    if (tail.length < 2) return null;
+    const xs = tail.map((_, i) => i);
+    const ys = tail.map((p) => p.costUsd);
+    const n = xs.length;
+    const sumX = xs.reduce((a, b) => a + b, 0);
+    const sumY = ys.reduce((a, b) => a + b, 0);
+    const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
+    const sumXX = xs.reduce((acc, x) => acc + x * x, 0);
+    const denom = n * sumXX - sumX * sumX;
+    if (denom === 0) return null;
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+    const next7Total = Array.from({ length: 7 }, (_, k) =>
+      Math.max(0, intercept + slope * (n + k))
+    ).reduce((a, b) => a + b, 0);
+    const monthlyRunRate = next7Total > 0 ? next7Total * (30 / 7) : 0;
+    return { slope, intercept, next7Total, monthlyRunRate };
+  }, [timeseries]);
 
   const maxStrategyRuns = useMemo(() => {
     if (!data) return 1;
@@ -196,6 +231,65 @@ export default function QCoreAnalyticsPage() {
               <Tile label="Cost" value={fmtMoney(data.totals.costUsd)} accent="#7c3aed" />
               <Tile label="Compute time" value={fmtDur(data.totals.durationMs)} accent="#ef4444" />
             </section>
+
+            {/* Cost over time + 7-day forecast */}
+            {timeseries.length > 0 && (
+              <Section title="Cost over time">
+                <CostTimeseriesChart points={timeseries} forecast={forecast} />
+                {forecast && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#475569" }}>
+                    Linear projection on last {Math.min(14, timeseries.length)} days:{" "}
+                    <strong style={{ color: "#0f172a" }}>{fmtMoney(forecast.next7Total, 4)}</strong> next 7d ·{" "}
+                    <strong style={{ color: "#0f172a" }}>{fmtMoney(forecast.monthlyRunRate, 2)}</strong> per month at this rate
+                    {forecast.slope > 0 && <span style={{ marginLeft: 8, color: "#dc2626" }}>↑ trending up</span>}
+                    {forecast.slope < 0 && <span style={{ marginLeft: 8, color: "#16a34a" }}>↓ trending down</span>}
+                  </div>
+                )}
+              </Section>
+            )}
+
+            {/* Top tags chart */}
+            {topTags.length > 0 && (
+              <Section title="Top tags">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {topTags.map((t) => {
+                    const max = Math.max(1, ...topTags.map((x) => x.count));
+                    const pct = (t.count / max) * 100;
+                    return (
+                      <div key={t.tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 140,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#0f766e",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={t.tag}
+                        >
+                          {t.tag}
+                        </div>
+                        <div style={{ flex: 1, height: 14, background: "rgba(13,148,136,0.08)", borderRadius: 999, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${pct}%`,
+                              height: "100%",
+                              background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                              borderRadius: 999,
+                            }}
+                          />
+                        </div>
+                        <div style={{ width: 40, textAlign: "right", fontSize: 12, color: "#0f172a", fontWeight: 700 }}>
+                          {t.count}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Section>
+            )}
 
             {/* Strategy breakdown */}
             <Section title="By strategy">
@@ -385,6 +479,112 @@ function Bar({ value, max, color }: { value: number; max: number; color: string 
           transition: "width 0.3s",
         }}
       />
+    </div>
+  );
+}
+
+function CostTimeseriesChart({
+  points,
+  forecast,
+}: {
+  points: TimeseriesPoint[];
+  forecast: { slope: number; intercept: number; next7Total: number; monthlyRunRate: number } | null;
+}) {
+  const W = 700;
+  const H = 180;
+  const PAD_L = 36;
+  const PAD_R = 8;
+  const PAD_T = 8;
+  const PAD_B = 28;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  const projected = forecast
+    ? Array.from({ length: 7 }, (_, k) => Math.max(0, forecast.intercept + forecast.slope * (points.length + k)))
+    : [];
+  const allCosts = [...points.map((p) => p.costUsd), ...projected];
+  const maxCost = Math.max(0.0001, ...allCosts);
+  const total = points.length + projected.length;
+
+  const xFor = (i: number) => PAD_L + (total <= 1 ? 0 : (i / (total - 1)) * innerW);
+  const yFor = (cost: number) => PAD_T + innerH - (cost / maxCost) * innerH;
+
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(i)} ${yFor(p.costUsd)}`).join(" ");
+  const projPath = projected.length > 0
+    ? `M ${xFor(points.length - 1)} ${yFor(points[points.length - 1].costUsd)}` +
+      projected.map((c, k) => ` L ${xFor(points.length + k)} ${yFor(c)}`).join("")
+    : "";
+
+  // Y-axis ticks (3 levels)
+  const yTicks = [0, maxCost / 2, maxCost];
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg width={W} height={H} role="img" aria-label="Cost over time" style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", display: "block", minWidth: W }}>
+        {/* Grid */}
+        {yTicks.map((v, i) => (
+          <g key={i}>
+            <line x1={PAD_L} x2={W - PAD_R} y1={yFor(v)} y2={yFor(v)} stroke="#f1f5f9" strokeWidth={1} />
+            <text x={PAD_L - 4} y={yFor(v) + 3} fontSize={9} fill="#94a3b8" textAnchor="end">
+              ${v.toFixed(v < 0.01 ? 4 : 2)}
+            </text>
+          </g>
+        ))}
+        {/* Forecast region */}
+        {projected.length > 0 && (
+          <rect
+            x={xFor(points.length - 1)}
+            y={PAD_T}
+            width={W - PAD_R - xFor(points.length - 1)}
+            height={innerH}
+            fill="rgba(124,58,237,0.04)"
+          />
+        )}
+        {/* Cost line */}
+        <path d={linePath} fill="none" stroke="#0d9488" strokeWidth={2} />
+        {/* Forecast line (dashed) */}
+        {projPath && (
+          <path d={projPath} fill="none" stroke="#7c3aed" strokeWidth={2} strokeDasharray="4 4" />
+        )}
+        {/* Points */}
+        {points.map((p, i) => (
+          <circle key={i} cx={xFor(i)} cy={yFor(p.costUsd)} r={2.5} fill="#0d9488">
+            <title>{`${p.date}: ${p.runs} runs · $${p.costUsd.toFixed(4)}`}</title>
+          </circle>
+        ))}
+        {/* X-axis labels (first, mid, last + forecast end) */}
+        {points.length > 0 && (
+          <>
+            <text x={xFor(0)} y={H - 10} fontSize={9} fill="#64748b" textAnchor="start">
+              {points[0].date.slice(5)}
+            </text>
+            {points.length > 2 && (
+              <text x={xFor(Math.floor((points.length - 1) / 2))} y={H - 10} fontSize={9} fill="#64748b" textAnchor="middle">
+                {points[Math.floor((points.length - 1) / 2)].date.slice(5)}
+              </text>
+            )}
+            <text x={xFor(points.length - 1)} y={H - 10} fontSize={9} fill="#64748b" textAnchor="middle">
+              {points[points.length - 1].date.slice(5)}
+            </text>
+            {projected.length > 0 && (
+              <text x={xFor(total - 1)} y={H - 10} fontSize={9} fill="#7c3aed" textAnchor="end" fontWeight={700}>
+                +7d
+              </text>
+            )}
+          </>
+        )}
+        {/* Legend */}
+        <g transform={`translate(${PAD_L}, ${PAD_T + 4})`}>
+          <line x1={0} x2={14} y1={0} y2={0} stroke="#0d9488" strokeWidth={2} />
+          <text x={18} y={3} fontSize={10} fill="#475569">Actual</text>
+          {projPath && (
+            <>
+              <line x1={62} x2={76} y1={0} y2={0} stroke="#7c3aed" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={80} y={3} fontSize={10} fill="#475569">Forecast</text>
+            </>
+          )}
+        </g>
+      </svg>
     </div>
   );
 }

@@ -8,17 +8,21 @@ import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qsignV2Router } from "./routes/qsignV2";
 import { startWebhookWorker } from "./lib/qsignV2/webhooks";
+import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter } from "./routes/qcoreai";
+import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { aevRouter } from "./routes/aev";
 import { buildRouter } from "./routes/build";
+import { aevionHubRouter } from "./routes/aevion-hub";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -341,6 +345,12 @@ app.use("/api/auth", authRouter);
 // Planet / Compliance / Evidence / Certificate
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
+app.use("/api/awards", awardsRouter);
+
+// ==========================
+// AEVION Hub — composite cross-product health + OpenAPI index
+// ==========================
+app.use("/api/aevion", aevionHubRouter);
 
 app.use(
   (
@@ -355,8 +365,16 @@ app.use(
   },
 );
 
-app.listen(PORT, () => {
+// QSign v2 — Sentry init (no-op when SENTRY_DSN unset). Must run before
+// the listener binds so any startup failures are captured too.
+initSentry();
+
+const httpServer = app.listen(PORT, () => {
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();
 });
+
+// QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)
+// but lets clients interject mid-run guidance on the same connection.
+attachQCoreWebSocket(httpServer, "/api/qcoreai/ws");

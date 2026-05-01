@@ -1,7 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Chess, type Square } from "chess.js";
-import { bumpDaily } from "./DailyMission";
 
 /* ══════════════════════════════════════════════════════════════════════
    AEVION CyberChess — AI Coach v35
@@ -39,9 +38,7 @@ type Props = {
   onClose: () => void;
   runEngine?: (fen: string, depth: number, pvCount: number) => Promise<PVLine[]>;
   quickEval?: (fen: string, depth: number) => Promise<{ cp: number; mate: number }>;
-  userStreak?: number;
-  userRating?: number;
-  userWins?: number;
+  phaseLabel?: string;       // "Дебют" / "Миттельшпиль" / "Эндшпиль" — если знаем стадию
 };
 
 const SYSTEM_DEEP = `Ты — Алексей, шахматный тренер внутри CyberChess by AEVION. Играешь на гроссмейстерском уровне, но разговариваешь как живой человек, который рядом сидит и разбирает партию. Не академично и без сухих формулировок — но и без панибратства.
@@ -223,15 +220,13 @@ function buildMovesStr(moves: string[]): string {
 
 export default function AiCoach({
   fen, moves, fenHist, evalCp, evalMate, opening, playerColor, visible, onClose,
-  runEngine, quickEval, userStreak = 0, userRating = 1200, userWins = 0,
+  runEngine, quickEval, phaseLabel,
 }: Props) {
   const [msgs, sMsgs] = useState<Msg[]>([]);
   const [input, sInput] = useState("");
   const [loading, sLoading] = useState(false);
   const [error, sError] = useState("");
   const [engineThinking, sEngineThinking] = useState(false);
-  // Typewriter effect for the latest assistant message
-  const [typing, sTyping] = useState<{ idx: number; pos: number } | null>(null);
 
   const [liveMode, sLiveMode] = useState(true);
   const [liveComments, sLiveComments] = useState<
@@ -384,32 +379,6 @@ export default function AiCoach({
     [quickEval]
   );
 
-  // Typewriter effect — when new assistant message appears, animate text reveal
-  useEffect(() => {
-    const lastIdx = msgs.length - 1;
-    if (lastIdx < 0) return;
-    const last = msgs[lastIdx];
-    if (last.role !== "assistant") return;
-    if (typing && typing.idx === lastIdx) return;
-    sTyping({ idx: lastIdx, pos: 0 });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [msgs.length]);
-
-  useEffect(() => {
-    if (!typing) return;
-    const target = msgs[typing.idx];
-    if (!target) { sTyping(null); return; }
-    if (typing.pos >= target.content.length) { sTyping(null); return; }
-    // Adaptive speed: faster for long messages so total time stays under ~3s
-    const total = target.content.length;
-    const charsPerTick = total > 600 ? 8 : total > 300 ? 5 : 3;
-    const tickMs = 18;
-    const t = setTimeout(() => {
-      sTyping(p => p ? { ...p, pos: Math.min(p.pos + charsPerTick, target.content.length) } : null);
-    }, tickMs);
-    return () => clearTimeout(t);
-  }, [typing, msgs]);
-
   const send = useCallback(
     async (userText?: string, opts?: { skipEngine?: boolean }) => {
       const userMsg = userText || input.trim();
@@ -458,6 +427,7 @@ export default function AiCoach({
             ctx.push("");
             ctx.push(`Game moves so far: ${buildMovesStr(moves)}`);
             if (opening) ctx.push(`Opening: ${opening.eco} ${opening.name} (${opening.desc})`);
+            if (phaseLabel) ctx.push(`Текущая стадия партии: ${phaseLabel}. Формулируй ответ в терминах этой стадии — для дебюта про развитие/центр/рокировку, для миттельшпиля про слабости/планы/инициативу, для эндшпиля про активность короля/проходные/типовые позиции.`);
             ctx.push(`You are coaching ${playerColor === "w" ? "White" : "Black"}.`);
             ctx.push("");
             ctx.push("User question:");
@@ -467,15 +437,24 @@ export default function AiCoach({
           return m;
         });
 
-        const res = await fetch(`${BACKEND}/api/coach/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system: SYSTEM_DEEP,
-            messages: apiMsgs,
-            maxTokens: 1200,
-          }),
-        });
+        // 30 секунд timeout — если backend не отвечает, не зависаем навсегда.
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 30000);
+        let res: Response;
+        try {
+          res = await fetch(`${BACKEND}/api/coach/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system: SYSTEM_DEEP,
+              messages: apiMsgs,
+              maxTokens: 1200,
+            }),
+            signal: ctrl.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -486,9 +465,14 @@ export default function AiCoach({
           data.content?.filter((c: any) => c.type === "text" || c.text)
             .map((c: any) => c.text || "").join("") || "No response";
         sMsgs([...newMsgs, { role: "assistant", content: reply }]);
-        bumpDaily("coach");
       } catch (e: any) {
-        sError(e.message || "Connection failed");
+        if (e?.name === "AbortError") {
+          sError("Coach AI не ответил за 30 секунд. Сервер может быть перегружен — попробуй ещё раз через минуту, или используй Stockfish-анализ ниже.");
+        } else if (/fetch|network|Failed to fetch/i.test(e?.message || "")) {
+          sError("Не удалось связаться с Coach AI. Проверь соединение или используй Stockfish-разбор (он работает локально).");
+        } else {
+          sError(e?.message || "Connection failed");
+        }
       } finally {
         sLoading(false);
         sEngineThinking(false);
@@ -625,55 +609,10 @@ ${quality === "blunder" || quality === "mistake"
         display: "flex", justifyContent: "space-between", alignItems: "center",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            width: 32, height: 32, borderRadius: 9,
-            background: "linear-gradient(135deg,#0e766e,#14b8a6)",
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            position: "relative", overflow: "hidden",
-            boxShadow: "inset 0 -2px 4px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.15)",
-          }}>
-            <svg viewBox="0 0 32 32" width="32" height="32" aria-label="Алексей">
-              <defs>
-                <linearGradient id="aevHair" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#1f2937"/><stop offset="100%" stopColor="#374151"/>
-                </linearGradient>
-                <linearGradient id="aevSkin" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#fde2c5"/><stop offset="100%" stopColor="#f4c896"/>
-                </linearGradient>
-              </defs>
-              {/* shoulders / dark turtleneck */}
-              <path d="M2 32 C5 24, 10 22, 16 22 C22 22, 27 24, 30 32 Z" fill="#0f172a"/>
-              {/* face oval */}
-              <ellipse cx="16" cy="14" rx="6.4" ry="7.2" fill="url(#aevSkin)"/>
-              {/* hair (short, side-parted) */}
-              <path d="M9.6 11.2 C10 7, 13 5.2, 16 5.2 C19 5.2, 22 6.6, 22.4 11 C22.4 11, 20.5 9.5, 18 10 C16 10.4, 14.2 11.2, 12.5 11.5 C11 11.8, 9.8 11.6, 9.6 11.2 Z" fill="url(#aevHair)"/>
-              {/* glasses (intellectual coach vibe) */}
-              <circle cx="13" cy="14.4" r="2.1" fill="none" stroke="#0f172a" strokeWidth="0.7"/>
-              <circle cx="19" cy="14.4" r="2.1" fill="none" stroke="#0f172a" strokeWidth="0.7"/>
-              <line x1="15.1" y1="14.4" x2="16.9" y2="14.4" stroke="#0f172a" strokeWidth="0.7"/>
-              {/* subtle smile */}
-              <path d="M14 18.4 Q16 19.6, 18 18.4" stroke="#7c3a1f" strokeWidth="0.7" fill="none" strokeLinecap="round"/>
-            </svg>
-            {(loading || engineThinking) && (
-              <span style={{
-                position: "absolute", right: -3, bottom: -3,
-                width: 12, height: 12, borderRadius: "50%",
-                background: "#fbbf24", border: "2px solid #059669",
-                animation: "cc-pulse-glow 1s ease-in-out infinite",
-              }}/>
-            )}
-          </span>
+          <span style={{ fontSize: 16 }}>♟</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 900, display: "flex", alignItems: "center", gap: 6 }}>
-              Алексей · ИИ-тренер
-              <span style={{
-                fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 4,
-                background: "rgba(255,255,255,0.22)", letterSpacing: 0.4,
-              }}>v35</span>
-            </div>
-            <div style={{ fontSize: 9.5, opacity: 0.85, lineHeight: 1.2, marginTop: 1 }}>
-              {engineThinking ? "Stockfish анализирует…" : loading ? "Думаю над ответом…" : "Claude Opus 4.7 + Stockfish 18"}
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 900 }}>AI Тренер v35</div>
+            <div style={{ fontSize: 9, opacity: 0.8 }}>Sonnet 4.6 + Stockfish 18</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -769,93 +708,41 @@ ${quality === "blunder" || quality === "mistake"
 
       {!liveMode && (
         <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "8px 12px", minHeight: 80, maxHeight: 300 }}>
-          {msgs.length === 0 && !loading && (() => {
-            const hr = new Date().getHours();
-            const greet = hr < 6 ? "Доброй ночи" : hr < 12 ? "Доброе утро" : hr < 18 ? "Добрый день" : "Добрый вечер";
-            return (
+          {msgs.length === 0 && !loading && (
+            <div style={{ textAlign: "center", padding: "16px 0", color: "#9ca3af", fontSize: 11 }}>
+              Выбери действие выше или задай свой вопрос
+            </div>
+          )}
+          {msgs.map((m, i) => (
+            <div key={i} style={{
+              marginBottom: 8, display: "flex", flexDirection: "column",
+              alignItems: m.role === "user" ? "flex-end" : "flex-start",
+            }}>
               <div style={{
-                padding: "12px 14px", marginBottom: 8,
-                borderRadius: 12,
-                background: "linear-gradient(135deg,#f0fdf4 0%,#ecfdf5 100%)",
-                border: "1px solid #a7f3d0",
-                animation: "cc-fade-in 240ms ease-out",
-                display: "flex", gap: 10, alignItems: "flex-start",
-              }}>
-                <span style={{
-                  width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                  background: "linear-gradient(135deg,#0e766e,#14b8a6)",
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  overflow: "hidden", boxShadow: "inset 0 -2px 4px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.15)",
-                }}>
-                  <svg viewBox="0 0 32 32" width="44" height="44" aria-label="Алексей">
-                    <defs>
-                      <linearGradient id="aevHairBig" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1f2937"/><stop offset="100%" stopColor="#374151"/></linearGradient>
-                      <linearGradient id="aevSkinBig" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fde2c5"/><stop offset="100%" stopColor="#f4c896"/></linearGradient>
-                    </defs>
-                    <path d="M2 32 C5 24, 10 22, 16 22 C22 22, 27 24, 30 32 Z" fill="#0f172a"/>
-                    <ellipse cx="16" cy="14" rx="6.4" ry="7.2" fill="url(#aevSkinBig)"/>
-                    <path d="M9.6 11.2 C10 7, 13 5.2, 16 5.2 C19 5.2, 22 6.6, 22.4 11 C22.4 11, 20.5 9.5, 18 10 C16 10.4, 14.2 11.2, 12.5 11.5 C11 11.8, 9.8 11.6, 9.6 11.2 Z" fill="url(#aevHairBig)"/>
-                    <circle cx="13" cy="14.4" r="2.1" fill="none" stroke="#0f172a" strokeWidth="0.7"/>
-                    <circle cx="19" cy="14.4" r="2.1" fill="none" stroke="#0f172a" strokeWidth="0.7"/>
-                    <line x1="15.1" y1="14.4" x2="16.9" y2="14.4" stroke="#0f172a" strokeWidth="0.7"/>
-                    <path d="M14 18.4 Q16 19.6, 18 18.4" stroke="#7c3a1f" strokeWidth="0.7" fill="none" strokeLinecap="round"/>
-                  </svg>
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#065f46", lineHeight: 1.4 }}>
-                    {greet}! Я Алексей — твой шахматный тренер.
-                  </div>
-                  <div style={{ fontSize: 11, color: "#047857", marginTop: 4, lineHeight: 1.5 }}>
-                    {userStreak > 0 && (
-                      <span>🔥 Уже {userStreak} {userStreak === 1 ? "день" : userStreak < 5 ? "дня" : "дней"} подряд занимаешься — отлично! </span>
-                    )}
-                    {userWins > 0 && <span>Побед в копилке: {userWins}. Рейтинг: {userRating}. </span>}
-                    Выбери быстрое действие сверху или задай свой вопрос — отвечаю в течение 3-7 секунд.
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-          {msgs.map((m, i) => {
-            const isLastAssistant = m.role === "assistant" && i === msgs.length - 1;
-            const isTyping = isLastAssistant && typing && typing.idx === i && typing.pos < m.content.length;
-            const displayText = isTyping ? m.content.slice(0, typing!.pos) : m.content;
-            return (
-              <div key={i} style={{
-                marginBottom: 8, display: "flex", flexDirection: "column",
-                alignItems: m.role === "user" ? "flex-end" : "flex-start",
-              }}>
-                <div style={{
-                  padding: "8px 12px", borderRadius: 10, maxWidth: "90%", fontSize: 12, lineHeight: 1.5,
-                  background: m.role === "user" ? "#059669" : "#f3f4f6",
-                  color: m.role === "user" ? "#fff" : "#111827",
-                  borderBottomRightRadius: m.role === "user" ? 2 : 10,
-                  borderBottomLeftRadius: m.role === "assistant" ? 2 : 10,
-                  whiteSpace: "pre-wrap",
-                }}>{displayText}{isTyping && <span style={{ display: "inline-block", width: 6, height: 12, background: "#059669", marginLeft: 2, verticalAlign: "middle", animation: "cc-pulse-glow 0.8s ease-in-out infinite" }}/>}</div>
-                {m.role === "assistant" && !isTyping && typeof window !== "undefined" && "speechSynthesis" in window && (
-                  <button onClick={() => (ttsSpeaking ? stopSpeak() : speakText(m.content))}
-                    title={ttsSpeaking ? "Остановить" : "Озвучить"}
-                    style={{ marginTop: 3, padding: "2px 8px", fontSize: 10, fontWeight: 700, borderRadius: 5, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: "pointer" }}>
-                    {ttsSpeaking ? "❚❚ Стоп" : "🔊 Озвучить"}
-                  </button>
-                )}
-              </div>
-            );
-          })}
+                padding: "8px 12px", borderRadius: 10, maxWidth: "90%", fontSize: 12, lineHeight: 1.5,
+                background: m.role === "user" ? "#059669" : "#f3f4f6",
+                color: m.role === "user" ? "#fff" : "#111827",
+                borderBottomRightRadius: m.role === "user" ? 2 : 10,
+                borderBottomLeftRadius: m.role === "assistant" ? 2 : 10,
+                whiteSpace: "pre-wrap",
+              }}>{m.content}</div>
+              {m.role === "assistant" && typeof window !== "undefined" && "speechSynthesis" in window && (
+                <button onClick={() => (ttsSpeaking ? stopSpeak() : speakText(m.content))}
+                  title={ttsSpeaking ? "Остановить" : "Озвучить"}
+                  style={{ marginTop: 3, padding: "2px 8px", fontSize: 10, fontWeight: 700, borderRadius: 5, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: "pointer" }}>
+                  {ttsSpeaking ? "❚❚ Стоп" : "🔊 Озвучить"}
+                </button>
+              )}
+            </div>
+          ))}
           {engineThinking && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#7c3aed", fontSize: 11, fontWeight: 700, padding: "4px 0" }}>
-              <span style={{ animation: "cc-pulse-glow 1s ease-in-out infinite" }}>⚡</span> Stockfish считает (depth 22, 3 линии)…
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#7c3aed", fontSize: 11, fontWeight: 700 }}>
+              <span style={{ animation: "pulse 1s infinite" }}>⚡</span> Stockfish считает (depth 22, 3 линии)...
             </div>
           )}
           {loading && !engineThinking && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#059669", fontSize: 11, fontWeight: 700, padding: "4px 0" }}>
-              <span>Алексей печатает</span>
-              <span className="cc-dots" style={{ display: "inline-flex", gap: 2 }}>
-                <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#059669", animation: "cc-bounce 1.2s 0s infinite ease-in-out" }}/>
-                <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#059669", animation: "cc-bounce 1.2s 0.2s infinite ease-in-out" }}/>
-                <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#059669", animation: "cc-bounce 1.2s 0.4s infinite ease-in-out" }}/>
-              </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#059669", fontSize: 11, fontWeight: 700 }}>
+              <span style={{ animation: "pulse 1s infinite" }}>●</span> Sonnet анализирует...
             </div>
           )}
           {error && (

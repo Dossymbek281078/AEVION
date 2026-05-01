@@ -32,6 +32,7 @@ import { computeInsights, type Insights } from "./insights";
 import { getValidGames as ldMasterGames, buildFenLine as masterFenLine, scoreGuess as masterScoreGuess, recordCompletion as masterRecord, type MasterGame } from "./masters";
 import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as oeBlackPct, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
 import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
+import RepertoireModal, { loadRepertoire, saveRepertoire, type Repertoire } from "./Repertoire";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -402,6 +403,9 @@ export default function CyberChessPage(){
   // Scratch / Analysis-during-play: отдельный Chess-инстанс для разбора
   // вариантов пока соперник думает. Real game нетронут; выход из scratch
   // возвращает к актуальной позиции.
+  const[repertoire,sRepertoire]=useState<Repertoire>(()=>loadRepertoire());
+  useEffect(()=>{saveRepertoire(repertoire)},[repertoire]);
+  const[repertoireOpen,sRepertoireOpen]=useState(false);
   const[scratchOn,sScratchOn]=useState(false);
   const[scratchGame,sScratchGame]=useState<Chess|null>(null);
   const[scratchHist,sScratchHist]=useState<string[]>([]);
@@ -1328,6 +1332,7 @@ export default function CyberChessPage(){
       if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
       if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
       if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on)){e.preventDefault();newGRef.current()}}
+      if(e.key==="r"||e.key==="R"){e.preventDefault();sRepertoireOpen(v=>!v)}
       if(hist.length===0)return;
       if(e.key==="ArrowLeft"){
         e.preventDefault();
@@ -3286,6 +3291,10 @@ export default function CyberChessPage(){
                   <button onClick={()=>sShowInsights(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🔬</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Insights</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedGames.length>0?`Анализ ${savedGames.length} партий — слабости и сильные стороны`:"Сыграй партии — соберём инсайты"}</div>
+                  </button>
+                  <button onClick={()=>sRepertoireOpen(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📚</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Репертуар</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:"#e5e7eb",color:CC.textDim}}>R</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{repertoire.entries.length>0?`${repertoire.entries.length} линий сохранено · ${repertoire.entries.reduce((a,e)=>a+e.uses,0)} применений`:"Сохрани свои дебютные линии"}</div>
                   </button>
                 </div>
                 <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2],textTransform:"uppercase" as const}}>Контент &amp; Стрим</div>
@@ -5607,6 +5616,15 @@ export default function CyberChessPage(){
     {/* Multi-Panel — split-screen до 4 окон с YouTube/Twitch */}
     <MultiPanel open={showMultiPanel} onClose={()=>sShowMultiPanel(false)}/>
 
+    {/* Personal Opening Repertoire (R hotkey) */}
+    <RepertoireModal
+      open={repertoireOpen}
+      onClose={()=>sRepertoireOpen(false)}
+      histSan={hist}
+      myColor={pCol}
+      onPlayMove={(san)=>{try{const g=new Chess(game.fen());const m=g.move(san);if(m){setGame(g);sHist(h=>[...h,m.san]);sLm({from:m.from,to:m.to});sBk(k=>k+1);sRepertoireOpen(false)}}catch{}}}
+    />
+
     {/* Keyboard Shortcuts Help Overlay — расширенная версия с группировкой */}
     <Modal open={showHelp} onClose={()=>sShowHelp(false)} size="md" title="⌨ Горячие клавиши">
       <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>Работают во всех вкладках, пока курсор не в поле ввода.</div>
@@ -5632,6 +5650,7 @@ export default function CyberChessPage(){
         {title:"Глобально",rows:[
           ["M","Вкл./выкл. звук"],
           ["N","Новая партия (в Play, до старта)"],
+          ["R","📚 Открыть / закрыть Репертуар дебютов"],
           ["?","Показать / скрыть эту подсказку"],
         ]},
       ] as const).map(grp=><div key={grp.title} style={{marginBottom:SPACE[3]}}>

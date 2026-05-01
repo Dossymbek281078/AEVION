@@ -3296,6 +3296,10 @@ export default function CyberChessPage(){
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📚</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Репертуар</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:"#e5e7eb",color:CC.textDim}}>R</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{repertoire.entries.length>0?`${repertoire.entries.length} линий сохранено · ${repertoire.entries.reduce((a,e)=>a+e.uses,0)} применений`:"Сохрани свои дебютные линии"}</div>
                   </button>
+                  <button onClick={()=>sShowOpeningTrainer(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🎓</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Opening Trainer</span></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Дрилл дебютов до автоматизма — спарринг с моделями.</div>
+                  </button>
                 </div>
                 <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,marginBottom:SPACE[2],textTransform:"uppercase" as const}}>Контент &amp; Стрим</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:SPACE[2]}}>

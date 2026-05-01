@@ -874,6 +874,142 @@ awardsRouter.post("/admin/entries/:id/disqualify", async (req, res) => {
   }
 });
 
+// 🔹 PATCH /admin/entries/bulk — bulk qualify or disqualify up to 100 entries.
+//    Body: { items: [{ entryId, action: "qualify"|"disqualify", reason? }, …] }
+//    Single transaction; aborts on first invalid row (no partial writes).
+//    One AwardAuditLog row per entry. Mirrors Modules / Bureau bulk pattern.
+awardsRouter.patch("/admin/entries/bulk", async (req, res) => {
+  try {
+    await ensureAwardsTables();
+    const auth = verifyBearerOptional(req);
+    if (!isAwardsAdmin(auth)) return res.status(403).json({ error: "Admin role required" });
+
+    const itemsRaw = req.body?.items;
+    if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
+      return res.status(400).json({ error: "items must be a non-empty array" });
+    }
+    if (itemsRaw.length > 100) {
+      return res.status(400).json({ error: "max 100 items per call" });
+    }
+
+    type BulkEdit = {
+      entryId: string;
+      action: "qualify" | "disqualify";
+      reason: string | null;
+    };
+    const edits: BulkEdit[] = [];
+    for (const raw of itemsRaw) {
+      if (!raw || typeof raw !== "object") {
+        return res.status(400).json({ error: "each item must be an object" });
+      }
+      const entryId = typeof raw.entryId === "string" ? raw.entryId.trim() : "";
+      if (!entryId) return res.status(400).json({ error: "entryId required" });
+      const action = String(raw.action || "");
+      if (action !== "qualify" && action !== "disqualify") {
+        return res.status(400).json({ error: "invalid action", entryId, action });
+      }
+      const reason =
+        typeof raw.reason === "string" ? raw.reason.trim().slice(0, 500) || null : null;
+      if (action === "disqualify" && !reason) {
+        return res.status(400).json({ error: "reason required for disqualify", entryId });
+      }
+      edits.push({ entryId, action, reason });
+    }
+
+    const actor = auth?.email || auth?.sub || null;
+    const results: Array<{
+      entryId: string;
+      ok: boolean;
+      action: string;
+      seasonId?: string;
+      prevStatus?: string;
+      error?: string;
+    }> = [];
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const e of edits) {
+        const cur = await client.query(
+          `SELECT "id","seasonId","status" FROM "AwardEntry" WHERE "id" = $1`,
+          [e.entryId]
+        );
+        if (cur.rowCount === 0) {
+          results.push({ entryId: e.entryId, ok: false, action: e.action, error: "entry_not_found" });
+          continue;
+        }
+        const prev = cur.rows[0] as { id: string; seasonId: string; status: string };
+        if (e.action === "qualify") {
+          await client.query(
+            `UPDATE "AwardEntry"
+               SET "status" = 'qualified',
+                   "qualifiedAt" = NOW(),
+                   "qualifiedBy" = $2,
+                   "disqualifyReason" = NULL
+             WHERE "id" = $1`,
+            [e.entryId, actor]
+          );
+          await client.query(
+            `INSERT INTO "AwardAuditLog" ("id","actor","action","targetId","payload")
+             VALUES ($1,$2,$3,$4,$5)`,
+            [
+              crypto.randomUUID(),
+              actor,
+              "entry.qualify",
+              e.entryId,
+              JSON.stringify({ seasonId: prev.seasonId, prevStatus: prev.status, bulk: true }),
+            ]
+          );
+        } else {
+          await client.query(
+            `UPDATE "AwardEntry"
+               SET "status" = 'disqualified',
+                   "disqualifyReason" = $2,
+                   "qualifiedAt" = NULL,
+                   "qualifiedBy" = NULL
+             WHERE "id" = $1`,
+            [e.entryId, e.reason]
+          );
+          await client.query(
+            `INSERT INTO "AwardAuditLog" ("id","actor","action","targetId","payload")
+             VALUES ($1,$2,$3,$4,$5)`,
+            [
+              crypto.randomUUID(),
+              actor,
+              "entry.disqualify",
+              e.entryId,
+              JSON.stringify({
+                seasonId: prev.seasonId,
+                prevStatus: prev.status,
+                reason: e.reason,
+                bulk: true,
+              }),
+            ]
+          );
+        }
+        results.push({
+          entryId: e.entryId,
+          ok: true,
+          action: e.action,
+          seasonId: prev.seasonId,
+          prevStatus: prev.status,
+        });
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const okCount = results.filter((r) => r.ok).length;
+    res.json({ ok: true, applied: okCount, total: results.length, results });
+  } catch (err: any) {
+    res.status(500).json({ error: "bulk failed", details: err.message });
+  }
+});
+
 // 🔹 POST /admin/seasons/:id/finalize — compute top-3 medals and freeze.
 //    Top-3 = qualified entries sorted by voteCount DESC, voteAvg DESC.
 //    Idempotent: deletes existing medals for this season first.

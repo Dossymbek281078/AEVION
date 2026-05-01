@@ -19,6 +19,7 @@ type VerifyData = {
     email?: string | null;
     location?: string | null;
     contentHash: string;
+    fileHash?: string | null;
     signatureHmac: string;
     signatureEd25519?: string | null;
     algorithm: string;
@@ -376,6 +377,7 @@ export default function VerifyPage() {
                 },
                 { label: "Algorithm", value: cert.algorithm },
                 { label: "Certificate ID", value: cert.id },
+                ...(cert.fileHash ? [{ label: "File Hash (SHA-256)", value: cert.fileHash, tip: { name: "File Hash", text: "SHA-256 of the original file bytes, computed in the author's browser before submission. Paste this hash into the bureau prior-art search to find this exact file." } }] : []),
               ].map((item) => (
                 <div key={item.label} style={{
                   padding: "10px 12px",

@@ -255,13 +255,31 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!data || data === "not_found") {
     return { title: `Module ${id} — AEVION` };
   }
+  // OG card lives on the backend so it inherits live tier/status colors
+  // without a client-side rebuild step. Absolute URL only matters when the
+  // browser scrapes — getApiBase() resolves the right one in both worlds.
+  const ogImage = `${getApiBase()}/api/modules/${encodeURIComponent(id)}/og.svg`;
+  const rssUrl = `${getApiBase()}/api/modules/${encodeURIComponent(id)}/changelog.rss`;
+  const title = `${data.name} — AEVION module`;
   return {
-    title: `${data.name} — AEVION module`,
+    title,
     description: data.description,
+    alternates: {
+      types: {
+        "application/rss+xml": rssUrl,
+      },
+    },
     openGraph: {
       type: "article",
-      title: `${data.name} — AEVION module`,
+      title,
       description: data.description,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: data.description,
+      images: [ogImage],
     },
   };
 }
@@ -336,8 +354,38 @@ export default async function ModuleDetailPage({ params, searchParams }: Props) 
   const badgeUrlLight = `${apiBase}/api/modules/${encodeURIComponent(detail.id)}/badge.svg?theme=light`;
   const embedJsonUrl = `${apiBase}/api/modules/${encodeURIComponent(detail.id)}/embed`;
 
+  // Structured data — BreadcrumbList + WebPage. Search engines parse this
+  // and (Google in particular) render breadcrumb chips in SERPs.
+  const ldJson = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "AEVION modules", item: "/modules" },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: detail.name,
+          item: `/modules/${detail.id}`,
+        },
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      name: `${detail.name} — AEVION module`,
+      description: detail.description,
+      keywords: detail.tags.join(", "),
+      url: `/modules/${detail.id}`,
+    },
+  ];
+
   return (
     <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "32px 16px" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ldJson) }}
+      />
       <div style={{ maxWidth: 1000, margin: "0 auto" }}>
         <div style={{ marginBottom: 16 }}>
           <Link
@@ -496,10 +544,30 @@ export default async function ModuleDetailPage({ params, searchParams }: Props) 
             <Field k={t.fieldName} v={detail.name} />
             <Field k={t.fieldKind} v={detail.kind} />
             <Field k={t.fieldPriority} v={String(detail.priority)} />
-            <Field
-              k={t.fieldTags}
-              v={detail.tags.length ? detail.tags.map((tag) => `#${tag}`).join(" ") : t.none}
-            />
+            <div style={fieldRow}>
+              <span style={fieldKey}>{t.fieldTags}</span>
+              <span style={fieldVal}>
+                {detail.tags.length === 0 ? (
+                  t.none
+                ) : (
+                  <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                    {detail.tags.map((tag) => (
+                      <Link
+                        key={tag}
+                        href={`/modules?tag=${encodeURIComponent(tag)}`}
+                        style={{
+                          color: "#0d9488",
+                          textDecoration: "none",
+                          fontSize: 12,
+                        }}
+                      >
+                        #{tag}
+                      </Link>
+                    ))}
+                  </span>
+                )}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -619,7 +687,22 @@ export default async function ModuleDetailPage({ params, searchParams }: Props) 
 
         {/* History */}
         <div style={card}>
-          <div style={sectionLabel}>{t.sectionHistory}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <div style={{ ...sectionLabel, marginBottom: 0 }}>{t.sectionHistory}</div>
+            <a
+              href={`${apiBase}/api/modules/${encodeURIComponent(detail.id)}/changelog.rss`}
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#ea580c",
+                textDecoration: "none",
+                fontFamily: "monospace",
+              }}
+              title="RSS feed scoped to this module"
+            >
+              RSS →
+            </a>
+          </div>
           {history.length === 0 ? (
             <div style={{ fontSize: 13, color: "#94a3b8" }}>{t.historyEmpty}</div>
           ) : (

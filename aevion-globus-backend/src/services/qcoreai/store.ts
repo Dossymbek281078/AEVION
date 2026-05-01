@@ -23,6 +23,7 @@ export type SessionRow = {
   userId: string | null;
   title: string;
   mode: string;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -109,6 +110,7 @@ export async function createSession(opts: {
       userId: opts.userId ?? null,
       title,
       mode,
+      pinned: false,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -195,19 +197,22 @@ export async function listSessions(userId: string | null, limit = 50): Promise<S
   if (!isDbReady()) {
     const all = Array.from(memSessions.values());
     const filtered = all.filter((s) => (userId ? s.userId === userId : s.userId == null));
-    filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    filtered.sort((a, b) => {
+      if (b.pinned !== a.pinned) return b.pinned ? 1 : -1;
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
     return filtered.slice(0, lim);
   }
 
   if (userId) {
     const r = await pool.query(
-      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "updatedAt" DESC LIMIT $2`,
+      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $2`,
       [userId, lim]
     );
     return r.rows as SessionRow[];
   }
   const r = await pool.query(
-    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "updatedAt" DESC LIMIT $1`,
+    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $1`,
     [lim]
   );
   return r.rows as SessionRow[];
@@ -273,6 +278,28 @@ export async function renameSession(
   const r = await pool.query(
     `UPDATE "QCoreSession" SET "title"=$2, "updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
     [id, clean]
+  );
+  return (r.rows?.[0] as SessionRow) ?? null;
+}
+
+export async function pinSession(
+  id: string,
+  userId: string | null,
+  pinned: boolean
+): Promise<SessionRow | null> {
+  const session = await getSession(id, userId);
+  if (!session) return null;
+
+  if (!isDbReady()) {
+    session.pinned = pinned;
+    session.updatedAt = nowIso();
+    memSessions.set(id, session);
+    return session;
+  }
+
+  const r = await pool.query(
+    `UPDATE "QCoreSession" SET "pinned"=$2, "updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
+    [id, pinned]
   );
   return (r.rows?.[0] as SessionRow) ?? null;
 }
@@ -1840,4 +1867,346 @@ export async function getPromptVersionChain(rootId: string): Promise<PromptRow[]
     }
   }
   return chain.sort((a, b) => a.version - b.version);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run comments (public — no auth, authorName is free-text)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type CommentRow = {
+  id: string;
+  runId: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+};
+
+const memComments = new Map<string, CommentRow[]>();
+
+export async function createComment(runId: string, authorName: string, content: string): Promise<CommentRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (authorName || "Anonymous").trim().slice(0, 60) || "Anonymous";
+  const text = (content || "").trim().slice(0, 2000);
+  if (!text) throw new Error("content required");
+
+  if (!isDbReady()) {
+    const row: CommentRow = { id, runId, authorName: name, content: text, createdAt: nowIso() };
+    const existing = memComments.get(runId) ?? [];
+    existing.push(row);
+    memComments.set(runId, existing);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreRunComment" ("id","runId","authorName","content") VALUES ($1,$2,$3,$4) RETURNING *`,
+    [id, runId, name, text]
+  );
+  return r.rows[0] as CommentRow;
+}
+
+export async function listComments(runId: string): Promise<CommentRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return (memComments.get(runId) ?? []).slice();
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRunComment" WHERE "runId"=$1 ORDER BY "createdAt" ASC`,
+    [runId]
+  );
+  return r.rows as CommentRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompt library audit log
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type AuditLogRow = {
+  id: string;
+  userId: string;
+  promptId: string;
+  promptName: string;
+  action: "create" | "update" | "delete";
+  changedFields: string | null;
+  createdAt: string;
+};
+
+const memAuditLog: AuditLogRow[] = [];
+
+export async function logPromptAudit(
+  userId: string,
+  promptId: string,
+  promptName: string,
+  action: "create" | "update" | "delete",
+  changedFields?: string
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  if (!isDbReady()) {
+    memAuditLog.push({ id, userId, promptId, promptName, action, changedFields: changedFields ?? null, createdAt: nowIso() });
+    return;
+  }
+  await pool.query(
+    `INSERT INTO "QCorePresetAuditLog" ("id","userId","promptId","promptName","action","changedFields") VALUES ($1,$2,$3,$4,$5,$6)`,
+    [id, userId, promptId, promptName, action, changedFields ?? null]
+  );
+}
+
+export async function listPromptAudit(userId: string, limit = 100): Promise<AuditLogRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(500, limit));
+  if (!isDbReady()) {
+    return memAuditLog.filter((e) => e.userId === userId).slice(-lim).reverse();
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCorePresetAuditLog" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
+    [userId, lim]
+  );
+  return r.rows as AuditLogRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Workspaces
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type WorkspaceRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkspaceMemberRow = {
+  workspaceId: string;
+  userId: string;
+  role: "owner" | "editor" | "viewer";
+  joinedAt: string;
+};
+
+const memWorkspaces = new Map<string, WorkspaceRow>();
+const memWorkspaceMembers = new Map<string, WorkspaceMemberRow[]>();
+const memWorkspaceSessions = new Map<string, string[]>();
+
+export async function createWorkspace(opts: {
+  ownerId: string;
+  name: string;
+  description?: string | null;
+}): Promise<WorkspaceRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (opts.name || "").trim().slice(0, 80);
+  if (!name) throw new Error("workspace name required");
+  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
+
+  if (!isDbReady()) {
+    const row: WorkspaceRow = { id, name, description, ownerId: opts.ownerId, createdAt: nowIso(), updatedAt: nowIso() };
+    memWorkspaces.set(id, row);
+    memWorkspaceMembers.set(id, [{ workspaceId: id, userId: opts.ownerId, role: "owner", joinedAt: nowIso() }]);
+    return row;
+  }
+  await pool.query(
+    `INSERT INTO "QCoreWorkspace" ("id","name","description","ownerId") VALUES ($1,$2,$3,$4)`,
+    [id, name, description, opts.ownerId]
+  );
+  await pool.query(
+    `INSERT INTO "QCoreWorkspaceMember" ("workspaceId","userId","role") VALUES ($1,$2,'owner')`,
+    [id, opts.ownerId]
+  );
+  const r = await pool.query(`SELECT * FROM "QCoreWorkspace" WHERE "id"=$1`, [id]);
+  return r.rows[0] as WorkspaceRow;
+}
+
+export async function listMyWorkspaces(userId: string): Promise<WorkspaceRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const memberOf = Array.from(memWorkspaceMembers.values())
+      .flat()
+      .filter((m) => m.userId === userId)
+      .map((m) => m.workspaceId);
+    return memberOf.map((id) => memWorkspaces.get(id)).filter(Boolean) as WorkspaceRow[];
+  }
+  const r = await pool.query(
+    `SELECT w.* FROM "QCoreWorkspace" w
+     JOIN "QCoreWorkspaceMember" m ON m."workspaceId"=w."id"
+     WHERE m."userId"=$1
+     ORDER BY w."updatedAt" DESC`,
+    [userId]
+  );
+  return r.rows as WorkspaceRow[];
+}
+
+export async function getWorkspace(id: string, userId: string): Promise<WorkspaceRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const ws = memWorkspaces.get(id);
+    if (!ws) return null;
+    const members = memWorkspaceMembers.get(id) ?? [];
+    if (!members.some((m) => m.userId === userId)) return null;
+    return ws;
+  }
+  const r = await pool.query(
+    `SELECT w.* FROM "QCoreWorkspace" w
+     JOIN "QCoreWorkspaceMember" m ON m."workspaceId"=w."id"
+     WHERE w."id"=$1 AND m."userId"=$2`,
+    [id, userId]
+  );
+  return (r.rows?.[0] as WorkspaceRow) ?? null;
+}
+
+export async function deleteWorkspace(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const ws = memWorkspaces.get(id);
+    if (!ws || ws.ownerId !== userId) return false;
+    memWorkspaces.delete(id);
+    memWorkspaceMembers.delete(id);
+    memWorkspaceSessions.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreWorkspace" WHERE "id"=$1 AND "ownerId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function updateWorkspace(
+  id: string,
+  userId: string,
+  patch: { name?: string; description?: string | null }
+): Promise<WorkspaceRow | null> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(id, userId);
+  if (!ws || ws.ownerId !== userId) return null;
+
+  const name = patch.name ? patch.name.trim().slice(0, 80) : ws.name;
+  const description = patch.description !== undefined ? (patch.description ? String(patch.description).trim().slice(0, 400) : null) : ws.description;
+
+  if (!isDbReady()) {
+    ws.name = name;
+    ws.description = description;
+    ws.updatedAt = nowIso();
+    memWorkspaces.set(id, ws);
+    return ws;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreWorkspace" SET "name"=$2,"description"=$3,"updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
+    [id, name, description]
+  );
+  return (r.rows?.[0] as WorkspaceRow) ?? null;
+}
+
+export async function listWorkspaceMembers(workspaceId: string, userId: string): Promise<WorkspaceMemberRow[]> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(workspaceId, userId);
+  if (!ws) return [];
+  if (!isDbReady()) return memWorkspaceMembers.get(workspaceId) ?? [];
+  const r = await pool.query(
+    `SELECT * FROM "QCoreWorkspaceMember" WHERE "workspaceId"=$1 ORDER BY "joinedAt" ASC`,
+    [workspaceId]
+  );
+  return r.rows as WorkspaceMemberRow[];
+}
+
+export async function addWorkspaceMember(
+  workspaceId: string,
+  targetUserId: string,
+  role: "editor" | "viewer",
+  requestingUserId: string
+): Promise<WorkspaceMemberRow | null> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(workspaceId, requestingUserId);
+  if (!ws || ws.ownerId !== requestingUserId) return null;
+  if (!isDbReady()) {
+    const members = memWorkspaceMembers.get(workspaceId) ?? [];
+    const existing = members.find((m) => m.userId === targetUserId);
+    if (existing) { existing.role = role; return existing; }
+    const row: WorkspaceMemberRow = { workspaceId, userId: targetUserId, role, joinedAt: nowIso() };
+    members.push(row);
+    memWorkspaceMembers.set(workspaceId, members);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreWorkspaceMember" ("workspaceId","userId","role")
+     VALUES ($1,$2,$3)
+     ON CONFLICT ("workspaceId","userId") DO UPDATE SET "role"=EXCLUDED."role"
+     RETURNING *`,
+    [workspaceId, targetUserId, role]
+  );
+  return r.rows[0] as WorkspaceMemberRow;
+}
+
+export async function removeWorkspaceMember(
+  workspaceId: string,
+  targetUserId: string,
+  requestingUserId: string
+): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(workspaceId, requestingUserId);
+  if (!ws || ws.ownerId !== requestingUserId) return false;
+  if (targetUserId === ws.ownerId) return false;
+  if (!isDbReady()) {
+    const members = memWorkspaceMembers.get(workspaceId) ?? [];
+    const idx = members.findIndex((m) => m.userId === targetUserId);
+    if (idx < 0) return false;
+    members.splice(idx, 1);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreWorkspaceMember" WHERE "workspaceId"=$1 AND "userId"=$2 AND "userId"!=(SELECT "ownerId" FROM "QCoreWorkspace" WHERE "id"=$1) RETURNING *`,
+    [workspaceId, targetUserId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function addSessionToWorkspace(workspaceId: string, sessionId: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(workspaceId, userId);
+  if (!ws) return false;
+  if (!isDbReady()) {
+    const sessions = memWorkspaceSessions.get(workspaceId) ?? [];
+    if (!sessions.includes(sessionId)) sessions.push(sessionId);
+    memWorkspaceSessions.set(workspaceId, sessions);
+    return true;
+  }
+  await pool.query(
+    `INSERT INTO "QCoreWorkspaceSession" ("workspaceId","sessionId") VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+    [workspaceId, sessionId]
+  );
+  return true;
+}
+
+export async function removeSessionFromWorkspace(workspaceId: string, sessionId: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(workspaceId, userId);
+  if (!ws) return false;
+  if (!isDbReady()) {
+    const sessions = memWorkspaceSessions.get(workspaceId) ?? [];
+    const idx = sessions.indexOf(sessionId);
+    if (idx < 0) return false;
+    sessions.splice(idx, 1);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreWorkspaceSession" WHERE "workspaceId"=$1 AND "sessionId"=$2 RETURNING *`,
+    [workspaceId, sessionId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listWorkspaceSessions(workspaceId: string, userId: string): Promise<SessionRow[]> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(workspaceId, userId);
+  if (!ws) return [];
+  if (!isDbReady()) {
+    const ids = memWorkspaceSessions.get(workspaceId) ?? [];
+    return ids.map((id) => memSessions.get(id)).filter(Boolean) as SessionRow[];
+  }
+  const r = await pool.query(
+    `SELECT s.* FROM "QCoreSession" s
+     JOIN "QCoreWorkspaceSession" ws ON ws."sessionId"=s."id"
+     WHERE ws."workspaceId"=$1
+     ORDER BY s."updatedAt" DESC`,
+    [workspaceId]
+  );
+  return r.rows as SessionRow[];
 }

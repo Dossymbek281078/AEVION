@@ -115,6 +115,9 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreMessage — per-call cost (computed from provider/model/tokens at runtime).
   await pool.query(`ALTER TABLE "QCoreMessage" ADD COLUMN IF NOT EXISTS "costUsd" DOUBLE PRECISION;`);
 
+  // QCoreSession — pin to top of sidebar.
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT false;`);
+
   // QCoreRun — free-form tags ([]) + GIN index for tag-filter chip strip.
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_tags_gin_idx" ON "QCoreRun" USING GIN ("tags");`);
@@ -233,6 +236,65 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     CREATE INDEX IF NOT EXISTS "QCorePrompt_public_imports_idx"
       ON "QCorePrompt" ("isPublic", "importCount" DESC, "updatedAt" DESC);
   `);
+
+  // Public comments on shared runs. No auth required to post — authorName is free-text.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunComment" (
+      "id"         TEXT PRIMARY KEY,
+      "runId"      TEXT NOT NULL,
+      "authorName" TEXT NOT NULL DEFAULT 'Anonymous',
+      "content"    TEXT NOT NULL,
+      "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunComment_runId_idx" ON "QCoreRunComment" ("runId", "createdAt" ASC);`);
+
+  // Audit log for prompt library changes (create / update / delete).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePresetAuditLog" (
+      "id"           TEXT PRIMARY KEY,
+      "userId"       TEXT NOT NULL,
+      "promptId"     TEXT NOT NULL,
+      "promptName"   TEXT NOT NULL,
+      "action"       TEXT NOT NULL,
+      "changedFields" TEXT,
+      "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePresetAuditLog_user_idx" ON "QCorePresetAuditLog" ("userId", "createdAt" DESC);`);
+
+  // Workspaces — shared session collections with role-based access.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspace" (
+      "id"          TEXT PRIMARY KEY,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "ownerId"     TEXT NOT NULL,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspace_owner_idx" ON "QCoreWorkspace" ("ownerId");`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspaceMember" (
+      "workspaceId" TEXT NOT NULL,
+      "userId"      TEXT NOT NULL,
+      "role"        TEXT NOT NULL DEFAULT 'viewer',
+      "joinedAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("workspaceId", "userId")
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspaceSession" (
+      "workspaceId" TEXT NOT NULL,
+      "sessionId"   TEXT NOT NULL,
+      "addedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("workspaceId", "sessionId")
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspaceSession_session_idx" ON "QCoreWorkspaceSession" ("sessionId");`);
 
     dbReady = true;
     ensured = true;

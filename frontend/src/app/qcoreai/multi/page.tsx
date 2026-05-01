@@ -106,6 +106,7 @@ type SessionSummary = {
   title: string;
   updatedAt: string;
   userId: string | null;
+  pinned?: boolean;
 };
 
 /** Saved agent preset — strategy + role overrides + revision count.
@@ -249,6 +250,24 @@ function bearerHeader(): HeadersInit {
   }
 }
 
+async function downloadRun(runId: string, format: "md" | "json") {
+  try {
+    const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/export?format=${format}`), {
+      headers: bearerHeader(),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qcore-run-${runId.slice(0, 8)}.${format === "md" ? "md" : "json"}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch { /* silent */ }
+}
+
 /** Read SSE stream from a fetch Response, yielding parsed JSON payloads. */
 async function* readSSE<T = unknown>(body: ReadableStream<Uint8Array>): AsyncGenerator<T> {
   const reader = body.getReader();
@@ -315,8 +334,9 @@ export default function QCoreMultiAgentPage() {
   const [roleDefaults, setRoleDefaults] = useState<RoleDefault[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
+  const [myWorkspaces, setMyWorkspaces] = useState<Array<{ id: string; name: string }>>([]);
   const [strategy, setStrategy] = useState<Strategy>("sequential");
-  const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
+  const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string; systemPrompt?: string }>>({
     analyst: { provider: "", model: "" },
     writer: { provider: "", model: "" },
     writerB: { provider: "", model: "" },
@@ -408,18 +428,21 @@ export default function QCoreMultiAgentPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [provRes, agRes, sessRes, priceRes, healthRes] = await Promise.all([
+        const [provRes, agRes, sessRes, priceRes, healthRes, wsRes] = await Promise.all([
           fetch(apiUrl("/api/qcoreai/providers")),
           fetch(apiUrl("/api/qcoreai/agents")),
           fetch(apiUrl("/api/qcoreai/sessions"), { headers: bearerHeader() }),
           fetch(apiUrl("/api/qcoreai/pricing")),
           fetch(apiUrl("/api/qcoreai/health")),
+          fetch(apiUrl("/api/qcoreai/workspaces"), { headers: bearerHeader() }),
         ]);
         const provData = await provRes.json().catch(() => ({}));
         const agData = await agRes.json().catch(() => ({}));
         const sessData = await sessRes.json().catch(() => ({}));
         const priceData = await priceRes.json().catch(() => ({}));
         const healthData = await healthRes.json().catch(() => ({}));
+        const wsData = await wsRes.json().catch(() => ({}));
+        if (Array.isArray(wsData?.items)) setMyWorkspaces(wsData.items.map((w: any) => ({ id: w.id, name: w.name })));
         if (typeof healthData?.webhookConfigured === "boolean") {
           setWebhookConfigured(healthData.webhookConfigured);
         }
@@ -926,6 +949,28 @@ export default function QCoreMultiAgentPage() {
       setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, title: data.session.title } : x)));
     } catch (e: any) {
       setGlobalError(e?.message || "Rename failed");
+    }
+  }, []);
+
+  const togglePinSession = useCallback(async (s: SessionSummary) => {
+    const next = !s.pinned;
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ pinned: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setSessions((prev) => {
+        const updated = prev.map((x) => (x.id === s.id ? { ...x, pinned: next } : x));
+        return [...updated].sort((a, b) => {
+          if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+          return b.updatedAt.localeCompare(a.updatedAt);
+        });
+      });
+    } catch (e: any) {
+      setGlobalError(e?.message || "Pin failed");
     }
   }, []);
 
@@ -1459,6 +1504,23 @@ export default function QCoreMultiAgentPage() {
                   title="Totals: runs, cost, tokens, strategy mix"
                 >
                   📊 Analytics
+                </Link>
+                <Link
+                  href="/qcoreai/workspaces"
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Share sessions with teammates"
+                >
+                  ⊞ Workspaces
                 </Link>
                 <Link
                   href="/qcoreai"
@@ -2597,8 +2659,8 @@ export default function QCoreMultiAgentPage() {
                       style={{
                         flex: 1, textAlign: "left",
                         padding: "8px 10px", borderRadius: 8,
-                        border: "1px solid transparent",
-                        background: activeSessionId === s.id ? "rgba(6,182,212,0.1)" : "transparent",
+                        border: s.pinned ? "1px solid rgba(6,182,212,0.3)" : "1px solid transparent",
+                        background: activeSessionId === s.id ? "rgba(6,182,212,0.1)" : s.pinned ? "rgba(6,182,212,0.04)" : "transparent",
                         color: activeSessionId === s.id ? "#0e7490" : "#334155",
                         fontSize: 12, fontWeight: activeSessionId === s.id ? 700 : 500,
                         cursor: "pointer",
@@ -2608,6 +2670,46 @@ export default function QCoreMultiAgentPage() {
                     >
                       {s.title || "(untitled)"}
                     </button>
+                    <button
+                      onClick={() => togglePinSession(s)}
+                      title={s.pinned ? "Unpin session" : "Pin session"}
+                      style={{
+                        width: 24, borderRadius: 6,
+                        border: "1px solid transparent", background: "transparent",
+                        color: s.pinned ? "#0e7490" : "#cbd5e1", cursor: "pointer", fontSize: 13,
+                      }}
+                    >
+                      ★
+                    </button>
+                    {myWorkspaces.length > 0 && (
+                      <select
+                        title="Add session to workspace"
+                        defaultValue=""
+                        onChange={async (e) => {
+                          const wsId = e.target.value;
+                          if (!wsId) return;
+                          e.target.value = "";
+                          try {
+                            await fetch(apiUrl(`/api/qcoreai/workspaces/${wsId}/sessions`), {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", ...bearerHeader() },
+                              body: JSON.stringify({ sessionId: s.id }),
+                            });
+                          } catch { /* silent */ }
+                        }}
+                        style={{
+                          width: 24, borderRadius: 6, padding: 0,
+                          border: "1px solid transparent", background: "transparent",
+                          color: "#cbd5e1", cursor: "pointer", fontSize: 11,
+                          appearance: "none", textAlign: "center",
+                        }}
+                      >
+                        <option value="">⊞</option>
+                        {myWorkspaces.map((w) => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       onClick={() => renameSessionPrompt(s)}
                       title="Rename session"
@@ -2935,8 +3037,8 @@ function RoleConfigCard({
   strategy: Strategy;
   providers: ProviderInfo[];
   pricing: PricingRow[];
-  value: { provider: string; model: string };
-  onChange: (v: { provider: string; model: string }) => void;
+  value: { provider: string; model: string; systemPrompt?: string };
+  onChange: (v: { provider: string; model: string; systemPrompt?: string }) => void;
   promptId?: string;
   onPromptChange?: (id: string) => void;
   availablePrompts?: Array<{ id: string; name: string; role: string; version: number }>;
@@ -2980,7 +3082,7 @@ function RoleConfigCard({
         onChange={(e) => {
           const nextProv = e.target.value;
           const p = providers.find((pp) => pp.id === nextProv);
-          onChange({ provider: nextProv, model: p?.defaultModel || "" });
+          onChange({ ...value, provider: nextProv, model: p?.defaultModel || "" });
         }}
         style={{
           width: "100%", padding: "6px 8px", borderRadius: 8,
@@ -2999,7 +3101,7 @@ function RoleConfigCard({
       </label>
       <select
         value={value.model}
-        onChange={(e) => onChange({ provider: value.provider, model: e.target.value })}
+        onChange={(e) => onChange({ ...value, model: e.target.value })}
         disabled={!availableModels.length}
         style={{
           width: "100%", padding: "6px 8px", borderRadius: 8,
@@ -3044,6 +3146,48 @@ function RoleConfigCard({
             </div>
           )}
         </>
+      )}
+      <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#475569", marginTop: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        Override system prompt
+      </label>
+      <textarea
+        value={value.systemPrompt || ""}
+        onChange={(e) => onChange({ ...value, systemPrompt: e.target.value })}
+        placeholder="Leave blank to use role default…"
+        rows={3}
+        style={{
+          width: "100%", padding: "6px 8px", borderRadius: 8, resize: "vertical",
+          border: value.systemPrompt ? "1px solid rgba(6,182,212,0.5)" : "1px solid rgba(15,23,42,0.15)",
+          background: "#fff", fontSize: 11, fontFamily: "monospace", boxSizing: "border-box",
+        }}
+      />
+      {value.systemPrompt && (
+        <button
+          onClick={async () => {
+            const name = window.prompt(`Save this prompt to library as (role: ${role.id}):`);
+            if (!name?.trim()) return;
+            try {
+              const res = await fetch(apiUrl("/api/qcoreai/prompts"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...bearerHeader() },
+                body: JSON.stringify({ name: name.trim(), role: role.id, content: value.systemPrompt }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+              if (onPromptChange && data.prompt?.id) onPromptChange(data.prompt.id);
+              alert(`Saved to library: "${name.trim()}"`);
+            } catch (e: any) {
+              alert(e?.message || "Save failed");
+            }
+          }}
+          style={{
+            marginTop: 4, padding: "4px 10px", borderRadius: 6,
+            border: "1px solid rgba(6,182,212,0.4)", background: "rgba(6,182,212,0.08)",
+            color: "#0e7490", fontSize: 10, fontWeight: 700, cursor: "pointer",
+          }}
+        >
+          + Save to library
+        </button>
       )}
     </div>
   );
@@ -3688,30 +3832,28 @@ function RunCard({
                     🔗 Share
                   </button>
                 ) : null}
-                <a
-                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
-                  target="_blank" rel="noreferrer"
+                <button
+                  onClick={() => downloadRun(run.id, "md")}
                   style={{
                     padding: "5px 10px", borderRadius: 8,
                     background: "#fff", border: "1px solid #cbd5e1",
-                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
                   }}
                   title="Download as Markdown"
                 >
                   ⬇ Markdown
-                </a>
-                <a
-                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=json`}
-                  target="_blank" rel="noreferrer"
+                </button>
+                <button
+                  onClick={() => downloadRun(run.id, "json")}
                   style={{
                     padding: "5px 10px", borderRadius: 8,
                     background: "#fff", border: "1px solid #cbd5e1",
-                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
                   }}
                   title="Download as JSON"
                 >
                   ⬇ JSON
-                </a>
+                </button>
               </>
             )}
             {!hasAgents && run.finalContent && onLoadDetails && (

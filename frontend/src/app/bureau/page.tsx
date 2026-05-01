@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -65,11 +65,19 @@ type DashboardData = {
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
+type SortMode = "newest" | "oldest" | "verified";
+
 export default function BureauPage() {
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
+
+  // Prior-art search + filter + sort over the public registry.
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<string>("all");
+  const [sort, setSort] = useState<SortMode>("newest");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
 
   const [authed, setAuthed] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -138,6 +146,41 @@ export default function BureauPage() {
       (v) => v.kycStatus !== "approved" || v.paymentStatus !== "paid",
     );
   })();
+
+  const filteredCerts = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let out = certificates;
+    if (q) {
+      out = out.filter((c) => {
+        const hay = [c.title, c.author, c.contentHash, c.location || ""].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    if (kindFilter !== "all") {
+      out = out.filter((c) => c.kind === kindFilter);
+    }
+    if (verifiedOnly) {
+      out = out.filter((c) => c.verificationLevel === "verified");
+    }
+    const sorted = [...out];
+    if (sort === "newest") {
+      sorted.sort((a, b) => +new Date(b.protectedAt) - +new Date(a.protectedAt));
+    } else if (sort === "oldest") {
+      sorted.sort((a, b) => +new Date(a.protectedAt) - +new Date(b.protectedAt));
+    } else if (sort === "verified") {
+      sorted.sort((a, b) => (b.verifiedCount || 0) - (a.verifiedCount || 0));
+    }
+    return sorted;
+  }, [certificates, query, kindFilter, sort, verifiedOnly]);
+
+  const kindCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of certificates) counts[c.kind] = (counts[c.kind] || 0) + 1;
+    return counts;
+  }, [certificates]);
+
+  const hashLooksLikeSha256 = /^[a-f0-9]{64}$/i.test(query.trim());
+  const filtersActive = query.trim() !== "" || kindFilter !== "all" || verifiedOnly || sort !== "newest";
 
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -311,10 +354,117 @@ export default function BureauPage() {
 
         {/* ── Certificate Registry ── */}
         <div style={{ marginBottom: 28 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>Certificate Registry ({certificates.length})</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 12, flexWrap: "wrap" as const }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>
+              Certificate Registry{" "}
+              <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 14 }}>
+                ({filtersActive ? `${filteredCerts.length} of ${certificates.length}` : certificates.length})
+              </span>
+            </div>
             <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
           </div>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+            Public prior-art lookup — search by title, author, or paste a SHA-256 hash to check if identical content already exists in the bureau.
+          </div>
+
+          {/* Search + filter toolbar (hidden until certs load to avoid layout flash). */}
+          {!loading && certificates.length > 0 && (
+            <div style={{ display: "grid", gap: 10, marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>
+                <div style={{ position: "relative" as const, flex: "1 1 280px", minWidth: 0 }}>
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search title, author, or paste SHA-256 hash…"
+                    aria-label="Search registry"
+                    style={{
+                      width: "100%",
+                      padding: "8px 30px 8px 32px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      fontSize: 13,
+                      fontFamily: hashLooksLikeSha256 ? "monospace" : undefined,
+                      color: "#0f172a",
+                      background: "#f8fafc",
+                      outline: "none",
+                      boxSizing: "border-box" as const,
+                    }}
+                  />
+                  <span style={{ position: "absolute" as const, left: 10, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontSize: 14, pointerEvents: "none" as const }}>🔎</span>
+                  {query && (
+                    <button
+                      type="button"
+                      onClick={() => setQuery("")}
+                      aria-label="Clear search"
+                      style={{ position: "absolute" as const, right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "transparent", color: "#94a3b8", fontSize: 16, cursor: "pointer", padding: "2px 6px", lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortMode)}
+                  aria-label="Sort registry"
+                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 12, fontWeight: 700, color: "#334155", background: "#fff", cursor: "pointer" }}
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="verified">Most verified</option>
+                </select>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: `1px solid ${verifiedOnly ? "rgba(16,185,129,0.45)" : "rgba(15,23,42,0.15)"}`, background: verifiedOnly ? "rgba(16,185,129,0.08)" : "#fff", fontSize: 12, fontWeight: 700, color: verifiedOnly ? "#065f46" : "#334155", cursor: "pointer", userSelect: "none" as const }}>
+                  <input
+                    type="checkbox"
+                    checked={verifiedOnly}
+                    onChange={(e) => setVerifiedOnly(e.target.checked)}
+                    style={{ margin: 0, cursor: "pointer" }}
+                  />
+                  ⭐ Verified only
+                </label>
+                {filtersActive && (
+                  <button
+                    type="button"
+                    onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
+                    style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer" }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+                {(["all", "music", "code", "design", "text", "video", "idea", "other"] as const).map((k) => {
+                  const active = kindFilter === k;
+                  const count = k === "all" ? certificates.length : (kindCounts[k] || 0);
+                  if (k !== "all" && count === 0) return null;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setKindFilter(k)}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 999,
+                        border: `1px solid ${active ? "rgba(13,148,136,0.45)" : "rgba(15,23,42,0.12)"}`,
+                        background: active ? "rgba(13,148,136,0.12)" : "#fff",
+                        color: active ? "#0d9488" : "#475569",
+                        fontWeight: 700,
+                        fontSize: 11,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      {k === "all" ? "All" : <>{KIND_ICONS[k]} {KIND_LABELS[k]?.split(" / ")[0] || k}</>}
+                      <span style={{ fontSize: 10, opacity: 0.7 }}>({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading certificates...</div>
@@ -325,9 +475,34 @@ export default function BureauPage() {
               <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
               <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>🛡️ Protect Your Work</Link>
             </div>
+          ) : filteredCerts.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.12)", background: "#fff" }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🔎</div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a", marginBottom: 4 }}>
+                {hashLooksLikeSha256 ? "No prior art for this hash" : "Nothing matches your filters"}
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14, lineHeight: 1.55 }}>
+                {hashLooksLikeSha256
+                  ? "Your content is unique in the AEVION registry — safe to register as new IP."
+                  : "Try a different search term or reset filters."}
+              </div>
+              {hashLooksLikeSha256 ? (
+                <Link href={`/qright?hash=${encodeURIComponent(query.trim())}`} style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                  🛡️ Protect this hash
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 12, fontWeight: 700, color: "#334155", cursor: "pointer" }}
+                >
+                  Reset filters
+                </button>
+              )}
+            </div>
           ) : (
             <div style={{ display: "grid", gap: 12 }}>
-              {certificates.map((cert) => (
+              {filteredCerts.map((cert) => (
                 <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
                     <div>

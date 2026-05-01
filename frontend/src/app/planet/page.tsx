@@ -87,6 +87,7 @@ export default function PlanetCompliancePage() {
   const [planetStats, setPlanetStats] = useState<{
     eligibleParticipants: number;
     distinctVotersAllTime: number;
+    shieldedObjects?: number;
   } | null>(null);
 
   const applyMediaTemplate = (preset: "music" | "film") => {
@@ -192,6 +193,7 @@ export default function PlanetCompliancePage() {
         setPlanetStats({
           eligibleParticipants: j.eligibleParticipants ?? 0,
           distinctVotersAllTime: j.distinctVotersAllTime ?? 0,
+          shieldedObjects: j.shieldedObjects ?? 0,
         });
       } catch {
         /* ignore */
@@ -381,7 +383,14 @@ export default function PlanetCompliancePage() {
         >
           <strong>Planet</strong>: participants with active symbol (metric Y) —{" "}
           <strong>{planetStats.eligibleParticipants}</strong>; unique voters —{" "}
-          <strong>{planetStats.distinctVotersAllTime}</strong>. API:{" "}
+          <strong>{planetStats.distinctVotersAllTime}</strong>
+          {typeof planetStats.shieldedObjects === "number" && (
+            <>
+              ; <a href="/quantum-shield" style={{ color: "#0d9488", textDecoration: "none", fontWeight: 800 }}>🛡️ shielded objects</a>{" "}
+              — <strong>{planetStats.shieldedObjects}</strong>
+            </>
+          )}
+          . API:{" "}
           <code style={{ fontSize: 12 }}>GET {backendOrigin}/api/planet/stats</code>
         </div>
       ) : null}

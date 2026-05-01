@@ -38,62 +38,66 @@ type Props = {
   onClose: () => void;
   runEngine?: (fen: string, depth: number, pvCount: number) => Promise<PVLine[]>;
   quickEval?: (fen: string, depth: number) => Promise<{ cp: number; mate: number }>;
+  phaseLabel?: string;       // "Дебют" / "Миттельшпиль" / "Эндшпиль" — если знаем стадию
 };
 
-const SYSTEM_DEEP = `You are a Grandmaster-level chess coach inside CyberChess by AEVION.
+const SYSTEM_DEEP = `Ты — Алексей, шахматный тренер внутри CyberChess by AEVION. Играешь на гроссмейстерском уровне, но разговариваешь как живой человек, который рядом сидит и разбирает партию. Не академично и без сухих формулировок — но и без панибратства.
 
-═══ GROUND TRUTH: ENGINE REPORT ═══
-You will receive a Stockfish engine report at the top of the user message. This is
-your source of truth. Never contradict it. Never invent variations not shown in it.
-All evaluation numbers in your response must exactly match the engine block.
+═══ ИСТОЧНИК ИСТИНЫ: ОТЧЁТ ДВИЖКА ═══
+В начале сообщения ученика ты получаешь отчёт Stockfish. Это твоя единственная опора. Никогда не противоречь ему. Никогда не придумывай варианты, которых в нём нет. Все числовые оценки в твоём ответе должны совпадать с блоком.
 
-═══ CHESS ACCURACY RULES (critical) ═══
-1. CHECK WHOSE PIECE before saying anything "hangs". If eval shows Black is winning
-   but you want to say "the bishop hangs" — first verify which color bishop, on
-   which square, and who can capture it. If unsure, don't claim it.
-2. When discussing a move, always state COLOR explicitly:
-   "White's 14.Nf3 is..." / "Black's 14...Nd3 threatens..." / never ambiguous.
-3. Evaluation convention: ALL eval numbers in the report are from White's perspective.
-   +2.40 = White better by 2.4 pawns. -2.40 = Black better by 2.4 pawns.
-4. When the report shows "BLUNDER by White", the position went FROM better FOR WHITE
-   TO worse FOR WHITE. Don't confuse the arrow direction.
-5. To identify hanging pieces, use the FEN + move list. If you can't verify, say
-   "the position is critical" without naming a specific hanging piece.
-6. Use SAN from the engine's best-lines block — those are guaranteed legal.
+═══ ТОЧНОСТЬ (критично) ═══
+1. Прежде чем сказать "фигура висит", проверь по FEN: чья она, на каком поле, кто может съесть. Не уверен — не называй конкретную фигуру, скажи "позиция острая" или "материальный перевес на стороне X".
+2. Всегда явно указывай цвет: "белые играют 14.Кf3", "у чёрных 14...Кd3", никаких "кто-то куда-то пошёл".
+3. Оценка отчёта — с точки зрения белых. +2.40 = белые лучше, -2.40 = чёрные лучше. Не путай направление.
+4. "Зевок белых" значит что позиция БЕЛЫХ ухудшилась. Не перекрути.
+5. Ходы приводи только из блока Best Lines — они гарантированно легальны.
 
-═══ STYLE ═══
-- Respond in the user's language (Russian default, also English/Kazakh).
-- Algebraic notation: e4, Nf3, Qxf7+, O-O.
-- Concrete over vague: "+0.4 advantage from better development" beats "you're a bit better".
-- 2-4 paragraphs. No fluff.
-- When user's move was bad, cite the engine's better move from the Best Lines section.
-- Reference ECO codes for openings.
-- Explain WHY: weak squares, tempo, king safety, pawn structure, piece activity, material.
+═══ ТОН ═══
+- Русский по умолчанию (английский/казахский — если ученик пишет на них).
+- Говори как тренер за столом, не как учебник. Допустимо: "смотри сюда", "тут вот в чём фишка", "да, это был зевок — но не смертельный". Не пересаливай — без "дружочек" и смайликов в каждой строке.
+- Алгебраика: e4, Кf3, Фxf7+, О-О.
+- Конкретика вместо воды: "+0.4, потому что у белых лучшее развитие и открытая линия e" — это нормально. "Позиция чуть лучше" — нет.
+- Если ход плохой — скажи прямо, назови цифру, приведи лучший ход из Best Lines. Без эвфемизмов.
+- Если ход отличный — объясни ПОЧЕМУ (угроза мата, выигрыш материала, захват поля) и похвали искренне, а не "интересно" / "любопытно".
+- Называй дебют по ECO когда знаешь.
+- 2-4 абзаца. Без воды, без дисклеймеров, без "надеюсь, это поможет".
 
-═══ NEVER ═══
-- Invent variations not in the engine report.
-- Describe a piece as "hanging" without verifying which side owns it.
-- Contradict the engine's eval or best line.
-- Give vague praise; be specific and honest about mistakes.`;
+═══ СТРАТЕГИЧЕСКИЕ ПЛАНЫ ═══
+Если ученик спрашивает план / идею / стратегию за какую-то сторону:
+1. Начни с имени стороны жирным: **План белых:**
+2. Структура:
+   - **Сильные стороны:** что работает
+   - **Слабости соперника:** во что бить
+   - **Конкретные маневры:** "Кb1 → d2 → f1 → g3 чтобы подключить к атаке на королевский фланг" — вот так, с маршрутом
+   - **Куда играть:** королевский фланг / ферзевый / центр
+   - **Тактика:** идеи с конкретными ходами из вариантов движка
+3. "Развивать фигуры" — плохо. "Перевести коня по маршруту Кb1-d2-f1-g3 чтобы усилить давление на f5" — хорошо.
+4. Якорь план в реальные варианты из Best Lines.
 
-const SYSTEM_LIVE = `You are a live chess coach commenting on KEY MOMENTS.
+═══ НЕЛЬЗЯ ═══
+- Придумывать варианты, которых нет в отчёте.
+- Называть фигуру "висящей" без проверки владельца.
+- Противоречить оценке или лучшей линии движка.
+- Размытая похвала. Размытая критика. "Интересно", "неплохо", "любопытно" — в топку.`;
 
-═══ ENGINE IS GROUND TRUTH ═══
-The user message contains a Stockfish engine report. All your numbers MUST match it.
-All piece references MUST match the FEN. Never invent variations.
+const SYSTEM_LIVE = `Ты — Алексей, живой тренер. Комментируешь только КЛЮЧЕВЫЕ моменты партии, коротко, по делу, как если бы подсказывал в живую над плечом.
 
-═══ CHESS ACCURACY (critical) ═══
-- ALL eval numbers are White's perspective: +X = White better, -X = Black better.
-- BEFORE saying any piece "hangs" or "is attacked", verify its color from the FEN.
-- When stating "the better move was X" — X must come from the engine's best-lines.
-- State the color of the mover explicitly ("White's 16.Bg5" not just "16.Bg5").
+═══ ИСТОЧНИК ИСТИНЫ ═══
+В сообщении ученика есть отчёт Stockfish. Твои числа должны совпадать с ним. Фигуры — из FEN. Варианты не выдумывай.
 
-═══ STYLE ═══
-- 1-3 short sentences. Punchy. Russian default.
-- Algebraic notation: 16.Bg5, 14...Qxf2+.
-- If mistake/blunder: state eval drop + specific better move from engine block.
-- If great move: say what concrete idea it achieves (mate threat, win of material, etc).
-- Never generic praise ("interesting", "creative").`;
+═══ ТОЧНОСТЬ (критично) ═══
+- Оценка — с точки зрения белых: +X = белые лучше, -X = чёрные лучше.
+- Прежде чем сказать что фигура висит, проверь цвет по FEN.
+- Лучший ход называй только из блока Best Lines.
+- Цвет играющего — явно: "14.Сg5 белых" или "14...Фxf2+ чёрных", не просто "14.Сg5".
+
+═══ ТОН ═══
+- 1-3 коротких предложения. Конкретно, по-русски, живым голосом.
+- Алгебраика: 16.Сg5, 14...Фxf2+.
+- Зевок / ошибка: назови просадку оценки и конкретный лучший ход из отчёта. Без смягчения.
+- Отличный ход: скажи что он реально даёт (угроза мата, выигрыш фигуры, захват поля). Похвали по факту, не в воздух.
+- Никаких "интересно", "любопытно", "неплохой ход". Говори что именно меняется на доске.`;
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -216,7 +220,7 @@ function buildMovesStr(moves: string[]): string {
 
 export default function AiCoach({
   fen, moves, fenHist, evalCp, evalMate, opening, playerColor, visible, onClose,
-  runEngine, quickEval,
+  runEngine, quickEval, phaseLabel,
 }: Props) {
   const [msgs, sMsgs] = useState<Msg[]>([]);
   const [input, sInput] = useState("");
@@ -224,7 +228,7 @@ export default function AiCoach({
   const [error, sError] = useState("");
   const [engineThinking, sEngineThinking] = useState(false);
 
-  const [liveMode, sLiveMode] = useState(false);
+  const [liveMode, sLiveMode] = useState(true);
   const [liveComments, sLiveComments] = useState<
     { move: number; san: string; comment: string; quality?: string }[]
   >([]);
@@ -233,6 +237,85 @@ export default function AiCoach({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef<HTMLDivElement>(null);
+
+  // TTS — browser SpeechSynthesis. Auto-reads the latest coach reply when enabled.
+  const TTS_KEY = "aevion_coach_tts_v1";
+  const TTS_VOICE_KEY = "aevion_coach_tts_voice_v1";
+  const [ttsOn, sTtsOn] = useState<boolean>(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem(TTS_KEY) === "1"; } catch { return false; }
+  });
+  const [ttsSpeaking, sTtsSpeaking] = useState(false);
+  const [voices, sVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceName, sVoiceName] = useState<string>(() => {
+    try { return typeof window !== "undefined" ? localStorage.getItem(TTS_VOICE_KEY) || "" : ""; } catch { return ""; }
+  });
+  useEffect(() => { try { localStorage.setItem(TTS_KEY, ttsOn ? "1" : "0"); } catch {} }, [ttsOn]);
+  useEffect(() => { try { localStorage.setItem(TTS_VOICE_KEY, voiceName); } catch {} }, [voiceName]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      sVoices(v);
+      if (!voiceName) {
+        const ru = v.find(x => x.lang.toLowerCase().startsWith("ru"));
+        if (ru) sVoiceName(ru.name);
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
+  const speakText = useCallback((text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
+    // Strip markdown emphasis and engine labels that sound weird spoken.
+    const clean = text.replace(/[*_`]/g, "").replace(/═/g, "").slice(0, 1500);
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(clean);
+    utt.lang = "ru-RU";
+    utt.rate = 1.05;
+    utt.pitch = 1.0;
+    if (voiceName) {
+      const v = voices.find(x => x.name === voiceName);
+      if (v) utt.voice = v;
+    }
+    utt.onstart = () => sTtsSpeaking(true);
+    utt.onend = () => sTtsSpeaking(false);
+    utt.onerror = () => sTtsSpeaking(false);
+    try { window.speechSynthesis.speak(utt); } catch {}
+  }, [voiceName, voices]);
+  const stopSpeak = useCallback(() => {
+    try { window.speechSynthesis.cancel(); } catch {}
+    sTtsSpeaking(false);
+  }, []);
+  // Stop speech when the coach panel closes or the component unmounts.
+  // Without the unmount cleanup, Chrome/Safari keep the utterance playing
+  // after the Coach disappears.
+  useEffect(() => {
+    if (!visible) stopSpeak();
+    return () => { try { window.speechSynthesis?.cancel(); } catch {} };
+  }, [visible, stopSpeak]);
+  // Auto-speak the latest assistant reply when TTS is on
+  const lastSpokenIdxRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!ttsOn || !visible) return;
+    const lastIdx = msgs.length - 1;
+    if (lastIdx <= lastSpokenIdxRef.current) return;
+    const last = msgs[lastIdx];
+    if (!last || last.role !== "assistant") return;
+    lastSpokenIdxRef.current = lastIdx;
+    speakText(last.content);
+  }, [msgs, ttsOn, visible, speakText]);
+  // Auto-speak the latest live comment
+  const lastSpokenLiveIdxRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!ttsOn || !visible || !liveMode) return;
+    const lastIdx = liveComments.length - 1;
+    if (lastIdx <= lastSpokenLiveIdxRef.current) return;
+    const last = liveComments[lastIdx];
+    if (!last) return;
+    lastSpokenLiveIdxRef.current = lastIdx;
+    speakText(`${last.san}. ${last.comment}`);
+  }, [liveComments, ttsOn, visible, liveMode, speakText]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -278,6 +361,11 @@ export default function AiCoach({
           ? (rAfter.mate > 0 ? 10000 : -10000) * signAfter
           : rAfter.cp * signAfter;
         prevEvalCache.current.set(fenAfter, evalAfter);
+        // Bound cache growth — strip oldest entries once we pass 500 FENs.
+        if (prevEvalCache.current.size > 500) {
+          const it = prevEvalCache.current.keys();
+          for (let k = 0; k < 100; k++) { const n = it.next(); if (n.done) break; prevEvalCache.current.delete(n.value); }
+        }
 
         const moverWasWhite = fenBefore.split(" ")[1] === "w";
         // Delta = how much the position worsened for the mover.
@@ -339,6 +427,7 @@ export default function AiCoach({
             ctx.push("");
             ctx.push(`Game moves so far: ${buildMovesStr(moves)}`);
             if (opening) ctx.push(`Opening: ${opening.eco} ${opening.name} (${opening.desc})`);
+            if (phaseLabel) ctx.push(`Текущая стадия партии: ${phaseLabel}. Формулируй ответ в терминах этой стадии — для дебюта про развитие/центр/рокировку, для миттельшпиля про слабости/планы/инициативу, для эндшпиля про активность короля/проходные/типовые позиции.`);
             ctx.push(`You are coaching ${playerColor === "w" ? "White" : "Black"}.`);
             ctx.push("");
             ctx.push("User question:");
@@ -348,15 +437,24 @@ export default function AiCoach({
           return m;
         });
 
-        const res = await fetch(`${BACKEND}/api/coach/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system: SYSTEM_DEEP,
-            messages: apiMsgs,
-            maxTokens: 1200,
-          }),
-        });
+        // 30 секунд timeout — если backend не отвечает, не зависаем навсегда.
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 30000);
+        let res: Response;
+        try {
+          res = await fetch(`${BACKEND}/api/coach/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system: SYSTEM_DEEP,
+              messages: apiMsgs,
+              maxTokens: 1200,
+            }),
+            signal: ctrl.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -368,7 +466,13 @@ export default function AiCoach({
             .map((c: any) => c.text || "").join("") || "No response";
         sMsgs([...newMsgs, { role: "assistant", content: reply }]);
       } catch (e: any) {
-        sError(e.message || "Connection failed");
+        if (e?.name === "AbortError") {
+          sError("Coach AI не ответил за 30 секунд. Сервер может быть перегружен — попробуй ещё раз через минуту, или используй Stockfish-анализ ниже.");
+        } else if (/fetch|network|Failed to fetch/i.test(e?.message || "")) {
+          sError("Не удалось связаться с Coach AI. Проверь соединение или используй Stockfish-разбор (он работает локально).");
+        } else {
+          sError(e?.message || "Connection failed");
+        }
       } finally {
         sLoading(false);
         sEngineThinking(false);
@@ -405,14 +509,7 @@ export default function AiCoach({
       if (delta === null) return;
 
       const quality = classifyDelta(delta);
-
-      const isKeyMoment =
-        quality === "blunder" ||
-        quality === "mistake" ||
-        quality === "great" ||
-        moves.length <= 10;
-
-      if (!isKeyMoment) return;
+      // Comment on every move when live mode is on (was: only key moments)
 
       // Analyze the BEFORE position — this gives us the best alternative moves
       // that were available (so we can say "should have played X instead").
@@ -471,7 +568,7 @@ ${quality === "blunder" || quality === "mistake"
           body: JSON.stringify({
             system: SYSTEM_LIVE,
             messages: [{ role: "user", content: prompt }],
-            maxTokens: 200,
+            maxTokens: 400,
           }),
         });
         if (!res.ok) return;
@@ -490,11 +587,14 @@ ${quality === "blunder" || quality === "mistake"
   const quickActions = [
     { label: "📊 Анализ", prompt: "Проанализируй позицию с опорой на engine report. Кто лучше стоит и почему? Ключевые факторы?" },
     { label: "💡 Лучший ход", prompt: "Какой лучший ход согласно engine? Объясни идею и что он даёт." },
+    { label: "🤍 План белых", prompt: "Подробно распиши стратегический план ЗА БЕЛЫХ в этой позиции. Какие у них сильные стороны, слабости соперника которые можно использовать, конкретные идеи: пешечная атака, типовые маневры фигур (какой конь куда, слон на какой диагонали), какие поля контролировать, на какой фланг играть, тактические возможности. Укажи 3-5 ближайших конкретных ходов из engine lines с объяснением плана за каждым." },
+    { label: "🖤 План чёрных", prompt: "Подробно распиши стратегический план ЗА ЧЁРНЫХ в этой позиции. Их сильные стороны, слабости белых для атаки, конкретные идеи: контригра, перегруппировка фигур (куда какой конь/слон), какие поля важны, где искать шансы — на королевском фланге, в центре или на ферзевом, тактические возможности. Укажи 3-5 ближайших ходов из engine lines с объяснением плана за каждым." },
+    { label: "⚖️ Планы обеих сторон", prompt: "Разбей позицию на два блока: сначала **План белых** (их сильные стороны, конкретные идеи на ближайшие 5-7 ходов, тактика, стратегия), потом **План чёрных** (то же самое). В каждом блоке: (1) сильные стороны, (2) слабости соперника, (3) конкретные маневры фигур, (4) куда играть (фланг), (5) тактические ресурсы. Используй ходы из engine lines." },
     { label: "⚠️ Мои ошибки", prompt: "Пройдись по ходам партии и укажи серьёзные ошибки. Покажи что было лучше в каждом случае." },
     { label: "📚 Дебют", prompt: "Расскажи про текущий дебют: идеи, планы обеих сторон, типичные ошибки." },
-    { label: "🎯 План", prompt: "Предложи конкретный план на 5-7 ходов с опорой на engine lines." },
+    { label: "🎯 План действий", prompt: "Предложи конкретный план на 5-7 ходов с опорой на engine lines." },
     { label: "🏰 Эндшпиль", prompt: "Принципы эндшпиля для текущей позиции. Если ещё не эндшпиль — на что ориентироваться." },
-    { label: "🏁 Разбор", prompt: "Краткий обзор партии: 3 ключевых момента с оценкой, основные ошибки, что проработать." },
+    { label: "🏁 Разбор партии", prompt: "Краткий обзор партии: 3 ключевых момента с оценкой, основные ошибки, что проработать." },
   ];
 
   if (!visible) return null;
@@ -516,6 +616,24 @@ ${quality === "blunder" || quality === "mistake"
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {ttsSpeaking && (
+            <button onClick={stopSpeak} title="Остановить озвучку"
+              style={{ background: "rgba(255,255,255,0.9)", border: "none", color: "#059669", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
+              ❚❚
+            </button>
+          )}
+          <button onClick={() => sTtsOn(v => !v)} title={ttsOn ? "Выкл. озвучку" : "Вкл. озвучку"}
+            style={{ background: ttsOn ? "#fbbf24" : "rgba(255,255,255,0.2)", border: "none", color: ttsOn ? "#111" : "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
+            {ttsOn ? "🔊 Voice" : "🔈 Voice"}
+          </button>
+          {ttsOn && voices.length > 0 && (
+            <select value={voiceName} onChange={e => sVoiceName(e.target.value)} title="Голос"
+              style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 6px", fontSize: 10, fontWeight: 700, cursor: "pointer", maxWidth: 110 }}>
+              {voices.filter(v => v.lang.toLowerCase().startsWith("ru") || v.lang.toLowerCase().startsWith("en")).slice(0, 12).map(v => (
+                <option key={v.name} value={v.name} style={{ color: "#111" }}>{v.name.slice(0, 18)}</option>
+              ))}
+            </select>
+          )}
           <button onClick={() => {
             sLiveMode(!liveMode);
             if (!liveMode) { lastCommentedMoveIdx.current = moves.length; sLiveComments([]); }
@@ -537,12 +655,12 @@ ${quality === "blunder" || quality === "mistake"
       {liveMode && (
         <div style={{ borderBottom: "1px solid #e5e7eb" }}>
           <div style={{ padding: "6px 12px", background: "#fffbeb", fontSize: 10, fontWeight: 700, color: "#92400e" }}>
-            🔴 Live — комментирую только ключевые моменты (зевки, ошибки, отличные ходы, дебют)
+            🔴 Live — комментирую каждый ход после его совершения
           </div>
           <div ref={liveRef} style={{ maxHeight: 200, overflowY: "auto", padding: "6px 12px" }}>
             {liveComments.length === 0 && (
               <div style={{ fontSize: 10, color: "#9ca3af", padding: "8px 0", textAlign: "center" }}>
-                Играй дальше — скажу когда случится что-то важное
+                Жду твой ход — прокомментирую сразу после
               </div>
             )}
             {liveComments.map((c, i) => {
@@ -608,6 +726,13 @@ ${quality === "blunder" || quality === "mistake"
                 borderBottomLeftRadius: m.role === "assistant" ? 2 : 10,
                 whiteSpace: "pre-wrap",
               }}>{m.content}</div>
+              {m.role === "assistant" && typeof window !== "undefined" && "speechSynthesis" in window && (
+                <button onClick={() => (ttsSpeaking ? stopSpeak() : speakText(m.content))}
+                  title={ttsSpeaking ? "Остановить" : "Озвучить"}
+                  style={{ marginTop: 3, padding: "2px 8px", fontSize: 10, fontWeight: 700, borderRadius: 5, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: "pointer" }}>
+                  {ttsSpeaking ? "❚❚ Стоп" : "🔊 Озвучить"}
+                </button>
+              )}
             </div>
           ))}
           {engineThinking && (

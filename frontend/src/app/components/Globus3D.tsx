@@ -1,16 +1,21 @@
 // @ts-nocheck — three@0.183 ships without complete typings; runtime API matches classic Three.js.
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { feature as topoFeature } from "topojson-client";
 import countriesData from "world-atlas/countries-110m.json";
+import earcut from "earcut";
 
 type Project = {
   id: string;
   code: string;
   name: string;
+  description?: string;
+  kind?: string;
+  status?: string;
+  tags?: string[];
   runtime?: { tier: string; hint?: string };
 };
 
@@ -21,11 +26,22 @@ type QRightObject = {
   city?: string;
 };
 
+type MarkerCategory = "product" | "award" | "infra" | "qright" | "focus";
+
 type Marker = {
   key: string;
   type: "project" | "qright";
+  /** Короткая метка (например, code "QR"). */
   label: string;
-  sublabel?: string;
+  /** Полное имя — заголовок ховер-карты. */
+  title: string;
+  description?: string;
+  category: MarkerCategory;
+  categoryLabel: string;
+  icon: string;
+  /** "LIVE", "API", "HUB" — иначе skip. */
+  statusLabel?: string;
+  tags?: string[];
   href?: string;
   country?: string;
   city?: string;
@@ -52,6 +68,10 @@ const EARTH_TEXTURE_CANDIDATES = {
   clouds: [
     "https://threejs.org/examples/textures/planets/earth_clouds_1024.png",
     "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_clouds_1024.png",
+  ],
+  night: [
+    "https://threejs.org/examples/textures/planets/earth_lights_2048.png",
+    "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_lights_2048.png",
   ],
 } as const;
 
@@ -95,6 +115,233 @@ function geoFromLatLon(lat: number, lon: number, radius: number) {
 
 let borderVerticesCache: Float32Array | null = null;
 let borderVerticesBuildStarted = false;
+
+/** Кэш country-полигонов для point-in-polygon на ховере. */
+type CountryCacheEntry = {
+  name: string;
+  bbox: [number, number, number, number]; // [west, south, east, north]
+  rings: number[][][]; // массив полигонов (для MultiPolygon), каждый = массив колец, ring = [[lon,lat], ...]
+};
+let countriesCache: CountryCacheEntry[] | null = null;
+let countriesCacheBuildStarted = false;
+
+function pointInRing(lon: number, lat: number, ring: number[][]) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0],
+      yi = ring[i][1];
+    const xj = ring[j][0],
+      yj = ring[j][1];
+    if (
+      yi > lat !== yj > lat &&
+      lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * topojson country names ↔ имена в наших данных (`m.country`).
+ * 110m carto использует "United States of America" / "United Kingdom",
+ * у нас в `projectGeo`/`objectGeo` — "United States" / "UK".
+ */
+const COUNTRY_NAME_ALIASES: Record<string, string> = {
+  "United States of America": "United States",
+  "United Kingdom": "UK",
+  "Russian Federation": "Russia",
+};
+function aliasCountry(name: string): string {
+  return COUNTRY_NAME_ALIASES[name] ?? name;
+}
+
+/** Локализация названий стран для UI. Базовое имя — английское из topojson. */
+const COUNTRY_I18N: Record<string, { ru?: string; kk?: string }> = {
+  "United States": { ru: "США", kk: "АҚШ" },
+  UK: { ru: "Великобритания", kk: "Ұлыбритания" },
+  Russia: { ru: "Россия", kk: "Ресей" },
+  Germany: { ru: "Германия", kk: "Германия" },
+  France: { ru: "Франция", kk: "Франция" },
+  Italy: { ru: "Италия", kk: "Италия" },
+  Spain: { ru: "Испания", kk: "Испания" },
+  Netherlands: { ru: "Нидерланды", kk: "Нидерланды" },
+  Turkey: { ru: "Турция", kk: "Түркия" },
+  Japan: { ru: "Япония", kk: "Жапония" },
+  China: { ru: "Китай", kk: "Қытай" },
+  India: { ru: "Индия", kk: "Үндістан" },
+  Brazil: { ru: "Бразилия", kk: "Бразилия" },
+  Canada: { ru: "Канада", kk: "Канада" },
+  Australia: { ru: "Австралия", kk: "Австралия" },
+  Mexico: { ru: "Мексика", kk: "Мексика" },
+  Argentina: { ru: "Аргентина", kk: "Аргентина" },
+  "South Korea": { ru: "Южная Корея", kk: "Оңтүстік Корея" },
+  Indonesia: { ru: "Индонезия", kk: "Индонезия" },
+  Vietnam: { ru: "Вьетнам", kk: "Вьетнам" },
+  Thailand: { ru: "Таиланд", kk: "Тайланд" },
+  Singapore: { ru: "Сингапур", kk: "Сингапур" },
+  Malaysia: { ru: "Малайзия", kk: "Малайзия" },
+  Philippines: { ru: "Филиппины", kk: "Филиппин" },
+  "Saudi Arabia": { ru: "Саудовская Аравия", kk: "Сауд Арабиясы" },
+  "United Arab Emirates": { ru: "ОАЭ", kk: "БАӘ" },
+  Egypt: { ru: "Египет", kk: "Мысыр" },
+  "South Africa": { ru: "ЮАР", kk: "ОАР" },
+  Nigeria: { ru: "Нигерия", kk: "Нигерия" },
+  Israel: { ru: "Израиль", kk: "Израиль" },
+  Switzerland: { ru: "Швейцария", kk: "Швейцария" },
+  Sweden: { ru: "Швеция", kk: "Швеция" },
+  Norway: { ru: "Норвегия", kk: "Норвегия" },
+  Denmark: { ru: "Дания", kk: "Дания" },
+  Finland: { ru: "Финляндия", kk: "Финляндия" },
+  Poland: { ru: "Польша", kk: "Польша" },
+  Ukraine: { ru: "Украина", kk: "Украина" },
+  Kazakhstan: { ru: "Казахстан", kk: "Қазақстан" },
+  Belarus: { ru: "Беларусь", kk: "Беларусь" },
+  Belgium: { ru: "Бельгия", kk: "Бельгия" },
+  Austria: { ru: "Австрия", kk: "Австрия" },
+  Portugal: { ru: "Португалия", kk: "Португалия" },
+  Greece: { ru: "Греция", kk: "Греция" },
+  "Czech Republic": { ru: "Чехия", kk: "Чехия" },
+  Czechia: { ru: "Чехия", kk: "Чехия" },
+  Hungary: { ru: "Венгрия", kk: "Венгрия" },
+  Iran: { ru: "Иран", kk: "Иран" },
+  Iraq: { ru: "Ирак", kk: "Ирак" },
+  Pakistan: { ru: "Пакистан", kk: "Пәкістан" },
+  Bangladesh: { ru: "Бангладеш", kk: "Бангладеш" },
+  Ireland: { ru: "Ирландия", kk: "Ирландия" },
+  "New Zealand": { ru: "Новая Зеландия", kk: "Жаңа Зеландия" },
+  Chile: { ru: "Чили", kk: "Чили" },
+  Colombia: { ru: "Колумбия", kk: "Колумбия" },
+  Peru: { ru: "Перу", kk: "Перу" },
+  Romania: { ru: "Румыния", kk: "Румыния" },
+  Bulgaria: { ru: "Болгария", kk: "Болгария" },
+  Serbia: { ru: "Сербия", kk: "Сербия" },
+  Croatia: { ru: "Хорватия", kk: "Хорватия" },
+  Estonia: { ru: "Эстония", kk: "Эстония" },
+  Latvia: { ru: "Латвия", kk: "Латвия" },
+  Lithuania: { ru: "Литва", kk: "Литва" },
+  Georgia: { ru: "Грузия", kk: "Грузия" },
+  Armenia: { ru: "Армения", kk: "Армения" },
+  Azerbaijan: { ru: "Азербайджан", kk: "Әзірбайжан" },
+  Uzbekistan: { ru: "Узбекистан", kk: "Өзбекстан" },
+  Kyrgyzstan: { ru: "Кыргызстан", kk: "Қырғызстан" },
+  Tajikistan: { ru: "Таджикистан", kk: "Тәжікстан" },
+  Turkmenistan: { ru: "Туркменистан", kk: "Түрікменстан" },
+  Mongolia: { ru: "Монголия", kk: "Моңғолия" },
+  World: { ru: "Мир", kk: "Әлем" },
+};
+
+function detectLocale(): "en" | "ru" | "kk" {
+  if (typeof window === "undefined") return "en";
+  try {
+    const stored = window.localStorage.getItem("aevion:locale");
+    if (stored === "ru" || stored === "kk" || stored === "en") return stored;
+  } catch {}
+  const lang =
+    typeof navigator !== "undefined" && navigator.language
+      ? navigator.language.toLowerCase()
+      : "en";
+  if (lang.startsWith("ru")) return "ru";
+  if (lang.startsWith("kk") || lang.startsWith("kz")) return "kk";
+  return "en";
+}
+
+function displayCountry(name: string, locale: "en" | "ru" | "kk"): string {
+  if (locale === "en") return name;
+  const e = COUNTRY_I18N[name];
+  if (!e) return name;
+  return (locale === "kk" ? e.kk : e.ru) ?? name;
+}
+
+function findCountryAt(lat: number, lon: number): string | null {
+  if (!countriesCache) return null;
+  for (const c of countriesCache) {
+    const [w, s, e, n] = c.bbox;
+    if (lat < s || lat > n) continue;
+    // Учёт wrap по долготе для стран на 180°.
+    if (w <= e ? lon < w || lon > e : lon < w && lon > e) continue;
+    for (const polygon of c.rings) {
+      // polygon[0] = outer ring; ignore holes для 110m carto.
+      if (pointInRing(lon, lat, polygon[0])) return c.name;
+    }
+  }
+  return null;
+}
+
+function pointToLatLon(p: THREE.Vector3): [number, number] {
+  const len = p.length() || 1;
+  const x = p.x / len;
+  const y = p.y / len;
+  const z = p.z / len;
+  const lat = Math.asin(Math.max(-1, Math.min(1, y))) * (180 / Math.PI);
+  let lon = Math.atan2(z, -x) * (180 / Math.PI) - 180;
+  while (lon < -180) lon += 360;
+  while (lon > 180) lon -= 360;
+  return [lat, lon];
+}
+
+function buildCountriesIfNeeded() {
+  if (countriesCache) return;
+  if (countriesCacheBuildStarted) return;
+  countriesCacheBuildStarted = true;
+
+  try {
+    const topoRoot = countriesData as Parameters<typeof topoFeature>[0];
+    const countriesObj = (
+      countriesData as { objects: { countries: Parameters<typeof topoFeature>[1] } }
+    ).objects.countries;
+    const geojson = topoFeature(topoRoot, countriesObj) as FeatureCollection;
+
+    const entries: CountryCacheEntry[] = [];
+    for (const f of geojson.features) {
+      const name: string =
+        (f.properties as Record<string, unknown> | null)?.name as string ??
+        (f.properties as Record<string, unknown> | null)?.NAME as string ??
+        "Unknown";
+      const geom = f.geometry;
+      if (!geom) continue;
+
+      const polys: number[][][] = [];
+      let west = 180, south = 90, east = -180, north = -90;
+
+      const processRing = (ring: number[][]) => {
+        for (const [lon, lat] of ring) {
+          if (lon < west) west = lon;
+          if (lon > east) east = lon;
+          if (lat < south) south = lat;
+          if (lat > north) north = lat;
+        }
+      };
+
+      if (geom.type === "Polygon") {
+        const poly = geom as Polygon;
+        if (!poly.coordinates?.length) continue;
+        polys.push(poly.coordinates[0]);
+        processRing(poly.coordinates[0]);
+      } else if (geom.type === "MultiPolygon") {
+        const mp = geom as MultiPolygon;
+        if (!mp.coordinates?.length) continue;
+        for (const poly of mp.coordinates) {
+          if (!poly?.length) continue;
+          polys.push(poly[0]);
+          processRing(poly[0]);
+        }
+      } else {
+        continue;
+      }
+
+      entries.push({
+        name,
+        bbox: [west, south, east, north],
+        rings: polys.map((ring) => [ring]),
+      });
+    }
+
+    countriesCache = entries;
+  } catch {
+    countriesCache = [];
+  }
+}
 
 function projectGeo(projectId: string) {
   const known: Record<
@@ -166,27 +413,133 @@ function objectGeo(obj: QRightObject) {
   return { lat, lon, country, city };
 }
 
-function buildStarField(count: number) {
+function randomSpherePositions(count: number, rMin: number, rMax: number) {
   const positions = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    const r = 420 + Math.random() * 180;
+    const r = rMin + Math.random() * (rMax - rMin);
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
     positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
     positions[i * 3 + 2] = r * Math.cos(phi);
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const mat = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.55,
-    transparent: true,
-    opacity: 0.9,
-    sizeAttenuation: true,
-    depthWrite: false,
-  });
-  return new THREE.Points(geo, mat);
+  return positions;
+}
+
+function buildStarField() {
+  const group = new THREE.Group();
+
+  // Dim — основное полотно (1800).
+  {
+    const pos = randomSpherePositions(1800, 420, 600);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.4,
+      transparent: true,
+      opacity: 0.65,
+      sizeAttenuation: true,
+      depthWrite: false,
+    });
+    group.add(new THREE.Points(geo, mat));
+  }
+
+  // Medium — слегка голубоватые (350).
+  {
+    const pos = randomSpherePositions(350, 430, 580);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xc4d8ff,
+      size: 0.7,
+      transparent: true,
+      opacity: 0.85,
+      sizeAttenuation: true,
+      depthWrite: false,
+    });
+    group.add(new THREE.Points(geo, mat));
+  }
+
+  // Bright — крупные с per-vertex hue (from cool blue до warm yellow).
+  {
+    const N = 70;
+    const pos = randomSpherePositions(N, 440, 560);
+    const colors = new Float32Array(N * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < N; i++) {
+      const h = (40 + Math.random() * 200) / 360;
+      const s = 0.18 + Math.random() * 0.18;
+      const l = 0.78 + Math.random() * 0.14;
+      c.setHSL(h, s, l);
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 1.4,
+      transparent: true,
+      opacity: 1,
+      sizeAttenuation: true,
+      depthWrite: false,
+      vertexColors: true,
+    });
+    group.add(new THREE.Points(geo, mat));
+  }
+
+  return group;
+}
+
+const MIN_DIST = 130;
+const MAX_DIST = 360;
+const MIN_PITCH = -1.1;
+const MAX_PITCH = 1.1;
+const DEFAULT_YAW = 0;
+const DEFAULT_PITCH = 0.22;
+const DEFAULT_DIST = 248;
+
+const VIEW_STORAGE_KEY = "aevion:globus:view:v1";
+type SavedView = {
+  yaw?: number;
+  pitch?: number;
+  distance?: number;
+  filter?: string;
+  autoRotate?: boolean;
+};
+function readSavedView(): SavedView | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw) as SavedView;
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+/** URL-сериализация ракурса: ?view=yaw,pitch,distance&filter=... */
+function readViewFromUrl(): SavedView | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const v = sp.get("view");
+    const f = sp.get("filter");
+    const out: SavedView = {};
+    if (v) {
+      const [y, p, d] = v.split(",").map((s) => parseFloat(s));
+      if (!Number.isNaN(y)) out.yaw = y;
+      if (!Number.isNaN(p)) out.pitch = p;
+      if (!Number.isNaN(d)) out.distance = d;
+    }
+    if (f) out.filter = f;
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function Globus3D({
@@ -204,14 +557,179 @@ export default function Globus3D({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
+  const [autoRotate, setAutoRotate] = useState<boolean>(
+    () => readSavedView()?.autoRotate ?? true,
+  );
+  /** Если в URL переданы view-параметры — auto-rotate отключаем (юзер пришёл по ссылке). */
+  const autoRotateRef = useRef(autoRotate);
+  useEffect(() => {
+    autoRotateRef.current = autoRotate;
+  }, [autoRotate]);
+
+  /** Внешний "пульт" камеры — refs инициализируются из localStorage один раз. */
+  const yawRef = useRef(DEFAULT_YAW);
+  const pitchRef = useRef(DEFAULT_PITCH);
+  const distanceRef = useRef(DEFAULT_DIST);
+  const viewLoadedRef = useRef(false);
+  if (!viewLoadedRef.current) {
+    viewLoadedRef.current = true;
+    // URL имеет приоритет над localStorage — пользователь пришёл по shared link.
+    const fromUrl = readViewFromUrl();
+    const saved = fromUrl ?? readSavedView();
+    if (saved) {
+      if (typeof saved.yaw === "number") yawRef.current = saved.yaw;
+      if (typeof saved.pitch === "number") {
+        pitchRef.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, saved.pitch));
+      }
+      if (typeof saved.distance === "number") {
+        distanceRef.current = Math.max(
+          MIN_DIST,
+          Math.min(MAX_DIST, saved.distance),
+        );
+      }
+    }
+  }
+  /** Целевая позиция при click-to-focus; tween идёт в animate. */
+  const targetYawRef = useRef<number | null>(null);
+  const targetPitchRef = useRef<number | null>(null);
+  const targetDistRef = useRef<number | null>(null);
+
+  const [focused, setFocused] = useState<Marker | null>(null);
+  const focusedRef = useRef<Marker | null>(null);
+  useEffect(() => {
+    focusedRef.current = focused;
+  }, [focused]);
+
+  const [tour, setTour] = useState(false);
+  const tourRef = useRef(tour);
+  useEffect(() => {
+    tourRef.current = tour;
+  }, [tour]);
+
+  /** Time-lapse: ускоренный sun cycle (1 час за 1 реальную секунду = 3600x). */
+  const [timeLapse, setTimeLapse] = useState(false);
+  const timeLapseRef = useRef(false);
+  const timeLapseOffsetRef = useRef(0);
+  useEffect(() => {
+    timeLapseRef.current = timeLapse;
+    if (!timeLapse) timeLapseOffsetRef.current = 0;
+  }, [timeLapse]);
+
+  /** Canvas ref для PNG snapshot. */
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  /** Setter для selected-country fill+outline (живёт в Three.js scope). */
+  const selectedCountryVizRef = useRef<((name: string | null) => void) | null>(null);
+
+  /** Setter для ecosystem-arcs от маркеров в выбранной стране к их «сородичам». */
+  const ecosystemArcsRef = useRef<
+    ((name: string | null, allMarkers: Marker[]) => void) | null
+  >(null);
+
+  /** Minimap dot — direct DOM update из RAF tick без React re-render. */
+  const minimapDotRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let raf: number;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const dot = minimapDotRef.current;
+      if (!dot) return;
+      const yaw = yawRef.current;
+      const pitch = pitchRef.current;
+      const r = 26; // half of minimap radius (px)
+      const x = Math.sin(yaw) * Math.cos(pitch) * r;
+      const y = -Math.sin(pitch) * r;
+      dot.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  /** Texture loading progress — albedo / normal / specular / clouds / night. */
+  const TEX_TOTAL = 5;
+  const [texLoaded, setTexLoaded] = useState(0);
+
+  /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | MarkerCategory>(() => {
+    const v = readViewFromUrl()?.filter ?? readSavedView()?.filter;
+    if (v === "all" || v === "product" || v === "award" || v === "qright" || v === "infra" || v === "focus") {
+      return v;
+    }
+    return "all";
+  });
+  const filterRef = useRef(filter);
+  useEffect(() => {
+    filterRef.current = filter;
+  }, [filter]);
+
+  /** Узкий экран — компактный layout overlay'ев. */
+  const [isNarrow, setIsNarrow] = useState(false);
+  const isNarrowRef = useRef(isNarrow);
+  useEffect(() => {
+    isNarrowRef.current = isNarrow;
+  }, [isNarrow]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 600px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  const markerMeshesRef = useRef<
+    Array<{
+      mesh: THREE.Mesh;
+      group: THREE.Group;
+      mat: THREE.MeshBasicMaterial;
+      marker: Marker;
+    }>
+  >([]);
+  const pulseMeshByKeyRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const arcsRef = useRef<
+    Array<{
+      line: THREE.Line;
+      geo: THREE.BufferGeometry;
+      total: number;
+      fromKey: string;
+      toKey: string;
+      curve: THREE.QuadraticBezierCurve3;
+      label: string;
+      color: string;
+    }>
+  >([]);
+  /** Tooltip-DOM для дуги; обновляем напрямую в animate. */
+  const arcTooltipRef = useRef<HTMLDivElement | null>(null);
+  /** Координаты курсора в координатах globe-контейнера (pointer move). */
+  const cursorXYRef = useRef<{ x: number; y: number } | null>(null);
+  /** DOM-overlay подписи над focus/award маркерами; обновляются прямо через style в animate. */
+  const sparseLabelsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  /** Mini-map: камера-индикатор (cx/cy обновляется в animate). */
+  const miniCamDotRef = useRef<SVGCircleElement | null>(null);
+
   const [label, setLabel] = useState<{
-    text: string;
-    sub?: string;
     screenX: number;
     screenY: number;
     marker: Marker;
   } | null>(null);
   const labelRef = useRef<typeof label>(null);
+
+  /** Country name detected by globe-surface point-in-polygon (shown as floating badge). */
+  const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+  const hoveredCountryRef = useRef<string | null>(null);
+
+  /** Локаль для отображения country names. */
+  const [locale, setLocale] = useState<"en" | "ru" | "kk">("en");
+  useEffect(() => {
+    setLocale(detectLocale());
+  }, []);
+  const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const selectedCountryRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedCountryRef.current = selectedCountry;
+  }, [selectedCountry]);
 
   useEffect(() => {
     labelRef.current = label;
@@ -223,6 +741,55 @@ export default function Globus3D({
     onNavigateRef.current = onNavigate;
     onSelectLocationRef.current = onSelectLocation;
   }, [onNavigate, onSelectLocation]);
+
+  /** Рефы на сеттеры — чтобы Three.js-обработчики могли менять search/filter без эффекта-зависимости. */
+  const setQueryRef = useRef(setQuery);
+  const setFilterToAllRef = useRef(() => setFilter("all"));
+  const setSelectedCountryRef = useRef(setSelectedCountry);
+  useEffect(() => {
+    setQueryRef.current = setQuery;
+    setFilterToAllRef.current = () => setFilter("all");
+    setSelectedCountryRef.current = setSelectedCountry;
+  });
+
+  /** Прокси для onPointerUp — функция определена ниже, но обёртка стабильна. */
+  const focusMarkerRef = useRef<(m: Marker) => void>(() => {});
+
+  /** Persist (debounced) — yaw/pitch/distance/filter/autoRotate. */
+  const persistTimerRef = useRef<number | null>(null);
+  const persistView = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        VIEW_STORAGE_KEY,
+        JSON.stringify({
+          yaw: yawRef.current,
+          pitch: pitchRef.current,
+          distance: distanceRef.current,
+          filter: filterRef.current,
+          autoRotate: autoRotateRef.current,
+        }),
+      );
+    } catch {}
+  }, []);
+  const persistViewDebounced = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null;
+      persistView();
+    }, 600);
+  }, [persistView]);
+  const persistViewRef = useRef(persistViewDebounced);
+  useEffect(() => {
+    persistViewRef.current = persistViewDebounced;
+  }, [persistViewDebounced]);
+  // Немедленное сохранение при изменении filter / autoRotate.
+  useEffect(() => {
+    persistView();
+  }, [filter, autoRotate, persistView]);
 
   const markers = useMemo<Marker[]>(() => {
     const projectMarkers: Marker[] = projects.map((p) => {
@@ -249,22 +816,59 @@ export default function Globus3D({
       if (g.city) qs.set("city", g.city);
       const href = qs.toString() ? `${baseHref}?${qs.toString()}` : baseHref;
 
+      const category: MarkerCategory = isFocus
+        ? "focus"
+        : isAwardPin
+          ? "award"
+          : p.kind === "infra"
+            ? "infra"
+            : "product";
+      const categoryLabel =
+        category === "focus"
+          ? "Focus"
+          : category === "award"
+            ? "Award"
+            : category === "infra"
+              ? "Infra"
+              : "Product";
+      const icon =
+        category === "focus"
+          ? "★"
+          : category === "award"
+            ? "🏆"
+            : category === "infra"
+              ? "⚙"
+              : "🚀";
+
+      const color =
+        category === "focus"
+          ? 0xfbbf24
+          : category === "award"
+            ? 0xe879f9
+            : category === "infra"
+              ? 0x94a3b8
+              : 0x7dd3fc;
+      const size =
+        category === "focus" ? 5 : category === "award" ? 4.5 : category === "infra" ? 3 : 4;
+
       return {
         key: `project:${p.id}`,
         type: "project",
         label: p.code,
-        sublabel:
-          g.city +
-          ", " +
-          g.country +
-          (p.runtime?.tier ? ` • ${tierShort(p.runtime.tier)}` : ""),
+        title: p.name,
+        description: p.description || p.runtime?.hint,
+        category,
+        categoryLabel,
+        icon,
+        statusLabel: p.runtime?.tier ? tierShort(p.runtime.tier) : undefined,
+        tags: p.tags,
         href,
         country: g.country,
         city: g.city,
         lat: g.lat,
         lon: g.lon,
-        color: isFocus ? 0xffcc66 : isAwardPin ? 0xff44cc : 0x66c2ff,
-        size: isFocus ? 6 : isAwardPin ? 5 : 4,
+        color,
+        size,
       };
     });
 
@@ -274,19 +878,154 @@ export default function Globus3D({
         key: `qright:${o.id}`,
         type: "qright",
         label: o.title,
-        sublabel: g.city + ", " + g.country,
+        title: o.title,
+        description: "QRight registry record — content hash, author, geolocation.",
+        category: "qright",
+        categoryLabel: "QRight",
+        icon: "💎",
+        statusLabel: "REGISTERED",
         href: `/bureau?objectId=${encodeURIComponent(o.id)}`,
         country: g.country,
         city: g.city,
         lat: g.lat,
         lon: g.lon,
-        color: 0x44ff99,
-        size: 4,
+        color: 0x34d399,
+        size: 3.5,
       };
     });
 
     return [...projectMarkers, ...objectMarkers];
   }, [projects, qrightObjects, focusProjectIds]);
+
+  /** Маркеры в выбранной стране — для side-sheet списка. */
+  const selectedCountryMarkers = useMemo<Marker[]>(() => {
+    if (!selectedCountry) return [];
+    return markers.filter((m) => m.country === selectedCountry);
+  }, [selectedCountry, markers]);
+
+  /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    const sel = selectedCountry;
+    const matches = (m: Marker) => {
+      if (filter !== "all" && m.category !== filter) return false;
+      if (sel && m.country !== sel) return false;
+      if (!q) return true;
+      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
+      return (
+        inField(m.title) ||
+        inField(m.label) ||
+        inField(m.country) ||
+        inField(m.city) ||
+        (m.tags?.some((t) => inField(t)) ?? false)
+      );
+    };
+    const visibleByKey = new Map<string, boolean>();
+    for (const item of markerMeshesRef.current) {
+      const v = matches(item.marker);
+      item.group.visible = v;
+      // Также на head — иначе raycaster найдёт скрытый маркер (он проверяет only-self).
+      item.mesh.visible = v;
+      visibleByKey.set(item.marker.key, v);
+    }
+    // Pulse уже внутри group → автоматически скрыт; просто синхронизируем.
+    for (const [key, pulseMesh] of pulseMeshByKeyRef.current) {
+      pulseMesh.visible = visibleByKey.get(key) === true;
+    }
+    for (const a of arcsRef.current) {
+      a.line.visible =
+        visibleByKey.get(a.fromKey) === true &&
+        visibleByKey.get(a.toKey) === true;
+    }
+  }, [query, filter, selectedCountry, markers]);
+
+  /** Auto-focus при единственном совпадении поиска. */
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (!q && filter === "all") return;
+    // Считаем матчи и собираем единственный.
+    const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
+    let count = 0;
+    let single: Marker | null = null;
+    for (const m of markers) {
+      if (filter !== "all" && m.category !== filter) continue;
+      if (q) {
+        if (
+          !(
+            inField(m.title) ||
+            inField(m.label) ||
+            inField(m.country) ||
+            inField(m.city) ||
+            (m.tags?.some((t) => inField(t)) ?? false)
+          )
+        ) {
+          continue;
+        }
+      }
+      count++;
+      if (count > 1) {
+        single = null;
+        break;
+      }
+      single = m;
+    }
+    if (count !== 1 || !single) return;
+    if (focusedRef.current?.key === single.key) return;
+    const target = single;
+    const tm = window.setTimeout(() => {
+      focusMarkerRef.current(target);
+    }, 700);
+    return () => window.clearTimeout(tm);
+  }, [query, filter, markers]);
+
+  const visibleMatchCount = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (filter === "all" && !q) return markers.length;
+    let n = 0;
+    for (const m of markers) {
+      if (filter !== "all" && m.category !== filter) continue;
+      if (!q) {
+        n++;
+        continue;
+      }
+      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
+      if (
+        inField(m.title) ||
+        inField(m.label) ||
+        inField(m.country) ||
+        inField(m.city) ||
+        (m.tags?.some((t) => inField(t)) ?? false)
+      ) {
+        n++;
+      }
+    }
+    return n;
+  }, [markers, query, filter]);
+
+  const counts = useMemo(() => {
+    let live = 0;
+    let api = 0;
+    let awards = 0;
+    let infra = 0;
+    for (const p of projects) {
+      if (p.id === "aevion-awards-music" || p.id === "aevion-awards-film") {
+        awards++;
+        continue;
+      }
+      if (p.kind === "infra") infra++;
+      const tier = p.runtime?.tier;
+      if (tier === "mvp_live") live++;
+      else if (tier === "platform_api") api++;
+    }
+    return {
+      nodes: projects.length,
+      live,
+      api,
+      awards,
+      infra,
+      qright: qrightObjects.length,
+    };
+  }, [projects, qrightObjects]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -312,6 +1051,7 @@ export default function Globus3D({
       alpha: true,
       powerPreference: "high-performance",
       failIfMajorPerformanceCaveat: false,
+      preserveDrawingBuffer: true,
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -324,12 +1064,27 @@ export default function Globus3D({
     canvas.style.height = "100%";
     canvas.style.verticalAlign = "top";
     el.appendChild(canvas);
+    canvasRef.current = canvas;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 2000);
-    camera.position.set(0, 0, 248);
 
-    const stars = buildStarField(2200);
+    /** Орбита: угол вокруг Y (yaw), угол подъёма (pitch), радиус (distance). */
+    const updateCamera = () => {
+      const yaw = yawRef.current;
+      const pitch = pitchRef.current;
+      const d = distanceRef.current;
+      const cp = Math.cos(pitch);
+      camera.position.set(
+        d * Math.sin(yaw) * cp,
+        d * Math.sin(pitch),
+        d * Math.cos(yaw) * cp,
+      );
+      camera.lookAt(0, 0, 0);
+    };
+    updateCamera();
+
+    const stars = buildStarField();
     scene.add(stars);
 
     const earthGroup = new THREE.Group();
@@ -351,6 +1106,17 @@ export default function Globus3D({
     let albedoTex: THREE.Texture | null = null;
     let normalTex: THREE.Texture | null = null;
     let specTex: THREE.Texture | null = null;
+    let nightTex: THREE.Texture | null = null;
+
+    setTexLoaded(0);
+    let loadedCount = 0;
+    const oneTexDone = () => {
+      loadedCount++;
+      setTexLoaded(loadedCount);
+    };
+
+    /** Sun direction в world space — глобус в (0,0,0), sun в фиксированной позиции. */
+    const sunWorldDir = new THREE.Vector3(260, 80, 180).normalize();
 
     const applyEarthMaterial = () => {
       if (!albedoTex) return;
@@ -359,6 +1125,65 @@ export default function Globus3D({
       if (normalTex) {
         normalTex.colorSpace = THREE.NoColorSpace;
       }
+
+      // Если есть night-карта — собираем кастомный shader с day/night миксом.
+      if (nightTex) {
+        nightTex.colorSpace = THREE.SRGBColorSpace;
+        nightTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+
+        const shaderMat = new THREE.ShaderMaterial({
+          uniforms: {
+            dayMap: { value: albedoTex },
+            nightMap: { value: nightTex },
+            normalMap: { value: normalTex },
+            useNormalMap: { value: normalTex ? 1 : 0 },
+            sunDir: { value: sunWorldDir.clone() },
+          },
+          vertexShader: [
+            "varying vec2 vUv;",
+            "varying vec3 vWorldNormal;",
+            "void main() {",
+            "  vUv = uv;",
+            "  vWorldNormal = normalize(mat3(modelMatrix) * normal);",
+            "  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);",
+            "}",
+          ].join("\n"),
+          fragmentShader: [
+            "uniform sampler2D dayMap;",
+            "uniform sampler2D nightMap;",
+            "uniform sampler2D normalMap;",
+            "uniform float useNormalMap;",
+            "uniform vec3 sunDir;",
+            "varying vec2 vUv;",
+            "varying vec3 vWorldNormal;",
+            "void main() {",
+            "  vec3 day = texture2D(dayMap, vUv).rgb;",
+            "  vec3 night = texture2D(nightMap, vUv).rgb;",
+            "  // Лёгкий perturbation нормали по normalMap (если есть).",
+            "  vec3 N = normalize(vWorldNormal);",
+            "  if (useNormalMap > 0.5) {",
+            "    vec3 nm = texture2D(normalMap, vUv).rgb * 2.0 - 1.0;",
+            "    N = normalize(N + nm * 0.18);",
+            "  }",
+            "  float dotNL = dot(N, sunDir);",
+            "  // Smooth terminator: -0.12 (полная ночь) → 0.22 (полный день).",
+            "  float t = smoothstep(-0.12, 0.22, dotNL);",
+            "  // Ambient + diffuse на дневной стороне.",
+            "  vec3 dayLit = day * (0.18 + 0.92 * max(dotNL, 0.0));",
+            "  // Ночные огни — ярче в темноте, гасятся к терминатору.",
+            "  vec3 nightLit = night * (1.5 - t * 1.4);",
+            "  // Лёгкий синий тон ночной поверхности (без огней).",
+            "  vec3 nightDark = day * 0.04 + vec3(0.012, 0.018, 0.045);",
+            "  vec3 col = mix(nightDark + nightLit, dayLit, t);",
+            "  gl_FragColor = vec4(col, 1.0);",
+            "}",
+          ].join("\n"),
+        });
+        globe.material = shaderMat;
+        return;
+      }
+
+      // Fallback — обычный Phong (если night текстура не подгрузилась).
       const mat = new THREE.MeshPhongMaterial({
         map: albedoTex,
         specular: new THREE.Color(0x111122),
@@ -384,8 +1209,12 @@ export default function Globus3D({
       (t) => {
         albedoTex = t;
         bumpApply();
+        oneTexDone();
       },
-      () => bumpApply()
+      () => {
+        bumpApply();
+        oneTexDone();
+      },
     );
     loadTextureChain(
       loader,
@@ -393,11 +1222,13 @@ export default function Globus3D({
       (t) => {
         normalTex = t;
         bumpApply();
+        oneTexDone();
       },
       () => {
         normalTex = null;
         bumpApply();
-      }
+        oneTexDone();
+      },
     );
     loadTextureChain(
       loader,
@@ -405,11 +1236,13 @@ export default function Globus3D({
       (t) => {
         specTex = t;
         bumpApply();
+        oneTexDone();
       },
       () => {
         specTex = null;
         bumpApply();
-      }
+        oneTexDone();
+      },
     );
 
     // Clouds (slightly larger, transparent; rotate with Earth).
@@ -436,21 +1269,66 @@ export default function Globus3D({
           specular: new THREE.Color(0x000000),
           shininess: 0,
         });
+        oneTexDone();
       },
       () => {
         cloudMesh.visible = false;
-      }
+        oneTexDone();
+      },
     );
 
-    // Soft outer halo (space-photo look; typings for ShaderMaterial are incomplete in this repo).
-    const haloGeo = new THREE.SphereGeometry(radius * 1.14, 56, 56);
-    const haloMat = new THREE.MeshBasicMaterial({
-      color: 0x66aaff,
-      transparent: true,
-      opacity: 0.11,
+    loadTextureChain(
+      loader,
+      EARTH_TEXTURE_CANDIDATES.night,
+      (t) => {
+        nightTex = t;
+        bumpApply();
+        oneTexDone();
+      },
+      () => {
+        nightTex = null;
+        bumpApply();
+        oneTexDone();
+      },
+    );
+
+    // Fresnel-атмосфера: яркий ободок по краям планеты (космический look).
+    const haloGeo = new THREE.SphereGeometry(radius * 1.18, 64, 64);
+    const haloMat = new THREE.ShaderMaterial({
+      vertexShader: [
+        "varying vec3 vNormal;",
+        "varying vec3 vViewDir;",
+        "void main() {",
+        "  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);",
+        "  vNormal = normalize(normalMatrix * normal);",
+        "  vViewDir = normalize(-mvPosition.xyz);",
+        "  gl_Position = projectionMatrix * mvPosition;",
+        "}",
+      ].join("\n"),
+      fragmentShader: [
+        "varying vec3 vNormal;",
+        "varying vec3 vViewDir;",
+        "uniform vec3 glowColor;",
+        "uniform vec3 rimColor;",
+        "uniform float power;",
+        "uniform float strength;",
+        "void main() {",
+        "  float facing = max(dot(vNormal, vViewDir), 0.0);",
+        "  float fresnel = pow(1.0 - facing, power);",
+        "  vec3 col = mix(glowColor, rimColor, fresnel);",
+        "  gl_FragColor = vec4(col, fresnel * strength);",
+        "}",
+      ].join("\n"),
+      uniforms: {
+        glowColor: { value: new THREE.Color(0x4a7fb8) },
+        rimColor: { value: new THREE.Color(0xa5d8ff) },
+        power: { value: 2.6 },
+        strength: { value: 1.15 },
+      },
       side: THREE.BackSide,
-      depthWrite: false,
       blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
     });
     const halo = new THREE.Mesh(haloGeo, haloMat);
     earthGroup.add(halo);
@@ -571,34 +1449,468 @@ export default function Globus3D({
       earthGroup.add(borders);
     }
 
+    // Density heatmap — постоянный нежный контур стран, в которых есть наши маркеры.
+    const presenceOutlineGroup = new THREE.Group();
+    earthGroup.add(presenceOutlineGroup);
+
+    // Hovered-country outline — светящийся контур поверх borders, пересоздаётся при смене страны.
+    const countryOutlineGroup = new THREE.Group();
+    earthGroup.add(countryOutlineGroup);
+
+    const countryOutlineMat = new THREE.LineBasicMaterial({
+      color: 0x4cc1ff,
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+    });
+    countryOutlineMat.blending = THREE.AdditiveBlending;
+
+    let lastHighlightedCountry: string | null = null;
+    const setCountryHighlight = (countryName: string | null) => {
+      if (countryName === lastHighlightedCountry) return;
+      lastHighlightedCountry = countryName;
+      // Освобождаем прошлые линии страны.
+      while (countryOutlineGroup.children.length > 0) {
+        const child = countryOutlineGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        countryOutlineGroup.remove(child);
+        child.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const entry = countriesCache.find((c) => c.name === countryName);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 2) continue;
+        // Линия контура — чуть выше borders, чтобы не утонула.
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 0.95);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, countryOutlineMat);
+        line.renderOrder = 5;
+        countryOutlineGroup.add(line);
+      }
+    };
+
+    // Selected-country visualization — постоянная заливка + жирный outline.
+    const selectedCountryGroup = new THREE.Group();
+    earthGroup.add(selectedCountryGroup);
+
+    const selectedFillMat = new THREE.MeshBasicMaterial({
+      color: 0x4cc1ff,
+      transparent: true,
+      opacity: 0.22,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    selectedFillMat.blending = THREE.AdditiveBlending;
+
+    const selectedOutlineMat = new THREE.LineBasicMaterial({
+      color: 0x9be9ff,
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+    });
+    selectedOutlineMat.blending = THREE.AdditiveBlending;
+
+    const setSelectedCountryViz = (countryName: string | null) => {
+      while (selectedCountryGroup.children.length > 0) {
+        const ch = selectedCountryGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        selectedCountryGroup.remove(ch);
+        ch.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const entry = countriesCache.find((c) => c.name === countryName);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 4) continue;
+
+        // Skip polygons crossing 180° meridian — earcut в lon/lat 2D не поймёт wrap.
+        let wraps = false;
+        for (let i = 1; i < ring.length; i++) {
+          if (Math.abs(ring[i][0] - ring[i - 1][0]) > 180) {
+            wraps = true;
+            break;
+          }
+        }
+
+        // Жирный outline — всегда (даже для wrap-стран).
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 1.05);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, selectedOutlineMat);
+        line.renderOrder = 6;
+        selectedCountryGroup.add(line);
+
+        if (wraps) continue;
+
+        // Triangulated fill — earcut over [lon,lat,...] flat.
+        const flat: number[] = [];
+        for (const [lon, lat] of ring) flat.push(lon, lat);
+        const indices = earcut(flat, undefined, 2);
+        if (indices.length === 0) continue;
+
+        const vCount = flat.length / 2;
+        const positions = new Float32Array(vCount * 3);
+        for (let i = 0; i < vCount; i++) {
+          const lon = flat[i * 2];
+          const lat = flat[i * 2 + 1];
+          const p = geoFromLatLon(lat, lon, radius + 0.5);
+          positions[i * 3] = p.x;
+          positions[i * 3 + 1] = p.y;
+          positions[i * 3 + 2] = p.z;
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geom.setIndex(
+          new THREE.BufferAttribute(
+            vCount > 65535 ? new Uint32Array(indices) : new Uint16Array(indices),
+            1,
+          ),
+        );
+
+        const mesh = new THREE.Mesh(geom, selectedFillMat);
+        mesh.renderOrder = 4;
+        selectedCountryGroup.add(mesh);
+      }
+    };
+
+    selectedCountryVizRef.current = setSelectedCountryViz;
+
+    // Ecosystem arcs — динамические дуги от маркеров выбранной страны к их
+    // «сородичам» в других странах (top-3 ближайших одной категории).
+    const ecosystemArcsGroup = new THREE.Group();
+    earthGroup.add(ecosystemArcsGroup);
+
+    const setEcosystemArcs = (
+      countryName: string | null,
+      allMarkers: Marker[],
+    ) => {
+      while (ecosystemArcsGroup.children.length > 0) {
+        const ch = ecosystemArcsGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+          material?: { dispose?: () => void };
+        };
+        ecosystemArcsGroup.remove(ch);
+        ch.geometry?.dispose?.();
+        ch.material?.dispose?.();
+      }
+      if (!countryName) return;
+
+      const inCountry = allMarkers.filter((m) => m.country === countryName);
+      if (inCountry.length === 0) return;
+      const others = allMarkers.filter((m) => m.country !== countryName);
+      if (others.length === 0) return;
+
+      const links: Array<{ a: Marker; b: Marker; color: number }> = [];
+      for (const a of inCountry) {
+        const sameCat = others.filter((b) => b.category === a.category);
+        if (sameCat.length === 0) continue;
+        const sorted = sameCat
+          .map((b) => ({
+            b,
+            d: Math.hypot(
+              a.lat - b.lat,
+              (a.lon - b.lon) * Math.cos((a.lat * Math.PI) / 180),
+            ),
+          }))
+          .sort((p, q) => p.d - q.d)
+          .slice(0, 3);
+        for (const { b } of sorted) links.push({ a, b, color: a.color });
+      }
+
+      for (const link of links) {
+        const pa = geoFromLatLon(link.a.lat, link.a.lon, radius + 1.5);
+        const pb = geoFromLatLon(link.b.lat, link.b.lon, radius + 1.5);
+        const start = new THREE.Vector3(pa.x, pa.y, pa.z);
+        const end = new THREE.Vector3(pb.x, pb.y, pb.z);
+        const midDir = start.clone().add(end).normalize();
+        const lift = 1.18 + Math.min(0.4, start.distanceTo(end) / (radius * 4));
+        const control = midDir.multiplyScalar(radius * lift);
+        const curve = new THREE.QuadraticBezierCurve3(start, control, end);
+        const points = curve.getPoints(48);
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const mat = new THREE.LineBasicMaterial({
+          color: link.color,
+          transparent: true,
+          opacity: 0.55,
+          depthTest: false,
+        });
+        mat.blending = THREE.AdditiveBlending;
+        const line = new THREE.Line(geo, mat);
+        line.renderOrder = 7;
+        ecosystemArcsGroup.add(line);
+      }
+    };
+
+    ecosystemArcsRef.current = setEcosystemArcs;
+
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    const markerMeshes: Array<{ mesh: THREE.Mesh; marker: Marker }> = [];
+    const markerMeshes: Array<{
+      mesh: THREE.Mesh;
+      group: THREE.Group;
+      mat: THREE.MeshBasicMaterial;
+      marker: Marker;
+    }> = [];
+    const pulseMeshes: Array<{
+      mesh: THREE.Mesh;
+      mat: THREE.MeshBasicMaterial;
+      baseSize: number;
+      offset: number;
+      markerKey: string;
+    }> = [];
+    const pulseMeshByKey = new Map<string, THREE.Mesh>();
 
+    let focusIndex = 0;
     for (const m of markers) {
-      const p = geoFromLatLon(m.lat, m.lon, radius + 1.2);
-      const markerGeo = new THREE.SphereGeometry(m.size, 16, 16);
-      const markerMat = new THREE.MeshBasicMaterial({ color: m.color });
-      const mesh = new THREE.Mesh(markerGeo, markerMat);
-      mesh.position.set(p.x, p.y, p.z);
-      mesh.userData = { key: m.key };
-      earthGroup.add(mesh);
-      markerMeshes.push({ mesh, marker: m });
+      const surface = geoFromLatLon(m.lat, m.lon, radius);
+      const normal = new THREE.Vector3(surface.x, surface.y, surface.z).normalize();
+      const pinHeight = m.size * 2.0;
+      const groupPos = new THREE.Vector3(surface.x, surface.y, surface.z).add(
+        normal.clone().multiplyScalar(pinHeight * 0.5),
+      );
+
+      const group = new THREE.Group();
+      group.position.copy(groupPos);
+      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+      earthGroup.add(group);
+
+      const markerMat = new THREE.MeshBasicMaterial({
+        color: m.color,
+        transparent: true,
+        opacity: 1,
+      });
+
+      // Конус — стержень pin (smaller end вверху, к head).
+      const coneGeo = new THREE.CylinderGeometry(0, m.size * 0.5, pinHeight * 0.85, 16);
+      const cone = new THREE.Mesh(coneGeo, markerMat);
+      cone.position.y = -pinHeight * 0.075;
+      group.add(cone);
+
+      // Head — сфера на верхушке (raycast target).
+      const headGeo = new THREE.SphereGeometry(m.size * 0.85, 18, 18);
+      const head = new THREE.Mesh(headGeo, markerMat);
+      head.position.y = pinHeight * 0.4;
+      head.userData = { key: m.key };
+      group.add(head);
+
+      markerMeshes.push({ mesh: head, group, mat: markerMat, marker: m });
+
+      if (m.category === "focus" || m.category === "award") {
+        const pulseGeo = new THREE.SphereGeometry(m.size * 1.05, 18, 18);
+        const pulseMat = new THREE.MeshBasicMaterial({
+          color: m.color,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false,
+        });
+        const pulse = new THREE.Mesh(pulseGeo, pulseMat);
+        pulse.position.y = pinHeight * 0.4; // у головки
+        group.add(pulse);
+        pulseMeshes.push({
+          mesh: pulse,
+          mat: pulseMat,
+          baseSize: m.size,
+          offset: focusIndex * 0.35,
+          markerKey: m.key,
+        });
+        pulseMeshByKey.set(m.key, pulse);
+        focusIndex++;
+      }
+    }
+    markerMeshesRef.current = markerMeshes;
+    pulseMeshByKeyRef.current = pulseMeshByKey;
+
+    // Connection arcs — пайплайн между ключевыми нодами.
+    const arcConnections: Array<{
+      from: string;
+      to: string;
+      color: number;
+      label: string;
+    }> = [
+      { from: "auth", to: "qright", color: 0x5eead4, label: "Identity → IP" },
+      { from: "qright", to: "qsign", color: 0x5eead4, label: "Sign record" },
+      { from: "qsign", to: "aevion-ip-bureau", color: 0x5eead4, label: "Certify" },
+      { from: "aevion-ip-bureau", to: "aevion-bank", color: 0x5eead4, label: "Earn royalties" },
+      { from: "planet", to: "aevion-awards-music", color: 0xe879f9, label: "Submit · Vote" },
+      { from: "planet", to: "aevion-awards-film", color: 0xe879f9, label: "Submit · Vote" },
+      { from: "qcoreai", to: "multichat-engine", color: 0x7dd3fc, label: "AI → Chat" },
+    ];
+
+    const markerByProjectId = new Map<string, Marker>();
+    for (const m of markers) {
+      if (m.type === "project") {
+        const id = m.key.replace(/^project:/, "");
+        markerByProjectId.set(id, m);
+      }
     }
 
-    const hemi = new THREE.HemisphereLight(0x9eb6ff, 0x080810, 0.55);
+    const arcs: typeof arcsRef.current = [];
+    const arcParticles: Array<{
+      mesh: THREE.Mesh;
+      mat: THREE.MeshBasicMaterial;
+      curve: THREE.QuadraticBezierCurve3;
+      offset: number;
+      arcIdx: number;
+    }> = [];
+    const PARTICLES_PER_ARC = 3;
+    for (const link of arcConnections) {
+      const a = markerByProjectId.get(link.from);
+      const b = markerByProjectId.get(link.to);
+      if (!a || !b) continue;
+
+      const pa = geoFromLatLon(a.lat, a.lon, radius + 1.5);
+      const pb = geoFromLatLon(b.lat, b.lon, radius + 1.5);
+      const start = new THREE.Vector3(pa.x, pa.y, pa.z);
+      const end = new THREE.Vector3(pb.x, pb.y, pb.z);
+      const midDir = start
+        .clone()
+        .add(end)
+        .normalize();
+      const lift = 1.18 + Math.min(0.4, start.distanceTo(end) / (radius * 4));
+      const control = midDir.multiplyScalar(radius * lift);
+      const curve = new THREE.QuadraticBezierCurve3(start, control, end);
+      const points = curve.getPoints(64);
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      geo.setDrawRange(0, 0);
+      const mat = new THREE.LineBasicMaterial({
+        color: link.color,
+        transparent: true,
+        opacity: 0.78,
+      });
+      const line = new THREE.Line(geo, mat);
+      earthGroup.add(line);
+
+      const arcIdx = arcs.length;
+      arcs.push({
+        line,
+        geo,
+        total: points.length,
+        fromKey: a.key,
+        toKey: b.key,
+        curve,
+        label: link.label,
+        color: `#${link.color.toString(16).padStart(6, "0")}`,
+      });
+
+      // Частицы вдоль дуги — поток данных.
+      for (let i = 0; i < PARTICLES_PER_ARC; i++) {
+        const pGeo = new THREE.SphereGeometry(0.65, 10, 10);
+        const pMat = new THREE.MeshBasicMaterial({
+          color: link.color,
+          transparent: true,
+          opacity: 0.9,
+          depthWrite: false,
+        });
+        const pMesh = new THREE.Mesh(pGeo, pMat);
+        earthGroup.add(pMesh);
+        arcParticles.push({
+          mesh: pMesh,
+          mat: pMat,
+          curve,
+          offset: i / PARTICLES_PER_ARC,
+          arcIdx,
+        });
+      }
+    }
+    arcsRef.current = arcs;
+    const arcStartTime = performance.now();
+    const ARC_DRAW_MS = 1400;
+
+    // Density heatmap: outline стран, где у нас живут маркеры. Контур повторяется по
+    // числу маркеров (через increment opacity), и игнорирует hover-overlay по renderOrder.
+    {
+      buildCountriesIfNeeded();
+      if (countriesCache && countriesCache.length > 0) {
+        const presenceCount = new Map<string, number>();
+        for (const m of markers) {
+          const name = findCountryAt(m.lat, m.lon);
+          if (!name) continue;
+          presenceCount.set(name, (presenceCount.get(name) ?? 0) + 1);
+        }
+        const sortedTop: Array<[string, number]> = [...presenceCount.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+        setTopCountries(sortedTop);
+        for (const [name, count] of presenceCount) {
+          const entry = countriesCache.find((c) => c.name === name);
+          if (!entry) continue;
+          // Densitу — больше маркеров → ярче контур (clamped).
+          const op = Math.min(0.55, 0.18 + 0.08 * count);
+          const mat = new THREE.LineBasicMaterial({
+            color: 0x6cd6ff,
+            transparent: true,
+            opacity: op,
+            depthWrite: false,
+          });
+          mat.blending = THREE.AdditiveBlending;
+          for (const polygon of entry.rings) {
+            const ring = polygon[0];
+            if (!ring || ring.length < 2) continue;
+            const linePts: THREE.Vector3[] = [];
+            for (const [lon, lat] of ring) {
+              const p = geoFromLatLon(lat, lon, radius + 0.7);
+              linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+            }
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+            const line = new THREE.LineLoop(lineGeo, mat);
+            line.renderOrder = 3;
+            presenceOutlineGroup.add(line);
+          }
+        }
+      }
+    }
+
+    // Освещение для облаков и halo (globe — shader-based, не зависит от scene lights).
+    // hemi пониже — иначе облака на ночной стороне светятся, разрушая terminator.
+    const hemi = new THREE.HemisphereLight(0x6e8ed0, 0x040612, 0.18);
     scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.55);
     sun.position.set(260, 80, 180);
     scene.add(sun);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.12);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.04);
     scene.add(ambient);
 
     let raf = 0;
     let isHovering = false;
     let lastTime = 0;
+    let lastSunUpdate = -1000;
+
+    /** Drag/inertia. */
+    let dragging = false;
+    let didDrag = false;
+    let lastPx = 0;
+    let lastPy = 0;
+    let yawVel = 0;
+    let pitchVel = 0;
+    /** Pinch-zoom (для двух пальцев). */
+    let pinchDist = 0;
+    const activePointers = new Map<number, { x: number; y: number }>();
+
+    const clampPitch = (p: number) =>
+      Math.max(MIN_PITCH, Math.min(MAX_PITCH, p));
+    const clampDist = (d: number) =>
+      Math.max(MIN_DIST, Math.min(MAX_DIST, d));
 
     const resize = () => {
       const m = measure();
@@ -613,10 +1925,11 @@ export default function Globus3D({
         : null;
     ro?.observe(el);
 
-    const onMouseMove = (ev: MouseEvent) => {
+    /** Подсветка маркера и pop-up — отдельно от drag. */
+    const updateHover = (clientX: number, clientY: number) => {
       const rect = el.getBoundingClientRect();
-      mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -(((ev.clientY - rect.top) / rect.height) * 2 - 1);
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
 
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(
@@ -627,7 +1940,36 @@ export default function Globus3D({
       if (!intersects.length) {
         setLabel(null);
         isHovering = false;
+        canvas.style.cursor = dragging ? "grabbing" : "grab";
+
+        // Globe-surface country detection — raycast the globe sphere.
+        buildCountriesIfNeeded();
+        const globeHits = raycaster.intersectObject(globe, false);
+        if (globeHits.length > 0) {
+          const pt = globeHits[0].point;
+          // Undo the earthGroup rotation (earthGroup has no rotation in this scene).
+          const [lat, lon] = pointToLatLon(pt);
+          const country = findCountryAt(lat, lon);
+          if (country !== hoveredCountryRef.current) {
+            hoveredCountryRef.current = country;
+            setHoveredCountry(country);
+            setCountryHighlight(country);
+          }
+        } else {
+          if (hoveredCountryRef.current !== null) {
+            hoveredCountryRef.current = null;
+            setHoveredCountry(null);
+            setCountryHighlight(null);
+          }
+        }
         return;
+      }
+
+      // If a marker is hovered, clear the country badge.
+      if (hoveredCountryRef.current !== null) {
+        hoveredCountryRef.current = null;
+        setHoveredCountry(null);
+        setCountryHighlight(null);
       }
 
       const top = intersects[0];
@@ -641,8 +1983,6 @@ export default function Globus3D({
       const sy = (-v.y * 0.5 + 0.5) * rect.height;
 
       const nextLabel = {
-        text: found.marker.label,
-        sub: found.marker.sublabel,
         screenX: sx,
         screenY: sy,
         marker: found.marker,
@@ -650,17 +1990,124 @@ export default function Globus3D({
       labelRef.current = nextLabel;
       setLabel(nextLabel);
       isHovering = true;
+      canvas.style.cursor = dragging ? "grabbing" : "pointer";
     };
 
-    const onClick = () => {
-      const cur = labelRef.current;
-      if (!cur) return;
-      if (!cur.marker.href) return;
-      onNavigateRef.current(cur.marker.href);
-      onSelectLocationRef.current({
-        country: cur.marker.country,
-        city: cur.marker.city,
-      });
+    const onPointerDown = (ev: PointerEvent) => {
+      // Юзер взял управление — отключаем тур.
+      if (tourRef.current) setTour(false);
+      activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (activePointers.size === 1) {
+        dragging = true;
+        didDrag = false;
+        lastPx = ev.clientX;
+        lastPy = ev.clientY;
+        yawVel = 0;
+        pitchVel = 0;
+        canvas.style.cursor = "grabbing";
+      } else if (activePointers.size === 2) {
+        const pts = Array.from(activePointers.values());
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        pinchDist = Math.hypot(dx, dy);
+      }
+      try {
+        el.setPointerCapture(ev.pointerId);
+      } catch {}
+    };
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (activePointers.has(ev.pointerId)) {
+        activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      }
+
+      if (activePointers.size === 2) {
+        const pts = Array.from(activePointers.values());
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        const dist = Math.hypot(dx, dy);
+        if (pinchDist > 0) {
+          const factor = pinchDist / dist;
+          distanceRef.current = clampDist(distanceRef.current * factor);
+        }
+        pinchDist = dist;
+        return;
+      }
+
+      if (!dragging) {
+        const rect = el.getBoundingClientRect();
+        cursorXYRef.current = {
+          x: ev.clientX - rect.left,
+          y: ev.clientY - rect.top,
+        };
+        updateHover(ev.clientX, ev.clientY);
+        return;
+      }
+
+      const dx = ev.clientX - lastPx;
+      const dy = ev.clientY - lastPy;
+      lastPx = ev.clientX;
+      lastPy = ev.clientY;
+
+      if (Math.hypot(dx, dy) > 1) didDrag = true;
+
+      const speed = 0.005;
+      yawRef.current -= dx * speed;
+      pitchRef.current = clampPitch(pitchRef.current + dy * speed);
+      yawVel = -dx * speed * 0.9;
+      pitchVel = dy * speed * 0.9;
+    };
+
+    const onPointerUp = (ev: PointerEvent) => {
+      activePointers.delete(ev.pointerId);
+      if (activePointers.size === 0) {
+        dragging = false;
+        canvas.style.cursor = isHovering ? "pointer" : "grab";
+        persistViewRef.current();
+      }
+      if (activePointers.size < 2) pinchDist = 0;
+      try {
+        el.releasePointerCapture(ev.pointerId);
+      } catch {}
+
+      // Если перемещения не было — это клик: focus-режим вместо моментальной навигации.
+      if (!didDrag) {
+        const cur = labelRef.current;
+        if (cur) {
+          focusMarkerRef.current(cur.marker);
+          onSelectLocationRef.current({
+            country: cur.marker.country,
+            city: cur.marker.city,
+          });
+        } else if (hoveredCountryRef.current) {
+          // Клик по пустой стране → выбираем её: side sheet + фильтр по стране.
+          const aliased = aliasCountry(hoveredCountryRef.current);
+          setFilterToAllRef.current();
+          setQueryRef.current("");
+          setSelectedCountryRef.current(aliased);
+          onSelectLocationRef.current({ country: aliased });
+        }
+      }
+    };
+
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const factor = Math.exp(ev.deltaY * 0.0015);
+      distanceRef.current = clampDist(distanceRef.current * factor);
+      persistViewRef.current();
+    };
+
+    const onPointerLeave = () => {
+      if (!dragging) {
+        setLabel(null);
+        isHovering = false;
+        cursorXYRef.current = null;
+        if (hoveredCountryRef.current !== null) {
+          hoveredCountryRef.current = null;
+          setHoveredCountry(null);
+          setCountryHighlight(null);
+        }
+      }
     };
 
     const animate = (t: number) => {
@@ -668,16 +2115,299 @@ export default function Globus3D({
       const dt = t - lastTime;
       lastTime = t;
 
-      if (!isHovering) {
-        earthGroup.rotation.y += dt * 0.000028 * 60;
+      // Click-to-focus tween — приоритетнее inertia/auto-rotate.
+      const tY = targetYawRef.current;
+      const tP = targetPitchRef.current;
+      const tD = targetDistRef.current;
+      const focusing =
+        !dragging && (tY !== null || tP !== null || tD !== null);
+
+      if (focusing) {
+        const k = 0.085;
+        if (tY !== null) {
+          const d = tY - yawRef.current;
+          yawRef.current += d * k;
+          if (Math.abs(d) < 0.001) targetYawRef.current = null;
+        }
+        if (tP !== null) {
+          const d = tP - pitchRef.current;
+          pitchRef.current = clampPitch(pitchRef.current + d * k);
+          if (Math.abs(d) < 0.001) targetPitchRef.current = null;
+        }
+        if (tD !== null) {
+          const d = tD - distanceRef.current;
+          distanceRef.current = clampDist(distanceRef.current + d * k);
+          if (Math.abs(d) < 0.05) targetDistRef.current = null;
+        }
+        yawVel = 0;
+        pitchVel = 0;
+      } else if (!dragging) {
+        if (Math.abs(yawVel) > 0.0005 || Math.abs(pitchVel) > 0.0005) {
+          yawRef.current += yawVel;
+          pitchRef.current = clampPitch(pitchRef.current + pitchVel);
+          yawVel *= 0.92;
+          pitchVel *= 0.92;
+        } else if (autoRotateRef.current && !isHovering && !focusedRef.current) {
+          yawRef.current += dt * 0.00018;
+        }
+      }
+
+      // Облака чуть-чуть бегут всегда — оживляет сцену.
+      cloudMesh.rotation.y += dt * 0.00004;
+
+      // Dynamic sun: пересчитываем sunDir по реальному UTC раз в ~250мс
+      // (или каждые 50мс в time-lapse — иначе дёргается).
+      if (timeLapseRef.current) {
+        timeLapseOffsetRef.current += dt * 3600;
+      }
+      const sunInterval = timeLapseRef.current ? 50 : 250;
+      if (t - lastSunUpdate > sunInterval) {
+        lastSunUpdate = t;
+        const now = new Date(Date.now() + timeLapseOffsetRef.current);
+        const utcH =
+          now.getUTCHours() +
+          now.getUTCMinutes() / 60 +
+          now.getUTCSeconds() / 3600;
+        const lonSun = -(utcH - 12) * 15;
+        const yearStart = Date.UTC(now.getUTCFullYear(), 0, 0);
+        const doy = (now.getTime() - yearStart) / 86400000;
+        const decDeg =
+          23.45 * Math.sin(((doy - 81) * 2 * Math.PI) / 365.25);
+        const sp = geoFromLatLon(decDeg, lonSun, 1);
+        sunWorldDir.set(sp.x, sp.y, sp.z).normalize();
+        const gm: any = globe.material;
+        if (gm?.uniforms?.sunDir?.value) {
+          gm.uniforms.sunDir.value.copy(sunWorldDir);
+        }
+        sun.position.copy(sunWorldDir).multiplyScalar(300);
+      }
+
+      // Дыхание контура страны под курсором — синусоида 1.4с.
+      if (countryOutlineGroup.children.length > 0) {
+        const phase = (t % 1400) / 1400;
+        countryOutlineMat.opacity = 0.6 + 0.35 * Math.sin(phase * Math.PI * 2);
+      }
+
+      // Прорисовка дуг от 0 до total за ARC_DRAW_MS (только при первом рендере).
+      if (arcs.length > 0) {
+        const arcElapsed = (t - arcStartTime) / ARC_DRAW_MS;
+        if (arcElapsed < 1) {
+          const eased =
+            arcElapsed <= 0
+              ? 0
+              : arcElapsed >= 1
+                ? 1
+                : 1 - Math.pow(1 - arcElapsed, 3); // ease-out cubic
+          for (const a of arcs) {
+            a.geo.setDrawRange(0, Math.floor(a.total * eased));
+          }
+        }
+      }
+
+      // Поток частиц вдоль дуг — оживляет связи.
+      if (arcParticles.length > 0) {
+        const arcElapsed = (t - arcStartTime) / ARC_DRAW_MS;
+        const startedFlow = arcElapsed >= 0.5;
+        for (const p of arcParticles) {
+          const arc = arcs[p.arcIdx];
+          if (!arc || !arc.line.visible || !startedFlow) {
+            p.mesh.visible = false;
+            continue;
+          }
+          p.mesh.visible = true;
+          const phase = ((t * 0.0006 + p.offset) % 1 + 1) % 1;
+          const pos = p.curve.getPointAt(phase);
+          p.mesh.position.copy(pos);
+          // sin envelope: 0 на концах, 1 в середине — частицы появляются из start, исчезают в end.
+          p.mat.opacity = 0.92 * Math.sin(phase * Math.PI);
+        }
+      }
+
+      // Pulse-кольца на focus/award — растущая полупрозрачная сфера, зацикленная.
+      if (pulseMeshes.length > 0) {
+        const PERIOD = 1700; // мс
+        for (const p of pulseMeshes) {
+          const phase = ((t + p.offset * PERIOD) % PERIOD) / PERIOD; // 0..1
+          const scale = 1 + phase * 2.4; // 1 → 3.4
+          p.mesh.scale.setScalar(scale);
+          p.mat.opacity = 0.55 * (1 - phase) * (1 - phase);
+        }
+      }
+
+      updateCamera();
+
+      // Keyboard-selected outline — следует за выбранным маркером.
+      {
+        const sel = kbSelectedKeyRef.current;
+        const outlineEl = kbOutlineRef.current;
+        if (outlineEl) {
+          if (!sel) {
+            if (outlineEl.style.display !== "none")
+              outlineEl.style.display = "none";
+          } else {
+            const item = markerMeshesRef.current.find(
+              (x) => x.marker.key === sel,
+            );
+            if (!item || !item.group.visible) {
+              if (outlineEl.style.display !== "none")
+                outlineEl.style.display = "none";
+            } else {
+              const cw = canvas.clientWidth;
+              const ch = canvas.clientHeight;
+              const camDir = camera.position.clone().normalize();
+              const tmp = new THREE.Vector3();
+              const tmpDir = new THREE.Vector3();
+              item.mesh.getWorldPosition(tmp);
+              tmpDir.copy(tmp).normalize();
+              const facing = tmpDir.dot(camDir);
+              if (facing < 0.05) {
+                if (outlineEl.style.display !== "none")
+                  outlineEl.style.display = "none";
+              } else {
+                tmp.project(camera);
+                const sx = (tmp.x * 0.5 + 0.5) * cw;
+                const sy = (-tmp.y * 0.5 + 0.5) * ch;
+                outlineEl.style.display = "block";
+                outlineEl.style.left = `${sx}px`;
+                outlineEl.style.top = `${sy}px`;
+              }
+            }
+          }
+        }
+      }
+
+      // Hover scale-bump на маркерах — плавный grow на hovered, shrink на остальных.
+      {
+        const hoveredKey = labelRef.current?.marker.key ?? null;
+        const focusedKey = focusedRef.current?.key ?? null;
+        const baseK = isNarrowRef.current ? 1.35 : 1;
+        for (const item of markerMeshesRef.current) {
+          const isHover = item.marker.key === hoveredKey;
+          const isFocus = item.marker.key === focusedKey;
+          const target = isHover ? baseK * 1.22 : isFocus ? baseK * 1.12 : baseK;
+          const cur = item.group.scale.x;
+          const next = cur + (target - cur) * 0.18;
+          item.group.scale.setScalar(next);
+        }
+      }
+
+      // Arc tooltip — если курсор близко к проекции середины видимой дуги.
+      {
+        const tipEl = arcTooltipRef.current;
+        if (tipEl) {
+          const cur = cursorXYRef.current;
+          const labelExists = !!labelRef.current;
+          if (!cur || labelExists || dragging) {
+            if (tipEl.style.display !== "none") tipEl.style.display = "none";
+          } else {
+            const cw = canvas.clientWidth;
+            const ch = canvas.clientHeight;
+            const camDir = camera.position.clone().normalize();
+            let bestDist = 999;
+            let bestArc: typeof arcs[number] | null = null;
+            let bestSx = 0;
+            let bestSy = 0;
+            const tmp = new THREE.Vector3();
+            const tmpDir = new THREE.Vector3();
+            for (const a of arcs) {
+              if (!a.line.visible) continue;
+              tmp.copy(a.curve.getPointAt(0.5));
+              tmpDir.copy(tmp).normalize();
+              if (tmpDir.dot(camDir) < 0.05) continue;
+              tmp.project(camera);
+              const sx = (tmp.x * 0.5 + 0.5) * cw;
+              const sy = (-tmp.y * 0.5 + 0.5) * ch;
+              const dist = Math.hypot(sx - cur.x, sy - cur.y);
+              if (dist < 36 && dist < bestDist) {
+                bestDist = dist;
+                bestArc = a;
+                bestSx = sx;
+                bestSy = sy;
+              }
+            }
+            if (bestArc) {
+              const fromMarker = markerMeshesRef.current.find(
+                (x) => x.marker.key === bestArc!.fromKey,
+              )?.marker;
+              const toMarker = markerMeshesRef.current.find(
+                (x) => x.marker.key === bestArc!.toKey,
+              )?.marker;
+              const arrow = `${fromMarker?.label ?? "?"} → ${toMarker?.label ?? "?"}`;
+              tipEl.style.display = "block";
+              tipEl.style.left = `${bestSx}px`;
+              tipEl.style.top = `${bestSy}px`;
+              tipEl.style.borderColor = `${bestArc.color}aa`;
+              tipEl.style.boxShadow = `0 8px 22px rgba(0,0,0,0.45), 0 0 14px ${bestArc.color}55`;
+              tipEl.querySelector(".aev-arc-arrow")!.textContent = arrow;
+              tipEl.querySelector(".aev-arc-label")!.textContent =
+                bestArc.label;
+              (tipEl.querySelector(".aev-arc-arrow") as HTMLElement).style.color =
+                bestArc.color;
+            } else {
+              if (tipEl.style.display !== "none") tipEl.style.display = "none";
+            }
+          }
+        }
+      }
+
+      // Mini-map camera dot — обновляем cx/cy без React re-render.
+      if (miniCamDotRef.current) {
+        let camLon = (yawRef.current * 180) / Math.PI - 90;
+        while (camLon > 180) camLon -= 360;
+        while (camLon < -180) camLon += 360;
+        const camLat = (pitchRef.current * 180) / Math.PI;
+        const cx = ((camLon + 180) / 360) * 120;
+        const cy = ((90 - camLat) / 180) * 60;
+        miniCamDotRef.current.setAttribute("cx", String(cx));
+        miniCamDotRef.current.setAttribute("cy", String(cy));
+      }
+
+      // Sparse-метки над focus/award маркерами — backside cull + screen project.
+      if (sparseLabelsRef.current.size > 0) {
+        const cw = canvas.clientWidth;
+        const ch = canvas.clientHeight;
+        const camDir = camera.position.clone().normalize();
+        const tmp = new THREE.Vector3();
+        const tmpDir = new THREE.Vector3();
+        for (const item of markerMeshesRef.current) {
+          if (item.marker.category !== "focus" && item.marker.category !== "award") {
+            continue;
+          }
+          const el = sparseLabelsRef.current.get(item.marker.key);
+          if (!el) continue;
+          if (!item.group.visible) {
+            if (el.style.display !== "none") el.style.display = "none";
+            continue;
+          }
+          item.mesh.getWorldPosition(tmp);
+          tmpDir.copy(tmp).normalize();
+          const facing = tmpDir.dot(camDir);
+          if (facing < 0.08) {
+            if (el.style.display !== "none") el.style.display = "none";
+            continue;
+          }
+          tmp.project(camera);
+          const sx = (tmp.x * 0.5 + 0.5) * cw;
+          const sy = (-tmp.y * 0.5 + 0.5) * ch;
+          el.style.display = "block";
+          el.style.left = `${sx}px`;
+          el.style.top = `${sy}px`;
+          el.style.opacity = String(Math.min(1, (facing - 0.08) / 0.2));
+        }
       }
 
       renderer.render(scene, camera);
     };
 
+    canvas.style.cursor = "grab";
+
     window.addEventListener("resize", resize);
-    el.addEventListener("mousemove", onMouseMove);
-    el.addEventListener("click", onClick);
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
+    el.addEventListener("pointerleave", onPointerLeave);
+    el.addEventListener("wheel", onWheel, { passive: false });
 
     requestAnimationFrame(() => resize());
 
@@ -686,9 +2416,32 @@ export default function Globus3D({
     return () => {
       ro?.disconnect();
       window.removeEventListener("resize", resize);
-      el.removeEventListener("mousemove", onMouseMove);
-      el.removeEventListener("click", onClick);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
+      el.removeEventListener("pointerleave", onPointerLeave);
+      el.removeEventListener("wheel", onWheel);
       cancelAnimationFrame(raf);
+
+      // Освобождаем GPU-ресурсы — иначе hot-reload и ремаунт через смену markers
+      // быстро забивают видеопамять.
+      const disposed = new WeakSet<object>();
+      const disposeMaterial = (m: any) => {
+        if (!m || disposed.has(m)) return;
+        disposed.add(m);
+        if (typeof m.dispose === "function") m.dispose();
+      };
+      scene.traverse((obj: any) => {
+        if (obj.geometry && !disposed.has(obj.geometry)) {
+          disposed.add(obj.geometry);
+          if (typeof obj.geometry.dispose === "function") obj.geometry.dispose();
+        }
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach(disposeMaterial);
+          else disposeMaterial(obj.material);
+        }
+      });
       renderer.dispose();
       while (el.firstChild) el.removeChild(el.firstChild);
     };
@@ -700,23 +2453,1370 @@ export default function Globus3D({
     }
   }, [markers]);
 
+  const ctrlSize = isNarrow ? 40 : 36;
+  const ctrlBtn: CSSProperties = {
+    width: ctrlSize,
+    height: ctrlSize,
+    borderRadius: 10,
+    border: "1px solid rgba(120,160,220,0.35)",
+    background: "rgba(12,18,32,0.78)",
+    color: "#e8eefc",
+    fontSize: 16,
+    fontWeight: 800,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+    backdropFilter: "blur(6px)",
+    transition: "transform 0.12s ease, background 0.15s ease",
+    touchAction: "manipulation",
+  };
+
+  const globeHeight = isNarrow ? 400 : 520;
+
+  const resetView = () => {
+    targetYawRef.current = null;
+    targetPitchRef.current = null;
+    targetDistRef.current = null;
+    yawRef.current = DEFAULT_YAW;
+    pitchRef.current = DEFAULT_PITCH;
+    distanceRef.current = DEFAULT_DIST;
+    setFocused(null);
+    setTour(false);
+    setQuery("");
+    setFilter("all");
+    setSelectedCountry(null);
+    setKbSelectedKey(null);
+  };
+
+  const focusOnMarker = (m: Marker) => {
+    const phi = ((90 - m.lat) * Math.PI) / 180;
+    const theta = ((m.lon + 180) * Math.PI) / 180;
+    const x = -Math.sin(phi) * Math.cos(theta);
+    const y = Math.cos(phi);
+    const z = Math.sin(phi) * Math.sin(theta);
+    let tYaw = Math.atan2(x, z);
+    const tPitch = Math.atan2(y, Math.sqrt(x * x + z * z));
+    // Wrap к ближайшему представителю — короткая дуга lerp.
+    let dy = tYaw - yawRef.current;
+    while (dy > Math.PI) dy -= 2 * Math.PI;
+    while (dy < -Math.PI) dy += 2 * Math.PI;
+    tYaw = yawRef.current + dy;
+    targetYawRef.current = tYaw;
+    targetPitchRef.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, tPitch));
+    targetDistRef.current = 195;
+    setAutoRotate(false);
+    setFocused(m);
+    persistViewDebounced();
+  };
+  useEffect(() => {
+    focusMarkerRef.current = focusOnMarker;
+  });
+
+  /** Keyboard nav: стрелки = поворот, +/- = zoom, Tab/Shift+Tab = марк, Enter = focus. */
+  const [kbSelectedKey, setKbSelectedKey] = useState<string | null>(null);
+  const kbSelectedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    kbSelectedKeyRef.current = kbSelectedKey;
+  }, [kbSelectedKey]);
+  const kbOutlineRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          (target as HTMLElement).isContentEditable);
+      if (isEditable) return;
+
+      const kRot = 0.07;
+      let handled = true;
+      switch (e.key) {
+        case "ArrowLeft":
+          yawRef.current -= kRot;
+          break;
+        case "ArrowRight":
+          yawRef.current += kRot;
+          break;
+        case "ArrowUp":
+          pitchRef.current = Math.max(
+            MIN_PITCH,
+            Math.min(MAX_PITCH, pitchRef.current + kRot),
+          );
+          break;
+        case "ArrowDown":
+          pitchRef.current = Math.max(
+            MIN_PITCH,
+            Math.min(MAX_PITCH, pitchRef.current - kRot),
+          );
+          break;
+        case "+":
+        case "=":
+          distanceRef.current = Math.max(
+            MIN_DIST,
+            Math.min(MAX_DIST, distanceRef.current * 0.9),
+          );
+          break;
+        case "-":
+        case "_":
+          distanceRef.current = Math.max(
+            MIN_DIST,
+            Math.min(MAX_DIST, distanceRef.current / 0.9),
+          );
+          break;
+        case "Tab": {
+          const visible = markerMeshesRef.current.filter(
+            (x) => x.group.visible,
+          );
+          if (visible.length === 0) {
+            handled = false;
+            break;
+          }
+          const curIdx = visible.findIndex(
+            (x) => x.marker.key === kbSelectedKey,
+          );
+          const next = e.shiftKey
+            ? (curIdx <= 0 ? visible.length - 1 : curIdx - 1)
+            : (curIdx === -1 || curIdx >= visible.length - 1 ? 0 : curIdx + 1);
+          setKbSelectedKey(visible[next].marker.key);
+          break;
+        }
+        case "Enter":
+        case " ": {
+          if (!kbSelectedKey) {
+            handled = false;
+            break;
+          }
+          const item = markerMeshesRef.current.find(
+            (x) => x.marker.key === kbSelectedKey,
+          );
+          if (item) focusMarkerRef.current(item.marker);
+          break;
+        }
+        default:
+          handled = false;
+      }
+      if (handled) {
+        e.preventDefault();
+        persistViewRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [kbSelectedKey]);
+
+  /** ESC закрывает focus-режим и тур. */
+  useEffect(() => {
+    if (!focused && !tour && !selectedCountry) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        targetYawRef.current = null;
+        targetPitchRef.current = null;
+        targetDistRef.current = null;
+        setFocused(null);
+        setTour(false);
+        setSelectedCountry(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focused, tour, selectedCountry]);
+
+  /** Tour mode — последовательный focus по приоритету. */
+  const tourQueue = useMemo(() => {
+    const order: Record<string, number> = {
+      focus: 0,
+      award: 1,
+      product: 2,
+      infra: 3,
+      qright: 4,
+    };
+    return [...markers]
+      .filter((m) => m.type === "project")
+      .sort((a, b) => (order[a.category] ?? 9) - (order[b.category] ?? 9));
+  }, [markers]);
+
+  useEffect(() => {
+    if (!tour) return;
+    if (tourQueue.length === 0) return;
+    let idx = 0;
+    focusMarkerRef.current(tourQueue[0]);
+    const tick = window.setInterval(() => {
+      idx = (idx + 1) % tourQueue.length;
+      focusMarkerRef.current(tourQueue[idx]);
+    }, 3200);
+    return () => window.clearInterval(tick);
+  }, [tour, tourQueue]);
+  const zoom = (factor: number) => {
+    distanceRef.current = Math.max(
+      MIN_DIST,
+      Math.min(MAX_DIST, distanceRef.current * factor),
+    );
+  };
+
+  const [shareToast, setShareToast] = useState<"copied" | "failed" | "locating" | "located" | "geo-failed" | null>(null);
+
+  const flyToLatLon = (lat: number, lon: number, dist = 220) => {
+    const phi = ((90 - lat) * Math.PI) / 180;
+    const theta = ((lon + 180) * Math.PI) / 180;
+    const x = -Math.sin(phi) * Math.cos(theta);
+    const y = Math.cos(phi);
+    const z = Math.sin(phi) * Math.sin(theta);
+    let tYaw = Math.atan2(x, z);
+    const tPitch = Math.atan2(y, Math.sqrt(x * x + z * z));
+    let dy = tYaw - yawRef.current;
+    while (dy > Math.PI) dy -= 2 * Math.PI;
+    while (dy < -Math.PI) dy += 2 * Math.PI;
+    tYaw = yawRef.current + dy;
+    targetYawRef.current = tYaw;
+    targetPitchRef.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, tPitch));
+    targetDistRef.current = dist;
+    setAutoRotate(false);
+    persistViewDebounced();
+  };
+
+  /** Camera fly-to при выборе страны: центроид bbox + дистанция по размеру страны. */
+  useEffect(() => {
+    if (!selectedCountry) return;
+    buildCountriesIfNeeded();
+    if (!countriesCache) return;
+    const entry = countriesCache.find((c) => c.name === selectedCountry);
+    if (!entry) return;
+    const [w, s, e, n] = entry.bbox;
+    const centerLat = (s + n) / 2;
+    let centerLon = (w + e) / 2;
+    if (w > e) {
+      // bbox wraps через 180° (Russia, Fiji) — берём «среднее» с учётом разрыва.
+      centerLon = ((w + e + 360) / 2) % 360;
+      if (centerLon > 180) centerLon -= 360;
+    }
+    const latRange = Math.abs(n - s);
+    const lonRange = Math.abs(e - w);
+    const spread = Math.max(
+      latRange,
+      lonRange * Math.cos((centerLat * Math.PI) / 180),
+    );
+    const dist = Math.max(180, Math.min(280, 160 + spread * 3));
+    flyToLatLon(centerLat, centerLon, dist);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCountry]);
+
+  /** Selected-country fill+outline на самом глобусе. */
+  useEffect(() => {
+    selectedCountryVizRef.current?.(selectedCountry);
+  }, [selectedCountry]);
+
+  /** Ecosystem arcs от выбранной страны к маркерам той же категории в других странах. */
+  useEffect(() => {
+    ecosystemArcsRef.current?.(selectedCountry, markers);
+  }, [selectedCountry, markers]);
+
+  /** URL ?country=Russia — deep-link на конкретную страну (mount-only). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const c = sp.get("country");
+      if (c) setSelectedCountry(c);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Синхронизация URL ?country=... при изменении selectedCountry — shareable. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (selectedCountry) sp.set("country", selectedCountry);
+      else sp.delete("country");
+      const qs = sp.toString();
+      const url = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", url);
+    } catch {}
+  }, [selectedCountry]);
+
+  const locateMe = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setShareToast("geo-failed");
+      window.setTimeout(() => setShareToast(null), 2200);
+      return;
+    }
+    setShareToast("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        flyToLatLon(pos.coords.latitude, pos.coords.longitude, 215);
+        setShareToast("located");
+        window.setTimeout(() => setShareToast(null), 1600);
+      },
+      () => {
+        setShareToast("geo-failed");
+        window.setTimeout(() => setShareToast(null), 2200);
+      },
+      { timeout: 6000, maximumAge: 5 * 60 * 1000 },
+    );
+  };
+  const snapshotPng = () => {
+    const c = canvasRef.current;
+    if (!c) return;
+    try {
+      c.toBlob((blob) => {
+        if (!blob) {
+          setShareToast("failed");
+          window.setTimeout(() => setShareToast(null), 2200);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        a.href = url;
+        a.download = `aevion-globus-${stamp}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, "image/png");
+    } catch {
+      setShareToast("failed");
+      window.setTimeout(() => setShareToast(null), 2200);
+    }
+  };
+
+  const randomCountry = () => {
+    const counts: Record<string, number> = {};
+    for (const m of markers) counts[m.country] = (counts[m.country] || 0) + 1;
+    const eligible = Object.keys(counts).filter((c) => c && c !== "World");
+    if (eligible.length === 0) return;
+    const pool = eligible.filter((c) => c !== selectedCountry);
+    const list = pool.length > 0 ? pool : eligible;
+    const pick = list[Math.floor(Math.random() * list.length)];
+    setSelectedCountry(pick);
+  };
+
+  const shareView = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set(
+        "view",
+        `${yawRef.current.toFixed(3)},${pitchRef.current.toFixed(3)},${distanceRef.current.toFixed(1)}`,
+      );
+      if (filter !== "all") sp.set("filter", filter);
+      else sp.delete("filter");
+      if (selectedCountry) sp.set("country", selectedCountry);
+      else sp.delete("country");
+      const url = `${window.location.origin}${window.location.pathname}?${sp.toString()}`;
+      await navigator.clipboard.writeText(url);
+      setShareToast("copied");
+      window.setTimeout(() => setShareToast(null), 1800);
+    } catch {
+      setShareToast("failed");
+      window.setTimeout(() => setShareToast(null), 2200);
+    }
+  };
+
   return (
-    <div style={{ position: "relative", width: "100%", minHeight: 520, height: 520 }}>
+    <div
+      role="region"
+      aria-label="AEVION ecosystem 3D globe — drag to rotate, scroll to zoom, arrow keys, Tab between markers, Enter to focus"
+      tabIndex={0}
+      style={{
+        position: "relative",
+        width: "100%",
+        minHeight: globeHeight,
+        height: globeHeight,
+        outline: "none",
+      }}
+    >
       <div
         ref={containerRef}
         style={{
           width: "100%",
-          height: 520,
-          minHeight: 520,
-          borderRadius: 9999,
+          height: globeHeight,
+          minHeight: globeHeight,
+          borderRadius: isNarrow ? 22 : 9999,
           border: "1px solid rgba(40,55,90,0.45)",
           overflow: "hidden",
           background:
             "radial-gradient(ellipse 120% 100% at 50% 35%, #0c1528 0%, #02040a 55%, #000005 100%)",
           boxShadow:
             "inset 0 0 80px rgba(60,100,180,0.12), 0 24px 48px rgba(0,0,0,0.35)",
+          touchAction: "none",
+          userSelect: "none",
         }}
       />
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 5,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(12,18,32,0.78)",
+            border: `1px solid ${visibleMatchCount === 0 ? "rgba(248,113,113,0.5)" : "rgba(120,160,220,0.28)"}`,
+            borderRadius: 999,
+            padding: "5px 6px 5px 12px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          <span style={{ fontSize: 12, opacity: 0.7 }}>🔍</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={isNarrow ? "Search" : "Try qright, awards…"}
+            aria-label="Search projects"
+            style={{
+              width: isNarrow ? 90 : 130,
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              color: "#f1f5ff",
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "4px 0",
+            }}
+          />
+          {query ? (
+            <button
+              type="button"
+              title="Clear"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                background: "rgba(148,163,184,0.2)",
+                color: "#cbd5e1",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          ) : null}
+
+          <span
+            style={{
+              width: 1,
+              height: 18,
+              background: "rgba(148,163,184,0.25)",
+              margin: "0 2px",
+            }}
+          />
+
+          {[
+            { key: "all", label: "All", icon: "" },
+            { key: "product", label: "Products", icon: "🚀" },
+            { key: "award", label: "Awards", icon: "🏆" },
+            { key: "qright", label: "QRight", icon: "💎" },
+          ].map((c) => {
+            const active = filter === c.key;
+            // На узком экране показываем только иконки, чтобы тулбар не вылезал.
+            const showText = !isNarrow || c.key === "all";
+            return (
+              <button
+                key={c.key}
+                type="button"
+                title={c.label}
+                aria-label={`Filter: ${c.label}`}
+                onClick={() => setFilter(c.key as typeof filter)}
+                style={{
+                  height: 28,
+                  padding: showText ? (c.icon ? "0 8px" : "0 10px") : "0 7px",
+                  borderRadius: 999,
+                  border: "1px solid transparent",
+                  background: active ? "rgba(125,211,252,0.18)" : "transparent",
+                  color: active ? "#bae6fd" : "#94a3b8",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: "0.02em",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  touchAction: "manipulation",
+                }}
+              >
+                {c.icon ? <span style={{ fontSize: 13 }}>{c.icon}</span> : null}
+                {showText ? c.label : null}
+              </button>
+            );
+          })}
+
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: visibleMatchCount === 0 ? "#fca5a5" : "#94a3b8",
+              padding: "0 8px 0 4px",
+              minWidth: 28,
+              textAlign: "right",
+            }}
+          >
+            {visibleMatchCount}/{markers.length}
+          </span>
+        </div>
+      ) : null}
+
+      {!initError &&
+      !isNarrow &&
+      query.trim() === "" &&
+      filter === "all" &&
+      !focused &&
+      !tour ? (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 53,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 4,
+            fontSize: 10,
+            color: "rgba(168,184,216,0.55)",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            pointerEvents: "none",
+            background: "rgba(12,18,32,0.45)",
+            padding: "2px 8px",
+            borderRadius: 999,
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          drag · ↑↓←→ · Tab · Enter to focus · Esc
+        </div>
+      ) : null}
+
+      {!initError && !isNarrow ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 84,
+            left: 14,
+            zIndex: 4,
+            background: "rgba(12,18,32,0.7)",
+            border: "1px solid rgba(120,160,220,0.22)",
+            borderRadius: 12,
+            padding: "10px 12px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.35)",
+            pointerEvents: "none",
+            minWidth: 144,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "#7a8fb0",
+              marginBottom: 6,
+            }}
+          >
+            Legend
+          </div>
+          {[
+            { c: "#7dd3fc", icon: "🚀", label: "Product" },
+            { c: "#fbbf24", icon: "★", label: "Focus" },
+            { c: "#e879f9", icon: "🏆", label: "Award" },
+            { c: "#34d399", icon: "💎", label: "QRight" },
+          ].map((row) => (
+            <div
+              key={row.label}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                marginTop: 3,
+                fontSize: 12,
+                color: "#cbd5e1",
+              }}
+            >
+              <span
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: row.c,
+                  boxShadow: `0 0 8px ${row.c}aa`,
+                }}
+              />
+              <span style={{ fontSize: 11, opacity: 0.75 }}>{row.icon}</span>
+              <span style={{ fontWeight: 700 }}>{row.label}</span>
+            </div>
+          ))}
+
+          {topCountries.length > 0 ? (
+            <>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#7a8fb0",
+                  marginTop: 12,
+                  marginBottom: 6,
+                  borderTop: "1px solid rgba(120,160,220,0.16)",
+                  paddingTop: 10,
+                }}
+              >
+                Top countries
+              </div>
+              {topCountries.map(([name, count]) => (
+                <div
+                  key={name}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: 14,
+                    marginTop: 3,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#cbd5e1",
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 110,
+                    }}
+                  >
+                    {displayCountry(name, locale)}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#6cd6ff",
+                      fontWeight: 900,
+                    }}
+                  >
+                    {count}
+                  </span>
+                </div>
+              ))}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 84,
+            right: 14,
+            zIndex: 4,
+            background: "rgba(12,18,32,0.7)",
+            border: "1px solid rgba(120,160,220,0.22)",
+            borderRadius: 12,
+            padding: "10px 12px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.35)",
+            pointerEvents: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+            minWidth: 132,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "#7a8fb0",
+              marginBottom: 3,
+            }}
+          >
+            Ecosystem
+          </div>
+          {(isNarrow
+            ? [
+                { k: "Nodes", v: counts.nodes, color: "#f1f5ff" },
+                { k: "LIVE", v: counts.live, color: "#86efac" },
+              ]
+            : [
+                { k: "Nodes", v: counts.nodes, color: "#f1f5ff" },
+                { k: "LIVE", v: counts.live, color: "#86efac" },
+                { k: "Awards", v: counts.awards, color: "#e879f9" },
+                { k: "QRight", v: counts.qright, color: "#5eead4" },
+              ]
+          ).map((row) => (
+            <div
+              key={row.k}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: 14,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "#94a3b8",
+                  fontWeight: 700,
+                }}
+              >
+                {row.k}
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  color: row.color,
+                  fontWeight: 900,
+                }}
+              >
+                {row.v}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {!initError && selectedCountry ? (
+        <div
+          aria-label={`Country sheet: ${selectedCountry}`}
+          style={{
+            position: "absolute",
+            top: isNarrow ? 64 : 232,
+            right: 14,
+            zIndex: 5,
+            background: "rgba(12,18,32,0.78)",
+            border: "1px solid rgba(108,214,255,0.35)",
+            borderRadius: 12,
+            padding: "12px 14px",
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+            width: 234,
+            maxHeight: "60vh",
+            overflowY: "auto",
+            animation: "aev-hover-card-in 140ms ease-out",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>🌍</span>
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 900,
+                  color: "#e2e8f8",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {displayCountry(selectedCountry, locale)}
+              </span>
+            </div>
+            <button
+              type="button"
+              title="Clear country filter"
+              aria-label="Clear country filter"
+              onClick={() => setSelectedCountry(null)}
+              style={{
+                background: "transparent",
+                color: "#94a3b8",
+                border: "1px solid rgba(120,160,220,0.28)",
+                borderRadius: 8,
+                width: 24,
+                height: 24,
+                cursor: "pointer",
+                fontSize: 12,
+                lineHeight: 1,
+                padding: 0,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            style={{
+              fontSize: 11,
+              color: "#6cd6ff",
+              fontWeight: 800,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              marginTop: 6,
+              marginBottom: 6,
+              display: "flex",
+              alignItems: "baseline",
+              gap: 6,
+            }}
+          >
+            <span>
+              {selectedCountryMarkers.length}{" "}
+              {selectedCountryMarkers.length === 1 ? "node" : "nodes"}
+            </span>
+            {selectedCountryMarkers.length > 0 && markers.length > 0 ? (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: "#94a3b8",
+                  fontWeight: 600,
+                  letterSpacing: "0.04em",
+                  textTransform: "none",
+                }}
+              >
+                · {((selectedCountryMarkers.length / markers.length) * 100).toFixed(1)}% of ecosystem
+              </span>
+            ) : null}
+          </div>
+
+          {selectedCountryMarkers.length > 0 ? (
+            <div
+              aria-label="Category breakdown"
+              style={{
+                display: "flex",
+                gap: 2,
+                height: 5,
+                borderRadius: 3,
+                overflow: "hidden",
+                background: "rgba(20,28,46,0.6)",
+                marginBottom: 10,
+              }}
+            >
+              {(["focus", "award", "product", "infra", "qright"] as const).map(
+                (cat) => {
+                  const n = selectedCountryMarkers.filter(
+                    (m) => m.category === cat,
+                  ).length;
+                  if (n === 0) return null;
+                  const colors: Record<string, string> = {
+                    focus: "#fbbf24",
+                    award: "#e879f9",
+                    product: "#7dd3fc",
+                    infra: "#94a3b8",
+                    qright: "#34d399",
+                  };
+                  return (
+                    <div
+                      key={cat}
+                      title={`${cat}: ${n}`}
+                      style={{
+                        flex: n,
+                        background: colors[cat],
+                        opacity: 0.85,
+                      }}
+                    />
+                  );
+                },
+              )}
+            </div>
+          ) : null}
+
+          {selectedCountryMarkers.length === 0 ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#94a3b8",
+                lineHeight: 1.45,
+              }}
+            >
+              No AEVION nodes registered in {displayCountry(selectedCountry, locale)} yet.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {selectedCountryMarkers.slice(0, 8).map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => focusOnMarker(m)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 8px",
+                    background: "rgba(20,28,46,0.6)",
+                    border: "1px solid rgba(120,160,220,0.18)",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    color: "#e2e8f8",
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: m.color,
+                      boxShadow: `0 0 6px ${m.color}aa`,
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      flex: 1,
+                    }}
+                  >
+                    {m.title || m.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "#94a3b8",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {m.city || ""}
+                  </span>
+                </button>
+              ))}
+              {selectedCountryMarkers.length > 8 ? (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#7a8fb0",
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  + {selectedCountryMarkers.length - 8} more
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {!initError && !isNarrow ? (
+        <div
+          aria-label="View compass minimap"
+          title="Camera angle indicator"
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: 14,
+            width: 64,
+            height: 64,
+            zIndex: 5,
+            pointerEvents: "none",
+          }}
+        >
+          <svg
+            viewBox="-32 -32 64 64"
+            width={64}
+            height={64}
+            style={{ display: "block" }}
+          >
+            <circle
+              cx={0}
+              cy={0}
+              r={28}
+              fill="rgba(12,18,32,0.72)"
+              stroke="rgba(108,214,255,0.45)"
+              strokeWidth={1}
+            />
+            <line x1={-28} x2={28} y1={0} y2={0} stroke="rgba(108,214,255,0.18)" strokeWidth={0.6} />
+            <line x1={0} x2={0} y1={-28} y2={28} stroke="rgba(108,214,255,0.18)" strokeWidth={0.6} />
+            <ellipse cx={0} cy={0} rx={28} ry={11} fill="none" stroke="rgba(108,214,255,0.22)" strokeWidth={0.6} />
+            <ellipse cx={0} cy={0} rx={11} ry={28} fill="none" stroke="rgba(108,214,255,0.22)" strokeWidth={0.6} />
+            <text x={0} y={-30} fill="#94a3b8" fontSize={6} fontWeight={700} textAnchor="middle">N</text>
+          </svg>
+          <div
+            style={{
+              position: "absolute",
+              left: 32,
+              top: 32,
+              width: 6,
+              height: 6,
+              marginLeft: -3,
+              marginTop: -3,
+              borderRadius: 3,
+              background: "#5eead4",
+              boxShadow: "0 0 8px rgba(94,234,212,0.9), 0 0 14px rgba(94,234,212,0.5)",
+              transition: "transform 60ms linear",
+            }}
+            ref={minimapDotRef}
+          />
+        </div>
+      ) : null}
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: 14,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            zIndex: 5,
+          }}
+        >
+          <button
+            type="button"
+            title="Zoom in"
+            aria-label="Zoom in"
+            onClick={() => zoom(0.85)}
+            style={ctrlBtn}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            title="Zoom out"
+            aria-label="Zoom out"
+            onClick={() => zoom(1 / 0.85)}
+            style={ctrlBtn}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            title={autoRotate ? "Pause rotation" : "Auto-rotate"}
+            aria-label={autoRotate ? "Pause rotation" : "Auto-rotate"}
+            onClick={() => setAutoRotate((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: autoRotate ? "rgba(13,148,136,0.85)" : ctrlBtn.background,
+              borderColor: autoRotate ? "rgba(94,234,212,0.6)" : ctrlBtn.border as string,
+            }}
+          >
+            {autoRotate ? "❚❚" : "▶"}
+          </button>
+          <button
+            type="button"
+            title={tour ? "Stop tour" : "Auto-tour"}
+            aria-label={tour ? "Stop tour" : "Auto-tour"}
+            onClick={() => setTour((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: tour ? "rgba(124,58,237,0.85)" : ctrlBtn.background,
+              borderColor: tour ? "rgba(196,181,253,0.6)" : ctrlBtn.border as string,
+            }}
+          >
+            {tour ? "■" : "▷"}
+          </button>
+          <button
+            type="button"
+            title="Reset view"
+            aria-label="Reset view"
+            onClick={resetView}
+            style={ctrlBtn}
+          >
+            ⌂
+          </button>
+          <button
+            type="button"
+            title="Copy share link"
+            aria-label="Copy share link"
+            onClick={shareView}
+            style={ctrlBtn}
+          >
+            ⤴
+          </button>
+          <button
+            type="button"
+            title="Locate me"
+            aria-label="Locate me"
+            onClick={locateMe}
+            style={ctrlBtn}
+          >
+            ⌖
+          </button>
+          <button
+            type="button"
+            title="Random country"
+            aria-label="Random country"
+            onClick={randomCountry}
+            style={ctrlBtn}
+          >
+            🎲
+          </button>
+          <button
+            type="button"
+            title={timeLapse ? "Stop time-lapse" : "Time-lapse (1h / sec)"}
+            aria-label={timeLapse ? "Stop time-lapse" : "Time-lapse"}
+            onClick={() => setTimeLapse((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: timeLapse ? "rgba(245,158,11,0.85)" : ctrlBtn.background,
+              borderColor: timeLapse ? "rgba(253,224,71,0.6)" : ctrlBtn.border as string,
+            }}
+          >
+            {timeLapse ? "⏸" : "⏱"}
+          </button>
+          <button
+            type="button"
+            title="Download PNG snapshot"
+            aria-label="Download PNG snapshot"
+            onClick={snapshotPng}
+            style={ctrlBtn}
+          >
+            📷
+          </button>
+        </div>
+      ) : null}
+
+      {shareToast ? (
+        <div
+          role="status"
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: ctrlSize * 6 + 14 + 14,
+            zIndex: 8,
+            padding: "8px 12px",
+            borderRadius: 10,
+            background:
+              shareToast === "copied" || shareToast === "located"
+                ? "rgba(13,148,136,0.92)"
+                : shareToast === "locating"
+                  ? "rgba(56,128,236,0.92)"
+                  : "rgba(220,38,38,0.92)",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: 12,
+            letterSpacing: "0.02em",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+            backdropFilter: "blur(6px)",
+            pointerEvents: "none",
+          }}
+        >
+          {shareToast === "copied"
+            ? "Link copied ✓"
+            : shareToast === "located"
+              ? "Located you ✓"
+              : shareToast === "locating"
+                ? "Locating…"
+                : shareToast === "geo-failed"
+                  ? "Location unavailable"
+                  : "Copy failed"}
+        </div>
+      ) : null}
+
+      {!initError && !isNarrow ? (
+        <div
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: 14,
+            zIndex: 4,
+            background: "rgba(8,12,24,0.78)",
+            border: "1px solid rgba(120,160,220,0.25)",
+            borderRadius: 8,
+            padding: 4,
+            pointerEvents: "none",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          <svg
+            width={120}
+            height={60}
+            viewBox="0 0 120 60"
+            aria-hidden
+            style={{ display: "block" }}
+          >
+            <defs>
+              <linearGradient id="aev-mini-bg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#0c1524" />
+                <stop offset="1" stopColor="#04070f" />
+              </linearGradient>
+            </defs>
+            <rect
+              x={0}
+              y={0}
+              width={120}
+              height={60}
+              fill="url(#aev-mini-bg)"
+              rx={4}
+            />
+            {/* экватор + меридиан */}
+            <line x1={0} x2={120} y1={30} y2={30} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} strokeDasharray="2 2" />
+            <line x1={60} x2={60} y1={0} y2={60} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} strokeDasharray="2 2" />
+            {markers.map((m) => {
+              const cx = ((m.lon + 180) / 360) * 120;
+              const cy = ((90 - m.lat) / 180) * 60;
+              const color =
+                m.category === "focus"
+                  ? "#fbbf24"
+                  : m.category === "award"
+                    ? "#e879f9"
+                    : m.category === "qright"
+                      ? "#34d399"
+                      : m.category === "infra"
+                        ? "#94a3b8"
+                        : "#7dd3fc";
+              const r = m.category === "focus" || m.category === "award" ? 1.8 : 1.3;
+              return (
+                <circle
+                  key={`mini:${m.key}`}
+                  cx={cx}
+                  cy={cy}
+                  r={r}
+                  fill={color}
+                  opacity={0.95}
+                />
+              );
+            })}
+            {/* Camera-индикатор: обновляется в animate. */}
+            <circle
+              ref={miniCamDotRef}
+              cx={30}
+              cy={30}
+              r={4}
+              fill="none"
+              stroke="#f1f5ff"
+              strokeWidth={1.4}
+              opacity={0.9}
+            />
+            <circle
+              ref={(el) => {
+                // Дублирующая внутренняя точка, обновляется реактивно через cam-dot.
+                // Не используется, оставлена пустой для эстетики.
+                void el;
+              }}
+              r={1}
+              fill="#f1f5ff"
+              style={{ display: "none" }}
+            />
+          </svg>
+          <div
+            style={{
+              fontSize: 9,
+              color: "rgba(168,184,216,0.55)",
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textAlign: "center",
+              marginTop: 2,
+              textTransform: "uppercase",
+            }}
+          >
+            World map
+          </div>
+        </div>
+      ) : null}
+
+      {!initError ? (
+        <div
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: isNarrow ? 14 : 96,
+            zIndex: 4,
+            fontSize: 11,
+            color: "rgba(168,184,216,0.72)",
+            background: "rgba(12,18,32,0.55)",
+            border: "1px solid rgba(120,160,220,0.18)",
+            borderRadius: 8,
+            padding: "5px 9px",
+            backdropFilter: "blur(4px)",
+            pointerEvents: "none",
+            letterSpacing: "0.02em",
+          }}
+        >
+          {isNarrow ? "drag · pinch" : "drag · scroll · arrows · Tab"}
+        </div>
+      ) : null}
+
+      {!initError && texLoaded < TEX_TOTAL ? (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            bottom: 50,
+            transform: "translateX(-50%)",
+            zIndex: 5,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "rgba(8,12,24,0.85)",
+            border: "1px solid rgba(120,160,220,0.28)",
+            borderRadius: 999,
+            padding: "6px 14px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+            pointerEvents: "none",
+          }}
+          aria-live="polite"
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: "#7dd3fc",
+              boxShadow: "0 0 10px #7dd3fcaa",
+              animation: "aev-globus-pulse 1.2s ease-in-out infinite",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#cbd5e1",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Loading textures
+          </span>
+          <div
+            style={{
+              width: 60,
+              height: 4,
+              borderRadius: 2,
+              background: "rgba(255,255,255,0.1)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${(texLoaded / TEX_TOTAL) * 100}%`,
+                height: "100%",
+                background: "#7dd3fc",
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: "#bae6fd",
+              minWidth: 26,
+              textAlign: "right",
+            }}
+          >
+            {texLoaded}/{TEX_TOTAL}
+          </span>
+        </div>
+      ) : null}
+      <style>{`@keyframes aev-globus-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }`}</style>
 
       {initError ? (
         <div
@@ -745,41 +3845,721 @@ export default function Globus3D({
         </div>
       ) : null}
 
-      {label ? (
+      {label && (!focused || label.marker.key !== focused.key) ? (() => {
+        const m = label.marker;
+        const accent =
+          m.category === "focus"
+            ? "#fbbf24"
+            : m.category === "award"
+              ? "#e879f9"
+              : m.category === "qright"
+                ? "#34d399"
+                : m.category === "infra"
+                  ? "#94a3b8"
+                  : "#7dd3fc";
+        const statusBg =
+          m.statusLabel === "LIVE"
+            ? "rgba(34,197,94,0.18)"
+            : m.statusLabel === "API"
+              ? "rgba(59,130,246,0.18)"
+              : m.statusLabel === "REGISTERED"
+                ? "rgba(20,184,166,0.18)"
+                : "rgba(148,163,184,0.18)";
+        const statusFg =
+          m.statusLabel === "LIVE"
+            ? "#86efac"
+            : m.statusLabel === "API"
+              ? "#93c5fd"
+              : m.statusLabel === "REGISTERED"
+                ? "#5eead4"
+                : "#cbd5e1";
+        const location =
+          m.city && m.country
+            ? `${m.city}, ${m.country}`
+            : m.country || m.city || "";
+
+        return (
+          <div
+            style={{
+              position: "absolute",
+              left: label.screenX,
+              top: label.screenY,
+              transform: "translate(-50%, calc(-100% - 14px))",
+              pointerEvents: "none",
+              width: 280,
+              zIndex: 6,
+              animation: "aev-hover-card-in 160ms ease-out",
+            }}
+          >
+            <div
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(8,12,24,0.92) 100%)",
+                border: `1px solid ${accent}55`,
+                borderRadius: 14,
+                padding: "12px 14px 13px",
+                boxShadow: `0 14px 44px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 24px ${accent}22`,
+                backdropFilter: "blur(12px)",
+              }}
+            >
+              {/* header: category chip + status */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                    background: `${accent}1f`,
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <span style={{ fontSize: 11 }}>{m.icon}</span>
+                  {m.categoryLabel}
+                </span>
+                {m.statusLabel ? (
+                  <span
+                    style={{
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      background: statusBg,
+                      color: statusFg,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {m.statusLabel}
+                  </span>
+                ) : null}
+              </div>
+
+              {/* title */}
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 16,
+                  color: "#f1f5ff",
+                  letterSpacing: "-0.01em",
+                  lineHeight: 1.2,
+                }}
+              >
+                {m.title}
+              </div>
+              {m.label && m.label !== m.title ? (
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontSize: 11,
+                    color: "#94a3b8",
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {m.label}
+                </div>
+              ) : null}
+
+              {/* location */}
+              {location ? (
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: "#a8b8d8",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <span style={{ opacity: 0.7 }}>📍</span>
+                  {location}
+                </div>
+              ) : null}
+
+              {/* description */}
+              {m.description ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: "#cbd5e1",
+                    lineHeight: 1.45,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {m.description}
+                </div>
+              ) : null}
+
+              {/* tags */}
+              {m.tags && m.tags.length > 0 ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 4,
+                  }}
+                >
+                  {m.tags.slice(0, 4).map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 6px",
+                        borderRadius: 6,
+                        background: "rgba(148,163,184,0.12)",
+                        color: "#cbd5e1",
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* CTA */}
+              {m.href ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    paddingTop: 9,
+                    borderTop: "1px solid rgba(148,163,184,0.14)",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: accent,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  Click to focus →
+                </div>
+              ) : null}
+            </div>
+
+            {/* стрелочка вниз — на маркер */}
+            <div
+              style={{
+                width: 0,
+                height: 0,
+                borderLeft: "7px solid transparent",
+                borderRight: "7px solid transparent",
+                borderTop: `7px solid ${accent}55`,
+                margin: "-1px auto 0",
+              }}
+            />
+          </div>
+        );
+      })() : null}
+
+      {!initError && visibleMatchCount === 0 ? (
         <div
           style={{
             position: "absolute",
-            left: label.screenX,
-            top: label.screenY,
-            transform: "translate(-50%, -110%)",
-            pointerEvents: "none",
-            maxWidth: 320,
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 6,
+            background: "rgba(8,12,24,0.88)",
+            border: "1px solid rgba(248,113,113,0.4)",
+            borderRadius: 14,
+            padding: "16px 18px",
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 14px 40px rgba(0,0,0,0.45)",
+            textAlign: "center",
+            maxWidth: 280,
           }}
         >
+          <div style={{ fontSize: 24, marginBottom: 6 }}>🔭</div>
           <div
             style={{
-              background: "rgba(12,18,32,0.88)",
-              border: "1px solid rgba(120,160,220,0.35)",
-              borderRadius: 14,
-              padding: "10px 12px",
-              boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
-              backdropFilter: "blur(10px)",
+              fontSize: 14,
+              fontWeight: 800,
+              color: "#fca5a5",
+              marginBottom: 4,
             }}
           >
-            <div style={{ fontWeight: 850, fontSize: 13, color: "#f0f4ff" }}>
-              {label.text}
-            </div>
-            {label.sub ? (
-              <div style={{ marginTop: 4, fontSize: 12, color: "#a8b8d8" }}>
-                {label.sub}
-              </div>
-            ) : null}
-            <div style={{ marginTop: 8, fontSize: 12, color: "#7a8fb0" }}>
-              click: open / select location
-            </div>
+            Nothing found
           </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#94a3b8",
+              marginBottom: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {query
+              ? `No nodes match "${query}"${filter !== "all" ? ` in ${filter}` : ""}.`
+              : `No nodes in this category.`}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setFilter("all");
+              setSelectedCountry(null);
+            }}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(148,163,184,0.3)",
+              background: "rgba(148,163,184,0.12)",
+              color: "#e8eefc",
+              fontWeight: 800,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            Clear filters
+          </button>
         </div>
       ) : null}
+
+      {/* Country badge — shown on globe-surface hover when no marker is hovered. */}
+      {hoveredCountry && !label ? (
+        <div
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            bottom: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 6,
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(8,12,24,0.88)",
+            border: "1px solid rgba(120,160,220,0.35)",
+            borderRadius: 999,
+            padding: "5px 12px 5px 9px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.42)",
+            animation: "aev-hover-card-in 120ms ease-out",
+          }}
+        >
+          <span style={{ fontSize: 13, opacity: 0.75 }}>🌍</span>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: "#e2e8f8",
+              letterSpacing: "0.02em",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {displayCountry(hoveredCountry, locale)}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: "rgba(180,210,255,0.7)",
+              marginLeft: 4,
+              borderLeft: "1px solid rgba(120,160,220,0.28)",
+              paddingLeft: 8,
+              whiteSpace: "nowrap",
+            }}
+          >
+            click → filter
+          </span>
+        </div>
+      ) : null}
+
+      {/* Arc-tooltip — при ховере на дугу (single DOM, обновляется в animate). */}
+      <div
+        ref={arcTooltipRef}
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          transform: "translate(-50%, calc(-100% - 10px))",
+          pointerEvents: "none",
+          background: "rgba(8,12,24,0.92)",
+          border: "1px solid rgba(120,160,220,0.4)",
+          borderRadius: 10,
+          padding: "6px 10px",
+          backdropFilter: "blur(8px)",
+          display: "none",
+          zIndex: 5,
+          whiteSpace: "nowrap",
+          minWidth: 110,
+        }}
+      >
+        <div
+          className="aev-arc-arrow"
+          style={{
+            fontSize: 10,
+            fontWeight: 900,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        />
+        <div
+          className="aev-arc-label"
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#cbd5e1",
+            marginTop: 2,
+          }}
+        />
+      </div>
+
+      {/* Keyboard-focused marker outline — single overlay, передвигаемый в animate. */}
+      <div
+        ref={kbOutlineRef}
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 26,
+          height: 26,
+          marginLeft: -13,
+          marginTop: -13,
+          borderRadius: "50%",
+          border: "2px dashed #f1f5ff",
+          boxShadow: "0 0 0 4px rgba(241,245,255,0.18), 0 0 22px rgba(241,245,255,0.5)",
+          pointerEvents: "none",
+          display: "none",
+          zIndex: 4,
+          animation: "aev-globus-spin 5s linear infinite",
+        }}
+      />
+      <style>{`
+        @keyframes aev-globus-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes aev-focus-card-in {
+          from { opacity: 0; transform: translateX(-50%) translateY(14px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes aev-hover-card-in {
+          from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)); }
+          to   { opacity: 1; transform: translate(-50%, calc(-100% - 14px)); }
+        }
+      `}</style>
+
+      {/* Sparse marker labels — постоянные подписи над focus/award (без ховера). */}
+      {!initError
+        ? markers
+            .filter((m) => m.category === "focus" || m.category === "award")
+            .map((m) => {
+              const accent = m.category === "focus" ? "#fbbf24" : "#e879f9";
+              return (
+                <div
+                  key={`sparse:${m.key}`}
+                  ref={(el) => {
+                    if (el) sparseLabelsRef.current.set(m.key, el);
+                    else sparseLabelsRef.current.delete(m.key);
+                  }}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    transform: "translate(-50%, calc(-100% - 8px))",
+                    pointerEvents: "none",
+                    background: "rgba(8,12,24,0.78)",
+                    border: `1px solid ${accent}66`,
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: "0.06em",
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    boxShadow: `0 4px 10px rgba(0,0,0,0.45), 0 0 12px ${accent}33`,
+                    backdropFilter: "blur(4px)",
+                    display: "none",
+                    whiteSpace: "nowrap",
+                    zIndex: 3,
+                    transition: "opacity 0.15s ease",
+                  }}
+                >
+                  {m.label}
+                </div>
+              );
+            })
+        : null}
+
+      {focused ? (() => {
+        const m = focused;
+        const accent =
+          m.category === "focus"
+            ? "#fbbf24"
+            : m.category === "award"
+              ? "#e879f9"
+              : m.category === "qright"
+                ? "#34d399"
+                : m.category === "infra"
+                  ? "#94a3b8"
+                  : "#7dd3fc";
+        const statusBg =
+          m.statusLabel === "LIVE"
+            ? "rgba(34,197,94,0.18)"
+            : m.statusLabel === "API"
+              ? "rgba(59,130,246,0.18)"
+              : m.statusLabel === "REGISTERED"
+                ? "rgba(20,184,166,0.18)"
+                : "rgba(148,163,184,0.18)";
+        const statusFg =
+          m.statusLabel === "LIVE"
+            ? "#86efac"
+            : m.statusLabel === "API"
+              ? "#93c5fd"
+              : m.statusLabel === "REGISTERED"
+                ? "#5eead4"
+                : "#cbd5e1";
+        const location =
+          m.city && m.country
+            ? `${m.city}, ${m.country}`
+            : m.country || m.city || "";
+
+        return (
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              bottom: 14,
+              transform: "translateX(-50%)",
+              width: "calc(100% - 100px)",
+              maxWidth: 360,
+              zIndex: 7,
+              animation: "aev-focus-card-in 240ms ease-out",
+            }}
+          >
+            <div
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(8,12,24,0.96) 100%)",
+                border: `1px solid ${accent}66`,
+                borderRadius: 16,
+                padding: "14px 16px",
+                boxShadow: `0 18px 48px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 32px ${accent}33`,
+                backdropFilter: "blur(14px)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                    background: `${accent}22`,
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <span style={{ fontSize: 11 }}>{m.icon}</span>
+                  {m.categoryLabel}
+                </span>
+                {m.statusLabel ? (
+                  <span
+                    style={{
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      background: statusBg,
+                      color: statusFg,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {m.statusLabel}
+                  </span>
+                ) : null}
+                <span style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  title="Close (Esc)"
+                  aria-label="Close"
+                  onClick={() => {
+                    targetYawRef.current = null;
+                    targetPitchRef.current = null;
+                    targetDistRef.current = null;
+                    setFocused(null);
+                  }}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: "50%",
+                    background: "rgba(148,163,184,0.18)",
+                    border: "none",
+                    color: "#cbd5e1",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 18,
+                  color: "#f1f5ff",
+                  letterSpacing: "-0.01em",
+                  lineHeight: 1.2,
+                }}
+              >
+                {m.title}
+              </div>
+              {location ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: "#a8b8d8",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <span style={{ opacity: 0.7 }}>📍</span>
+                  {location}
+                </div>
+              ) : null}
+
+              {m.description ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 13,
+                    color: "#cbd5e1",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {m.description}
+                </div>
+              ) : null}
+
+              {m.tags && m.tags.length > 0 ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 4,
+                  }}
+                >
+                  {m.tags.slice(0, 6).map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: 6,
+                        background: "rgba(148,163,184,0.14)",
+                        color: "#cbd5e1",
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  gap: 8,
+                }}
+              >
+                {m.href ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (m.href) onNavigateRef.current(m.href);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "10px 14px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: accent,
+                      color: "#0b1020",
+                      fontWeight: 900,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      letterSpacing: "0.01em",
+                      boxShadow: `0 8px 22px ${accent}55`,
+                    }}
+                  >
+                    Open {m.label || m.title} →
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    targetYawRef.current = null;
+                    targetPitchRef.current = null;
+                    targetDistRef.current = null;
+                    setFocused(null);
+                  }}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(148,163,184,0.3)",
+                    background: "transparent",
+                    color: "#cbd5e1",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 10,
+                  color: "rgba(148,163,184,0.55)",
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                  textAlign: "center",
+                  textTransform: "uppercase",
+                }}
+              >
+                Esc to close
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }

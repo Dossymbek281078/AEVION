@@ -761,1148 +761,244 @@ const makeAgent = (overrides: Partial<Agent> = {}): Agent => ({
 
 export default function MultichatEnginePage() {
   const origin = getBackendOrigin();
-  const m = launchedModules.find((x) => x.id === "multichat-engine");
-
-  /* Module-local i18n */
-  const { lang } = useI18n();
-  const t = useMemo(() => makeMcT(lang), [lang]);
-
-  /* Providers (loaded from backend, optional) */
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(apiUrl("/api/qcoreai/providers"));
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && Array.isArray(data?.providers)) {
-          setProviders(data.providers as ProviderInfo[]);
-        }
-      } catch {
-        /* silent — provider switcher will hide gracefully */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  /* AEVION user context — injected into agent system prompts so
-   * every panel knows who the human is (balance, IP works, …). */
-  const [userCtx, setUserCtx] = useState<UserContext | null>(null);
-  const [ctxEnabled, setCtxEnabled] = useState(true);
-
-  useEffect(() => {
-    let token: string | null = null;
-    try {
-      token = localStorage.getItem("aevion_auth_token_v1");
-    } catch {
-      /* private mode — silently skip */
-    }
-    if (!token) return;
-
-    let cancelled = false;
-    (async () => {
-      const headers: HeadersInit = { Authorization: `Bearer ${token}` };
-      const ctx: UserContext = {};
-
-      try {
-        const r = await fetch(apiUrl("/api/auth/me"), { headers });
-        if (r.ok) {
-          const me = await r.json();
-          ctx.email = me?.email || me?.user?.email;
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        const r = await fetch(apiUrl("/api/qtrade/accounts"), { headers });
-        if (r.ok) {
-          const data = await r.json();
-          const list = Array.isArray(data?.accounts)
-            ? data.accounts
-            : Array.isArray(data)
-            ? data
-            : null;
-          if (list && list.length) {
-            const acc = list[0];
-            if (acc?.id) ctx.accountId = acc.id;
-            if (typeof acc?.balance === "number") ctx.balance = acc.balance;
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        const r = await fetch(apiUrl("/api/qright/objects"), { headers });
-        if (r.ok) {
-          const data = await r.json();
-          const objs = Array.isArray(data?.objects)
-            ? data.objects
-            : Array.isArray(data)
-            ? data
-            : null;
-          if (objs) ctx.qrightCount = objs.length;
-        }
-      } catch {
-        /* ignore */
-      }
-
-      if (cancelled) return;
-      const hasAny =
-        ctx.email != null ||
-        ctx.balance != null ||
-        ctx.accountId != null ||
-        ctx.qrightCount != null;
-      if (hasAny) setUserCtx(ctx);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  /* Compose role system prompt + user context block */
-  const buildSystemPrompt = useCallback(
-    (agent: Agent): string => {
-      const base = agent.customSystemPrompt?.trim() || ROLE_SYSTEM_PROMPT[agent.role];
-      if (!ctxEnabled || !userCtx) return base;
-      const lines: string[] = [
-        "AEVION USER CONTEXT (the human you are talking to has a real account on AEVION):",
-      ];
-      if (userCtx.email) lines.push(`- Account email: ${userCtx.email}`);
-      if (userCtx.accountId) lines.push(`- Wallet ID: ${userCtx.accountId}`);
-      if (userCtx.balance != null)
-        lines.push(`- Current AEC balance: ${userCtx.balance.toLocaleString("en-US")}`);
-      if (userCtx.qrightCount != null)
-        lines.push(`- Registered IP works on QRight: ${userCtx.qrightCount}`);
-      lines.push(
-        "Use these facts when they are relevant to the user's question. Do not list them back unless asked."
-      );
-      return `${lines.join("\n")}\n\n${base}`;
-    },
-    [ctxEnabled, userCtx]
-  );
-
-  /* Agents — restore from localStorage on mount */
-  const [agents, setAgents] = useState<Agent[]>([makeAgent()]);
-  const [hydrated, setHydrated] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
-
-  /* Always-current ref for cross-agent handoff lookup */
-  const agentsRef = useRef<Agent[]>(agents);
-  useEffect(() => {
-    agentsRef.current = agents;
-  }, [agents]);
-
-  useEffect(() => {
-    let wantDemo = false;
-    let sharedAgents: Agent[] | null = null;
-    if (typeof window !== "undefined") {
-      try {
-        const params = new URLSearchParams(window.location.search);
-        wantDemo = params.get("demo") === "1";
-        const wsParam = params.get("ws");
-        if (wsParam) {
-          const decoded = decodeWorkspaceUrlParam(wsParam);
-          if (decoded && decoded.length > 0) sharedAgents = decoded;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
-    if (sharedAgents) {
-      const ok = window.confirm(
-        `Load shared workspace (${sharedAgents.length} agent${sharedAgents.length === 1 ? "" : "s"})? Your current panels will be replaced.`
-      );
-      if (ok) {
-        setAgents(sharedAgents);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(sharedAgents));
-        } catch {
-          /* ignore */
-        }
-        // Drop ?ws= from the URL so a refresh doesn't re-prompt
-        try {
-          const url = new URL(window.location.href);
-          url.searchParams.delete("ws");
-          window.history.replaceState(null, "", url.toString());
-        } catch {
-          /* ignore */
-        }
-        setHydrated(true);
-        return;
-      }
-      // User declined — fall through to normal hydration, but strip ?ws=
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.delete("ws");
-        window.history.replaceState(null, "", url.toString());
-      } catch {
-        /* ignore */
-      }
-    }
-
-    let alreadySeeded = false;
-    try {
-      alreadySeeded = localStorage.getItem(DEMO_FLAG) === "1";
-    } catch {
-      /* ignore */
-    }
-
-    if (wantDemo && !alreadySeeded) {
-      const seeded = buildDemoAgents();
-      setAgents(seeded);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-        localStorage.setItem(DEMO_FLAG, "1");
-      } catch {
-        /* ignore */
-      }
-      setDemoMode(true);
-      setHydrated(true);
-      return;
-    }
-
-    if (wantDemo && alreadySeeded) setDemoMode(true);
-
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Strip any stuck busy flags from a previous session.
-          setAgents(
-            parsed.slice(0, MAX_AGENTS).map((a: Agent) => ({ ...a, busy: false }))
-          );
-        }
-      }
-    } catch {
-      /* ignore corrupted state */
-    }
-    setHydrated(true);
-  }, []);
-
-  const resetDemo = useCallback(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(DEMO_FLAG);
-    } catch {
-      /* ignore */
-    }
-    setAgents([makeAgent()]);
-    setDemoMode(false);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("demo");
-      window.history.replaceState(null, "", url.toString());
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(agents));
-    } catch {
-      /* quota / privacy mode — ignore */
-    }
-  }, [agents, hydrated]);
-
-  /* Agent operations */
-  const addAgent = useCallback(() => {
-    setAgents((cur) => {
-      if (cur.length >= MAX_AGENTS) return cur;
-      // Pick the next role that isn't already used, fall back to General
-      const used = new Set(cur.map((a) => a.role));
-      const nextRole = ROLES.find((r) => !used.has(r)) ?? "General";
-      return [...cur, makeAgent({ role: nextRole, title: nextRole })];
-    });
-  }, []);
-
-  const removeAgent = useCallback((id: string) => {
-    setAgents((cur) => {
-      const next = cur.filter((a) => a.id !== id);
-      return next.length === 0 ? [makeAgent()] : next;
-    });
-  }, []);
-
-  const updateAgent = useCallback(
-    (id: string, patch: Partial<Agent> | ((a: Agent) => Partial<Agent>)) => {
-      setAgents((cur) =>
-        cur.map((a) => {
-          if (a.id !== id) return a;
-          const p = typeof patch === "function" ? patch(a) : patch;
-          return { ...a, ...p };
-        })
-      );
-    },
-    []
-  );
-
-  const clearAll = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const ok = window.confirm(t("mc.live.confirm.wipe"));
-    if (!ok) return;
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-    setAgents([makeAgent()]);
-  }, [t]);
-
-  /* Compact mode — collapses hero/vision/preset/killer/footer to
-   * give the agent grid full real estate. Persisted in localStorage. */
-  const [compactMode, setCompactMode] = useState(false);
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(COMPACT_KEY) === "1") setCompactMode(true);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  const toggleCompact = useCallback(() => {
-    setCompactMode((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem(COMPACT_KEY, next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
-
-  /* Global keyboard shortcuts:
-   *   ⌘/Ctrl + K  → focus first panel's textarea
-   *   ⌘/Ctrl + /  → toggle compact mode
-   */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onKey = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return;
-      const key = e.key.toLowerCase();
-      if (key === "k") {
-        e.preventDefault();
-        const ta = document.querySelector<HTMLTextAreaElement>(
-          "[data-mc-role] textarea"
-        );
-        if (ta) ta.focus();
-        return;
-      }
-      if (key === "/") {
-        e.preventDefault();
-        toggleCompact();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [toggleCompact]);
-
-  /* Saved workspaces — named bundles in localStorage */
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [loadMenuOpen, setLoadMenuOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(WORKSPACES_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setWorkspaces(parsed as Workspace[]);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const persistWorkspaces = useCallback((next: Workspace[]) => {
-    try {
-      localStorage.setItem(WORKSPACES_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const saveWorkspace = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.prompt("Name this workspace:");
-    const name = raw?.trim();
-    if (!name) return;
-    const cur = agentsRef.current;
-    const ws: Workspace = {
-      name,
-      savedAt: new Date().toISOString(),
-      agents: cur.map((a) => ({ ...a, busy: false })),
-    };
-    setWorkspaces((prev) => {
-      const filtered = prev.filter((w) => w.name !== ws.name);
-      const next = [...filtered, ws].slice(-MAX_WORKSPACES);
-      persistWorkspaces(next);
-      return next;
-    });
-  }, [persistWorkspaces]);
-
-  const loadWorkspace = useCallback(
-    (ws: Workspace) => {
-      if (typeof window === "undefined") return;
-      const cur = agentsRef.current;
-      const hasHistory = cur.some((a) => a.messages.length > 0);
-      if (hasHistory) {
-        const ok = window.confirm(
-          `Replace current panels with workspace "${ws.name}"?`
-        );
-        if (!ok) return;
-      }
-      setAgents(ws.agents.map((a) => ({ ...a, busy: false })));
-      setLoadMenuOpen(false);
-    },
-    []
-  );
-
-  const shareWorkspace = useCallback(async () => {
-    if (typeof window === "undefined") return;
-    const cur = agentsRef.current;
-    const encoded = encodeWorkspaceUrlParam(cur);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("demo");
-    url.searchParams.set("ws", encoded);
-    const link = url.toString();
-    const sizeKb = link.length / 1024;
-    // 6 KB warning — most browsers cap effective URL at ~8 KB
-    if (sizeKb > 6) {
-      const ok = window.confirm(
-        `Share link is ${sizeKb.toFixed(1)} KB — some browsers cap URLs at ~8 KB and the link may break. Try Save (workspace) instead, or continue?`
-      );
-      if (!ok) return;
-    }
-    let copied = false;
-    try {
-      await navigator.clipboard.writeText(link);
-      copied = true;
-    } catch {
-      /* clipboard API unavailable — fall through */
-    }
-    if (copied) {
-      window.alert(`Share link copied to clipboard (${sizeKb.toFixed(1)} KB).`);
-    } else {
-      window.prompt("Copy this share link:", link);
-    }
-  }, []);
-
-  const deleteWorkspace = useCallback(
-    (name: string) => {
-      setWorkspaces((prev) => {
-        const next = prev.filter((w) => w.name !== name);
-        persistWorkspaces(next);
-        return next;
-      });
-    },
-    [persistWorkspaces]
-  );
-
-  const undoSummary = useCallback((target: Agent) => {
-    if (!target.preSummary) return;
-    setAgents((curS) =>
-      curS.map((a) => {
-        if (a.id !== target.id) return a;
-        return {
-          ...a,
-          messages: a.preSummary ?? a.messages,
-          preSummary: undefined,
-        };
-      })
-    );
-  }, []);
-
-  /* Fork an agent's conversation: clone with messages[0..upTo] kept */
-  const forkAgent = useCallback((src: Agent, upToIndex: number) => {
-    let createdId: string | null = null;
-    setAgents((cur) => {
-      if (cur.length >= MAX_AGENTS) return cur;
-      const id = newId();
-      createdId = id;
-      const slicedMessages = src.messages.slice(0, upToIndex + 1);
-      const firstUser = slicedMessages.find((m) => m.role === "user");
-      const titleSeed = firstUser?.content ?? src.role;
-      const next: Agent = {
-        id,
-        role: src.role,
-        provider: src.provider,
-        model: src.model,
-        title: titleFromMessage(src.role, titleSeed),
-        messages: slicedMessages,
-        busy: false,
-        customSystemPrompt: src.customSystemPrompt,
-      };
-      return [...cur, next];
-    });
-    setTimeout(() => {
-      if (typeof document === "undefined" || !createdId) return;
-      const articles = document.querySelectorAll<HTMLElement>("[data-mc-role]");
-      const last = articles[articles.length - 1];
-      if (!last) return;
-      last.scrollIntoView({ behavior: "smooth", block: "center" });
-      const prev = last.style.boxShadow;
-      last.style.boxShadow =
-        "0 0 0 3px #5eead4, 0 8px 32px rgba(94,234,212,0.4)";
-      setTimeout(() => {
-        last.style.boxShadow = prev;
-      }, 1200);
-    }, 100);
-  }, []);
-
-  /* Replace the current agent set with a preset bundle */
-  const applyPreset = useCallback((preset: Preset) => {
-    if (typeof window === "undefined") return;
-    const cur = agentsRef.current;
-    const hasHistory = cur.some((a) => a.messages.length > 0);
-    if (hasHistory) {
-      const ok = window.confirm(
-        t("mc.live.confirm.preset", {
-          cur: cur.length,
-          name: t(preset.nameKey),
-          n: preset.roles.length,
-        })
-      );
-      if (!ok) return;
-    }
-    setAgents(
-      preset.roles
-        .slice(0, MAX_AGENTS)
-        .map((role) => makeAgent({ role, title: role }))
-    );
-    setTimeout(() => {
-      const el = document.getElementById("live");
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
-  }, [t]);
-
-  /* Low-level: call /api/qcoreai/chat with role+model+history, get reply */
-  const callChat = useCallback(
-    async (role: Role, systemPrompt: string, provider: string, model: string, history: ChatMsg[]): Promise<{ reply: string; demo: boolean }> => {
-      const apiMessages = [
-        { role: "system" as const, content: systemPrompt },
-        ...history.map((mm) => ({ role: mm.role, content: mm.content })),
-      ];
-      try {
-        const headers: HeadersInit = { "Content-Type": "application/json" };
-        try {
-          const t = localStorage.getItem("aevion_auth_token_v1");
-          if (t) headers.Authorization = `Bearer ${t}`;
-        } catch {
-          /* ignore */
-        }
-        const body: Record<string, unknown> = { messages: apiMessages };
-        if (provider) body.provider = provider;
-        if (model) body.model = model;
-        const res = await fetch(apiUrl("/api/qcoreai/chat"), {
-          method: "POST",
-          headers,
-          body: JSON.stringify(body),
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-        if (typeof data?.reply === "string") return { reply: data.reply, demo: false };
-        if (typeof data?.content === "string") return { reply: data.content, demo: false };
-        return { reply: JSON.stringify(data, null, 2), demo: false };
-      } catch {
-        return { reply: DEMO_REPLIES[role], demo: true };
-      }
-    },
-    []
-  );
-
-  /* Summarise an agent's history into a single assistant bubble.
-   * Keeps the original messages in preSummary so the user can undo. */
-  const summariseAgent = useCallback(
-    async (target: Agent) => {
-      if (target.messages.length < 4 || target.busy) return;
-      const original = target.messages;
-      setAgents((curS) =>
-        curS.map((a) => (a.id === target.id ? { ...a, busy: true } : a))
-      );
-      const summaryRequest =
-        "Summarise the conversation above in two short paragraphs (≤ 120 words total). Keep the most important facts, decisions, and open questions. Do not add new information.";
-      const history: ChatMsg[] = [
-        ...original,
-        { role: "user", content: summaryRequest },
-      ];
-      const { reply } = await callChat(
-        target.role,
-        buildSystemPrompt(target),
-        target.provider,
-        target.model,
-        history
-      );
-      const trimmedReply = (reply ?? "").trim();
-      if (!trimmedReply) {
-        // Provider returned nothing — restore busy=false, leave history intact
-        setAgents((curS) =>
-          curS.map((a) => (a.id === target.id ? { ...a, busy: false } : a))
-        );
-        if (typeof window !== "undefined") {
-          window.alert(
-            "Summarisation returned an empty reply — original conversation kept. Try again, switch model, or check the provider key."
-          );
-        }
-        return;
-      }
-      setAgents((curS) =>
-        curS.map((a) => {
-          if (a.id !== target.id) return a;
-          return {
-            ...a,
-            preSummary: original,
-            messages: [
-              {
-                role: "assistant",
-                content: `📝 Summary of ${original.length} prior messages\n\n${trimmedReply}`,
-              },
-            ],
-            busy: false,
-          };
-        })
-      );
-    },
-    [callChat, buildSystemPrompt]
-  );
-
-  /* Send message for a specific agent — supports @mention handoff */
-  const sendMessage = useCallback(
-    async (agentId: string, text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-
-      /* ── Broadcast branch: @all fans the message out to every other panel ── */
-      const broadcastMatch = trimmed.match(/^@all\s+([\s\S]+)$/i);
-      if (broadcastMatch) {
-        const body = broadcastMatch[1].trim();
-        const cur = agentsRef.current;
-        const sourceAgent = cur.find((a) => a.id === agentId);
-        if (!sourceAgent) return;
-        const others = cur.filter((a) => a.id !== agentId);
-
-        if (others.length === 0) {
-          setAgents((curS) =>
-            curS.map((a) => {
-              if (a.id !== agentId) return a;
-              const next: ChatMsg[] = [
-                ...a.messages,
-                { role: "user" as const, content: trimmed },
-                {
-                  role: "assistant" as const,
-                  content:
-                    "@all needs at least one other agent. Spawn another panel and try again.",
-                },
-              ].slice(-MAX_MESSAGES_KEPT);
-              return {
-                ...a,
-                messages: next,
-                title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
-                busy: false,
-              };
-            })
-          );
-          return;
-        }
-
-        const sourceTag = ROLE_TAG[sourceAgent.role];
-        const inboundMsg = `↪ broadcast from @${sourceTag}: ${body}`;
-
-        // 1) Append user msg in source + mark every panel busy
-        setAgents((curS) =>
-          curS.map((a) => {
-            if (a.id === agentId) {
-              const next: ChatMsg[] = [
-                ...a.messages,
-                { role: "user" as const, content: trimmed },
-              ].slice(-MAX_MESSAGES_KEPT);
-              return {
-                ...a,
-                messages: next,
-                title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
-                busy: true,
-              };
-            }
-            if (others.some((o) => o.id === a.id)) {
-              const next: ChatMsg[] = [
-                ...a.messages,
-                { role: "user" as const, content: inboundMsg },
-              ].slice(-MAX_MESSAGES_KEPT);
-              return {
-                ...a,
-                messages: next,
-                title: a.messages.length === 0 ? titleFromMessage(a.role, body) : a.title,
-                busy: true,
-              };
-            }
-            return a;
-          })
-        );
-
-        // 2) Fan out in parallel
-        const results = await Promise.all(
-          others.map(async (target) => {
-            const targetHistory: ChatMsg[] = [
-              ...target.messages,
-              { role: "user" as const, content: inboundMsg },
-            ];
-            const { reply } = await callChat(
-              target.role,
-              buildSystemPrompt(target),
-              target.provider,
-              target.model,
-              targetHistory
-            );
-            return { target, reply };
-          })
-        );
-
-        // 3) Settle each target panel with its own reply
-        setAgents((curS) =>
-          curS.map((a) => {
-            const r = results.find((x) => x.target.id === a.id);
-            if (!r) return a;
-            const next: ChatMsg[] = [
-              ...a.messages,
-              { role: "assistant" as const, content: r.reply },
-            ].slice(-MAX_MESSAGES_KEPT);
-            return { ...a, messages: next, busy: false };
-          })
-        );
-
-        // 4) Settle source with one combined assistant msg listing every reply
-        const summary = results
-          .map(({ target, reply }) => `↪ via @${ROLE_TAG[target.role]}\n${reply}`)
-          .join("\n\n———\n\n");
-        setAgents((curS) =>
-          curS.map((a) => {
-            if (a.id !== agentId) return a;
-            const next: ChatMsg[] = [
-              ...a.messages,
-              { role: "assistant" as const, content: summary },
-            ].slice(-MAX_MESSAGES_KEPT);
-            return { ...a, messages: next, busy: false };
-          })
-        );
-        return;
-      }
-
-      const { role: mentionRole, body: mentionBody } = parseMention(trimmed);
-      const cur = agentsRef.current;
-      const sourceAgent = cur.find((a) => a.id === agentId);
-      if (!sourceAgent) return;
-
-      const target = mentionRole
-        ? cur.find((a) => a.role === mentionRole && a.id !== agentId)
-        : null;
-
-      /* ── Handoff branch: forward to target, return reply to both ── */
-      if (mentionRole && target) {
-        // 1) Append the @mention prompt in source as user msg + mark busy
-        setAgents((curS) =>
-          curS.map((a) => {
-            if (a.id !== agentId) return a;
-            const next: ChatMsg[] = [
-              ...a.messages,
-              { role: "user" as const, content: trimmed },
-            ].slice(-MAX_MESSAGES_KEPT);
-            return {
-              ...a,
-              messages: next,
-              title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
-              busy: true,
-            };
-          })
-        );
-
-        // 2) Append in target (visible "↪ from @<src>" so target user knows context)
-        const sourceTag = ROLE_TAG[sourceAgent.role];
-        const inboundMsg = `↪ from @${sourceTag}: ${mentionBody}`;
-        setAgents((curS) =>
-          curS.map((a) => {
-            if (a.id !== target.id) return a;
-            const next: ChatMsg[] = [
-              ...a.messages,
-              { role: "user" as const, content: inboundMsg },
-            ].slice(-MAX_MESSAGES_KEPT);
-            return {
-              ...a,
-              messages: next,
-              title: a.messages.length === 0 ? titleFromMessage(a.role, mentionBody) : a.title,
-              busy: true,
-            };
-          })
-        );
-
-        // Build target history from current state (post-append) for the call
-        const targetHistory = [
-          ...target.messages,
-          { role: "user" as const, content: inboundMsg },
-        ];
-
-        const { reply } = await callChat(target.role, buildSystemPrompt(target), target.provider, target.model, targetHistory);
-
-        // 3) Append assistant reply in TARGET (normal)
-        setAgents((curS) =>
-          curS.map((a) => {
-            if (a.id !== target.id) return a;
-            const next: ChatMsg[] = [
-              ...a.messages,
-              { role: "assistant" as const, content: reply },
-            ].slice(-MAX_MESSAGES_KEPT);
-            return { ...a, messages: next, busy: false };
-          })
-        );
-
-        // 4) Append assistant reply in SOURCE with "↪ via @<target>" prefix
-        const targetTag = ROLE_TAG[target.role];
-        setAgents((curS) =>
-          curS.map((a) => {
-            if (a.id !== agentId) return a;
-            const next: ChatMsg[] = [
-              ...a.messages,
-              { role: "assistant" as const, content: `↪ via @${targetTag}\n${reply}` },
-            ].slice(-MAX_MESSAGES_KEPT);
-            return { ...a, messages: next, busy: false };
-          })
-        );
-        return;
-      }
-
-      /* ── Mention requested but no matching agent active ── */
-      if (mentionRole && !target) {
-        setAgents((curS) =>
-          curS.map((a) => {
-            if (a.id !== agentId) return a;
-            const next: ChatMsg[] = [
-              ...a.messages,
-              { role: "user" as const, content: trimmed },
-              {
-                role: "assistant" as const,
-                content: t("mc.handoff.noTarget", {
-                  tag: ROLE_TAG[mentionRole],
-                  role: mentionRole,
-                }),
-              },
-            ].slice(-MAX_MESSAGES_KEPT);
-            return {
-              ...a,
-              messages: next,
-              title: a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title,
-              busy: false,
-            };
-          })
-        );
-        return;
-      }
-
-      /* ── Normal (no-mention) branch ── */
-      let snapshot: Agent | undefined;
-      setAgents((curS) =>
-        curS.map((a) => {
-          if (a.id !== agentId) return a;
-          const nextMessages: ChatMsg[] = [
-            ...a.messages,
-            { role: "user" as const, content: trimmed },
-          ].slice(-MAX_MESSAGES_KEPT);
-          const nextTitle =
-            a.messages.length === 0 ? titleFromMessage(a.role, trimmed) : a.title;
-          const updated: Agent = {
-            ...a,
-            messages: nextMessages,
-            title: nextTitle,
-            busy: true,
-          };
-          snapshot = updated;
-          return updated;
-        })
-      );
-      if (!snapshot) return;
-
-      const { reply } = await callChat(snapshot.role, buildSystemPrompt(snapshot), snapshot.provider, snapshot.model, snapshot.messages);
-
-      setAgents((curS) =>
-        curS.map((a) => {
-          if (a.id !== agentId) return a;
-          const nextMessages: ChatMsg[] = [
-            ...a.messages,
-            { role: "assistant" as const, content: reply },
-          ].slice(-MAX_MESSAGES_KEPT);
-          return { ...a, messages: nextMessages, busy: false };
-        })
-      );
-    },
-    [callChat, buildSystemPrompt, t]
-  );
-
-  /* Layout: 1 col → 1, 2-3 → auto-fit, 4+ → 2 cols (CSS handles mobile) */
-  const gridStyle = useMemo<React.CSSProperties>(() => {
-    const n = agents.length;
-    if (n <= 1) return { display: "grid", gridTemplateColumns: "1fr", gap: 16 };
-    if (n <= 3)
-      return {
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-        gap: 16,
-      };
-    return {
-      display: "grid",
-      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-      gap: 16,
-    };
-  }, [agents.length]);
 
   return (
-    <div style={{ background: "#020617", color: "#e2e8f0", minHeight: "100vh" }}>
-      <section
-        style={{
-          position: "relative",
-          minHeight: compactMode ? "auto" : "78vh",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: compactMode ? "20px 24px 24px" : "48px 24px 56px",
-          overflow: "hidden",
-        }}
-      >
-        <div className="demo-aurora" aria-hidden />
-        <div style={{ position: "relative", zIndex: 1, maxWidth: 1100, margin: "0 auto", width: "100%" }}>
-          <Wave1Nav variant="dark" />
-          {demoMode ? (
-            <div
-              role="status"
-              style={{
-                marginBottom: 18,
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid rgba(251,191,36,0.4)",
-                background: "rgba(251,191,36,0.12)",
-                color: "#fde68a",
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                flexWrap: "wrap",
-                fontSize: 13,
-              }}
-            >
-              <span style={{ fontWeight: 800, letterSpacing: "0.05em" }}>DEMO</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                3 agents pre-loaded with hand-crafted answers — perfect for screenshots and live pitches.
-              </span>
-              <button
-                type="button"
-                onClick={resetDemo}
-                style={{
-                  padding: "5px 12px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(251,191,36,0.5)",
-                  background: "rgba(251,191,36,0.2)",
-                  color: "#fef3c7",
-                  fontWeight: 700,
-                  fontSize: 12,
-                  cursor: "pointer",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                Reset
-              </button>
-            </div>
-          ) : null}
-          <p
-            style={{
-              fontSize: 12,
-              fontWeight: 800,
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-              color: "rgba(148,163,184,0.95)",
-              marginBottom: 16,
-            }}
-          >
-            {t("mc.badge")}
-          </p>
-          <h1
-            style={{
-              fontSize: compactMode ? "clamp(20px, 3vw, 28px)" : "clamp(32px, 6vw, 56px)",
-              fontWeight: 900,
-              lineHeight: 1.05,
-              margin: compactMode ? "0 0 6px" : "0 0 20px",
-              letterSpacing: "-0.04em",
-              background: "linear-gradient(120deg, #fff 0%, #99f6e4 45%, #7dd3fc 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
-            {t("mc.title.a")}
-            <br />
-            <span style={{ fontSize: "0.62em", fontWeight: 800, letterSpacing: "-0.02em" }}>
-              {t("mc.title.b")}
-            </span>
+    <main>
+      <ProductPageShell maxWidth={860}>
+        <Wave1Nav />
+
+        <div
+          style={{
+            borderRadius: 20,
+            overflow: "hidden",
+            marginBottom: 20,
+            background: "linear-gradient(135deg, #0f172a, #1e1b4b, #312e81)",
+            padding: "28px 28px 24px",
+            color: "#fff",
+          }}
+        >
+          <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>
+            AEVION Multichat Engine
           </h1>
-          <p
-            style={{
-              display: compactMode ? "none" : "block",
-              fontSize: "clamp(16px, 2.4vw, 20px)",
-              lineHeight: 1.55,
-              maxWidth: 760,
-              color: "rgba(226,232,240,0.92)",
-              margin: 0,
-            }}
-          >
-            {m?.tagline ?? t("mc.subtitle.fallback")}
+          <p style={{ margin: "8px 0 0", color: "rgba(226,232,240,0.82)", fontSize: 14, lineHeight: 1.55 }}>
+            One backend, five LLM providers, two modes. Pick a single-model chat for quick answers,
+            or a multi-agent pipeline when you need a second (and third) pair of eyes on the answer.
           </p>
+        </div>
 
-          <div
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: 16,
+          }}
+        >
+          {/* Single chat card */}
+          <Link
+            href="/qcoreai"
             style={{
-              marginTop: 32,
-              display: compactMode ? "none" : "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: 14,
+              textDecoration: "none",
+              color: "inherit",
+              border: "1px solid rgba(15,23,42,0.12)",
+              borderRadius: 14,
+              padding: 20,
+              background: "#fff",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              boxShadow: "0 1px 4px rgba(15,23,42,0.04)",
+              transition: "transform 0.12s",
             }}
           >
-            {HERO_STAT_DEFS.map((s) => {
-              const value = s.valueFixed ?? (s.valueKey ? t(s.valueKey) : "");
-              return (
-                <div
-                  key={s.labelKey}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(94,234,212,0.25)",
-                    background: "rgba(15,23,42,0.65)",
-                    backdropFilter: "blur(6px)",
-                  }}
-                >
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#5eead4", textTransform: "uppercase" }}>
-                    {t(s.labelKey)}
-                  </div>
-                  <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#f8fafc", letterSpacing: "-0.01em" }}>
-                    {value}
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8", lineHeight: 1.4 }}>{t(s.hintKey)}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ marginTop: 28, display: compactMode ? "none" : "flex", gap: 12, flexWrap: "wrap" }}>
-            <a
-              href="#live"
-              style={{
-                display: "inline-block",
-                padding: "14px 28px",
-                borderRadius: 12,
-                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
-                color: "#fff",
-                fontWeight: 800,
-                textDecoration: "none",
-                fontSize: 16,
-                boxShadow: "0 8px 32px rgba(13,148,136,0.35)",
-              }}
-            >
-              {t("mc.cta.try")}
-            </a>
-            <Link
-              href="/qcoreai"
-              style={{
-                display: "inline-block",
-                padding: "14px 28px",
-                borderRadius: 12,
-                background: "rgba(148,163,184,0.12)",
-                border: "1px solid rgba(148,163,184,0.35)",
-                color: "#e2e8f0",
-                fontWeight: 750,
-                textDecoration: "none",
-                fontSize: 16,
-              }}
-            >
-              {t("mc.cta.single")}
-            </Link>
-            <a
-              href={`${origin}/api/qcoreai/health`}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: "inline-block",
-                padding: "14px 28px",
-                borderRadius: 12,
-                background: "rgba(148,163,184,0.12)",
-                border: "1px solid rgba(148,163,184,0.35)",
-                color: "#e2e8f0",
-                fontWeight: 750,
-                textDecoration: "none",
-                fontSize: 16,
-              }}
-            >
-              {t("mc.cta.health")}
-            </a>
-          </div>
-
-          {/* Personalisation strip — visible only when we have any AEVION context */}
-          {userCtx ? (
-            <div
-              style={{
-                marginTop: 22,
-                padding: "12px 16px",
-                borderRadius: 12,
-                border: "1px solid rgba(94,234,212,0.25)",
-                background: "rgba(15,23,42,0.55)",
-                display: "flex",
-                gap: 12,
-                alignItems: "center",
-                flexWrap: "wrap",
-                fontSize: 13,
-                color: "#cbd5e1",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span
                 style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  letterSpacing: "0.15em",
-                  textTransform: "uppercase",
-                  color: "#5eead4",
-                }}
-              >
-                {t("mc.ctx.label")}
-              </span>
-              {userCtx.email ? <span>· {userCtx.email}</span> : null}
-              {userCtx.balance != null ? (
-                <span>· {userCtx.balance.toLocaleString("en-US")} AEC</span>
-              ) : null}
-              {userCtx.qrightCount != null && userCtx.qrightCount > 0 ? (
-                <span>
-                  · {t(userCtx.qrightCount === 1 ? "mc.ctx.work" : "mc.ctx.works", { n: userCtx.qrightCount })}
-                </span>
-              ) : null}
-              <label
-                style={{
-                  marginLeft: "auto",
-                  display: "inline-flex",
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
+                  background: "linear-gradient(135deg, #0d9488, #06b6d4)",
+                  display: "flex",
                   alignItems: "center",
-                  gap: 6,
-                  cursor: "pointer",
-                  fontSize: 12,
-                  color: ctxEnabled ? "#5eead4" : "#94a3b8",
-                  fontWeight: 700,
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontWeight: 900,
+                  fontSize: 14,
+                  letterSpacing: "0.03em",
                 }}
-                title={t("mc.ctx.toggle.title")}
               >
-                <input
-                  type="checkbox"
-                  checked={ctxEnabled}
-                  onChange={(e) => setCtxEnabled(e.target.checked)}
-                  style={{ accentColor: "#5eead4" }}
-                />
-                {t("mc.ctx.toggle")}
-              </label>
+                S
+              </span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Single chat</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>One provider · one model · fastest path</div>
+              </div>
             </div>
-          ) : null}
+            <p style={{ margin: 0, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+              Classic chat experience. Pick Claude, GPT, Gemini, DeepSeek or Grok, ask a question, get an answer.
+              Best for quick lookups and informal conversation.
+            </p>
+            <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: "#0e7490" }}>
+              Open single chat →
+            </span>
+          </Link>
+
+          {/* Multi-agent card */}
+          <Link
+            href="/qcoreai/multi"
+            style={{
+              textDecoration: "none",
+              color: "inherit",
+              border: "1px solid rgba(124,58,237,0.35)",
+              borderRadius: 14,
+              padding: 20,
+              background: "linear-gradient(180deg, #fff 0%, rgba(124,58,237,0.04) 100%)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              boxShadow: "0 1px 4px rgba(124,58,237,0.08)",
+              position: "relative",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 12,
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                padding: "3px 8px",
+                borderRadius: 999,
+                background: "rgba(124,58,237,0.12)",
+                color: "#6d28d9",
+                border: "1px solid rgba(124,58,237,0.3)",
+              }}
+            >
+              New
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
+                  background: "linear-gradient(135deg, #7c3aed, #4338ca)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontWeight: 900,
+                  fontSize: 13,
+                  letterSpacing: "0.03em",
+                }}
+              >
+                MA
+              </span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Multi-agent</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>Analyst → Writer → Critic · inspectable</div>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+              Three specialized agents coordinate on every answer. Pick <b>Sequential</b> for a classic reflection loop,
+              <b> Parallel</b> for two writers on different models merged by a Judge, or <b>Debate</b> where a Pro and a Con
+              advocate argue and a Moderator synthesizes a balanced recommendation.
+            </p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+              {[
+                { t: "3 strategies", c: "#7c3aed" },
+                { t: "Live streaming", c: "#0369a1" },
+                { t: "Live cost + tokens", c: "#15803d" },
+                { t: "Mixed models per role", c: "#4338ca" },
+                { t: "Saveable presets", c: "#0d9488" },
+                { t: "Edit & resend", c: "#0891b2" },
+                { t: "Webhook on done", c: "#0284c7" },
+                { t: "Public share + OG preview", c: "#9333ea" },
+                { t: "Export JSON + Markdown", c: "#b45309" },
+              ].map((b) => (
+                <span
+                  key={b.t}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                    background: `${b.c}14`,
+                    color: b.c,
+                    border: `1px solid ${b.c}33`,
+                  }}
+                >
+                  {b.t}
+                </span>
+              ))}
+            </div>
+            <span style={{ marginTop: "auto", fontSize: 12, fontWeight: 700, color: "#6d28d9" }}>
+              Open multi-agent →
+            </span>
+          </Link>
+        </div>
+
+        <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: "#64748b" }}>
+          <Link
+            href="/qcoreai/analytics"
+            style={{
+              border: "1px solid #7c3aed55",
+              background: "rgba(124,58,237,0.06)",
+              borderRadius: 8,
+              padding: "6px 10px",
+              textDecoration: "none",
+              color: "#6d28d9",
+              fontWeight: 700,
+            }}
+          >
+            📊 Analytics
+          </Link>
+          <a
+            href={`${origin}/api/qcoreai/health`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              padding: "6px 10px",
+              textDecoration: "none",
+              color: "#334155",
+              fontWeight: 650,
+            }}
+          >
+            Backend health
+          </a>
+          <a
+            href={`${origin}/api/qcoreai/providers`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              padding: "6px 10px",
+              textDecoration: "none",
+              color: "#334155",
+              fontWeight: 650,
+            }}
+          >
+            Configured providers
+          </a>
+          <a
+            href={`${origin}/api/qcoreai/agents`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              padding: "6px 10px",
+              textDecoration: "none",
+              color: "#334155",
+              fontWeight: 650,
+            }}
+          >
+            Role defaults
+          </a>
         </div>
       </section>
 

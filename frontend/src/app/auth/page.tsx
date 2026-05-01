@@ -174,6 +174,9 @@ export default function AuthPage() {
                   <Link href="/planet" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #0f766e", color: "#0f766e", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
                     🌍 Planet Lab
                   </Link>
+                  <Link href="/account" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+                    ⚙ Account settings
+                  </Link>
                 </div>
               </div>
             ) : null}

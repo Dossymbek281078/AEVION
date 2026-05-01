@@ -1,73 +1,82 @@
 import type { MetadataRoute } from "next";
+import { getApiBase } from "@/lib/apiBase";
 
-const ROUTES: Array<{ path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"] }> = [
-  { path: "/",                  priority: 1.0, changeFrequency: "weekly" },
-  { path: "/pitch",             priority: 0.95, changeFrequency: "weekly" },
-  { path: "/pitch/print",       priority: 0.6, changeFrequency: "weekly" },
-  { path: "/demo",              priority: 0.9, changeFrequency: "weekly" },
-  { path: "/demo/deep",         priority: 0.8, changeFrequency: "monthly" },
-  { path: "/auth",              priority: 0.6, changeFrequency: "monthly" },
-  { path: "/qright",            priority: 0.85, changeFrequency: "weekly" },
-  { path: "/qsign",             priority: 0.8, changeFrequency: "weekly" },
-  { path: "/bureau",            priority: 0.85, changeFrequency: "weekly" },
-  { path: "/quantum-shield",    priority: 0.8, changeFrequency: "weekly" },
-  { path: "/qtrade",            priority: 0.7, changeFrequency: "weekly" },
-  { path: "/planet",            priority: 0.85, changeFrequency: "weekly" },
-  { path: "/bank",              priority: 0.9, changeFrequency: "weekly" },
-  { path: "/bank/about",        priority: 0.85, changeFrequency: "monthly" },
-  { path: "/bank/trust",        priority: 0.85, changeFrequency: "monthly" },
-  { path: "/bank/card",         priority: 0.8, changeFrequency: "monthly" },
-  { path: "/bank/security",     priority: 0.85, changeFrequency: "monthly" },
-  { path: "/bank/help",         priority: 0.7, changeFrequency: "monthly" },
-  { path: "/bank/savings",      priority: 0.8, changeFrequency: "weekly" },
-  { path: "/bank/circles",      priority: 0.75, changeFrequency: "weekly" },
-  { path: "/bank/glossary",     priority: 0.75, changeFrequency: "monthly" },
-  { path: "/bank/onboarding",   priority: 0.85, changeFrequency: "monthly" },
-  { path: "/bank/insights",     priority: 0.8, changeFrequency: "weekly" },
-  { path: "/bank/flow",         priority: 0.75, changeFrequency: "weekly" },
-  { path: "/bank/api",          priority: 0.7, changeFrequency: "monthly" },
-  { path: "/bank/badge",        priority: 0.7, changeFrequency: "monthly" },
-  { path: "/bank/explore",      priority: 0.85, changeFrequency: "weekly" },
-  { path: "/bank/leaderboard",  priority: 0.75, changeFrequency: "daily" },
-  { path: "/bank/share",        priority: 0.6, changeFrequency: "weekly" },
-  { path: "/bank/recurring",    priority: 0.8, changeFrequency: "weekly" },
-  { path: "/bank/budget",       priority: 0.85, changeFrequency: "weekly" },
-  { path: "/bank/calendar",     priority: 0.8, changeFrequency: "weekly" },
-  { path: "/bank/subscriptions", priority: 0.8, changeFrequency: "weekly" },
-  { path: "/bank/forecast",     priority: 0.85, changeFrequency: "weekly" },
-  { path: "/bank/trip",         priority: 0.7, changeFrequency: "monthly" },
-  { path: "/bank/brief",        priority: 0.75, changeFrequency: "weekly" },
-  { path: "/bank/achievements", priority: 0.75, changeFrequency: "weekly" },
-  { path: "/bank/challenges",   priority: 0.75, changeFrequency: "weekly" },
-  { path: "/bank/networth",     priority: 0.85, changeFrequency: "weekly" },
-  { path: "/bank/timetravel",   priority: 0.7, changeFrequency: "monthly" },
-  { path: "/bank/constellation", priority: 0.8, changeFrequency: "weekly" },
-  { path: "/bank/wishlist",     priority: 0.7, changeFrequency: "weekly" },
-  { path: "/bank/loyalty",      priority: 0.7, changeFrequency: "weekly" },
-  { path: "/bank/cooldown",     priority: 0.7, changeFrequency: "monthly" },
-  { path: "/bank/changelog",    priority: 0.65, changeFrequency: "weekly" },
-  { path: "/awards",            priority: 0.8, changeFrequency: "weekly" },
-  { path: "/awards/music",      priority: 0.75, changeFrequency: "weekly" },
-  { path: "/awards/film",       priority: 0.75, changeFrequency: "weekly" },
-  { path: "/cyberchess",        priority: 0.8, changeFrequency: "weekly" },
-  { path: "/qcoreai",           priority: 0.75, changeFrequency: "weekly" },
-  { path: "/multichat-engine",  priority: 0.7, changeFrequency: "weekly" },
-  { path: "/help",              priority: 0.5, changeFrequency: "monthly" },
-  { path: "/press",             priority: 0.7, changeFrequency: "monthly" },
-  { path: "/security",          priority: 0.85, changeFrequency: "monthly" },
-  { path: "/developers",        priority: 0.85, changeFrequency: "weekly" },
-  { path: "/changelog",         priority: 0.4, changeFrequency: "weekly" },
-  { path: "/privacy",           priority: 0.3, changeFrequency: "yearly" },
-  { path: "/terms",             priority: 0.3, changeFrequency: "yearly" },
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
+
+const TIERS = ["free", "pro", "business", "enterprise"];
+const INDUSTRIES = ["banks", "startups", "government", "creators", "law-firms"];
+
+const TOP_LEVEL_ROUTES: Array<{
+  path: string;
+  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
+  priority: number;
+}> = [
+  { path: "/", changeFrequency: "daily", priority: 1.0 },
+  { path: "/modules", changeFrequency: "daily", priority: 0.9 },
+  { path: "/qright", changeFrequency: "daily", priority: 0.9 },
+  { path: "/qright/transparency", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/bureau", changeFrequency: "daily", priority: 0.9 },
+  { path: "/bureau/transparency", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/planet", changeFrequency: "daily", priority: 0.8 },
+  { path: "/awards", changeFrequency: "daily", priority: 0.8 },
+  { path: "/qcoreai", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/cyberchess", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments", changeFrequency: "weekly", priority: 0.9 },
+  { path: "/payments/links", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/methods", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/webhooks", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/settlements", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/subscriptions", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/compliance", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/api", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/audit", changeFrequency: "weekly", priority: 0.6 },
 ];
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || "https://aevion.app";
+async function fetchCaseIds(): Promise<string[]> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/pricing/cases`, { cache: "no-store" });
+    if (!r.ok) return [];
+    const j = (await r.json()) as { items?: Array<{ id: string }> };
+    return (j.items ?? []).map((c) => c.id).filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  return ROUTES.map((r) => ({
-    url: `${base}${r.path}`,
+
+  const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((path) => ({
+    url: `${BASE_URL}${path}`,
     lastModified: now,
-    changeFrequency: r.changeFrequency,
-    priority: r.priority,
+    changeFrequency: path === "/pricing" || path === "" ? "weekly" : "monthly",
+    priority:
+      path === "" ? 1.0 : path.startsWith("/pricing") ? 0.9 : 0.7,
   }));
+
+  const tierEntries: MetadataRoute.Sitemap = TIERS.map((id) => ({
+    url: `${BASE_URL}/pricing/${id}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.85,
+  }));
+
+  const industryEntries: MetadataRoute.Sitemap = INDUSTRIES.map((id) => ({
+    url: `${BASE_URL}/pricing/for/${id}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.8,
+  }));
+
+  const caseIds = await fetchCaseIds();
+  const caseEntries: MetadataRoute.Sitemap = caseIds.map((id) => ({
+    url: `${BASE_URL}/pricing/cases/${id}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.75,
+  }));
+
+  return [...staticEntries, ...tierEntries, ...industryEntries, ...caseEntries];
 }

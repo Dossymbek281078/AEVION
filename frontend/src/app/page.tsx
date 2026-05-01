@@ -301,6 +301,18 @@ export default function HomePage() {
             <Link href="/qright" style={btnGhost}>
               QRight Registry
             </Link>
+            <Link
+              href="/multichat-engine"
+              style={{
+                ...btnGhost,
+                border: "1px solid rgba(196,181,253,0.7)",
+                background: "rgba(124,58,237,0.18)",
+                color: "#fff",
+                fontWeight: 800,
+              }}
+            >
+              QCoreAI · Multi-agent
+            </Link>
             <Link href="/awards/music" style={btnGhost}>
               Music Awards
             </Link>
@@ -381,7 +393,7 @@ export default function HomePage() {
           {[
             {
               t: "QRight",
-              d: "IP registry with content hash, author binding, and geolocation tracking.",
+              d: "Forever-verifiable IP. SHA-256, Ed25519, distributed Shamir shards, Bitcoin-anchored timestamps — works offline if AEVION goes dark.",
               href: "/qright",
             },
             {
@@ -446,8 +458,8 @@ export default function HomePage() {
           <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 20px", letterSpacing: "-0.02em" }}>From idea to monetization in 4 steps</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {[
-              { step: "1", title: "Register", desc: "Upload your work to QRight — get a SHA-256 hash and timestamp proof of existence.", icon: "📝", color: "#0d9488" },
-              { step: "2", title: "Sign", desc: "QSign creates an HMAC-SHA256 signature — cryptographic proof that your data hasn't been tampered with.", icon: "🔐", color: "#2563eb" },
+              { step: "1", title: "Register", desc: "Describe your work in QRight — walk away with a SHA-256 fingerprint, Ed25519 signature, and Bitcoin-anchored timestamp.", icon: "📝", color: "#0d9488" },
+              { step: "2", title: "Sign", desc: "AEVION + your browser key co-sign the work; the private key is Shamir-split across 3 locations so we never hold enough to forge it.", icon: "🔐", color: "#2563eb" },
               { step: "3", title: "Certify", desc: "IP Bureau generates a certificate-ready document. Planet validators verify and community votes.", icon: "📜", color: "#7c3aed" },
               { step: "4", title: "Earn", desc: "AEVION Bank distributes royalties automatically when someone uses your content. Instant, transparent.", icon: "💰", color: "#059669" },
             ].map((s) => (
@@ -811,17 +823,35 @@ export default function HomePage() {
                 Planet
               </Link>
               <Link
-                href="/qcoreai"
+                href="/multichat-engine"
                 style={{
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid rgba(124,58,237,0.4)",
                   borderRadius: 10,
                   padding: "10px 12px",
                   textDecoration: "none",
-                  color: "#475569",
-                  fontWeight: 650,
+                  color: "#6d28d9",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "rgba(124,58,237,0.06)",
                 }}
               >
                 QCoreAI
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 800,
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                    padding: "2px 6px",
+                    borderRadius: 999,
+                    background: "rgba(124,58,237,0.15)",
+                    color: "#6d28d9",
+                  }}
+                >
+                  Multi-agent
+                </span>
               </Link>
               <Link
                 href="/auth"

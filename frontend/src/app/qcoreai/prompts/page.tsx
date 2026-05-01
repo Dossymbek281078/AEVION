@@ -69,10 +69,14 @@ export default function QCorePromptsPage() {
 
   const fetchAudit = useCallback(async () => {
     setAuditLoading(true);
+    setError(null);
     try {
       const r = await fetch(apiUrl("/api/qcoreai/prompts/audit?limit=200"), { headers: bearerHeader() });
       const data = await r.json().catch(() => ({}));
-      if (r.ok) setAuditItems(data.items || []);
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+      setAuditItems(data.items || []);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load audit log");
     } finally {
       setAuditLoading(false);
     }

@@ -239,6 +239,7 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
     const status = String(req.query.status || "").trim();
     const kind = String(req.query.kind || "").trim();
     const q = String(req.query.q || "").trim().toLowerCase();
+    const tag = String(req.query.tag || "").trim().toLowerCase();
     const sort = String(req.query.sort || "").trim().toLowerCase();
     const windowRaw = String(req.query.window || "24h").trim().toLowerCase();
     const window: TrendingWindow = windowRaw === "7d" ? "7d" : "24h";
@@ -249,6 +250,10 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
       if (tier && p.effectiveTier !== tier) return false;
       if (status && p.effectiveStatus !== status) return false;
       if (kind && p.kind !== kind) return false;
+      if (tag) {
+        const tags = (p.tags || []).map((t) => t.toLowerCase());
+        if (!tags.includes(tag)) return false;
+      }
       if (q.length >= 2) {
         const hay = [
           p.id,
@@ -292,6 +297,7 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
         tier: tier || null,
         status: status || null,
         kind: kind || null,
+        tag: tag || null,
         q: q || null,
         limit,
         sort: sort || null,
@@ -310,12 +316,17 @@ modulesRouter.get("/registry.csv", modulesEmbedRateLimit, async (req, res) => {
     const enriched = await loadAllEnriched();
     const tier = String(req.query.tier || "").trim();
     const status = String(req.query.status || "").trim();
+    const tagFilter = String(req.query.tag || "").trim().toLowerCase();
     const kind = String(req.query.kind || "").trim();
     const q = String(req.query.q || "").trim().toLowerCase();
     const filtered = enriched.filter((p) => {
       if (tier && p.effectiveTier !== tier) return false;
       if (status && p.effectiveStatus !== status) return false;
       if (kind && p.kind !== kind) return false;
+      if (tagFilter) {
+        const tags = (p.tags || []).map((t) => t.toLowerCase());
+        if (!tags.includes(tagFilter)) return false;
+      }
       if (q.length >= 2) {
         const hay = [p.id, p.code, p.name, p.description, ...(p.tags || [])]
           .join(" ")
@@ -1128,5 +1139,301 @@ ${items}
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "rss failed", details: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tier 3 amplifier — tags, OG image, per-module RSS, sitemap
+// ─────────────────────────────────────────────────────────────────────────
+
+// 🔹 GET /tags — distinct tags with module counts. Public, 5-min cached.
+//    Sorted by count DESC, name ASC. Used by /modules to render a tag-chip
+//    strip and by integrations to discover the taxonomy.
+modulesRouter.get("/tags", modulesEmbedRateLimit, async (_req, res) => {
+  try {
+    const enriched = await loadAllEnriched();
+    const counts = new Map<string, number>();
+    for (const p of enriched) {
+      for (const t of p.tags || []) {
+        const key = t.toLowerCase();
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+    const items = Array.from(counts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag));
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      generatedAt: new Date().toISOString(),
+      total: items.length,
+      modules: enriched.length,
+      items,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "tags failed", details: err.message });
+  }
+});
+
+// 🔹 GET /:id/og.svg — 1200x630 social-share card. SVG so we don't pull a
+//    rasterizer dep; Discord/Slack/Facebook accept SVG og:image; Twitter
+//    requires PNG so add a rasterizer later if Twitter cards become
+//    important. Color keyed off effective tier so the card visibly
+//    inherits the module's status.
+modulesRouter.get("/:id/og.svg", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const base = projects.find((p) => p.id === id);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    function esc(s: string): string {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    function wrap(text: string, perLine: number, maxLines: number): string[] {
+      const words = text.split(/\s+/);
+      const lines: string[] = [];
+      let current = "";
+      for (const w of words) {
+        if ((current + " " + w).trim().length > perLine) {
+          if (current) lines.push(current);
+          current = w;
+          if (lines.length >= maxLines - 1) break;
+        } else {
+          current = (current + " " + w).trim();
+        }
+      }
+      if (current && lines.length < maxLines) lines.push(current);
+      // If we ran out of lines but still had words, add an ellipsis to the
+      // last line so truncation is visible.
+      const consumed = lines.join(" ").split(/\s+/).length;
+      if (consumed < words.length && lines.length === maxLines) {
+        lines[maxLines - 1] = (lines[maxLines - 1] || "").replace(/\s+\S+$/, "") + "…";
+      }
+      return lines;
+    }
+
+    if (!base) {
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="320" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="900" fill="#e2e8f0">AEVION module not found</text>
+  <text x="60" y="380" font-family="ui-monospace, monospace" font-size="24" fill="#64748b">${esc(id)}</text>
+</svg>`;
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(fallback);
+    }
+
+    const overrides = await loadOverrides();
+    const p = applyOverride(enrichProject(base), overrides.get(id));
+    const tierColor =
+      p.effectiveTier === "mvp_live"
+        ? "#0d9488"
+        : p.effectiveTier === "platform_api"
+          ? "#2563eb"
+          : "#94a3b8";
+    const nameLines = wrap(p.name, 22, 2);
+    const descLines = wrap(p.description, 60, 3);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${tierColor}"/>
+      <stop offset="1" stop-color="${tierColor}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION ECOSYSTEM</text>
+    <g transform="translate(60, 160)">
+      ${nameLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 96}" font-size="84" font-weight="900" letter-spacing="-2">${esc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, ${160 + nameLines.length * 96 + 40})">
+      ${descLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 38}" font-size="28" font-weight="500" fill="#cbd5e1">${esc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, 540)">
+      <rect width="${(p.code.length + p.effectiveTier.length) * 14 + 60}" height="44" rx="22" fill="${tierColor}" fill-opacity="0.18" stroke="${tierColor}" stroke-width="2"/>
+      <text x="22" y="30" font-size="22" font-weight="800" fill="${tierColor}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(p.code)} · ${esc(p.effectiveTier)}</text>
+    </g>
+    <g transform="translate(${1200 - 60}, 540)" text-anchor="end">
+      <text font-size="22" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">${esc(p.effectiveStatus)}</text>
+    </g>
+  </g>
+</svg>`;
+
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /:id/changelog.rss — public RSS 2.0 scoped to one module. Lets a
+//    journalist or partner subscribe to launches of, say, QRight without
+//    having to filter the global feed.
+modulesRouter.get("/:id/changelog.rss", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureModulesTables();
+    const id = String(req.params.id);
+    const base = projects.find((p) => p.id === id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    function esc(s: string): string {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/modules/${encodeURIComponent(id)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/modules/${encodeURIComponent(id)}`;
+    const moduleName = base?.name || id;
+
+    const r = await pool.query(
+      `SELECT "id","moduleId","oldState","newState","at"
+       FROM "ModuleStateChange"
+       WHERE "moduleId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    function describe(row: any): string {
+      const before = row.oldState || {};
+      const after = row.newState || {};
+      const parts: string[] = [];
+      if (before.status !== after.status) parts.push(`status: ${before.status} → ${after.status}`);
+      if (before.tier !== after.tier) parts.push(`tier: ${before.tier} → ${after.tier}`);
+      if (before.hint !== after.hint) parts.push(`hint changed`);
+      if (parts.length === 0 && !before.hadOverride && after.hadOverride) {
+        return "Admin override applied.";
+      }
+      if (parts.length === 0 && before.hadOverride && !after.hadOverride) {
+        return "Admin override cleared.";
+      }
+      return parts.join("; ") || "Override changed.";
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const title = `${moduleName} — ${describe(row)}`;
+        const guid = `aevion-modules-${row.id}`;
+        return `    <item>
+      <title>${esc(title)}</title>
+      <link>${esc(siteUrl)}</link>
+      <guid isPermaLink="false">${esc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${esc(describe(row))}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION ${esc(moduleName)} — changelog</title>
+    <link>${esc(siteUrl)}</link>
+    <atom:link href="${esc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Tier and status changes for the AEVION ${esc(moduleName)} module.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "module rss failed", details: err.message });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap for the modules surface. Lists /modules,
+//    every /modules/[id], every /modules/[id]/badge. Search engines can
+//    discover all 27 module landings without crawling the SPA shell.
+modulesRouter.get("/sitemap.xml", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    const enriched = await loadAllEnriched();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const origin = `${proto}://${host}`;
+
+    function esc(s: string): string {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const urls: string[] = [];
+    urls.push(`  <url>
+    <loc>${esc(origin)}/modules</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`);
+    for (const p of enriched) {
+      const lastmod = (p.override?.updatedAt || p.updatedAt || "").slice(0, 10) || today;
+      urls.push(`  <url>
+    <loc>${esc(origin)}/modules/${esc(p.id)}</loc>
+    <lastmod>${esc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`);
+      urls.push(`  <url>
+    <loc>${esc(origin)}/modules/${esc(p.id)}/badge</loc>
+    <lastmod>${esc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=600");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "sitemap failed", details: err.message });
   }
 });

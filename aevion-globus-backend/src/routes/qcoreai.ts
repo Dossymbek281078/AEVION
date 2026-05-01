@@ -66,6 +66,22 @@ import {
   listRuns,
   listSessions,
   listSuiteRuns,
+  addSessionToWorkspace,
+  addWorkspaceMember,
+  createComment,
+  createWorkspace,
+  deleteWorkspace,
+  getWorkspace,
+  listComments,
+  listMyWorkspaces,
+  listPromptAudit,
+  listWorkspaceMembers,
+  listWorkspaceSessions,
+  logPromptAudit,
+  pinSession,
+  removeSessionFromWorkspace,
+  removeWorkspaceMember,
+  updateWorkspace,
   renameSession,
   renameSessionIfDefault,
   searchRuns,
@@ -283,13 +299,22 @@ qcoreaiRouter.get("/sessions/:id", async (req, res) => {
 qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const title = typeof req.body?.title === "string" ? req.body.title : "";
-    if (!title.trim()) return res.status(400).json({ error: "title required" });
-    const updated = await renameSession(req.params.id, auth?.sub ?? null, title);
+    const hasTitle = typeof req.body?.title === "string";
+    const hasPinned = typeof req.body?.pinned === "boolean";
+    if (!hasTitle && !hasPinned) return res.status(400).json({ error: "title or pinned required" });
+
+    let updated = null;
+    if (hasPinned) {
+      updated = await pinSession(req.params.id, auth?.sub ?? null, req.body.pinned as boolean);
+    }
+    if (hasTitle) {
+      if (!req.body.title.trim()) return res.status(400).json({ error: "title required" });
+      updated = await renameSession(req.params.id, auth?.sub ?? null, req.body.title);
+    }
     if (!updated) return res.status(404).json({ error: "session not found" });
     res.json({ session: updated });
   } catch (err: any) {
-    res.status(500).json({ error: "rename failed", details: err?.message });
+    res.status(500).json({ error: "patch session failed", details: err?.message });
   }
 });
 
@@ -805,9 +830,24 @@ qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) =>
   }
 });
 
+/** Per-user sliding-window rate limit (authenticated users only). */
+const userRunTimestamps = new Map<string, number[]>();
+function checkUserRateLimit(userId: string, maxPerMinute = 30): boolean {
+  const now = Date.now();
+  const hits = (userRunTimestamps.get(userId) ?? []).filter((t) => now - t < 60_000);
+  if (hits.length >= maxPerMinute) return false;
+  hits.push(now);
+  userRunTimestamps.set(userId, hits);
+  return true;
+}
+
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
+
+  if (userId && !checkUserRateLimit(userId)) {
+    return res.status(429).json({ error: "Too many runs. Please wait before starting another." });
+  }
 
   const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
   if (!userInput) {
@@ -1316,6 +1356,7 @@ qcoreaiRouter.post("/prompts", async (req, res) => {
       parentPromptId: typeof parentPromptId === "string" ? parentPromptId : null,
       isPublic: isPublic === true,
     });
+    logPromptAudit(auth.sub, p.id, p.name, "create").catch(() => {});
     res.json({ ok: true, prompt: p });
   } catch (err: any) {
     res.status(500).json({ error: "create prompt failed", details: err?.message });
@@ -1342,6 +1383,18 @@ qcoreaiRouter.get("/prompts/public", async (req, res) => {
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: "list public prompts failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/audit", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+    const items = await listPromptAudit(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list audit failed", details: err?.message });
   }
 });
 
@@ -1379,6 +1432,7 @@ qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { name, description, role, isPublic } = req.body || {};
+    const changed = [name && "name", description !== undefined && "description", role && "role", isPublic !== undefined && "isPublic"].filter(Boolean).join(",");
     const p = await updatePrompt(String(req.params.id), auth.sub, {
       name,
       description,
@@ -1386,6 +1440,7 @@ qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
       isPublic,
     });
     if (!p) return res.status(404).json({ error: "prompt not found or forbidden" });
+    logPromptAudit(auth.sub, p.id, p.name, "update", changed || undefined).catch(() => {});
     res.json({ prompt: p });
   } catch (err: any) {
     res.status(500).json({ error: "update prompt failed", details: err?.message });
@@ -1396,8 +1451,10 @@ qcoreaiRouter.delete("/prompts/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const toDelete = await getPrompt(String(req.params.id));
     const ok = await deletePrompt(String(req.params.id), auth.sub);
     if (!ok) return res.status(404).json({ error: "prompt not found or forbidden" });
+    if (toDelete) logPromptAudit(auth.sub, toDelete.id, toDelete.name, "delete").catch(() => {});
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: "delete prompt failed", details: err?.message });
@@ -1621,3 +1678,187 @@ function renderRunMarkdown(opts: { session: any; run: any; messages: any[] }): s
   }
   return lines.join("\n");
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Public run comments (no auth required to post)
+   GET  /api/qcoreai/shared/:token/comments
+   POST /api/qcoreai/shared/:token/comments
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/shared/:token/comments", sharedLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const items = await listComments(run.id);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list comments failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/shared/:token/comments", sharedLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const authorName = typeof req.body?.authorName === "string" ? req.body.authorName : "Anonymous";
+    const content = typeof req.body?.content === "string" ? req.body.content : "";
+    const comment = await createComment(run.id, authorName, content);
+    res.status(201).json({ comment });
+  } catch (err: any) {
+    const msg = err?.message || "comment failed";
+    res.status(msg.includes("required") ? 400 : 500).json({ error: msg });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Workspaces
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const workspaceLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "qcore-workspace",
+  message: "Too many workspace requests. Please slow down.",
+});
+
+qcoreaiRouter.post("/workspaces", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
+    const ws = await createWorkspace({ ownerId: auth.sub, name, description: typeof description === "string" ? description : null });
+    res.status(201).json({ workspace: ws });
+  } catch (err: any) {
+    res.status(500).json({ error: "create workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listMyWorkspaces(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list workspaces failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/workspaces/:id", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description } = req.body || {};
+    const ws = await getWorkspace(req.params.id, auth.sub);
+    if (name === undefined && description === undefined) return res.status(400).json({ error: "name or description required" });
+    const updated = await updateWorkspace(req.params.id, auth.sub, {
+      name: typeof name === "string" ? name : undefined,
+      description: description !== undefined ? (typeof description === "string" ? description : null) : undefined,
+    });
+    if (!updated) return res.status(404).json({ error: "workspace not found or forbidden" });
+    res.json({ workspace: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: "patch workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces/:id", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ws = await getWorkspace(String(req.params.id), auth.sub);
+    if (!ws) return res.status(404).json({ error: "workspace not found" });
+    const members = await listWorkspaceMembers(String(req.params.id), auth.sub);
+    res.json({ workspace: ws, members });
+  } catch (err: any) {
+    res.status(500).json({ error: "get workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteWorkspace(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "workspace not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces/:id/members", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listWorkspaceMembers(String(req.params.id), auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list members failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/workspaces/:id/members", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { userId, role } = req.body || {};
+    if (typeof userId !== "string" || !userId.trim()) return res.status(400).json({ error: "userId required" });
+    const memberRole = role === "editor" ? "editor" : "viewer";
+    const member = await addWorkspaceMember(String(req.params.id), userId.trim(), memberRole, auth.sub);
+    if (!member) return res.status(403).json({ error: "forbidden — only the owner can invite members" });
+    res.status(201).json({ member });
+  } catch (err: any) {
+    res.status(500).json({ error: "add member failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id/members/:userId", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await removeWorkspaceMember(String(req.params.id), String(req.params.userId), auth.sub);
+    if (!ok) return res.status(404).json({ error: "member not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "remove member failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces/:id/sessions", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listWorkspaceSessions(String(req.params.id), auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list workspace sessions failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/workspaces/:id/sessions", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { sessionId } = req.body || {};
+    if (typeof sessionId !== "string" || !sessionId.trim()) return res.status(400).json({ error: "sessionId required" });
+    const ok = await addSessionToWorkspace(String(req.params.id), sessionId.trim(), auth.sub);
+    if (!ok) return res.status(403).json({ error: "forbidden or workspace not found" });
+    res.status(201).json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "add session failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id/sessions/:sessionId", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await removeSessionFromWorkspace(String(req.params.id), String(req.params.sessionId), auth.sub);
+    if (!ok) return res.status(404).json({ error: "session not in workspace or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "remove session failed", details: err?.message });
+  }
+});

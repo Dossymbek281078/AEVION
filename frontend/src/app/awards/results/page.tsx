@@ -110,6 +110,13 @@ export const metadata: Metadata = {
     type: "article",
     title: "AEVION Awards results",
     description: "Gold/silver/bronze winners across music, film, and more.",
+    images: [{ url: `${getApiBase()}/api/awards/og.svg`, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AEVION Awards results",
+    description: "Gold/silver/bronze winners across music, film, and more.",
+    images: [`${getApiBase()}/api/awards/og.svg`],
   },
 };
 

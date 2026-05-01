@@ -108,25 +108,57 @@ function fmtMoney(v: number | null | undefined) {
   return `$${v.toFixed(4)}`;
 }
 
+type CommentItem = { id: string; authorName: string; content: string; createdAt: string };
+
 export default function SharedRunClient() {
   const params = useParams();
   const token = typeof params?.token === "string" ? params.token : Array.isArray(params?.token) ? params.token[0] : "";
   const [payload, setPayload] = useState<SharedPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [commentName, setCommentName] = useState("");
+  const [commentText, setCommentText] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
 
   useEffect(() => {
     if (!token) return;
     (async () => {
       try {
-        const res = await fetch(apiUrl(`/api/qcoreai/shared/${token}`));
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        const [runRes, cmRes] = await Promise.all([
+          fetch(apiUrl(`/api/qcoreai/shared/${token}`)),
+          fetch(apiUrl(`/api/qcoreai/shared/${token}/comments`)),
+        ]);
+        const data = await runRes.json();
+        if (!runRes.ok) throw new Error(data?.error || `HTTP ${runRes.status}`);
         setPayload(data as SharedPayload);
+        const cmData = await cmRes.json().catch(() => ({}));
+        if (Array.isArray(cmData?.items)) setComments(cmData.items);
       } catch (e: any) {
         setError(e?.message || "Failed to load shared run");
       }
     })();
   }, [token]);
+
+  const submitComment = async () => {
+    const text = commentText.trim();
+    if (!text || commentBusy) return;
+    setCommentBusy(true);
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/shared/${token}/comments`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authorName: commentName.trim() || "Anonymous", content: text }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setComments((prev) => [...prev, data.comment]);
+      setCommentText("");
+    } catch (e: any) {
+      alert(e?.message || "Comment failed");
+    } finally {
+      setCommentBusy(false);
+    }
+  };
 
   if (error) {
     return (
@@ -373,6 +405,54 @@ export default function SharedRunClient() {
             </a>
           </span>
         </footer>
+
+        {/* Comments */}
+        <section style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>
+            Comments ({comments.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+            {comments.length === 0 && (
+              <div style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No comments yet. Be the first.</div>
+            )}
+            {comments.map((c) => (
+              <div key={c.id} style={{ padding: "10px 14px", borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{c.authorName}</span>
+                  <span style={{ fontSize: 10, color: "#94a3b8" }}>{new Date(c.createdAt).toLocaleString()}</span>
+                </div>
+                <div style={{ fontSize: 13, color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{c.content}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px", borderRadius: 12, background: "#fff", border: "1px solid #e2e8f0" }}>
+            <input
+              value={commentName}
+              onChange={(e) => setCommentName(e.target.value)}
+              placeholder="Your name (optional)"
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+            />
+            <textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Leave a comment…"
+              rows={3}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12, resize: "vertical" }}
+            />
+            <button
+              onClick={submitComment}
+              disabled={!commentText.trim() || commentBusy}
+              style={{
+                alignSelf: "flex-end", padding: "7px 18px", borderRadius: 8,
+                background: commentText.trim() ? "#0e7490" : "#cbd5e1",
+                border: "none", color: "#fff", fontSize: 12, fontWeight: 700,
+                cursor: commentText.trim() ? "pointer" : "default",
+              }}
+            >
+              {commentBusy ? "Posting…" : "Post comment"}
+            </button>
+          </div>
+        </section>
       </div>
     </main>
   );

@@ -1408,6 +1408,7 @@ modulesRouter.get("/sitemap.xml", modulesEmbedRateLimit, async (req, res) => {
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>`);
+    const tagSet = new Set<string>();
     for (const p of enriched) {
       const lastmod = (p.override?.updatedAt || p.updatedAt || "").slice(0, 10) || today;
       urls.push(`  <url>
@@ -1422,6 +1423,17 @@ modulesRouter.get("/sitemap.xml", modulesEmbedRateLimit, async (req, res) => {
     <changefreq>weekly</changefreq>
     <priority>0.4</priority>
   </url>`);
+      for (const t of p.tags || []) tagSet.add(t.toLowerCase());
+    }
+    // Tag landing pages — one per distinct tag. SEO-relevant entry points
+    // for use-case-based queries ("aevion ai modules", etc.).
+    for (const tag of Array.from(tagSet).sort()) {
+      urls.push(`  <url>
+    <loc>${esc(origin)}/modules/tags/${esc(tag)}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>`);
     }
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1435,5 +1447,319 @@ ${urls.join("\n")}
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "sitemap failed", details: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tier 3 block 2 — tag landings, tag-RSS, index OG, bulk admin
+// ─────────────────────────────────────────────────────────────────────────
+
+// 🔹 GET /og.svg — index-page social-share card. Same dimensions and
+//    style as /:id/og.svg but for the registry root. Used by /modules
+//    via og:image so a share of "all 27 modules" renders nicely too.
+modulesRouter.get("/og.svg", modulesEmbedRateLimit, async (_req, res) => {
+  try {
+    const enriched = await loadAllEnriched();
+    const live = enriched.filter((p) => p.effectiveTier === "mvp_live").length;
+    const api = enriched.filter((p) => p.effectiveTier === "platform_api").length;
+    const portal = enriched.filter((p) => p.effectiveTier === "portal_only").length;
+
+    function esc(s: string): string {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d9488"/>
+      <stop offset="0.5" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION ECOSYSTEM</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${esc(String(enriched.length))} modules</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Live registry of every node — tier, status, surfaces.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#0d9488" fill-opacity="0.15" stroke="#0d9488" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#0d9488">${esc(String(live))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#5eead4">MVP LIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#2563eb" fill-opacity="0.15" stroke="#2563eb" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#60a5fa">${esc(String(api))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#93c5fd">PLATFORM API</text>
+      </g>
+      <g transform="translate(480, 0)">
+        <rect width="220" height="80" rx="14" fill="#94a3b8" fill-opacity="0.18" stroke="#94a3b8" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#e2e8f0">${esc(String(portal))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#cbd5e1">PORTAL ONLY</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / modules</text>
+  </g>
+</svg>`;
+
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "index og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /tags/:tag/changelog.rss — RSS 2.0 of override flips for any
+//    module carrying the given tag. Lets a partner who cares about, say,
+//    "ai" subscribe to launches across that whole vertical.
+modulesRouter.get("/tags/:tag/changelog.rss", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureModulesTables();
+    const tag = String(req.params.tag).toLowerCase();
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    function esc(s: string): string {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    const enriched = await loadAllEnriched();
+    const matchingIds = enriched
+      .filter((p) => (p.tags || []).map((t) => t.toLowerCase()).includes(tag))
+      .map((p) => p.id);
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/modules/tags/${encodeURIComponent(tag)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/modules/tags/${encodeURIComponent(tag)}`;
+
+    let items = "";
+    if (matchingIds.length > 0) {
+      const r = await pool.query(
+        `SELECT "id","moduleId","oldState","newState","at"
+         FROM "ModuleStateChange"
+         WHERE "moduleId" = ANY($1::text[])
+         ORDER BY "at" DESC
+         LIMIT $2`,
+        [matchingIds, limit]
+      );
+      function describe(row: any): string {
+        const before = row.oldState || {};
+        const after = row.newState || {};
+        const parts: string[] = [];
+        if (before.status !== after.status) parts.push(`status: ${before.status} → ${after.status}`);
+        if (before.tier !== after.tier) parts.push(`tier: ${before.tier} → ${after.tier}`);
+        if (before.hint !== after.hint) parts.push(`hint changed`);
+        if (parts.length === 0 && !before.hadOverride && after.hadOverride) {
+          return "Admin override applied.";
+        }
+        if (parts.length === 0 && before.hadOverride && !after.hadOverride) {
+          return "Admin override cleared.";
+        }
+        return parts.join("; ") || "Override changed.";
+      }
+      items = r.rows
+        .map((row: any) => {
+          const at = row.at instanceof Date ? row.at : new Date(row.at);
+          const pubDate = at.toUTCString();
+          const title = `${row.moduleId} — ${describe(row)}`;
+          const guid = `aevion-modules-${row.id}`;
+          const link = `${proto}://${host}/modules/${encodeURIComponent(row.moduleId)}`;
+          return `    <item>
+      <title>${esc(title)}</title>
+      <link>${esc(link)}</link>
+      <guid isPermaLink="false">${esc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${esc(describe(row))}</description>
+    </item>`;
+        })
+        .join("\n");
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION modules · #${esc(tag)} — changelog</title>
+    <link>${esc(siteUrl)}</link>
+    <atom:link href="${esc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Tier and status changes across AEVION modules tagged #${esc(tag)}.</description>
+    <language>en</language>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "tag rss failed", details: err.message });
+  }
+});
+
+// 🔹 PATCH /admin/bulk — apply overrides to many modules in one request.
+//    Body: { items: [{ id, status?, tier?, hint? }, …] }
+//    Each item is validated against the same allowlists as PATCH /admin/:id.
+//    All writes happen in a single transaction; one combined audit row per
+//    module affected; one webhook fire per module. Aborts on first
+//    validation error (no partial writes).
+modulesRouter.patch("/admin/bulk", async (req, res) => {
+  try {
+    await ensureModulesTables();
+    const auth = verifyBearerOptional(req);
+    if (!isModulesAdmin(auth)) {
+      return res.status(403).json({ error: "Admin role required" });
+    }
+    const itemsRaw = req.body?.items;
+    if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
+      return res.status(400).json({ error: "items must be a non-empty array" });
+    }
+    if (itemsRaw.length > 100) {
+      return res.status(400).json({ error: "max 100 items per call" });
+    }
+
+    type Edit = {
+      id: string;
+      status?: string | null;
+      tier?: string | null;
+      hint?: string | null;
+    };
+    const edits: Edit[] = [];
+    for (const raw of itemsRaw) {
+      if (!raw || typeof raw !== "object") {
+        return res.status(400).json({ error: "each item must be an object" });
+      }
+      const id = typeof raw.id === "string" ? raw.id.trim() : "";
+      if (!id || !MODULE_RUNTIME[id]) {
+        return res.status(400).json({ error: "unknown or missing module id", id });
+      }
+      const e: Edit = { id };
+      if ("status" in raw) {
+        const v = raw.status;
+        if (v !== null && v !== undefined && !VALID_STATUS.has(String(v))) {
+          return res.status(400).json({ error: "invalid status", id, value: v });
+        }
+        e.status = v === undefined ? undefined : v;
+      }
+      if ("tier" in raw) {
+        const v = raw.tier;
+        if (v !== null && v !== undefined && !VALID_TIER.has(String(v))) {
+          return res.status(400).json({ error: "invalid tier", id, value: v });
+        }
+        e.tier = v === undefined ? undefined : v;
+      }
+      if ("hint" in raw) {
+        const v = raw.hint;
+        if (v !== null && v !== undefined && (typeof v !== "string" || v.length > 500)) {
+          return res.status(400).json({ error: "hint must be string ≤ 500 chars", id });
+        }
+        e.hint = v === undefined ? undefined : v;
+      }
+      edits.push(e);
+    }
+
+    const overridesBefore = await loadOverrides();
+    const results: Array<{
+      moduleId: string;
+      before: any;
+      after: any;
+      cleared: boolean;
+    }> = [];
+    const actor = auth?.email || auth?.sub || null;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const e of edits) {
+        const beforeOv = overridesBefore.get(e.id);
+        const baseEnriched = enrichProject(projects.find((p) => p.id === e.id)!);
+        const before = {
+          status: beforeOv?.status ?? baseEnriched.status,
+          tier: beforeOv?.tier ?? baseEnriched.runtime.tier,
+          hint: beforeOv?.hint ?? baseEnriched.runtime.hint,
+          hadOverride: !!beforeOv,
+        };
+        const next = {
+          status: e.status === undefined ? beforeOv?.status ?? null : e.status,
+          tier: e.tier === undefined ? beforeOv?.tier ?? null : e.tier,
+          hint: e.hint === undefined ? beforeOv?.hint ?? null : e.hint,
+        };
+        if (next.status === null && next.tier === null && next.hint === null) {
+          await client.query(`DELETE FROM "ModuleStateOverride" WHERE "moduleId" = $1`, [e.id]);
+        } else {
+          await client.query(
+            `INSERT INTO "ModuleStateOverride" ("moduleId","status","tier","hint","updatedAt","updatedBy")
+             VALUES ($1,$2,$3,$4,NOW(),$5)
+             ON CONFLICT ("moduleId") DO UPDATE
+               SET "status" = EXCLUDED."status",
+                   "tier" = EXCLUDED."tier",
+                   "hint" = EXCLUDED."hint",
+                   "updatedAt" = NOW(),
+                   "updatedBy" = EXCLUDED."updatedBy"`,
+            [e.id, next.status, next.tier, next.hint, actor]
+          );
+        }
+        const after = {
+          status: next.status ?? baseEnriched.status,
+          tier: next.tier ?? baseEnriched.runtime.tier,
+          hint: next.hint ?? baseEnriched.runtime.hint,
+          hadOverride: next.status !== null || next.tier !== null || next.hint !== null,
+        };
+        await client.query(
+          `INSERT INTO "ModuleStateChange" ("id","moduleId","actor","oldState","newState")
+           VALUES ($1,$2,$3,$4,$5)`,
+          [crypto.randomUUID(), e.id, actor, JSON.stringify(before), JSON.stringify(after)]
+        );
+        results.push({
+          moduleId: e.id,
+          before,
+          after,
+          cleared: !after.hadOverride,
+        });
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // Fire webhooks AFTER the transaction commits — one per module so
+    // subscribers can correlate by moduleId, matching the single-edit
+    // contract.
+    for (const r of results) {
+      const ev: ModuleWebhookEvent = r.cleared
+        ? "module.override.cleared"
+        : "module.override.set";
+      fireModuleWebhook(pool, ev, {
+        moduleId: r.moduleId,
+        before: r.before,
+        after: r.after,
+        at: new Date().toISOString(),
+      });
+    }
+
+    res.json({ updated: results.length, items: results });
+  } catch (err: any) {
+    res.status(500).json({ error: "bulk patch failed", details: err.message });
   }
 });

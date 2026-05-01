@@ -81,6 +81,27 @@ export default function BureauPage() {
   const [sort, setSort] = useState<SortMode>("newest");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
 
+  // File drag-drop on /bureau: compute SHA-256 → populate search query.
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const [fileChecking, setFileChecking] = useState(false);
+  const hashAndSearch = async (file: File) => {
+    setFileChecking(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buf);
+      const hex = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      setQuery(hex);
+      setKindFilter("all");
+      setVerifiedOnly(false);
+    } catch {
+      showToast("Could not hash file", "error");
+    } finally {
+      setFileChecking(false);
+    }
+  };
+
   const [authed, setAuthed] = useState(false);
 
   // Notarized tier waitlist.
@@ -412,10 +433,43 @@ export default function BureauPage() {
             <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
           </div>
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
-            Public prior-art lookup — search by title, author, or paste a SHA-256 hash to check if identical content already exists in the bureau.
+            Public prior-art lookup — search by title, author, or paste a SHA-256 hash. Or <strong>drop a file below</strong> to check it instantly.
           </div>
 
           {/* Search + filter toolbar (hidden until certs load to avoid layout flash). */}
+          {/* File drop zone — drag any file to compute SHA-256 and search instantly */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setFileDragOver(true); }}
+            onDragLeave={() => setFileDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setFileDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) hashAndSearch(f); }}
+            style={{
+              marginBottom: 10,
+              padding: "12px 16px",
+              borderRadius: 10,
+              border: `2px dashed ${fileDragOver ? "#0d9488" : "rgba(15,23,42,0.12)"}`,
+              background: fileDragOver ? "rgba(13,148,136,0.04)" : "transparent",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              transition: "border-color 0.15s, background 0.15s",
+              cursor: "default",
+            }}
+          >
+            <span style={{ fontSize: 20 }}>{fileChecking ? "⏳" : "📂"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                {fileChecking ? "Computing SHA-256…" : "Drop a file here to check prior art"}
+              </div>
+              <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                {fileChecking ? "Searching registry…" : "Any format — computes SHA-256 in your browser, then searches the registry instantly"}
+              </div>
+            </div>
+            <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>
+              Browse
+              <input type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
+            </label>
+          </div>
+
           {!loading && certificates.length > 0 && (
             <div style={{ display: "grid", gap: 10, marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>

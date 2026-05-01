@@ -55,12 +55,16 @@ function unwrap(r) {
   return null;
 }
 
+function is2xx(r) {
+  return r.status >= 200 && r.status < 300;
+}
+
 async function main() {
   console.log(`QBuild smoke against ${BASE}\n`);
 
   // 1. health
   let r = await call("GET", "/api/build/health");
-  if (r.status === 200 && unwrap(r)?.service === "qbuild") ok("GET /api/build/health");
+  if (is2xx(r) && unwrap(r)?.service === "qbuild") ok("GET /api/build/health");
   else return fail("health", `status=${r.status}`);
 
   // 2. register client
@@ -91,7 +95,7 @@ async function main() {
     city: "Almaty",
     buildRole: "CLIENT",
   }, clientToken);
-  if (r.status === 200 && unwrap(r)?.buildRole === "CLIENT") ok("upsert client profile");
+  if (is2xx(r) && unwrap(r)?.buildRole === "CLIENT") ok("upsert client profile");
   else return fail("upsert client profile", `status=${r.status}`);
 
   // 5. worker upserts build profile
@@ -100,7 +104,7 @@ async function main() {
     city: "Almaty",
     buildRole: "WORKER",
   }, workerToken);
-  if (r.status === 200 && unwrap(r)?.buildRole === "WORKER") ok("upsert worker profile");
+  if (is2xx(r) && unwrap(r)?.buildRole === "WORKER") ok("upsert worker profile");
   else return fail("upsert worker profile", `status=${r.status}`);
 
   // 6. create project
@@ -118,7 +122,7 @@ async function main() {
   // 7. public view (no auth)
   r = await call("GET", `/api/build/projects/${projectId}/public`);
   const pub = unwrap(r);
-  if (r.status === 200 && pub?.project?.id === projectId && pub?.client?.name === "Smoke Client") ok("public project view");
+  if (is2xx(r) && pub?.project?.id === projectId && pub?.client?.name === "Smoke Client") ok("public project view");
   else return fail("public view", `status=${r.status}`);
 
   // 8. create vacancy
@@ -136,7 +140,7 @@ async function main() {
   // 9. cross-project vacancies feed picks it up
   r = await call("GET", "/api/build/vacancies?status=OPEN&limit=100");
   const feed = unwrap(r);
-  if (r.status === 200 && feed?.items?.some((v) => v.id === vacancyId)) ok("vacancies feed contains new row");
+  if (is2xx(r) && feed?.items?.some((v) => v.id === vacancyId)) ok("vacancies feed contains new row");
   else return fail("vacancies feed", `status=${r.status}`);
 
   // 10. worker applies
@@ -152,18 +156,18 @@ async function main() {
   // 11. owner sees the pending application via notifications
   r = await call("GET", "/api/build/notifications/summary", null, clientToken);
   const notif = unwrap(r);
-  if (r.status === 200 && notif?.pendingApplications >= 1) ok("client notifications", `pending=${notif.pendingApplications}`);
+  if (is2xx(r) && notif?.pendingApplications >= 1) ok("client notifications", `pending=${notif.pendingApplications}`);
   else return fail("client notifications", `status=${r.status} body=${JSON.stringify(r.body)}`);
 
   // 12. owner accepts the application
   r = await call("PATCH", `/api/build/applications/${applicationId}`, { status: "ACCEPTED" }, clientToken);
-  if (r.status === 200 && unwrap(r)?.status === "ACCEPTED") ok("owner accepts application");
+  if (is2xx(r) && unwrap(r)?.status === "ACCEPTED") ok("owner accepts application");
   else return fail("accept", `status=${r.status}`);
 
   // 13. worker sees applicationUpdates
   r = await call("GET", "/api/build/notifications/summary", null, workerToken);
   const wnotif = unwrap(r);
-  if (r.status === 200 && wnotif?.applicationUpdates >= 1) ok("worker notifications", `updates=${wnotif.applicationUpdates}`);
+  if (is2xx(r) && wnotif?.applicationUpdates >= 1) ok("worker notifications", `updates=${wnotif.applicationUpdates}`);
   else return fail("worker notifications", `status=${r.status}`);
 
   // 14. client DMs worker
@@ -176,12 +180,12 @@ async function main() {
 
   // 15. worker has unread message
   r = await call("GET", "/api/build/notifications/summary", null, workerToken);
-  if (r.status === 200 && unwrap(r)?.unreadMessages >= 1) ok("worker unread message visible");
+  if (is2xx(r) && unwrap(r)?.unreadMessages >= 1) ok("worker unread message visible");
   else return fail("worker unread", `status=${r.status}`);
 
   // 16. worker reads thread (marks as read)
   r = await call("GET", `/api/build/messages/${clientId}`, null, workerToken);
-  if (r.status === 200 && unwrap(r)?.items?.length >= 1) ok("worker reads thread");
+  if (is2xx(r) && unwrap(r)?.items?.length >= 1) ok("worker reads thread");
   else return fail("worker reads", `status=${r.status}`);
 
   // 17. unauth call to /notifications/summary → 401
@@ -191,12 +195,12 @@ async function main() {
 
   // 18. plans catalog
   r = await call("GET", "/api/build/plans");
-  if (r.status === 200 && unwrap(r)?.items?.length >= 4) ok("plans catalog (4 tiers)");
+  if (is2xx(r) && unwrap(r)?.items?.length >= 4) ok("plans catalog (4 tiers)");
   else return fail("plans catalog", `status=${r.status}`);
 
   // 19. usage/me on FREE plan baseline
   r = await call("GET", "/api/build/usage/me", null, clientToken);
-  if (r.status === 200 && unwrap(r)?.plan?.key === "FREE") ok("usage/me FREE baseline");
+  if (is2xx(r) && unwrap(r)?.plan?.key === "FREE") ok("usage/me FREE baseline");
   else return fail("usage/me FREE", `plan=${unwrap(r)?.plan?.key}`);
 
   // 20. bookmark VACANCY toggle on
@@ -206,19 +210,19 @@ async function main() {
 
   // 21. bookmark VACANCY toggle off (idempotent removal)
   r = await call("POST", "/api/build/bookmarks", { kind: "VACANCY", targetId: vacancyId }, workerToken);
-  if (r.status === 200 && unwrap(r)?.saved === false) ok("bookmark toggle off (idempotent)");
+  if (is2xx(r) && unwrap(r)?.saved === false) ok("bookmark toggle off (idempotent)");
   else return fail("bookmark toggle off", `status=${r.status}`);
 
   // 22. bookmarks list (re-add then list)
   await call("POST", "/api/build/bookmarks", { kind: "VACANCY", targetId: vacancyId }, workerToken);
   r = await call("GET", "/api/build/bookmarks?kind=VACANCY", null, workerToken);
-  if (r.status === 200 && unwrap(r)?.items?.length >= 1 && unwrap(r).items[0]?.target?.id === vacancyId) ok("bookmarks list hydrated");
+  if (is2xx(r) && unwrap(r)?.items?.length >= 1 && unwrap(r).items[0]?.target?.id === vacancyId) ok("bookmarks list hydrated");
   else return fail("bookmarks list", `status=${r.status} items=${unwrap(r)?.items?.length}`);
 
   // 23. reverse-match: vacancy → top candidates (worker had "5 years" but
   //     no overlapping skills with vacancy — could be 0). Just check 200.
   r = await call("GET", `/api/build/vacancies/${vacancyId}/match-candidates`, null, clientToken);
-  if (r.status === 200) ok("reverse match candidates", `total=${unwrap(r)?.total ?? 0}`);
+  if (is2xx(r)) ok("reverse match candidates", `total=${unwrap(r)?.total ?? 0}`);
   else return fail("reverse match", `status=${r.status}`);
 
   // 24. PDF resume export (public, no auth)
@@ -233,7 +237,7 @@ async function main() {
   r = await call("POST", "/api/build/ai/consult", {
     messages: [{ role: "user", content: "Hi, one-liner: am I ready to apply for vacancies?" }],
   }, workerToken);
-  if (r.status === 200 && typeof unwrap(r)?.reply === "string") ok("AI consult", `tokens=${unwrap(r)?.usage?.output}`);
+  if (is2xx(r) && typeof unwrap(r)?.reply === "string") ok("AI consult", `tokens=${unwrap(r)?.usage?.output}`);
   else if (r.body?.details && /ANTHROPIC_API_KEY/i.test(r.body.details)) {
     step += 1;
     console.log(`  ${String(step).padStart(2, "0")}  SKIP  AI consult (ANTHROPIC_API_KEY not set)`);
@@ -258,12 +262,12 @@ async function main() {
     locale: "ru",
     source: "smoke-test",
   });
-  if (r.status === 200 && unwrap(r)?.alreadyExists === true) ok("lead idempotent", "alreadyExists=true");
+  if (is2xx(r) && unwrap(r)?.alreadyExists === true) ok("lead idempotent", "alreadyExists=true");
   else return fail("lead idempotent", `status=${r.status}`);
 
   // 28. Loyalty cashback ledger reachable (totals 0 unless prior PAID orders).
   r = await call("GET", "/api/build/loyalty/cashback", null, clientToken);
-  if (r.status === 200 && typeof unwrap(r)?.totalAev === "number") {
+  if (is2xx(r) && typeof unwrap(r)?.totalAev === "number") {
     ok("loyalty cashback ledger", `totalAev=${unwrap(r).totalAev}`);
   } else return fail("loyalty cashback", `status=${r.status}`);
 
@@ -281,7 +285,7 @@ async function main() {
   r = await call("PATCH", `/api/build/experiences/${expId}`, {
     description: "Polished description with concrete numbers.",
   }, workerToken);
-  if (r.status === 200 && unwrap(r)?.description?.includes("Polished")) {
+  if (is2xx(r) && unwrap(r)?.description?.includes("Polished")) {
     ok("PATCH experience description", `id=${expId.slice(0, 8)}…`);
   } else return fail("PATCH experience", `status=${r.status}`);
 
@@ -289,7 +293,7 @@ async function main() {
   r = await call("GET", "/api/build/health");
   const h = unwrap(r);
   if (
-    r.status === 200 &&
+    is2xx(r) &&
     typeof h?.vacancies === "number" &&
     typeof h?.candidates === "number" &&
     typeof h?.projects === "number"
@@ -312,7 +316,7 @@ async function main() {
       orderId: pendingOrder.id,
       providerId: `smoke-${RUN}`,
     });
-    if (r.status === 200 && unwrap(r)?.processed === true) {
+    if (is2xx(r) && unwrap(r)?.processed === true) {
       ok("webhook payment.succeeded", `orderId=${pendingOrder.id.slice(0, 8)}…`);
     } else return fail("webhook payment", `status=${r.status} ${r.body?.code || ""}`);
   } else {

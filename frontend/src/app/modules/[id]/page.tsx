@@ -259,10 +259,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // without a client-side rebuild step. Absolute URL only matters when the
   // browser scrapes — getApiBase() resolves the right one in both worlds.
   const ogImage = `${getApiBase()}/api/modules/${encodeURIComponent(id)}/og.svg`;
+  const rssUrl = `${getApiBase()}/api/modules/${encodeURIComponent(id)}/changelog.rss`;
   const title = `${data.name} — AEVION module`;
   return {
     title,
     description: data.description,
+    alternates: {
+      types: {
+        "application/rss+xml": rssUrl,
+      },
+    },
     openGraph: {
       type: "article",
       title,

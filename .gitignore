@@ -17,6 +17,8 @@ build/
 # these are TS/TSX modules under our own src tree, not output artifacts).
 !aevion-globus-backend/src/lib/build/
 !aevion-globus-backend/src/lib/build/**
+!aevion-globus-backend/src/routes/build/
+!aevion-globus-backend/src/routes/build/**
 !frontend/src/lib/build/
 !frontend/src/lib/build/**
 !frontend/src/components/build/

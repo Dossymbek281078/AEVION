@@ -815,9 +815,24 @@ qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) =>
   }
 });
 
+/** Per-user sliding-window rate limit (authenticated users only). */
+const userRunTimestamps = new Map<string, number[]>();
+function checkUserRateLimit(userId: string, maxPerMinute = 30): boolean {
+  const now = Date.now();
+  const hits = (userRunTimestamps.get(userId) ?? []).filter((t) => now - t < 60_000);
+  if (hits.length >= maxPerMinute) return false;
+  hits.push(now);
+  userRunTimestamps.set(userId, hits);
+  return true;
+}
+
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
+
+  if (userId && !checkUserRateLimit(userId)) {
+    return res.status(429).json({ error: "Too many runs. Please wait before starting another." });
+  }
 
   const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
   if (!userInput) {

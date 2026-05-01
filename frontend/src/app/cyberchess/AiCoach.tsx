@@ -38,6 +38,7 @@ type Props = {
   onClose: () => void;
   runEngine?: (fen: string, depth: number, pvCount: number) => Promise<PVLine[]>;
   quickEval?: (fen: string, depth: number) => Promise<{ cp: number; mate: number }>;
+  phaseLabel?: string;       // "Дебют" / "Миттельшпиль" / "Эндшпиль" — если знаем стадию
 };
 
 const SYSTEM_DEEP = `Ты — Алексей, шахматный тренер внутри CyberChess by AEVION. Играешь на гроссмейстерском уровне, но разговариваешь как живой человек, который рядом сидит и разбирает партию. Не академично и без сухих формулировок — но и без панибратства.
@@ -219,7 +220,7 @@ function buildMovesStr(moves: string[]): string {
 
 export default function AiCoach({
   fen, moves, fenHist, evalCp, evalMate, opening, playerColor, visible, onClose,
-  runEngine, quickEval,
+  runEngine, quickEval, phaseLabel,
 }: Props) {
   const [msgs, sMsgs] = useState<Msg[]>([]);
   const [input, sInput] = useState("");
@@ -426,6 +427,7 @@ export default function AiCoach({
             ctx.push("");
             ctx.push(`Game moves so far: ${buildMovesStr(moves)}`);
             if (opening) ctx.push(`Opening: ${opening.eco} ${opening.name} (${opening.desc})`);
+            if (phaseLabel) ctx.push(`Текущая стадия партии: ${phaseLabel}. Формулируй ответ в терминах этой стадии — для дебюта про развитие/центр/рокировку, для миттельшпиля про слабости/планы/инициативу, для эндшпиля про активность короля/проходные/типовые позиции.`);
             ctx.push(`You are coaching ${playerColor === "w" ? "White" : "Black"}.`);
             ctx.push("");
             ctx.push("User question:");
@@ -435,15 +437,24 @@ export default function AiCoach({
           return m;
         });
 
-        const res = await fetch(`${BACKEND}/api/coach/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system: SYSTEM_DEEP,
-            messages: apiMsgs,
-            maxTokens: 1200,
-          }),
-        });
+        // 30 секунд timeout — если backend не отвечает, не зависаем навсегда.
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 30000);
+        let res: Response;
+        try {
+          res = await fetch(`${BACKEND}/api/coach/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system: SYSTEM_DEEP,
+              messages: apiMsgs,
+              maxTokens: 1200,
+            }),
+            signal: ctrl.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -455,7 +466,13 @@ export default function AiCoach({
             .map((c: any) => c.text || "").join("") || "No response";
         sMsgs([...newMsgs, { role: "assistant", content: reply }]);
       } catch (e: any) {
-        sError(e.message || "Connection failed");
+        if (e?.name === "AbortError") {
+          sError("Coach AI не ответил за 30 секунд. Сервер может быть перегружен — попробуй ещё раз через минуту, или используй Stockfish-анализ ниже.");
+        } else if (/fetch|network|Failed to fetch/i.test(e?.message || "")) {
+          sError("Не удалось связаться с Coach AI. Проверь соединение или используй Stockfish-разбор (он работает локально).");
+        } else {
+          sError(e?.message || "Connection failed");
+        }
       } finally {
         sLoading(false);
         sEngineThinking(false);

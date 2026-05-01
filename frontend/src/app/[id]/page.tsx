@@ -61,17 +61,13 @@ export default async function ProjectByIdPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }> | { id: string };
-  searchParams?: Promise<{ [key: string]: string | string[] | undefined }> | {
-    [key: string]: string | string[] | undefined;
-  };
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const p = (await Promise.resolve(params)) as { id: string };
+  const p = await params;
   const id = p.id;
 
-  const sp = (await Promise.resolve(searchParams)) as
-    | { [key: string]: string | string[] | undefined }
-    | undefined;
+  const sp = await Promise.resolve(searchParams);
 
   const normalize = (v: unknown): string => {
     if (v == null) return "";

@@ -1,0 +1,44 @@
+{
+  "name": "@aevion/qright-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for AEVION QRight — author/work registry with embed widgets, transparency feed, and webhook subscriptions.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.ts",
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "aevion",
+    "qright",
+    "author-rights",
+    "embed-widget",
+    "ip-registry"
+  ],
+  "homepage": "https://aevion.com/qright",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "aevion-globus-backend/sdk/qright-client"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck"
+  }
+}

@@ -106,6 +106,7 @@ type SessionSummary = {
   title: string;
   updatedAt: string;
   userId: string | null;
+  pinned?: boolean;
 };
 
 /** Saved agent preset — strategy + role overrides + revision count.
@@ -926,6 +927,28 @@ export default function QCoreMultiAgentPage() {
       setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, title: data.session.title } : x)));
     } catch (e: any) {
       setGlobalError(e?.message || "Rename failed");
+    }
+  }, []);
+
+  const togglePinSession = useCallback(async (s: SessionSummary) => {
+    const next = !s.pinned;
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ pinned: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setSessions((prev) => {
+        const updated = prev.map((x) => (x.id === s.id ? { ...x, pinned: next } : x));
+        return [...updated].sort((a, b) => {
+          if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+          return b.updatedAt.localeCompare(a.updatedAt);
+        });
+      });
+    } catch (e: any) {
+      setGlobalError(e?.message || "Pin failed");
     }
   }, []);
 
@@ -2597,8 +2620,8 @@ export default function QCoreMultiAgentPage() {
                       style={{
                         flex: 1, textAlign: "left",
                         padding: "8px 10px", borderRadius: 8,
-                        border: "1px solid transparent",
-                        background: activeSessionId === s.id ? "rgba(6,182,212,0.1)" : "transparent",
+                        border: s.pinned ? "1px solid rgba(6,182,212,0.3)" : "1px solid transparent",
+                        background: activeSessionId === s.id ? "rgba(6,182,212,0.1)" : s.pinned ? "rgba(6,182,212,0.04)" : "transparent",
                         color: activeSessionId === s.id ? "#0e7490" : "#334155",
                         fontSize: 12, fontWeight: activeSessionId === s.id ? 700 : 500,
                         cursor: "pointer",
@@ -2607,6 +2630,17 @@ export default function QCoreMultiAgentPage() {
                       title={s.title}
                     >
                       {s.title || "(untitled)"}
+                    </button>
+                    <button
+                      onClick={() => togglePinSession(s)}
+                      title={s.pinned ? "Unpin session" : "Pin session"}
+                      style={{
+                        width: 24, borderRadius: 6,
+                        border: "1px solid transparent", background: "transparent",
+                        color: s.pinned ? "#0e7490" : "#cbd5e1", cursor: "pointer", fontSize: 13,
+                      }}
+                    >
+                      ★
                     </button>
                     <button
                       onClick={() => renameSessionPrompt(s)}

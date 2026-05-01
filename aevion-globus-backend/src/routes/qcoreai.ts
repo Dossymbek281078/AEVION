@@ -66,6 +66,7 @@ import {
   listRuns,
   listSessions,
   listSuiteRuns,
+  pinSession,
   renameSession,
   renameSessionIfDefault,
   searchRuns,
@@ -283,13 +284,22 @@ qcoreaiRouter.get("/sessions/:id", async (req, res) => {
 qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const title = typeof req.body?.title === "string" ? req.body.title : "";
-    if (!title.trim()) return res.status(400).json({ error: "title required" });
-    const updated = await renameSession(req.params.id, auth?.sub ?? null, title);
+    const hasTitle = typeof req.body?.title === "string";
+    const hasPinned = typeof req.body?.pinned === "boolean";
+    if (!hasTitle && !hasPinned) return res.status(400).json({ error: "title or pinned required" });
+
+    let updated = null;
+    if (hasPinned) {
+      updated = await pinSession(req.params.id, auth?.sub ?? null, req.body.pinned as boolean);
+    }
+    if (hasTitle) {
+      if (!req.body.title.trim()) return res.status(400).json({ error: "title required" });
+      updated = await renameSession(req.params.id, auth?.sub ?? null, req.body.title);
+    }
     if (!updated) return res.status(404).json({ error: "session not found" });
     res.json({ session: updated });
   } catch (err: any) {
-    res.status(500).json({ error: "rename failed", details: err?.message });
+    res.status(500).json({ error: "patch session failed", details: err?.message });
   }
 });
 

@@ -57,10 +57,15 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
+  const origin = await getOrigin();
+  const rssUrl = origin
+    ? `${origin}/api-backend/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`
+    : `${getApiBase()}/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`;
   const fallback: Metadata = {
     title: "QRight registration — AEVION",
     description: "Public registration record on the AEVION QRight registry.",
     openGraph: { type: "article", title: "QRight registration — AEVION" },
+    twitter: { card: "summary_large_image", title: "QRight registration — AEVION" },
   };
   if (!id) return fallback;
   const data = await loadEmbed(id);
@@ -83,8 +88,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${titleLine} — AEVION QRight`,
     description: desc,
+    alternates: { types: { "application/rss+xml": rssUrl } },
     openGraph: {
       type: "article",
+      title: titleLine,
+      description: desc,
+    },
+    twitter: {
+      card: "summary_large_image",
       title: titleLine,
       description: desc,
     },
@@ -261,8 +272,37 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
     );
   }
 
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "AEVION",
+        item: origin || "https://aevion.tech",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "QRight",
+        item: origin ? `${origin}/qright` : "https://aevion.tech/qright",
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: data.title || `QRight ${id.slice(0, 8)}`,
+        item: verifyUrl,
+      },
+    ],
+  };
+
   return (
     <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "32px 16px" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+      />
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <div style={{ marginBottom: 16 }}>
           <Link

@@ -453,8 +453,105 @@ export const openapiSpec = {
     "/api/modules/status": { get: { summary: "Modules dashboard payload", security: [] } },
     "/api/modules/{id}/health": { get: { summary: "Per-module health stub", security: [] } },
     "/api/qright/objects": { get: { summary: "List QRight" }, post: { summary: "Create QRight object" } },
-    "/api/qcoreai/chat": { post: { summary: "Chat (OpenAI or stub)" } },
+    "/api/qcoreai/chat": {
+      post: {
+        summary: "Chat (5 LLM providers + stub fallback)",
+        description:
+          "Rate-limited 30/min per JWT sub or per IP. Optional conversationId persists each turn into chat_turns for /history replay. Returns 429 + Retry-After when the bucket is empty.",
+        responses: {
+          "200": { description: "Provider reply (or stub when none configured)" },
+          "400": { description: "messages required" },
+          "429": { description: "rate limit — see Retry-After header" },
+        },
+      },
+    },
+    "/api/qcoreai/history": {
+      get: {
+        summary: "Caller's chat-turn history (auth)",
+        parameters: [
+          { in: "query", name: "conversationId", schema: { type: "string" }, description: "Filter to one conversation. Multichat uses `${convId}:${agentId}` to isolate per-agent chains." },
+          { in: "query", name: "limit", schema: { type: "integer", minimum: 1, maximum: 500, default: 100 } },
+        ],
+        responses: {
+          "200": { description: "{ items: ChatTurn[], total: number }" },
+          "401": { description: "auth required" },
+        },
+      },
+    },
+    "/api/qcoreai/providers": { get: { summary: "Configured LLM providers + active selection", security: [] } },
     "/api/qcoreai/health": { get: { summary: "QCoreAI config probe", security: [] } },
+    "/api/multichat/conversations": {
+      get: { summary: "Caller's conversations, newest first (auth, max 200)" },
+      post: {
+        summary: "Create a conversation (auth)",
+        requestBody: {
+          required: false,
+          content: { "application/json": { example: { title: "Brainstorm — pitch outline" } } },
+        },
+        responses: { "201": { description: "Conversation row" } },
+      },
+    },
+    "/api/multichat/conversations/{id}": {
+      get: {
+        summary: "Conversation + last 200 turns (auth)",
+        responses: { "200": { description: "{ conversation, turns: ChatTurn[] }" }, "404": { description: "not yours / not found" } },
+      },
+    },
+    "/api/multichat/conversations/{id}/dispatch": {
+      post: {
+        summary: "Fan out one prompt across N agents in parallel (auth, ≤8 agents/call)",
+        description:
+          "Rate-limited 12/min per user. Each agent's reply is recorded in chat_turns under conversationId `${id}:${agentId}` so per-agent history is queryable. Promise.all — slow agents don't block the rest.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              example: {
+                prompt: "Summarise this in 50 words",
+                agents: [
+                  { id: "code", role: "Senior engineer", provider: "anthropic" },
+                  { id: "biz", role: "Investor", provider: "openai" },
+                ],
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "{ results: [{ agentId, ok, reply | error }, …] }" },
+          "400": { description: "prompt or agents missing" },
+          "429": { description: "dispatch rate limit" },
+        },
+      },
+    },
+    "/api/auth/oauth/providers": { get: { summary: "List configured OAuth providers (Google + GitHub)", security: [] } },
+    "/api/auth/oauth/{provider}/start": {
+      get: {
+        summary: "Begin OAuth — 302 to provider authorize URL (Google | GitHub)",
+        security: [],
+        parameters: [{ in: "path", name: "provider", required: true, schema: { type: "string", enum: ["google", "github"] } }],
+        responses: { "302": { description: "Redirect to provider" }, "503": { description: "provider not configured" } },
+      },
+    },
+    "/api/auth/oauth/{provider}/callback": {
+      get: {
+        summary: "OAuth callback — exchange code, upsert user, redirect to OAUTH_SUCCESS_REDIRECT?token=…",
+        security: [],
+        parameters: [
+          { in: "path", name: "provider", required: true, schema: { type: "string", enum: ["google", "github"] } },
+          { in: "query", name: "code", required: true, schema: { type: "string" } },
+          { in: "query", name: "state", required: true, schema: { type: "string" } },
+        ],
+        responses: { "302": { description: "Redirect carrying ?token=<jwt>" }, "400": { description: "state mismatch / code missing" } },
+      },
+    },
+    "/api/auth/sign-out-everywhere": {
+      post: {
+        summary: "Bump tokenVersion — invalidate every JWT for caller (auth)",
+        description:
+          "Increments AEVIONUser.tokenVersion. The current token is rejected on the next request because requireAuth compares its tv claim with the bumped server-side counter. Other devices/tabs lose access within ~10s (cache TTL).",
+        responses: { "200": { description: "{ ok: true, tokenVersion: number }" }, "401": { description: "auth required" } },
+      },
+    },
     "/api/planet/stats": { get: { summary: "Planet public stats", security: [] } },
     "/api/planet/artifacts/recent": { get: { summary: "Recent certified artifacts", security: [] } },
     "/api/planet/artifacts/{artifactVersionId}/public": { get: { summary: "Public artifact + votes", security: [] } },

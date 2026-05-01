@@ -59,6 +59,38 @@ const APIS = [
     desc: "Threshold key management. Shamir's Secret Sharing (k of n). Shard rotation, recovery, post-quantum-ready KDF.",
     endpoints: ["POST /api/quantum-shield/derive", "POST /api/quantum-shield/recover", "POST /api/quantum-shield/rotate"],
   },
+  {
+    name: "QCoreAI",
+    color: "#fbbf24",
+    href: "/qcoreai",
+    desc: "5 LLM providers (Claude/GPT/Gemini/DeepSeek/Grok) behind one rate-limited endpoint. Per-user 30/min, per-conversation history, normalised token usage.",
+    endpoints: ["POST /api/qcoreai/chat", "GET /api/qcoreai/history", "GET /api/qcoreai/providers", "GET /api/qcoreai/health"],
+  },
+  {
+    name: "Multichat",
+    color: "#c084fc",
+    href: "/multichat-engine",
+    desc: "Fan one prompt out to up to 8 agents in parallel, each with its own provider/model/role. Conversations + per-agent history persist server-side.",
+    endpoints: [
+      "POST /api/multichat/conversations",
+      "GET /api/multichat/conversations",
+      "GET /api/multichat/conversations/:id",
+      "POST /api/multichat/conversations/:id/dispatch",
+    ],
+  },
+  {
+    name: "Auth (OAuth + revocation)",
+    color: "#fb923c",
+    href: "/auth",
+    desc: "JWT bearer issued by email login OR Google/GitHub OAuth. Revocable: bump tokenVersion via /sign-out-everywhere to invalidate every live session for the caller.",
+    endpoints: [
+      "POST /api/auth/login",
+      "POST /api/auth/register",
+      "GET /api/auth/oauth/providers",
+      "GET /api/auth/oauth/{google|github}/start",
+      "POST /api/auth/sign-out-everywhere",
+    ],
+  },
 ];
 
 const SDKS = [
@@ -114,6 +146,36 @@ await fetch("https://aevion.app/api/planet/submit", {
     qrightCertId: cert.id,
     qsignReceiptId: signed.id,
   }),
+});
+
+// 5. Multichat — fan one prompt out across N agents in parallel
+const conv = await fetch("https://aevion.app/api/multichat/conversations", {
+  method: "POST",
+  headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+  body: JSON.stringify({ title: "Pitch outline" }),
+}).then(r => r.json());
+
+const replies = await fetch(
+  \`https://aevion.app/api/multichat/conversations/\${conv.id}/dispatch\`,
+  {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt: "Summarise this in 50 words for an investor",
+      agents: [
+        { id: "tech",  role: "Senior engineer",   provider: "anthropic" },
+        { id: "biz",   role: "Investor",          provider: "openai" },
+        { id: "legal", role: "IP lawyer",         provider: "gemini" },
+      ],
+    }),
+  },
+).then(r => r.json());
+// → { results: [{ agentId, ok, reply, provider, model, usage }, …] }
+
+// 6. Revoke every live session (sign out everywhere)
+await fetch("https://aevion.app/api/auth/sign-out-everywhere", {
+  method: "POST",
+  headers: { "Authorization": "Bearer " + token },
 });`;
 
 const FACTS = [

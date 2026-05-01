@@ -29,26 +29,71 @@ import {
   validateWebhookUrl,
 } from "../services/qcoreai/userWebhooks";
 import {
+  applyRefinement,
   buildHistoryContext,
+  createEvalRun,
+  createEvalSuite,
+  createPrompt,
   createRun,
+  createSharedPreset,
+  deleteEvalSuite,
+  deletePrompt,
   deleteSession,
+  deleteSharedPreset,
   ensureSession,
   finishRun,
+  forkPrompt,
   getAnalytics,
+  getCostTimeseries,
+  getEvalRun,
+  getEvalSuite,
+  getMaxOrdering,
+  getPrompt,
+  getPromptVersionChain,
   getRun,
   getRunByShareToken,
   getSession,
   getSessionPublic,
+  getSharedPreset,
+  getTopUserTags,
+  importSharedPreset,
   insertMessage,
+  listEvalSuites,
   listMessages,
+  listPrompts,
+  listPublicPrompts,
+  listPublicSharedPresets,
   listRuns,
   listSessions,
+  listSuiteRuns,
+  addSessionToWorkspace,
+  addWorkspaceMember,
+  createComment,
+  createWorkspace,
+  deleteWorkspace,
+  getWorkspace,
+  listComments,
+  listMyWorkspaces,
+  listPromptAudit,
+  listWorkspaceMembers,
+  listWorkspaceSessions,
+  logPromptAudit,
+  pinSession,
+  removeSessionFromWorkspace,
+  removeWorkspaceMember,
+  updateWorkspace,
   renameSession,
   renameSessionIfDefault,
+  searchRuns,
+  setRunTags,
   shareRun,
   touchSession,
   unshareRun,
+  updateEvalSuite,
+  updatePrompt,
 } from "../services/qcoreai/store";
+import { runEvalSuite } from "../services/qcoreai/evalRunner";
+import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
 
 export const qcoreaiRouter = Router();
 
@@ -134,6 +179,13 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     const { getPool } = await import("../lib/dbPool");
     await ensureQCoreTables(getPool());
   } catch { /* probe errors are reflected via isDbReady() */ }
+  let guidanceBusKind = "memory";
+  let liveRuns = 0;
+  try {
+    const bus = await getGuidanceBus();
+    guidanceBusKind = bus.kind;
+    liveRuns = bus.liveRuns().length;
+  } catch { /* tolerable */ }
   res.json({
     service: "qcoreai",
     ok: true,
@@ -143,6 +195,8 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     storage: isDbReady() ? "postgres" : "in-memory",
     storageError: isDbReady() ? null : getDbError(),
     webhookConfigured: isWebhookConfigured(),
+    guidanceBus: guidanceBusKind,
+    liveRuns,
     at: new Date().toISOString(),
   });
 });
@@ -245,13 +299,22 @@ qcoreaiRouter.get("/sessions/:id", async (req, res) => {
 qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
-    const title = typeof req.body?.title === "string" ? req.body.title : "";
-    if (!title.trim()) return res.status(400).json({ error: "title required" });
-    const updated = await renameSession(req.params.id, auth?.sub ?? null, title);
+    const hasTitle = typeof req.body?.title === "string";
+    const hasPinned = typeof req.body?.pinned === "boolean";
+    if (!hasTitle && !hasPinned) return res.status(400).json({ error: "title or pinned required" });
+
+    let updated = null;
+    if (hasPinned) {
+      updated = await pinSession(req.params.id, auth?.sub ?? null, req.body.pinned as boolean);
+    }
+    if (hasTitle) {
+      if (!req.body.title.trim()) return res.status(400).json({ error: "title required" });
+      updated = await renameSession(req.params.id, auth?.sub ?? null, req.body.title);
+    }
     if (!updated) return res.status(404).json({ error: "session not found" });
     res.json({ session: updated });
   } catch (err: any) {
-    res.status(500).json({ error: "rename failed", details: err?.message });
+    res.status(500).json({ error: "patch session failed", details: err?.message });
   }
 });
 
@@ -364,6 +427,293 @@ qcoreaiRouter.get("/analytics", async (req, res) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Refinement / search / tagging — feat/qcore-extras 2026-04-29
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const refineLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyPrefix: "qcore-refine",
+  message: "Too many refinements from this IP. Please retry in a minute.",
+});
+
+/**
+ * POST /api/qcoreai/runs/:id/refine
+ * Body: { instruction, provider?, model?, temperature? }
+ * Single-pass refinement on top of an already-finished run.
+ * Appends a final/refinement message and accumulates cost+duration.
+ */
+qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const run = await getRun(String(req.params.id));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    if (run.status === "running") {
+      return res.status(409).json({ error: "run is still streaming — wait for it to finish" });
+    }
+    const baseFinal = run.finalContent;
+    if (!baseFinal || !baseFinal.trim()) {
+      return res.status(400).json({ error: "run has no final answer to refine" });
+    }
+
+    const instruction =
+      typeof req.body?.instruction === "string" ? req.body.instruction.trim().slice(0, 4000) : "";
+    if (!instruction) {
+      return res.status(400).json({ error: "instruction required" });
+    }
+
+    const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
+    const providerId = resolveProvider(requestedProvider);
+    if (providerId === "stub") {
+      return res.status(503).json({ error: "no AI provider configured" });
+    }
+    const provider = getProviders().find((p) => p.id === providerId)!;
+    const modelName =
+      typeof req.body?.model === "string" && req.body.model
+        ? req.body.model
+        : provider.defaultModel;
+    const temperature =
+      typeof req.body?.temperature === "number" ? req.body.temperature : 0.5;
+
+    const systemPrompt =
+      "You are refining a previously produced answer. Apply the user's instruction " +
+      "with surgical precision: keep correct content, rewrite or extend per the instruction, " +
+      "preserve formatting (headings, lists, tables, code blocks). Output ONLY the refined " +
+      "answer — no preamble, no meta commentary, no \"here is the refined version\" prefix.";
+    const userPrompt =
+      `Original task:\n${run.userInput}\n\n` +
+      `Current answer:\n${baseFinal}\n\n` +
+      `Refinement instruction:\n${instruction}`;
+
+    const startedAt = Date.now();
+    const result = await callProvider(
+      providerId,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      modelName,
+      temperature
+    );
+    const durationMs = Date.now() - startedAt;
+
+    const tokensIn =
+      typeof result.usage?.input_tokens === "number"
+        ? result.usage.input_tokens
+        : typeof result.usage?.prompt_tokens === "number"
+        ? result.usage.prompt_tokens
+        : typeof result.usage?.promptTokenCount === "number"
+        ? result.usage.promptTokenCount
+        : null;
+    const tokensOut =
+      typeof result.usage?.output_tokens === "number"
+        ? result.usage.output_tokens
+        : typeof result.usage?.completion_tokens === "number"
+        ? result.usage.completion_tokens
+        : typeof result.usage?.candidatesTokenCount === "number"
+        ? result.usage.candidatesTokenCount
+        : null;
+    const cost = costUsd(providerId, result.model || modelName, tokensIn ?? 0, tokensOut ?? 0);
+
+    const refinedContent = (result.reply || "").trim();
+    if (!refinedContent) {
+      return res.status(502).json({ error: "provider returned empty refinement" });
+    }
+
+    const ordering = (await getMaxOrdering(run.id)) + 1;
+    const message = await insertMessage({
+      runId: run.id,
+      role: "final",
+      stage: "refinement",
+      provider: providerId,
+      model: result.model || modelName,
+      content: refinedContent,
+      tokensIn,
+      tokensOut,
+      durationMs,
+      costUsd: cost,
+      ordering,
+    });
+
+    const updated = await applyRefinement({
+      runId: run.id,
+      finalContent: refinedContent,
+      addCostUsd: cost,
+      addDurationMs: durationMs,
+    });
+
+    res.json({
+      ok: true,
+      content: refinedContent,
+      provider: providerId,
+      model: result.model || modelName,
+      tokensIn,
+      tokensOut,
+      durationMs,
+      costUsd: cost,
+      runTotalCostUsd: updated?.totalCostUsd ?? null,
+      runTotalDurationMs: updated?.totalDurationMs ?? null,
+      messageId: message.id,
+    });
+  } catch (err: any) {
+    const msg = err?.message || "refine failed";
+    console.error("[QCoreAI] refine error:", msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/qcoreai/search?q=...&limit=30
+ * Substring search across the caller's runs — userInput / finalContent /
+ * session.title / tags. Powers the sidebar quick-find.
+ */
+qcoreaiRouter.get("/search", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const q = String(req.query.q ?? "").trim().slice(0, 200);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    if (!q) return res.json({ items: [], query: "" });
+    const items = await searchRuns(auth?.sub ?? null, q, limit);
+    res.json({ items, query: q });
+  } catch (err: any) {
+    res.status(500).json({ error: "search failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/tags?limit=20
+ * Top tags across the caller's runs, sorted by usage count.
+ * One-click shortcut for the sidebar chip strip → /search?q=<tag>.
+ */
+qcoreaiRouter.get("/tags", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const items = await getTopUserTags(auth?.sub ?? null, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list tags failed", details: err?.message });
+  }
+});
+
+/**
+ * PATCH /api/qcoreai/runs/:id/tags
+ * Replace a run's tags. Owner-only. Body: { tags: string[] }.
+ * Normalized server-side: trim, dedupe, cap 16 × 32 chars.
+ */
+qcoreaiRouter.patch("/runs/:id/tags", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const incoming = Array.isArray(req.body?.tags) ? req.body.tags : null;
+    if (incoming === null) {
+      return res.status(400).json({ error: "tags must be an array of strings" });
+    }
+    const updated = await setRunTags(String(req.params.id), auth?.sub ?? null, incoming);
+    if (!updated) return res.status(404).json({ error: "run not found or forbidden" });
+    res.json({ ok: true, tags: updated.tags ?? [] });
+  } catch (err: any) {
+    res.status(500).json({ error: "set tags failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Agent marketplace — V4-E
+   - POST   /presets/share        (auth)  — publish a preset
+   - GET    /presets/public       (none)  — browse, optional ?q= search
+   - GET    /presets/:id          (none)  — fetch one
+   - POST   /presets/:id/import   (none)  — bumps importCount, returns the preset
+   - DELETE /presets/:id          (auth)  — owner-only
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/presets/share", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, strategy, overrides, isPublic } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "name required" });
+    }
+    const preset = await createSharedPreset({
+      ownerUserId: auth.sub,
+      name,
+      description: typeof description === "string" ? description : null,
+      strategy: typeof strategy === "string" ? strategy : "sequential",
+      overrides: overrides && typeof overrides === "object" ? overrides : {},
+      isPublic: isPublic !== false,
+    });
+    res.json({ ok: true, preset });
+  } catch (err: any) {
+    res.status(500).json({ error: "share preset failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/presets/public", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim().slice(0, 80);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const items = await listPublicSharedPresets(q, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public presets failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/presets/:id", async (req, res) => {
+  try {
+    const p = await getSharedPreset(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "preset not found" });
+    if (!p.isPublic) {
+      const auth = verifyBearerOptional(req);
+      if (!auth?.sub || auth.sub !== p.ownerUserId) {
+        return res.status(404).json({ error: "preset not found" });
+      }
+    }
+    res.json({ preset: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "get preset failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/presets/:id/import", async (req, res) => {
+  try {
+    const p = await importSharedPreset(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "preset not found or not public" });
+    res.json({ ok: true, preset: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "import preset failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/presets/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteSharedPreset(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "preset not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete preset failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/analytics/timeseries?days=30
+ * Daily run + cost buckets for the cost-forecasting chart on /qcoreai/analytics.
+ */
+qcoreaiRouter.get("/analytics/timeseries", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const days = Math.max(1, Math.min(365, parseInt(String(req.query.days ?? "30"), 10) || 30));
+    const items = await getCostTimeseries(auth?.sub ?? null, days);
+    res.json({ items, days });
+  } catch (err: any) {
+    res.status(500).json({ error: "timeseries failed", details: err?.message });
+  }
+});
+
 /**
  * GET /api/qcoreai/runs/:id/export?format=json|md
  * Returns a clean, shareable snapshot of a run: agents, messages, final answer,
@@ -431,21 +781,27 @@ const multiAgentLimiter = rateLimit({
  * In-process is fine for single-instance deploys. A multi-instance setup
  * would replace this with Redis pub/sub keyed by runId.
  */
-const liveRunGuidance = new Map<string, string[]>();
-
-function pushGuidance(runId: string, text: string): boolean {
-  const arr = liveRunGuidance.get(runId);
-  if (!arr) return false;
-  arr.push(text);
-  return true;
+// Backend swap: GuidanceBus has both InMemory + Redis impls. With
+// QCORE_REDIS_URL set the bus boots in Redis pub/sub mode so multi-instance
+// deploys can route /guidance to any node. Without it, behavior is the same
+// in-process Map as before. See services/qcoreai/guidanceBus.ts.
+async function pushGuidance(runId: string, text: string): Promise<boolean> {
+  const bus = await getGuidanceBus();
+  return bus.push(runId, text);
 }
 
-function drainGuidance(runId: string): string[] {
-  const arr = liveRunGuidance.get(runId);
-  if (!arr || arr.length === 0) return [];
-  const out = arr.slice();
-  arr.length = 0;
-  return out;
+// Synchronous version for the orchestrator's `guidanceProvider` contract,
+// which is called inside the generator's flow control. The bus's drain is
+// synchronous on both impls (Redis subscriber accumulates into a local
+// buffer; drain reads + clears that buffer), so we expose a sync wrapper
+// using the cached bus reference fetched at run start.
+function drainGuidanceSync(bus: { drain: (id: string) => any }, runId: string): string[] {
+  const result = bus.drain(runId);
+  if (Array.isArray(result)) return result;
+  // Both bus implementations return arrays synchronously; if a future impl
+  // returns a Promise, the orchestrator can't await it — log and drop.
+  console.warn("[QCoreAI] guidance drain returned non-array, dropping");
+  return [];
 }
 
 const guidanceLimiter = rateLimit({
@@ -461,18 +817,37 @@ const guidanceLimiter = rateLimit({
  * Returns 404 if the run has already finished or doesn't exist in this
  * process; the client should treat that as "too late, run is over".
  */
-qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, (req, res) => {
+qcoreaiRouter.post("/runs/:runId/guidance", guidanceLimiter, async (req, res) => {
   const runId = String(req.params.runId || "");
   const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
   if (!text) return res.status(400).json({ error: "text required" });
-  const ok = pushGuidance(runId, text);
-  if (!ok) return res.status(404).json({ error: "run is not live" });
-  return res.json({ ok: true, queueDepth: liveRunGuidance.get(runId)?.length ?? 0 });
+  try {
+    const ok = await pushGuidance(runId, text);
+    if (!ok) return res.status(404).json({ error: "run is not live" });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: "guidance push failed", details: err?.message });
+  }
 });
+
+/** Per-user sliding-window rate limit (authenticated users only). */
+const userRunTimestamps = new Map<string, number[]>();
+function checkUserRateLimit(userId: string, maxPerMinute = 30): boolean {
+  const now = Date.now();
+  const hits = (userRunTimestamps.get(userId) ?? []).filter((t) => now - t < 60_000);
+  if (hits.length >= maxPerMinute) return false;
+  hits.push(now);
+  userRunTimestamps.set(userId, hits);
+  return true;
+}
 
 qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
+
+  if (userId && !checkUserRateLimit(userId)) {
+    return res.status(429).json({ error: "Too many runs. Please wait before starting another." });
+  }
 
   const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
   if (!userInput) {
@@ -505,6 +880,35 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     writerB: parseAgentOverride(req.body?.overrides?.writerB),
     critic: parseAgentOverride(req.body?.overrides?.critic),
   };
+
+  // V6-P integration: promptOverrides — { role: { promptId? OR content? } }
+  // Either reference a saved prompt by id (owner-scoped fetch) or pass content
+  // inline. The result is merged into overrides[role].systemPrompt so the
+  // orchestrator picks it up via existing AgentOverride.systemPrompt path.
+  const rawPromptOverrides = req.body?.promptOverrides;
+  if (rawPromptOverrides && typeof rawPromptOverrides === "object") {
+    const roles = ["analyst", "writer", "writerB", "critic"] as const;
+    for (const role of roles) {
+      const entry = rawPromptOverrides[role];
+      if (!entry || typeof entry !== "object") continue;
+      let content: string | null = null;
+      if (typeof entry.content === "string" && entry.content.trim()) {
+        content = entry.content.slice(0, 16000);
+      } else if (typeof entry.promptId === "string" && entry.promptId) {
+        try {
+          const p = await getPrompt(entry.promptId);
+          // Owner-only fetch unless prompt is public — same gate as /prompts/:id
+          if (p && (p.isPublic || (userId && p.ownerUserId === userId))) {
+            content = p.content;
+          }
+        } catch { /* ignore — fall through with no override */ }
+      }
+      if (content) {
+        const cur = overrides[role] || {};
+        overrides[role] = { ...cur, systemPrompt: content };
+      }
+    }
+  }
 
   // Pre-fetch any QRight attachments the user wants the agents to reason
   // against. Pulled BEFORE the SSE stream opens so we can fail fast (bad
@@ -595,10 +999,12 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     }
   }
 
-  // Register this run for mid-run guidance. The orchestrator will drain
-  // this queue at each writer-stage boundary; the new
-  // POST /runs/:runId/guidance endpoint pushes into it.
-  liveRunGuidance.set(runId, []);
+  // Register this run for mid-run guidance via the bus. The orchestrator
+  // drains the bus at each writer-stage boundary; POST /runs/:id/guidance
+  // pushes into it. With QCORE_REDIS_URL set, pushes are broadcast across
+  // nodes; otherwise it's an in-process Map.
+  const guidanceBus = await getGuidanceBus();
+  await guidanceBus.register(runId);
 
   const history = await buildHistoryContext(sessionId, 6);
 
@@ -623,7 +1029,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       overrides,
       maxRevisions,
       history,
-      guidanceProvider: () => drainGuidance(runId),
+      guidanceProvider: () => drainGuidanceSync(guidanceBus, runId),
       maxCostUsd,
     }) as AsyncGenerator<OrchestratorEvent>) {
       if (aborted) break;
@@ -777,13 +1183,297 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
 
   // Deregister mid-run guidance queue regardless of how the run finished.
   // Any guidance posted after this point gets a 404 — accurate.
-  liveRunGuidance.delete(runId);
+  await guidanceBus.unregister(runId);
 
   if (!aborted) {
     send({ type: "sse_end" });
     res.end();
   } else {
     try { res.end(); } catch { /* noop */ }
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Eval harness — test suites + regression tracking
+   ═══════════════════════════════════════════════════════════════════════
+   A suite holds a list of test cases (input + judge); /run kicks off an
+   async run; consumers poll GET /eval/runs/:id for progress + final score.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/eval/suites", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, strategy, overrides, cases } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "name required" });
+    }
+    const suite = await createEvalSuite({
+      ownerUserId: auth.sub,
+      name,
+      description: typeof description === "string" ? description : null,
+      strategy: typeof strategy === "string" ? strategy : "sequential",
+      overrides: overrides && typeof overrides === "object" ? overrides : {},
+      cases,
+    });
+    res.json({ ok: true, suite });
+  } catch (err: any) {
+    res.status(500).json({ error: "create eval suite failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/suites", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const items = await listEvalSuites(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list eval suites failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/suites/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const s = await getEvalSuite(String(req.params.id));
+    if (!s || s.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
+    res.json({ suite: s });
+  } catch (err: any) {
+    res.status(500).json({ error: "get eval suite failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/eval/suites/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, strategy, overrides, cases } = req.body || {};
+    const s = await updateEvalSuite(String(req.params.id), auth.sub, {
+      name,
+      description,
+      strategy,
+      overrides,
+      cases,
+    });
+    if (!s) return res.status(404).json({ error: "suite not found or forbidden" });
+    res.json({ suite: s });
+  } catch (err: any) {
+    res.status(500).json({ error: "update eval suite failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/eval/suites/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteEvalSuite(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "suite not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete eval suite failed", details: err?.message });
+  }
+});
+
+const evalRunLimiter = rateLimit({ windowMs: 60_000, max: 10 });
+
+qcoreaiRouter.post("/eval/suites/:id/run", evalRunLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const suite = await getEvalSuite(String(req.params.id));
+    if (!suite || suite.ownerUserId !== auth.sub) {
+      return res.status(404).json({ error: "suite not found" });
+    }
+    if (!suite.cases?.length) {
+      return res.status(400).json({ error: "suite has no cases" });
+    }
+    const run = await createEvalRun({
+      suiteId: suite.id,
+      ownerUserId: auth.sub,
+      totalCases: suite.cases.length,
+    });
+    const concurrency = Math.max(1, Math.min(8, Number(req.body?.concurrency) || 3));
+    const perCaseMax = Number(req.body?.perCaseMaxCostUsd);
+    // Fire and forget. Persisted progress is what the client polls.
+    void runEvalSuite({
+      runId: run.id,
+      suite,
+      concurrency,
+      perCaseMaxCostUsd: Number.isFinite(perCaseMax) && perCaseMax > 0 ? perCaseMax : undefined,
+    });
+    res.json({ ok: true, run });
+  } catch (err: any) {
+    res.status(500).json({ error: "start eval run failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/runs/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const r = await getEvalRun(String(req.params.id));
+    if (!r || r.ownerUserId !== auth.sub) return res.status(404).json({ error: "run not found" });
+    res.json({ run: r });
+  } catch (err: any) {
+    res.status(500).json({ error: "get eval run failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/eval/suites/:id/runs", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const suite = await getEvalSuite(String(req.params.id));
+    if (!suite || suite.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const items = await listSuiteRuns(suite.id, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list eval runs failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompts library (V6-P) — versioned custom system prompts per agent role
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/prompts", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, role, content, parentPromptId, isPublic } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
+    if (typeof content !== "string" || !content.trim()) return res.status(400).json({ error: "content required" });
+    const p = await createPrompt({
+      ownerUserId: auth.sub,
+      name,
+      description: typeof description === "string" ? description : null,
+      role: typeof role === "string" ? role : "writer",
+      content,
+      parentPromptId: typeof parentPromptId === "string" ? parentPromptId : null,
+      isPublic: isPublic === true,
+    });
+    logPromptAudit(auth.sub, p.id, p.name, "create").catch(() => {});
+    res.json({ ok: true, prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "create prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+    const items = await listPrompts(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list prompts failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/public", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim().slice(0, 80);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const items = await listPublicPrompts(q, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public prompts failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/audit", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+    const items = await listPromptAudit(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list audit failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const p = await getPrompt(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "prompt not found" });
+    if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
+      return res.status(404).json({ error: "prompt not found" });
+    }
+    res.json({ prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "get prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const p = await getPrompt(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "prompt not found" });
+    if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
+      return res.status(404).json({ error: "prompt not found" });
+    }
+    const chain = await getPromptVersionChain(String(req.params.id));
+    res.json({ items: chain });
+  } catch (err: any) {
+    res.status(500).json({ error: "version chain failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, role, isPublic } = req.body || {};
+    const changed = [name && "name", description !== undefined && "description", role && "role", isPublic !== undefined && "isPublic"].filter(Boolean).join(",");
+    const p = await updatePrompt(String(req.params.id), auth.sub, {
+      name,
+      description,
+      role,
+      isPublic,
+    });
+    if (!p) return res.status(404).json({ error: "prompt not found or forbidden" });
+    logPromptAudit(auth.sub, p.id, p.name, "update", changed || undefined).catch(() => {});
+    res.json({ prompt: p });
+  } catch (err: any) {
+    res.status(500).json({ error: "update prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/prompts/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const toDelete = await getPrompt(String(req.params.id));
+    const ok = await deletePrompt(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "prompt not found or forbidden" });
+    if (toDelete) logPromptAudit(auth.sub, toDelete.id, toDelete.name, "delete").catch(() => {});
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete prompt failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/prompts/:id/fork", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { content, name } = req.body || {};
+    const forked = await forkPrompt(String(req.params.id), auth.sub, {
+      content: typeof content === "string" ? content : undefined,
+      name: typeof name === "string" ? name : undefined,
+    });
+    if (!forked) return res.status(404).json({ error: "prompt not found or not forkable" });
+    res.json({ ok: true, prompt: forked });
+  } catch (err: any) {
+    res.status(500).json({ error: "fork prompt failed", details: err?.message });
   }
 });
 
@@ -988,3 +1678,187 @@ function renderRunMarkdown(opts: { session: any; run: any; messages: any[] }): s
   }
   return lines.join("\n");
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Public run comments (no auth required to post)
+   GET  /api/qcoreai/shared/:token/comments
+   POST /api/qcoreai/shared/:token/comments
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/shared/:token/comments", sharedLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const items = await listComments(run.id);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list comments failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/shared/:token/comments", sharedLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const authorName = typeof req.body?.authorName === "string" ? req.body.authorName : "Anonymous";
+    const content = typeof req.body?.content === "string" ? req.body.content : "";
+    const comment = await createComment(run.id, authorName, content);
+    res.status(201).json({ comment });
+  } catch (err: any) {
+    const msg = err?.message || "comment failed";
+    res.status(msg.includes("required") ? 400 : 500).json({ error: msg });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Workspaces
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const workspaceLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "qcore-workspace",
+  message: "Too many workspace requests. Please slow down.",
+});
+
+qcoreaiRouter.post("/workspaces", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
+    const ws = await createWorkspace({ ownerId: auth.sub, name, description: typeof description === "string" ? description : null });
+    res.status(201).json({ workspace: ws });
+  } catch (err: any) {
+    res.status(500).json({ error: "create workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listMyWorkspaces(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list workspaces failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/workspaces/:id", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description } = req.body || {};
+    const ws = await getWorkspace(req.params.id, auth.sub);
+    if (name === undefined && description === undefined) return res.status(400).json({ error: "name or description required" });
+    const updated = await updateWorkspace(req.params.id, auth.sub, {
+      name: typeof name === "string" ? name : undefined,
+      description: description !== undefined ? (typeof description === "string" ? description : null) : undefined,
+    });
+    if (!updated) return res.status(404).json({ error: "workspace not found or forbidden" });
+    res.json({ workspace: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: "patch workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces/:id", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ws = await getWorkspace(String(req.params.id), auth.sub);
+    if (!ws) return res.status(404).json({ error: "workspace not found" });
+    const members = await listWorkspaceMembers(String(req.params.id), auth.sub);
+    res.json({ workspace: ws, members });
+  } catch (err: any) {
+    res.status(500).json({ error: "get workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteWorkspace(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "workspace not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces/:id/members", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listWorkspaceMembers(String(req.params.id), auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list members failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/workspaces/:id/members", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { userId, role } = req.body || {};
+    if (typeof userId !== "string" || !userId.trim()) return res.status(400).json({ error: "userId required" });
+    const memberRole = role === "editor" ? "editor" : "viewer";
+    const member = await addWorkspaceMember(String(req.params.id), userId.trim(), memberRole, auth.sub);
+    if (!member) return res.status(403).json({ error: "forbidden — only the owner can invite members" });
+    res.status(201).json({ member });
+  } catch (err: any) {
+    res.status(500).json({ error: "add member failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id/members/:userId", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await removeWorkspaceMember(String(req.params.id), String(req.params.userId), auth.sub);
+    if (!ok) return res.status(404).json({ error: "member not found or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "remove member failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces/:id/sessions", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listWorkspaceSessions(String(req.params.id), auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list workspace sessions failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/workspaces/:id/sessions", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { sessionId } = req.body || {};
+    if (typeof sessionId !== "string" || !sessionId.trim()) return res.status(400).json({ error: "sessionId required" });
+    const ok = await addSessionToWorkspace(String(req.params.id), sessionId.trim(), auth.sub);
+    if (!ok) return res.status(403).json({ error: "forbidden or workspace not found" });
+    res.status(201).json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "add session failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id/sessions/:sessionId", workspaceLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await removeSessionFromWorkspace(String(req.params.id), String(req.params.sessionId), auth.sub);
+    if (!ok) return res.status(404).json({ error: "session not in workspace or forbidden" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "remove session failed", details: err?.message });
+  }
+});

@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-cjs-shims.js",
     "start": "node dist/index.js",
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
+    "smoke:build": "node scripts/build-smoke.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -17,10 +18,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@noble/post-quantum": "^0.6.1",
     "@prisma/client": "^7.2.0",
+    "@sentry/node": "^9.47.1",
     "@types/geoip-lite": "^1.4.4",
     "@types/pdfkit": "^0.17.5",
     "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -32,7 +36,8 @@
     "pdfkit": "^0.18.0",
     "pg": "^8.19.0",
     "qrcode": "^1.5.4",
-    "secrets.js-grempe": "^2.0.0"
+    "secrets.js-grempe": "^2.0.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

@@ -55,7 +55,12 @@ async function jsonFetch(method, path, { body, token } = {}) {
   } catch {
     data = null;
   }
-  return { status: res.status, ok: res.ok, data };
+  // Normalize headers to a plain object for case-insensitive lookups in steps.
+  const hdrs = {};
+  res.headers.forEach((v, k) => {
+    hdrs[k.toLowerCase()] = v;
+  });
+  return { status: res.status, ok: res.ok, data, headers: hdrs };
 }
 
 async function main() {
@@ -64,7 +69,7 @@ async function main() {
   console.log(`  EMAIL = ${EMAIL}`);
   console.log(`  ─────────────────────────────────────────────\n`);
 
-  // 1 — health
+  // 1 — health (production-grade shape: db.ok, counts, memory)
   try {
     const r = await jsonFetch("GET", "/api/qsign/v2/health");
     if (!r.ok) return fail("health", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
@@ -72,12 +77,51 @@ async function main() {
       return fail("health", `unexpected status ${r.data?.status}`);
     if (!r.data?.activeKeys?.hmac || !r.data?.activeKeys?.ed25519)
       return fail("health", "missing activeKeys");
+    if (!r.data?.db?.ok)
+      return fail("health", `db not ok: ${JSON.stringify(r.data?.db)}`);
+    if (typeof r.data?.counts?.signatures !== "number")
+      return fail("health", "counts.signatures missing");
+    if (!r.headers || !r.headers["x-request-id"])
+      return fail("health", "missing X-Request-Id response header");
     pass(
       "health",
-      `hmac=${r.data.activeKeys.hmac} ed25519=${r.data.activeKeys.ed25519}`,
+      `db=${r.data.db.latencyMs}ms hmac=${r.data.activeKeys.hmac} sigs=${r.data.counts.signatures} req=${r.headers["x-request-id"]}`,
     );
   } catch (e) {
     return fail("health", e?.message || String(e));
+  }
+
+  // 1b — openapi spec
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/openapi.json");
+    if (!r.ok) return fail("openapi", `HTTP ${r.status}`);
+    if (r.data?.info?.title !== "AEVION QSign v2")
+      return fail("openapi", `unexpected title ${r.data?.info?.title}`);
+    if (!r.data?.paths || typeof r.data.paths !== "object")
+      return fail("openapi", "missing paths");
+    const pathCount = Object.keys(r.data.paths).length;
+    if (pathCount < 15)
+      return fail("openapi", `expected >=15 paths, got ${pathCount}`);
+    pass("openapi", `v${r.data.info.version} paths=${pathCount}`);
+  }
+
+  // 1c — metrics (Prometheus exposition)
+  {
+    try {
+      const r = await fetch(`${BASE}/api/qsign/v2/metrics`);
+      if (!r.ok) return fail("metrics", `HTTP ${r.status}`);
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.startsWith("text/plain"))
+        return fail("metrics", `unexpected content-type ${ct}`);
+      const text = await r.text();
+      if (!text.includes("qsign_signatures_total"))
+        return fail("metrics", "missing qsign_signatures_total");
+      if (!text.includes("# TYPE qsign_uptime_seconds gauge"))
+        return fail("metrics", "missing TYPE annotations");
+      pass("metrics", `${text.split("\n").length} lines`);
+    } catch (e) {
+      return fail("metrics", e?.message || String(e));
+    }
   }
 
   // 2 — register (idempotent enough: re-registering same email fails,
@@ -114,11 +158,66 @@ async function main() {
     if (!r.ok) return fail("sign", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
     if (!r.data?.id || !r.data?.hmac?.signature || !r.data?.ed25519?.signature)
       return fail("sign", `malformed response: ${JSON.stringify(r.data)}`);
+    if (!r.data?.dilithium) return fail("sign", `missing dilithium block`);
+    const dilMode = r.data.dilithium.mode;
+    const dilSlot = r.data.dilithium.signature || r.data.dilithium.digest;
+    if ((dilMode !== "preview" && dilMode !== "real") || !dilSlot) {
+      return fail(
+        "sign",
+        `malformed dilithium block (mode=${dilMode}, slot=${!!dilSlot}): ${JSON.stringify(r.data.dilithium)}`,
+      );
+    }
     signed = r.data;
     pass(
       "sign",
-      `id=${signed.id.slice(0, 8)} kids=${signed.hmac.kid}/${signed.ed25519.kid}`,
+      `id=${signed.id.slice(0, 8)} kids=${signed.hmac.kid}/${signed.ed25519.kid} pq=${signed.dilithium.kid} mode=${dilMode}`,
     );
+  }
+
+  // 4b — idempotency: same Idempotency-Key + same payload returns the same id (replayed)
+  {
+    const idemKey = `smoke-idem-${Date.now()}`;
+    const r1 = await fetch(`${BASE}/api/qsign/v2/sign`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify({ payload: { idem: "test", n: 1 } }),
+    });
+    const d1 = await r1.json().catch(() => null);
+    if (!r1.ok) return fail("idem first", `HTTP ${r1.status}`);
+    if (d1?.idempotent !== "fresh") return fail("idem first", `expected fresh, got ${d1?.idempotent}`);
+
+    const r2 = await fetch(`${BASE}/api/qsign/v2/sign`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify({ payload: { idem: "test", n: 1 } }),
+    });
+    const d2 = await r2.json().catch(() => null);
+    if (!r2.ok) return fail("idem replay", `HTTP ${r2.status}`);
+    if (d2?.id !== d1?.id) return fail("idem replay", `id mismatch ${d2?.id} vs ${d1?.id}`);
+    if (d2?.idempotent !== "replayed")
+      return fail("idem replay", `expected replayed, got ${d2?.idempotent}`);
+
+    // Same key + DIFFERENT payload → 409
+    const r3 = await fetch(`${BASE}/api/qsign/v2/sign`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify({ payload: { idem: "test", n: 2 } }),
+    });
+    if (r3.status !== 409)
+      return fail("idem mismatch", `expected 409, got ${r3.status}`);
+    pass("idempotency", `fresh+replayed id=${d1.id.slice(0, 8)} mismatch→409`);
   }
 
   // 5 — stateless verify (should be valid)
@@ -130,13 +229,19 @@ async function main() {
         signatureHmac: signed.hmac.signature,
         ed25519Kid: signed.ed25519.kid,
         signatureEd25519: signed.ed25519.signature,
+        signatureDilithium: signed.dilithium?.signature || signed.dilithium?.digest,
       },
     });
     if (!r.ok)
       return fail("stateless verify", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
     if (!r.data?.valid)
       return fail("stateless verify", `valid=false: ${JSON.stringify(r.data)}`);
-    pass("stateless verify", `hmac+ed25519 valid`);
+    if (!r.data?.dilithium || r.data.dilithium.valid !== true)
+      return fail(
+        "stateless verify",
+        `dilithium did not round-trip: ${JSON.stringify(r.data?.dilithium)}`,
+      );
+    pass("stateless verify", `hmac+ed25519+dilithium-${signed.dilithium.mode} valid`);
   }
 
   // 6 — stateless verify with tampered payload (should fail)
@@ -214,6 +319,77 @@ async function main() {
     pass("recent", `includes signed id, no leaked fields`);
   }
 
+  // 9d-1 — webhook CRUD lifecycle (no real receiver)
+  let smokeWebhookId = null;
+  {
+    // Create — point at a host that won't accept; we only verify shape, not delivery.
+    const r = await jsonFetch("POST", "/api/qsign/v2/webhooks", {
+      body: { url: "http://127.0.0.1:65535/qsign-smoke-sink", events: ["sign", "revoke"] },
+      token,
+    });
+    if (!r.ok) return fail("webhook create", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!r.data?.id || !r.data?.secret)
+      return fail("webhook create", "missing id or secret");
+    smokeWebhookId = r.data.id;
+    pass("webhook create", `id=${smokeWebhookId.slice(0, 8)} secret-len=${r.data.secret.length}`);
+  }
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/webhooks", { token });
+    if (!r.ok) return fail("webhook list", `HTTP ${r.status}`);
+    const ours = (r.data?.webhooks || []).find((w) => w.id === smokeWebhookId);
+    if (!ours) return fail("webhook list", "freshly created id not in list");
+    pass("webhook list", `total=${r.data.webhooks.length}`);
+  }
+  {
+    // Deliveries endpoint shape — may be empty if first delivery hasn't recorded yet.
+    const r = await jsonFetch(
+      "GET",
+      `/api/qsign/v2/webhooks/${smokeWebhookId}/deliveries`,
+      { token },
+    );
+    if (!r.ok) return fail("webhook deliveries", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!Array.isArray(r.data?.deliveries))
+      return fail("webhook deliveries", "deliveries not array");
+    pass("webhook deliveries", `total=${r.data.total}`);
+  }
+  {
+    const r = await jsonFetch("DELETE", `/api/qsign/v2/webhooks/${smokeWebhookId}`, { token });
+    if (!r.ok) return fail("webhook delete", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!r.data?.deleted) return fail("webhook delete", "not marked deleted");
+    pass("webhook delete", "ok");
+  }
+
+  // 9d — audit log (per-user)
+  {
+    const r = await jsonFetch("GET", "/api/qsign/v2/audit?limit=20", { token });
+    if (!r.ok) return fail("audit", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (!Array.isArray(r.data?.items))
+      return fail("audit", `items not array: ${JSON.stringify(r.data)}`);
+    const ours = r.data.items.find(
+      (it) => it.event === "sign" && it.signatureId === signed.id,
+    );
+    if (!ours) return fail("audit", "freshly signed id not in audit log");
+    pass("audit", `items=${r.data.items.length} mySign=found`);
+  }
+
+  // 9e — PDF stamp render
+  {
+    try {
+      const r = await fetch(`${BASE}/api/qsign/v2/${signed.id}/pdf`);
+      if (!r.ok) return fail("pdf stamp", `HTTP ${r.status}`);
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.startsWith("application/pdf"))
+        return fail("pdf stamp", `unexpected content-type ${ct}`);
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 1000) return fail("pdf stamp", `payload too small: ${buf.length} bytes`);
+      const head = buf.slice(0, 5).toString("utf8");
+      if (head !== "%PDF-") return fail("pdf stamp", `bad magic header: ${JSON.stringify(head)}`);
+      pass("pdf stamp", `${buf.length} bytes, magic OK`);
+    } catch (e) {
+      return fail("pdf stamp", e?.message || String(e));
+    }
+  }
+
   // 10 — revoke (unless skipped)
   if (!SKIP_REVOKE) {
     const r = await jsonFetch("POST", `/api/qsign/v2/revoke/${signed.id}`, {
@@ -245,6 +421,14 @@ async function main() {
     if (r3.status !== 409)
       return fail("double revoke", `expected 409, got ${r3.status}`);
     pass("double revoke", "409 conflict (expected)");
+
+    // 13 — audit log now contains a revoke event for our signature
+    const r4 = await jsonFetch("GET", `/api/qsign/v2/audit?event=revoke&limit=50`, { token });
+    if (!r4.ok) return fail("audit revoke", `HTTP ${r4.status}: ${JSON.stringify(r4.data)}`);
+    const rev = (r4.data?.items || []).find((it) => it.signatureId === signed.id);
+    if (!rev)
+      return fail("audit revoke", "revoke event for signed id not found in audit feed");
+    pass("audit revoke", `reason=${rev.reason}`);
   }
 
   const failed = results.filter((r) => !r.ok).length;

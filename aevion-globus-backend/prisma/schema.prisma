@@ -12,6 +12,9 @@ model QRightObject {
   description  String
   kind         String
   contentHash  String
+  /// SHA-256 of raw file bytes, supplied client-side. Stored alongside
+  /// contentHash for file-level prior-art lookup. Nullable for text-only registrations.
+  fileHash     String?
   ownerName    String?
   ownerEmail   String?
   ownerUserId  String?
@@ -45,6 +48,7 @@ model QCoreSession {
   userId    String?
   title     String   @default("New session")
   mode      String   @default("multi-agent")
+  pinned    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
@@ -152,4 +156,151 @@ model QSignRevocation {
   causalSignatureId String?
   revokerUserId     String?
   revokedAt         DateTime @default(now())
+}
+
+model QSignWebhook {
+  id          String    @id @default(uuid())
+  ownerUserId String                                    // owner of subscription; only events on their own sigs fire
+  url         String                                    // delivery target — must be https in prod, http in dev
+  secret      String                                    // HMAC-SHA256 over body, sent in X-QSign-Signature header
+  events      String                                    // comma-separated subset of "sign,revoke"
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  lastFiredAt DateTime?
+  lastStatus  Int?
+  lastError   String?
+
+  @@index([ownerUserId])
+  @@index([active])
+}
+
+// ── AEV native token ─────────────────────────────────────────────────
+// Snapshot wallet keyed on deviceId (anonymous) либо userId (authed).
+// Source-of-record для cross-device sync. Frontend держит copy в
+// localStorage, периодически syncит сюда. Append-only ledger ниже —
+// audit trail для каждого mint/spend.
+
+model AevWallet {
+  id                  String   @id @default(uuid())
+  deviceId            String   @unique
+  userId              String?
+  balance             Float    @default(0)
+  lifetimeMined       Float    @default(0)
+  lifetimeSpent       Float    @default(0)
+  globalSupplyMined   Float    @default(0)
+  dividendsClaimed    Float    @default(0)
+  modesPlay           Boolean  @default(true)
+  modesCompute        Boolean  @default(false)
+  modesStewardship    Boolean  @default(true)
+  startTs             DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  ledger              AevLedgerEntry[]
+
+  @@index([userId])
+}
+
+model AevLedgerEntry {
+  id          String     @id @default(uuid())
+  walletId    String
+  wallet      AevWallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  kind        String     // "mint" | "spend"
+  amount      Float
+  sourceKind  String?    // "play" | "compute" | "stewardship" | "streak" | etc.
+  sourceModule String?   // "cyberchess" | "qsign" | "qright" | "qtrade" | ...
+  sourceAction String?   // RATE_CARD action key (e.g. "cyberchess_win_easy")
+  reason      String?    // human-readable description
+  balanceAfter Float
+  ts          DateTime   @default(now())
+
+  @@index([walletId, ts])
+  @@index([sourceModule])
+}
+
+// =====================================================================
+// QBuild — Construction + Recruiting platform
+// Mounted under /api/build/*. Runtime uses raw SQL via pg Pool;
+// these models document shape for tooling / future migrations.
+// userId references AEVIONUser.id (no FK — same convention as QRight).
+// =====================================================================
+
+model BuildProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique                 // AEVIONUser.id
+  name        String
+  phone       String?
+  city        String?
+  description String?
+  buildRole   String   @default("CLIENT")      // CLIENT | CONTRACTOR | WORKER | ADMIN
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@index([buildRole])
+  @@index([city])
+}
+
+model BuildProject {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  budget      Float    @default(0)
+  status      String   @default("OPEN")        // OPEN | IN_PROGRESS | DONE
+  city        String?
+  clientId    String                            // AEVIONUser.id of client
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+model BuildVacancy {
+  id          String   @id @default(uuid())
+  projectId   String                            // BuildProject.id
+  title       String
+  description String
+  salary      Float    @default(0)
+  status      String   @default("OPEN")        // OPEN | CLOSED
+  createdAt   DateTime @default(now())
+
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+model BuildApplication {
+  id        String   @id @default(uuid())
+  vacancyId String
+  userId    String                              // applicant AEVIONUser.id
+  message   String?                             // applicant's pitch
+  status    String   @default("PENDING")       // PENDING | ACCEPTED | REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@unique([vacancyId, userId])                 // one application per (vacancy,user)
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([vacancyId, status])
+}
+
+model BuildMessage {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  content    String
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, readAt])
+}
+
+model BuildFile {
+  id         String   @id @default(uuid())
+  projectId  String
+  url        String
+  name       String?
+  mimeType   String?
+  sizeBytes  Int?
+  uploaderId String
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, createdAt(sort: Desc)])
 }

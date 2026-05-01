@@ -363,6 +363,19 @@ export const projects: GlobusProject[] = [
     updatedAt: now,
   },
   {
+    id: "qbuild",
+    code: "QBUILD",
+    name: "QBuild — Construction Hiring Platform",
+    description:
+      "Платформа найма для строительной вертикали: проекты, вакансии, тестовые задания, AI-оценка резюме, лояльность и cashback в AEV.",
+    kind: "product",
+    status: "in_progress",
+    priority: 1,
+    tags: ["hiring", "construction", "ai", "marketplace"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
     id: "qchaingov",
     code: "QCHAINGOV",
     name: "QChainGov — DAO Governance",

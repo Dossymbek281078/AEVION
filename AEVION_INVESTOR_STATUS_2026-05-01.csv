@@ -1,0 +1,36 @@
+section,id,code,name,status,date_actual,working_v1_target,public_launch_target,evidence_pr,notes
+platform,globus-3d,GLOBUS-PORTAL,Globus 3D portal,Production,pre-2026-03,done,live,,29-node UI map
+platform,auth,AUTH,Auth,Tier 2 prod,2026-04-30,done,live,#25,sessions/email-verify/audit
+platform,planet,PLANET,Planet compliance,Tier 2 prod,2026-04-30,done,live,#24,embed/revoke/transparency/webhooks
+platform,pipeline,PIPELINE,Pipeline core,Tier 2 prod,2026-04-30,done,live,#34,shared webhook lib + tests
+platform,modules,MODULES,Modules registry,Tier 2 prod,2026-05-01,done,live,#27/#35,Tier 3 RSS+trending
+platform,awards,AWARDS,Awards (Music + Film),Tier 2 prod,2026-04-30,done,live,#29,seasons/medals/embed/audit
+platform,quantum-shield,QSHIELD,Quantum Shield,Production v1,2026-04-30,done,live,#23,Shamir 2-of-3 + Ed25519
+platform,sdk-monorepo,SDK,AEVION SDK monorepo,Production,2026-04-30,done,live,#28,/api/aevion/* hub + clients
+canonical,globus,GLOBUS,AEVION Globus,Production,pre-2026-03,done,live,,
+canonical,qcoreai,QCOREAI,QCoreAI Engine V6,Tier 2 prod,2026-04-30,done,live,#20/#30/#31,LLM-judge + mobile SDKs
+canonical,multichat-engine,MULTICHAT,AEVION Multichat,Production,2026-04-26,done,live,,3 strategies seq/par/debate
+canonical,qfusionai,QFUSIONAI,QFusionAI Hybrid,Planning,,Q1 2027,Q2 2027,,R&D
+canonical,qright,QRIGHT,QRight Legal & IP v1.2,Tier 2 prod,2026-04-30,done,live,#18/#22/#6,offline-bundle + RU i18n
+canonical,qsign,QSIGN,QSign v2 v1.1,Tier 2 prod,2026-04-29,done,live,#17/#21,real ML-DSA-65 PQC
+canonical,aevion-ip-bureau,AIPB,AEVION IP Bureau,Tier 2 prod,2026-04-30,done,live,#9/#11/#32,Verified KYC tier
+canonical,qtradeoffline,QTRADEOFFLINE,QTradeOffline,MVP,2026-03,Aug 2026,Sep 2026,,in-memory backend
+canonical,qpaynet-embedded,QPAYNET,QPayNet Embedded,In progress,,Q4 2026,Q1 2027,#19,Payments Rail v1.0-1.3 open
+canonical,qmaskcard,QMASKCARD,QMaskCard,Idea,,Q2 2027,Q3 2027,,after payment core
+canonical,veilnetx,VEILNETX,VeilNetX,Planning,,2027+,2028,,
+canonical,cyberchess,CYBERCHESS,CyberChess v37,Production,2026-04-26,done,live,,Stockfish/P2P/Tablebase/Studio
+canonical,healthai,HEALTHAI,HealthAI,In progress,,Q4 2026,Q1 2027,,branch healthai-v1
+canonical,qlife,QLIFE,QLife Longevity,Idea,,Q1 2027,Q2 2027,,
+canonical,qgood,QGOOD,QGood Mental Health,Idea,,Q1 2027,Q2 2027,,
+canonical,psyapp-deps,PSYAPP,PsyApp Dependencies,Idea,,Q2 2027,Q3 2027,,
+canonical,qpersona,QPERSONA,QPersona Avatar,Idea,,Q2 2027,Q4 2027,,
+canonical,kids-ai-content,KIDS-AI,Kids AI Content,Planning,,Q4 2026,Q1 2027,,
+canonical,voice-of-earth,VOE,Voice of Earth,Idea,,2027+,2028,,music content series
+canonical,startup-exchange,STARTUPX,Startup Exchange,In progress,,Q1 2027,Q2 2027,,branch aec-exchange
+canonical,deepsan,DEEPSAN,DeepSan Anti-chaos,Idea,,Q2 2027,Q3 2027,,
+canonical,mapreality,MAPREALITY,MapReality,Idea,,2027+,2028,,
+canonical,z-tide,Z-TIDE,Z-Tide currency,Idea,,2027+,2028,,
+canonical,qcontract,QCONTRACT,QContract smart docs,Idea,,Q3 2027,Q4 2027,,
+canonical,shadownet,SHADOWNET,ShadowNet,Idea,,2027+,2028,,
+canonical,lifebox,LIFEBOX,LifeBox digital safe,Idea,,Q3 2027,Q4 2027,,
+canonical,qchaingov,QCHAINGOV,QChainGov DAO,Idea,,2027+,2028,,after VeilNetX

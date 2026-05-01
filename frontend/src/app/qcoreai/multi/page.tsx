@@ -334,6 +334,7 @@ export default function QCoreMultiAgentPage() {
   const [roleDefaults, setRoleDefaults] = useState<RoleDefault[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
+  const [myWorkspaces, setMyWorkspaces] = useState<Array<{ id: string; name: string }>>([]);
   const [strategy, setStrategy] = useState<Strategy>("sequential");
   const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string; systemPrompt?: string }>>({
     analyst: { provider: "", model: "" },
@@ -427,18 +428,21 @@ export default function QCoreMultiAgentPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [provRes, agRes, sessRes, priceRes, healthRes] = await Promise.all([
+        const [provRes, agRes, sessRes, priceRes, healthRes, wsRes] = await Promise.all([
           fetch(apiUrl("/api/qcoreai/providers")),
           fetch(apiUrl("/api/qcoreai/agents")),
           fetch(apiUrl("/api/qcoreai/sessions"), { headers: bearerHeader() }),
           fetch(apiUrl("/api/qcoreai/pricing")),
           fetch(apiUrl("/api/qcoreai/health")),
+          fetch(apiUrl("/api/qcoreai/workspaces"), { headers: bearerHeader() }),
         ]);
         const provData = await provRes.json().catch(() => ({}));
         const agData = await agRes.json().catch(() => ({}));
         const sessData = await sessRes.json().catch(() => ({}));
         const priceData = await priceRes.json().catch(() => ({}));
         const healthData = await healthRes.json().catch(() => ({}));
+        const wsData = await wsRes.json().catch(() => ({}));
+        if (Array.isArray(wsData?.items)) setMyWorkspaces(wsData.items.map((w: any) => ({ id: w.id, name: w.name })));
         if (typeof healthData?.webhookConfigured === "boolean") {
           setWebhookConfigured(healthData.webhookConfigured);
         }
@@ -2677,6 +2681,35 @@ export default function QCoreMultiAgentPage() {
                     >
                       ★
                     </button>
+                    {myWorkspaces.length > 0 && (
+                      <select
+                        title="Add session to workspace"
+                        defaultValue=""
+                        onChange={async (e) => {
+                          const wsId = e.target.value;
+                          if (!wsId) return;
+                          e.target.value = "";
+                          try {
+                            await fetch(apiUrl(`/api/qcoreai/workspaces/${wsId}/sessions`), {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", ...bearerHeader() },
+                              body: JSON.stringify({ sessionId: s.id }),
+                            });
+                          } catch { /* silent */ }
+                        }}
+                        style={{
+                          width: 24, borderRadius: 6, padding: 0,
+                          border: "1px solid transparent", background: "transparent",
+                          color: "#cbd5e1", cursor: "pointer", fontSize: 11,
+                          appearance: "none", textAlign: "center",
+                        }}
+                      >
+                        <option value="">⊞</option>
+                        {myWorkspaces.map((w) => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       onClick={() => renameSessionPrompt(s)}
                       title="Rename session"

@@ -88,6 +88,21 @@ export default function WorkspacesPage() {
     }
   };
 
+  const renameWorkspace = async (ws: Workspace) => {
+    const next = window.prompt("Rename workspace:", ws.name);
+    if (!next?.trim() || next.trim() === ws.name) return;
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/workspaces/${ws.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ name: next.trim() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+      setWorkspaces((prev) => prev.map((w) => w.id === ws.id ? { ...w, name: next.trim() } : w));
+    } catch (e: any) { setError(e?.message || "rename failed"); }
+  };
+
   const deleteWorkspace = async (id: string) => {
     if (!confirm("Delete this workspace? Sessions and members will be unlinked.")) return;
     try {
@@ -196,7 +211,8 @@ export default function WorkspacesPage() {
                       <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{w.name}</div>
                       {w.description && <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{w.description}</div>}
                     </button>
-                    <button onClick={() => deleteWorkspace(w.id)} title="Delete workspace" style={{ width: 28, borderRadius: 8, border: "1px solid transparent", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 14 }}>×</button>
+                    <button onClick={() => renameWorkspace(w)} title="Rename workspace" style={{ width: 24, borderRadius: 8, border: "1px solid transparent", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 12 }}>✎</button>
+                    <button onClick={() => deleteWorkspace(w.id)} title="Delete workspace" style={{ width: 24, borderRadius: 8, border: "1px solid transparent", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 14 }}>×</button>
                   </div>
                 ))
               )}

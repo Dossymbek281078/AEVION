@@ -1,7 +1,18 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../lib/authJwt";
-import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 import { csvFromRows } from "../lib/csv";
+import {
+  describeBackend,
+  loadSnapshot,
+  persistSnapshot,
+} from "../lib/ecosystemStore";
+import type {
+  ChessPrize,
+  PlanetCert,
+  RoyaltyEvent,
+} from "./ecosystem.types";
+
+export type { ChessPrize, PlanetCert, RoyaltyEvent };
 
 function sendCsv(
   res: Response,
@@ -23,45 +34,15 @@ ecosystemRouter.use(requireAuth);
 // ----------------------------------------------------------------------------
 // Persisted ecosystem ledger.
 //
-// Three separate ledgers, all keyed by user email, all stored together in
-// ecosystem.json (atomic write via jsonFileStore). Load-once on first access,
-// persist-after-mutation in the same chain pattern qtrade uses.
+// Three separate ledgers, all keyed by user email. The storage backend is
+// chosen at runtime by src/lib/ecosystemStore.ts:
+//   - Postgres (when DATABASE_URL is set) — append-only tables in
+//     ecosystem_royalty_events / ecosystem_chess_prizes / ecosystem_planet_certs.
+//   - JSON file (.aevion-data/ecosystem.json) — dev/test fallback.
 //
-// Why one file: the three arrays naturally aggregate into the single
-// /earnings response, so co-locating their persistence keeps a snapshot
-// representation consistent for backups + diff inspection.
+// In-memory arrays keep being a write-through cache for read latency; routes
+// mutate them and call scheduleEcosystemPersist() to flush asynchronously.
 // ----------------------------------------------------------------------------
-
-export type RoyaltyEvent = {
-  id: string;
-  email: string;
-  productKey: string;
-  period: string;
-  amount: number;
-  paidAt: string;
-  transferId: string | null;
-  source: "qright";
-};
-
-export type ChessPrize = {
-  id: string;
-  email: string;
-  tournamentId: string;
-  place: number;
-  amount: number;
-  finalizedAt: string;
-  transferId: string | null;
-  source: "cyberchess";
-};
-
-export type PlanetCert = {
-  id: string;
-  email: string;
-  artifactVersionId: string;
-  amount: number;
-  certifiedAt: string;
-  source: "planet";
-};
 
 export const royaltyEvents: RoyaltyEvent[] = [];
 export const chessPrizes: ChessPrize[] = [];
@@ -71,15 +52,15 @@ export function getEcosystemMetrics(): {
   royaltyEvents: number;
   chessPrizes: number;
   planetCerts: number;
+  backend: "postgres" | "json";
 } {
   return {
     royaltyEvents: royaltyEvents.length,
     chessPrizes: chessPrizes.length,
     planetCerts: planetCerts.length,
+    backend: describeBackend().kind,
   };
 }
-
-const STORE_REL = "ecosystem.json";
 
 let loaded = false;
 let loading: Promise<void> | null = null;
@@ -88,17 +69,10 @@ export async function ensureEcosystemLoaded(): Promise<void> {
   if (loaded) return;
   if (!loading) {
     loading = (async () => {
-      const data = await readJsonFile<{
-        royaltyEvents?: RoyaltyEvent[];
-        chessPrizes?: ChessPrize[];
-        planetCerts?: PlanetCert[];
-      }>(STORE_REL, { royaltyEvents: [], chessPrizes: [], planetCerts: [] });
-      const r = Array.isArray(data.royaltyEvents) ? data.royaltyEvents : [];
-      const c = Array.isArray(data.chessPrizes) ? data.chessPrizes : [];
-      const p = Array.isArray(data.planetCerts) ? data.planetCerts : [];
-      royaltyEvents.splice(0, royaltyEvents.length, ...r);
-      chessPrizes.splice(0, chessPrizes.length, ...c);
-      planetCerts.splice(0, planetCerts.length, ...p);
+      const snap = await loadSnapshot();
+      royaltyEvents.splice(0, royaltyEvents.length, ...snap.royaltyEvents);
+      chessPrizes.splice(0, chessPrizes.length, ...snap.chessPrizes);
+      planetCerts.splice(0, planetCerts.length, ...snap.planetCerts);
       loaded = true;
     })();
   }
@@ -114,7 +88,7 @@ export function scheduleEcosystemPersist(): void {
     planetCerts: [...planetCerts],
   };
   persistChain = persistChain
-    .then(() => writeJsonFile(STORE_REL, snapshot))
+    .then(() => persistSnapshot(snapshot))
     .catch((err) => {
       console.error("[ecosystem] persist failed", err);
     });

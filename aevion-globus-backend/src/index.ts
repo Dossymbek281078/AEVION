@@ -8,9 +8,11 @@ import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
+import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { qcoreaiRouter } from "./routes/qcoreai";
+import { multichatRouter } from "./routes/multichat";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { coachRouter } from "./routes/coach";
@@ -97,6 +99,7 @@ app.get("/api/health/deep", async (_req, res) => {
         royaltyEvents: e.royaltyEvents,
         chessPrizes: e.chessPrizes,
         planetCerts: e.planetCerts,
+        backend: e.backend,
       },
       memory: {
         heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
@@ -150,6 +153,7 @@ app.get("/api/globus/projects/:id", (req, res) => {
 app.use("/api/modules", modulesRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
+app.use("/api/multichat", multichatRouter);
 
 /** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,
  *  summary-only for legacy globus / qsign. See lib/openapiSpec.ts. */
@@ -180,6 +184,7 @@ app.use("/api/coach", coachRouter);
 // Auth
 // ==========================
 app.use("/api/auth", authRouter);
+app.use("/api/auth/oauth", authOauthRouter);
 
 // ==========================
 // Planet / Compliance / Evidence / Certificate

@@ -54,9 +54,13 @@ export default function BankStatementPage() {
   const [period, setPeriod] = useState<Period>("30d");
   const [code, setCode] = useState<CurrencyCode>("AEC");
   const [loaded, setLoaded] = useState<boolean>(false);
+  // Filled in after mount so the server-rendered HTML and client first
+  // paint don't disagree about the user's locale / timezone formatting.
+  const [generatedAt, setGeneratedAt] = useState<string>("");
 
   useEffect(() => {
     setCode(loadCurrency());
+    setGeneratedAt(new Date().toLocaleString());
     let cancelled = false;
     (async () => {
       try {
@@ -237,9 +241,9 @@ export default function BankStatementPage() {
           })}
         </div>
         <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
-          {t("statement.generatedAt", {
-            date: new Date().toLocaleString(),
-          })}
+          {generatedAt
+            ? t("statement.generatedAt", { date: generatedAt })
+            : null}
           {account ? ` · ${account.id}` : ""}
         </div>
       </header>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 import { formatRelative } from "../_lib/format";
 import {
   listDevices,
@@ -13,6 +14,8 @@ import {
 } from "../_lib/devices";
 
 type Notify = (msg: string, type?: "success" | "error" | "info") => void;
+
+const TOKEN_KEY = "aevion_auth_token_v1";
 
 function deviceIcon(os: string): string {
   if (os === "iOS" || os === "Android") return "▢";
@@ -29,10 +32,49 @@ export function DeviceManagement({
 }) {
   const { t } = useI18n();
   const [devices, setDevices] = useState<Device[]>([]);
+  const [revoking, setRevoking] = useState(false);
 
   useEffect(() => {
     setDevices(registerCurrentDevice(accountId));
   }, [accountId]);
+
+  const signOutEverywhere = async () => {
+    if (revoking) return;
+    if (
+      !confirm(
+        "Sign out from every device? You'll need to log in again here too. Other browsers and devices will lose access on their next request.",
+      )
+    )
+      return;
+    setRevoking(true);
+    try {
+      const token = localStorage.getItem(TOKEN_KEY) || "";
+      const r = await fetch(apiUrl("/api/auth/sign-out-everywhere"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await r.json().catch(() => null);
+      if (r.ok && data?.ok) {
+        try {
+          localStorage.removeItem(TOKEN_KEY);
+        } catch {
+          /* ignore */
+        }
+        notify("Signed out everywhere — redirecting…", "success");
+        // Every other tab/window using this token is now invalidated
+        // server-side; clearing localStorage here cleans the current tab.
+        setTimeout(() => {
+          if (typeof window !== "undefined") window.location.assign("/auth");
+        }, 600);
+      } else {
+        notify(data?.error || "Sign-out request failed", "error");
+      }
+    } catch {
+      notify("Sign-out request failed", "error");
+    } finally {
+      setRevoking(false);
+    }
+  };
 
   const sorted = [...devices].sort((a, b) => {
     if (a.current !== b.current) return a.current ? -1 : 1;
@@ -117,6 +159,26 @@ export function DeviceManagement({
       <div style={{ marginTop: 14, fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
         {t("dev.footer")}
       </div>
+
+      <button
+        type="button"
+        onClick={signOutEverywhere}
+        disabled={revoking}
+        style={{
+          marginTop: 14,
+          padding: "10px 14px",
+          borderRadius: 10,
+          border: "1px solid rgba(220,38,38,0.30)",
+          background: revoking ? "rgba(220,38,38,0.04)" : "rgba(220,38,38,0.06)",
+          color: "#dc2626",
+          fontWeight: 800,
+          fontSize: 12,
+          cursor: revoking ? "default" : "pointer",
+          width: "100%",
+        }}
+      >
+        {revoking ? "Revoking sessions…" : "Sign out from all devices"}
+      </button>
     </section>
   );
 }

@@ -211,6 +211,9 @@ export default function BureauPage() {
               <Link href="/qright" style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 6 }}>
                 🛡️ Protect Your Work
               </Link>
+              <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+                🔎 Search prior art
+              </Link>
               <Link href="/quantum-shield" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
                 Quantum Shield Dashboard
               </Link>
@@ -353,7 +356,7 @@ export default function BureauPage() {
         </div>
 
         {/* ── Certificate Registry ── */}
-        <div style={{ marginBottom: 28 }}>
+        <div id="registry" style={{ marginBottom: 28, scrollMarginTop: 80 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 12, flexWrap: "wrap" as const }}>
             <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>
               Certificate Registry{" "}
@@ -487,8 +490,8 @@ export default function BureauPage() {
                   : "Try a different search term or reset filters."}
               </div>
               {hashLooksLikeSha256 ? (
-                <Link href={`/qright?hash=${encodeURIComponent(query.trim())}`} style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
-                  🛡️ Protect this hash
+                <Link href="/qright" style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                  🛡️ Register this work
                 </Link>
               ) : (
                 <button

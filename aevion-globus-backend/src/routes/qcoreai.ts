@@ -1767,9 +1767,9 @@ qcoreaiRouter.get("/workspaces/:id", workspaceLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const ws = await getWorkspace(req.params.id, auth.sub);
+    const ws = await getWorkspace(String(req.params.id), auth.sub);
     if (!ws) return res.status(404).json({ error: "workspace not found" });
-    const members = await listWorkspaceMembers(req.params.id, auth.sub);
+    const members = await listWorkspaceMembers(String(req.params.id), auth.sub);
     res.json({ workspace: ws, members });
   } catch (err: any) {
     res.status(500).json({ error: "get workspace failed", details: err?.message });
@@ -1780,7 +1780,7 @@ qcoreaiRouter.delete("/workspaces/:id", workspaceLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const ok = await deleteWorkspace(req.params.id, auth.sub);
+    const ok = await deleteWorkspace(String(req.params.id), auth.sub);
     if (!ok) return res.status(404).json({ error: "workspace not found or forbidden" });
     res.json({ ok: true });
   } catch (err: any) {
@@ -1792,7 +1792,7 @@ qcoreaiRouter.get("/workspaces/:id/members", workspaceLimiter, async (req, res) 
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const items = await listWorkspaceMembers(req.params.id, auth.sub);
+    const items = await listWorkspaceMembers(String(req.params.id), auth.sub);
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: "list members failed", details: err?.message });
@@ -1806,7 +1806,7 @@ qcoreaiRouter.post("/workspaces/:id/members", workspaceLimiter, async (req, res)
     const { userId, role } = req.body || {};
     if (typeof userId !== "string" || !userId.trim()) return res.status(400).json({ error: "userId required" });
     const memberRole = role === "editor" ? "editor" : "viewer";
-    const member = await addWorkspaceMember(req.params.id, userId.trim(), memberRole, auth.sub);
+    const member = await addWorkspaceMember(String(req.params.id), userId.trim(), memberRole, auth.sub);
     if (!member) return res.status(403).json({ error: "forbidden — only the owner can invite members" });
     res.status(201).json({ member });
   } catch (err: any) {
@@ -1818,7 +1818,7 @@ qcoreaiRouter.delete("/workspaces/:id/members/:userId", workspaceLimiter, async 
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const ok = await removeWorkspaceMember(req.params.id, req.params.userId, auth.sub);
+    const ok = await removeWorkspaceMember(String(req.params.id), String(req.params.userId), auth.sub);
     if (!ok) return res.status(404).json({ error: "member not found or forbidden" });
     res.json({ ok: true });
   } catch (err: any) {
@@ -1830,7 +1830,7 @@ qcoreaiRouter.get("/workspaces/:id/sessions", workspaceLimiter, async (req, res)
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const items = await listWorkspaceSessions(req.params.id, auth.sub);
+    const items = await listWorkspaceSessions(String(req.params.id), auth.sub);
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: "list workspace sessions failed", details: err?.message });
@@ -1843,7 +1843,7 @@ qcoreaiRouter.post("/workspaces/:id/sessions", workspaceLimiter, async (req, res
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { sessionId } = req.body || {};
     if (typeof sessionId !== "string" || !sessionId.trim()) return res.status(400).json({ error: "sessionId required" });
-    const ok = await addSessionToWorkspace(req.params.id, sessionId.trim(), auth.sub);
+    const ok = await addSessionToWorkspace(String(req.params.id), sessionId.trim(), auth.sub);
     if (!ok) return res.status(403).json({ error: "forbidden or workspace not found" });
     res.status(201).json({ ok: true });
   } catch (err: any) {
@@ -1855,7 +1855,7 @@ qcoreaiRouter.delete("/workspaces/:id/sessions/:sessionId", workspaceLimiter, as
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const ok = await removeSessionFromWorkspace(req.params.id, req.params.sessionId, auth.sub);
+    const ok = await removeSessionFromWorkspace(String(req.params.id), String(req.params.sessionId), auth.sub);
     if (!ok) return res.status(404).json({ error: "session not in workspace or forbidden" });
     res.json({ ok: true });
   } catch (err: any) {

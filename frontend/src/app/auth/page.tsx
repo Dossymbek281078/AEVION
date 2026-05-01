@@ -11,6 +11,8 @@ import { apiUrl } from "@/lib/apiBase";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 
+type OauthProvider = { id: string; name: string; configured: boolean };
+
 export default function AuthPage() {
   const { showToast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("register");
@@ -21,12 +23,52 @@ export default function AuthPage() {
   const [me, setMe] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<OauthProvider[]>([]);
+
+  // OAuth callback redirect lands here with ?token=…&provider=…
+  // Persist + clean up URL so refresh doesn't re-process.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("token");
+    const provider = sp.get("provider");
+    if (t) {
+      try {
+        localStorage.setItem(TOKEN_KEY, t);
+      } catch {}
+      setToken(t);
+      sp.delete("token");
+      sp.delete("provider");
+      const next = window.location.pathname + (sp.toString() ? `?${sp}` : "");
+      window.history.replaceState(null, "", next);
+      showToast(`Signed in via ${provider || "provider"}`, "success");
+    }
+  }, [showToast]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(TOKEN_KEY);
       if (raw) setToken(raw);
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/auth/oauth/providers"), { cache: "no-store" });
+        if (!r.ok) return;
+        const data = (await r.json()) as { providers?: OauthProvider[] };
+        if (cancelled) return;
+        const list = Array.isArray(data?.providers) ? data.providers.filter((p) => p.configured) : [];
+        setOauthProviders(list);
+      } catch {
+        // backend offline — silently hide oauth buttons, password login still works
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -132,6 +174,39 @@ export default function AuthPage() {
                   <Link href="/planet" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #0f766e", color: "#0f766e", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
                     🌍 Planet Lab
                   </Link>
+                </div>
+              </div>
+            ) : null}
+
+            {!token && oauthProviders.length > 0 ? (
+              <div style={{ display: "grid", gap: 8, maxWidth: 440, marginBottom: 18 }}>
+                {oauthProviders.map((p) => (
+                  <a
+                    key={p.id}
+                    href={apiUrl(`/api/auth/oauth/${p.id}/start`)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 10,
+                      padding: "11px 16px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      color: "#0f172a",
+                      textDecoration: "none",
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}
+                  >
+                    <span style={{ fontSize: 16 }}>{p.id === "google" ? "🔵" : p.id === "github" ? "⬛" : "🔑"}</span>
+                    Continue with {p.name}
+                  </a>
+                ))}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 -2px" }}>
+                  <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.10)" }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "#94a3b8" }}>OR</span>
+                  <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.10)" }} />
                 </div>
               </div>
             ) : null}

@@ -97,9 +97,10 @@ export function LevelHome() {
                     </div>
                     <h2 className="text-base font-bold text-slate-900 mt-0.5">{level.title}</h2>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">{level.description}</p>
-                    <div className="mt-2 flex items-center gap-4 text-[11px] text-slate-400">
+                    <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
                       <span>⏱ ~{level.timeHours} ч</span>
-                      <span>✓ {level.zachetCriteria ?? level.zacketCriteria}</span>
+                      <span className="text-slate-300">·</span>
+                      <span>✓ {(level as { zachetCriteria?: string; zacketCriteria?: string }).zachetCriteria ?? (level as { zachetCriteria?: string; zacketCriteria?: string }).zacketCriteria}</span>
                     </div>
                   </div>
 

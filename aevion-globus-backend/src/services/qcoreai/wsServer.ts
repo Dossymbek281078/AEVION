@@ -123,7 +123,7 @@ export function attachQCoreWebSocket(server: HttpServer, path = "/api/qcoreai/ws
         return;
       }
 
-      wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.handleUpgrade(req, socket, head, (ws: unknown) => {
         wss.emit("connection", ws, req, reqUrl);
       });
     } catch (err: any) {

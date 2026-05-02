@@ -106,7 +106,7 @@ export function splitAndAuthenticate(
   const rawShares = secrets.share(secretHex, SHAMIR_SHARDS, SHAMIR_THRESHOLD);
 
   const now = new Date().toISOString();
-  const shards: AuthenticatedShard[] = rawShares.map((sssShare, i) => {
+  const shards: AuthenticatedShard[] = rawShares.map((sssShare: string, i: number) => {
     const index = i + 1;
     const hmac = computeShardHmac(
       index,

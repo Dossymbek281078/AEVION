@@ -61,7 +61,7 @@ export function captureException(
 ): void {
   if (!active) return;
   try {
-    Sentry.withScope((scope) => {
+    Sentry.withScope((scope: { setExtra: (k: string, v: unknown) => void; setTag: (k: string, v: string) => void }) => {
       for (const [k, v] of Object.entries(context)) {
         if (v === undefined || v === null) continue;
         scope.setExtra(k, v);

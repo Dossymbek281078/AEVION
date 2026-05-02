@@ -19,7 +19,11 @@ type BuildAuthState = {
   logout: () => void;
 };
 
-export const useBuildAuth = create<BuildAuthState>()(
+// zustand v5 + persist middleware doesn't always propagate the State generic
+// into selector callbacks (TS infers `any` for the selector arg). Wrapping the
+// raw store as a generic selector function gives every call site `s: BuildAuthState`
+// for free without sprinkling type annotations across 12 files.
+const useBuildAuthRaw = create<BuildAuthState>()(
   persist(
     (set) => ({
       token: null,
@@ -38,6 +42,15 @@ export const useBuildAuth = create<BuildAuthState>()(
     },
   ),
 );
+
+type BuildAuthHook = {
+  <T>(selector: (s: BuildAuthState) => T): T;
+  getState: () => BuildAuthState;
+  setState: (typeof useBuildAuthRaw)["setState"];
+  subscribe: (typeof useBuildAuthRaw)["subscribe"];
+};
+
+export const useBuildAuth: BuildAuthHook = useBuildAuthRaw as unknown as BuildAuthHook;
 
 export function getAuthToken(): string | null {
   return useBuildAuth.getState().token;

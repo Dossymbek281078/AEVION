@@ -5,6 +5,7 @@ import { use } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ApplicationForm } from "@/components/build/ApplicationForm";
+import { QuickApplyButton } from "@/components/build/QuickApplyButton";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import {
   buildApi,
@@ -157,6 +158,14 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
                 Apply
               </h2>
+              {(vacancy.questions || []).length === 0 && !myApplied && (
+                <div className="mb-3">
+                  <QuickApplyButton vacancyId={vacancy.id} />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Один клик. Без анкет. Только если у тебя заполнен профиль.
+                  </p>
+                </div>
+              )}
               <ApplicationForm
                 vacancyId={vacancy.id}
                 alreadyApplied={myApplied}

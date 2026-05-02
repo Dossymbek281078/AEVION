@@ -81,6 +81,11 @@ export function ProfileForm({
   const [safetyTrainingUntil, setSafetyTrainingUntil] = useState(initial?.safetyTrainingUntil ?? "");
   const [introVideoUrl, setIntroVideoUrl] = useState(initial?.introVideoUrl ?? "");
 
+  // KZ localisation (v3)
+  const [iin, setIin] = useState(initial?.iin ?? "");
+  const [bin, setBin] = useState(initial?.bin ?? "");
+  const [locale, setLocale] = useState<"ru" | "en" | "kz">(initial?.locale ?? "ru");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -157,6 +162,9 @@ export function ProfileForm({
         safetyTrainingValid,
         safetyTrainingUntil: safetyTrainingUntil.trim() || null,
         introVideoUrl: introVideoUrl.trim() || null,
+        iin: iin.trim() || null,
+        bin: bin.trim() || null,
+        locale,
       });
       setSavedAt(new Date().toISOString());
       onSaved?.(saved);
@@ -224,6 +232,35 @@ export function ProfileForm({
             placeholder="https://youtu.be/… — 30s pitch makes you 10× more memorable"
             className="input-build"
           />
+        </Field>
+        <Field label="🇰🇿 ИИН (KZ — 12 цифр, опционально)">
+          <input
+            value={iin}
+            onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+            inputMode="numeric"
+            placeholder="12 digits"
+            className="input-build"
+          />
+        </Field>
+        <Field label="🇰🇿 БИН (юр. лицо KZ — 12 цифр, опционально)">
+          <input
+            value={bin}
+            onChange={(e) => setBin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+            inputMode="numeric"
+            placeholder="12 digits"
+            className="input-build"
+          />
+        </Field>
+        <Field label="🌐 Язык интерфейса">
+          <select
+            value={locale}
+            onChange={(e) => setLocale(e.target.value as "ru" | "en" | "kz")}
+            className="input-build"
+          >
+            <option value="ru">Русский</option>
+            <option value="kz">Қазақша</option>
+            <option value="en">English</option>
+          </select>
         </Field>
         <Field label="Role">
           <div className="grid grid-cols-3 gap-2">

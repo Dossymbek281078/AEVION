@@ -61,6 +61,10 @@ export type BuildProfile = {
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
   introVideoUrl: string | null;
+  // KZ localisation (v3)
+  iin: string | null;
+  bin: string | null;
+  locale: "ru" | "en" | "kz";
 };
 
 export type BuildExperience = {
@@ -415,6 +419,9 @@ export const buildApi = {
     safetyTrainingValid?: boolean;
     safetyTrainingUntil?: string | null;
     introVideoUrl?: string | null;
+    iin?: string | null;
+    bin?: string | null;
+    locale?: "ru" | "en" | "kz";
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
@@ -1036,6 +1043,134 @@ export const buildApi = {
     ),
   verifyDocument: (id: string) => call<{ id: string; status: string }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/verify`),
   rejectDocument: (id: string, reason?: string) => call<{ id: string; status: string }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/reject`, { reason }),
+
+  // ── V3: Push notifications ─────────────────────────────────────
+  pushPublicKey: () => call<{ publicKey: string }>("GET", "/api/build/push/public-key", undefined, { auth: false }),
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    call<{ id: string; refreshed: boolean }>("POST", "/api/build/push/subscribe", sub),
+  pushUnsubscribe: (endpoint: string) =>
+    call<{ removed: number }>("POST", "/api/build/push/unsubscribe", { endpoint }),
+  pushTest: () =>
+    call<{ sent: number; removed: number; configured: boolean }>("POST", "/api/build/push/test"),
+
+  // ── V3: Safety briefing ─────────────────────────────────────
+  safetyTemplate: () => call<{ items: string[] }>("GET", "/api/build/safety-briefing/template", undefined, { auth: false }),
+  signSafetyBriefing: (shiftId: string, items?: string[]) =>
+    call<{ id: string; shiftId: string; signedAt: string }>("POST", "/api/build/safety-briefing", { shiftId, items }),
+  briefingsForShift: (shiftId: string) =>
+    call<{ items: Array<{ id: string; workerId: string; signedAt: string; items: string[] }>; total: number }>(
+      "GET", `/api/build/safety-briefing/shift/${encodeURIComponent(shiftId)}`,
+    ),
+
+  // ── V3: Site stories ─────────────────────────────────────
+  storiesFeed: (opts?: { before?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.before) q.set("before", opts.before);
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return call<{ items: Array<BuildStory>; total: number }>(
+      "GET", `/api/build/stories${qs ? `?${qs}` : ""}`, undefined, { auth: false },
+    );
+  },
+  storiesByUser: (userId: string) =>
+    call<{ items: Array<BuildStory>; total: number }>("GET", `/api/build/stories/by-user/${encodeURIComponent(userId)}`, undefined, { auth: false }),
+  createStory: (input: { content: string; projectId?: string | null; mediaUrl?: string | null; mediaType?: "image" | "video" | null }) =>
+    call<BuildStory>("POST", "/api/build/stories", input),
+  toggleStoryLike: (id: string) =>
+    call<{ liked: boolean; likeCount: number }>("POST", `/api/build/stories/${encodeURIComponent(id)}/like`),
+  deleteStory: (id: string) => call<{ ok: true }>("DELETE", `/api/build/stories/${encodeURIComponent(id)}`),
+
+  // ── V3: Payment calendar ─────────────────────────────────────
+  createPaymentEvent: (input: {
+    applicationId: string;
+    amount: number;
+    currency?: string;
+    dueDate: string;
+    note?: string | null;
+  }) => call<BuildPaymentEvent>("POST", "/api/build/payment-calendar", input),
+  myPaymentCalendar: (opts?: { from?: string; to?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.from) q.set("from", opts.from);
+    if (opts?.to) q.set("to", opts.to);
+    const qs = q.toString();
+    return call<{
+      items: Array<BuildPaymentEvent>;
+      total: number;
+      summary: { due: number; paid: number; overdue: number };
+    }>("GET", `/api/build/payment-calendar/my${qs ? `?${qs}` : ""}`);
+  },
+  updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus; note?: string | null }) =>
+    call<BuildPaymentEvent>("PATCH", `/api/build/payment-calendar/${encodeURIComponent(id)}`, patch),
+  deletePaymentEvent: (id: string) =>
+    call<{ ok: true }>("DELETE", `/api/build/payment-calendar/${encodeURIComponent(id)}`),
+
+  // ── V3: AI vacancy generator + Quick Apply + Leaderboard ──────
+  aiGenerateVacancy: (input: { brief: string; city?: string | null; locale?: "ru" | "en" | "kz" }) =>
+    call<{ draft: AiVacancyDraft; usage: { input: number; output: number } }>(
+      "POST", "/api/build/ai/generate-vacancy", input,
+    ),
+  quickApply: (input: { vacancyId: string; referredByUserId?: string }) =>
+    call<BuildApplication>("POST", "/api/build/applications/quick", input),
+  leaderboard: (kind: "employer" | "worker", limit = 20) =>
+    call<{ items: LeaderboardRow[]; total: number; kind: string }>(
+      "GET", `/api/build/stats/leaderboard?kind=${kind}&limit=${limit}`, undefined, { auth: false },
+    ),
+};
+
+// ── V3 types ─────────────────────────────────────────────────────────
+
+export type BuildStory = {
+  id: string;
+  userId: string;
+  projectId: string | null;
+  content: string;
+  mediaUrl: string | null;
+  mediaType: "image" | "video" | null;
+  likeCount: number;
+  createdAt: string;
+  userName?: string;
+  userPhoto?: string | null;
+  userCity?: string | null;
+  projectTitle?: string | null;
+};
+
+export type PaymentEventStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+export type BuildPaymentEvent = {
+  id: string;
+  applicationId: string;
+  clientId: string;
+  workerId: string;
+  amount: number;
+  currency: string;
+  dueDate: string;
+  status: PaymentEventStatus;
+  paidAt: string | null;
+  note: string | null;
+  createdAt: string;
+};
+
+export type AiVacancyDraft = {
+  title: string;
+  skills: string[];
+  description: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: "RUB" | "KZT" | "USD";
+  questions: string[];
+};
+
+export type LeaderboardRow = {
+  userId: string;
+  name: string;
+  city: string | null;
+  photoUrl: string | null;
+  hires?: number;
+  trialsApproved?: number;
+  tierKey?: TierKey;
+  tierLabel?: string;
+  avgRating: number | null;
+  reviewCount: number;
+  title?: string | null;
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─

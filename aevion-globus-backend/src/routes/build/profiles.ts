@@ -146,6 +146,13 @@ profilesRouter.post("/profiles", async (req, res) => {
       ? null : String(req.body.safetyTrainingUntil).trim().slice(0, 32) || null;
     const introVideoUrl = req.body?.introVideoUrl == null
       ? null : String(req.body.introVideoUrl).trim().slice(0, 500) || null;
+    // KZ localisation (v3) — optional, format-validated.
+    const iinRaw = req.body?.iin == null ? null : String(req.body.iin).replace(/\D/g, "").slice(0, 12);
+    const iin = iinRaw && iinRaw.length === 12 ? iinRaw : null;
+    const binRaw = req.body?.bin == null ? null : String(req.body.bin).replace(/\D/g, "").slice(0, 12);
+    const bin = binRaw && binRaw.length === 12 ? binRaw : null;
+    const localeRaw = typeof req.body?.locale === "string" ? req.body.locale.trim().toLowerCase() : null;
+    const locale = ["ru", "en", "kz"].includes(localeRaw || "") ? (localeRaw as string) : "ru";
 
     const id = crypto.randomUUID();
     const result = await pool.query(
@@ -158,9 +165,10 @@ profilesRouter.post("/profiles", async (req, res) => {
           "driversLicense","shiftPreference","availabilityType","readyFromDate",
           "preferredLocationsJson","toolsOwnedJson",
           "medicalCheckValid","medicalCheckUntil",
-          "safetyTrainingValid","safetyTrainingUntil","introVideoUrl")
+          "safetyTrainingValid","safetyTrainingUntil","introVideoUrl",
+          "iin","bin","locale")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
+               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)
        ON CONFLICT ("userId") DO UPDATE SET
          "name" = EXCLUDED."name", "phone" = EXCLUDED."phone",
          "city" = EXCLUDED."city", "description" = EXCLUDED."description",
@@ -186,6 +194,9 @@ profilesRouter.post("/profiles", async (req, res) => {
          "safetyTrainingValid" = EXCLUDED."safetyTrainingValid",
          "safetyTrainingUntil" = EXCLUDED."safetyTrainingUntil",
          "introVideoUrl" = EXCLUDED."introVideoUrl",
+         "iin" = EXCLUDED."iin",
+         "bin" = EXCLUDED."bin",
+         "locale" = EXCLUDED."locale",
          "updatedAt" = NOW()
        RETURNING *`,
       [
@@ -198,6 +209,7 @@ profilesRouter.post("/profiles", async (req, res) => {
         driversLicense, shiftPreference, availabilityType, readyFromDate,
         JSON.stringify(preferredLocations), JSON.stringify(toolsOwned),
         medicalCheckValid, medicalCheckUntil, safetyTrainingValid, safetyTrainingUntil, introVideoUrl,
+        iin, bin, locale,
       ],
     );
 

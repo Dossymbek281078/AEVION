@@ -358,3 +358,101 @@ applicationsRouter.patch("/:id", async (req, res) => {
     return fail(res, 500, "application_update_failed", { details: (err as Error).message });
   }
 });
+
+// POST /api/build/applications/quick — 1-tap apply for a known
+// candidate with a complete profile. Skips the questions/answers form,
+// auto-fills a short message from the profile, and only requires the
+// vacancyId. The vacancy author still sees AI scoring + match badge.
+applicationsRouter.post("/quick", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 200 });
+    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
+
+    // Quick Apply requires a profile so the recruiter has something to read.
+    const profile = await pool.query(
+      `SELECT "name","title","city","summary","skillsJson","experienceYears"
+       FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
+      [auth.sub],
+    );
+    if (profile.rowCount === 0) return fail(res, 400, "profile_required_for_quick_apply");
+    const p = profile.rows[0];
+    const skills = safeParseJson(p.skillsJson, [] as string[]);
+
+    const vacancy = await pool.query(
+      `SELECT v."id", v."status" AS "vacancyStatus", v."title", v."description",
+              v."skillsJson", v."questionsJson", p."clientId"
+       FROM "BuildVacancy" v LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [vacancyId.value],
+    );
+    if (vacancy.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (vacancy.rows[0].vacancyStatus === "CLOSED") return fail(res, 409, "vacancy_closed");
+    if (vacancy.rows[0].clientId === auth.sub) return fail(res, 400, "cannot_apply_to_own_vacancy");
+
+    const referredByRaw = req.body?.referredByUserId;
+    const referredByUserId =
+      typeof referredByRaw === "string" && referredByRaw.trim().length > 0 && referredByRaw.trim() !== auth.sub
+        ? referredByRaw.trim().slice(0, 200) : null;
+
+    const autoMessage = `${p.title || p.name} — ${p.experienceYears ?? 0} лет опыта${p.city ? `, ${p.city}` : ""}.${skills.length ? `\nКлючевые навыки: ${skills.slice(0, 6).join(", ")}.` : ""}${p.summary ? `\n\n${String(p.summary).slice(0, 600)}` : ""}\n\n— Quick Apply через QBuild.`;
+
+    const id = crypto.randomUUID();
+    try {
+      const result = await pool.query(
+        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId")
+         VALUES ($1,$2,$3,$4,'[]',$5) RETURNING *`,
+        [id, vacancyId.value, auth.sub, autoMessage, referredByUserId],
+      );
+
+      void (async () => {
+        try {
+          const emails = await pool.query(
+            `SELECT u."name" AS "uname", bp."name" AS "wName",
+                    v."title" AS "vacTitle", proj."title" AS "projTitle",
+                    cu."email" AS "clientEmail", cu."name" AS "clientName"
+             FROM "BuildApplication" a
+             LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+             LEFT JOIN "BuildProject" proj ON proj."id" = v."projectId"
+             LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+             LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+             LEFT JOIN "AEVIONUser" cu ON cu."id" = proj."clientId"
+             WHERE a."id" = $1 LIMIT 1`,
+            [id],
+          );
+          const e = emails.rows[0];
+          if (e?.clientEmail) {
+            sendNewApplication({
+              clientEmail: e.clientEmail,
+              clientName: e.clientName ?? "",
+              workerName: e.wName ?? e.uname ?? "Работник",
+              vacancyTitle: e.vacTitle ?? "",
+              projectTitle: e.projTitle ?? "",
+              applicationId: id,
+            });
+          }
+        } catch {/**/}
+      })();
+
+      const questions = safeParseJson(vacancy.rows[0].questionsJson, [] as string[]);
+      if (questions.length === 0 && process.env.ANTHROPIC_API_KEY) {
+        // No questions to answer — score based purely on profile vs vacancy.
+        void scoreApplicationAsync(id, {
+          vacancyTitle: vacancy.rows[0].title,
+          vacancyDescription: vacancy.rows[0].description,
+          requiredSkills: safeParseJson(vacancy.rows[0].skillsJson, [] as string[]),
+          questions: [], answers: [], candidateUserId: auth.sub,
+        });
+      }
+
+      return ok(res, result.rows[0], 201);
+    } catch (err: unknown) {
+      const e = err as { code?: string };
+      if (e.code === "23505") return fail(res, 409, "already_applied");
+      throw err;
+    }
+  } catch (err: unknown) {
+    return fail(res, 500, "quick_apply_failed", { details: (err as Error).message });
+  }
+});

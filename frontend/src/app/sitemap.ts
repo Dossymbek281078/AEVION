@@ -32,6 +32,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/payments/compliance", changeFrequency: "weekly", priority: 0.7 },
   { path: "/payments/api", changeFrequency: "weekly", priority: 0.7 },
   { path: "/payments/audit", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/pricing", changeFrequency: "weekly", priority: 0.9 },
 ];
 
 async function fetchCaseIds(): Promise<string[]> {
@@ -48,11 +49,11 @@ async function fetchCaseIds(): Promise<string[]> {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
-  const staticEntries: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map(({ path, changeFrequency, priority }) => ({
-    url: `${BASE_URL}${path}`,
+  const topLevelEntries: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map((r) => ({
+    url: `${BASE_URL}${r.path}`,
     lastModified: now,
-    changeFrequency,
-    priority,
+    changeFrequency: r.changeFrequency,
+    priority: r.priority,
   }));
 
   const tierEntries: MetadataRoute.Sitemap = TIERS.map((id) => ({
@@ -77,5 +78,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.75,
   }));
 
-  return [...staticEntries, ...tierEntries, ...industryEntries, ...caseEntries];
+  return [...topLevelEntries, ...tierEntries, ...industryEntries, ...caseEntries];
 }

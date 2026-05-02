@@ -11,9 +11,13 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/admin/", "/api/", "/api-backend/", "/pay/", "/r/", "/account/", "/_next/"],
       },
     ],
+    // Two sitemap directives: the Next.js-generated top-level page sitemap
+    // and the backend sitemap-index that fans out into per-module sitemaps
+    // (modules / bureau / awards / pipeline / qright / quantum-shield /
+    // planet). Crawlers merge both.
     sitemap: [
-      `${origin}/sitemap.xml`,
-      `${origin}/api-backend/api/aevion/sitemap.xml`,
+      `${BASE_URL}/sitemap.xml`,
+      `${BASE_URL}/api-backend/api/aevion/sitemap.xml`,
     ],
   };
 }

@@ -37,6 +37,7 @@
     "pg": "^8.19.0",
     "qrcode": "^1.5.4",
     "secrets.js-grempe": "^2.0.0",
+    "stripe": "^22.1.0",
     "ws": "^8.20.0"
   },
   "devDependencies": {

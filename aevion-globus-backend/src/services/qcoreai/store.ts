@@ -2069,6 +2069,32 @@ export async function deleteWorkspace(id: string, userId: string): Promise<boole
   return (r.rowCount ?? 0) > 0;
 }
 
+export async function updateWorkspace(
+  id: string,
+  userId: string,
+  patch: { name?: string; description?: string | null }
+): Promise<WorkspaceRow | null> {
+  await ensureQCoreTables(pool);
+  const ws = await getWorkspace(id, userId);
+  if (!ws || ws.ownerId !== userId) return null;
+
+  const name = patch.name ? patch.name.trim().slice(0, 80) : ws.name;
+  const description = patch.description !== undefined ? (patch.description ? String(patch.description).trim().slice(0, 400) : null) : ws.description;
+
+  if (!isDbReady()) {
+    ws.name = name;
+    ws.description = description;
+    ws.updatedAt = nowIso();
+    memWorkspaces.set(id, ws);
+    return ws;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreWorkspace" SET "name"=$2,"description"=$3,"updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
+    [id, name, description]
+  );
+  return (r.rows?.[0] as WorkspaceRow) ?? null;
+}
+
 export async function listWorkspaceMembers(workspaceId: string, userId: string): Promise<WorkspaceMemberRow[]> {
   await ensureQCoreTables(pool);
   const ws = await getWorkspace(workspaceId, userId);

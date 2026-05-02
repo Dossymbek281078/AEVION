@@ -1,23 +1,11 @@
 import type { MetadataRoute } from "next";
-import { headers } from "next/headers";
+import { getApiBase } from "@/lib/apiBase";
 
-export const dynamic = "force-dynamic";
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
 
-async function getOrigin(): Promise<string> {
-  try {
-    const h = await headers();
-    const host = h.get("x-forwarded-host") || h.get("host");
-    const proto = h.get("x-forwarded-proto") || "https";
-    if (host) return `${proto}://${host}`;
-  } catch {}
-  return "https://aevion.tech";
-}
+const TIERS = ["free", "pro", "business", "enterprise"];
+const INDUSTRIES = ["banks", "startups", "government", "creators", "law-firms"];
 
-// Top-level routes only. Per-resource pages (e.g. /modules/<id>,
-// /bureau/cert/<id>, /awards/entry/<id>) live in each module's own
-// /api/<module>/sitemap.xml — those are aggregated by the backend
-// /api/aevion/sitemap.xml sitemap-index, which is the canonical entry
-// point referenced from /robots.txt.
 const TOP_LEVEL_ROUTES: Array<{
   path: string;
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
@@ -32,20 +20,63 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
   { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
   { path: "/planet", changeFrequency: "daily", priority: 0.8 },
-  { path: "/planet/transparency", changeFrequency: "weekly", priority: 0.6 },
   { path: "/awards", changeFrequency: "daily", priority: 0.8 },
-  { path: "/awards/results", changeFrequency: "daily", priority: 0.8 },
   { path: "/qcoreai", changeFrequency: "weekly", priority: 0.7 },
   { path: "/cyberchess", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments", changeFrequency: "weekly", priority: 0.9 },
+  { path: "/payments/links", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/methods", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/webhooks", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/settlements", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/subscriptions", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/compliance", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/api", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/payments/audit", changeFrequency: "weekly", priority: 0.6 },
 ];
 
+async function fetchCaseIds(): Promise<string[]> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/pricing/cases`, { cache: "no-store" });
+    if (!r.ok) return [];
+    const j = (await r.json()) as { items?: Array<{ id: string }> };
+    return (j.items ?? []).map((c) => c.id).filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const origin = await getOrigin();
-  const today = new Date();
-  return TOP_LEVEL_ROUTES.map((r) => ({
-    url: `${origin}${r.path}`,
-    lastModified: today,
-    changeFrequency: r.changeFrequency,
-    priority: r.priority,
+  const now = new Date();
+
+  const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((path) => ({
+    url: `${BASE_URL}${path}`,
+    lastModified: now,
+    changeFrequency: path === "/pricing" || path === "" ? "weekly" : "monthly",
+    priority:
+      path === "" ? 1.0 : path.startsWith("/pricing") ? 0.9 : 0.7,
   }));
+
+  const tierEntries: MetadataRoute.Sitemap = TIERS.map((id) => ({
+    url: `${BASE_URL}/pricing/${id}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.85,
+  }));
+
+  const industryEntries: MetadataRoute.Sitemap = INDUSTRIES.map((id) => ({
+    url: `${BASE_URL}/pricing/for/${id}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.8,
+  }));
+
+  const caseIds = await fetchCaseIds();
+  const caseEntries: MetadataRoute.Sitemap = caseIds.map((id) => ({
+    url: `${BASE_URL}/pricing/cases/${id}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.75,
+  }));
+
+  return [...staticEntries, ...tierEntries, ...industryEntries, ...caseEntries];
 }

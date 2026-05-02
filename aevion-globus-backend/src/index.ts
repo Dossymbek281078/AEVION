@@ -32,6 +32,10 @@ import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
+import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
+import { planetPayoutsRouter } from "./routes/planetPayouts";
+import { bankTestRouter } from "./routes/bankTest";
+import { metricsRouter } from "./routes/metrics";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -343,7 +347,7 @@ app.get("/api/openapi.json", (_req, res) => {
 app.use("/api/qtrade", qtradeRouter);
 app.use("/api/aev", aevRouter);
 app.use("/api/qright", qrightRouter);
-// Royalties are handled within qrightRouter at /api/qright/*.
+app.use("/api/qright", qrightRoyaltiesRouter);
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
 
@@ -378,12 +382,19 @@ app.use("/api/auth/oauth", authOauthRouter);
 // Planet / Compliance / Evidence / Certificate
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
+app.use("/api/planet", planetPayoutsRouter);
 app.use("/api/awards", awardsRouter);
 
 // ==========================
 // AEVION Hub — composite cross-product health + OpenAPI index
 // ==========================
 app.use("/api/aevion", aevionHubRouter);
+
+// Internal: synthetic webhook dispatcher used by /bank/diagnostics.
+app.use("/api/bank", bankTestRouter);
+
+// Prometheus metrics. Public unless METRICS_TOKEN is set in env.
+app.use("/api/metrics", metricsRouter);
 
 app.use(
   (

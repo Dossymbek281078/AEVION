@@ -130,7 +130,7 @@ const KB: KbEntry[] = [
   },
   {
     keywords: ["что мне добавить", "что не хватает", "что ещё нужно", "следующий шаг"],
-    answer: null, // будет заполнен контекстно
+    answer: "__contextual__",
   },
 ];
 
@@ -214,7 +214,7 @@ export function askConsultant(question: string, lsr: Lsr, calc: LsrCalc): AiMess
 
   // База знаний
   const entry = matchKb(question);
-  if (entry && entry.answer) {
+  if (entry && entry.answer && entry.answer !== "__contextual__") {
     return {
       role: "assistant",
       text: entry.answer,

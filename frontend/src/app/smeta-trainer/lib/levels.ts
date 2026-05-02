@@ -8,7 +8,7 @@ export interface LevelDef {
   timeHours: number;
   objective: string;
   description: string;
-  zacketCriteria: string;
+  zachetCriteria: string;
 }
 
 export const LEVELS: LevelDef[] = [

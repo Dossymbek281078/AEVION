@@ -140,8 +140,9 @@ export function Level2View() {
             <button onClick={() => setShowTask(true)} className="text-amber-600 underline">показать задание</button>
           </div>
         )}
+        {/* key сбрасывает LsrEditor когда применяется demo — иначе useLocalSmeta не перечитает initialLsr */}
         <div className="flex-1 overflow-hidden">
-          <LsrEditor initialLsr={lsr} />
+          <LsrEditor key={demoApplied ? "demo" : "fresh"} initialLsr={lsr} />
         </div>
       </div>
     </div>

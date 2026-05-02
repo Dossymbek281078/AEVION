@@ -17,44 +17,40 @@ export function useLocalSmeta(initial: Lsr): {
 } {
   const key = storageKey(initial.id);
 
-  const [lsr, setLsrState] = useState<Lsr>(() => {
-    if (typeof window === "undefined") return initial;
+  // ⚠️  Всегда начинаем с `initial` — это устраняет hydration mismatch.
+  //     localStorage читается в useEffect ПОСЛЕ гидрации.
+  const [lsr, setLsrState]   = useState<Lsr>(initial);
+  const [hasSaved, setHasSaved] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Загрузка из localStorage после монтирования
+  useEffect(() => {
+    setHydrated(true);
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw) as Lsr;
-        // Базовая проверка совместимости
         if (parsed.id === initial.id && Array.isArray(parsed.sections)) {
-          return parsed;
+          setLsrState(parsed);
+          setHasSaved(true);
+          return;
         }
       }
-    } catch {
-      // ignore parse errors
-    }
-    return initial;
-  });
-
-  const [hasSaved, setHasSaved] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const existing = localStorage.getItem(key);
-      setHasSaved(!!existing);
     } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // Сохранение при каждом изменении (debounce 500ms)
+  // Автосохранение (debounce 500ms) — только после гидрации
   useEffect(() => {
+    if (!hydrated) return;
     const timer = setTimeout(() => {
-      if (typeof window === "undefined") return;
       try {
         localStorage.setItem(key, JSON.stringify(lsr));
         setHasSaved(true);
       } catch {}
     }, 500);
     return () => clearTimeout(timer);
-  }, [lsr, key]);
+  }, [lsr, key, hydrated]);
 
   const setLsr = useCallback(
     (updater: Lsr | ((prev: Lsr) => Lsr)) => {
@@ -66,11 +62,7 @@ export function useLocalSmeta(initial: Lsr): {
   );
 
   const reset = useCallback(() => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.removeItem(key);
-      } catch {}
-    }
+    try { localStorage.removeItem(key); } catch {}
     setLsrState(initial);
     setHasSaved(false);
   }, [key, initial]);

@@ -100,7 +100,7 @@ export function LevelHome() {
                     <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
                       <span>⏱ ~{level.timeHours} ч</span>
                       <span className="text-slate-300">·</span>
-                      <span>✓ {(level as { zachetCriteria?: string; zacketCriteria?: string }).zachetCriteria ?? (level as { zachetCriteria?: string; zacketCriteria?: string }).zacketCriteria}</span>
+                      <span>✓ {level.zachetCriteria}</span>
                     </div>
                   </div>
 

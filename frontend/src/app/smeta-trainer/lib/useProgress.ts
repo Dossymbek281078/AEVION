@@ -43,7 +43,13 @@ function save(p: CourseProgress) {
 }
 
 export function useProgress() {
-  const [progress, setProgress] = useState<CourseProgress>(load);
+  // Всегда начинаем с DEFAULT — localStorage читается в useEffect (fix hydration mismatch)
+  const [progress, setProgress] = useState<CourseProgress>(DEFAULT);
+
+  useEffect(() => {
+    setProgress(load());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setLevel = useCallback((num: number, update: Partial<LevelProgress>) => {
     setProgress((prev) => {

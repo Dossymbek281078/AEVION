@@ -6,7 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
-import Piece from "./Pieces";
+import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
@@ -15,6 +15,7 @@ import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, 
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput } from "./useBoardInput";
+import { StreamerOverlay } from "./StreamerOverlay";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
 import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
@@ -625,6 +626,8 @@ export default function CyberChessPage(){
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
+  const streamerToolbarRef=useRef<{showYT:()=>void;showTW:()=>void;ytVisible:boolean;twVisible:boolean}|null>(null);
+  const activePieceSet=useActivePieceSet();
   // Threat Heatmap (killer #12) — overlay контроля доски, нет ни у chess.com, ни у lichess
   const[showThreatMap,sShowThreatMap]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_threatmap_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_threatmap_v1",showThreatMap?"1":"0")}catch{}},[showThreatMap]);
@@ -2568,8 +2571,11 @@ export default function CyberChessPage(){
   return(<main style={{background:T.bg,minHeight:"100vh"}}>
     <ProductPageShell maxWidth={2000}><Wave1Nav/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
-      {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6}}>
+      <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
+      {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>
         <div style={{padding:"6px 12px",background:"rgba(124,58,237,0.2)",border:"1px solid rgba(124,58,237,0.4)",borderRadius:8,color:"#a78bfa",fontSize:12,fontWeight:800,letterSpacing:"0.05em"}}>📺 STREAMER MODE</div>
+        <button onClick={()=>streamerToolbarRef.current?.showYT()} title="Show YouTube panel" style={{padding:"6px 10px",background:"rgba(255,0,51,0.18)",border:"1px solid rgba(255,0,51,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ YT</button>
+        <button onClick={()=>streamerToolbarRef.current?.showTW()} title="Show Twitch panel" style={{padding:"6px 10px",background:"rgba(145,70,255,0.18)",border:"1px solid rgba(145,70,255,0.5)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>+ Twitch</button>
         <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
       </div>}
       {/* Sticky glass header */}
@@ -7011,6 +7017,28 @@ export default function CyberChessPage(){
                   </div>
                   <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{th.name}</span>
                   {locked&&<span style={{fontSize:10,color:"#b45309"}}>🔒</span>}
+                </button>;
+              })}
+            </div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>♟ Набор фигур</div>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
+              {PIECE_SETS.map(ps=>{
+                const selected=activePieceSet===ps.id;
+                return <button key={ps.id}
+                  className="cc-focus-ring"
+                  onClick={()=>{setActivePieceSet(ps.id);showToast(`Набор: ${ps.name}`,"info")}}
+                  title={ps.hint}
+                  style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
+                    borderRadius:RADIUS.full,
+                    border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                    background:selected?CC.brandSoft:CC.surface1,
+                    cursor:"pointer",
+                    transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                  <div style={{width:28,height:18,display:"flex",gap:1,alignItems:"center",justifyContent:"center",background:bT.light,borderRadius:3,padding:1}}>
+                    <div style={{width:13,height:16}}><Piece type="n" color="w" setOverride={ps.id}/></div>
+                    <div style={{width:13,height:16,background:bT.dark,borderRadius:2}}><Piece type="n" color="b" setOverride={ps.id}/></div>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{ps.name}</span>
                 </button>;
               })}
             </div>

@@ -97,7 +97,7 @@ jobs:
             "http://127.0.0.1:3000/api/payments/v1/links/$ID" | jq -e '.status == "active"'
       - name: Audit captured the create
         run: |
-          KEY="sk_test_smoke_audit$(date +%s)xyz"
+          KEY="sk_test_smokeaudit$(date +%s)xyz"
           curl -sSf -X POST http://127.0.0.1:3000/api/payments/v1/links \
             -H "Authorization: Bearer $KEY" \
             -H "Content-Type: application/json" \

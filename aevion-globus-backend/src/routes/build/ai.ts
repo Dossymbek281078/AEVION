@@ -29,7 +29,7 @@ const aiRateLimiter = rateLimit({
         if (typeof payload.sub === "string") return payload.sub;
       } catch { /**/ }
     }
-    return ipKeyGenerator(req.ip ?? "anon");
+    return ipKeyGenerator(req.ip ?? "::1");
   },
   message: {
     success: false,

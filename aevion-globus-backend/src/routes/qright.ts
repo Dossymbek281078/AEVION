@@ -5,6 +5,7 @@ import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
+import { applyOgEtag } from "../lib/ogEtag";
 
 const QRIGHT_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "QRightWebhook",
@@ -1879,7 +1880,7 @@ function qrEsc(s: string): string {
 
 // 🔹 GET /og.svg — index card. Pulls live counters so a paste of /qright
 //    reflects current state.
-qrightRouter.get("/og.svg", embedRateLimit, async (_req, res) => {
+qrightRouter.get("/og.svg", embedRateLimit, async (req, res) => {
   try {
     await ensureQRightTable();
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
@@ -1892,6 +1893,7 @@ qrightRouter.get("/og.svg", embedRateLimit, async (_req, res) => {
     const total = Number(t.total) || 0;
     const revoked = Number(t.revoked) || 0;
     const active = total - revoked;
+    if (applyOgEtag(req, res, `qright-index-${total}-${active}-${revoked}`)) return;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
@@ -1926,7 +1928,6 @@ qrightRouter.get("/og.svg", embedRateLimit, async (_req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "index og failed", details: err.message });

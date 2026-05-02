@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { refererHost } from "../lib/qrightHelpers";
+import { applyOgEtag } from "../lib/ogEtag";
 
 export const awardsRouter = Router();
 
@@ -1249,7 +1250,9 @@ awardsRouter.get("/entries/:entryId/og.svg", awardsEmbedRateLimit, async (req, r
     }
     const row = r.rows[0] as any;
     const place = (row.place as number | null) ?? null;
-    const theme = awardsMedalTheme(place, String(row.status));
+    const status = String(row.status);
+    if (applyOgEtag(req, res, `awards-entry-${entryId}-${place ?? 0}-${status}`)) return;
+    const theme = awardsMedalTheme(place, status);
     const titleLines = awardsWrap(row.submissionTitle || row.seasonTitle || entryId, 24, 2);
     const seasonLine = `${String(row.seasonType || "").toUpperCase()} · ${row.seasonTitle || row.seasonCode || ""}`;
 
@@ -1289,7 +1292,6 @@ awardsRouter.get("/entries/:entryId/og.svg", awardsEmbedRateLimit, async (req, r
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "entry og failed", details: err.message });
@@ -1298,7 +1300,7 @@ awardsRouter.get("/entries/:entryId/og.svg", awardsEmbedRateLimit, async (req, r
 
 // 🔹 GET /og.svg — index-page social-share card. Pulls live totals so a
 //    paste of /awards reflects current state.
-awardsRouter.get("/og.svg", awardsEmbedRateLimit, async (_req, res) => {
+awardsRouter.get("/og.svg", awardsEmbedRateLimit, async (req, res) => {
   try {
     await ensureAwardsTables();
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
@@ -1316,6 +1318,7 @@ awardsRouter.get("/og.svg", awardsEmbedRateLimit, async (_req, res) => {
     const finalized = t.finalized || 0;
     const entries = t.entries || 0;
     const medals = t.medals || 0;
+    if (applyOgEtag(req, res, `awards-index-${seasons}-${finalized}-${entries}-${medals}`)) return;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
@@ -1356,7 +1359,6 @@ awardsRouter.get("/og.svg", awardsEmbedRateLimit, async (_req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "index og failed", details: err.message });

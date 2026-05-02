@@ -36,6 +36,7 @@ import {
   reverifyAuthorCosign,
   verifyAuthorCosign,
 } from "../lib/cosign/authorCosign";
+import { applyOgEtag } from "../lib/ogEtag";
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -2384,6 +2385,10 @@ pipelineRouter.get("/certificate/:certId/og.svg", async (req, res) => {
     }
     const row = r.rows[0] as any;
     const status = String(row.status || "active");
+    const protectedAtMs = row.protectedAt
+      ? (row.protectedAt instanceof Date ? row.protectedAt.getTime() : new Date(row.protectedAt).getTime())
+      : 0;
+    if (applyOgEtag(req, res, `pipeline-cert-${certId}-${status}-${protectedAtMs}`)) return;
     const isRevoked = status === "revoked";
     const accent = isRevoked ? "#dc2626" : "#16a34a";
     const label = isRevoked ? "REVOKED" : "ACTIVE";
@@ -2442,7 +2447,6 @@ pipelineRouter.get("/certificate/:certId/og.svg", async (req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "cert og failed", details: err.message });
@@ -2450,7 +2454,7 @@ pipelineRouter.get("/certificate/:certId/og.svg", async (req, res) => {
 });
 
 // 🔹 GET /og.svg — index-page social-share card (totals + active + revoked).
-pipelineRouter.get("/og.svg", async (_req, res) => {
+pipelineRouter.get("/og.svg", async (req, res) => {
   try {
     await ensureTables();
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
@@ -2466,6 +2470,7 @@ pipelineRouter.get("/og.svg", async (_req, res) => {
     const total = t.n || 0;
     const active = t.active || 0;
     const revoked = t.revoked || 0;
+    if (applyOgEtag(req, res, `pipeline-index-${total}-${active}-${revoked}`)) return;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
@@ -2500,7 +2505,6 @@ pipelineRouter.get("/og.svg", async (_req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "index og failed", details: err.message });

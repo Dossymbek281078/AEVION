@@ -95,7 +95,7 @@ function Bar({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, fontSize: 13 }}>
         <span style={{ color: "#0f172a", fontWeight: 700 }}>{label}</span>
         <span style={{ color: "#64748b" }}>
-          {fmt(count, lang)}
+          {fmt(count, lang as "en" | "ru")}
           <span style={{ marginLeft: 6, color: "#94a3b8" }}>{pct.toFixed(1)}%</span>
         </span>
       </div>
@@ -111,7 +111,7 @@ export default async function QRightTransparencyPage({ searchParams }: Props) {
   const h = await headers();
   const lang = pickLang(sp, h);
   const t = (key: string, vars?: Record<string, string | number>) =>
-    tString("transparency", lang, key, vars);
+    tString("transparency", lang as "en" | "ru", key, vars);
 
   const data = await loadTransparency();
 
@@ -159,15 +159,15 @@ export default async function QRightTransparencyPage({ searchParams }: Props) {
         {/* ── Headline stats ── */}
         <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", marginBottom: 20 }}>
           <div style={card}>
-            <p style={stat}>{fmt(data.totals.registered, lang)}</p>
+            <p style={stat}>{fmt(data.totals.registered, lang as "en" | "ru")}</p>
             <div style={statLabel}>{t("headRegistered")}</div>
           </div>
           <div style={{ ...card, borderColor: "rgba(13,148,136,0.25)" }}>
-            <p style={{ ...stat, color: "#0d9488" }}>{fmt(data.totals.active, lang)}</p>
+            <p style={{ ...stat, color: "#0d9488" }}>{fmt(data.totals.active, lang as "en" | "ru")}</p>
             <div style={statLabel}>{t("headActive")}</div>
           </div>
           <div style={{ ...card, borderColor: "rgba(220,38,38,0.25)" }}>
-            <p style={{ ...stat, color: "#dc2626" }}>{fmt(data.totals.revoked, lang)}</p>
+            <p style={{ ...stat, color: "#dc2626" }}>{fmt(data.totals.revoked, lang as "en" | "ru")}</p>
             <div style={statLabel}>{t("headRevoked")}</div>
           </div>
           <div style={card}>
@@ -192,17 +192,17 @@ export default async function QRightTransparencyPage({ searchParams }: Props) {
               {data.revokesByReasonCode.map((r) => (
                 <Bar
                   key={r.code}
-                  label={revokeReasonLabel(r.code, lang)}
+                  label={revokeReasonLabel(r.code, lang as "en" | "ru")}
                   count={r.count}
                   total={totalRevokes}
                   accent="#dc2626"
-                  lang={lang}
+                  lang={lang as "en" | "ru"}
                 />
               ))}
               <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
                 {t("totalRevSummary", {
-                  total: fmt(totalRevokes, lang),
-                  registered: fmt(data.totals.registered, lang),
+                  total: fmt(totalRevokes, lang as "en" | "ru"),
+                  registered: fmt(data.totals.registered, lang as "en" | "ru"),
                   pct:
                     totalRevokes > 0
                       ? ((totalRevokes / data.totals.registered) * 100).toFixed(2)
@@ -222,7 +222,7 @@ export default async function QRightTransparencyPage({ searchParams }: Props) {
             <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>{t("noRegistrations")}</p>
           ) : (
             data.registrationsByKind.map((r) => (
-              <Bar key={r.kind} label={r.kind} count={r.count} total={totalKinds} accent="#0d9488" lang={lang} />
+              <Bar key={r.kind} label={r.kind} count={r.count} total={totalKinds} accent="#0d9488" lang={lang as "en" | "ru"} />
             ))
           )}
         </div>

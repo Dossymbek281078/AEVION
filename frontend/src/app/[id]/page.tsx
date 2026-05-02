@@ -125,6 +125,8 @@ export default async function ProjectByIdPage({
 
   const country = normalize(sp?.country);
   const city = normalize(sp?.city);
+  const lang = (normalize(sp?.lang) as ServerLang) || "en";
+  const t = (k: string, v?: Record<string, string | number>) => tServer(lang, k, v);
 
   let res: Response;
   try {

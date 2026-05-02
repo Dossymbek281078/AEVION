@@ -1,6 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
+declare global {
+  namespace Express {
+    interface Request {
+      auth?: import("./authJwt").JwtPayload;
+    }
+  }
+}
+
 export type JwtPayload = {
   sub: string;
   email: string;
@@ -47,4 +55,19 @@ export function verifyBearerToken(token: string | null | undefined): JwtPayload 
   } catch {
     return null;
   }
+}
+
+/**
+ * Express middleware — rejects unauthenticated requests with 401.
+ * On success attaches the JWT payload as `(req as any).auth`.
+ * Used by bank-track routes that require a signed-in user.
+ */
+export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  const payload = verifyBearerOptional(req);
+  if (!payload) {
+    res.status(401).json({ error: "auth required" });
+    return;
+  }
+  (req as any).auth = payload;
+  next();
 }

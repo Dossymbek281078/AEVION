@@ -262,7 +262,7 @@ export default async function ModulesPage({ searchParams }: Props) {
   const sp = (await searchParams) || {};
   const h = await headers();
   const lang = pickLang(sp, h);
-  const t = COPY[lang];
+  const t = COPY[lang as "en" | "ru"];
 
   const tier = typeof sp.tier === "string" ? sp.tier : "";
   const status = typeof sp.status === "string" ? sp.status : "";

@@ -289,7 +289,7 @@ export default async function ModuleDetailPage({ params, searchParams }: Props) 
   const sp = (await searchParams) || {};
   const h = await headers();
   const lang = pickLang(sp, h);
-  const t = COPY[lang];
+  const t = COPY[lang as "en" | "ru"];
 
   const [detail, history, graph] = await Promise.all([
     loadDetail(id),

@@ -2,7 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { getJwtSecret, invalidateTokenVersionCache } from "../lib/authJwt";
+import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
@@ -11,8 +11,8 @@ export const authRouter = Router();
 
 // 10 register attempts per minute per IP, refilled gradually.
 // Login gets a more relaxed bucket (legitimate password retries are common).
-const registerLimiter = rateLimit({ capacity: 10, refillPerSec: 10 / 60 });
-const loginLimiter = rateLimit({ capacity: 30, refillPerSec: 30 / 60 });
+const registerLimiter = rateLimit({ windowMs: 60000, max: 10 });
+const loginLimiter = rateLimit({ windowMs: 60000, max: 30 });
 
 const pool = getPool();
 

@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { createHmac, randomUUID } from "node:crypto";
-import { requireAuth } from "../lib/authJwt";
+import { verifyBearerOptional } from "../lib/authJwt";
+function requireAuth(req: any, res: any, next: any) { const p = verifyBearerOptional(req); if (!p) return res.status(401).json({ error: "auth required" }); (req as any).auth = p; next(); }
 import { stableStringify } from "../lib/stableStringify";
 
 // Server-side proxy that fires synthetic partner webhooks against the

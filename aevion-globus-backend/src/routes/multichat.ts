@@ -108,7 +108,7 @@ async function listConvs(userId: string): Promise<Conversation[]> {
        LIMIT 200`,
       [userId],
     );
-    return r.rows.map((row) => ({
+    return r.rows.map((row: any) => ({
       ...row,
       createdAt: toIso(row.createdAt),
       updatedAt: toIso(row.updatedAt),

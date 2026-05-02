@@ -133,7 +133,7 @@ export async function loadTournaments(): Promise<Tournament[]> {
        FROM cyberchess_tournaments WHERE status = 'upcoming'
        ORDER BY starts_at ASC`,
     );
-    return r.rows.map((row) => ({
+    return r.rows.map((row: any) => ({
       ...row,
       startsAt: toIso(row.startsAt),
     })) as Tournament[];
@@ -215,15 +215,15 @@ export async function loadSnapshot(): Promise<LedgerSnapshot> {
       ),
     ]);
     return {
-      royaltyEvents: r.rows.map((row) => ({
+      royaltyEvents: r.rows.map((row: any) => ({
         ...row,
         paidAt: toIso(row.paidAt),
       })) as RoyaltyEvent[],
-      chessPrizes: c.rows.map((row) => ({
+      chessPrizes: c.rows.map((row: any) => ({
         ...row,
         finalizedAt: toIso(row.finalizedAt),
       })) as ChessPrize[],
-      planetCerts: p.rows.map((row) => ({
+      planetCerts: p.rows.map((row: any) => ({
         ...row,
         certifiedAt: toIso(row.certifiedAt),
       })) as PlanetCert[],

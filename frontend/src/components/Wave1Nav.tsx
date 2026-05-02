@@ -17,7 +17,7 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <span style={{ color: sep }} aria-hidden>|</span>
       <Link href="/demo" style={{ color: demoLink, fontWeight: 800 }}>Demo</Link>
       <Link href="/demo/deep" style={{ color: link, fontWeight: 650 }}>Deep dive</Link>
-      <Link href="/pitch" style={{ color: pitch, fontWeight: 800 }}>Pitch · $1B+</Link>
+      <Link href="/pitch" style={{ color: variant === "dark" ? "#fbbf24" : "#b45309", fontWeight: 800 }}>Pitch · $1B+</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
       <Link href="/auth" style={{ color: link, fontWeight: 600 }}>Auth</Link>
       <Link href="/qright" style={{ color: link, fontWeight: 600 }}>QRight</Link>

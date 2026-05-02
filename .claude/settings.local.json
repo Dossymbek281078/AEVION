@@ -21,7 +21,23 @@
       "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\frontend-bank\\\\START_SESSIONS.ps1\"\\); $nonAscii = $bytes | Where-Object { $_ -gt 127 }; \"Total bytes: $\\($bytes.Length\\)\"; \"Non-ASCII bytes: $\\($nonAscii.Count\\)\"; if \\($nonAscii.Count -gt 0\\) { \"First 20 non-ASCII byte values:\"; $nonAscii | Select-Object -First 20 })",
       "PowerShell(Out-Null *)",
       "Read(//c/Users/user/aevion-core/**)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(C:/Users/user/aevion-core/aevion-globus-backend/node_modules/.bin/tsc --noEmit --project C:/Users/user/aevion-core/frontend-qcore/aevion-globus-backend/tsconfig.json)",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "Bash(sed -n '160,170p' C:/Users/user/aevion-core/frontend-qcore/aevion-globus-backend/src/lib/chatHistory.ts)",
+      "Bash(sed -n '108,115p' C:/Users/user/aevion-core/frontend-qcore/aevion-globus-backend/src/routes/multichat.ts)",
+      "Bash(C:/Users/user/aevion-core/frontend/node_modules/.bin/tsc --noEmit --project C:/Users/user/aevion-core/frontend/tsconfig.json)",
+      "Bash(sed -n '30,35p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/build/admin/leads/page.tsx)",
+      "Bash(sed -n '17,22p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/build/admin/page.tsx)",
+      "Bash(sed -n '48,58p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/sitemap.ts)",
+      "Bash(C:/Users/user/aevion-core/frontend-qcore/frontend/node_modules/.bin/tsc --noEmit --project C:/Users/user/aevion-core/frontend-qcore/frontend/tsconfig.json)",
+      "Bash(sed -n '682,695p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/bank/page.tsx)",
+      "Bash(sed -n '998,1010p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/multichat-engine/page.tsx)",
+      "Bash(sed -n '185,200p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/planet/transparency/page.tsx)",
+      "Bash(sed -n '159,175p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/qright/transparency/page.tsx)",
+      "Bash(sed -n '48,60p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/lib/qrightRevokeReasons.ts)",
+      "Bash(sed -n '148,160p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/lib/qrightServerI18n.ts)"
     ]
   }
 }

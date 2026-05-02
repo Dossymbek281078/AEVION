@@ -111,7 +111,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   Required skills
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {vacancy.skills.map((s) => (
+                  {vacancy.skills.map((s: any) => (
                     <span
                       key={s}
                       className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs text-emerald-200"
@@ -228,7 +228,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                 : "bg-slate-500/15 text-slate-300";
           const initials = c.name
             .split(/\s+/)
-            .map((s) => s.charAt(0))
+            .map((s: any) => s.charAt(0))
             .join("")
             .toUpperCase()
             .slice(0, 2);
@@ -273,7 +273,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                   </div>
                   {c.matchedSkills.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      {c.matchedSkills.slice(0, 6).map((s) => (
+                      {c.matchedSkills.slice(0, 6).map((s: any) => (
                         <span
                           key={s}
                           className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
@@ -387,7 +387,7 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           </div>
           {(app.matchedSkills?.length ?? 0) > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
-              {app.matchedSkills!.slice(0, 6).map((s) => (
+              {app.matchedSkills!.slice(0, 6).map((s: any) => (
                 <span
                   key={s}
                   className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"

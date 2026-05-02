@@ -96,7 +96,7 @@ export default function BuildHomePage() {
           </button>
         )}
         <div className="flex items-center gap-1">
-          {STATUS_FILTERS.map((s) => (
+          {STATUS_FILTERS.map((s: any) => (
             <button
               key={s}
               onClick={() => setStatus(s)}

@@ -53,6 +53,7 @@ const LABELS_RU: Record<string, string> = {
 const TABLES: Record<Lang, Record<string, string>> = {
   en: LABELS_EN,
   ru: LABELS_RU,
+  kk: LABELS_EN,
 };
 
 // Lookup with graceful fallback: requested lang → English → raw code.

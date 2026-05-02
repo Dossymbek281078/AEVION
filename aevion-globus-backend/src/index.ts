@@ -26,6 +26,13 @@ import { checkoutRouter } from "./routes/checkout";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
+import { multichatRouter } from "./routes/multichat";
+import { aevRouter } from "./routes/aev";
+import { ecosystemRouter } from "./routes/ecosystem";
+import { cyberchessRouter } from "./routes/cyberchess";
+import { buildRouter } from "./routes/build";
+import { aevionHubRouter } from "./routes/aevion-hub";
+import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -336,8 +343,7 @@ app.get("/api/openapi.json", (_req, res) => {
 app.use("/api/qtrade", qtradeRouter);
 app.use("/api/aev", aevRouter);
 app.use("/api/qright", qrightRouter);
-// Royalties live alongside QRight authorship endpoints under /api/qright/*.
-app.use("/api/qright", qrightRoyaltiesRouter);
+// Royalties are handled within qrightRouter at /api/qright/*.
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
 

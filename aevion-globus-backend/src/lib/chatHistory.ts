@@ -161,7 +161,7 @@ export async function listChatTurns(opts: {
       LIMIT $${args.length}
     `;
     const r = await getPool().query(sql, args);
-    return r.rows.map((row) => ({ ...row, createdAt: toIso(row.createdAt) })) as ChatTurn[];
+    return r.rows.map((row: any) => ({ ...row, createdAt: toIso(row.createdAt) })) as ChatTurn[];
   }
 
   const data = await readJsonFile<{ items: ChatTurn[] }>(STORE_REL, { items: [] });

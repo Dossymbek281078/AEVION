@@ -161,8 +161,8 @@ export async function fetchAllPages<T>(
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const sep = path.includes("?") ? "&" : "?";
-    const cursorPart = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-    const qs = `${path}${sep}limit=${PAGE_LIMIT}${cursorPart}`;
+    const cursorPart: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    const qs: string = `${path}${sep}limit=${PAGE_LIMIT}${cursorPart}`;
 
     let data: { items?: T[]; nextCursor?: string | null; total?: number } | null;
     try {
@@ -180,7 +180,7 @@ export async function fetchAllPages<T>(
     out.push(...items);
     if (typeof data?.total === "number") serverTotal = data.total;
 
-    const next = data?.nextCursor ?? null;
+    const next: string | null = data?.nextCursor ?? null;
     if (!next) return { items: out, total: serverTotal ?? out.length, truncated };
     cursor = next;
   }

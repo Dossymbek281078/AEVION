@@ -134,7 +134,7 @@ function Bar({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, fontSize: 13 }}>
         <span style={{ color: "#0f172a", fontWeight: 700 }}>{label}</span>
         <span style={{ color: "#64748b" }}>
-          {fmt(count, lang)}
+          {fmt(count, lang as "en" | "ru")}
           <span style={{ marginLeft: 6, color: "#94a3b8" }}>{pct.toFixed(1)}%</span>
         </span>
       </div>
@@ -149,7 +149,7 @@ export default async function PlanetTransparencyPage({ searchParams }: Props) {
   const sp = (await searchParams) || {};
   const h = await headers();
   const lang = pickLang(sp, h);
-  const t = COPY[lang];
+  const t = COPY[lang as "en" | "ru"];
   const data = await loadTransparency();
 
   if (!data) {
@@ -185,15 +185,15 @@ export default async function PlanetTransparencyPage({ searchParams }: Props) {
 
         <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", marginBottom: 20 }}>
           <div style={card}>
-            <p style={stat}>{fmt(data.totals.certificates, lang)}</p>
+            <p style={stat}>{fmt(data.totals.certificates, lang as "en" | "ru")}</p>
             <div style={statLabel}>{t.headIssued}</div>
           </div>
           <div style={{ ...card, borderColor: "rgba(13,148,136,0.25)" }}>
-            <p style={{ ...stat, color: "#0d9488" }}>{fmt(data.totals.active, lang)}</p>
+            <p style={{ ...stat, color: "#0d9488" }}>{fmt(data.totals.active, lang as "en" | "ru")}</p>
             <div style={statLabel}>{t.headActive}</div>
           </div>
           <div style={{ ...card, borderColor: "rgba(220,38,38,0.25)" }}>
-            <p style={{ ...stat, color: "#dc2626" }}>{fmt(data.totals.revoked, lang)}</p>
+            <p style={{ ...stat, color: "#dc2626" }}>{fmt(data.totals.revoked, lang as "en" | "ru")}</p>
             <div style={statLabel}>{t.headRevoked}</div>
           </div>
           <div style={card}>
@@ -217,17 +217,17 @@ export default async function PlanetTransparencyPage({ searchParams }: Props) {
               {data.revokesByReasonCode.map((r) => (
                 <Bar
                   key={r.code}
-                  label={revokeReasonLabel(r.code, lang)}
+                  label={revokeReasonLabel(r.code, lang as "en" | "ru")}
                   count={r.count}
                   total={totalRevokes}
                   accent="#dc2626"
-                  lang={lang}
+                  lang={lang as "en" | "ru"}
                 />
               ))}
               <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
                 {t.summary
-                  .replace("{total}", fmt(totalRevokes, lang))
-                  .replace("{issued}", fmt(data.totals.certificates, lang))
+                  .replace("{total}", fmt(totalRevokes, lang as "en" | "ru"))
+                  .replace("{issued}", fmt(data.totals.certificates, lang as "en" | "ru"))
                   .replace(
                     "{pct}",
                     data.totals.certificates > 0
@@ -253,7 +253,7 @@ export default async function PlanetTransparencyPage({ searchParams }: Props) {
                 count={r.count}
                 total={totalTypes}
                 accent="#0d9488"
-                lang={lang}
+                lang={lang as "en" | "ru"}
               />
             ))
           )}

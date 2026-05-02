@@ -112,13 +112,12 @@ qcoreaiRouter.post("/chat", async (req, res) => {
     const providerId = resolveProvider(requestedProvider);
 
     if (providerId === "stub") {
-      const lastUser = [...messages].reverse().find((m) => m.role === "user");
       return res.json({
         mode: "stub",
         provider: "none",
         model: "none",
         reply:
-          `[QCoreAI — no AI provider configured]\n\nYour question: "${lastUser?.content?.slice(0, 200) || ""}"\n\n` +
+          `[QCoreAI — no AI provider configured]\n\nTo enable AI responses, add one of these API keys to the backend environment:\n` +
           `To enable AI responses, add one of these API keys to the backend environment:\n` +
           `- ANTHROPIC_API_KEY (Claude)\n- OPENAI_API_KEY (GPT-4)\n- GEMINI_API_KEY (Gemini)\n- DEEPSEEK_API_KEY (DeepSeek)\n- GROK_API_KEY (Grok)`,
         usage: null,
@@ -1750,9 +1749,9 @@ qcoreaiRouter.patch("/workspaces/:id", workspaceLimiter, async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { name, description } = req.body || {};
-    const ws = await getWorkspace(req.params.id, auth.sub);
+    const ws = await getWorkspace(String(req.params.id), auth.sub);
     if (name === undefined && description === undefined) return res.status(400).json({ error: "name or description required" });
-    const updated = await updateWorkspace(req.params.id, auth.sub, {
+    const updated = await updateWorkspace(String(req.params.id), auth.sub, {
       name: typeof name === "string" ? name : undefined,
       description: description !== undefined ? (typeof description === "string" ? description : null) : undefined,
     });

@@ -3,7 +3,21 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "AEVION platform terms of service and user agreement.",
+  description:
+    "AEVION terms of service and user agreement. Authorship rights stay with creators, AEVION takes no IP and no exclusive license. Read the full agreement before signing in.",
+  alternates: { canonical: "/terms" },
+  openGraph: {
+    title: "AEVION Terms of Service",
+    description: "Authorship stays with you. AEVION takes no IP. Read the full agreement.",
+    type: "article",
+    siteName: "AEVION",
+  },
+  twitter: {
+    card: "summary",
+    title: "AEVION Terms of Service",
+    description: "User agreement at AEVION.",
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function TermsPage() {

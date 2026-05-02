@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 type Account = {
@@ -201,6 +202,8 @@ export default function QTradePage() {
         , или каталог <code style={{ fontSize: 13 }}>AEVION_DATA_DIR</code>
         ).
       </div>
+
+      <PitchValueCallout moduleId="qtrade" variant="dark" />
 
       <div style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 10 }}>
         {[

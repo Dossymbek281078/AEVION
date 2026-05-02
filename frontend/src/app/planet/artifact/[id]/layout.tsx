@@ -9,12 +9,20 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
 
+  const safeId = (id || "").slice(0, 32);
+  const fallbackOg = `/api/og/artifact/${encodeURIComponent(safeId || "artifact")}?title=${encodeURIComponent("AEVION Planet artifact")}&subtitle=${encodeURIComponent("Public artifact showcase: compliance, voting, certificate.")}`;
+
   const fallback: Metadata = {
     title: "Artifact Planet — AEVION",
     description: "Публичная витрина artifactа: compliance, votesание, сертификат.",
     openGraph: {
       title: "AEVION Planet Artifact",
       description: "Публичная витрина artifactа с compliance и votesанием участников Planet.",
+      images: [{ url: fallbackOg, width: 1200, height: 630, alt: "AEVION Planet artifact" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      images: [fallbackOg],
     },
   };
 
@@ -49,6 +57,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       .filter(Boolean)
       .join(" · ");
 
+    const ogQuery = new URLSearchParams({
+      title: `${title}`.slice(0, 80),
+      subtitle: description.slice(0, 200),
+      tag: type.toUpperCase().slice(0, 12),
+      status: voteCount > 0 ? `${voteCount} votes` : status,
+    }).toString();
+    const ogUrl = `/api/og/artifact/${encodeURIComponent(safeId)}?${ogQuery}`;
+
     return {
       title: `${title} — AEVION Planet`,
       description,
@@ -56,6 +72,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         title: `${title} — AEVION Planet`,
         description,
         type: "article",
+        images: [{ url: ogUrl, width: 1200, height: 630, alt: `${title} — AEVION Planet artifact` }],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: `${title} — AEVION Planet`,
+        description,
+        images: [ogUrl],
       },
     };
   } catch {

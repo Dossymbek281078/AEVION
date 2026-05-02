@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
 import { planetNominationOptions } from "@/lib/planetNominations";
 
@@ -365,6 +366,8 @@ export default function PlanetCompliancePage() {
       <div style={{ color: "#555", marginBottom: 16 }}>
         Single pipeline: canonization → validators → evidenceRoot → signed certificate. Code/web segments shown based on your code.
       </div>
+
+      <PitchValueCallout moduleId="planet" variant="dark" />
 
       {planetStats ? (
         <div

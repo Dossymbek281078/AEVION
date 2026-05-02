@@ -11,6 +11,7 @@ import { startWebhookWorker } from "./lib/qsignV2/webhooks";
 import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
+import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { awardsRouter } from "./routes/awards";
@@ -25,9 +26,19 @@ import { checkoutRouter } from "./routes/checkout";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
+import { multichatRouter } from "./routes/multichat";
+import { aevRouter } from "./routes/aev";
+import { ecosystemRouter } from "./routes/ecosystem";
+import { cyberchessRouter } from "./routes/cyberchess";
+import { buildRouter } from "./routes/build";
+import { aevionHubRouter } from "./routes/aevion-hub";
+import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
+
+// Optional Sentry. No-op when SENTRY_DSN is unset OR @sentry/node missing.
+initSentry();
 
 const app = express();
 const PORT = process.env.PORT || 4001;
@@ -37,13 +48,68 @@ app.use(cors());
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
 app.use(express.json({ limit: "10mb" }));
 
-// Health-check
-app.get("/health", (_req, res) => {
-  res.json({
+// Health-check. Both /health (legacy) and /api/health (the path the
+// frontend + diagnostics page have always probed against) return the
+// same shape so existing callers don't break.
+function healthPayload() {
+  return {
     status: "ok",
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
-  });
+  };
+}
+app.get("/health", (_req, res) => res.json(healthPayload()));
+app.get("/api/health", (_req, res) => res.json(healthPayload()));
+
+// Deep health: aggregates ops-relevant counts so /bank/diagnostics +
+// oncall don't have to compose multiple endpoints. No auth — counts
+// only, no per-user data. If you need access control, gate via your
+// load balancer or use METRICS_TOKEN on /api/metrics for richer detail.
+const STARTED_AT = Date.now();
+app.get("/api/health/deep", async (_req, res) => {
+  // Lazy imports so this module's load order doesn't fight with
+  // ecosystem persistence. Errors are caught and surfaced.
+  try {
+    const { getQtradeMetrics } = await import("./routes/qtrade");
+    const { getEcosystemMetrics, ensureEcosystemLoaded } = await import("./routes/ecosystem");
+    await ensureEcosystemLoaded();
+    const q = getQtradeMetrics();
+    const e = getEcosystemMetrics();
+    const mem = process.memoryUsage();
+    res.json({
+      status: "ok",
+      service: "AEVION Globus Backend",
+      timestamp: new Date().toISOString(),
+      uptimeSec: Math.floor((Date.now() - STARTED_AT) / 1000),
+      sentry: isSentryEnabled(),
+      ledger: {
+        accounts: q.accounts,
+        transfers: q.transfers,
+        operations: q.operations,
+        idempotencyCacheSize: q.idemCache,
+        royaltyEvents: e.royaltyEvents,
+        chessPrizes: e.chessPrizes,
+        planetCerts: e.planetCerts,
+        backend: e.backend,
+      },
+      memory: {
+        heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
+        rssMb: Math.round(mem.rss / 1024 / 1024),
+      },
+      env: {
+        nodeEnv: process.env.NODE_ENV || "development",
+        bankDailyTopupCap: Number(process.env.BANK_DAILY_TOPUP_CAP || 5000),
+        bankDailyTransferCap: Number(process.env.BANK_DAILY_TRANSFER_CAP || 2000),
+        corsRestricted: !!process.env.CORS_ALLOWED_ORIGINS,
+        metricsTokenSet: !!process.env.METRICS_TOKEN,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: err instanceof Error ? err.message : "deep health failed",
+    });
+  }
 });
 
 // Проверка соединения
@@ -78,8 +144,10 @@ app.get("/api/globus/projects/:id", (req, res) => {
 app.use("/api/modules", modulesRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
+app.use("/api/multichat", multichatRouter);
 
-/** Минимальная машиночитаемая карта API для ускорения интеграций */
+/** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,
+ *  summary-only for legacy globus / qsign. See lib/openapiSpec.ts. */
 app.get("/api/openapi.json", (_req, res) => {
   res.json({
     openapi: "3.1.0",
@@ -275,6 +343,9 @@ app.get("/api/openapi.json", (_req, res) => {
 app.use("/api/qtrade", qtradeRouter);
 app.use("/api/aev", aevRouter);
 app.use("/api/qright", qrightRouter);
+// Royalties are handled within qrightRouter at /api/qright/*.
+app.use("/api/ecosystem", ecosystemRouter);
+app.use("/api/cyberchess", cyberchessRouter);
 
 // ==========================
 // QSign — v1 (legacy) + v2 (RFC 8785, persisted, multi-algo)
@@ -301,6 +372,7 @@ app.use("/api/pricing/events", eventsRouter);
 // Auth
 // ==========================
 app.use("/api/auth", authRouter);
+app.use("/api/auth/oauth", authOauthRouter);
 
 // ==========================
 // Planet / Compliance / Evidence / Certificate
@@ -316,11 +388,16 @@ app.use("/api/aevion", aevionHubRouter);
 app.use(
   (
     err: unknown,
-    _req: express.Request,
+    req: express.Request,
     res: express.Response,
     _next: express.NextFunction,
   ) => {
     console.error("[express]", err);
+    captureException(err, {
+      url: req.originalUrl ?? req.url,
+      method: req.method,
+      ip: req.ip,
+    });
     if (res.headersSent) return;
     res.status(500).json({ error: "internal_error" });
   },

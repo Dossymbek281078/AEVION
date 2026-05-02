@@ -48,7 +48,7 @@ async function fetchCaseIds(): Promise<string[]> {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
-  const staticEntries: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map(({ path, changeFrequency, priority }) => ({
+  const staticEntries: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map(r => r.path).map((path: any) => ({
     url: `${BASE_URL}${path}`,
     lastModified: now,
     changeFrequency,

@@ -5,6 +5,7 @@ import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Mo
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";

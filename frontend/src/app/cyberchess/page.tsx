@@ -5,6 +5,7 @@ import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Mo
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
@@ -2245,6 +2246,7 @@ export default function CyberChessPage(){
     // фигуру из позиции, в которой она будет находиться после уже стоящих премувов.
     if(!over&&!editorMode&&!scratchOn){
       const _isPM=tab!=="analysis"&&game.turn()!==pCol&&on;
+      if(!_isPM&&sel===sq&&!vm.has(sq)){sSel(null);sVm(new Set());return;}
       if(!_isPM&&sel&&vm.has(sq)){const f=sel;const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){if(autoQueen)exec(f,sq,"q");else sPromo({from:f,to:sq});}else exec(f,sq);sSel(null);sVm(new Set());return;}
       if(_isPM&&pmSelRef.current&&sq!==pmSelRef.current&&pmsRef.current.length<pmLim){const f=pmSelRef.current;const vp=virtualGame.get(f);const pre:Pre={from:f,to:sq};const pr=pCol==="w"?"8":"1";if(vp?.type==="p"&&sq[1]===pr)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);sVm(new Set());snd("premove");return;}
     }
@@ -2305,7 +2307,7 @@ export default function CyberChessPage(){
     if(!d)return;
     if(!d.active){
       const sq=sqFromCachedRect(e.clientX,e.clientY,d.bRect)||sqFromPoint(e.clientX,e.clientY);
-      if(sq)click(sq);
+      if(sq&&sq!==d.from)click(sq);
       return;
     }
     recentDragRef.current=Date.now();

@@ -138,7 +138,7 @@ export default async function ModulesTagPage({ params, searchParams }: Props) {
   const sp = (await searchParams) || {};
   const h = await headers();
   const lang = pickLang(sp, h);
-  const t = COPY[lang];
+  const t = COPY[lang as "en" | "ru"];
 
   const [registry, tags] = await Promise.all([loadRegistryByTag(tag), loadTags()]);
   const apiBase = getApiBase();

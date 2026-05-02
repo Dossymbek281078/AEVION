@@ -6,9 +6,12 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
+
+type OauthProvider = { id: string; name: string; configured: boolean };
 
 export default function AuthPage() {
   const { showToast } = useToast();
@@ -20,12 +23,52 @@ export default function AuthPage() {
   const [me, setMe] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<OauthProvider[]>([]);
+
+  // OAuth callback redirect lands here with ?token=…&provider=…
+  // Persist + clean up URL so refresh doesn't re-process.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("token");
+    const provider = sp.get("provider");
+    if (t) {
+      try {
+        localStorage.setItem(TOKEN_KEY, t);
+      } catch {}
+      setToken(t);
+      sp.delete("token");
+      sp.delete("provider");
+      const next = window.location.pathname + (sp.toString() ? `?${sp}` : "");
+      window.history.replaceState(null, "", next);
+      showToast(`Signed in via ${provider || "provider"}`, "success");
+    }
+  }, [showToast]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(TOKEN_KEY);
       if (raw) setToken(raw);
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/auth/oauth/providers"), { cache: "no-store" });
+        if (!r.ok) return;
+        const data = (await r.json()) as { providers?: OauthProvider[] };
+        if (cancelled) return;
+        const list = Array.isArray(data?.providers) ? data.providers.filter((p) => p.configured) : [];
+        setOauthProviders(list);
+      } catch {
+        // backend offline — silently hide oauth buttons, password login still works
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -138,6 +181,39 @@ export default function AuthPage() {
               </div>
             ) : null}
 
+            {!token && oauthProviders.length > 0 ? (
+              <div style={{ display: "grid", gap: 8, maxWidth: 440, marginBottom: 18 }}>
+                {oauthProviders.map((p) => (
+                  <a
+                    key={p.id}
+                    href={apiUrl(`/api/auth/oauth/${p.id}/start`)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 10,
+                      padding: "11px 16px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      background: "#fff",
+                      color: "#0f172a",
+                      textDecoration: "none",
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}
+                  >
+                    <span style={{ fontSize: 16 }}>{p.id === "google" ? "🔵" : p.id === "github" ? "⬛" : "🔑"}</span>
+                    Continue with {p.name}
+                  </a>
+                ))}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 -2px" }}>
+                  <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.10)" }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "#94a3b8" }}>OR</span>
+                  <span style={{ flex: 1, height: 1, background: "rgba(15,23,42,0.10)" }} />
+                </div>
+              </div>
+            ) : null}
+
             <div style={{ display: "inline-flex", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", marginBottom: 20 }}>
               {(["register", "login"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)} disabled={busy} style={{ padding: "10px 20px", border: "none", background: mode === m ? "#0f172a" : "#fff", color: mode === m ? "#fff" : "#64748b", fontWeight: mode === m ? 800 : 600, fontSize: 14, cursor: "pointer" }}>
@@ -182,6 +258,8 @@ export default function AuthPage() {
             ) : null}
           </div>
         </div>
+
+        <PitchValueCallout moduleId="auth" variant="dark" />
 
         {/* What you get */}
         <div style={{ marginTop: 20, padding: "18px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)" }}>

@@ -1004,7 +1004,8 @@ const dict: Record<Lang, Record<string, string>> = {
 export function usePricingT() {
   const { lang } = useI18n();
   return (key: string, vars?: Record<string, string | number>): string => {
-    const raw = dict[lang][key] ?? dict.en[key] ?? key;
+    const safeL = (lang in dict ? lang : "en") as "en" | "ru";
+    const raw = dict[safeL][key] ?? dict.en[key] ?? key;
     if (!vars) return raw;
     return Object.keys(vars).reduce(
       (acc, k) => acc.replace(`{${k}}`, String(vars[k])),

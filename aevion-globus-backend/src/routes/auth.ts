@@ -9,6 +9,11 @@ import { rateLimit } from "../lib/rateLimit";
 
 export const authRouter = Router();
 
+// 10 register attempts per minute per IP, refilled gradually.
+// Login gets a more relaxed bucket (legitimate password retries are common).
+const registerLimiter = rateLimit({ windowMs: 60000, max: 10 });
+const loginLimiter = rateLimit({ windowMs: 60000, max: 30 });
+
 const pool = getPool();
 
 // ─────────────────────────────────────────────────────────────────────────

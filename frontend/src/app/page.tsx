@@ -329,6 +329,19 @@ export default function HomePage() {
             >
               Full demo →
             </Link>
+            <Link
+              href="/pitch"
+              style={{
+                ...btnGhost,
+                border: "2px solid rgba(251,191,36,0.7)",
+                background: "linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.18))",
+                color: "#fff",
+                fontWeight: 800,
+                boxShadow: "0 8px 24px rgba(251,191,36,0.25)",
+              }}
+            >
+              Investor pitch · $1B+ →
+            </Link>
           </div>
 
           <div

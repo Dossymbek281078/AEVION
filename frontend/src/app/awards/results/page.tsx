@@ -144,7 +144,7 @@ export default async function AwardsResultsPage({ searchParams }: Props) {
   const sp = (await searchParams) || {};
   const h = await headers();
   const lang = pickLang(sp, h);
-  const t = COPY[lang];
+  const t = COPY[lang as "en" | "ru"];
 
   const requestedSeason = typeof sp.season === "string" ? sp.season : "";
   const seasons = await loadSeasons();

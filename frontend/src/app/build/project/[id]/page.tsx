@@ -294,7 +294,7 @@ function OwnerStatusControls({
   const [busy, setBusy] = useState(false);
   return (
     <div className="mt-3 flex flex-wrap gap-1">
-      {STATUSES.map((s) => (
+      {STATUSES.map((s: any) => (
         <button
           key={s}
           disabled={busy || project.status === s}
@@ -437,7 +437,7 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
       <div className="rounded-md border border-white/10 bg-white/5 p-2">
         <div className="mb-1 text-xs text-slate-400">Required skills (Enter to add — used for match score)</div>
         <div className="flex flex-wrap gap-1.5">
-          {skills.map((s) => (
+          {skills.map((s: any) => (
             <span
               key={s}
               className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-200"

@@ -1,16 +1,19 @@
 # Быстрый gate: обе части стека собираются без ручных переключений папок.
+# Backend matrix runs tsc *and* the integration suite so a regression in any
+# of the bank-track routes (qtrade / ecosystem / cyberchess / planet payouts /
+# qright royalties / metrics) lights the PR red.
 name: CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, bank-payment-layer]
   pull_request:
     branches: [main, master, develop]
   workflow_dispatch:
 
 jobs:
   backend:
-    name: Backend (tsc)
+    name: Backend (tsc + integration tests)
     runs-on: ubuntu-latest
     defaults:
       run:

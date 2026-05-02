@@ -1,5 +1,5 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
   buildPool as pool,
   ok,
@@ -29,7 +29,7 @@ const aiRateLimiter = rateLimit({
         if (typeof payload.sub === "string") return payload.sub;
       } catch { /**/ }
     }
-    return req.ip ?? "anon";
+    return ipKeyGenerator(req.ip ?? "::1");
   },
   message: {
     success: false,

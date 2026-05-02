@@ -422,11 +422,18 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
               try {
                 const r = await buildApi.updateApplication(app.id, "ACCEPTED");
                 onChanged();
-                if (r.hireOrder && r.hireOrder.amount > 0) {
-                  // Surface the hire fee so the recruiter knows to pay it.
-                  alert(
-                    `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в разделе «Мои заказы».`,
-                  );
+                if (r.hireOrder && r.hireOrder.amount > 0 && r.hireOrder.status === "PENDING") {
+                  // Open Stripe Checkout or dev-mode pay
+                  try {
+                    const checkout = await buildApi.checkoutOrder(r.hireOrder.id);
+                    if (checkout.url) {
+                      window.location.href = checkout.url;
+                    } else if (checkout.devMode) {
+                      alert(`[Dev] Hire fee ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} помечен как оплаченный (dev mode).`);
+                    }
+                  } catch {
+                    alert(`Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency}. Оплатите в разделе «Мои заказы».`);
+                  }
                 }
               } finally {
                 setBusy(false);
@@ -452,6 +459,19 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
             className="rounded-md bg-rose-500/20 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
           >
             Reject
+          </button>
+        )}
+        {app.status === "ACCEPTED" && (
+          <button
+            onClick={async () => {
+              try {
+                const r = await buildApi.generateContract(app.id);
+                window.open(r.qsignUrl, "_blank", "noreferrer");
+              } catch {/**/}
+            }}
+            className="rounded-md border border-teal-500/30 bg-teal-500/10 px-3 py-1.5 text-xs font-medium text-teal-200 hover:bg-teal-500/20"
+          >
+            📄 Договор (QSign)
           </button>
         )}
       </div>

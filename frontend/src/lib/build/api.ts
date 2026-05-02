@@ -873,6 +873,11 @@ export const buildApi = {
     ),
   myOrders: () =>
     call<{ items: BuildOrderRow[]; total: number }>("GET", "/api/build/orders/me"),
+  checkoutOrder: (id: string) =>
+    call<{ url: string | null; sessionId?: string; alreadyPaid?: boolean; devMode?: boolean; order?: BuildOrderRow }>(
+      "POST",
+      `/api/build/orders/${encodeURIComponent(id)}/checkout`,
+    ),
   payOrder: (id: string) =>
     call<{ order: BuildOrderRow; alreadyPaid?: boolean }>(
       "POST",
@@ -898,6 +903,139 @@ export const buildApi = {
     mimeType?: string;
     sizeBytes?: number;
   }) => call<BuildFile>("POST", "/api/build/files/upload", input),
+
+  // ── v2 Killer Features ────────────────────────────────────────────────
+
+  // 1. Available Now
+  setAvailability: (on: boolean, hours?: number) =>
+    call<{ userId: string; availableNow: boolean; availableUntil: string | null }>(
+      "POST", "/api/build/availability", { on, hours },
+    ),
+  myAvailability: () =>
+    call<{ availableNow: boolean; availableUntil: string | null }>("GET", "/api/build/availability/me"),
+  availableWorkers: (params?: { city?: string; specialty?: string; limit?: number }) =>
+    call<{ items: BuildProfile[]; total: number; asOf: string }>(
+      "GET",
+      `/api/build/availability/workers?${new URLSearchParams(
+        Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])),
+      )}`,
+    ),
+
+  // 2. Portfolio Photos
+  addPortfolioPhoto: (input: { url: string; caption?: string; projectType?: string; takenAt?: string }) =>
+    call<{ id: string; url: string; caption: string | null; projectType: string | null; createdAt: string }>(
+      "POST", "/api/build/portfolio/photos", input,
+    ),
+  portfolioPhotos: (userId: string) =>
+    call<{ items: Array<{ id: string; url: string; caption: string | null; projectType: string | null; sortOrder: number; createdAt: string }>; total: number }>(
+      "GET", `/api/build/portfolio/photos/${encodeURIComponent(userId)}`,
+    ),
+  deletePortfolioPhoto: (id: string) =>
+    call<{ deleted: boolean }>("DELETE", `/api/build/portfolio/photos/${encodeURIComponent(id)}`),
+  updatePortfolioPhoto: (id: string, input: { caption?: string; sortOrder?: number }) =>
+    call<{ id: string }>("PATCH", `/api/build/portfolio/photos/${encodeURIComponent(id)}`, input),
+
+  // 3. Salary Stats
+  salaryStats: (params?: { q?: string; city?: string }) =>
+    call<{
+      workerExpectations: { sampleSize: number; p25: number | null; p50: number | null; p75: number | null; currency: string };
+      employerOffers: { sampleSize: number; p25: number | null; p50: number | null; p75: number | null; currency: string };
+      topCities: Array<{ city: string; vacancyCount: number; avgSalary: number | null }>;
+      query: { q: string | null; city: string | null };
+    }>(
+      "GET",
+      `/api/build/salary-stats?${new URLSearchParams(
+        Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v).map(([k, v]) => [k, String(v)])),
+      )}`,
+    ),
+
+  // 4. Contracts (QSign deep-link)
+  generateContract: (applicationId: string) =>
+    call<{ contractPayload: Record<string, unknown>; qsignUrl: string; hint: string }>(
+      "POST", `/api/build/applications/${encodeURIComponent(applicationId)}/contract`,
+    ),
+
+  // 5. Communities
+  communities: () =>
+    call<{ items: Array<{ id: string; slug: string; name: string; specialty: string; description: string | null; memberCount: number; lastMessageAt: string | null }>; total: number }>(
+      "GET", "/api/build/communities",
+    ),
+  community: (slug: string) =>
+    call<{ community: { id: string; slug: string; name: string; specialty: string; memberCount: number }; messages: Array<{ id: string; userId: string; content: string; createdAt: string; authorName: string | null; authorPhoto: string | null; buildRole: string | null }>; total: number }>(
+      "GET", `/api/build/communities/${encodeURIComponent(slug)}`,
+    ),
+  joinCommunity: (slug: string) =>
+    call<{ joined: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/join`),
+  leaveCommunity: (slug: string) =>
+    call<{ left: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/leave`),
+  sendCommunityMessage: (slug: string, content: string) =>
+    call<{ id: string; content: string; createdAt: string }>(
+      "POST", `/api/build/communities/${encodeURIComponent(slug)}/messages`, { content },
+    ),
+
+  // 6. Team Hiring
+  createTeamRequest: (input: { title: string; description: string; roles: Array<{ specialty: string; count: number; salary?: number | null }>; city?: string; startDate?: string }) =>
+    call<{ id: string; title: string; roles: Array<{ specialty: string; count: number; salary: number | null }> }>(
+      "POST", "/api/build/team-requests", input,
+    ),
+  teamRequests: (params?: { city?: string; specialty?: string; limit?: number }) =>
+    call<{ items: Array<{ id: string; title: string; description: string; rolesJson: string; city: string | null; clientName: string | null; applicantCount: number; createdAt: string }>; total: number }>(
+      "GET",
+      `/api/build/team-requests?${new URLSearchParams(
+        Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])),
+      )}`,
+    ),
+  teamRequest: (id: string) =>
+    call<{ id: string; title: string; description: string; roles: Array<{ specialty: string; count: number; salary: number | null }>; city: string | null; clientName: string | null; applications: Array<{ id: string; userId: string; roleIndex: number; message: string | null; status: string; applicantName: string | null }>; createdAt: string }>(
+      "GET", `/api/build/team-requests/${encodeURIComponent(id)}`,
+    ),
+  applyToTeam: (teamRequestId: string, roleIndex: number, message?: string) =>
+    call<{ id: string; status: string; role: { specialty: string; count: number } }>(
+      "POST", `/api/build/team-requests/${encodeURIComponent(teamRequestId)}/apply`, { roleIndex, message },
+    ),
+
+  // 7. Shifts
+  createShift: (input: { applicationId: string; shiftDate: string; startTime?: string; endTime?: string; notes?: string }) =>
+    call<{ id: string; shiftDate: string; status: string }>("POST", "/api/build/shifts", input),
+  myShifts: (from?: string) =>
+    call<{ items: Array<{ id: string; applicationId: string; workerId: string; clientId: string; shiftDate: string; startTime: string | null; endTime: string | null; status: string; checkInAt: string | null; checkOutAt: string | null; workerName: string | null; clientName: string | null }>; total: number }>(
+      "GET", `/api/build/shifts/my${from ? `?from=${encodeURIComponent(from)}` : ""}`,
+    ),
+  shiftCheckin: (id: string, lat?: number, lng?: number) =>
+    call<{ id: string; status: string; checkInAt: string }>(
+      "PATCH",
+      `/api/build/shifts/${encodeURIComponent(id)}/checkin`,
+      lat != null && lng != null ? { lat, lng } : undefined,
+    ),
+  shiftCheckout: (id: string) => call<{ id: string; status: string; checkOutAt: string }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkout`),
+
+  // 9. Video Rooms
+  createVideoRoom: (input: { guestId?: string; scheduledAt?: string }) =>
+    call<{ id: string; roomUrl: string; roomName: string; status: string }>("POST", "/api/build/video/rooms", input),
+  myVideoRooms: () =>
+    call<{ items: Array<{ id: string; roomUrl: string; hostId: string; guestId: string | null; scheduledAt: string | null; status: string; hostName: string | null; guestName: string | null; createdAt: string }>; total: number }>(
+      "GET", "/api/build/video/rooms/my",
+    ),
+  inviteToVideoRoom: (roomId: string, guestId: string) =>
+    call<{ invited: boolean; roomUrl: string }>("POST", `/api/build/video/rooms/${encodeURIComponent(roomId)}/invite`, { guestId }),
+
+  // 10. Documents
+  uploadDocument: (input: { fileUrl: string; docType: string }) =>
+    call<{ id: string; docType: string; status: string; createdAt: string }>("POST", "/api/build/documents", input),
+  myDocuments: () =>
+    call<{ items: Array<{ id: string; docType: string; status: string; verifiedAt: string | null; rejectReason: string | null; fileUrl: string }>; total: number }>(
+      "GET", "/api/build/documents/me",
+    ),
+  userDocuments: (userId: string) =>
+    call<{ items: Array<{ id: string; docType: string; status: string; verifiedAt: string | null }>; total: number }>(
+      "GET", `/api/build/documents/user/${encodeURIComponent(userId)}`,
+    ),
+  adminPendingDocuments: () =>
+    call<{ items: Array<{ id: string; userId: string; docType: string; fileUrl: string; createdAt: string; userName: string | null; userEmail: string | null }>; total: number }>(
+      "GET", "/api/build/documents/admin/pending",
+    ),
+  verifyDocument: (id: string) => call<{ id: string; status: string }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/verify`),
+  rejectDocument: (id: string, reason?: string) => call<{ id: string; status: string }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/reject`, { reason }),
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─

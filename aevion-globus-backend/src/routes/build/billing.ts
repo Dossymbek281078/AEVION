@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
+import Stripe from "stripe";
 import {
   buildPool as pool,
   ok,
@@ -189,6 +190,62 @@ billingRouter.get("/orders/me", async (req, res) => {
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
     return fail(res, 500, "orders_me_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/orders/:id/checkout — create a Stripe Checkout session.
+// Returns { url } — redirect the browser there to complete payment.
+// On success Stripe calls /api/build/webhooks/payment via build webhook route.
+// Falls back to the dev-mode payOrder stub if STRIPE_SECRET_KEY is not set.
+billingRouter.post("/orders/:id/checkout", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const order = await pool.query(`SELECT * FROM "BuildOrder" WHERE "id" = $1 LIMIT 1`, [id]);
+    if (order.rowCount === 0) return fail(res, 404, "order_not_found");
+    const row = order.rows[0];
+    if (row.userId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+    if (row.status === "PAID") return ok(res, { alreadyPaid: true });
+    if (row.status !== "PENDING") return fail(res, 400, "order_not_payable", { currentStatus: row.status });
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
+    const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.vercel.app").replace(/\/+$/, "");
+
+    if (!stripeKey) {
+      // Dev mode: immediately mark as paid (same as /pay stub)
+      const result = await markOrderPaid(id);
+      return ok(res, { devMode: true, order: result.order });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stripe = new Stripe(stripeKey, { apiVersion: "2026-04-22.dahlia" as any });
+    const amount = Math.round(Number(row.amount) * 100); // Stripe uses minor units
+    const currency = (String(row.currency || "rub")).toLowerCase();
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: {
+          currency,
+          unit_amount: amount,
+          product_data: {
+            name: `AEVION QBuild — ${String(row.kind).replace("_", " ")}`,
+            description: `Order #${id.slice(0, 8)}`,
+          },
+        },
+        quantity: 1,
+      }],
+      metadata: { buildOrderId: id, userId: auth.sub },
+      success_url: `${frontendUrl}/build?payment=success&orderId=${id}`,
+      cancel_url: `${frontendUrl}/build?payment=cancelled&orderId=${id}`,
+    });
+
+    return ok(res, { url: session.url, sessionId: session.id });
+  } catch (err: unknown) {
+    return fail(res, 500, "checkout_session_failed", { details: (err as Error).message });
   }
 });
 

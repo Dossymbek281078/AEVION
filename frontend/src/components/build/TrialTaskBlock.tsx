@@ -249,6 +249,23 @@ function TaskRow({
         <p className="mt-2 text-xs opacity-80">Reason: {task.rejectReason}</p>
       )}
 
+      {/* Escrow badge */}
+      {task.paymentAmount > 0 && (
+        <div className="mt-2 flex items-center gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px]">
+          <span className="text-slate-400">Эскроу:</span>
+          <span className={`font-bold ${
+            task.status === "APPROVED" ? "text-emerald-300" :
+            task.status === "REJECTED" ? "text-rose-300" : "text-amber-300"
+          }`}>
+            {task.status === "APPROVED" ? "✓ Освобождён" :
+             task.status === "REJECTED" ? "↩ Возврат" : "🔒 Заморожен"}
+          </span>
+          <span className="ml-auto font-semibold text-slate-300">
+            {task.paymentAmount.toLocaleString("ru-RU")} {task.paymentCurrency}
+          </span>
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap gap-2">
         {isCandidate && task.status === "PROPOSED" && (
           <>

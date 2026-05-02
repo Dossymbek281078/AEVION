@@ -93,6 +93,11 @@ function Body() {
           title="Pricing"
           body="Plans, loyalty tiers, AEV cashback. Marketing-facing."
         />
+        <NavCard
+          href="/build/admin/documents"
+          title="🏅 Верификация документов"
+          body="Проверка и подтверждение удостоверений работников (сварщик, электрик, медкомиссия и др.)"
+        />
       </div>
     </section>
   );

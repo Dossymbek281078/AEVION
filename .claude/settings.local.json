@@ -37,7 +37,9 @@
       "Bash(sed -n '185,200p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/planet/transparency/page.tsx)",
       "Bash(sed -n '159,175p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/qright/transparency/page.tsx)",
       "Bash(sed -n '48,60p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/lib/qrightRevokeReasons.ts)",
-      "Bash(sed -n '148,160p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/lib/qrightServerI18n.ts)"
+      "Bash(sed -n '148,160p' C:/Users/user/aevion-core/frontend-qcore/frontend/src/lib/qrightServerI18n.ts)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr merge 5 --squash)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 5 --json state,mergedAt --jq '\"#5: \\\\\\(.state\\) \\\\\\(.mergedAt\\)\"')"
     ]
   }
 }

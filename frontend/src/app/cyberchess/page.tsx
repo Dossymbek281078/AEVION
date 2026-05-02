@@ -2166,6 +2166,7 @@ export default function CyberChessPage(){
     const sideToMove=(tab==="analysis"||hotseat)?game.turn():pCol;
     if(sel){
       if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){if(autoQueen){exec(sel,sq,"q");return}sPromo({from:sel,to:sq});return}exec(sel,sq);return}
+      if(sel===sq){sSel(null);sVm(new Set());return}
       if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));return}
       sSel(null);sVm(new Set());return;
     }
@@ -2185,7 +2186,9 @@ export default function CyberChessPage(){
   // hit-test'а: elementsFromPoint на каждый pointermove делал layout read и тормозил.
   const dragRef=useRef<{from:Square;sx:number;sy:number;active:boolean;pid:number;bRect:{l:number;t:number;w:number;h:number;cw:number;flip:boolean}}|null>(null);
   const recentDragRef=useRef<number>(0);
+  const boardRef=useRef<HTMLDivElement|null>(null);
   const[ghostFrom,sGhostFrom]=useState<Square|null>(null);
+  const ghostSizeRef=useRef<number>(72);
   const ghostRef=useRef<HTMLDivElement|null>(null);
   const ghostPosRef=useRef<{x:number;y:number}>({x:0,y:0});
   const ghostRafRef=useRef<number|null>(null);
@@ -2203,13 +2206,13 @@ export default function CyberChessPage(){
     if(ghostRafRef.current!==null){cancelAnimationFrame(ghostRafRef.current);ghostRafRef.current=null;}
   },[]);
   const sqFromPoint=(x:number,y:number):Square|null=>{
-    if(typeof document==="undefined")return null;
-    const els=document.elementsFromPoint(x,y) as HTMLElement[];
-    for(const el of els){
-      const cell=el.closest?.("[data-sq]") as HTMLElement|null;
-      if(cell){const v=cell.getAttribute("data-sq");if(v)return v as Square;}
-    }
-    return null;
+    const el=boardRef.current;if(!el)return null;
+    const r=el.getBoundingClientRect();
+    const cw=r.width/8;
+    const fx=Math.floor((x-r.left)/cw);const fy=Math.floor((y-r.top)/cw);
+    if(fx<0||fx>7||fy<0||fy>7)return null;
+    const file=flip?7-fx:fx;const rank=flip?fy:7-fy;
+    return `${FILES[file]}${rank+1}` as Square;
   };
   // Быстрый hit-test через кешированный rect доски — без layout-read'ов.
   // Используется на каждом pointermove (горячий путь). 100x быстрее elementsFromPoint.
@@ -2241,6 +2244,12 @@ export default function CyberChessPage(){
     // Premove chain: когда не твой ход и есть очередь премувов, проверяем
     // ВИРТУАЛЬНУЮ доску (game + applied premoves), чтобы можно было перетащить
     // фигуру из позиции, в которой она будет находиться после уже стоящих премувов.
+    if(!over&&!editorMode&&!scratchOn){
+      const _isPM=tab!=="analysis"&&game.turn()!==pCol&&on;
+      if(!_isPM&&sel===sq&&!vm.has(sq)){sSel(null);sVm(new Set());return;}
+      if(!_isPM&&sel&&vm.has(sq)){const f=sel;const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){if(autoQueen)exec(f,sq,"q");else sPromo({from:f,to:sq});}else exec(f,sq);sSel(null);sVm(new Set());return;}
+      if(_isPM&&pmSelRef.current&&sq!==pmSelRef.current&&pmsRef.current.length<pmLim){const f=pmSelRef.current;const vp=virtualGame.get(f);const pre:Pre={from:f,to:sq};const pr=pCol==="w"?"8":"1";if(vp?.type==="p"&&sq[1]===pr)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);sVm(new Set());snd("premove");return;}
+    }
     const isPremoveMode=tab!=="analysis"&&game.turn()!==pCol&&on&&!over;
     const checkBoard=isPremoveMode?virtualGame:game;
     const p=checkBoard.get(sq);
@@ -2255,17 +2264,17 @@ export default function CyberChessPage(){
     // Кешируем bounding rect доски один раз на pointerdown — потом используем для
     // математического hit-test'а вместо elementsFromPoint (тот делает layout read
     // на каждом move, видимо тормозит drag-feel).
-    const boardEl=e.currentTarget as HTMLElement;
+    const boardEl=boardRef.current||e.currentTarget as HTMLElement;
     const br=boardEl.getBoundingClientRect();
     const bRect={l:br.left,t:br.top,w:br.width,h:br.height,cw:br.width/8,flip};
     dragRef.current={from:sq,sx:e.clientX,sy:e.clientY,active:false,pid:e.pointerId,bRect};
-    try{boardEl.setPointerCapture(e.pointerId);}catch{}
+    ghostSizeRef.current=Math.max(52,Math.round(bRect.cw*1.2));
     // Selection + dots — мгновенно на нажатии (lichess-style), а не после движения.
     const isMyTurn=tab==="analysis"||game.turn()===pCol;
     if(isMyTurn){
       sSel(sq);
       sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));
-    }else if(on){sPmSel(sq);}
+    }else if(on){sPmSel(sq);try{sVm(new Set(virtualGame.moves({square:sq,verbose:true}).map(m=>m.to)));}catch{}}
   };
   const onBoardMove=(e:React.PointerEvent)=>{
     const d=dragRef.current;if(!d||d.pid!==e.pointerId)return;
@@ -2294,10 +2303,15 @@ export default function CyberChessPage(){
     cancelGhostRaf();sGhostFrom(null);
     if(dragHoverRef.current!==null){dragHoverRef.current=null;sDragHover(null);}
     if(typeof document!=="undefined")document.body.style.cursor="";
-    try{(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);}catch{}
-    if(!d||!d.active)return;
+    try{(e.currentTarget as HTMLElement|null)?.releasePointerCapture?.(e.pointerId);}catch{}
+    if(!d)return;
+    if(!d.active){
+      const sq=sqFromCachedRect(e.clientX,e.clientY,d.bRect)||sqFromPoint(e.clientX,e.clientY);
+      if(sq&&sq!==d.from)click(sq);
+      return;
+    }
     recentDragRef.current=Date.now();
-    const to=sqFromPoint(e.clientX,e.clientY);if(!to||to===d.from)return;
+    const to=sqFromCachedRect(e.clientX,e.clientY,d.bRect)||sqFromPoint(e.clientX,e.clientY);if(!to||to===d.from)return;
     const f=d.from;
     // SCRATCH: коммит на отдельный chess instance, не трогая real game.
     if(scratchOn&&scratchGame){
@@ -2376,6 +2390,17 @@ export default function CyberChessPage(){
     if(dragHoverRef.current!==null){dragHoverRef.current=null;sDragHover(null);}
     if(typeof document!=="undefined")document.body.style.cursor="";
   };
+
+  const onBoardMoveRef=useRef(onBoardMove);const onBoardUpRef=useRef(onBoardUp);
+  useEffect(()=>{onBoardMoveRef.current=onBoardMove},[onBoardMove]);
+  useEffect(()=>{onBoardUpRef.current=onBoardUp},[onBoardUp]);
+  useEffect(()=>{
+    const mv=(e:PointerEvent)=>onBoardMoveRef.current(e as any);
+    const up=(e:PointerEvent)=>onBoardUpRef.current(e as any);
+    window.addEventListener("pointermove",mv,{passive:false});
+    window.addEventListener("pointerup",up);
+    return()=>{window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
+  },[]);
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;
     // Determine starting FEN based on variant
@@ -3570,7 +3595,7 @@ export default function CyberChessPage(){
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
-            <div onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel}
+            <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel}
               onClick={e=>{
                 if(Date.now()-recentDragRef.current<150)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
@@ -3705,7 +3730,7 @@ export default function CyberChessPage(){
                   Outer div: GPU-композитная позиция через translate3d (обновляется в flushGhost).
                   Inner div: pop-анимация при mount'е — даёт визуальное «отлипание от доски».
                   willChange: transform — даёт браузеру upfront create compositor layer. */}
-              {ghostFrom&&(()=>{const gp=game.get(ghostFrom);if(!gp)return null;const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(64px,9vw,96px)",height:"clamp(64px,9vw,96px)",transform:`translate3d(${gx}px, ${gy}px, 0) translate(-50%, -50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform"}}><div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}><Piece type={gp.type} color={gp.color}/></div></div>;})()}
+              {(()=>{const gp=ghostFrom?(game.get(ghostFrom)):null;const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;const sz=ghostSizeRef.current;const overIllegal=ghostFrom&&dragHover&&vm.size>0&&!vm.has(dragHover);return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:sz,height:sz,transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform",visibility:ghostFrom&&gp?"visible":"hidden"}}>{gp&&<div style={{width:"100%",height:"100%",opacity:overIllegal?0.55:1,animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}><Piece type={gp.type} color={gp.color}/></div>}</div>;})()}
 
               {/* Move slide animation — летящая фигура поверх board */}
               {moveAnim&&(()=>{

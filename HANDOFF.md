@@ -1,6 +1,32 @@
 # AEVION CyberChess — HANDOFF (живой)
 
-> **Последнее обновление:** 2026-05-01 — слил `chess-tournaments` в `main`. Tournaments / Variants / Brilliancy / GhostMode / Leaderboards / Coach Knowledge / 18 новых модулей теперь на main. См. раздел «Состояние после merge 2026-05-01».
+> **Последнее обновление:** 2026-05-02 ночь — полный overhaul drag/click/premove механики (9 фиксов, commits `54bdfc4`/`bf11b9c`/`c74e8fa` на chess-tournaments + `69e4aa4` на main).
+> Dev server: `cd frontend-chess && npm run dev` → http://localhost:3000/cyberchess
+
+---
+
+## Drag/click/premove overhaul 2026-05-02
+
+### Корневые баги которые починили:
+1. `sqFromPoint` → `boardRef.current.getBoundingClientRect()` прямая математика. `elementsFromPoint` ненадёжен: пропускает `pointer-events:none` элементы и зависит от z-index.
+2. `window.addEventListener("pointermove"/"pointerup")` нативные — React synthetic events + `setPointerCapture` теряют события когда мышь выходит за пределы доски на Windows/Chrome.
+3. Ghost always rendered (`visibility:hidden` когда idle) — `ghostRef.current=null` на первом кадре drag → ghost невидим.
+4. `ghostSizeRef` = 1.2× ширина клетки (lichess feel).
+5. `onBoardUp` → `click(sq)` явно для не-drag кликов (e.preventDefault глушил synthetic click).
+6. Priority check в `onBoardDown`: sel+vm.has(sq) → exec без второго drag.
+7. Точки валидных ходов при premove-drag.
+8. Click-deselect (повторный клик снимает выбор).
+
+### Что тестировать утром:
+- Клик на пешку → зелёные точки появляются мгновенно
+- Клик на точку → ход делается
+- Drag пешки → ghost следует за курсором сразу
+- Повторный клик на выбранную фигуру → снимает выбор
+- Ход AI → поставить 2-3 премува во время его раздумья
+
+---
+
+> **Предыдущее обновление:** 2026-05-01 — слил `chess-tournaments` в `main`. Tournaments / Variants / Brilliancy / GhostMode / Leaderboards / Coach Knowledge / 18 новых модулей теперь на main. См. раздел «Состояние после merge 2026-05-01».
 
 ---
 

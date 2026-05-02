@@ -25,7 +25,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: aevion-globus-backend/package-lock.json
-      - run: npm ci --omit=optional
+      - run: npm install --ignore-scripts
       - run: npm run build
       - run: npm test
 

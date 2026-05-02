@@ -10,18 +10,27 @@ import {
 } from "react";
 
 export type Lang = "en" | "ru";
+export const LANGS: Lang[] = ["en", "ru"];
+export const LANG_FULL: Record<Lang, string> = { en: "English", ru: "Русский" };
+export const LANG_SHORT: Record<Lang, string> = { en: "EN", ru: "RU" };
 
 type I18nContextValue = {
   lang: Lang;
   setLang: (l: Lang) => void;
-  t: (key: string) => string;
+  t: (key: string, vars?: Record<string, string | number>) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-const STORAGE_KEY = "aevion_lang_v1";
+export const LANG_COOKIE = "aevion_lang_v1";
+const STORAGE_KEY = LANG_COOKIE;
 
-const translations: Record<Lang, Record<string, string>> = {
+export function interpolate(raw: string, vars?: Record<string, string | number>): string {
+  if (!vars) return raw;
+  return raw.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
+}
+
+export const translations: Record<Lang, Record<string, string>> = {
   en: {
     /* Nav & global */
     "nav.demo": "Ecosystem demo",
@@ -301,7 +310,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: string): string => translations[lang][key] || translations.en[key] || key,
+    (key: string, vars?: Record<string, string | number>): string => {
+      const raw = translations[lang]?.[key] ?? translations.en[key] ?? key;
+      return interpolate(raw, vars);
+    },
     [lang],
   );
 

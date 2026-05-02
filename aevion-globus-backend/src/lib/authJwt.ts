@@ -1,4 +1,4 @@
-import type { Request } from "express";
+import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 export type JwtPayload = {
@@ -34,5 +34,27 @@ export function verifyBearerToken(token: string | null | undefined): JwtPayload 
     return jwt.verify(token, getJwtSecret()) as JwtPayload;
   } catch {
     return null;
+  }
+}
+
+
+/** Express middleware: 401 if no valid Bearer JWT; sets req.auth on success. */
+export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  const payload = verifyBearerOptional(req);
+  if (!payload) {
+    res.status(401).json({ error: "authentication required" });
+    return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (req as any).auth = payload;
+  next();
+}
+
+// Module augmentation so req.auth is available after requireAuth middleware.
+declare global {
+  namespace Express {
+    interface Request {
+      auth?: JwtPayload;
+    }
   }
 }

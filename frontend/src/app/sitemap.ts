@@ -1,50 +1,72 @@
 import type { MetadataRoute } from "next";
-import { headers } from "next/headers";
 
-export const dynamic = "force-dynamic";
-
-async function getOrigin(): Promise<string> {
-  try {
-    const h = await headers();
-    const host = h.get("x-forwarded-host") || h.get("host");
-    const proto = h.get("x-forwarded-proto") || "https";
-    if (host) return `${proto}://${host}`;
-  } catch {}
-  return "https://aevion.tech";
-}
-
-// Top-level routes only. Per-resource pages (e.g. /modules/<id>,
-// /bureau/cert/<id>, /awards/entry/<id>) live in each module's own
-// /api/<module>/sitemap.xml — those are aggregated by the backend
-// /api/aevion/sitemap.xml sitemap-index, which is the canonical entry
-// point referenced from /robots.txt.
-const TOP_LEVEL_ROUTES: Array<{
-  path: string;
-  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
-  priority: number;
-}> = [
-  { path: "/", changeFrequency: "daily", priority: 1.0 },
-  { path: "/modules", changeFrequency: "daily", priority: 0.9 },
-  { path: "/qright", changeFrequency: "daily", priority: 0.9 },
-  { path: "/qright/transparency", changeFrequency: "weekly", priority: 0.6 },
-  { path: "/bureau", changeFrequency: "daily", priority: 0.9 },
-  { path: "/bureau/transparency", changeFrequency: "weekly", priority: 0.6 },
-  { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
-  { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
-  { path: "/planet", changeFrequency: "daily", priority: 0.8 },
-  { path: "/planet/transparency", changeFrequency: "weekly", priority: 0.6 },
-  { path: "/awards", changeFrequency: "daily", priority: 0.8 },
-  { path: "/awards/results", changeFrequency: "daily", priority: 0.8 },
-  { path: "/qcoreai", changeFrequency: "weekly", priority: 0.7 },
-  { path: "/cyberchess", changeFrequency: "weekly", priority: 0.7 },
+const ROUTES: Array<{ path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"] }> = [
+  { path: "/",                  priority: 1.0, changeFrequency: "weekly" },
+  { path: "/pitch",             priority: 0.95, changeFrequency: "weekly" },
+  { path: "/pitch/print",       priority: 0.6, changeFrequency: "weekly" },
+  { path: "/demo",              priority: 0.9, changeFrequency: "weekly" },
+  { path: "/demo/deep",         priority: 0.8, changeFrequency: "monthly" },
+  { path: "/auth",              priority: 0.6, changeFrequency: "monthly" },
+  { path: "/qright",            priority: 0.85, changeFrequency: "weekly" },
+  { path: "/qsign",             priority: 0.8, changeFrequency: "weekly" },
+  { path: "/bureau",            priority: 0.85, changeFrequency: "weekly" },
+  { path: "/quantum-shield",    priority: 0.8, changeFrequency: "weekly" },
+  { path: "/qtrade",            priority: 0.7, changeFrequency: "weekly" },
+  { path: "/planet",            priority: 0.85, changeFrequency: "weekly" },
+  { path: "/bank",              priority: 0.9, changeFrequency: "weekly" },
+  { path: "/bank/about",        priority: 0.85, changeFrequency: "monthly" },
+  { path: "/bank/trust",        priority: 0.85, changeFrequency: "monthly" },
+  { path: "/bank/card",         priority: 0.8, changeFrequency: "monthly" },
+  { path: "/bank/security",     priority: 0.85, changeFrequency: "monthly" },
+  { path: "/bank/help",         priority: 0.7, changeFrequency: "monthly" },
+  { path: "/bank/savings",      priority: 0.8, changeFrequency: "weekly" },
+  { path: "/bank/circles",      priority: 0.75, changeFrequency: "weekly" },
+  { path: "/bank/glossary",     priority: 0.75, changeFrequency: "monthly" },
+  { path: "/bank/onboarding",   priority: 0.85, changeFrequency: "monthly" },
+  { path: "/bank/insights",     priority: 0.8, changeFrequency: "weekly" },
+  { path: "/bank/flow",         priority: 0.75, changeFrequency: "weekly" },
+  { path: "/bank/api",          priority: 0.7, changeFrequency: "monthly" },
+  { path: "/bank/badge",        priority: 0.7, changeFrequency: "monthly" },
+  { path: "/bank/explore",      priority: 0.85, changeFrequency: "weekly" },
+  { path: "/bank/leaderboard",  priority: 0.75, changeFrequency: "daily" },
+  { path: "/bank/share",        priority: 0.6, changeFrequency: "weekly" },
+  { path: "/bank/recurring",    priority: 0.8, changeFrequency: "weekly" },
+  { path: "/bank/budget",       priority: 0.85, changeFrequency: "weekly" },
+  { path: "/bank/calendar",     priority: 0.8, changeFrequency: "weekly" },
+  { path: "/bank/subscriptions", priority: 0.8, changeFrequency: "weekly" },
+  { path: "/bank/forecast",     priority: 0.85, changeFrequency: "weekly" },
+  { path: "/bank/trip",         priority: 0.7, changeFrequency: "monthly" },
+  { path: "/bank/brief",        priority: 0.75, changeFrequency: "weekly" },
+  { path: "/bank/achievements", priority: 0.75, changeFrequency: "weekly" },
+  { path: "/bank/challenges",   priority: 0.75, changeFrequency: "weekly" },
+  { path: "/bank/networth",     priority: 0.85, changeFrequency: "weekly" },
+  { path: "/bank/timetravel",   priority: 0.7, changeFrequency: "monthly" },
+  { path: "/bank/constellation", priority: 0.8, changeFrequency: "weekly" },
+  { path: "/bank/wishlist",     priority: 0.7, changeFrequency: "weekly" },
+  { path: "/bank/loyalty",      priority: 0.7, changeFrequency: "weekly" },
+  { path: "/bank/cooldown",     priority: 0.7, changeFrequency: "monthly" },
+  { path: "/bank/changelog",    priority: 0.65, changeFrequency: "weekly" },
+  { path: "/awards",            priority: 0.8, changeFrequency: "weekly" },
+  { path: "/awards/music",      priority: 0.75, changeFrequency: "weekly" },
+  { path: "/awards/film",       priority: 0.75, changeFrequency: "weekly" },
+  { path: "/cyberchess",        priority: 0.8, changeFrequency: "weekly" },
+  { path: "/qcoreai",           priority: 0.75, changeFrequency: "weekly" },
+  { path: "/multichat-engine",  priority: 0.7, changeFrequency: "weekly" },
+  { path: "/help",              priority: 0.5, changeFrequency: "monthly" },
+  { path: "/press",             priority: 0.7, changeFrequency: "monthly" },
+  { path: "/security",          priority: 0.85, changeFrequency: "monthly" },
+  { path: "/developers",        priority: 0.85, changeFrequency: "weekly" },
+  { path: "/changelog",         priority: 0.4, changeFrequency: "weekly" },
+  { path: "/privacy",           priority: 0.3, changeFrequency: "yearly" },
+  { path: "/terms",             priority: 0.3, changeFrequency: "yearly" },
 ];
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const origin = await getOrigin();
-  const today = new Date();
-  return TOP_LEVEL_ROUTES.map((r) => ({
-    url: `${origin}${r.path}`,
-    lastModified: today,
+export default function sitemap(): MetadataRoute.Sitemap {
+  const base = process.env.NEXT_PUBLIC_SITE_URL || "https://aevion.app";
+  const now = new Date();
+  return ROUTES.map((r) => ({
+    url: `${base}${r.path}`,
+    lastModified: now,
     changeFrequency: r.changeFrequency,
     priority: r.priority,
   }));

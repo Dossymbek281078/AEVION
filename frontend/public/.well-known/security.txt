@@ -1,0 +1,6 @@
+Contact: mailto:yahiin1978@gmail.com
+Expires: 2027-04-28T00:00:00.000Z
+Preferred-Languages: en, ru, kk
+Canonical: https://aevion.app/.well-known/security.txt
+Policy: https://aevion.app/quantum-shield
+Acknowledgments: https://aevion.app/changelog

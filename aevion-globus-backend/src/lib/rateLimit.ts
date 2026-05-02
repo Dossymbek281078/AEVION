@@ -1,59 +1,73 @@
 import type { Request, Response, NextFunction } from "express";
 
-type Bucket = { count: number; resetAt: number };
+type Bucket = { tokens: number; updatedAt: number };
 
-export interface RateLimitOptions {
+/** Token-bucket style: capacity + refillPerSec. */
+type TokenBucketOptions = {
+  capacity: number;
+  refillPerSec: number;
+  keyFn?: (req: Request) => string;
+  keyPrefix?: string;
+};
+
+/** express-rate-limit compatible: windowMs + max. Converted to token bucket internally. */
+type WindowOptions = {
   windowMs: number;
   max: number;
+  keyFn?: (req: Request) => string;
   keyPrefix?: string;
   message?: string;
+};
+
+export type RateLimitOptions = TokenBucketOptions | WindowOptions;
+
+function isWindowOpts(o: RateLimitOptions): o is WindowOptions {
+  return "windowMs" in o;
 }
 
-const GLOBAL_BUCKETS = new Map<string, Bucket>();
-let lastSweep = 0;
+function defaultKeyFn(req: Request): string {
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
 
-/**
- * In-process fixed-window rate limiter. No external deps.
- * Good enough for public read-only endpoints; replace with Redis-backed
- * limiter if the app ever runs on multiple instances.
- */
 export function rateLimit(opts: RateLimitOptions) {
-  const { windowMs, max, keyPrefix = "rl", message = "Too many requests" } = opts;
+  const buckets = new Map<string, Bucket>();
+  const keyFn = opts.keyFn ?? defaultKeyFn;
+  const prefix = opts.keyPrefix ?? "";
 
-  return function rateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
+  let capacity: number;
+  let refill: number;
+  if (isWindowOpts(opts)) {
+    capacity = opts.max;
+    refill = opts.max / (opts.windowMs / 1000);
+  } else {
+    capacity = opts.capacity;
+    refill = opts.refillPerSec;
+  }
+
+  return function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
+    const key = prefix + keyFn(req);
     const now = Date.now();
-    if (now - lastSweep > 60_000) {
-      lastSweep = now;
-      for (const [k, b] of GLOBAL_BUCKETS) {
-        if (b.resetAt <= now) GLOBAL_BUCKETS.delete(k);
-      }
+    const existing = buckets.get(key);
+    let bucket: Bucket;
+    if (existing) {
+      const elapsedSec = (now - existing.updatedAt) / 1000;
+      const refilled = Math.min(capacity, existing.tokens + elapsedSec * refill);
+      bucket = { tokens: refilled, updatedAt: now };
+    } else {
+      bucket = { tokens: capacity, updatedAt: now };
     }
 
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-      req.ip ||
-      req.socket?.remoteAddress ||
-      "unknown";
-    const key = `${keyPrefix}:${ip}`;
-
-    let bucket = GLOBAL_BUCKETS.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      bucket = { count: 0, resetAt: now + windowMs };
-      GLOBAL_BUCKETS.set(key, bucket);
-    }
-    bucket.count += 1;
-
-    const remaining = Math.max(0, max - bucket.count);
-    res.setHeader("X-RateLimit-Limit", String(max));
-    res.setHeader("X-RateLimit-Remaining", String(remaining));
-    res.setHeader("X-RateLimit-Reset", String(Math.ceil(bucket.resetAt / 1000)));
-
-    if (bucket.count > max) {
-      const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    if (bucket.tokens < 1) {
+      const need = 1 - bucket.tokens;
+      const retryAfter = Math.max(1, Math.ceil(need / refill));
+      buckets.set(key, bucket);
       res.setHeader("Retry-After", String(retryAfter));
-      return res.status(429).json({ error: message, retryAfterSec: retryAfter });
+      res.status(429).json({ error: "rate limit exceeded", retryAfterSeconds: retryAfter });
+      return;
     }
 
+    bucket.tokens -= 1;
+    buckets.set(key, bucket);
     next();
   };
 }

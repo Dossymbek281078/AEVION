@@ -11,6 +11,7 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
   const demoLink = variant === "dark" ? "#5eead4" : "#0f766e";
   const shield = variant === "dark" ? "#7dd3fc" : "#0369a1";
   const qcore = variant === "dark" ? "#c4b5fd" : "#6d28d9";
+  const pitch = variant === "dark" ? "#fbbf24" : "#b45309";
   return (
     <nav style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 13, alignItems: "center" }} aria-label="Wave 1 navigation">
       <Link href="/" style={{ color: globus, fontWeight: 800 }}>← Globus</Link>
@@ -30,6 +31,8 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/bank" style={{ color: link, fontWeight: 600 }}>Bank</Link>
       <Link href="/cyberchess" style={{ color: link, fontWeight: 600 }}>Chess</Link>
       {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
+      <span style={{ color: sep }} aria-hidden>|</span>
+      <Link href="/pitch" style={{ color: pitch, fontWeight: 800 }}>Pitch · $1B+</Link>
     </nav>
   );
 }

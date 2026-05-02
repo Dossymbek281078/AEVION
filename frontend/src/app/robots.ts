@@ -12,8 +12,8 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: [
-      `${origin}/sitemap.xml`,
-      `${origin}/api-backend/api/aevion/sitemap.xml`,
+      `${BASE_URL}/sitemap.xml`,
+      `${BASE_URL}/api-backend/api/aevion/sitemap.xml`,
     ],
   };
 }

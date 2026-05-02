@@ -18,6 +18,7 @@ import { AiCoachChat } from "@/components/build/AiCoachChat";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import { AiImprove } from "@/components/build/AiImprove";
 import { ProfileCompletenessMeter } from "@/components/build/ProfileCompletenessMeter";
+import { PushSubscribeButton } from "@/components/build/PushSubscribeButton";
 
 export default function ProfilePage() {
   return (
@@ -128,6 +129,15 @@ function ProfileBody() {
           {error && <p className="mb-4 text-sm text-rose-300">{error}</p>}
           <div className="rounded-xl border border-white/10 bg-white/5 p-6">
             <ProfileForm initial={profile} onSaved={(p) => setProfile(p)} />
+          </div>
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-5">
+            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-300">
+              🔔 Push-уведомления
+            </h3>
+            <p className="mb-3 text-xs text-slate-400">
+              Получай новые сообщения, отклики и события смены прямо в браузер. Работает на десктопе и Android.
+            </p>
+            <PushSubscribeButton />
           </div>
         </div>
 

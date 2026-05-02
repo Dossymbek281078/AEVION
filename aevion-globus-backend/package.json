@@ -25,6 +25,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/pdfkit": "^0.17.5",
     "@types/qrcode": "^1.5.6",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
@@ -40,6 +41,7 @@
     "qrcode": "^1.5.4",
     "secrets.js-grempe": "^2.0.0",
     "stripe": "^22.1.0",
+    "web-push": "^3.6.7",
     "ws": "^8.20.0"
   },
   "devDependencies": {

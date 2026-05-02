@@ -83,10 +83,16 @@ shiftsRouter.patch("/:id/checkin", async (req, res) => {
     if (shift.rows[0].workerId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "only_worker_can_checkin");
     if (shift.rows[0].checkInAt) return fail(res, 409, "already_checked_in");
 
+    const lat = typeof req.body?.lat === "number" ? req.body.lat : null;
+    const lng = typeof req.body?.lng === "number" ? req.body.lng : null;
+    const geoNote = lat != null && lng != null ? `GPS: ${lat.toFixed(5)},${lng.toFixed(5)}` : null;
+
     const result = await pool.query(
-      `UPDATE "BuildShift" SET "checkInAt" = NOW(), "status" = 'STARTED', "updatedAt" = NOW()
+      `UPDATE "BuildShift"
+         SET "checkInAt" = NOW(), "status" = 'STARTED',
+             "notes" = COALESCE($2, "notes"), "updatedAt" = NOW()
        WHERE "id" = $1 RETURNING *`,
-      [id],
+      [id, geoNote],
     );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {

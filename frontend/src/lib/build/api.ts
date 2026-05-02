@@ -873,6 +873,11 @@ export const buildApi = {
     ),
   myOrders: () =>
     call<{ items: BuildOrderRow[]; total: number }>("GET", "/api/build/orders/me"),
+  checkoutOrder: (id: string) =>
+    call<{ url: string | null; sessionId?: string; alreadyPaid?: boolean; devMode?: boolean; order?: BuildOrderRow }>(
+      "POST",
+      `/api/build/orders/${encodeURIComponent(id)}/checkout`,
+    ),
   payOrder: (id: string) =>
     call<{ order: BuildOrderRow; alreadyPaid?: boolean }>(
       "POST",
@@ -996,7 +1001,12 @@ export const buildApi = {
     call<{ items: Array<{ id: string; applicationId: string; workerId: string; clientId: string; shiftDate: string; startTime: string | null; endTime: string | null; status: string; checkInAt: string | null; checkOutAt: string | null; workerName: string | null; clientName: string | null }>; total: number }>(
       "GET", `/api/build/shifts/my${from ? `?from=${encodeURIComponent(from)}` : ""}`,
     ),
-  shiftCheckin: (id: string) => call<{ id: string; status: string; checkInAt: string }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkin`),
+  shiftCheckin: (id: string, lat?: number, lng?: number) =>
+    call<{ id: string; status: string; checkInAt: string }>(
+      "PATCH",
+      `/api/build/shifts/${encodeURIComponent(id)}/checkin`,
+      lat != null && lng != null ? { lat, lng } : undefined,
+    ),
   shiftCheckout: (id: string) => call<{ id: string; status: string; checkOutAt: string }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkout`),
 
   // 9. Video Rooms

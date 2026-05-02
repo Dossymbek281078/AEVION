@@ -61,7 +61,22 @@ function ShiftsInner() {
 
   async function checkin(id: string) {
     setBusy(id);
-    try { await buildApi.shiftCheckin(id); load(); } catch {/**/} finally { setBusy(null); }
+    try {
+      // Try to get GPS location for check-in
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if ("geolocation" in navigator) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }),
+          );
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+        } catch {/*optional*/}
+      }
+      await buildApi.shiftCheckin(id, lat, lng);
+      load();
+    } catch {/**/} finally { setBusy(null); }
   }
 
   async function checkout(id: string) {

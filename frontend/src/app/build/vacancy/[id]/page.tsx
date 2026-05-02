@@ -422,11 +422,18 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
               try {
                 const r = await buildApi.updateApplication(app.id, "ACCEPTED");
                 onChanged();
-                if (r.hireOrder && r.hireOrder.amount > 0) {
-                  // Surface the hire fee so the recruiter knows to pay it.
-                  alert(
-                    `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в разделе «Мои заказы».`,
-                  );
+                if (r.hireOrder && r.hireOrder.amount > 0 && r.hireOrder.status === "PENDING") {
+                  // Open Stripe Checkout or dev-mode pay
+                  try {
+                    const checkout = await buildApi.checkoutOrder(r.hireOrder.id);
+                    if (checkout.url) {
+                      window.location.href = checkout.url;
+                    } else if (checkout.devMode) {
+                      alert(`[Dev] Hire fee ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} помечен как оплаченный (dev mode).`);
+                    }
+                  } catch {
+                    alert(`Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency}. Оплатите в разделе «Мои заказы».`);
+                  }
                 }
               } finally {
                 setBusy(false);

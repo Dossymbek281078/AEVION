@@ -20,5 +20,12 @@ export const metadata: Metadata = {
 };
 
 export default function BuildLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      {/* PWA manifest for /build — enables "Add to Home Screen" on mobile */}
+      {/* eslint-disable-next-line @next/next/no-head-element */}
+      <link rel="manifest" href="/build-manifest.json" />
+      {children}
+    </>
+  );
 }

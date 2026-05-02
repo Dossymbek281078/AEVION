@@ -11,6 +11,11 @@ import {
   APPLICATION_STATUSES,
   getRecruiterTier,
 } from "../../lib/build";
+import {
+  sendNewApplication,
+  sendApplicationAccepted,
+  sendApplicationRejected,
+} from "../../lib/build/email";
 
 export const applicationsRouter = Router();
 
@@ -105,6 +110,36 @@ applicationsRouter.post("/", async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
         [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId],
       );
+
+      // Notify client (fire-and-forget)
+      void (async () => {
+        try {
+          const emails = await pool.query(
+            `SELECT u."email", u."name", p."name" AS "wName",
+                    v."title" AS "vacTitle", proj."title" AS "projTitle",
+                    cu."email" AS "clientEmail", cu."name" AS "clientName"
+             FROM "BuildApplication" a
+             LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+             LEFT JOIN "BuildProject" proj ON proj."id" = v."projectId"
+             LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+             LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+             LEFT JOIN "AEVIONUser" cu ON cu."id" = proj."clientId"
+             WHERE a."id" = $1 LIMIT 1`,
+            [id],
+          );
+          const e = emails.rows[0];
+          if (e?.clientEmail) {
+            sendNewApplication({
+              clientEmail: e.clientEmail,
+              clientName: e.clientName ?? "",
+              workerName: e.wName ?? e.name ?? "Работник",
+              vacancyTitle: e.vacTitle ?? "",
+              projectTitle: e.projTitle ?? "",
+              applicationId: id,
+            });
+          }
+        } catch {/**/}
+      })();
 
       if (questions.length > 0 && process.env.ANTHROPIC_API_KEY) {
         void scoreApplicationAsync(id, {
@@ -233,6 +268,42 @@ applicationsRouter.patch("/:id", async (req, res) => {
       `UPDATE "BuildApplication" SET "status" = $1, "updatedAt" = NOW() WHERE "id" = $2 RETURNING *`,
       [status.value, id],
     );
+
+    // Email notification to worker (fire-and-forget)
+    void (async () => {
+      try {
+        const ctx = await pool.query(
+          `SELECT u."email", u."name" AS "workerName",
+                  cu."name" AS "clientName",
+                  v."title" AS "vacTitle", proj."title" AS "projTitle"
+           FROM "BuildApplication" a
+           LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+           LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+           LEFT JOIN "BuildProject" proj ON proj."id" = v."projectId"
+           LEFT JOIN "AEVIONUser" cu ON cu."id" = proj."clientId"
+           WHERE a."id" = $1 LIMIT 1`,
+          [id],
+        );
+        const c = ctx.rows[0];
+        if (!c?.email) return;
+        if (status.value === "ACCEPTED") {
+          sendApplicationAccepted({
+            workerEmail: c.email,
+            workerName: c.workerName ?? "",
+            vacancyTitle: c.vacTitle ?? "",
+            projectTitle: c.projTitle ?? "",
+            clientName: c.clientName ?? "",
+          });
+        } else if (status.value === "REJECTED") {
+          sendApplicationRejected({
+            workerEmail: c.email,
+            workerName: c.workerName ?? "",
+            vacancyTitle: c.vacTitle ?? "",
+            projectTitle: c.projTitle ?? "",
+          });
+        }
+      } catch {/**/}
+    })();
 
     let hireOrder: Record<string, unknown> | null = null;
     if (status.value === "ACCEPTED") {

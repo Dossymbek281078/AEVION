@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber, TRIAL_TASK_STATUSES } from "../../lib/build";
+import { sendTrialTaskProposed, sendTrialTaskApproved } from "../../lib/build/email";
 
 export const trialTasksRouter = Router();
 
@@ -55,6 +56,29 @@ trialTasksRouter.post("/", async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PROPOSED') RETURNING *`,
       [id, applicationId.value, app.vacancyId, app.recruiterId, app.candidateId, title.value, description.value, paymentAmount, paymentCurrency],
     );
+    // Email candidate (fire-and-forget)
+    void (async () => {
+      try {
+        const eu = await pool.query(
+          `SELECT u."email", ru."name" AS "recName"
+           FROM "AEVIONUser" u
+           LEFT JOIN "AEVIONUser" ru ON ru."id" = $2
+           WHERE u."id" = $1 LIMIT 1`,
+          [app.candidateId, app.recruiterId],
+        );
+        const e = eu.rows[0];
+        if (e?.email) {
+          sendTrialTaskProposed({
+            candidateEmail: e.email,
+            recruiterName: e.recName ?? "Работодатель",
+            taskTitle: title.value,
+            paymentAmount: paymentAmount,
+            currency: paymentCurrency,
+          });
+        }
+      } catch {/**/}
+    })();
+
     return ok(res, r.rows[0], 201);
   } catch (err: unknown) {
     return fail(res, 500, "trial_create_failed", { details: (err as Error).message });
@@ -120,6 +144,25 @@ trialTasksRouter.post("/:id/approve", async (req, res) => {
         [row.id, orderId],
       );
       await pool.query("COMMIT");
+
+      // Email candidate (fire-and-forget)
+      void (async () => {
+        try {
+          const eu = await pool.query(
+            `SELECT u."email" FROM "AEVIONUser" u WHERE u."id" = $1 LIMIT 1`,
+            [row.candidateId],
+          );
+          if (eu.rows[0]?.email) {
+            sendTrialTaskApproved({
+              candidateEmail: eu.rows[0].email,
+              taskTitle: String(row.title ?? ""),
+              paymentAmount: Number(row.paymentAmount) || 0,
+              currency: String(row.paymentCurrency || "RUB"),
+            });
+          }
+        } catch {/**/}
+      })();
+
       return ok(res, { trialTask: r.rows[0], payoutOrderId: orderId, payoutStatus: orderStatus });
     } catch (innerErr) {
       await pool.query("ROLLBACK");

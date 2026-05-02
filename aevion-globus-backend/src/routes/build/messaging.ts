@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber } from "../../lib/build";
+import { sendNewMessage } from "../../lib/build/email";
 
 export const messagingRouter = Router();
 
@@ -25,6 +26,27 @@ messagingRouter.post("/messages", async (req, res) => {
       `INSERT INTO "BuildMessage" ("id","senderId","receiverId","content") VALUES ($1,$2,$3,$4) RETURNING *`,
       [id, auth.sub, receiverId.value, content.value],
     );
+    // Notify receiver by email (fire-and-forget)
+    void (async () => {
+      try {
+        const recRow = await pool.query(
+          `SELECT u."email", su."name" AS "senderName"
+           FROM "AEVIONUser" u
+           LEFT JOIN "AEVIONUser" su ON su."id" = $2
+           WHERE u."id" = $1 LIMIT 1`,
+          [receiverId.value, auth.sub],
+        );
+        const r = recRow.rows[0];
+        if (r?.email) {
+          sendNewMessage({
+            receiverEmail: r.email,
+            senderName: r.senderName ?? "Пользователь",
+            preview: content.value,
+          });
+        }
+      } catch {/**/}
+    })();
+
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
     return fail(res, 500, "message_send_failed", { details: (err as Error).message });

@@ -23,6 +23,9 @@ import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
 import { eventsRouter } from "./routes/events";
+import { aevRouter } from "./routes/aev";
+import { buildRouter } from "./routes/build";
+import { aevionHubRouter } from "./routes/aevion-hub";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 

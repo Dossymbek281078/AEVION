@@ -1750,9 +1750,9 @@ qcoreaiRouter.patch("/workspaces/:id", workspaceLimiter, async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { name, description } = req.body || {};
-    const ws = await getWorkspace(req.params.id, auth.sub);
+    const ws = await getWorkspace(String(req.params.id), auth.sub);
     if (name === undefined && description === undefined) return res.status(400).json({ error: "name or description required" });
-    const updated = await updateWorkspace(req.params.id, auth.sub, {
+    const updated = await updateWorkspace(String(req.params.id), auth.sub, {
       name: typeof name === "string" ? name : undefined,
       description: description !== undefined ? (typeof description === "string" ? description : null) : undefined,
     });

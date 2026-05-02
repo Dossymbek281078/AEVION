@@ -14,6 +14,7 @@ import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
+import { useBoardInput } from "./useBoardInput";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
 import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
@@ -2173,234 +2174,8 @@ export default function CyberChessPage(){
     if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)))}
   },[game,sel,vm,over,think,pCol,exec,on,pmLim,tab,editorMode,editorPiece,editorTurn,showToast,scratchOn,scratchGame,scratchSel,scratchVm,autoQueen]);
 
-  /* ── Pointer-events drag (replaces unreliable HTML5 drag) ── */
-  // Перф: ghost-позиция обновлялась через setState на каждый pointermove (60+ Hz),
-  // что вызывало re-render всего CyberChessPage и feel залипания.
-  // Теперь: state хранит ТОЛЬКО from (mount/unmount), позицию пишем напрямую в DOM
-  // через ghostRef + rAF — нулевая нагрузка на React per pixel.
-  // sx/sy — стартовая позиция курсора, ox/oy — смещение от ЦЕНТРА исходной ячейки
-  // до точки клика (для lichess-like grab: фигура остаётся под пальцем, а не телепортируется).
-  // Snap-to-cursor-center (как у lichess/chess.com): фигура «отлипает» в руку, а не висит
-  // там, где её схватили. Это даёт ощущение поднятия. Для этого ox/oy = 0 — никакого
-  // offset не сохраняем, центр фигуры всегда под курсором. Кеш bRect/cellW для быстрого
-  // hit-test'а: elementsFromPoint на каждый pointermove делал layout read и тормозил.
-  const dragRef=useRef<{from:Square;sx:number;sy:number;active:boolean;pid:number;bRect:{l:number;t:number;w:number;h:number;cw:number;flip:boolean}}|null>(null);
-  const recentDragRef=useRef<number>(0);
-  const boardRef=useRef<HTMLDivElement|null>(null);
-  const[ghostFrom,sGhostFrom]=useState<Square|null>(null);
-  const ghostSizeRef=useRef<number>(72);
-  const ghostRef=useRef<HTMLDivElement|null>(null);
-  const ghostPosRef=useRef<{x:number;y:number}>({x:0,y:0});
-  const ghostRafRef=useRef<number|null>(null);
-  const dragHoverRef=useRef<Square|null>(null);
-  const[dragHover,sDragHover]=useState<Square|null>(null);
-  const flushGhost=useCallback(()=>{
-    ghostRafRef.current=null;
-    const el=ghostRef.current;if(!el)return;
-    const{x,y}=ghostPosRef.current;
-    // GPU-compositor positioning: translate3d не триггерит layout, в отличие от left/top.
-    // -50%,-50% центрирует элемент на (x,y) с учётом его собственных размеров.
-    el.style.transform=`translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
-  },[]);
-  const cancelGhostRaf=useCallback(()=>{
-    if(ghostRafRef.current!==null){cancelAnimationFrame(ghostRafRef.current);ghostRafRef.current=null;}
-  },[]);
-  const sqFromPoint=(x:number,y:number):Square|null=>{
-    const el=boardRef.current;if(!el)return null;
-    const r=el.getBoundingClientRect();
-    const cw=r.width/8;
-    const fx=Math.floor((x-r.left)/cw);const fy=Math.floor((y-r.top)/cw);
-    if(fx<0||fx>7||fy<0||fy>7)return null;
-    const file=flip?7-fx:fx;const rank=flip?fy:7-fy;
-    return `${FILES[file]}${rank+1}` as Square;
-  };
-  // Быстрый hit-test через кешированный rect доски — без layout-read'ов.
-  // Используется на каждом pointermove (горячий путь). 100x быстрее elementsFromPoint.
-  const sqFromCachedRect=(x:number,y:number,bRect:{l:number;t:number;cw:number;flip:boolean}):Square|null=>{
-    const fx=Math.floor((x-bRect.l)/bRect.cw);
-    const fy=Math.floor((y-bRect.t)/bRect.cw);
-    if(fx<0||fx>7||fy<0||fy>7)return null;
-    const file=bRect.flip?7-fx:fx;
-    const rank=bRect.flip?fy:7-fy;
-    return `${FILES[file]}${rank+1}` as Square;
-  };
-  const onBoardDown=(e:React.PointerEvent)=>{
-    if(e.button!==0)return;
-    const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
-    // SCRATCH: своя свободная доска. Можно двигать любой цвет.
-    if(scratchOn&&scratchGame){
-      const p=scratchGame.get(sq);
-      if(!p||p.color!==scratchGame.turn())return;
-      e.preventDefault();
-      const boardEl=e.currentTarget as HTMLElement;
-      const br=boardEl.getBoundingClientRect();
-      const bRect={l:br.left,t:br.top,w:br.width,h:br.height,cw:br.width/8,flip};
-      dragRef.current={from:sq,sx:e.clientX,sy:e.clientY,active:false,pid:e.pointerId,bRect};
-      try{boardEl.setPointerCapture(e.pointerId);}catch{}
-      sScratchSel(sq);
-      sScratchVm(new Set(scratchGame.moves({square:sq,verbose:true}).map(m=>m.to)));
-      return;
-    }
-    // Premove chain: когда не твой ход и есть очередь премувов, проверяем
-    // ВИРТУАЛЬНУЮ доску (game + applied premoves), чтобы можно было перетащить
-    // фигуру из позиции, в которой она будет находиться после уже стоящих премувов.
-    if(!over&&!editorMode&&!scratchOn){
-      const _isPM=tab!=="analysis"&&game.turn()!==pCol&&on;
-      if(!_isPM&&sel===sq&&!vm.has(sq)){sSel(null);sVm(new Set());return;}
-      if(!_isPM&&sel&&vm.has(sq)){const f=sel;const mp=game.get(f);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){if(autoQueen)exec(f,sq,"q");else sPromo({from:f,to:sq});}else exec(f,sq);sSel(null);sVm(new Set());return;}
-      if(_isPM&&pmSelRef.current&&sq!==pmSelRef.current&&pmsRef.current.length<pmLim){const f=pmSelRef.current;const vp=virtualGame.get(f);const pre:Pre={from:f,to:sq};const pr=pCol==="w"?"8":"1";if(vp?.type==="p"&&sq[1]===pr)pre.pr="q";sPms(v=>[...v,pre]);sPmSel(null);sVm(new Set());snd("premove");return;}
-    }
-    const isPremoveMode=tab!=="analysis"&&game.turn()!==pCol&&on&&!over;
-    const checkBoard=isPremoveMode?virtualGame:game;
-    const p=checkBoard.get(sq);
-    const side=tab==="analysis"?game.turn():pCol;
-    const canDrag=!!p&&(tab==="analysis"?true:p.color===side)&&!over;
-    if(!canDrag)return;
-    // КРИТИЧНО: preventDefault на pointerdown глушит дефолтные браузерные жесты
-    // (Windows pen press-and-hold, precision touchpad "pan to scroll", text-selection
-    // drag), которые иначе срабатывают через ~1сек и вызывают pointercancel.
-    // Без этого drag прерывается mid-flight на Windows.
-    e.preventDefault();
-    // Кешируем bounding rect доски один раз на pointerdown — потом используем для
-    // математического hit-test'а вместо elementsFromPoint (тот делает layout read
-    // на каждом move, видимо тормозит drag-feel).
-    const boardEl=boardRef.current||e.currentTarget as HTMLElement;
-    const br=boardEl.getBoundingClientRect();
-    const bRect={l:br.left,t:br.top,w:br.width,h:br.height,cw:br.width/8,flip};
-    dragRef.current={from:sq,sx:e.clientX,sy:e.clientY,active:false,pid:e.pointerId,bRect};
-    ghostSizeRef.current=Math.max(52,Math.round(bRect.cw*1.2));
-    // Selection + dots — мгновенно на нажатии (lichess-style), а не после движения.
-    const isMyTurn=tab==="analysis"||game.turn()===pCol;
-    if(isMyTurn){
-      sSel(sq);
-      sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));
-    }else if(on){sPmSel(sq);try{sVm(new Set(virtualGame.moves({square:sq,verbose:true}).map(m=>m.to)));}catch{}}
-  };
-  const onBoardMove=(e:React.PointerEvent)=>{
-    const d=dragRef.current;if(!d||d.pid!==e.pointerId)return;
-    const dx=e.clientX-d.sx,dy=e.clientY-d.sy;
-    // Threshold 4px — даёт время увидеть «отлипание» (scale-up на origin клетке через
-    // cubic-bezier overshoot, ~80ms). При 1px ghost появлялся раньше чем глаз успевал
-    // зарегистрировать pickup — feel'a "поднял в руку" не было.
-    if(!d.active&&Math.hypot(dx,dy)>4){
-      d.active=true;
-      ghostPosRef.current={x:e.clientX,y:e.clientY};
-      sGhostFrom(d.from);
-      if(typeof document!=="undefined")document.body.style.cursor="grabbing";
-    }
-    if(d.active){
-      ghostPosRef.current={x:e.clientX,y:e.clientY};
-      if(ghostRafRef.current===null)ghostRafRef.current=requestAnimationFrame(flushGhost);
-      // sqFromCachedRect: math-only, без layout reads. Раньше elementsFromPoint
-      // вызывался на каждом move (60+ Hz) и сбивал rendering pipeline.
-      const hover=sqFromCachedRect(e.clientX,e.clientY,d.bRect);
-      const target=hover&&hover!==d.from?hover:null;
-      if(target!==dragHoverRef.current){dragHoverRef.current=target;sDragHover(target);}
-    }
-  };
-  const onBoardUp=(e:React.PointerEvent)=>{
-    const d=dragRef.current;dragRef.current=null;
-    cancelGhostRaf();sGhostFrom(null);
-    if(dragHoverRef.current!==null){dragHoverRef.current=null;sDragHover(null);}
-    if(typeof document!=="undefined")document.body.style.cursor="";
-    try{(e.currentTarget as HTMLElement|null)?.releasePointerCapture?.(e.pointerId);}catch{}
-    if(!d)return;
-    if(!d.active){
-      const sq=sqFromCachedRect(e.clientX,e.clientY,d.bRect)||sqFromPoint(e.clientX,e.clientY);
-      if(sq&&sq!==d.from)click(sq);
-      return;
-    }
-    recentDragRef.current=Date.now();
-    const to=sqFromCachedRect(e.clientX,e.clientY,d.bRect)||sqFromPoint(e.clientX,e.clientY);if(!to||to===d.from)return;
-    const f=d.from;
-    // SCRATCH: коммит на отдельный chess instance, не трогая real game.
-    if(scratchOn&&scratchGame){
-      const moves=scratchGame.moves({square:f,verbose:true});
-      const matched=moves.find(m=>m.to===to);
-      if(matched){
-        try{
-          const promoNeeded=!!matched.promotion;
-          const mv=scratchGame.move({from:f,to,promotion:promoNeeded?"q":undefined});
-          if(mv){
-            sScratchHist(h=>[...h,mv.san]);
-            sScratchLm({from:mv.from,to:mv.to});
-            sScratchSel(null);sScratchVm(new Set());
-            sScratchBk(k=>k+1);
-            snd(mv.captured?"capture":mv.san.includes("O-")?"castle":scratchGame.isCheck()?"check":"move");
-          }
-        }catch{}
-      }else{sScratchSel(null);sScratchVm(new Set());}
-      return;
-    }
-    if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){
-      if(pmsRef.current.length>=pmLim)return;
-      // Promo check от ВИРТУАЛЬНОЙ доски — фигура могла оказаться на f
-      // в результате уже стоящих премувов.
-      const p=virtualGame.get(f);
-      const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
-      if(p?.type==="p"&&to[1]===promoRank)pre.pr="q";
-      sPms(v=>[...v,pre]);sPmSel(null);snd("premove");return;
-    }
-    const legal=(variant==="diceblade"&&dicePieceType
-      ?filterMovesByDice(game.moves({square:f,verbose:true}),dicePieceType)
-      :game.moves({square:f,verbose:true}));
-    const matched=legal.find(m=>m.to===to);
-    if(matched){
-      const mp=game.get(f);
-      if(mp?.type==="p"&&(to[1]==="1"||to[1]==="8")){
-        if(autoQueen)exec(f,to,"q");
-        else sPromo({from:f,to});
-      }
-      else exec(f,to);
-    }else{sSel(null);sVm(new Set());}
-  };
-  const onBoardCancel=(_e:React.PointerEvent)=>{
-    // Salvage: если drag был активен и есть легальная цель под последним курсором —
-    // коммитим как обычный pointerup. preventDefault на pointerdown обычно глушит
-    // pointercancel, но если жест всё-таки прорвётся (Windows pen, multi-touch и т.п.),
-    // мы не теряем ход.
-    const d=dragRef.current;
-    if(d&&d.active){
-      const{x,y}=ghostPosRef.current;
-      const to=sqFromPoint(x,y);
-      if(to&&to!==d.from){
-        const f=d.from;
-        if(tab!=="analysis"&&game.turn()!==pCol&&on&&!over){
-          if(pmsRef.current.length<pmLim){
-            const pp=virtualGame.get(f);const pre:Pre={from:f,to};const promoRank=pCol==="w"?"8":"1";
-            if(pp?.type==="p"&&to[1]===promoRank)pre.pr="q";
-            sPms(v=>[...v,pre]);sPmSel(null);snd("premove");
-          }
-        }else{
-          const legal=(variant==="diceblade"&&dicePieceType
-            ?filterMovesByDice(game.moves({square:f,verbose:true}),dicePieceType)
-            :game.moves({square:f,verbose:true}));
-          const matched=legal.find(m=>m.to===to);
-          if(matched){
-            recentDragRef.current=Date.now();
-            const mp=game.get(f);
-            if(mp?.type==="p"&&(to[1]==="1"||to[1]==="8")){
-              if(autoQueen)exec(f,to,"q");else sPromo({from:f,to});
-            }else exec(f,to);
-          }
-        }
-      }
-    }
-    dragRef.current=null;cancelGhostRaf();sGhostFrom(null);
-    if(dragHoverRef.current!==null){dragHoverRef.current=null;sDragHover(null);}
-    if(typeof document!=="undefined")document.body.style.cursor="";
-  };
-
-  const onBoardMoveRef=useRef(onBoardMove);const onBoardUpRef=useRef(onBoardUp);
-  useEffect(()=>{onBoardMoveRef.current=onBoardMove},[onBoardMove]);
-  useEffect(()=>{onBoardUpRef.current=onBoardUp},[onBoardUp]);
-  useEffect(()=>{
-    const mv=(e:PointerEvent)=>onBoardMoveRef.current(e as any);
-    const up=(e:PointerEvent)=>onBoardUpRef.current(e as any);
-    window.addEventListener("pointermove",mv,{passive:false});
-    window.addEventListener("pointerup",up);
-    return()=>{window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
-  },[]);
+  /* ── Pointer-events drag — fully isolated in useBoardInput hook.
+     Hook is called below, after virtualGame is declared (it depends on it). */
 
   const newG=(c?:ChessColor)=>{const cl=c||pCol;
     // Determine starting FEN based on variant
@@ -2735,6 +2510,34 @@ export default function CyberChessPage(){
       return g;
     }catch{return game;}
   },[game,bk,pms,pCol]);
+  // ── Board input hook (drag/click/premove) ──────────────────────────────────
+  // Owns drag state, ghost RAF positioning, window pointer listeners,
+  // click-vs-drag distinction, premove + scratch + dice paths, and salvage.
+  const _bi = useBoardInput({
+    game, virtualGame, pCol, on, over, flip, tab,
+    sel, vm, pms, pmSel, pmLim,
+    pmsRef, pmSelRef,
+    scratchOn, scratchGame, autoQueen, hotseat, variant,
+    dicePieceType: dicePieceType || null,
+    editorMode,
+    exec, sSel, sVm, sPms, sPmSel, sPromo,
+    sScratchSel, sScratchVm, sScratchBk, sScratchHist, sScratchLm,
+    snd, click,
+    filterMovesByDice,
+  });
+  const boardRef = _bi.boardRef;
+  const ghostRef = _bi.ghostRef;
+  const ghostPosRef = _bi.ghostPosRef;
+  const ghostSizeRef = _bi.ghostSizeRef;
+  const ghostFrom = _bi.ghostFrom;
+  const dragHover = _bi.dragHover;
+  const recentDragRef = _bi.recentDragRef;
+  const onBoardDown = _bi.onBoardDown;
+  const onBoardMove = _bi.onBoardMove;
+  const onBoardUp = _bi.onBoardUp;
+  const onBoardCancel = _bi.onBoardCancel;
+  const sqFromPoint = _bi.sqFromBoard;
+
   // Scratch — отдельный inst отображается вместо virtualGame.
   const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
   const bd=renderGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];

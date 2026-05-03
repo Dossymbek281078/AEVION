@@ -44,13 +44,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // QRight public surfaces are intended to be embedded on third-party
-        // sites. Override X-Frame-Options to ALLOWALL (legacy) + CSP
-        // frame-ancestors *. The catch-all COEP above would otherwise prevent
-        // these from being loaded as <iframe>.
-        // Also: COEP credentialless lets credentialed sub-resources work in
-        // modern browsers, and a tight Permissions-Policy denies the embed
-        // any sensitive APIs by default.
         source: "/qright/object/:id",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
@@ -78,7 +71,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Public transparency report — no PII, freely embeddable.
         source: "/qright/transparency",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
@@ -90,8 +82,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // QSign embed widget — must be embeddable cross-origin in any iframe.
-        // Disable COOP/COEP isolation here and allow framing from anywhere.
         source: "/qsign/embed/:path*",
         headers: [
           { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
@@ -101,8 +91,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // QCoreAI embed widget — read-only multi-agent run snapshot,
-        // embeddable on landing pages, docs, customer portals.
         source: "/qcoreai/embed/:path*",
         headers: [
           { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },

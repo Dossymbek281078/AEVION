@@ -11,7 +11,7 @@
       "default": "./index.js"
     }
   },
-  "files": ["index.ts", "index.js", "index.d.ts", "README.md", "LICENSE"],
+  "files": ["index.ts", "index.js", "index.d.ts", "README.md"],
   "keywords": [
     "aevion",
     "qsign",
@@ -27,20 +27,15 @@
     "url": "https://github.com/Dossymbek281078/AEVION.git",
     "directory": "aevion-globus-backend/sdk/qsign-webhook-receiver"
   },
-  "license": "MIT",
-  "author": "AEVION",
+  "license": "UNLICENSED",
   "engines": {
     "node": ">=14"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "peerDependencies": {},
   "devDependencies": {
     "typescript": "^5.0.0"
   },
   "scripts": {
-    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck",
-    "prepublishOnly": "npm run build"
+    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck"
   }
 }

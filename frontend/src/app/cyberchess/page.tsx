@@ -38,6 +38,9 @@ import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as
 import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
 import RepertoireModal, { loadRepertoire, saveRepertoire, type Repertoire } from "./Repertoire";
 import DailyMission, { bumpDaily } from "./DailyMission";
+import WhatIfButton from "./WhatIfButton";
+import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from "./BoardArt";
+import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -416,6 +419,11 @@ export default function CyberChessPage(){
   const[repertoire,sRepertoire]=useState<Repertoire>(()=>loadRepertoire());
   useEffect(()=>{saveRepertoire(repertoire)},[repertoire]);
   const[repertoireOpen,sRepertoireOpen]=useState(false);
+  const[boardArt,sBoardArt]=useState<BoardArtId>(()=>{try{return(localStorage.getItem("aevion_chess_art_v1")||"off") as BoardArtId}catch{return"off"}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_art_v1",boardArt)}catch{}},[boardArt]);
+  const[p2pMode,sP2pMode]=useState(false);
+  const[p2pRoomId,sP2pRoomId]=useState("");
+  const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
   const[scratchOn,sScratchOn]=useState(false);
   const[scratchGame,sScratchGame]=useState<Chess|null>(null);
   const[scratchHist,sScratchHist]=useState<string[]>([]);
@@ -1048,6 +1056,25 @@ export default function CyberChessPage(){
     return()=>{cancelled=true};
   },[tab,hist.length,sfOk]);
 
+  // ── P2P friend play ─────────────────────────────────────────────────────
+  const p2pMsgRef=useRef<((msg:P2PMessage)=>void)|null>(null);
+  const p2p=useP2P({onMessage:(msg)=>p2pMsgRef.current?.(msg)});
+  const p2pRef=useRef({mode:false,send:p2p.send});
+  p2pRef.current={mode:p2pMode,send:p2p.send};
+  // Auto-join via URL param: /cyberchess?room=ABC123&color=w
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const room=params.get("room");const hostColor=(params.get("color")||"w") as ChessColor;
+    if(!room)return;
+    sP2pMode(true);sP2pRoomId(room);
+    p2p.join(room);
+    // Take opposite color of host
+    const myColor:ChessColor=hostColor==="w"?"b":"w";
+    sPCol(myColor);sFlip(myColor==="b");
+    showToast(`🤝 Подключаюсь к комнате ${room}…`,"info");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   // Когда true — следующий апдейт lm (свой ход юзера) НЕ запускает slide-animation.
   // Юзер только что сам перетащил/щёлкнул — анимация лишь добавляет восприятия лага.
   const skipNextAnimRef=useRef(false);
@@ -1229,6 +1256,8 @@ export default function CyberChessPage(){
     let mv;
     try{mv=game.move({from,to,promotion:pr||"q"});}catch{return false;}
     if(!mv)return false;
+    // P2P: send move to peer
+    if(p2pRef.current.mode&&p2pRef.current.send){p2pRef.current.send({t:"mv",uci:`${from}${to}${pr||""}`,san:mv.san,at:Date.now()})}
     if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(game.isCheck())snd("check");else snd("move");
     if(mv.captured){
       const cc=pc(mv.captured,mv.color==="w"?"b":"w");
@@ -1870,12 +1899,33 @@ export default function CyberChessPage(){
     doPremoveRef.current();
   },[bk,over,on,tab,pCol,pms.length]);
 
+  /* ── P2P onMessage — wired here so exec is in scope ── */
+  useEffect(()=>{
+    p2pMsgRef.current=(msg:P2PMessage)=>{
+      if(msg.t==="mv"){
+        const f=msg.uci.slice(0,2) as Square,t=msg.uci.slice(2,4) as Square;
+        const pr=msg.uci[4] as any||undefined;
+        exec(f,t,pr);
+      }else if(msg.t==="hello"){sP2pOpponentName((msg as any).name||"Оппонент")}
+      else if(msg.t==="resign"){sOver(`${p2pOpponentName} сдался — Вы победили!`);sOn(false)}
+      else if(msg.t==="draw-accept"){sOver("Ничья (договорились)");sOn(false)}
+    };
+    return()=>{p2pMsgRef.current=null};
+  },[exec,p2pOpponentName]);
+
+  /* ── P2P status → connect toast ── */
+  useEffect(()=>{
+    if(p2p.status==="connected")showToast(`🤝 ${p2pOpponentName} подключился — игра началась!`,"success");
+    if(p2p.status==="closed"&&p2pMode)showToast("P2P соединение закрыто","error");
+  },[p2p.status]);// eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── AI turn trigger ── */
   // Snapshot fen at trigger time so a late-arriving Stockfish bestmove
   // can't try to apply itself on a position the user has already moved on.
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(hotseat)return; // two-player hotseat: no AI moves
+    if(p2pMode)return; // P2P mode: opponent is human, no AI
     if(openingDrill)return; // Opening Trainer plays bot moves from script
     if(game.turn()===pCol)return;
     sThink(true);
@@ -2049,7 +2099,7 @@ export default function CyberChessPage(){
       sThink(false);
     },delay);
     return()=>clearTimeout(t);
-  },[bk,over,on,tab]);
+  },[bk,over,on,tab,p2pMode]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
@@ -3086,6 +3136,18 @@ export default function CyberChessPage(){
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Hotseat 1v1</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:hotseat?"#3b82f6":"#e5e7eb",color:hotseat?"#fff":CC.textDim}}>{hotseat?"ON":"OFF"}</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без AI — оба игрока ходят на одном устройстве.</div>
                   </button>
+                  {/* P2P — play with friend online via WebRTC */}
+                  <button onClick={()=>{
+                    const room=genRoomId();const myColor:ChessColor="w";
+                    sP2pMode(true);sP2pRoomId(room);sHotseat(false);sRivalMode(false);
+                    p2p.host(room);
+                    sPCol(myColor);sFlip(false);
+                    const url=typeof window!=="undefined"?`${window.location.origin}/cyberchess?room=${room}&color=${myColor}`:`/cyberchess?room=${room}&color=${myColor}`;
+                    try{navigator.clipboard.writeText(url).then(()=>showToast(`🤝 Комната ${room} — ссылка скопирована! Жди друга…`,"success"))}catch{showToast(`🤝 Комната: ${room}. Отправь другу эту ссылку`,"info")}
+                  }} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${p2pMode?"#059669":CC.border}`,background:p2pMode?"linear-gradient(135deg,#d1fae5,#a7f3d0)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🤝</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Друг онлайн</span>{p2p.status!=="idle"&&<span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:p2p.status==="connected"?"#059669":"#f59e0b",color:"#fff"}}>{p2p.status==="connected"?"ONLINE":p2p.status==="open"?"Жду…":p2p.status}</span>}</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{p2pMode&&p2pRoomId?`Комната: ${p2pRoomId} · ${p2p.latencyMs?`${p2p.latencyMs}ms`:""}`:p2p.errorMsg||"P2P через WebRTC — без сервера. Отправь другу ссылку."}</div>
+                  </button>
                   <button onClick={()=>sShowTournament(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🏆</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Турниры</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Свисс / Round-Robin против AI разных рейтингов.</div>
@@ -3393,6 +3455,8 @@ export default function CyberChessPage(){
               const isWhiteBetter=evalMate!==0?evalMate>0:evalCp>=0;
               const badgeBg=isWhiteBetter?"#ffffff":"#1e293b";
               const badgeFg=isWhiteBetter?"#0f172a":"#ffffff";
+              const absCp=Math.abs(evalMate!==0?9999:evalCp);
+              const strengthLabel=evalMate!==0?`M${Math.abs(evalMate)}`:absCp<20?"=":absCp<60?"±":absCp<150?"+":absCp<350?"±±":"±±±";
               const pipStyle=(side:"W"|"B"):React.CSSProperties=>side==="W"
                 ? {background:"#f8fafc",color:CC.text,border:`1px solid ${CC.border}`}
                 : {background:"#1e293b",color:"#fff"};
@@ -3409,6 +3473,7 @@ export default function CyberChessPage(){
                   <div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",padding:"2px 5px",background:badgeBg,color:badgeFg,fontSize:10,fontWeight:900,fontFamily:"ui-monospace, monospace",borderRadius:4,boxShadow:"0 1px 3px rgba(0,0,0,0.3)",whiteSpace:"nowrap",minWidth:26,textAlign:"center",letterSpacing:0.3}}>{label}</div>
                 </div>
                 <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(botSide)}}>{botSide}</div>
+                <div style={{fontSize:8,fontWeight:900,color:absCp<20?CC.textMute:isWhiteBetter?CC.accent:CC.danger,letterSpacing:0.5,textAlign:"center",marginTop:2}}>{strengthLabel}</div>
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
@@ -3448,6 +3513,8 @@ export default function CyberChessPage(){
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
+              {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
+              {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
                 const tm:ThreatMap=computeThreatMap(bd as any);
@@ -4268,6 +4335,7 @@ export default function CyberChessPage(){
                 const sanMoves=uciToSan(analFen||game.fen(),line.moves);
                 const uciMoves=line.moves;
                 const baseFen=analFen||game.fen();
+                const bestSan=sanMoves[0]||uciMoves[0]||"";
                 return(<div key={i} style={{padding:"5px 10px",borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",gap:8,background:i===0?"rgba(5,150,105,0.03)":"transparent"}}>
                   <div style={{minWidth:20,height:20,borderRadius:4,background:i===0?T.accent:i===1?T.blue:T.dim,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
                   <div style={{minWidth:40,padding:"2px 5px",borderRadius:4,background:isPos?"#065f46":"#1e293b",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",textAlign:"center",flexShrink:0}}>{isPos?"+":""}{evalStr}</div>
@@ -4282,6 +4350,7 @@ export default function CyberChessPage(){
                     })}
                     {sanMoves.length>8&&<span style={{fontSize:10,color:T.dim}}>…</span>}
                   </div>
+                  {bestSan&&<WhatIfButton fen={baseFen} san={bestSan} evalStr={evalStr} rank={i+1} isBest={i===0}/>}
                 </div>);
               })}
             </div>
@@ -7041,6 +7110,17 @@ export default function CyberChessPage(){
                   </div>
                   <span style={{fontSize:12,fontWeight:selected?800:600,color:selected?CC.text:CC.textDim}}>{th.name}</span>
                   {locked&&<span style={{fontSize:10,color:"#b45309"}}>🔒</span>}
+                </button>;
+              })}
+            </div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>🖼 Декор доски (Board Art)</div>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
+              {BOARD_ART_OPTIONS.map(opt=>{
+                const selected=boardArt===opt.v;
+                return <button key={opt.v} className="cc-focus-ring" onClick={()=>{sBoardArt(opt.v);showToast(`Арт: ${opt.label}`,"info")}}
+                  title={opt.hint}
+                  style={{padding:"5px 12px",borderRadius:RADIUS.full,border:selected?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,background:selected?CC.accentSoft:CC.surface1,cursor:"pointer",fontSize:12,fontWeight:selected?800:600,color:selected?CC.accent:CC.textDim,transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                  {opt.label}
                 </button>;
               })}
             </div>

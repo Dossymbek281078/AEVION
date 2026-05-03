@@ -1,98 +1,143 @@
 "use client";
 /**
- * useBoardInput v3 — DOM-imperative drag, no React state in the hot path.
+ * useBoardInput v4 — chess board input system, complete rewrite.
  *
- * Why: React 19 + non-React event handlers (window listeners) had a quirk
- * where state updates from inside the listener didn't always propagate.
- * Ghost was positioned via direct DOM (worked) but ghostFrom React state
- * stayed null, leaving the ghost div with visibility:hidden.
+ * Goals (in order of importance):
+ *   1. Drag-and-drop with mouse — piece physically follows cursor like
+ *      lichess/chess.com.
+ *   2. Click-to-move — fast, single-click commits a move when a piece is
+ *      already selected.
+ *   3. Touch / touchpad — same as mouse via Pointer Events (preventDefault
+ *      on pointerdown suppresses pan-to-scroll).
+ *   4. Premoves — when not your turn, drag or click queues a premove.
+ *      Premove chain (multiple queued) supported.
+ *   5. Keyboard navigation — arrows + Enter/Space (handled at page level).
  *
- * Solution: ghost element is mutated DIRECTLY via the ghostRef:
- *   - visibility:visible/hidden
- *   - innerHTML = piece SVG
- *   - transform via translate3d
- * No React render needed for any drag step. State updates that DO happen
- * (sSel, sVm, sPmSel, sPms, exec) are still going through React because
- * those drive the board re-render, which is fine — they happen outside
- * the per-frame hot path.
- *
- * Drag-hover indicator (the green ring around the hover square) also uses
- * direct DOM via dataset attribute on the board element + a child overlay
- * styled by CSS — no React state needed.
+ * Key design decisions (learned from previous attempts):
+ *   - Ghost element is created IMPERATIVELY via document.createElement and
+ *     appended to document.body. NOT in React's render tree. This way, no
+ *     React re-render can ever overwrite its inline style. Previous attempts
+ *     with portaled JSX or React state for ghostFrom were broken because
+ *     React reconciler reset visibility:hidden between renders.
+ *   - Window listeners for pointermove/up — single source of truth, no
+ *     double-fire from React synthetic delegation.
+ *   - React synthetic onPointerDown ONLY for synchronous preventDefault
+ *     (suppress HTML5 dragstart and touchpad pan).
+ *   - State machine: dragRef holds {from, sx, sy, pid, active}. active=false
+ *     until threshold crossed; then ghost appears and tracks cursor.
+ *   - On pointerup: if !active → it was a click (no-op, selection set in
+ *     pointerdown). If active → execute drop on target square.
  */
 
 import { useCallback, useEffect, useRef } from "react";
 import { Chess, type Square, type Color as ChessColor } from "chess.js";
 
-const FILES = ["a","b","c","d","e","f","g","h"];
+const FILES = ["a","b","c","d","e","f","g","h"] as const;
 
-type Pre = {from:Square;to:Square;pr?:"q"|"r"|"b"|"n"};
+type Pre = { from: Square; to: Square; pr?: "q"|"r"|"b"|"n" };
 
 interface BoardInputOptions {
   game: Chess;
   virtualGame: Chess;
   pCol: ChessColor;
   on: boolean;
-  over: string|null;
+  over: string | null;
   flip: boolean;
   tab: string;
-  sel: Square|null;
+  sel: Square | null;
   vm: Set<string>;
   pms: Pre[];
-  pmSel: Square|null;
+  pmSel: Square | null;
   pmLim: number;
   pmsRef: React.MutableRefObject<Pre[]>;
-  pmSelRef: React.MutableRefObject<Square|null>;
+  pmSelRef: React.MutableRefObject<Square | null>;
   scratchOn: boolean;
-  scratchGame: Chess|null;
+  scratchGame: Chess | null;
   autoQueen: boolean;
   hotseat: boolean;
   variant: string;
-  dicePieceType: string|null;
+  dicePieceType: string | null;
   editorMode: boolean;
-  exec: (from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>void;
-  sSel: (sq:Square|null)=>void;
-  sVm: (v:Set<string>)=>void;
-  sPms: (fn:(v:Pre[])=>Pre[])=>void;
-  sPmSel: (sq:Square|null)=>void;
-  sPromo: (p:{from:Square;to:Square}|null)=>void;
-  sScratchSel: (sq:Square|null)=>void;
-  sScratchVm: (v:Set<string>)=>void;
-  sScratchBk: (fn:(k:number)=>number)=>void;
-  sScratchHist: (fn:(h:string[])=>string[])=>void;
-  sScratchLm: (v:{from:string;to:string}|null)=>void;
-  snd: (name:string)=>void;
-  click: (sq:Square)=>void;
-  filterMovesByDice?: (moves:any[],pieceType:string)=>any[];
-  /** Callback that returns the inner HTML for the ghost piece at `sq`.
-      Page provides this by looking up the piece on the (virtual) board
-      and calling pieceHtml(type, color, activePieceSet, sizePx). */
+  exec: (from: Square, to: Square, pr?: "q"|"r"|"b"|"n") => void;
+  sSel: (sq: Square | null) => void;
+  sVm: (v: Set<string>) => void;
+  sPms: (fn: (v: Pre[]) => Pre[]) => void;
+  sPmSel: (sq: Square | null) => void;
+  sPromo: (p: { from: Square; to: Square } | null) => void;
+  sScratchSel: (sq: Square | null) => void;
+  sScratchVm: (v: Set<string>) => void;
+  sScratchBk: (fn: (k: number) => number) => void;
+  sScratchHist: (fn: (h: string[]) => string[]) => void;
+  sScratchLm: (v: { from: string; to: string } | null) => void;
+  snd: (name: string) => void;
+  click: (sq: Square) => void;
+  filterMovesByDice?: (moves: any[], pieceType: string) => any[];
+  /** Returns inner HTML for the piece at `sq` sized to `sizePx`. */
   getPieceHtml: (sq: Square, sizePx: number) => string;
 }
 
+type BRect = { l: number; t: number; cw: number; flip: boolean };
+
 type DragState = {
   from: Square;
-  sx: number; sy: number;
-  active: boolean;
+  sx: number;
+  sy: number;
   pid: number;
-  bRect: { l:number; t:number; cw:number; flip:boolean };
+  active: boolean;
+  bRect: BRect;
 };
 
-export function useBoardInput(opts: BoardInputOptions) {
-  const boardRef = useRef<HTMLDivElement|null>(null);
-  const ghostRef = useRef<HTMLDivElement|null>(null);
-  const dragRef = useRef<DragState|null>(null);
-  const recentDragRef = useRef<number>(0);
-  const ghostRafRef = useRef<number|null>(null);
-  const ghostPosRef = useRef<{x:number;y:number}>({x:0,y:0});
+const GHOST_ID = "cc-ghost-v4";
+const ACTIVATION_THRESHOLD_SQ = 9; // 3px squared
 
-  // Always-fresh opts via render-time assignment.
+export function useBoardInput(opts: BoardInputOptions) {
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  // ghostRef is kept for backwards compat with the page; we DON'T render it
+  // via React. Instead we create the element imperatively below and store
+  // the reference here. Page can pass an empty placeholder div if it likes —
+  // we'll detach and re-create regardless.
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const recentDragRef = useRef<number>(0);
+  const ghostPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const ghostRafRef = useRef<number | null>(null);
+
+  // optsRef stays current — assigned during render, before any window
+  // listener can fire.
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
-  // ── Hit-test helpers ──────────────────────────────────────────────────────
-  const sqFromBoard = useCallback((x:number, y:number): Square|null => {
-    const el = boardRef.current; if (!el) return null;
+  // ── Imperative ghost lifecycle ──────────────────────────────────────────
+  useEffect(() => {
+    // Reuse existing element if any (HMR survival).
+    let el = document.getElementById(GHOST_ID) as HTMLDivElement | null;
+    if (!el) {
+      el = document.createElement("div");
+      el.id = GHOST_ID;
+      document.body.appendChild(el);
+    }
+    el.style.cssText = [
+      "position:fixed",
+      "left:0", "top:0",
+      "width:0", "height:0",
+      "transform:translate3d(-9999px,-9999px,0)",
+      "pointer-events:none",
+      "z-index:99999",
+      "will-change:transform",
+      "visibility:hidden",
+      "filter:drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))",
+    ].join(";");
+    el.innerHTML = "";
+    ghostRef.current = el;
+    return () => {
+      // Don't remove — survives HMR. Real unmount is rare.
+    };
+  }, []);
+
+  // ── Hit-test helpers ────────────────────────────────────────────────────
+  const sqFromBoard = useCallback((x: number, y: number): Square | null => {
+    const el = boardRef.current;
+    if (!el) return null;
     const r = el.getBoundingClientRect();
     if (r.width === 0) return null;
     const cw = r.width / 8;
@@ -105,7 +150,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     return `${FILES[file]}${rank + 1}` as Square;
   }, []);
 
-  const sqFromCachedRect = useCallback((x:number, y:number, b: DragState["bRect"]): Square|null => {
+  const sqFromCachedRect = useCallback((x: number, y: number, b: BRect): Square | null => {
     const fx = Math.floor((x - b.l) / b.cw);
     const fy = Math.floor((y - b.t) / b.cw);
     if (fx < 0 || fx > 7 || fy < 0 || fy > 7) return null;
@@ -114,15 +159,9 @@ export function useBoardInput(opts: BoardInputOptions) {
     return `${FILES[file]}${rank + 1}` as Square;
   }, []);
 
-  // ── Ghost DOM mutation helpers ────────────────────────────────────────────
+  // ── Ghost DOM mutations (pure imperative, NO React) ─────────────────────
   const showGhost = useCallback((from: Square, x: number, y: number, cw: number) => {
     const el = ghostRef.current;
-    // Telemetry — HUD listens to this.
-    if (typeof window!=="undefined") {
-      window.dispatchEvent(new CustomEvent("aevion-drag-debug", {
-        detail: { type: "showGhost", from, x, y, cw, ghostElExists: !!el, html: el?.innerHTML?.length || 0 }
-      }));
-    }
     if (!el) return;
     const sz = Math.max(48, Math.round(cw * 1.15));
     el.style.width = `${sz}px`;
@@ -130,29 +169,29 @@ export function useBoardInput(opts: BoardInputOptions) {
     el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
     el.style.visibility = "visible";
     el.dataset.from = from;
-    const html = optsRef.current.getPieceHtml(from, sz);
-    el.innerHTML = html;
-    if (typeof window!=="undefined") {
-      window.dispatchEvent(new CustomEvent("aevion-drag-debug", {
-        detail: { type: "showGhost-done", from, sz, htmlLen: html.length, vis: el.style.visibility }
-      }));
-    }
+    el.innerHTML = optsRef.current.getPieceHtml(from, sz);
     const board = boardRef.current;
     if (board) board.dataset.dragFrom = from;
+    document.body.style.cursor = "grabbing";
   }, []);
 
   const flushGhostPos = useCallback(() => {
     ghostRafRef.current = null;
-    const el = ghostRef.current; if (!el) return;
+    const el = ghostRef.current;
+    if (!el) return;
     const { x, y } = ghostPosRef.current;
     el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
   }, []);
 
   const hideGhost = useCallback(() => {
-    if (ghostRafRef.current !== null) { cancelAnimationFrame(ghostRafRef.current); ghostRafRef.current = null; }
+    if (ghostRafRef.current !== null) {
+      cancelAnimationFrame(ghostRafRef.current);
+      ghostRafRef.current = null;
+    }
     const el = ghostRef.current;
     if (el) {
       el.style.visibility = "hidden";
+      el.style.transform = "translate3d(-9999px,-9999px,0)";
       el.innerHTML = "";
       delete el.dataset.from;
     }
@@ -161,17 +200,20 @@ export function useBoardInput(opts: BoardInputOptions) {
       delete board.dataset.dragFrom;
       delete board.dataset.hoverSq;
     }
+    document.body.style.cursor = "";
   }, []);
 
-  const setHover = useCallback((sq: Square|null) => {
-    const board = boardRef.current; if (!board) return;
+  const setHover = useCallback((sq: Square | null) => {
+    const board = boardRef.current;
+    if (!board) return;
     if (sq) board.dataset.hoverSq = sq;
     else delete board.dataset.hoverSq;
   }, []);
 
-  // ── Drop execution ────────────────────────────────────────────────────────
+  // ── Move execution ──────────────────────────────────────────────────────
   const executeDrop = useCallback((from: Square, to: Square) => {
     const o = optsRef.current;
+    // Scratch board
     if (o.scratchOn && o.scratchGame) {
       const moves = o.scratchGame.moves({ square: from, verbose: true });
       const matched = moves.find(m => m.to === to);
@@ -181,27 +223,37 @@ export function useBoardInput(opts: BoardInputOptions) {
           if (mv) {
             o.sScratchHist(h => [...h, mv.san]);
             o.sScratchLm({ from: mv.from, to: mv.to });
-            o.sScratchSel(null); o.sScratchVm(new Set()); o.sScratchBk(k => k + 1);
+            o.sScratchSel(null);
+            o.sScratchVm(new Set());
+            o.sScratchBk(k => k + 1);
             o.snd(mv.captured ? "capture" : "move");
           }
         } catch {}
-      } else { o.sScratchSel(null); o.sScratchVm(new Set()); }
+      } else {
+        o.sScratchSel(null);
+        o.sScratchVm(new Set());
+      }
       return;
     }
+    // Premove (not user's turn)
     if (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over) {
       if (o.pmsRef.current.length >= o.pmLim) return;
       const p = o.virtualGame.get(from) || o.game.get(from);
       const pre: Pre = { from, to };
       const promoRank = o.pCol === "w" ? "8" : "1";
       if (p?.type === "p" && to[1] === promoRank) pre.pr = "q";
-      o.sPms(v => [...v, pre]); o.sPmSel(null); o.sVm(new Set()); o.snd("premove");
+      o.sPms(v => [...v, pre]);
+      o.sPmSel(null);
+      o.sVm(new Set());
+      o.snd("premove");
       return;
     }
+    // Normal move
     const rawLegal = o.game.moves({ square: from, verbose: true });
     const legal = (o.variant === "diceblade" && o.dicePieceType && o.filterMovesByDice)
       ? o.filterMovesByDice(rawLegal, o.dicePieceType)
       : rawLegal;
-    const matched = legal.find((m:any) => m.to === to);
+    const matched = legal.find((m: any) => m.to === to);
     if (matched) {
       const mp = o.game.get(from);
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
@@ -211,23 +263,23 @@ export function useBoardInput(opts: BoardInputOptions) {
         o.exec(from, to);
       }
     } else {
-      o.sSel(null); o.sVm(new Set());
+      o.sSel(null);
+      o.sVm(new Set());
     }
   }, []);
 
-  // ── Window listeners (single source of truth) ─────────────────────────────
+  // ── Window pointer listeners ────────────────────────────────────────────
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d || d.pid !== e.pointerId) return;
       const dx = e.clientX - d.sx;
       const dy = e.clientY - d.sy;
-      // Activation threshold: ~3px squared = 9
-      if (!d.active && (dx*dx + dy*dy) > 9) {
+      // Activation threshold
+      if (!d.active && (dx * dx + dy * dy) > ACTIVATION_THRESHOLD_SQ) {
         d.active = true;
         ghostPosRef.current = { x: e.clientX, y: e.clientY };
         showGhost(d.from, e.clientX, e.clientY, d.bRect.cw);
-        document.body.style.cursor = "grabbing";
       }
       if (d.active) {
         e.preventDefault?.();
@@ -236,8 +288,7 @@ export function useBoardInput(opts: BoardInputOptions) {
           ghostRafRef.current = requestAnimationFrame(flushGhostPos);
         }
         const hover = sqFromCachedRect(e.clientX, e.clientY, d.bRect);
-        const target = hover && hover !== d.from ? hover : null;
-        setHover(target);
+        setHover(hover && hover !== d.from ? hover : null);
       }
     };
 
@@ -246,11 +297,13 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (!d || d.pid !== e.pointerId) return;
       dragRef.current = null;
       const wasActive = d.active;
-      hideGhost(); setHover(null);
-      document.body.style.cursor = "";
+      hideGhost();
 
       if (!wasActive) {
-        // Pure click: if released on a different square, run click().
+        // Pure click: if released on a different square, run click() — covers
+        // edge cases where pointerdown set selection but pointerup landed on
+        // a different (also valid) square. Same-square click was already
+        // handled in onPointerDown selection logic.
         const sq = sqFromCachedRect(e.clientX, e.clientY, d.bRect)
                 || sqFromBoard(e.clientX, e.clientY);
         if (sq && sq !== d.from) optsRef.current.click(sq);
@@ -260,7 +313,8 @@ export function useBoardInput(opts: BoardInputOptions) {
       const to = sqFromCachedRect(e.clientX, e.clientY, d.bRect)
               || sqFromBoard(e.clientX, e.clientY);
       if (!to || to === d.from) {
-        optsRef.current.sSel(null); optsRef.current.sVm(new Set());
+        optsRef.current.sSel(null);
+        optsRef.current.sVm(new Set());
         return;
       }
       executeDrop(d.from, to);
@@ -269,7 +323,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     const onCancel = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d || d.pid !== e.pointerId) return;
-      // Salvage drop if drag was active.
+      // Salvage: if drag was active and we have a valid landing, commit it.
       if (d.active) {
         const { x, y } = ghostPosRef.current;
         const to = sqFromCachedRect(x, y, d.bRect) || sqFromBoard(x, y);
@@ -279,8 +333,7 @@ export function useBoardInput(opts: BoardInputOptions) {
         }
       }
       dragRef.current = null;
-      hideGhost(); setHover(null);
-      document.body.style.cursor = "";
+      hideGhost();
     };
 
     window.addEventListener("pointermove", onMove, { passive: false });
@@ -293,9 +346,9 @@ export function useBoardInput(opts: BoardInputOptions) {
     };
   }, [executeDrop, flushGhostPos, hideGhost, setHover, showGhost, sqFromBoard, sqFromCachedRect]);
 
-  // ── React-synthetic onPointerDown — only synthetic handler we keep.
-  // We need it for synchronous e.preventDefault() to suppress HTML5 dragstart
-  // and touchpad pan-to-scroll BEFORE the browser commits to those gestures.
+  // ── React-synthetic onPointerDown ────────────────────────────────────────
+  // The ONLY synthetic handler we keep. Needed for synchronous
+  // preventDefault() to suppress HTML5 dragstart and touchpad pan-to-scroll.
   const onBoardDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     const sq = sqFromBoard(e.clientX, e.clientY);
@@ -305,7 +358,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     const boardEl = boardRef.current;
     if (!boardEl) return;
     const br = boardEl.getBoundingClientRect();
-    const bRect = { l: br.left, t: br.top, cw: br.width / 8, flip: o.flip };
+    const bRect: BRect = { l: br.left, t: br.top, cw: br.width / 8, flip: o.flip };
 
     // Scratch board mode
     if (o.scratchOn && o.scratchGame) {
@@ -321,7 +374,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     const isPM = o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over;
 
     if (!o.over && !o.editorMode) {
-      // Priority 1: complete an existing selection on click.
+      // Priority 1: complete an existing selection — execute move now.
       if (!isPM && o.sel && o.vm.has(sq)) {
         const f = o.sel;
         const mp = o.game.get(f);
@@ -329,11 +382,14 @@ export function useBoardInput(opts: BoardInputOptions) {
         if (mp?.type === "p" && (sq[1] === "1" || sq[1] === "8")) {
           if (o.autoQueen) o.exec(f, sq, "q");
           else o.sPromo({ from: f, to: sq });
-        } else o.exec(f, sq);
-        o.sSel(null); o.sVm(new Set());
+        } else {
+          o.exec(f, sq);
+        }
+        o.sSel(null);
+        o.sVm(new Set());
         return;
       }
-      // Priority 2: complete a premove selection on click.
+      // Priority 2: complete a premove selection.
       if (isPM && o.pmSelRef.current && sq !== o.pmSelRef.current && o.pmsRef.current.length < o.pmLim) {
         const f = o.pmSelRef.current;
         const vp = o.virtualGame.get(f) || o.game.get(f);
@@ -342,18 +398,21 @@ export function useBoardInput(opts: BoardInputOptions) {
         if (vp?.type === "p" && sq[1] === pr) pre.pr = "q";
         e.preventDefault();
         o.sPms(v => [...v, pre]);
-        o.sPmSel(null); o.sVm(new Set()); o.snd("premove");
+        o.sPmSel(null);
+        o.sVm(new Set());
+        o.snd("premove");
         return;
       }
       // Tap same selected piece again → deselect.
       if (!isPM && o.sel === sq && !o.vm.has(sq)) {
         e.preventDefault();
-        o.sSel(null); o.sVm(new Set());
+        o.sSel(null);
+        o.sVm(new Set());
         return;
       }
     }
 
-    // Drag candidate? Must have own piece (or any piece in analysis).
+    // Drag-start path.
     const checkBoard = isPM ? o.virtualGame : o.game;
     const p = checkBoard.get(sq);
     const side = o.tab === "analysis" ? o.game.turn() : o.pCol;
@@ -370,23 +429,27 @@ export function useBoardInput(opts: BoardInputOptions) {
       o.sSel(sq);
       const all = o.game.moves({ square: sq, verbose: true });
       const filtered = (o.variant === "diceblade" && o.dicePieceType && o.filterMovesByDice)
-        ? o.filterMovesByDice(all, o.dicePieceType) : all;
-      o.sVm(new Set(filtered.map((m:any) => m.to)));
+        ? o.filterMovesByDice(all, o.dicePieceType)
+        : all;
+      o.sVm(new Set(filtered.map((m: any) => m.to)));
     } else if (o.on) {
       o.sPmSel(sq);
-      try { o.sVm(new Set(o.virtualGame.moves({ square: sq, verbose: true }).map(m => m.to))); } catch {}
+      try {
+        o.sVm(new Set(o.virtualGame.moves({ square: sq, verbose: true }).map(m => m.to)));
+      } catch {}
     }
   }, [sqFromBoard]);
 
   const noopHandler = useCallback((_e: React.PointerEvent) => {}, []);
 
   return {
-    boardRef, ghostRef,
-    // Legacy compat (not needed now — ghost is DOM-managed):
+    boardRef,
+    ghostRef,
+    // Legacy compat fields — not used anymore (ghost is imperative DOM):
     ghostPosRef,
     ghostSizeRef: { current: 0 } as React.MutableRefObject<number>,
-    ghostFrom: null as Square|null,
-    dragHover: null as Square|null,
+    ghostFrom: null as Square | null,
+    dragHover: null as Square | null,
     recentDragRef,
     onBoardDown,
     onBoardMove: noopHandler,

@@ -20,7 +20,7 @@ export function BoardDebugHud({ boardRef, ghostRef, ghostFrom, dragHover }: Debu
     try { return typeof window!=="undefined" && localStorage.getItem("aevion_chess_debug")==="1"; }
     catch { return false; }
   });
-  const HOOK_VERSION = "v3-DOM-imperative-2026-05-03";
+  const HOOK_VERSION = "v4-imperative-ghost-2026-05-03";
   const [counts, setCounts] = useState({down:0, move:0, up:0, cancel:0, lastEvent:""});
   const [hookCalls, setHookCalls] = useState<{showGhost:number; lastDetail:string}>({showGhost:0, lastDetail:"(none)"});
   const [boardRect, setBoardRect] = useState<{l:number;t:number;w:number;h:number}|null>(null);

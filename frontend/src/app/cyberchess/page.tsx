@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -7399,16 +7398,10 @@ export default function CyberChessPage(){
     </Modal>
 
     </ProductPageShell>
-    {typeof document!=="undefined" && createPortal(
-      <div ref={ghostRef} style={{
-        position:"fixed",left:0,top:0,width:0,height:0,
-        transform:"translate3d(-9999px,-9999px,0)",
-        pointerEvents:"none",zIndex:99999,willChange:"transform",
-        visibility:"hidden",
-        filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))",
-      }}/>,
-      document.body
-    )}
+    {/* Ghost element is created imperatively by the hook in useEffect via
+        document.createElement + appendChild(document.body). It lives
+        outside React's render tree entirely — no re-render can ever
+        overwrite its inline style. See useBoardInput.ts. */}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
     </main>);
 }

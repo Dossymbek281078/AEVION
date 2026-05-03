@@ -129,6 +129,24 @@ function Body() {
                     {u.verifiedAt && (
                       <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-sky-200">verified</span>
                     )}
+                    <button
+                      onClick={async () => {
+                        if (!token) return;
+                        const endpoint = u.verifiedAt
+                          ? `/api/build/admin/users/${u.id}/verify`
+                          : `/api/build/admin/users/${u.id}/verify`;
+                        const method = u.verifiedAt ? "DELETE" : "POST";
+                        await fetch(endpoint, { method, headers: { Authorization: `Bearer ${token}` } });
+                        load(q);
+                      }}
+                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase transition ${
+                        u.verifiedAt
+                          ? "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                          : "bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"
+                      }`}
+                    >
+                      {u.verifiedAt ? "unverify" : "verify"}
+                    </button>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-slate-400">

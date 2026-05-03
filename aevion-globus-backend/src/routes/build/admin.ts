@@ -159,5 +159,41 @@ adminRouter.get("/users", async (req, res) => {
   }
 });
 
+// POST /api/build/admin/users/:id/verify — set verifiedAt on BuildProfile
+adminRouter.post("/users/:id/verify", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const userId = String(req.params.id);
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 500) : "Manual admin verification";
+    const r = await pool.query(
+      `UPDATE "BuildProfile" SET "verifiedAt" = NOW(), "verifiedReason" = $2 WHERE "userId" = $1 RETURNING "userId","verifiedAt"`,
+      [userId, reason],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "profile_not_found");
+    return ok(res, { userId, verified: true, verifiedAt: r.rows[0].verifiedAt });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_verify_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/admin/users/:id/verify — remove verification
+adminRouter.delete("/users/:id/verify", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const userId = String(req.params.id);
+    await pool.query(
+      `UPDATE "BuildProfile" SET "verifiedAt" = NULL, "verifiedReason" = NULL WHERE "userId" = $1`,
+      [userId],
+    );
+    return ok(res, { userId, verified: false });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_unverify_failed", { details: (err as Error).message });
+  }
+});
+
 // Suppress unused import warning — crypto used for future admin routes
 void crypto;

@@ -192,6 +192,7 @@ export default function MultichatEnginePage() {
             { href: "/qcoreai/eval",      label: "🧪 Eval harness" },
             { href: "/qcoreai/prompts",   label: "📝 Prompts library" },
             { href: "/qcoreai/batch",     label: "⚡ Batch runs" },
+            { href: "/qcoreai/schedule",  label: "🕐 Scheduled batches" },
           ].map(({ href, label }) => (
             <Link
               key={href}

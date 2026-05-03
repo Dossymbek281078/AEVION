@@ -2156,6 +2156,196 @@ export async function deleteTemplate(id: string, ownerUserId: string): Promise<b
   return (r.rowCount ?? 0) > 0;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Scheduled batch runs — fire a batch on a recurring or one-shot schedule.
+   The backend polls due schedules every minute and fires a batch run.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type ScheduleKind = "once" | "hourly" | "daily" | "weekly";
+
+export type ScheduledBatchRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  inputs: string[];
+  strategy: string;
+  overrides: Record<string, unknown>;
+  schedule: ScheduleKind;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastBatchId: string | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memScheduledBatches = new Map<string, ScheduledBatchRow>();
+
+function nextRunTime(schedule: ScheduleKind, from = new Date()): Date | null {
+  if (schedule === "once") return null; // one-shot: set manually by caller
+  const d = new Date(from);
+  if (schedule === "hourly") d.setHours(d.getHours() + 1, 0, 0, 0);
+  else if (schedule === "daily") { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+  else if (schedule === "weekly") { d.setDate(d.getDate() + 7); d.setHours(9, 0, 0, 0); }
+  return d;
+}
+
+export async function createScheduledBatch(opts: {
+  ownerUserId: string;
+  name: string;
+  inputs: string[];
+  strategy?: string;
+  overrides?: Record<string, unknown>;
+  schedule?: ScheduleKind;
+  nextRunAt?: string | null;
+}): Promise<ScheduledBatchRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const schedule = (opts.schedule || "once") as ScheduleKind;
+  let nextRunAt: string | null = opts.nextRunAt ?? null;
+  if (!nextRunAt && schedule !== "once") {
+    nextRunAt = nextRunTime(schedule)?.toISOString() ?? null;
+  }
+
+  const row: ScheduledBatchRow = {
+    id,
+    ownerUserId: opts.ownerUserId,
+    name: opts.name.slice(0, 80),
+    inputs: opts.inputs.slice(0, 20).map((s) => s.slice(0, 16000)),
+    strategy: opts.strategy || "sequential",
+    overrides: opts.overrides ?? {},
+    schedule,
+    nextRunAt,
+    lastRunAt: null,
+    lastBatchId: null,
+    enabled: true,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  if (!isDbReady()) { memScheduledBatches.set(id, row); return row; }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreScheduledBatch"
+       ("id","ownerUserId","name","inputs","strategy","overrides","schedule","nextRunAt","enabled")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)
+     RETURNING *`,
+    [id, row.ownerUserId, row.name, JSON.stringify(row.inputs), row.strategy,
+     JSON.stringify(row.overrides), row.schedule, row.nextRunAt]
+  );
+  return r.rows[0] as ScheduledBatchRow;
+}
+
+export async function listScheduledBatches(ownerUserId: string): Promise<ScheduledBatchRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memScheduledBatches.values())
+      .filter((s) => s.ownerUserId === ownerUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreScheduledBatch" WHERE "ownerUserId"=$1 ORDER BY "createdAt" DESC`,
+    [ownerUserId]
+  );
+  return r.rows as ScheduledBatchRow[];
+}
+
+export async function getScheduledBatch(id: string): Promise<ScheduledBatchRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memScheduledBatches.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreScheduledBatch" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as ScheduledBatchRow) || null;
+}
+
+export async function updateScheduledBatch(
+  id: string,
+  ownerUserId: string,
+  patch: Partial<Pick<ScheduledBatchRow, "name" | "inputs" | "strategy" | "overrides" | "schedule" | "nextRunAt" | "enabled">>
+): Promise<ScheduledBatchRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memScheduledBatches.get(id);
+    if (!s || s.ownerUserId !== ownerUserId) return null;
+    const updated = { ...s, ...patch, updatedAt: nowIso() };
+    memScheduledBatches.set(id, updated);
+    return updated;
+  }
+  const sets: string[] = ["\"updatedAt\"=NOW()"];
+  const vals: unknown[] = [id, ownerUserId];
+  let idx = 3;
+  if (patch.name !== undefined) { sets.push(`"name"=$${idx++}`); vals.push(patch.name); }
+  if (patch.inputs !== undefined) { sets.push(`"inputs"=$${idx++}`); vals.push(JSON.stringify(patch.inputs)); }
+  if (patch.strategy !== undefined) { sets.push(`"strategy"=$${idx++}`); vals.push(patch.strategy); }
+  if (patch.overrides !== undefined) { sets.push(`"overrides"=$${idx++}`); vals.push(JSON.stringify(patch.overrides)); }
+  if (patch.schedule !== undefined) { sets.push(`"schedule"=$${idx++}`); vals.push(patch.schedule); }
+  if (patch.nextRunAt !== undefined) { sets.push(`"nextRunAt"=$${idx++}`); vals.push(patch.nextRunAt); }
+  if (patch.enabled !== undefined) { sets.push(`"enabled"=$${idx++}`); vals.push(patch.enabled); }
+  const r = await pool.query(
+    `UPDATE "QCoreScheduledBatch" SET ${sets.join(",")} WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING *`,
+    vals
+  );
+  return (r.rows[0] as ScheduledBatchRow) || null;
+}
+
+export async function deleteScheduledBatch(id: string, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memScheduledBatches.get(id);
+    if (!s || s.ownerUserId !== ownerUserId) return false;
+    memScheduledBatches.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreScheduledBatch" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, ownerUserId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/** Called by the scheduler — advance nextRunAt and record lastRunAt + lastBatchId. */
+export async function recordScheduledRun(
+  id: string,
+  batchId: string
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  const s = await getScheduledBatch(id);
+  if (!s) return;
+  const next = s.schedule === "once" ? null : nextRunTime(s.schedule)?.toISOString() ?? null;
+  const enabledNext = s.schedule !== "once"; // disable after one-shot fires
+
+  if (!isDbReady()) {
+    const r = memScheduledBatches.get(id);
+    if (!r) return;
+    r.lastRunAt = nowIso();
+    r.lastBatchId = batchId;
+    r.nextRunAt = next;
+    r.enabled = enabledNext;
+    r.updatedAt = nowIso();
+    return;
+  }
+  await pool.query(
+    `UPDATE "QCoreScheduledBatch"
+       SET "lastRunAt"=NOW(), "lastBatchId"=$2, "nextRunAt"=$3, "enabled"=$4, "updatedAt"=NOW()
+     WHERE "id"=$1`,
+    [id, batchId, next, enabledNext]
+  );
+}
+
+/** Returns schedules that are due (nextRunAt <= now, enabled=true). */
+export async function getDueSchedules(): Promise<ScheduledBatchRow[]> {
+  await ensureQCoreTables(pool);
+  const nowStr = new Date().toISOString();
+  if (!isDbReady()) {
+    return Array.from(memScheduledBatches.values()).filter(
+      (s) => s.enabled && s.nextRunAt !== null && s.nextRunAt <= nowStr
+    );
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreScheduledBatch" WHERE "enabled"=TRUE AND "nextRunAt" <= NOW()`,
+  );
+  return r.rows as ScheduledBatchRow[];
+}
+
 export async function useTemplate(id: string): Promise<TemplateRow | null> {
   await ensureQCoreTables(pool);
   if (!isDbReady()) {

@@ -273,6 +273,32 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
 
+  // Scheduled batch runs — fire a batch on a recurring or one-shot schedule.
+  // schedule: "once" | "hourly" | "daily" | "weekly". nextRunAt is always UTC.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreScheduledBatch" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "inputs"      JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "schedule"    TEXT NOT NULL DEFAULT 'once',
+      "nextRunAt"   TIMESTAMPTZ,
+      "lastRunAt"   TIMESTAMPTZ,
+      "lastBatchId" TEXT,
+      "enabled"     BOOLEAN NOT NULL DEFAULT TRUE,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_owner_idx" ON "QCoreScheduledBatch" ("ownerUserId", "createdAt" DESC);`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_nextRun_idx" ON "QCoreScheduledBatch" ("nextRunAt") WHERE "enabled"=TRUE AND "nextRunAt" IS NOT NULL;`
+  );
+
   // QCoreRun — threading: parentRunId links to the previous run in a thread;
   // threadId is always set to the root run's id so we can retrieve all replies
   // in one WHERE clause. The root run has parentRunId=NULL, threadId=its own id.

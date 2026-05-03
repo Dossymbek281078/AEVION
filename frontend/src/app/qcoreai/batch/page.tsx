@@ -186,7 +186,12 @@ export default function BatchPage() {
       <Wave1Nav />
       <ProductPageShell>
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: 0 }}>⚡ Batch Runs</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: 0 }}>⚡ Batch Runs</h1>
+            <Link href="/qcoreai/schedule" style={{ fontSize: 12, color: "#4338ca", fontWeight: 700, textDecoration: "none" }}>
+              🕐 Scheduled →
+            </Link>
+          </div>
           <p style={{ fontSize: 13, color: "#64748b", margin: "4px 0 0" }}>
             Submit multiple prompts against a shared agent config — up to {MAX_INPUTS} prompts, 5 at a time.
           </p>
@@ -315,10 +320,19 @@ export default function BatchPage() {
                           {formatAgo(b.createdAt)}
                         </span>
                       </div>
-                      <div style={{ fontSize: 11, color: "#475569" }}>
-                        {b.completedRuns}/{b.totalRuns} done
-                        {b.failedRuns > 0 && <span style={{ color: "#dc2626" }}> · {b.failedRuns} failed</span>}
-                        <span style={{ marginLeft: 6, color: "#0f172a", fontWeight: 700 }}>{fmt$(b.totalCostUsd)}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "#475569" }}>
+                          {b.completedRuns}/{b.totalRuns} done
+                          {b.failedRuns > 0 && <span style={{ color: "#dc2626" }}> · {b.failedRuns} failed</span>}
+                        </span>
+                        <span style={{ fontSize: 11, color: "#0f172a", fontWeight: 700 }}>{fmt$(b.totalCostUsd)}</span>
+                        <Link
+                          href={`/qcoreai/batch/${b.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ marginLeft: "auto", fontSize: 10, color: "#4338ca", fontWeight: 700, textDecoration: "none" }}
+                        >
+                          Full view ↗
+                        </Link>
                       </div>
                       {/* Progress bar */}
                       <div style={{ height: 3, borderRadius: 2, background: "#f1f5f9", overflow: "hidden" }}>

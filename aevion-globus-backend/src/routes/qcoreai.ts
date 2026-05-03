@@ -35,6 +35,8 @@ import {
   createEvalRun,
   createEvalSuite,
   createBatch,
+  createScheduledBatch,
+  deleteScheduledBatch,
   deleteSpendLimit,
   createPrompt,
   createRun,
@@ -47,12 +49,17 @@ import {
   deleteTemplate,
   ensureSession,
   getBatch,
+  getDueSchedules,
   getMonthlySpend,
+  getScheduledBatch,
   getSpendLimit,
   listBatches,
   listBatchRuns,
+  listScheduledBatches,
+  recordScheduledRun,
   setSpendLimit,
   updateBatchProgress,
+  updateScheduledBatch,
   finishRun,
   forkPrompt,
   getAnalytics,
@@ -1953,6 +1960,198 @@ qcoreaiRouter.get("/batch/:id", async (req, res) => {
     res.status(500).json({ error: "get batch failed", details: err?.message });
   }
 });
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Scheduled batch runs — fire a batch on a recurring or one-shot schedule.
+   POST   /api/qcoreai/schedules
+   GET    /api/qcoreai/schedules
+   GET    /api/qcoreai/schedules/:id
+   PATCH  /api/qcoreai/schedules/:id
+   DELETE /api/qcoreai/schedules/:id
+   POST   /api/qcoreai/schedules/:id/run-now  (manual trigger)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/schedules", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, inputs, strategy, overrides, schedule, nextRunAt } = req.body || {};
+    if (!name?.trim()) return res.status(400).json({ error: "name required" });
+    if (!Array.isArray(inputs) || inputs.length === 0) return res.status(400).json({ error: "inputs[] required" });
+    const s = await createScheduledBatch({
+      ownerUserId: auth.sub,
+      name: String(name),
+      inputs: inputs.filter((x: unknown) => typeof x === "string" && x.trim()).map((x: string) => x.trim()),
+      strategy: strategy || "sequential",
+      overrides: overrides && typeof overrides === "object" ? overrides : {},
+      schedule: (schedule || "once") as "once" | "hourly" | "daily" | "weekly",
+      nextRunAt: nextRunAt || null,
+    });
+    res.status(201).json({ schedule: s });
+  } catch (err: any) {
+    res.status(500).json({ error: "create schedule failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/schedules", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listScheduledBatches(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list schedules failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/schedules/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const s = await getScheduledBatch(req.params.id);
+    if (!s || s.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
+    res.json({ schedule: s });
+  } catch (err: any) {
+    res.status(500).json({ error: "get schedule failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/schedules/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, inputs, strategy, overrides, schedule, nextRunAt, enabled } = req.body || {};
+    const s = await updateScheduledBatch(req.params.id, auth.sub, {
+      ...(name !== undefined && { name: String(name) }),
+      ...(inputs !== undefined && { inputs }),
+      ...(strategy !== undefined && { strategy }),
+      ...(overrides !== undefined && { overrides }),
+      ...(schedule !== undefined && { schedule }),
+      ...(nextRunAt !== undefined && { nextRunAt }),
+      ...(enabled !== undefined && { enabled: Boolean(enabled) }),
+    });
+    if (!s) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ schedule: s });
+  } catch (err: any) {
+    res.status(500).json({ error: "update schedule failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/schedules/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteScheduledBatch(req.params.id, auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete schedule failed", details: err?.message });
+  }
+});
+
+/** Manual trigger — fires the batch immediately regardless of nextRunAt. */
+qcoreaiRouter.post("/schedules/:id/run-now", batchLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const sched = await getScheduledBatch(req.params.id);
+    if (!sched || sched.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
+
+    const strategy = (["sequential", "parallel", "debate"].includes(sched.strategy)
+      ? sched.strategy : "sequential") as PipelineStrategy;
+    const overrides = {
+      analyst: parseAgentOverride((sched.overrides as any)?.analyst),
+      writer: parseAgentOverride((sched.overrides as any)?.writer),
+      writerB: parseAgentOverride((sched.overrides as any)?.writerB),
+      critic: parseAgentOverride((sched.overrides as any)?.critic),
+    };
+
+    const batch = await createBatch({ ownerUserId: auth.sub, strategy, overrides, inputs: sched.inputs });
+    const session = await ensureSession({ userId: auth.sub, seedTitle: `Schedule: ${sched.name}` });
+    const runIds: string[] = [];
+    for (const input of sched.inputs) {
+      const run = await createRun({ sessionId: session.id, userInput: input, agentConfig: { strategy, overrides }, strategy, batchId: batch.id });
+      await insertMessage({ runId: run.id, role: "user", content: input, ordering: 0 });
+      runIds.push(run.id);
+    }
+    await recordScheduledRun(sched.id, batch.id);
+    res.status(202).json({ batchId: batch.id, runIds });
+
+    void (async () => {
+      const queue = runIds.map((runId, i) => ({ runId, input: sched.inputs[i] }));
+      let active = 0; let idx = 0;
+      await new Promise<void>((resolve) => {
+        const next = () => {
+          if (idx >= queue.length && active === 0) { resolve(); return; }
+          while (active < BATCH_CONCURRENCY && idx < queue.length) {
+            const { runId, input } = queue[idx++];
+            active++;
+            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions: 0 })
+              .then(({ costUsd: c, status }) => updateBatchProgress(batch.id, { completedDelta: status === "done" ? 1 : 0, failedDelta: status === "error" ? 1 : 0, costDelta: c }))
+              .catch(() => updateBatchProgress(batch.id, { failedDelta: 1 }))
+              .finally(() => { active--; next(); });
+          }
+        };
+        next();
+      });
+    })();
+  } catch (err: any) {
+    if (!res.headersSent) res.status(500).json({ error: "run-now failed", details: err?.message });
+  }
+});
+
+/**
+ * Start the background scheduler — polls for due scheduled batches every minute.
+ * Called once from the main app after all routes are set up.
+ */
+export function startScheduler(): void {
+  const tick = async () => {
+    try {
+      const due = await getDueSchedules();
+      for (const sched of due) {
+        const strategy = (["sequential", "parallel", "debate"].includes(sched.strategy)
+          ? sched.strategy : "sequential") as PipelineStrategy;
+        const overrides = {
+          analyst: parseAgentOverride((sched.overrides as any)?.analyst),
+          writer: parseAgentOverride((sched.overrides as any)?.writer),
+          writerB: parseAgentOverride((sched.overrides as any)?.writerB),
+          critic: parseAgentOverride((sched.overrides as any)?.critic),
+        };
+        const batch = await createBatch({ ownerUserId: sched.ownerUserId, strategy, overrides, inputs: sched.inputs });
+        const session = await ensureSession({ userId: sched.ownerUserId, seedTitle: `Schedule: ${sched.name}` });
+        const runIds: string[] = [];
+        for (const input of sched.inputs) {
+          const run = await createRun({ sessionId: session.id, userInput: input, agentConfig: { strategy, overrides }, strategy, batchId: batch.id });
+          await insertMessage({ runId: run.id, role: "user", content: input, ordering: 0 });
+          runIds.push(run.id);
+        }
+        await recordScheduledRun(sched.id, batch.id);
+        void (async () => {
+          const queue = runIds.map((runId, i) => ({ runId, input: sched.inputs[i] }));
+          let active = 0; let idx = 0;
+          await new Promise<void>((resolve) => {
+            const next = () => {
+              if (idx >= queue.length && active === 0) { resolve(); return; }
+              while (active < BATCH_CONCURRENCY && idx < queue.length) {
+                const { runId, input } = queue[idx++];
+                active++;
+                runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions: 0 })
+                  .then(({ costUsd: c, status }) => updateBatchProgress(batch.id, { completedDelta: status === "done" ? 1 : 0, failedDelta: status === "error" ? 1 : 0, costDelta: c }))
+                  .catch(() => updateBatchProgress(batch.id, { failedDelta: 1 }))
+                  .finally(() => { active--; next(); });
+              }
+            };
+            next();
+          });
+        })();
+      }
+    } catch (e) {
+      console.error("[QCoreAI] scheduler tick error:", e);
+    }
+  };
+  setInterval(tick, 60_000);
+  console.log("[QCoreAI] scheduler started (1-min poll)");
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    Role + strategy defaults (for UI to pre-populate config dropdowns)

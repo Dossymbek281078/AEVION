@@ -83,9 +83,20 @@ export default function StoriesPage() {
 
       {items === null && <p className="text-sm text-slate-500">Загружаю…</p>}
       {items && items.length === 0 && (
-        <p className="rounded-lg border border-white/10 bg-white/[0.02] p-6 text-center text-sm text-slate-500">
-          Лента пуста. Будь первым — поделись чем-то с площадки.
-        </p>
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
+          <p className="text-3xl">📣</p>
+          <p className="mt-2 text-sm font-semibold text-slate-300">Лента пока пуста</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Site Stories — это короткие обновления прямо с объекта: фото сварки, прогресс монтажа, находки дня.<br/>
+            Работодатели используют их как сигнал активности. Работники — как портфолио.
+          </p>
+          <button
+            onClick={() => setComposeOpen(true)}
+            className="mt-4 rounded-lg bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30"
+          >
+            Поделиться первым →
+          </button>
+        </div>
       )}
 
       <div className="space-y-4">

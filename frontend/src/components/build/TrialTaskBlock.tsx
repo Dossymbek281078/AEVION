@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { buildApi, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
+import { HelpTip } from "./HelpTip";
 
 const TONE: Record<TrialTaskStatus, string> = {
   PROPOSED: "border-amber-500/40 bg-amber-500/10 text-amber-200",
@@ -45,8 +46,15 @@ export function TrialTaskBlock({
   return (
     <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          🧪 Paid trial task
+        <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+          🧪 Тестовое задание
+          <HelpTip>
+            <p className="mb-1 font-semibold text-white">Что это?</p>
+            <p>Работодатель предлагает небольшое платное задание — сварить образец, сделать замеры, составить смету. Оплата замораживается в <strong>эскроу</strong> до одобрения.</p>
+            <p className="mt-1.5">Жизненный цикл: <br/>
+              📬 Предложено → ✅ Принято → 📤 Сдано → 💰 Оплачено
+            </p>
+          </HelpTip>
         </div>
         {isRecruiter && !proposing && !hasTasks && (
           <button
@@ -253,6 +261,11 @@ function TaskRow({
       {task.paymentAmount > 0 && (
         <div className="mt-2 flex items-center gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px]">
           <span className="text-slate-400">Эскроу:</span>
+          <HelpTip>
+            <p className="mb-1 font-semibold text-white">Что такое эскроу?</p>
+            <p>Оплата <strong>заморожена</strong> на счёте платформы до одобрения работы. Работодатель не может просто не заплатить — деньги уже зарезервированы.</p>
+            <p className="mt-1.5">🔒 Заморожен — ждём сдачи работы<br/>✓ Освобождён — деньги переведены<br/>↩ Возврат — задание отклонено</p>
+          </HelpTip>
           <span className={`font-bold ${
             task.status === "APPROVED" ? "text-emerald-300" :
             task.status === "REJECTED" ? "text-rose-300" : "text-amber-300"

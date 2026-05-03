@@ -12,6 +12,8 @@ interface DocMeta {
   viewCount: number;
   expiresAt: string | null;
   hasPassword: boolean;
+  requireSignature: boolean;
+  qrightId: string | null;
   expired: boolean;
 }
 
@@ -22,12 +24,13 @@ interface DocContent {
   viewCount: number;
   maxViews: number | null;
   expiresAt: string | null;
+  qrightId: string | null;
+  viewerEmail: string | null;
   selfDestructed: boolean;
 }
 
 function CountdownTimer({ expiresAt }: { expiresAt: string }) {
   const [remaining, setRemaining] = useState("");
-
   useEffect(() => {
     function update() {
       const diff = new Date(expiresAt).getTime() - Date.now();
@@ -41,8 +44,47 @@ function CountdownTimer({ expiresAt }: { expiresAt: string }) {
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, [expiresAt]);
-
   return <span className="font-mono text-amber-400">{remaining}</span>;
+}
+
+function WatermarkOverlay({ email, ip }: { email?: string | null; ip?: string }) {
+  const text = email ?? ip ?? "просмотрено";
+  const lines = Array.from({ length: 8 }, () => text).join("    ");
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-0 pointer-events-none overflow-hidden select-none"
+      style={{ zIndex: 10 }}
+    >
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div
+          key={i}
+          className="text-[11px] text-slate-400 whitespace-nowrap absolute w-full"
+          style={{
+            top: `${i * 8}%`,
+            opacity: 0.07,
+            transform: "rotate(-25deg)",
+            transformOrigin: "left center",
+            letterSpacing: "0.1em",
+          }}
+        >
+          {lines}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QRightBadge({ qrightId }: { qrightId: string }) {
+  return (
+    <Link
+      href={`/qright/${qrightId}`}
+      target="_blank"
+      className="inline-flex items-center gap-1.5 text-[11px] bg-emerald-900/40 border border-emerald-700/50 text-emerald-400 px-2.5 py-1 rounded-full hover:bg-emerald-900/70 transition-colors"
+    >
+      🛡 IP-защита · QRight #{qrightId.slice(0, 8)}
+    </Link>
+  );
 }
 
 export default function ViewDocument() {
@@ -52,11 +94,11 @@ export default function ViewDocument() {
   const [meta, setMeta] = useState<DocMeta | null>(null);
   const [content, setContent] = useState<DocContent | null>(null);
   const [password, setPassword] = useState("");
-  const [stage, setStage] = useState<"loading" | "meta" | "password" | "content" | "expired" | "error">("loading");
+  const [viewerEmail, setViewerEmail] = useState("");
+  const [stage, setStage] = useState<"loading" | "password" | "signature" | "both" | "content" | "expired" | "error">("loading");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Load meta first (no view recorded)
   useEffect(() => {
     fetch(`/api/qcontract/view/${token}`)
       .then((r) => r.json())
@@ -64,27 +106,30 @@ export default function ViewDocument() {
         if (d.error) { setError(d.error); setStage("error"); return; }
         setMeta(d);
         if (d.expired) { setStage("expired"); return; }
+        if (d.hasPassword && d.requireSignature) { setStage("both"); return; }
         if (d.hasPassword) { setStage("password"); return; }
-        // No password — load content immediately
+        if (d.requireSignature) { setStage("signature"); return; }
         loadContent();
       })
       .catch(() => { setError("Ошибка загрузки"); setStage("error"); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const loadContent = useCallback(async (pw?: string) => {
+  const loadContent = useCallback(async (pw?: string, email?: string) => {
     setSubmitting(true);
+    setError("");
     try {
       const res = await fetch(`/api/qcontract/view/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw }),
+        body: JSON.stringify({ password: pw, viewerEmail: email }),
       });
       const d = await res.json();
       if (!res.ok) {
-        if (d.error === "wrong_password") { setError("Неверный пароль"); setSubmitting(false); return; }
-        if (d.error === "document_expired") { setStage("expired"); setSubmitting(false); return; }
-        setError(d.error ?? "Ошибка"); setStage("error"); setSubmitting(false); return;
+        if (d.error === "wrong_password") { setError("Неверный пароль"); return; }
+        if (d.error === "signature_required") { setStage("signature"); return; }
+        if (d.error === "document_expired") { setStage("expired"); return; }
+        setError(d.error ?? "Ошибка"); setStage("error"); return;
       }
       setContent(d);
       setStage("content");
@@ -95,26 +140,25 @@ export default function ViewDocument() {
     }
   }, [token]);
 
+  // ── Loading ──
   if (stage === "loading") {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        <div className="text-center">
-          <div className="text-4xl mb-4 animate-pulse">💣</div>
-          <p className="text-sm">Проверка документа...</p>
-        </div>
+        <div className="text-center"><div className="text-4xl mb-4 animate-pulse">💣</div><p className="text-sm">Проверка документа...</p></div>
       </div>
     );
   }
 
+  // ── Expired ──
   if (stage === "expired") {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
         <div className="max-w-md w-full text-center">
           <div className="text-6xl mb-6">💨</div>
           <h1 className="text-2xl font-black mb-3 text-slate-300">Документ уничтожен</h1>
-          <p className="text-slate-500 text-sm mb-6">
+          <p className="text-slate-500 text-sm mb-4">
             {meta?.title && <><strong className="text-slate-300">«{meta.title}»</strong><br /></>}
-            Этот документ уже недоступен — истёк срок действия, лимит просмотров или он был отозван.
+            Документ больше недоступен — истёк срок, лимит просмотров или отозван.
           </p>
           <Link href="/qcontract" className="text-xs text-slate-600 hover:text-slate-400">QContract</Link>
         </div>
@@ -122,6 +166,7 @@ export default function ViewDocument() {
     );
   }
 
+  // ── Error ──
   if (stage === "error") {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
@@ -134,29 +179,39 @@ export default function ViewDocument() {
     );
   }
 
-  if (stage === "password") {
+  // ── Password + Signature ──
+  if (stage === "both" || stage === "password" || stage === "signature") {
+    const needPassword = stage === "both" || stage === "password";
+    const needSignature = stage === "both" || stage === "signature";
+
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
         <div className="max-w-sm w-full">
           <div className="text-center mb-6">
-            <div className="text-4xl mb-3">🔒</div>
-            <h1 className="text-xl font-bold">{meta?.title ?? "Защищённый документ"}</h1>
-            <p className="text-slate-500 text-sm mt-1">Введите пароль для доступа</p>
+            <div className="text-4xl mb-3">{needSignature ? "✍️" : "🔒"}</div>
+            <h1 className="text-xl font-bold">{meta?.title ?? "Документ"}</h1>
+            <p className="text-slate-500 text-sm mt-1">
+              {needSignature && needPassword ? "Введите пароль и подпишите email" : needPassword ? "Введите пароль" : "Введите email для доступа"}
+            </p>
           </div>
           <div className="space-y-3">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(""); }}
-              placeholder="Пароль"
-              autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter" && password) loadContent(password); }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors"
-            />
+            {needPassword && (
+              <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                placeholder="Пароль" autoFocus={!needSignature}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors" />
+            )}
+            {needSignature && (
+              <div>
+                <input type="email" value={viewerEmail} onChange={(e) => { setViewerEmail(e.target.value); setError(""); }}
+                  placeholder="Ваш email (будет виден в документе)" autoFocus={!needPassword}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors" />
+                <p className="text-[11px] text-slate-600 mt-1">Ваш email будет отображён на документе и в логе просмотра</p>
+              </div>
+            )}
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button
-              onClick={() => loadContent(password)}
-              disabled={!password || submitting}
+              onClick={() => loadContent(needPassword ? password : undefined, needSignature ? viewerEmail : undefined)}
+              disabled={submitting || (needPassword && !password) || (needSignature && !viewerEmail)}
               className="w-full py-3 bg-red-600 hover:bg-red-700 disabled:opacity-40 rounded-xl font-semibold transition-colors"
             >
               {submitting ? "Проверка..." : "Открыть документ →"}
@@ -167,17 +222,18 @@ export default function ViewDocument() {
     );
   }
 
+  // ── Content ──
   if (stage === "content" && content) {
     const viewsLeft = content.maxViews != null ? content.maxViews - content.viewCount : null;
 
     return (
       <div className="min-h-screen bg-slate-950 text-white">
-        {/* Danger banner */}
+        {/* Status banner */}
         <div className={`px-4 py-2 text-center text-xs font-semibold ${
           content.selfDestructed ? "bg-red-600" : "bg-slate-800 text-slate-400"
         }`}>
           {content.selfDestructed
-            ? "💣 Этот был последний просмотр — документ уничтожен"
+            ? "💣 Последний просмотр — документ уничтожен навсегда"
             : viewsLeft != null
               ? `👁 Осталось просмотров: ${viewsLeft}`
               : content.expiresAt
@@ -185,45 +241,51 @@ export default function ViewDocument() {
                 : "🔒 Просмотр зафиксирован · QContract"}
         </div>
 
-        {/* Document */}
         <div className="max-w-3xl mx-auto px-6 py-8">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-            {/* Doc header */}
-            <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
-              <div>
-                <h1 className="font-bold text-lg">{content.title}</h1>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Просмотр {content.viewCount}{content.maxViews ? `/${content.maxViews}` : ""}
-                  {content.expiresAt && <> · до {new Date(content.expiresAt).toLocaleDateString("ru-RU")}</>}
-                </p>
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-700">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h1 className="font-bold text-lg truncate">{content.title}</h1>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-xs text-slate-500">
+                      Просмотр {content.viewCount}{content.maxViews ? `/${content.maxViews}` : ""}
+                      {content.expiresAt && <> · до {new Date(content.expiresAt).toLocaleDateString("ru-RU")}</>}
+                    </span>
+                    {content.viewerEmail && (
+                      <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">
+                        ✍️ {content.viewerEmail}
+                      </span>
+                    )}
+                    {content.qrightId && <QRightBadge qrightId={content.qrightId} />}
+                  </div>
+                </div>
+                <div className="text-2xl shrink-0">📄</div>
               </div>
-              <div className="text-2xl">📄</div>
             </div>
 
-            {/* Content */}
-            <div className="px-6 py-6">
-              {content.contentType === "url" ? (
-                <div className="text-center py-8">
-                  <p className="text-slate-400 text-sm mb-4">Этот документ — ссылка:</p>
-                  <a
-                    href={content.content}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-400 hover:text-emerald-300 underline break-all"
-                  >
+            {/* Content with watermark */}
+            <div className="relative px-6 py-6">
+              <WatermarkOverlay email={content.viewerEmail} />
+              <div className="relative" style={{ zIndex: 1 }}>
+                {content.contentType === "url" ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 text-sm mb-4">Документ — ссылка:</p>
+                    <a href={content.content} target="_blank" rel="noopener noreferrer"
+                      className="text-emerald-400 hover:text-emerald-300 underline break-all">
+                      {content.content}
+                    </a>
+                  </div>
+                ) : content.contentType === "html" ? (
+                  <div className="prose prose-invert max-w-none prose-sm"
+                    dangerouslySetInnerHTML={{ __html: content.content }} />
+                ) : (
+                  <pre className="whitespace-pre-wrap font-sans text-slate-200 text-sm leading-relaxed">
                     {content.content}
-                  </a>
-                </div>
-              ) : content.contentType === "html" ? (
-                <div
-                  className="prose prose-invert max-w-none prose-sm"
-                  dangerouslySetInnerHTML={{ __html: content.content }}
-                />
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans text-slate-200 text-sm leading-relaxed">
-                  {content.content}
-                </pre>
-              )}
+                  </pre>
+                )}
+              </div>
             </div>
 
             {/* Footer */}
@@ -236,8 +298,8 @@ export default function ViewDocument() {
           {content.selfDestructed && (
             <div className="mt-6 bg-red-950/50 border border-red-900 rounded-2xl p-6 text-center">
               <div className="text-3xl mb-3">💥</div>
-              <p className="text-red-300 font-semibold text-sm">Документ самоуничтожен после этого просмотра</p>
-              <p className="text-red-600 text-xs mt-1">Ни один пользователь больше не сможет открыть эту ссылку</p>
+              <p className="text-red-300 font-semibold text-sm">Документ самоуничтожен</p>
+              <p className="text-red-600 text-xs mt-1">Ни один пользователь больше не откроет эту ссылку</p>
             </div>
           )}
         </div>

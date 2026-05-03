@@ -75,55 +75,67 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
   return (
     <BuildShell>
-      <Link
-        href={`/build/project/${encodeURIComponent(vacancy.projectId)}`}
-        className="text-xs text-slate-400 underline-offset-2 hover:underline"
-      >
-        ← {vacancy.projectTitle || "Back to project"}
-      </Link>
+      <nav className="mb-3 flex items-center gap-2 text-xs text-slate-500">
+        <Link href="/build/vacancies" className="hover:text-slate-300">Вакансии</Link>
+        <span>›</span>
+        <span className="text-slate-400 truncate max-w-xs">{vacancy.title}</span>
+      </nav>
 
-      <div className="mt-2 mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">{vacancy.title}</h1>
-          <div className="mt-1 text-xs text-slate-400">
-            Posted {new Date(vacancy.createdAt).toLocaleDateString()} ·{" "}
-            <span className={vacancy.status === "OPEN" ? "text-emerald-300" : "text-slate-500"}>
-              {vacancy.status}
-            </span>
+      <div className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
+                vacancy.status === "OPEN"
+                  ? "bg-emerald-500/20 text-emerald-300"
+                  : "bg-slate-500/20 text-slate-400"
+              }`}>
+                {vacancy.status === "OPEN" ? "● Открыта" : "✕ Закрыта"}
+              </span>
+              {vacancy.city && (
+                <span className="text-xs text-slate-400">📍 {vacancy.city}</span>
+              )}
+              <span className="text-xs text-slate-500">
+                Опубликована {new Date(vacancy.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
+              </span>
+            </div>
+            <h1 className="mt-2 text-2xl font-bold text-white">{vacancy.title}</h1>
+            {vacancy.projectTitle && (
+              <p className="mt-1 text-sm text-slate-400">
+                Проект: <Link href={`/build/project/${encodeURIComponent(vacancy.projectId)}`} className="text-emerald-300 hover:underline">{vacancy.projectTitle}</Link>
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-3 text-center">
+            <div className="text-xs text-slate-400">Зарплата</div>
+            {vacancy.salary > 0 ? (
+              <div className="text-2xl font-bold text-emerald-300">
+                {vacancy.salary.toLocaleString("ru-RU")}
+                <span className="ml-1 text-sm font-normal text-slate-400">{vacancy.salaryCurrency || "₽"}</span>
+              </div>
+            ) : (
+              <div className="text-base text-slate-400">По договору</div>
+            )}
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs uppercase tracking-wider text-slate-400">Salary</div>
-          <div className="text-2xl font-semibold text-emerald-300">
-            {vacancy.salary > 0 ? `$${vacancy.salary.toLocaleString()}` : "—"}
+        {vacancy.skills && vacancy.skills.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {vacancy.skills.map((s) => (
+              <span key={s} className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-200">
+                {s}
+              </span>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-              Role description
+              Описание вакансии
             </h2>
-            <p className="whitespace-pre-wrap text-sm text-slate-200">{vacancy.description}</p>
-            {vacancy.skills && vacancy.skills.length > 0 && (
-              <div className="mt-4">
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Required skills
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {vacancy.skills.map((s: any) => (
-                    <span
-                      key={s}
-                      className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs text-emerald-200"
-                    >
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{vacancy.description}</p>
           </div>
 
           {isOwner && <SuggestedCandidates vacancyId={vacancy.id} />}
@@ -399,8 +411,9 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-400">
             {app.applicantCity && <span>📍 {app.applicantCity}</span>}
             {app.applicantExperienceYears != null && app.applicantExperienceYears > 0 && (
-              <span>⏱ {app.applicantExperienceYears}y</span>
+              <span>⏱ {app.applicantExperienceYears} лет опыта</span>
             )}
+            <span className="text-slate-500">{new Date(app.createdAt).toLocaleDateString("ru-RU")}</span>
           </div>
           {(app.matchedSkills?.length ?? 0) > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -416,9 +429,9 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           )}
         </div>
         <span
-          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${STATUS_TONE[app.status]}`}
+          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_TONE[app.status]}`}
         >
-          {app.status}
+          {{ PENDING: "⏳ Ожидает", ACCEPTED: "✅ Принят", REJECTED: "✕ Отклонён" }[app.status] ?? app.status}
         </span>
       </div>
       {app.message && (
@@ -429,7 +442,13 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           href={`/build/messages?to=${encodeURIComponent(app.userId)}`}
           className="rounded-md bg-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/20"
         >
-          Message
+          💬 Написать
+        </Link>
+        <Link
+          href={`/build/u/${encodeURIComponent(app.userId)}`}
+          className="rounded-md bg-white/5 px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
+        >
+          Профиль →
         </Link>
         {app.status !== "ACCEPTED" && (
           <button
@@ -456,9 +475,9 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
                 setBusy(false);
               }
             }}
-            className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+            className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
           >
-            Accept
+            ✓ Принять
           </button>
         )}
         {app.status !== "REJECTED" && (
@@ -475,7 +494,7 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
             }}
             className="rounded-md bg-rose-500/20 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
           >
-            Reject
+            ✕ Отклонить
           </button>
         )}
         {app.status === "ACCEPTED" && (

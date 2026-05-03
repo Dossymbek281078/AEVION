@@ -917,6 +917,9 @@ export default function MultichatEnginePage() {
                 { t: "Webhook on done", c: "#0284c7" },
                 { t: "Public share + OG preview", c: "#9333ea" },
                 { t: "Export JSON + Markdown", c: "#b45309" },
+                { t: "↩ Thread continuation", c: "#6d28d9" },
+                { t: "📋 Templates", c: "#1d4ed8" },
+                { t: "⚡ Batch runs", c: "#1e40af" },
               ].map((b) => (
                 <span
                   key={b.t}
@@ -941,20 +944,30 @@ export default function MultichatEnginePage() {
         </div>
 
         <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, color: "#64748b" }}>
-          <Link
-            href="/qcoreai/analytics"
-            style={{
-              border: "1px solid #7c3aed55",
-              background: "rgba(124,58,237,0.06)",
-              borderRadius: 8,
-              padding: "6px 10px",
-              textDecoration: "none",
-              color: "#6d28d9",
-              fontWeight: 700,
-            }}
-          >
-            📊 Analytics
-          </Link>
+          {[
+            { href: "/qcoreai/analytics", label: "📊 Analytics" },
+            { href: "/qcoreai/eval",      label: "🧪 Eval harness" },
+            { href: "/qcoreai/prompts",   label: "📝 Prompts library" },
+            { href: "/qcoreai/batch",     label: "⚡ Batch runs" },
+            { href: "/qcoreai/schedule",  label: "🕐 Scheduled batches" },
+          ].map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              style={{
+                border: "1px solid #7c3aed55",
+                background: "rgba(124,58,237,0.06)",
+                borderRadius: 8,
+                padding: "6px 10px",
+                textDecoration: "none",
+                color: "#6d28d9",
+                fontWeight: 700,
+              }}
+            >
+              {label}
+            </Link>
+          ))}
+          <div style={{ width: 1, background: "#e2e8f0", margin: "0 2px" }} />
           <a
             href={`${origin}/api/qcoreai/health`}
             target="_blank"

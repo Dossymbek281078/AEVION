@@ -63,25 +63,6 @@ export default function QCorePromptsPage() {
   const [browseItems, setBrowseItems] = useState<Prompt[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"library" | "audit">("library");
-  const [auditItems, setAuditItems] = useState<Array<{ id: string; promptId: string; promptName: string; action: string; changedFields: string | null; createdAt: string }>>([]);
-  const [auditLoading, setAuditLoading] = useState(false);
-
-  const fetchAudit = useCallback(async () => {
-    setAuditLoading(true);
-    setError(null);
-    try {
-      const r = await fetch(apiUrl("/api/qcoreai/prompts/audit?limit=200"), { headers: bearerHeader() });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
-      setAuditItems(data.items || []);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load audit log");
-    } finally {
-      setAuditLoading(false);
-    }
-  }, []);
-
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -523,49 +504,6 @@ export default function QCorePromptsPage() {
         )}
 
         {!authMissing && (
-          <>
-          {/* Tab bar */}
-          <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "2px solid #e2e8f0", paddingBottom: 0 }}>
-            {(["library", "audit"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => { setActiveTab(tab); if (tab === "audit" && auditItems.length === 0) fetchAudit(); }}
-                style={{
-                  padding: "8px 18px", border: "none", background: "transparent",
-                  borderBottom: activeTab === tab ? "2px solid #4f46e5" : "2px solid transparent",
-                  color: activeTab === tab ? "#4f46e5" : "#64748b",
-                  fontWeight: activeTab === tab ? 800 : 500, fontSize: 13, cursor: "pointer",
-                  marginBottom: -2,
-                }}
-              >
-                {tab === "library" ? "Library" : "Audit log"}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === "audit" ? (
-            <div>
-              {auditLoading ? (
-                <div style={{ color: "#64748b", padding: 12 }}>Loading…</div>
-              ) : auditItems.length === 0 ? (
-                <div style={{ color: "#94a3b8", fontSize: 13 }}>No audit events yet. Create, edit or delete prompts to see the log.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {auditItems.map((e) => (
-                    <div key={e.id} style={{ padding: "10px 14px", borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0", display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 999, background: e.action === "create" ? "#d1fae5" : e.action === "delete" ? "#fee2e2" : "#fef3c7", color: e.action === "create" ? "#065f46" : e.action === "delete" ? "#991b1b" : "#78350f" }}>
-                        {e.action.toUpperCase()}
-                      </span>
-                      <span style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{e.promptName}</span>
-                      {e.changedFields && <span style={{ fontSize: 11, color: "#64748b" }}>({e.changedFields})</span>}
-                      <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: "auto" }}>{new Date(e.createdAt).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-
           <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
             <div style={{ display: "grid", gap: 8, alignContent: "start" }}>
               {loading ? (
@@ -726,8 +664,6 @@ export default function QCorePromptsPage() {
               )}
             </div>
           </div>
-          )} {/* end activeTab === "library" */}
-          </> /* end !authMissing fragment */
         )}
       </ProductPageShell>
     </main>

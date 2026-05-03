@@ -23,7 +23,6 @@ export type SessionRow = {
   userId: string | null;
   title: string;
   mode: string;
-  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -43,6 +42,9 @@ export type RunRow = {
   startedAt: string;
   finishedAt: string | null;
   tags?: string[];
+  parentRunId?: string | null;
+  threadId?: string | null;
+  batchId?: string | null;
 };
 
 export type SearchHit = {
@@ -110,7 +112,6 @@ export async function createSession(opts: {
       userId: opts.userId ?? null,
       title,
       mode,
-      pinned: false,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -197,22 +198,19 @@ export async function listSessions(userId: string | null, limit = 50): Promise<S
   if (!isDbReady()) {
     const all = Array.from(memSessions.values());
     const filtered = all.filter((s) => (userId ? s.userId === userId : s.userId == null));
-    filtered.sort((a, b) => {
-      if (b.pinned !== a.pinned) return b.pinned ? 1 : -1;
-      return b.updatedAt.localeCompare(a.updatedAt);
-    });
+    filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return filtered.slice(0, lim);
   }
 
   if (userId) {
     const r = await pool.query(
-      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $2`,
+      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "updatedAt" DESC LIMIT $2`,
       [userId, lim]
     );
     return r.rows as SessionRow[];
   }
   const r = await pool.query(
-    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $1`,
+    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "updatedAt" DESC LIMIT $1`,
     [lim]
   );
   return r.rows as SessionRow[];
@@ -282,28 +280,6 @@ export async function renameSession(
   return (r.rows?.[0] as SessionRow) ?? null;
 }
 
-export async function pinSession(
-  id: string,
-  userId: string | null,
-  pinned: boolean
-): Promise<SessionRow | null> {
-  const session = await getSession(id, userId);
-  if (!session) return null;
-
-  if (!isDbReady()) {
-    session.pinned = pinned;
-    session.updatedAt = nowIso();
-    memSessions.set(id, session);
-    return session;
-  }
-
-  const r = await pool.query(
-    `UPDATE "QCoreSession" SET "pinned"=$2, "updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
-    [id, pinned]
-  );
-  return (r.rows?.[0] as SessionRow) ?? null;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    Runs
    ═══════════════════════════════════════════════════════════════════════ */
@@ -313,9 +289,15 @@ export async function createRun(opts: {
   userInput: string;
   agentConfig?: unknown;
   strategy?: string | null;
+  parentRunId?: string | null;
+  threadId?: string | null;
+  batchId?: string | null;
 }): Promise<RunRow> {
   await ensureQCoreTables(pool);
   const id = crypto.randomUUID();
+  const parentRunId = opts.parentRunId ?? null;
+  const threadId = opts.threadId ?? (parentRunId ? null : id);
+  const batchId = opts.batchId ?? null;
 
   if (!isDbReady()) {
     const row: RunRow = {
@@ -332,6 +314,9 @@ export async function createRun(opts: {
       shareToken: null,
       startedAt: nowIso(),
       finishedAt: null,
+      parentRunId,
+      threadId: threadId ?? id,
+      batchId,
     };
     memRuns.set(id, row);
     memMessagesByRun.set(id, []);
@@ -339,8 +324,8 @@ export async function createRun(opts: {
   }
 
   const r = await pool.query(
-    `INSERT INTO "QCoreRun" ("id","sessionId","userInput","status","agentConfig","strategy")
-     VALUES ($1,$2,$3,'running',$4,$5)
+    `INSERT INTO "QCoreRun" ("id","sessionId","userInput","status","agentConfig","strategy","parentRunId","threadId","batchId")
+     VALUES ($1,$2,$3,'running',$4,$5,$6,$7,$8)
      RETURNING *`,
     [
       id,
@@ -348,6 +333,9 @@ export async function createRun(opts: {
       opts.userInput,
       opts.agentConfig ? JSON.stringify(opts.agentConfig) : null,
       opts.strategy ?? null,
+      parentRunId,
+      threadId ?? id,
+      batchId,
     ]
   );
   return r.rows[0] as RunRow;
@@ -1209,6 +1197,47 @@ export async function buildHistoryContext(sessionId: string, maxTurns = 6): Prom
   return out;
 }
 
+/** Returns all runs in a thread ordered oldest→newest (root included). */
+export async function getThread(threadId: string): Promise<RunRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const rows = Array.from(memRuns.values()).filter(
+      (r) => r.threadId === threadId || r.id === threadId
+    );
+    rows.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    return rows;
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRun" WHERE "threadId"=$1 ORDER BY "startedAt" ASC`,
+    [threadId]
+  );
+  return r.rows as RunRow[];
+}
+
+/**
+ * Builds a ChatMessage[] conversation history by walking UP the parent chain
+ * from the given run (not including it). Used when continuing a specific run
+ * so the agent sees the full thread context, not just the session's last N turns.
+ */
+export async function buildThreadContext(runId: string, maxTurns = 12): Promise<ChatMessage[]> {
+  await ensureQCoreTables(pool);
+  const chain: RunRow[] = [];
+  let current: RunRow | null = await getRun(runId);
+  let steps = 0;
+  while (current && steps < maxTurns) {
+    chain.unshift(current);
+    if (!current.parentRunId) break;
+    current = await getRun(current.parentRunId);
+    steps++;
+  }
+  const out: ChatMessage[] = [];
+  for (const run of chain) {
+    if (run.userInput) out.push({ role: "user", content: run.userInput });
+    if (run.finalContent) out.push({ role: "assistant", content: run.finalContent });
+  }
+  return out;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Eval harness
    ═══════════════════════════════════════════════════════════════════════
@@ -1870,6 +1899,603 @@ export async function getPromptVersionChain(rootId: string): Promise<PromptRow[]
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Per-user monthly spend limits — gate /multi-agent when the calendar-month
+   total exceeds monthlyLimitUsd. alertAt (0..1) triggers a warning banner.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type SpendLimitRow = {
+  userId: string;
+  monthlyLimitUsd: number;
+  alertAt: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memSpendLimits = new Map<string, SpendLimitRow>();
+
+export async function getSpendLimit(userId: string): Promise<SpendLimitRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memSpendLimits.get(userId) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreSpendLimit" WHERE "userId"=$1`, [userId]);
+  return (r.rows[0] as SpendLimitRow) || null;
+}
+
+export async function setSpendLimit(
+  userId: string,
+  monthlyLimitUsd: number,
+  alertAt = 0.8
+): Promise<SpendLimitRow> {
+  await ensureQCoreTables(pool);
+  const clamped = Math.max(0, Math.min(1000, monthlyLimitUsd));
+  const at = Math.max(0.1, Math.min(1, alertAt));
+
+  if (!isDbReady()) {
+    const row: SpendLimitRow = {
+      userId,
+      monthlyLimitUsd: clamped,
+      alertAt: at,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memSpendLimits.set(userId, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreSpendLimit" ("userId","monthlyLimitUsd","alertAt")
+     VALUES ($1,$2,$3)
+     ON CONFLICT ("userId") DO UPDATE
+       SET "monthlyLimitUsd"=$2, "alertAt"=$3, "updatedAt"=NOW()
+     RETURNING *`,
+    [userId, clamped, at]
+  );
+  return r.rows[0] as SpendLimitRow;
+}
+
+export async function deleteSpendLimit(userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const had = memSpendLimits.has(userId);
+    memSpendLimits.delete(userId);
+    return had;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreSpendLimit" WHERE "userId"=$1 RETURNING "userId"`,
+    [userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Sum of totalCostUsd for the calling user's runs in the current calendar month.
+ * Falls back to an in-memory scan for the demo mode.
+ */
+export async function getMonthlySpend(userId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  if (!isDbReady()) {
+    // In-memory: userId isn't stored on runs directly — approximate via sessions.
+    const sessions = await listSessions(userId, 200);
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    let total = 0;
+    for (const run of memRuns.values()) {
+      if (sessionIds.has(run.sessionId) && run.startedAt >= monthStart) {
+        total += run.totalCostUsd ?? 0;
+      }
+    }
+    return total;
+  }
+
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(r."totalCostUsd"), 0) AS total
+     FROM "QCoreRun" r
+     JOIN "QCoreSession" s ON s.id = r."sessionId"
+     WHERE s."userId"=$1 AND r."startedAt" >= $2`,
+    [userId, monthStart]
+  );
+  return parseFloat(r.rows[0]?.total ?? "0") || 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run templates — reusable input + strategy + overrides bundles.
+   Users save a named config once and apply it in one click; public
+   templates are browsable across accounts.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type TemplateRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  input: string;
+  strategy: string;
+  overrides: Record<string, unknown>;
+  isPublic: boolean;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memTemplates = new Map<string, TemplateRow>();
+
+export async function createTemplate(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  input: string;
+  strategy?: string;
+  overrides?: Record<string, unknown>;
+  isPublic?: boolean;
+}): Promise<TemplateRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: TemplateRow = {
+    id,
+    ownerUserId: opts.ownerUserId,
+    name: opts.name.slice(0, 80),
+    description: opts.description?.slice(0, 400) ?? null,
+    input: opts.input.slice(0, 16000),
+    strategy: opts.strategy || "sequential",
+    overrides: opts.overrides ?? {},
+    isPublic: opts.isPublic ?? false,
+    useCount: 0,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  if (!isDbReady()) {
+    memTemplates.set(id, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreTemplate"
+       ("id","ownerUserId","name","description","input","strategy","overrides","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     RETURNING *`,
+    [id, row.ownerUserId, row.name, row.description, row.input, row.strategy,
+     JSON.stringify(row.overrides), row.isPublic]
+  );
+  return r.rows[0] as TemplateRow;
+}
+
+export async function listTemplates(ownerUserId: string, limit = 50): Promise<TemplateRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memTemplates.values())
+      .filter((t) => t.ownerUserId === ownerUserId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreTemplate" WHERE "ownerUserId"=$1 ORDER BY "updatedAt" DESC LIMIT $2`,
+    [ownerUserId, limit]
+  );
+  return r.rows as TemplateRow[];
+}
+
+export async function listPublicTemplates(query?: string, limit = 30): Promise<TemplateRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  if (!isDbReady()) {
+    const q = (query || "").toLowerCase();
+    return Array.from(memTemplates.values())
+      .filter((t) => t.isPublic && (!q || t.name.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q)))
+      .sort((a, b) => b.useCount - a.useCount || b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, lim);
+  }
+  if (query?.trim()) {
+    const q = `%${query.trim()}%`;
+    const r = await pool.query(
+      `SELECT * FROM "QCoreTemplate"
+        WHERE "isPublic"=TRUE AND ("name" ILIKE $1 OR "description" ILIKE $1)
+        ORDER BY "useCount" DESC, "updatedAt" DESC LIMIT $2`,
+      [q, lim]
+    );
+    return r.rows as TemplateRow[];
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreTemplate" WHERE "isPublic"=TRUE ORDER BY "useCount" DESC, "updatedAt" DESC LIMIT $1`,
+    [lim]
+  );
+  return r.rows as TemplateRow[];
+}
+
+export async function getTemplate(id: string): Promise<TemplateRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memTemplates.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreTemplate" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as TemplateRow) || null;
+}
+
+export async function updateTemplate(
+  id: string,
+  ownerUserId: string,
+  patch: Partial<Pick<TemplateRow, "name" | "description" | "input" | "strategy" | "overrides" | "isPublic">>
+): Promise<TemplateRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memTemplates.get(id);
+    if (!t || t.ownerUserId !== ownerUserId) return null;
+    const updated = { ...t, ...patch, updatedAt: nowIso() };
+    memTemplates.set(id, updated);
+    return updated;
+  }
+  const sets: string[] = [];
+  const vals: unknown[] = [id, ownerUserId];
+  let idx = 3;
+  if (patch.name !== undefined) { sets.push(`"name"=$${idx++}`); vals.push(patch.name.slice(0, 80)); }
+  if (patch.description !== undefined) { sets.push(`"description"=$${idx++}`); vals.push(patch.description?.slice(0, 400) ?? null); }
+  if (patch.input !== undefined) { sets.push(`"input"=$${idx++}`); vals.push(patch.input.slice(0, 16000)); }
+  if (patch.strategy !== undefined) { sets.push(`"strategy"=$${idx++}`); vals.push(patch.strategy); }
+  if (patch.overrides !== undefined) { sets.push(`"overrides"=$${idx++}`); vals.push(JSON.stringify(patch.overrides)); }
+  if (patch.isPublic !== undefined) { sets.push(`"isPublic"=$${idx++}`); vals.push(patch.isPublic); }
+  if (!sets.length) return getTemplate(id);
+  sets.push(`"updatedAt"=NOW()`);
+  const r = await pool.query(
+    `UPDATE "QCoreTemplate" SET ${sets.join(",")} WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING *`,
+    vals
+  );
+  return (r.rows[0] as TemplateRow) || null;
+}
+
+export async function deleteTemplate(id: string, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memTemplates.get(id);
+    if (!t || t.ownerUserId !== ownerUserId) return false;
+    memTemplates.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreTemplate" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, ownerUserId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Scheduled batch runs — fire a batch on a recurring or one-shot schedule.
+   The backend polls due schedules every minute and fires a batch run.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type ScheduleKind = "once" | "hourly" | "daily" | "weekly";
+
+export type ScheduledBatchRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  inputs: string[];
+  strategy: string;
+  overrides: Record<string, unknown>;
+  schedule: ScheduleKind;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastBatchId: string | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memScheduledBatches = new Map<string, ScheduledBatchRow>();
+
+function nextRunTime(schedule: ScheduleKind, from = new Date()): Date | null {
+  if (schedule === "once") return null; // one-shot: set manually by caller
+  const d = new Date(from);
+  if (schedule === "hourly") d.setHours(d.getHours() + 1, 0, 0, 0);
+  else if (schedule === "daily") { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+  else if (schedule === "weekly") { d.setDate(d.getDate() + 7); d.setHours(9, 0, 0, 0); }
+  return d;
+}
+
+export async function createScheduledBatch(opts: {
+  ownerUserId: string;
+  name: string;
+  inputs: string[];
+  strategy?: string;
+  overrides?: Record<string, unknown>;
+  schedule?: ScheduleKind;
+  nextRunAt?: string | null;
+}): Promise<ScheduledBatchRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const schedule = (opts.schedule || "once") as ScheduleKind;
+  let nextRunAt: string | null = opts.nextRunAt ?? null;
+  if (!nextRunAt && schedule !== "once") {
+    nextRunAt = nextRunTime(schedule)?.toISOString() ?? null;
+  }
+
+  const row: ScheduledBatchRow = {
+    id,
+    ownerUserId: opts.ownerUserId,
+    name: opts.name.slice(0, 80),
+    inputs: opts.inputs.slice(0, 20).map((s) => s.slice(0, 16000)),
+    strategy: opts.strategy || "sequential",
+    overrides: opts.overrides ?? {},
+    schedule,
+    nextRunAt,
+    lastRunAt: null,
+    lastBatchId: null,
+    enabled: true,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  if (!isDbReady()) { memScheduledBatches.set(id, row); return row; }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreScheduledBatch"
+       ("id","ownerUserId","name","inputs","strategy","overrides","schedule","nextRunAt","enabled")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)
+     RETURNING *`,
+    [id, row.ownerUserId, row.name, JSON.stringify(row.inputs), row.strategy,
+     JSON.stringify(row.overrides), row.schedule, row.nextRunAt]
+  );
+  return r.rows[0] as ScheduledBatchRow;
+}
+
+export async function listScheduledBatches(ownerUserId: string): Promise<ScheduledBatchRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memScheduledBatches.values())
+      .filter((s) => s.ownerUserId === ownerUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreScheduledBatch" WHERE "ownerUserId"=$1 ORDER BY "createdAt" DESC`,
+    [ownerUserId]
+  );
+  return r.rows as ScheduledBatchRow[];
+}
+
+export async function getScheduledBatch(id: string): Promise<ScheduledBatchRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memScheduledBatches.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreScheduledBatch" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as ScheduledBatchRow) || null;
+}
+
+export async function updateScheduledBatch(
+  id: string,
+  ownerUserId: string,
+  patch: Partial<Pick<ScheduledBatchRow, "name" | "inputs" | "strategy" | "overrides" | "schedule" | "nextRunAt" | "enabled">>
+): Promise<ScheduledBatchRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memScheduledBatches.get(id);
+    if (!s || s.ownerUserId !== ownerUserId) return null;
+    const updated = { ...s, ...patch, updatedAt: nowIso() };
+    memScheduledBatches.set(id, updated);
+    return updated;
+  }
+  const sets: string[] = ["\"updatedAt\"=NOW()"];
+  const vals: unknown[] = [id, ownerUserId];
+  let idx = 3;
+  if (patch.name !== undefined) { sets.push(`"name"=$${idx++}`); vals.push(patch.name); }
+  if (patch.inputs !== undefined) { sets.push(`"inputs"=$${idx++}`); vals.push(JSON.stringify(patch.inputs)); }
+  if (patch.strategy !== undefined) { sets.push(`"strategy"=$${idx++}`); vals.push(patch.strategy); }
+  if (patch.overrides !== undefined) { sets.push(`"overrides"=$${idx++}`); vals.push(JSON.stringify(patch.overrides)); }
+  if (patch.schedule !== undefined) { sets.push(`"schedule"=$${idx++}`); vals.push(patch.schedule); }
+  if (patch.nextRunAt !== undefined) { sets.push(`"nextRunAt"=$${idx++}`); vals.push(patch.nextRunAt); }
+  if (patch.enabled !== undefined) { sets.push(`"enabled"=$${idx++}`); vals.push(patch.enabled); }
+  const r = await pool.query(
+    `UPDATE "QCoreScheduledBatch" SET ${sets.join(",")} WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING *`,
+    vals
+  );
+  return (r.rows[0] as ScheduledBatchRow) || null;
+}
+
+export async function deleteScheduledBatch(id: string, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memScheduledBatches.get(id);
+    if (!s || s.ownerUserId !== ownerUserId) return false;
+    memScheduledBatches.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreScheduledBatch" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, ownerUserId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/** Called by the scheduler — advance nextRunAt and record lastRunAt + lastBatchId. */
+export async function recordScheduledRun(
+  id: string,
+  batchId: string
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  const s = await getScheduledBatch(id);
+  if (!s) return;
+  const next = s.schedule === "once" ? null : nextRunTime(s.schedule)?.toISOString() ?? null;
+  const enabledNext = s.schedule !== "once"; // disable after one-shot fires
+
+  if (!isDbReady()) {
+    const r = memScheduledBatches.get(id);
+    if (!r) return;
+    r.lastRunAt = nowIso();
+    r.lastBatchId = batchId;
+    r.nextRunAt = next;
+    r.enabled = enabledNext;
+    r.updatedAt = nowIso();
+    return;
+  }
+  await pool.query(
+    `UPDATE "QCoreScheduledBatch"
+       SET "lastRunAt"=NOW(), "lastBatchId"=$2, "nextRunAt"=$3, "enabled"=$4, "updatedAt"=NOW()
+     WHERE "id"=$1`,
+    [id, batchId, next, enabledNext]
+  );
+}
+
+/** Returns schedules that are due (nextRunAt <= now, enabled=true). */
+export async function getDueSchedules(): Promise<ScheduledBatchRow[]> {
+  await ensureQCoreTables(pool);
+  const nowStr = new Date().toISOString();
+  if (!isDbReady()) {
+    return Array.from(memScheduledBatches.values()).filter(
+      (s) => s.enabled && s.nextRunAt !== null && s.nextRunAt <= nowStr
+    );
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreScheduledBatch" WHERE "enabled"=TRUE AND "nextRunAt" <= NOW()`,
+  );
+  return r.rows as ScheduledBatchRow[];
+}
+
+export async function useTemplate(id: string): Promise<TemplateRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memTemplates.get(id);
+    if (!t) return null;
+    t.useCount++;
+    return t;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreTemplate" SET "useCount"="useCount"+1,"updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
+    [id]
+  );
+  return (r.rows[0] as TemplateRow) || null;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Batch runs — send N prompts against a shared config in one call.
+   QCoreBatch tracks aggregate progress; each individual run links back via
+   batchId. The route fires runs asynchronously (max 5 parallel) and polls
+   completedRuns + failedRuns to determine when the batch is done.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type BatchRow = {
+  id: string;
+  ownerUserId: string;
+  strategy: string;
+  overrides: Record<string, unknown>;
+  status: "running" | "done" | "error";
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  totalCostUsd: number;
+  inputs: string[];
+  createdAt: string;
+  completedAt: string | null;
+};
+
+const memBatches = new Map<string, BatchRow>();
+
+export async function createBatch(opts: {
+  ownerUserId: string;
+  strategy?: string;
+  overrides?: Record<string, unknown>;
+  inputs: string[];
+}): Promise<BatchRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: BatchRow = {
+    id,
+    ownerUserId: opts.ownerUserId,
+    strategy: opts.strategy || "sequential",
+    overrides: opts.overrides ?? {},
+    status: "running",
+    totalRuns: opts.inputs.length,
+    completedRuns: 0,
+    failedRuns: 0,
+    totalCostUsd: 0,
+    inputs: opts.inputs,
+    createdAt: nowIso(),
+    completedAt: null,
+  };
+
+  if (!isDbReady()) {
+    memBatches.set(id, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreBatch"
+       ("id","ownerUserId","strategy","overrides","status","totalRuns","inputs")
+     VALUES ($1,$2,$3,$4,'running',$5,$6)
+     RETURNING *`,
+    [id, row.ownerUserId, row.strategy, JSON.stringify(row.overrides), row.totalRuns, JSON.stringify(row.inputs)]
+  );
+  return r.rows[0] as BatchRow;
+}
+
+export async function getBatch(id: string): Promise<BatchRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memBatches.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreBatch" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as BatchRow) || null;
+}
+
+export async function listBatches(ownerUserId: string, limit = 30): Promise<BatchRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memBatches.values())
+      .filter((b) => b.ownerUserId === ownerUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreBatch" WHERE "ownerUserId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
+    [ownerUserId, limit]
+  );
+  return r.rows as BatchRow[];
+}
+
+export async function updateBatchProgress(
+  batchId: string,
+  delta: { completedDelta?: number; failedDelta?: number; costDelta?: number }
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const b = memBatches.get(batchId);
+    if (!b) return;
+    b.completedRuns += delta.completedDelta ?? 0;
+    b.failedRuns += delta.failedDelta ?? 0;
+    b.totalCostUsd += delta.costDelta ?? 0;
+    if (b.completedRuns + b.failedRuns >= b.totalRuns) {
+      b.status = b.failedRuns === b.totalRuns ? "error" : "done";
+      b.completedAt = nowIso();
+    }
+    return;
+  }
+  await pool.query(
+    `UPDATE "QCoreBatch"
+       SET "completedRuns" = "completedRuns" + $2,
+           "failedRuns"    = "failedRuns"    + $3,
+           "totalCostUsd"  = "totalCostUsd"  + $4,
+           "status" = CASE
+             WHEN "completedRuns" + $2 + "failedRuns" + $3 >= "totalRuns"
+             THEN CASE WHEN "completedRuns" + $2 = 0 THEN 'error' ELSE 'done' END
+             ELSE 'running'
+           END,
+           "completedAt" = CASE
+             WHEN "completedRuns" + $2 + "failedRuns" + $3 >= "totalRuns" THEN NOW()
+             ELSE NULL
+           END
+     WHERE "id" = $1`,
+    [batchId, delta.completedDelta ?? 0, delta.failedDelta ?? 0, delta.costDelta ?? 0]
+  );
+}
+
+export async function listBatchRuns(batchId: string): Promise<RunRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memRuns.values())
+      .filter((r) => r.batchId === batchId)
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRun" WHERE "batchId"=$1 ORDER BY "startedAt" ASC`,
+    [batchId]
+  );
+  return r.rows as RunRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Run comments (public — no auth, authorName is free-text)
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -1889,7 +2515,6 @@ export async function createComment(runId: string, authorName: string, content: 
   const name = (authorName || "Anonymous").trim().slice(0, 60) || "Anonymous";
   const text = (content || "").trim().slice(0, 2000);
   if (!text) throw new Error("content required");
-
   if (!isDbReady()) {
     const row: CommentRow = { id, runId, authorName: name, content: text, createdAt: nowIso() };
     const existing = memComments.get(runId) ?? [];
@@ -1931,11 +2556,8 @@ export type AuditLogRow = {
 const memAuditLog: AuditLogRow[] = [];
 
 export async function logPromptAudit(
-  userId: string,
-  promptId: string,
-  promptName: string,
-  action: "create" | "update" | "delete",
-  changedFields?: string
+  userId: string, promptId: string, promptName: string,
+  action: "create" | "update" | "delete", changedFields?: string
 ): Promise<void> {
   await ensureQCoreTables(pool);
   const id = crypto.randomUUID();
@@ -1952,9 +2574,7 @@ export async function logPromptAudit(
 export async function listPromptAudit(userId: string, limit = 100): Promise<AuditLogRow[]> {
   await ensureQCoreTables(pool);
   const lim = Math.max(1, Math.min(500, limit));
-  if (!isDbReady()) {
-    return memAuditLog.filter((e) => e.userId === userId).slice(-lim).reverse();
-  }
+  if (!isDbReady()) return memAuditLog.filter((e) => e.userId === userId).slice(-lim).reverse();
   const r = await pool.query(
     `SELECT * FROM "QCorePresetAuditLog" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
     [userId, lim]
@@ -1963,7 +2583,7 @@ export async function listPromptAudit(userId: string, limit = 100): Promise<Audi
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Workspaces
+   Workspaces — shared session collections with role-based access
    ═══════════════════════════════════════════════════════════════════════ */
 
 export type WorkspaceRow = {
@@ -1975,238 +2595,33 @@ export type WorkspaceRow = {
   updatedAt: string;
 };
 
-export type WorkspaceMemberRow = {
-  workspaceId: string;
-  userId: string;
-  role: "owner" | "editor" | "viewer";
-  joinedAt: string;
-};
-
 const memWorkspaces = new Map<string, WorkspaceRow>();
-const memWorkspaceMembers = new Map<string, WorkspaceMemberRow[]>();
-const memWorkspaceSessions = new Map<string, string[]>();
 
-export async function createWorkspace(opts: {
-  ownerId: string;
-  name: string;
-  description?: string | null;
-}): Promise<WorkspaceRow> {
+export async function createWorkspace(opts: { name: string; description?: string | null; ownerId: string }): Promise<WorkspaceRow> {
   await ensureQCoreTables(pool);
   const id = crypto.randomUUID();
-  const name = (opts.name || "").trim().slice(0, 80);
-  if (!name) throw new Error("workspace name required");
-  const description = opts.description ? String(opts.description).trim().slice(0, 400) : null;
-
-  if (!isDbReady()) {
-    const row: WorkspaceRow = { id, name, description, ownerId: opts.ownerId, createdAt: nowIso(), updatedAt: nowIso() };
-    memWorkspaces.set(id, row);
-    memWorkspaceMembers.set(id, [{ workspaceId: id, userId: opts.ownerId, role: "owner", joinedAt: nowIso() }]);
-    return row;
-  }
-  await pool.query(
-    `INSERT INTO "QCoreWorkspace" ("id","name","description","ownerId") VALUES ($1,$2,$3,$4)`,
-    [id, name, description, opts.ownerId]
+  const row: WorkspaceRow = { id, name: opts.name.slice(0, 80), description: opts.description ?? null, ownerId: opts.ownerId, createdAt: nowIso(), updatedAt: nowIso() };
+  if (!isDbReady()) { memWorkspaces.set(id, row); return row; }
+  const r = await pool.query(
+    `INSERT INTO "QCoreWorkspace" ("id","name","description","ownerId") VALUES ($1,$2,$3,$4) RETURNING *`,
+    [id, row.name, row.description, row.ownerId]
   );
-  await pool.query(
-    `INSERT INTO "QCoreWorkspaceMember" ("workspaceId","userId","role") VALUES ($1,$2,'owner')`,
-    [id, opts.ownerId]
-  );
-  const r = await pool.query(`SELECT * FROM "QCoreWorkspace" WHERE "id"=$1`, [id]);
   return r.rows[0] as WorkspaceRow;
 }
 
-export async function listMyWorkspaces(userId: string): Promise<WorkspaceRow[]> {
+export async function listWorkspaces(userId: string): Promise<WorkspaceRow[]> {
   await ensureQCoreTables(pool);
-  if (!isDbReady()) {
-    const memberOf = Array.from(memWorkspaceMembers.values())
-      .flat()
-      .filter((m) => m.userId === userId)
-      .map((m) => m.workspaceId);
-    return memberOf.map((id) => memWorkspaces.get(id)).filter(Boolean) as WorkspaceRow[];
-  }
+  if (!isDbReady()) return Array.from(memWorkspaces.values()).filter((w) => w.ownerId === userId);
   const r = await pool.query(
-    `SELECT w.* FROM "QCoreWorkspace" w
-     JOIN "QCoreWorkspaceMember" m ON m."workspaceId"=w."id"
-     WHERE m."userId"=$1
-     ORDER BY w."updatedAt" DESC`,
+    `SELECT w.* FROM "QCoreWorkspace" w LEFT JOIN "QCoreWorkspaceMember" m ON m."workspaceId"=w."id" AND m."userId"=$1 WHERE w."ownerId"=$1 OR m."userId"=$1 ORDER BY w."updatedAt" DESC`,
     [userId]
   );
   return r.rows as WorkspaceRow[];
 }
 
-export async function getWorkspace(id: string, userId: string): Promise<WorkspaceRow | null> {
+export async function getWorkspace(id: string): Promise<WorkspaceRow | null> {
   await ensureQCoreTables(pool);
-  if (!isDbReady()) {
-    const ws = memWorkspaces.get(id);
-    if (!ws) return null;
-    const members = memWorkspaceMembers.get(id) ?? [];
-    if (!members.some((m) => m.userId === userId)) return null;
-    return ws;
-  }
-  const r = await pool.query(
-    `SELECT w.* FROM "QCoreWorkspace" w
-     JOIN "QCoreWorkspaceMember" m ON m."workspaceId"=w."id"
-     WHERE w."id"=$1 AND m."userId"=$2`,
-    [id, userId]
-  );
-  return (r.rows?.[0] as WorkspaceRow) ?? null;
-}
-
-export async function deleteWorkspace(id: string, userId: string): Promise<boolean> {
-  await ensureQCoreTables(pool);
-  if (!isDbReady()) {
-    const ws = memWorkspaces.get(id);
-    if (!ws || ws.ownerId !== userId) return false;
-    memWorkspaces.delete(id);
-    memWorkspaceMembers.delete(id);
-    memWorkspaceSessions.delete(id);
-    return true;
-  }
-  const r = await pool.query(
-    `DELETE FROM "QCoreWorkspace" WHERE "id"=$1 AND "ownerId"=$2 RETURNING "id"`,
-    [id, userId]
-  );
-  return (r.rowCount ?? 0) > 0;
-}
-
-export async function updateWorkspace(
-  id: string,
-  userId: string,
-  patch: { name?: string; description?: string | null }
-): Promise<WorkspaceRow | null> {
-  await ensureQCoreTables(pool);
-  const ws = await getWorkspace(id, userId);
-  if (!ws || ws.ownerId !== userId) return null;
-
-  const name = patch.name ? patch.name.trim().slice(0, 80) : ws.name;
-  const description = patch.description !== undefined ? (patch.description ? String(patch.description).trim().slice(0, 400) : null) : ws.description;
-
-  if (!isDbReady()) {
-    ws.name = name;
-    ws.description = description;
-    ws.updatedAt = nowIso();
-    memWorkspaces.set(id, ws);
-    return ws;
-  }
-  const r = await pool.query(
-    `UPDATE "QCoreWorkspace" SET "name"=$2,"description"=$3,"updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
-    [id, name, description]
-  );
-  return (r.rows?.[0] as WorkspaceRow) ?? null;
-}
-
-export async function listWorkspaceMembers(workspaceId: string, userId: string): Promise<WorkspaceMemberRow[]> {
-  await ensureQCoreTables(pool);
-  const ws = await getWorkspace(workspaceId, userId);
-  if (!ws) return [];
-  if (!isDbReady()) return memWorkspaceMembers.get(workspaceId) ?? [];
-  const r = await pool.query(
-    `SELECT * FROM "QCoreWorkspaceMember" WHERE "workspaceId"=$1 ORDER BY "joinedAt" ASC`,
-    [workspaceId]
-  );
-  return r.rows as WorkspaceMemberRow[];
-}
-
-export async function addWorkspaceMember(
-  workspaceId: string,
-  targetUserId: string,
-  role: "editor" | "viewer",
-  requestingUserId: string
-): Promise<WorkspaceMemberRow | null> {
-  await ensureQCoreTables(pool);
-  const ws = await getWorkspace(workspaceId, requestingUserId);
-  if (!ws || ws.ownerId !== requestingUserId) return null;
-  if (!isDbReady()) {
-    const members = memWorkspaceMembers.get(workspaceId) ?? [];
-    const existing = members.find((m) => m.userId === targetUserId);
-    if (existing) { existing.role = role; return existing; }
-    const row: WorkspaceMemberRow = { workspaceId, userId: targetUserId, role, joinedAt: nowIso() };
-    members.push(row);
-    memWorkspaceMembers.set(workspaceId, members);
-    return row;
-  }
-  const r = await pool.query(
-    `INSERT INTO "QCoreWorkspaceMember" ("workspaceId","userId","role")
-     VALUES ($1,$2,$3)
-     ON CONFLICT ("workspaceId","userId") DO UPDATE SET "role"=EXCLUDED."role"
-     RETURNING *`,
-    [workspaceId, targetUserId, role]
-  );
-  return r.rows[0] as WorkspaceMemberRow;
-}
-
-export async function removeWorkspaceMember(
-  workspaceId: string,
-  targetUserId: string,
-  requestingUserId: string
-): Promise<boolean> {
-  await ensureQCoreTables(pool);
-  const ws = await getWorkspace(workspaceId, requestingUserId);
-  if (!ws || ws.ownerId !== requestingUserId) return false;
-  if (targetUserId === ws.ownerId) return false;
-  if (!isDbReady()) {
-    const members = memWorkspaceMembers.get(workspaceId) ?? [];
-    const idx = members.findIndex((m) => m.userId === targetUserId);
-    if (idx < 0) return false;
-    members.splice(idx, 1);
-    return true;
-  }
-  const r = await pool.query(
-    `DELETE FROM "QCoreWorkspaceMember" WHERE "workspaceId"=$1 AND "userId"=$2 AND "userId"!=(SELECT "ownerId" FROM "QCoreWorkspace" WHERE "id"=$1) RETURNING *`,
-    [workspaceId, targetUserId]
-  );
-  return (r.rowCount ?? 0) > 0;
-}
-
-export async function addSessionToWorkspace(workspaceId: string, sessionId: string, userId: string): Promise<boolean> {
-  await ensureQCoreTables(pool);
-  const ws = await getWorkspace(workspaceId, userId);
-  if (!ws) return false;
-  if (!isDbReady()) {
-    const sessions = memWorkspaceSessions.get(workspaceId) ?? [];
-    if (!sessions.includes(sessionId)) sessions.push(sessionId);
-    memWorkspaceSessions.set(workspaceId, sessions);
-    return true;
-  }
-  await pool.query(
-    `INSERT INTO "QCoreWorkspaceSession" ("workspaceId","sessionId") VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-    [workspaceId, sessionId]
-  );
-  return true;
-}
-
-export async function removeSessionFromWorkspace(workspaceId: string, sessionId: string, userId: string): Promise<boolean> {
-  await ensureQCoreTables(pool);
-  const ws = await getWorkspace(workspaceId, userId);
-  if (!ws) return false;
-  if (!isDbReady()) {
-    const sessions = memWorkspaceSessions.get(workspaceId) ?? [];
-    const idx = sessions.indexOf(sessionId);
-    if (idx < 0) return false;
-    sessions.splice(idx, 1);
-    return true;
-  }
-  const r = await pool.query(
-    `DELETE FROM "QCoreWorkspaceSession" WHERE "workspaceId"=$1 AND "sessionId"=$2 RETURNING *`,
-    [workspaceId, sessionId]
-  );
-  return (r.rowCount ?? 0) > 0;
-}
-
-export async function listWorkspaceSessions(workspaceId: string, userId: string): Promise<SessionRow[]> {
-  await ensureQCoreTables(pool);
-  const ws = await getWorkspace(workspaceId, userId);
-  if (!ws) return [];
-  if (!isDbReady()) {
-    const ids = memWorkspaceSessions.get(workspaceId) ?? [];
-    return ids.map((id) => memSessions.get(id)).filter(Boolean) as SessionRow[];
-  }
-  const r = await pool.query(
-    `SELECT s.* FROM "QCoreSession" s
-     JOIN "QCoreWorkspaceSession" ws ON ws."sessionId"=s."id"
-     WHERE ws."workspaceId"=$1
-     ORDER BY s."updatedAt" DESC`,
-    [workspaceId]
-  );
-  return r.rows as SessionRow[];
+  if (!isDbReady()) return memWorkspaces.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreWorkspace" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as WorkspaceRow) || null;
 }

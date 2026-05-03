@@ -106,7 +106,6 @@ type SessionSummary = {
   title: string;
   updatedAt: string;
   userId: string | null;
-  pinned?: boolean;
 };
 
 /** Saved agent preset — strategy + role overrides + revision count.
@@ -160,6 +159,18 @@ type QRightObjectLite = {
   id: string;
   title: string | null;
   kind: string | null;
+};
+
+type TemplateItem = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  input: string;
+  strategy: string;
+  overrides: Record<string, { provider: string; model: string }>;
+  isPublic: boolean;
+  useCount: number;
 };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -250,24 +261,6 @@ function bearerHeader(): HeadersInit {
   }
 }
 
-async function downloadRun(runId: string, format: "md" | "json") {
-  try {
-    const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/export?format=${format}`), {
-      headers: bearerHeader(),
-    });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `qcore-run-${runId.slice(0, 8)}.${format === "md" ? "md" : "json"}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch { /* silent */ }
-}
-
 /** Read SSE stream from a fetch Response, yielding parsed JSON payloads. */
 async function* readSSE<T = unknown>(body: ReadableStream<Uint8Array>): AsyncGenerator<T> {
   const reader = body.getReader();
@@ -334,9 +327,8 @@ export default function QCoreMultiAgentPage() {
   const [roleDefaults, setRoleDefaults] = useState<RoleDefault[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [pricing, setPricing] = useState<PricingRow[]>([]);
-  const [myWorkspaces, setMyWorkspaces] = useState<Array<{ id: string; name: string }>>([]);
   const [strategy, setStrategy] = useState<Strategy>("sequential");
-  const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string; systemPrompt?: string }>>({
+  const [overrides, setOverrides] = useState<Record<ConfigRoleId, { provider: string; model: string }>>({
     analyst: { provider: "", model: "" },
     writer: { provider: "", model: "" },
     writerB: { provider: "", model: "" },
@@ -395,6 +387,17 @@ export default function QCoreMultiAgentPage() {
   const [qrightObjects, setQrightObjects] = useState<QRightObjectLite[] | null>(null);
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
 
+  // V7-T: id of the run being continued (thread reply context).
+  const [continueFromRunId, setContinueFromRunId] = useState<string | null>(null);
+  // V7-Tmpl: run templates — save/load named input+strategy bundles.
+  const [templates, setTemplates] = useState<TemplateItem[]>([]);
+  const [publicTemplates, setPublicTemplates] = useState<TemplateItem[]>([]);
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateNameInput, setTemplateNameInput] = useState("");
+  const [saveTemplateFor, setSaveTemplateFor] = useState<string | null>(null);
+
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunState[]>([]);
@@ -428,21 +431,18 @@ export default function QCoreMultiAgentPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [provRes, agRes, sessRes, priceRes, healthRes, wsRes] = await Promise.all([
+        const [provRes, agRes, sessRes, priceRes, healthRes] = await Promise.all([
           fetch(apiUrl("/api/qcoreai/providers")),
           fetch(apiUrl("/api/qcoreai/agents")),
           fetch(apiUrl("/api/qcoreai/sessions"), { headers: bearerHeader() }),
           fetch(apiUrl("/api/qcoreai/pricing")),
           fetch(apiUrl("/api/qcoreai/health")),
-          fetch(apiUrl("/api/qcoreai/workspaces"), { headers: bearerHeader() }),
         ]);
         const provData = await provRes.json().catch(() => ({}));
         const agData = await agRes.json().catch(() => ({}));
         const sessData = await sessRes.json().catch(() => ({}));
         const priceData = await priceRes.json().catch(() => ({}));
         const healthData = await healthRes.json().catch(() => ({}));
-        const wsData = await wsRes.json().catch(() => ({}));
-        if (Array.isArray(wsData?.items)) setMyWorkspaces(wsData.items.map((w: any) => ({ id: w.id, name: w.name })));
         if (typeof healthData?.webhookConfigured === "boolean") {
           setWebhookConfigured(healthData.webhookConfigured);
         }
@@ -464,6 +464,18 @@ export default function QCoreMultiAgentPage() {
           setOverrides(next);
         }
         if (Array.isArray(sessData?.items)) setSessions(sessData.items);
+
+        // V7-Tmpl: load user's own templates in the background.
+        try {
+          const [tmplRes, pubTmplRes] = await Promise.all([
+            fetch(apiUrl("/api/qcoreai/templates"), { headers: bearerHeader() }),
+            fetch(apiUrl("/api/qcoreai/templates/public?limit=20")),
+          ]);
+          const tmplData = await tmplRes.json().catch(() => ({}));
+          const pubData = await pubTmplRes.json().catch(() => ({}));
+          if (Array.isArray(tmplData?.items)) setTemplates(tmplData.items);
+          if (Array.isArray(pubData?.items)) setPublicTemplates(pubData.items);
+        } catch { /* templates are non-critical */ }
       } catch (e: any) {
         setGlobalError(e?.message || "Failed to load QCoreAI config");
       }
@@ -918,6 +930,83 @@ export default function QCoreMultiAgentPage() {
     setBusy(false);
     setGlobalError(null);
     setInput("");
+    setContinueFromRunId(null);
+  }, []);
+
+  /* V7-T: continue a run — fills the textarea and marks thread context. */
+  const continueRun = useCallback((runId: string) => {
+    setContinueFromRunId(runId);
+    setInput("");
+    // Scroll textarea into view and focus it.
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 80);
+  }, []);
+
+  /* V7-Tmpl: save current run as a template. */
+  const saveAsTemplate = useCallback(async (runId: string, name: string) => {
+    const run = runs.find((r) => r.id === runId);
+    if (!run || !name.trim()) return;
+    setSavingTemplate(true);
+    try {
+      const body = {
+        name: name.trim(),
+        input: run.userInput,
+        strategy: run.strategy || strategy,
+        overrides: {
+          analyst: overrides.analyst,
+          writer: overrides.writer,
+          writerB: overrides.writerB,
+          critic: overrides.critic,
+        },
+        isPublic: false,
+      };
+      const res = await fetch(apiUrl("/api/qcoreai/templates"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.template) {
+        setTemplates((prev) => [data.template, ...prev]);
+        setSaveTemplateFor(null);
+        setTemplateNameInput("");
+      } else {
+        setGlobalError(data.error || "Failed to save template");
+      }
+    } catch (e: any) {
+      setGlobalError(e?.message || "Failed to save template");
+    } finally {
+      setSavingTemplate(false);
+    }
+  }, [runs, strategy, overrides]);
+
+  /* V7-Tmpl: apply a template — fills form fields. */
+  const applyTemplate = useCallback(async (t: TemplateItem) => {
+    setInput(t.input);
+    if (t.strategy === "sequential" || t.strategy === "parallel" || t.strategy === "debate") {
+      setStrategy(t.strategy as Strategy);
+    }
+    if (t.overrides && typeof t.overrides === "object") {
+      setOverrides((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          Object.entries(t.overrides).filter(([, v]) => v?.provider && v?.model)
+        ),
+      }));
+    }
+    setTemplatePanelOpen(false);
+    // Bump useCount in background.
+    fetch(apiUrl(`/api/qcoreai/templates/${t.id}/use`), { method: "POST" }).catch(() => {});
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(t.input.length, t.input.length);
+      }
+    }, 80);
   }, []);
 
   const removeSession = useCallback(async (id: string) => {
@@ -949,28 +1038,6 @@ export default function QCoreMultiAgentPage() {
       setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, title: data.session.title } : x)));
     } catch (e: any) {
       setGlobalError(e?.message || "Rename failed");
-    }
-  }, []);
-
-  const togglePinSession = useCallback(async (s: SessionSummary) => {
-    const next = !s.pinned;
-    try {
-      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...bearerHeader() },
-        body: JSON.stringify({ pinned: next }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      setSessions((prev) => {
-        const updated = prev.map((x) => (x.id === s.id ? { ...x, pinned: next } : x));
-        return [...updated].sort((a, b) => {
-          if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
-          return b.updatedAt.localeCompare(a.updatedAt);
-        });
-      });
-    } catch (e: any) {
-      setGlobalError(e?.message || "Pin failed");
     }
   }, []);
 
@@ -1025,6 +1092,7 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
+      if (continueFromRunId) body.continueFromRunId = continueFromRunId;
       // V6-P integration: send promptOverrides if user picked custom prompts.
       const promptOverridesBody: Record<string, { promptId: string }> = {};
       (Object.keys(promptSelections) as ConfigRoleId[]).forEach((role) => {
@@ -1064,6 +1132,8 @@ export default function QCoreMultiAgentPage() {
             realSessionId = payload.sessionId;
             setRuns((prev) => prev.map((r) => (r.id === tempRunId ? { ...r, id: realRunId, sessionId: realSessionId } : r)));
             if (!activeSessionId) setActiveSessionId(realSessionId);
+            // Clear thread continuation after the run is confirmed started.
+            setContinueFromRunId(null);
             break;
           case "agent_start":
             setRuns((prev) =>
@@ -1504,23 +1574,6 @@ export default function QCoreMultiAgentPage() {
                   title="Totals: runs, cost, tokens, strategy mix"
                 >
                   📊 Analytics
-                </Link>
-                <Link
-                  href="/qcoreai/workspaces"
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(255,255,255,0.25)",
-                    background: "rgba(255,255,255,0.08)",
-                    color: "#fff",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                  }}
-                  title="Share sessions with teammates"
-                >
-                  ⊞ Workspaces
                 </Link>
                 <Link
                   href="/qcoreai"
@@ -2269,6 +2322,37 @@ export default function QCoreMultiAgentPage() {
                     >
                       {whBusy ? "…" : "Remove"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setWhBusy(true);
+                        try {
+                          const res = await fetch(apiUrl("/api/qcoreai/me/webhook/test"), {
+                            method: "POST", headers: bearerHeader(),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok) alert(`Test sent to ${data.sentTo}`);
+                          else alert(data.error || "Test failed");
+                        } catch (e: any) {
+                          alert(e?.message || "Test failed");
+                        } finally {
+                          setWhBusy(false);
+                        }
+                      }}
+                      disabled={whBusy}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "#fff",
+                        border: "1px solid #bfdbfe",
+                        color: "#1d4ed8",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Send test
+                    </button>
                   </div>
                 )}
               </div>
@@ -2359,9 +2443,12 @@ export default function QCoreMultiAgentPage() {
                 )}
               </div>
 
+              {/* V7-Budget: monthly spend summary + limit setting */}
+              <SpendLimitPanel />
+
               {/* Budget cap selector — applies to every strategy. */}
               <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 700 }}>Spend cap:</span>
+                <span style={{ fontWeight: 700 }}>Per-run cap:</span>
                 {[
                   { v: 0, label: "No cap" },
                   { v: 0.05, label: "$0.05" },
@@ -2659,8 +2746,8 @@ export default function QCoreMultiAgentPage() {
                       style={{
                         flex: 1, textAlign: "left",
                         padding: "8px 10px", borderRadius: 8,
-                        border: s.pinned ? "1px solid rgba(6,182,212,0.3)" : "1px solid transparent",
-                        background: activeSessionId === s.id ? "rgba(6,182,212,0.1)" : s.pinned ? "rgba(6,182,212,0.04)" : "transparent",
+                        border: "1px solid transparent",
+                        background: activeSessionId === s.id ? "rgba(6,182,212,0.1)" : "transparent",
                         color: activeSessionId === s.id ? "#0e7490" : "#334155",
                         fontSize: 12, fontWeight: activeSessionId === s.id ? 700 : 500,
                         cursor: "pointer",
@@ -2670,46 +2757,6 @@ export default function QCoreMultiAgentPage() {
                     >
                       {s.title || "(untitled)"}
                     </button>
-                    <button
-                      onClick={() => togglePinSession(s)}
-                      title={s.pinned ? "Unpin session" : "Pin session"}
-                      style={{
-                        width: 24, borderRadius: 6,
-                        border: "1px solid transparent", background: "transparent",
-                        color: s.pinned ? "#0e7490" : "#cbd5e1", cursor: "pointer", fontSize: 13,
-                      }}
-                    >
-                      ★
-                    </button>
-                    {myWorkspaces.length > 0 && (
-                      <select
-                        title="Add session to workspace"
-                        defaultValue=""
-                        onChange={async (e) => {
-                          const wsId = e.target.value;
-                          if (!wsId) return;
-                          e.target.value = "";
-                          try {
-                            await fetch(apiUrl(`/api/qcoreai/workspaces/${wsId}/sessions`), {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json", ...bearerHeader() },
-                              body: JSON.stringify({ sessionId: s.id }),
-                            });
-                          } catch { /* silent */ }
-                        }}
-                        style={{
-                          width: 24, borderRadius: 6, padding: 0,
-                          border: "1px solid transparent", background: "transparent",
-                          color: "#cbd5e1", cursor: "pointer", fontSize: 11,
-                          appearance: "none", textAlign: "center",
-                        }}
-                      >
-                        <option value="">⊞</option>
-                        {myWorkspaces.map((w) => (
-                          <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
-                      </select>
-                    )}
                     <button
                       onClick={() => renameSessionPrompt(s)}
                       title="Rename session"
@@ -2784,6 +2831,12 @@ export default function QCoreMultiAgentPage() {
                     onChangeRefineText={setRefineText}
                     onCancelRefine={() => { setRefineOpen(null); setRefineText(""); }}
                     onApplyRefine={() => refineRun(run.id, refineText)}
+                    onContinue={continueRun}
+                    onSaveTemplate={(runId) => {
+                      setSaveTemplateFor(runId);
+                      setTemplateNameInput("");
+                      setTemplatePanelOpen(false);
+                    }}
                   />
                 ))
               )}
@@ -2894,6 +2947,169 @@ export default function QCoreMultiAgentPage() {
               </div>
             )}
 
+            {/* V7-Tmpl: save-template inline form */}
+            {saveTemplateFor && (
+              <div
+                style={{
+                  marginBottom: 10, padding: 12, borderRadius: 12,
+                  border: "1px solid rgba(15,23,42,0.15)", background: "#f8fafc",
+                  display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>📋 Save as template:</span>
+                <input
+                  autoFocus
+                  value={templateNameInput}
+                  onChange={(e) => setTemplateNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveAsTemplate(saveTemplateFor, templateNameInput);
+                    if (e.key === "Escape") setSaveTemplateFor(null);
+                  }}
+                  placeholder="Template name…"
+                  style={{
+                    flex: 1, padding: "5px 10px", borderRadius: 8,
+                    border: "1px solid #cbd5e1", fontSize: 12, outline: "none",
+                    background: "#fff", minWidth: 140,
+                  }}
+                />
+                <button
+                  onClick={() => saveAsTemplate(saveTemplateFor, templateNameInput)}
+                  disabled={savingTemplate || !templateNameInput.trim()}
+                  style={{
+                    padding: "5px 14px", borderRadius: 8, border: "none",
+                    background: templateNameInput.trim() ? "#0f172a" : "#94a3b8",
+                    color: "#fff", fontSize: 12, fontWeight: 700,
+                    cursor: templateNameInput.trim() ? "pointer" : "default",
+                  }}
+                >
+                  {savingTemplate ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={() => setSaveTemplateFor(null)}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    border: "1px solid #cbd5e1", background: "#fff",
+                    color: "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* V7-T: thread continuation pill */}
+            {continueFromRunId && (
+              <div
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
+                  padding: "6px 12px", borderRadius: 10,
+                  background: "rgba(124,58,237,0.08)",
+                  border: "1px solid rgba(124,58,237,0.25)",
+                  fontSize: 12, color: "#6d28d9", fontWeight: 600,
+                }}
+              >
+                <span>↩</span>
+                <span style={{ flex: 1 }}>Continuing thread — context from previous run loaded</span>
+                <button
+                  onClick={() => setContinueFromRunId(null)}
+                  title="Cancel continuation"
+                  style={{
+                    border: "none", background: "transparent", cursor: "pointer",
+                    color: "#7c3aed", fontSize: 16, lineHeight: 1, padding: "0 2px",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* V7-Tmpl: template panel */}
+            {templatePanelOpen && (
+              <div
+                style={{
+                  marginBottom: 10, borderRadius: 12,
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  background: "#f8fafc", padding: 12,
+                  maxHeight: 320, overflowY: "auto",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, flex: 1 }}>📋 Templates</span>
+                  <input
+                    placeholder="Filter…"
+                    value={templateQuery}
+                    onChange={(e) => setTemplateQuery(e.target.value)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 8, border: "1px solid #cbd5e1",
+                      fontSize: 12, width: 130, outline: "none", background: "#fff",
+                    }}
+                  />
+                  <button
+                    onClick={() => setTemplatePanelOpen(false)}
+                    style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: "#475569" }}
+                  >
+                    ×
+                  </button>
+                </div>
+                {templates.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
+                      My Templates
+                    </div>
+                    {templates
+                      .filter((t) => !templateQuery || t.name.toLowerCase().includes(templateQuery.toLowerCase()))
+                      .map((t) => (
+                        <div
+                          key={t.id}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+                            padding: "6px 10px", borderRadius: 8, background: "#fff",
+                            border: "1px solid rgba(15,23,42,0.08)", cursor: "pointer",
+                          }}
+                          onClick={() => applyTemplate(t)}
+                        >
+                          <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
+                          <span style={{ fontSize: 10, color: "#94a3b8", borderRadius: 6, padding: "2px 6px", background: "#f1f5f9" }}>{t.strategy}</span>
+                          {t.description && (
+                            <span style={{ fontSize: 11, color: "#64748b", flex: 2 }} title={t.description}>
+                              {t.description.slice(0, 60)}{t.description.length > 60 ? "…" : ""}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                  </>
+                )}
+                {publicTemplates.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, margin: "8px 0 4px" }}>
+                      Community
+                    </div>
+                    {publicTemplates
+                      .filter((t) => !templateQuery || t.name.toLowerCase().includes(templateQuery.toLowerCase()))
+                      .map((t) => (
+                        <div
+                          key={t.id}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+                            padding: "6px 10px", borderRadius: 8, background: "#fff",
+                            border: "1px solid rgba(124,58,237,0.12)", cursor: "pointer",
+                          }}
+                          onClick={() => applyTemplate(t)}
+                        >
+                          <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
+                          <span style={{ fontSize: 10, color: "#6d28d9", borderRadius: 6, padding: "2px 6px", background: "rgba(124,58,237,0.07)" }}>{t.useCount} uses</span>
+                        </div>
+                      ))}
+                  </>
+                )}
+                {templates.length === 0 && publicTemplates.length === 0 && (
+                  <p style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", margin: "12px 0" }}>
+                    No templates yet. Save a run as a template to reuse it.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Input */}
             <div style={{ display: "flex", gap: 8 }}>
               <textarea
@@ -2937,22 +3153,37 @@ export default function QCoreMultiAgentPage() {
                   Stop
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => compareMode ? sendCompareAll() : send()}
-                  disabled={!input.trim() || !anyConfigured}
-                  style={{
-                    padding: "12px 24px", borderRadius: 12, border: "none",
-                    background: !input.trim() || !anyConfigured ? "#94a3b8"
-                      : compareMode ? "linear-gradient(135deg, #f59e0b, #ef4444)"
-                      : "linear-gradient(135deg, #0d9488, #06b6d4)",
-                    color: "#fff", fontWeight: 800, fontSize: 14,
-                    cursor: !input.trim() || !anyConfigured ? "default" : "pointer",
-                    alignSelf: "stretch", whiteSpace: "nowrap",
-                  }}
-                >
-                  {compareMode ? "Send × 3" : "Send"}
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignSelf: "stretch" }}>
+                  <button
+                    type="button"
+                    onClick={() => compareMode ? sendCompareAll() : send()}
+                    disabled={!input.trim() || !anyConfigured}
+                    style={{
+                      flex: 1, padding: "12px 24px", borderRadius: 12, border: "none",
+                      background: !input.trim() || !anyConfigured ? "#94a3b8"
+                        : compareMode ? "linear-gradient(135deg, #f59e0b, #ef4444)"
+                        : "linear-gradient(135deg, #0d9488, #06b6d4)",
+                      color: "#fff", fontWeight: 800, fontSize: 14,
+                      cursor: !input.trim() || !anyConfigured ? "default" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {compareMode ? "Send × 3" : "Send"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplatePanelOpen((v) => !v)}
+                    title="Browse and apply run templates"
+                    style={{
+                      padding: "6px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)",
+                      background: templatePanelOpen ? "rgba(124,58,237,0.1)" : "#fff",
+                      color: templatePanelOpen ? "#6d28d9" : "#475569",
+                      fontWeight: 700, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap",
+                    }}
+                  >
+                    📋 Templates
+                  </button>
+                </div>
               )}
             </div>
           </section>
@@ -2986,6 +3217,132 @@ export default function QCoreMultiAgentPage() {
 /* ═══════════════════════════════════════════════════════════════════════
    Subcomponents
    ═══════════════════════════════════════════════════════════════════════ */
+
+function SpendLimitPanel() {
+  const [summary, setSummary] = useState<{
+    spentUsd: number; limitUsd: number | null; alertAt: number; pct: number | null;
+    alerting: boolean; exceeded: boolean;
+  } | null>(null);
+  const [limitInput, setLimitInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/qcoreai/me/spend-summary"), { headers: bearerHeader() })
+      .then((r) => r.json()).then((d) => { if (d.spentUsd !== undefined) setSummary(d); })
+      .catch(() => {});
+  }, []);
+
+  if (!summary) return null;
+
+  const pctNum = summary.pct !== null ? Math.min(100, Math.round(summary.pct * 100)) : null;
+  const barColor = summary.exceeded ? "#ef4444" : summary.alerting ? "#f59e0b" : "#10b981";
+
+  const save = async () => {
+    const v = parseFloat(limitInput);
+    if (!isFinite(v) || v <= 0) return;
+    setSaving(true);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/spend-limit"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ monthlyLimitUsd: v }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSummary((prev) => prev ? { ...prev, limitUsd: v, pct: prev.spentUsd / v, alerting: prev.spentUsd / v >= 0.8, exceeded: prev.spentUsd >= v } : prev);
+        setEditing(false);
+        setLimitInput("");
+      } else {
+        alert(data.error || "Failed to save limit");
+      }
+    } finally { setSaving(false); }
+  };
+
+  const remove = async () => {
+    setSaving(true);
+    try {
+      await fetch(apiUrl("/api/qcoreai/me/spend-limit"), { method: "DELETE", headers: bearerHeader() });
+      setSummary((prev) => prev ? { ...prev, limitUsd: null, pct: null, alerting: false, exceeded: false } : prev);
+      setEditing(false);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 12, padding: "10px 12px", borderRadius: 10,
+        border: `1px solid ${summary.alerting ? "rgba(245,158,11,0.4)" : "rgba(15,23,42,0.1)"}`,
+        background: summary.alerting ? "rgba(245,158,11,0.05)" : "#f8fafc",
+        fontSize: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ fontWeight: 800, color: "#0f172a" }}>Monthly spend</span>
+        <span style={{ fontWeight: 700, color: summary.exceeded ? "#dc2626" : "#0f172a" }}>
+          ${summary.spentUsd.toFixed(4)}
+        </span>
+        {summary.limitUsd && (
+          <span style={{ color: "#64748b" }}>/ ${summary.limitUsd.toFixed(2)}</span>
+        )}
+        {summary.alerting && !summary.exceeded && (
+          <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, background: "rgba(245,158,11,0.15)", color: "#92400e" }}>
+            ⚠ 80%+ of limit
+          </span>
+        )}
+        {summary.exceeded && (
+          <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, background: "rgba(239,68,68,0.1)", color: "#991b1b" }}>
+            LIMIT REACHED
+          </span>
+        )}
+        <button
+          onClick={() => { setEditing((v) => !v); setLimitInput(summary.limitUsd ? String(summary.limitUsd) : ""); }}
+          style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", color: "#475569" }}
+        >
+          {editing ? "Close" : summary.limitUsd ? "Edit limit" : "+ Set limit"}
+        </button>
+      </div>
+
+      {summary.limitUsd && pctNum !== null && (
+        <div style={{ height: 4, borderRadius: 2, background: "#e2e8f0", overflow: "hidden", marginBottom: editing ? 8 : 0 }}>
+          <div style={{ height: "100%", borderRadius: 2, background: barColor, width: `${pctNum}%`, transition: "width 0.5s" }} />
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: "#64748b" }}>$/month:</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={limitInput}
+            onChange={(e) => setLimitInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+            placeholder="e.g. 10"
+            style={{ width: 80, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 11, fontFamily: "inherit" }}
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {saving ? "…" : "Save"}
+          </button>
+          {summary.limitUsd && (
+            <button
+              onClick={remove}
+              disabled={saving}
+              style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LiveCostBadge({ run }: { run: RunState }) {
   const stats = runStats(run);
@@ -3037,8 +3394,8 @@ function RoleConfigCard({
   strategy: Strategy;
   providers: ProviderInfo[];
   pricing: PricingRow[];
-  value: { provider: string; model: string; systemPrompt?: string };
-  onChange: (v: { provider: string; model: string; systemPrompt?: string }) => void;
+  value: { provider: string; model: string };
+  onChange: (v: { provider: string; model: string }) => void;
   promptId?: string;
   onPromptChange?: (id: string) => void;
   availablePrompts?: Array<{ id: string; name: string; role: string; version: number }>;
@@ -3082,7 +3439,7 @@ function RoleConfigCard({
         onChange={(e) => {
           const nextProv = e.target.value;
           const p = providers.find((pp) => pp.id === nextProv);
-          onChange({ ...value, provider: nextProv, model: p?.defaultModel || "" });
+          onChange({ provider: nextProv, model: p?.defaultModel || "" });
         }}
         style={{
           width: "100%", padding: "6px 8px", borderRadius: 8,
@@ -3101,7 +3458,7 @@ function RoleConfigCard({
       </label>
       <select
         value={value.model}
-        onChange={(e) => onChange({ ...value, model: e.target.value })}
+        onChange={(e) => onChange({ provider: value.provider, model: e.target.value })}
         disabled={!availableModels.length}
         style={{
           width: "100%", padding: "6px 8px", borderRadius: 8,
@@ -3146,48 +3503,6 @@ function RoleConfigCard({
             </div>
           )}
         </>
-      )}
-      <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#475569", marginTop: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        Override system prompt
-      </label>
-      <textarea
-        value={value.systemPrompt || ""}
-        onChange={(e) => onChange({ ...value, systemPrompt: e.target.value })}
-        placeholder="Leave blank to use role default…"
-        rows={3}
-        style={{
-          width: "100%", padding: "6px 8px", borderRadius: 8, resize: "vertical",
-          border: value.systemPrompt ? "1px solid rgba(6,182,212,0.5)" : "1px solid rgba(15,23,42,0.15)",
-          background: "#fff", fontSize: 11, fontFamily: "monospace", boxSizing: "border-box",
-        }}
-      />
-      {value.systemPrompt && (
-        <button
-          onClick={async () => {
-            const name = window.prompt(`Save this prompt to library as (role: ${role.id}):`);
-            if (!name?.trim()) return;
-            try {
-              const res = await fetch(apiUrl("/api/qcoreai/prompts"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...bearerHeader() },
-                body: JSON.stringify({ name: name.trim(), role: role.id, content: value.systemPrompt }),
-              });
-              const data = await res.json().catch(() => ({}));
-              if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-              if (onPromptChange && data.prompt?.id) onPromptChange(data.prompt.id);
-              alert(`Saved to library: "${name.trim()}"`);
-            } catch (e: any) {
-              alert(e?.message || "Save failed");
-            }
-          }}
-          style={{
-            marginTop: 4, padding: "4px 10px", borderRadius: 6,
-            border: "1px solid rgba(6,182,212,0.4)", background: "rgba(6,182,212,0.08)",
-            color: "#0e7490", fontSize: 10, fontWeight: 700, cursor: "pointer",
-          }}
-        >
-          + Save to library
-        </button>
       )}
     </div>
   );
@@ -3335,6 +3650,8 @@ function RunCard({
   onChangeRefineText,
   onCancelRefine,
   onApplyRefine,
+  onContinue,
+  onSaveTemplate,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
@@ -3350,6 +3667,8 @@ function RunCard({
   onChangeRefineText?: (text: string) => void;
   onCancelRefine?: () => void;
   onApplyRefine?: () => void;
+  onContinue?: (runId: string) => void;
+  onSaveTemplate?: (runId: string) => void;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
@@ -3459,7 +3778,12 @@ function RunCard({
       {/* Final */}
       {run.finalContent && (
         <>
-          <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />
+          <FinalCard
+            content={run.finalContent}
+            runId={run.id}
+            stopped={run.status === "stopped"}
+            onContinue={onContinue}
+          />
           {run.status !== "running" && onOpenRefine && !refineOpen && (
             <button
               onClick={onOpenRefine}
@@ -3478,6 +3802,26 @@ function RunCard({
               }}
             >
               ✎ Refine
+            </button>
+          )}
+          {run.finalContent && run.status !== "running" && onSaveTemplate && (
+            <button
+              onClick={() => onSaveTemplate(run.id)}
+              title="Save this prompt + config as a reusable template"
+              style={{
+                marginTop: 6,
+                alignSelf: "flex-start",
+                padding: "4px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.2)",
+                background: "#f8fafc",
+                color: "#475569",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              📋 Save as template
             </button>
           )}
           {refineOpen && (
@@ -3832,28 +4176,30 @@ function RunCard({
                     🔗 Share
                   </button>
                 ) : null}
-                <button
-                  onClick={() => downloadRun(run.id, "md")}
+                <a
+                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
+                  target="_blank" rel="noreferrer"
                   style={{
                     padding: "5px 10px", borderRadius: 8,
                     background: "#fff", border: "1px solid #cbd5e1",
-                    color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
                   }}
                   title="Download as Markdown"
                 >
                   ⬇ Markdown
-                </button>
-                <button
-                  onClick={() => downloadRun(run.id, "json")}
+                </a>
+                <a
+                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=json`}
+                  target="_blank" rel="noreferrer"
                   style={{
                     padding: "5px 10px", borderRadius: 8,
                     background: "#fff", border: "1px solid #cbd5e1",
-                    color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
                   }}
                   title="Download as JSON"
                 >
                   ⬇ JSON
-                </button>
+                </a>
               </>
             )}
             {!hasAgents && run.finalContent && onLoadDetails && (
@@ -4019,7 +4365,12 @@ function groupTurns(turns: AgentTurn[]): TurnGroup[] {
   return out;
 }
 
-function FinalCard({ content, runId, stopped }: { content: string; runId: string; stopped?: boolean }) {
+function FinalCard({
+  content, runId, stopped, onContinue,
+}: {
+  content: string; runId: string; stopped?: boolean;
+  onContinue?: (runId: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -4053,22 +4404,37 @@ function FinalCard({ content, runId, stopped }: { content: string; runId: string
         <span style={{ fontWeight: 800, fontSize: 13, color: stopped ? "#92400e" : "#581c87" }}>
           {stopped ? "Partial answer (stopped)" : "Final answer"}
         </span>
-        <button
-          onClick={copy}
-          style={{
-            marginLeft: "auto",
-            padding: "4px 10px",
-            borderRadius: 8,
-            border: "1px solid rgba(124,58,237,0.3)",
-            background: copied ? "rgba(124,58,237,0.12)" : "#fff",
-            color: "#6d28d9",
-            fontSize: 11,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          {onContinue && (
+            <button
+              onClick={() => onContinue(runId)}
+              title="Continue this thread — sends a follow-up with full context"
+              style={{
+                padding: "4px 10px", borderRadius: 8,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "#fff", color: "#6d28d9",
+                fontSize: 11, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              ↩ Continue
+            </button>
+          )}
+          <button
+            onClick={copy}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 8,
+              border: "1px solid rgba(124,58,237,0.3)",
+              background: copied ? "rgba(124,58,237,0.12)" : "#fff",
+              color: "#6d28d9",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </div>
       <div style={{ fontSize: 14, lineHeight: 1.6, color: "#0f172a" }}>
         <Markdown source={content} />

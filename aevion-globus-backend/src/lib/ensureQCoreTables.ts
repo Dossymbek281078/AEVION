@@ -275,7 +275,6 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspace_owner_idx" ON "QCoreWorkspace" ("ownerId");`);
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreWorkspaceMember" (
       "workspaceId" TEXT NOT NULL,
@@ -285,7 +284,6 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       PRIMARY KEY ("workspaceId", "userId")
     );
   `);
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreWorkspaceSession" (
       "workspaceId" TEXT NOT NULL,
@@ -295,6 +293,83 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspaceSession_session_idx" ON "QCoreWorkspaceSession" ("sessionId");`);
+
+  // Batch runs — run N prompts against the same agent config in one call.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreBatch" (
+      "id"             TEXT PRIMARY KEY,
+      "ownerUserId"    TEXT NOT NULL,
+      "strategy"       TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "status"         TEXT NOT NULL DEFAULT 'running',
+      "totalRuns"      INTEGER NOT NULL DEFAULT 0,
+      "completedRuns"  INTEGER NOT NULL DEFAULT 0,
+      "failedRuns"     INTEGER NOT NULL DEFAULT 0,
+      "totalCostUsd"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "inputs"         JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "completedAt"    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreBatch_owner_created_idx" ON "QCoreBatch" ("ownerUserId", "createdAt" DESC);`);
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "batchId" TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_batchId_idx" ON "QCoreRun" ("batchId") WHERE "batchId" IS NOT NULL;`);
+
+  // Per-user monthly spend limit.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSpendLimit" (
+      "userId"          TEXT PRIMARY KEY,
+      "monthlyLimitUsd" DOUBLE PRECISION NOT NULL,
+      "alertAt"         DOUBLE PRECISION NOT NULL DEFAULT 0.8,
+      "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Scheduled batch runs.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreScheduledBatch" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "inputs"      JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "schedule"    TEXT NOT NULL DEFAULT 'once',
+      "nextRunAt"   TIMESTAMPTZ,
+      "lastRunAt"   TIMESTAMPTZ,
+      "lastBatchId" TEXT,
+      "enabled"     BOOLEAN NOT NULL DEFAULT TRUE,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_owner_idx" ON "QCoreScheduledBatch" ("ownerUserId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_nextRun_idx" ON "QCoreScheduledBatch" ("nextRunAt") WHERE "enabled"=TRUE AND "nextRunAt" IS NOT NULL;`);
+
+  // QCoreRun — threading.
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "parentRunId" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "threadId" TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_threadId_startedAt_idx" ON "QCoreRun" ("threadId", "startedAt");`);
+
+  // Run templates.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreTemplate" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "input"       TEXT NOT NULL,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "useCount"    INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_owner_updated_idx" ON "QCoreTemplate" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_public_uses_idx" ON "QCoreTemplate" ("isPublic", "useCount" DESC, "updatedAt" DESC);`);
 
     dbReady = true;
     ensured = true;

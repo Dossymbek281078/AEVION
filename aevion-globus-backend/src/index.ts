@@ -15,7 +15,7 @@ import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { awardsRouter } from "./routes/awards";
-import { qcoreaiRouter } from "./routes/qcoreai";
+import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
@@ -435,3 +435,6 @@ const httpServer = app.listen(PORT, () => {
 // QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)
 // but lets clients interject mid-run guidance on the same connection.
 attachQCoreWebSocket(httpServer, "/api/qcoreai/ws");
+
+// QCoreAI scheduler — polls for due scheduled batches every minute.
+startScheduler();

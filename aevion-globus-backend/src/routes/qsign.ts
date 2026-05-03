@@ -3,6 +3,15 @@ import crypto from "crypto";
 
 export const qsignRouter = Router();
 
+qsignRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "qsign-legacy",
+    note: "v1 HMAC stub; production traffic should use /api/qsign/v2",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Секрет подписи (пока MVP)
 const SIGN_SECRET = process.env.QSIGN_SECRET || "dev-qsign-secret";
 

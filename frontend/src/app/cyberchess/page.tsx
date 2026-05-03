@@ -3428,6 +3428,17 @@ export default function CyberChessPage(){
                   <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                     <span style={{fontSize:13,fontWeight:800,color:CC.gold}}>{g.rating}</span>
                     <Badge tone={catBadge} size="xs">{g.category}</Badge>
+                    {g.moves.length>4&&<button title="⚔ Дуэль с прошлым собой" onClick={evt=>{
+                      evt.stopPropagation();
+                      const src:GhostSourceGame={id:g.id,date:g.date,moves:g.moves,playerColor:g.playerColor as "w"|"b",result:g.result,rating:g.rating,aiLevel:g.aiLevel,opening:g.opening};
+                      const cfg=makeDuelConfig(src,"rematch");
+                      sGhostDuelMode(true);sGhostDuelConfig(cfg);sGhostDuelDivergePly(null);
+                      sTab("play");sSetup(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sP2pMode(false);
+                      const myCol=cfg.userPlaysAs;sPCol(myCol);sFlip(myCol==="b");
+                      const ng=new Chess();setGame(ng);sBk(k=>k+1);
+                      sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sOn(true);sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+                      showToast(`👻 Дуэль: ${formatPastDate(g.date)} — ${g.aiLevel}. Попробуй сыграть лучше!`,"success");
+                    }} style={{padding:"2px 7px",borderRadius:6,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:10,fontWeight:900,cursor:"pointer"}}>⚔</button>}
                   </div>
                 </button>);
               })}
@@ -3940,6 +3951,15 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
+          {/* Ghost Duel HUD */}
+          {ghostDuelMode&&ghostDuelConfig&&on&&!over&&(tab==="play")&&<div style={{padding:"8px 14px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"1px solid #a78bfa",display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
+            <span style={{fontSize:18}}>👻</span>
+            <span style={{fontWeight:900,color:"#6d28d9",fontSize:13}}>Дуэль с прошлым</span>
+            <span style={{fontSize:11,color:"#5b21b6"}}>{formatPastDate(ghostDuelConfig.pastDate)} · {ghostDuelConfig.pastAiLevel} · ход {hist.length}/{ghostDuelConfig.pastMoves.length}</span>
+            {ghostDuelDivergePly!==null&&<span style={{fontSize:11,color:"#dc2626",fontWeight:800}}>⚡ Отклонение на ходу {Math.floor(ghostDuelDivergePly/2)+1}</span>}
+            <div style={{flex:1}}/>
+            <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
+          </div>}
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}

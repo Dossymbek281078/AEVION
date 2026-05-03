@@ -38,6 +38,7 @@ import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { qcontractRouter } from "./routes/qcontract";
+import { healthaiRouter } from "./routes/healthai";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -403,6 +404,9 @@ app.use("/api/smeta-trainer", smetaTrainerRouter);
 
 // QContract — self-destruct smart documents
 app.use("/api/qcontract", qcontractRouter);
+
+// HealthAI — personal AI doctor
+app.use("/api/healthai", healthaiRouter);
 
 app.use(
   (

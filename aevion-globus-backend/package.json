@@ -13,6 +13,8 @@
     "smoke:all": "node scripts/all-smokes.js",
     "smoke:read-only": "READ_ONLY=1 node scripts/all-smokes.js",
     "smoke:auth-replay": "node scripts/auth-replay-smoke.js",
+    "smoke:planet": "node scripts/planet-smoke.js",
+    "smoke:awards": "node scripts/awards-smoke.js",
     "check:prod-env": "node scripts/check-prod-env.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "test": "vitest run",

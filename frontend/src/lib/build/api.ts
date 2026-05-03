@@ -783,6 +783,13 @@ export const buildApi = {
         applicantName: string | null;
       }[];
     }>("GET", "/api/build/referrals/me"),
+  publicStats: () =>
+    call<{ vacancies: number; candidates: number; projects: number }>(
+      "GET",
+      "/api/build/health",
+      undefined,
+      { auth: false },
+    ),
   buildStats: () =>
     call<{
       vacancies: { open: number; total: number };
@@ -889,6 +896,26 @@ export const buildApi = {
     }>("GET", "/api/build/notifications/summary"),
   notificationsRead: (senderId: string) =>
     call<{ markedRead: number }>("POST", "/api/build/notifications/read", { senderId }),
+
+  notifications: () =>
+    call<{
+      items: {
+        id: string;
+        kind: string;
+        title: string;
+        body: string;
+        href: string;
+        read: boolean;
+        at: string;
+      }[];
+      total: number;
+    }>("GET", "/api/build/notifications"),
+
+  markNotificationsRead: () =>
+    call<{ marked: boolean }>("POST", "/api/build/notifications/mark-read"),
+
+  changePassword: (current: string, next: string) =>
+    call<{ changed: boolean }>("PATCH", "/api/build/users/me/password", { current, next }),
 
   // Files
   uploadFile: (input: {

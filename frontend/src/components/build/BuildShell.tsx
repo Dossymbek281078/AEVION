@@ -6,15 +6,16 @@ import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
 
-const NAV: { href: string; label: string }[] = [
+const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build", label: "Projects" },
   { href: "/build/vacancies", label: "Vacancies" },
-  { href: "/build/talent", label: "Talent" },
-  { href: "/build/coach", label: "AI Coach" },
-  { href: "/build/saved", label: "Saved" },
-  { href: "/build/create-project", label: "New project" },
-  { href: "/build/profile", label: "Profile" },
-  { href: "/build/messages", label: "Messages" },
+  { href: "/build/talent", label: "Talent", authOnly: true },
+  { href: "/build/coach", label: "AI Coach", authOnly: true },
+  { href: "/build/saved", label: "Saved", authOnly: true },
+  { href: "/build/trials", label: "Trials", authOnly: true },
+  { href: "/build/create-project", label: "New project", authOnly: true },
+  { href: "/build/profile", label: "Profile", authOnly: true },
+  { href: "/build/messages", label: "Messages", authOnly: true },
   { href: "/build/pricing", label: "Pricing" },
   { href: "/build/loyalty", label: "Loyalty" },
   { href: "/build/why-aevion", label: "Why us" },
@@ -44,7 +45,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="hidden items-center gap-1 sm:flex">
-            {NAV.map((n) => {
+            {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
               const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
               return (
                 <Link
@@ -74,13 +75,13 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                 <PlanBadge />
                 <TierBadge />
                 <NotificationBell />
-                <span className="hidden text-slate-400 sm:inline">{user.email}</span>
-                <button
-                  onClick={logout}
-                  className="rounded-md border border-white/10 px-3 py-1.5 text-slate-200 hover:bg-white/10"
+                <Link
+                  href="/build/settings"
+                  title="Account settings"
+                  className={`rounded-md border border-white/10 px-2.5 py-1.5 text-slate-200 hover:bg-white/10 ${pathname === "/build/settings" ? "bg-white/10" : ""}`}
                 >
-                  Sign out
-                </button>
+                  ⚙
+                </Link>
               </>
             ) : (
               <span className="text-slate-500">Not signed in</span>
@@ -89,7 +90,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex items-center gap-1 overflow-x-auto border-t border-white/5 px-4 py-2 sm:hidden">
-          {NAV.map((n) => {
+          {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
             const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
             return (
               <Link
@@ -302,8 +303,9 @@ function NotificationBell() {
           className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-white/10 bg-slate-900 p-3 text-sm shadow-xl"
           onMouseLeave={() => setOpen(false)}
         >
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Notifications
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notifications</span>
+            <Link href="/build/notifications" onClick={() => setOpen(false)} className="text-[10px] text-emerald-300 hover:underline">See all →</Link>
           </div>
           {!summary ? (
             <p className="text-xs text-slate-500">Loading…</p>
@@ -342,7 +344,7 @@ function NotificationBell() {
               {summary.applicationUpdates > 0 && (
                 <li>
                   <Link
-                    href="/build/profile"
+                    href="/build/notifications"
                     onClick={() => setOpen(false)}
                     className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
                   >

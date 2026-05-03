@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
+import { getApiBase } from "@/lib/apiBase";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,6 @@ async function getOrigin(): Promise<string> {
   return "https://aevion.tech";
 }
 
-// Top-level routes only. Per-resource pages (e.g. /modules/<id>,
-// /bureau/cert/<id>, /awards/entry/<id>) live in each module's own
-// /api/<module>/sitemap.xml — those are aggregated by the backend
-// /api/aevion/sitemap.xml sitemap-index, which is the canonical entry
-// point referenced from /robots.txt.
 const TOP_LEVEL_ROUTES: Array<{
   path: string;
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
@@ -37,15 +33,52 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/awards/results", changeFrequency: "daily", priority: 0.8 },
   { path: "/qcoreai", changeFrequency: "weekly", priority: 0.7 },
   { path: "/cyberchess", changeFrequency: "weekly", priority: 0.7 },
+  // QBuild static routes
+  { path: "/build", changeFrequency: "daily", priority: 1.0 },
+  { path: "/build/vacancies", changeFrequency: "hourly", priority: 0.9 },
+  { path: "/build/stats", changeFrequency: "hourly", priority: 0.7 },
+  { path: "/build/pricing", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/build/why-aevion", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/build/referrals", changeFrequency: "daily", priority: 0.5 },
 ];
 
+async function fetchIds(path: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${getApiBase()}${path}`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const j = await res.json();
+    return (j?.data?.items ?? []).map((r: { id: string }) => r.id).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const origin = await getOrigin();
+  const [origin, projectIds, vacancyIds] = await Promise.all([
+    getOrigin(),
+    fetchIds("/api/build/projects?limit=200&status=OPEN"),
+    fetchIds("/api/build/vacancies?limit=200&status=OPEN"),
+  ]);
+
   const today = new Date();
-  return TOP_LEVEL_ROUTES.map((r) => ({
+  const staticRoutes: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map((r) => ({
     url: `${origin}${r.path}`,
     lastModified: today,
     changeFrequency: r.changeFrequency,
     priority: r.priority,
   }));
+
+  const projectRoutes: MetadataRoute.Sitemap = projectIds.map((id) => ({
+    url: `${origin}/build/p/${id}`,
+    changeFrequency: "daily" as const,
+    priority: 0.6,
+  }));
+
+  const vacancyRoutes: MetadataRoute.Sitemap = vacancyIds.map((id) => ({
+    url: `${origin}/build/vacancy/${id}`,
+    changeFrequency: "daily" as const,
+    priority: 0.7,
+  }));
+
+  return [...staticRoutes, ...projectRoutes, ...vacancyRoutes];
 }

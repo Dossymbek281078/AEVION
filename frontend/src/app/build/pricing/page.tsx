@@ -327,8 +327,7 @@ function OrdersLedger({
     <section id="orders" className="mt-12">
       <h2 className="text-lg font-bold text-white">Your orders</h2>
       <p className="mt-1 text-sm text-slate-400">
-        Subscription starts and boost charges land here. Use «Pay (test)» below to flip a pending order to PAID — that's the stub
-        for the future Stripe / YooKassa webhook.
+        Subscription and boost charges. Pending orders are confirmed automatically via the payment provider webhook.
       </p>
       <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
         <table className="w-full min-w-[640px] text-left text-sm">
@@ -365,7 +364,7 @@ function OrdersLedger({
                         onClick={() => onPay(o.id)}
                         className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-950 hover:bg-emerald-400"
                       >
-                        Pay (test)
+                        Pay
                       </button>
                     )}
                   </td>

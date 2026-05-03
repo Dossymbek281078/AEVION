@@ -48,7 +48,14 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 65 --json mergeable,mergeStateStatus)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr view 66 --json mergeable,mergeStateStatus)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 65)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 66)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 66)",
+      "Bash(netstat -ano)",
+      "Bash(powershell -Command \"Get-Process -Id 20196,15212 | Select-Object Id, ProcessName, Path, StartTime | Format-List\")",
+      "Bash(powershell *)",
+      "Bash(curl -s -o /dev/null -w \"PORT 3000 \\(frontend-chess\\) HTTP %{http_code}\\\\n\" http://localhost:3000/cyberchess)",
+      "Bash(curl -s -o /dev/null -w \"PORT 3001 \\(aevion-build\\)   HTTP %{http_code}\\\\n\" http://localhost:3001/cyberchess)",
+      "Bash(curl -s http://localhost:3000/cyberchess)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3000/cyberchess)"
     ]
   }
 }

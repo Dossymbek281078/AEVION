@@ -8,7 +8,6 @@
  */
 
 import { Router, type Request } from "express";
-import { applyEtag } from "../lib/ogEtag";
 
 export const aevionHubRouter = Router();
 
@@ -150,103 +149,12 @@ aevionHubRouter.get("/openapi.json", (req, res) => {
           "@aevion/qshield-client",
           "@aevion/pipeline-client",
           "@aevion/qright-client",
-          "@aevion/planet-client",
-          "@aevion/bureau-client",
         ],
         docs: "https://aevion.com/docs/sdk",
       },
       generatedAt: new Date().toISOString(),
     },
   });
-});
-
-/**
- * GET /api/aevion/sitemap.xml — sitemap-index aggregating every module's
- * own sitemap. Per sitemaps.org, search engines that hit a sitemapindex
- * file fan out to each <sitemap><loc> child, so this single URL gets all
- * 7 surfaces indexed without listing every URL twice.
- *
- * Use case: a single Sitemap: directive in robots.txt + Google/Bing
- * Search Console submission covers the whole platform.
- */
-aevionHubRouter.get("/sitemap.xml", (req, res) => {
-  const proto =
-    (req.headers["x-forwarded-proto"] as string) ||
-    (req.protocol as string) ||
-    "https";
-  const host = req.headers.host || "aevion.tech";
-  const origin = `${proto}://${host}`;
-  const today = new Date().toISOString().slice(0, 10);
-
-  const modules: Array<{ name: string; path: string }> = [
-    { name: "modules", path: "/api/modules/sitemap.xml" },
-    { name: "bureau", path: "/api/bureau/sitemap.xml" },
-    { name: "awards", path: "/api/awards/sitemap.xml" },
-    { name: "pipeline", path: "/api/pipeline/sitemap.xml" },
-    { name: "qright", path: "/api/qright/sitemap.xml" },
-    { name: "quantum-shield", path: "/api/quantum-shield/sitemap.xml" },
-    { name: "planet", path: "/api/planet/sitemap.xml" },
-  ];
-
-  function esc(s: string): string {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;");
-  }
-
-  const items = modules
-    .map(
-      (m) => `  <sitemap>
-    <loc>${esc(origin + m.path)}</loc>
-    <lastmod>${today}</lastmod>
-  </sitemap>`,
-    )
-    .join("\n");
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${items}
-</sitemapindex>`;
-
-  res.setHeader("Content-Type", "application/xml; charset=utf-8");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  if (applyEtag(req, res, `aevion-index-${modules.length}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
-  res.send(xml);
-});
-
-/**
- * GET /api/aevion/robots.txt — robots.txt with the Sitemap: directive
- * pointing at the sitemap-index. Frontend can either proxy this verbatim
- * or expose its own /robots.txt that references the same canonical URL.
- *
- * No path-level Disallow rules; per-route opt-outs (admin/, api-backend/)
- * are handled by Next.js metadata in app/robots.ts.
- */
-aevionHubRouter.get("/robots.txt", (req, res) => {
-  const proto =
-    (req.headers["x-forwarded-proto"] as string) ||
-    (req.protocol as string) ||
-    "https";
-  const host = req.headers.host || "aevion.tech";
-  const origin = `${proto}://${host}`;
-
-  res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=3600");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.send(
-    [
-      "User-agent: *",
-      "Allow: /",
-      "Disallow: /admin/",
-      "Disallow: /api-backend/",
-      "",
-      `Sitemap: ${origin}/api/aevion/sitemap.xml`,
-      "",
-    ].join("\n"),
-  );
 });
 
 /**

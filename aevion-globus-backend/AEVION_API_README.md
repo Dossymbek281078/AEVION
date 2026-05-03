@@ -71,11 +71,7 @@ npm install @aevion/pipeline-client
 npm install @aevion/qshield-client
 npm install @aevion/qsign-client
 npm install @aevion/qright-client
-npm install @aevion/planet-client
-npm install @aevion/bureau-client
 ```
-
-**Full ecosystem coverage**: 6 zero-dep TypeScript clients, one per major product.
 
 Common usage:
 

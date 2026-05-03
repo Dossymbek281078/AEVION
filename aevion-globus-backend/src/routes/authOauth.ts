@@ -101,7 +101,7 @@ function successRedirect(): string {
 
 const STATE_COOKIE = "aevion_oauth_state";
 
-function setStateCookie(res: { setHeader: (k: string, v: string) => void }, value: string): void {
+function setStateCookie(res: { setHeader: (k: string, v: string) => void; appendHeader?: (k: string, v: string) => void; getHeader?: (k: string) => unknown }, value: string): void {
   // Lax keeps the cookie on the redirect back from the provider; Strict
   // would drop it because the callback navigation is initiated by an
   // external origin. HttpOnly + Secure (when behind HTTPS) prevent JS
@@ -114,7 +114,21 @@ function setStateCookie(res: { setHeader: (k: string, v: string) => void }, valu
     "SameSite=Lax",
   ];
   if (process.env.NODE_ENV === "production") parts.push("Secure");
-  res.setHeader("Set-Cookie", parts.join("; "));
+  const cookie = parts.join("; ");
+  // Use appendHeader so we don't clobber other Set-Cookie headers any
+  // upstream middleware may have added (e.g. session cookie, CSRF).
+  if (typeof res.appendHeader === "function") {
+    res.appendHeader("Set-Cookie", cookie);
+  } else {
+    const existing = res.getHeader?.("Set-Cookie");
+    if (Array.isArray(existing)) {
+      res.setHeader("Set-Cookie", [...(existing as string[]), cookie].join("\r\nSet-Cookie: "));
+    } else if (typeof existing === "string") {
+      res.setHeader("Set-Cookie", `${existing}\r\nSet-Cookie: ${cookie}`);
+    } else {
+      res.setHeader("Set-Cookie", cookie);
+    }
+  }
 }
 
 function readStateCookie(cookieHeader: string | undefined): string | null {
@@ -123,6 +137,46 @@ function readStateCookie(cookieHeader: string | undefined): string | null {
     const [k, v] = raw.split("=").map((s) => s.trim());
     if (k === STATE_COOKIE && v) return decodeURIComponent(v);
   }
+  return null;
+}
+
+// Mirror the AuthSession bootstrap from auth.ts so OAuth users get the
+// same session-revocation surface (/sessions, /logout-all). The CREATE
+// is idempotent; we cache the outcome to skip the round-trip on hot paths.
+let ensuredAuthSession = false;
+async function ensureAuthSessionTable(): Promise<void> {
+  if (ensuredAuthSession) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "AuthSession" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "lastActiveAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "ip" TEXT,
+      "userAgent" TEXT,
+      "revokedAt" TIMESTAMPTZ
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "AuthSession_user_idx" ON "AuthSession" ("userId", "createdAt" DESC);`
+  );
+  ensuredAuthSession = true;
+}
+
+function clientIp(req: { headers: any; socket?: any; ip?: string }): string | null {
+  const xff = req.headers?.["x-forwarded-for"];
+  const first = Array.isArray(xff)
+    ? xff[0]
+    : typeof xff === "string"
+    ? xff.split(",")[0]?.trim()
+    : null;
+  return first || req.ip || req.socket?.remoteAddress || null;
+}
+
+function clientUa(req: { headers: any }): string | null {
+  const ua = req.headers?.["user-agent"];
+  if (Array.isArray(ua)) return ua[0]?.slice(0, 500) || null;
+  if (typeof ua === "string") return ua.slice(0, 500);
   return null;
 }
 
@@ -288,8 +342,21 @@ authOauthRouter.get("/:provider/callback", async (req, res) => {
       user = { id: userId, email, name, role };
     }
 
+    // Mint a session row so this token can be revoked via /sessions or
+    // /logout-all the same way password-login tokens can. Without this,
+    // OAuth users would be invisible to /sign-out-everywhere and any
+    // strict route would treat their tokens as legacy (no sid → bypass
+    // revocation check).
+    await ensureAuthSessionTable();
+    const sid = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO "AuthSession" ("id", "userId", "ip", "userAgent")
+       VALUES ($1, $2, $3, $4)`,
+      [sid, user.id, clientIp(req), clientUa(req)],
+    );
+
     const token = jwt.sign(
-      { sub: user.id, email: user.email, role: user.role },
+      { sub: user.id, email: user.email, role: user.role, sid },
       getJwtSecret(),
       { expiresIn: process.env.AUTH_JWT_EXPIRES_IN || "7d" },
     );

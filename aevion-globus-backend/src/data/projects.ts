@@ -117,9 +117,9 @@ export const projects: GlobusProject[] = [
     code: "QPAYNET",
     name: "QPayNet Embedded — Payment Core",
     description:
-      "Встроенная платёжная система для приложений AEVION: счета, переводы, комиссии, интеграции.",
+      "Встроенная платёжная система для приложений AEVION: кошельки, переводы, мерчант-ключи, комиссии.",
     kind: "service",
-    status: "planning",
+    status: "mvp",
     priority: 1,
     tags: ["payments", "engine", "fintech"],
     createdAt: now,

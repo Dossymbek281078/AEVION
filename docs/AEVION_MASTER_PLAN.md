@@ -151,7 +151,8 @@ without explicit user direction.
 |---|---|---|---|
 | P0-1 | Custom domain on Vercel (`aevion.app` or `aevion.tech`) — DNS cutover | aevion-core | DNS |
 | P0-2 | Remove SSO gating from Vercel preview / prod (per memory `reference_prod_deploy_state_2026-05-03`) | aevion-core | infra access |
-| P0-3 | Railway backend public URL stable; env audit: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `QSIGN_HMAC_V1_SECRET`, `QSIGN_ED25519_V1_PRIVATE`, `STRIPE_SECRET_KEY`, OAuth secrets | aevion-backend-modules | infra |
+| ~~P0-3~~ | ~~Env audit~~ ✅ done in PR #92 — see `docs/PROD_ENV_CHECKLIST.md` + `npm run check:prod-env` | aevion-backend-modules | — |
+| P0-3a | Wire `npm run check:prod-env` into the Railway deploy pre-step | aevion-core / infra | P0-3 |
 | P0-4 | Public smoke target — point all `npm run smoke:*` scripts to prod URL via `BASE` env | aevion-backend-modules | P0-2 |
 
 **Until P0-1+P0-2+P0-3 are done, every "shipped" Tier 1-3 module is invisible
@@ -217,9 +218,9 @@ When the user is in a specific window and asks "what's next?", pick from
 this section. It maps to § 4 phases and is updated as work lands.
 
 ### `aevion-backend-modules` (this window's owner)
-1. **P0-3** env audit doc — write `docs/PROD_ENV_CHECKLIST.md` listing every required env var per module (gates Phase 0 deploy)
-2. **P1-7** OpenAPI 0.4.0 → 0.5.0 with full request/response schemas for Tier 1 endpoints
-3. **P1-2b** tokenVersion replay-rejection smoke (auth) — covers a gap in the daily cron coverage
+1. **P1-7** OpenAPI 0.4.0 → 0.5.0 with full request/response schemas for Tier 1 endpoints
+2. **P1-2b** tokenVersion replay-rejection smoke (auth) — covers a gap in the daily cron coverage
+3. **P1-4** Backup/restore drill — run `scripts/backup.mjs`, verify restore on a fresh DB, document RTO/RPO in `docs/RUNBOOK.md`
 
 ### `aevion-core`
 1. **P0-1+P0-2** DNS + SSO cutover — single biggest unblock for the whole roadmap
@@ -261,6 +262,7 @@ this section. It maps to § 4 phases and is updated as work lands.
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-03  #92  docs(env): PROD_ENV_CHECKLIST.md + check-prod-env validator (P0-3 done)
 2026-05-03  #89  ci(platform): daily smoke runner orchestrator + GitHub Actions cron (P1-3 done)
 2026-05-03  #88  docs(plan): mark P1-2 done — security pass 2 shipped in #80+#85
 2026-05-03  #87  docs(plan): mark P1-1 done — Sentry coverage shipped

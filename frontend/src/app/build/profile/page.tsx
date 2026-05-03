@@ -185,9 +185,18 @@ function ProfileBody() {
         )}
       </aside>
 
-      <section className="lg:col-span-3">
-        <h2 className="mb-3 mt-2 text-lg font-semibold text-white">Ask the AI coach</h2>
-        <AiCoachChat height={420} />
+      <section className="lg:col-span-3 grid gap-6 lg:grid-cols-2">
+        <div>
+          <h2 className="mb-3 mt-2 text-lg font-semibold text-white">Ask the AI coach</h2>
+          <AiCoachChat height={420} />
+        </div>
+        <div>
+          <h2 className="mb-3 mt-2 text-lg font-semibold text-white">Job alerts & verification</h2>
+          <div className="space-y-4">
+            <JobAlertsWidget />
+            <VerificationWidget />
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -670,3 +679,147 @@ function OnboardingChecklist() {
   );
 }
 
+function JobAlertsWidget() {
+  const [alert, setAlert] = useState<{ keywords: string; skills: string; city: string | null; active: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [keywords, setKeywords] = useState("");
+  const [skills, setSkills] = useState("");
+  const [city, setCity] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    buildApi.myAlert().then((r) => {
+      setAlert(r.alert);
+      if (r.alert) {
+        setKeywords(r.alert.keywords);
+        setSkills(r.alert.skills);
+        setCity(r.alert.city ?? "");
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  async function save() {
+    setBusy(true);
+    try {
+      const r = await buildApi.upsertAlert({ keywords, skills, city: city || undefined });
+      setAlert(r.alert);
+      setEditing(false);
+    } catch { /* ignore */ } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unsubscribe() {
+    setBusy(true);
+    try {
+      await buildApi.deleteAlert();
+      setAlert(null);
+    } catch { /* ignore */ } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) return <div className="text-xs text-slate-400">Loading…</div>;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4" id="alerts">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white">🔔 Job alerts</h3>
+        {alert?.active && !editing && (
+          <button onClick={() => setEditing(true)} className="text-xs text-emerald-300 hover:underline">Edit</button>
+        )}
+      </div>
+      {!alert?.active && !editing ? (
+        <>
+          <p className="mb-3 text-xs text-slate-400">Get an email when a matching vacancy is posted.</p>
+          <button
+            onClick={() => setEditing(true)}
+            className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30"
+          >
+            Set up alert
+          </button>
+        </>
+      ) : editing ? (
+        <div className="space-y-2">
+          <input value={keywords} onChange={(e) => setKeywords(e.target.value)}
+            placeholder="Keywords (welding, foreman, AutoCAD)" className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none" />
+          <input value={skills} onChange={(e) => setSkills(e.target.value)}
+            placeholder="Skills, comma-separated" className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none" />
+          <input value={city} onChange={(e) => setCity(e.target.value)}
+            placeholder="City (leave blank for any)" className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none" />
+          <div className="flex gap-2">
+            <button onClick={save} disabled={busy} className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50">
+              {busy ? "…" : "Save"}
+            </button>
+            <button onClick={() => setEditing(false)} className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs text-slate-300 space-y-1">
+          {alert?.keywords && <div>Keywords: <span className="text-white">{alert.keywords}</span></div>}
+          {alert?.skills && <div>Skills: <span className="text-white">{alert.skills}</span></div>}
+          {alert?.city && <div>City: <span className="text-white">{alert.city}</span></div>}
+          <button onClick={unsubscribe} disabled={busy} className="mt-2 text-rose-400 hover:underline disabled:opacity-50">
+            Unsubscribe
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VerificationWidget() {
+  const [req, setReq] = useState<{ status: string; note: string | null; adminNote: string | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    buildApi.myVerification().then((r) => setReq(r.request)).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  async function request() {
+    setBusy(true);
+    try {
+      const r = await buildApi.requestVerification(note || undefined);
+      setReq({ status: r.request.status, note, adminNote: null });
+      setSubmitted(true);
+    } catch { /* ignore */ } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) return null;
+
+  const STATUS_COLOR: Record<string, string> = {
+    PENDING: "text-amber-200",
+    APPROVED: "text-emerald-200",
+    REJECTED: "text-rose-200",
+  };
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <h3 className="mb-2 text-sm font-semibold text-white">✓ Verification badge</h3>
+      {req ? (
+        <div className="text-xs space-y-1">
+          <div>Status: <span className={STATUS_COLOR[req.status] ?? "text-slate-200"}>{req.status}</span></div>
+          {req.adminNote && <div className="text-slate-400">Admin note: {req.adminNote}</div>}
+          {req.status === "PENDING" && <p className="text-slate-400 mt-1">Your request is under review. We&apos;ll email you when it&apos;s processed.</p>}
+        </div>
+      ) : submitted ? (
+        <p className="text-xs text-emerald-200">✅ Request submitted. We&apos;ll review within 1-2 business days.</p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-slate-400">Request the ✓ verified badge — shows on your public profile and boosts trust with employers.</p>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Optional: link to LinkedIn, portfolio, certificates…"
+            className="w-full resize-none rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none" />
+          <button onClick={request} disabled={busy} className="mt-2 rounded-md bg-sky-500/20 px-3 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/30 disabled:opacity-50">
+            {busy ? "…" : "Request verification"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}

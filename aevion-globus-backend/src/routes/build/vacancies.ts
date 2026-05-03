@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
+import { dispatchJobAlerts } from "./alerts";
 import {
   buildPool as pool,
   ok,
@@ -77,6 +78,8 @@ vacanciesRouter.post("/", async (req, res) => {
       [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions)],
     );
     const row = result.rows[0];
+    // Fire job alerts asynchronously — non-blocking
+    void dispatchJobAlerts({ id: row.id, title: row.title, description: row.description, skillsJson: row.skillsJson, city: row.city, salary: row.salary }).catch(() => {});
     return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]), questions: safeParseJson(row.questionsJson, [] as string[]) }, 201);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_create_failed", { details: (err as Error).message });

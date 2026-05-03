@@ -75,6 +75,7 @@ function Body() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <NavCard href="/build/admin/leads" title="Leads" body="Email captures from /build/why-aevion. Search, filter, CSV export." />
         <NavCard href="/build/admin/users" title="Users" body="All registered users, roles, profiles, verification status." />
+        <NavCard href="/build/admin/verification" title="Verification queue" body="Pending ✓ verified badge requests from candidates. Approve or reject." />
         <NavCard href="/build/stats" title="Public stats" body="Live platform numbers shown to non-admins." />
         <NavCard href="/build/pricing" title="Pricing" body="Plans, loyalty tiers, AEV cashback. Marketing-facing." />
         <NavCard href="/build/referrals" title="Referrals" body="Top-50 referral leaderboard. Public page." />

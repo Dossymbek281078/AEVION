@@ -469,6 +469,37 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildReview_project_idx"
     ON "BuildReview" ("projectId", "createdAt" DESC);`);
 
+  // BuildJobAlert: candidate subscribes to receive email when a new vacancy
+  // matches their keywords/skills. Fire-and-forget via Resend when POST /vacancies.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildJobAlert" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "email" TEXT NOT NULL,
+      "keywords" TEXT NOT NULL DEFAULT '',
+      "skills" TEXT NOT NULL DEFAULT '',
+      "city" TEXT,
+      "active" BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildJobAlert_user_uniq" ON "BuildJobAlert" ("userId");`);
+
+  // BuildVerificationRequest: candidate submits a request for the ✓ verified badge.
+  // Admin reviews from /build/admin/users or a dedicated queue.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVerificationRequest" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL UNIQUE,
+      "status" TEXT NOT NULL DEFAULT 'PENDING',
+      "note" TEXT,
+      "adminNote" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVerifReq_status_idx" ON "BuildVerificationRequest" ("status", "createdAt" DESC);`);
+
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.
   await pool.query(

@@ -21,6 +21,8 @@ import { statsRouter } from "./build/stats";
 import { adminRouter } from "./build/admin";
 import { leadsRouter } from "./build/leads";
 import { healthRouter } from "./build/health";
+import { alertsRouter } from "./build/alerts";
+import { verificationRouter } from "./build/verification";
 
 export const buildRouter = Router();
 
@@ -98,3 +100,5 @@ buildRouter.use("/admin", adminRouter);
 buildRouter.post("/leads", leadsLimiter);
 buildRouter.use("/leads", leadsRouter);
 buildRouter.use("/health", healthRouter);
+buildRouter.use("/alerts", alertsRouter);
+buildRouter.use("/verification", verificationRouter);

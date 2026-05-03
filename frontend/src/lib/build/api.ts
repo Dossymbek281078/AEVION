@@ -793,6 +793,25 @@ export const buildApi = {
         applicantName: string | null;
       }[];
     }>("GET", "/api/build/referrals/me"),
+  // Job alerts
+  myAlert: () =>
+    call<{ alert: { id: string; keywords: string; skills: string; city: string | null; active: boolean } | null }>(
+      "GET", "/api/build/alerts/me",
+    ),
+  upsertAlert: (input: { keywords?: string; skills?: string; city?: string }) =>
+    call<{ alert: { id: string; keywords: string; skills: string; city: string | null; active: boolean } }>(
+      "POST", "/api/build/alerts", input,
+    ),
+  deleteAlert: () => call<{ unsubscribed: boolean }>("DELETE", "/api/build/alerts/me"),
+
+  // Verification
+  myVerification: () =>
+    call<{ request: { id: string; status: string; note: string | null; adminNote: string | null } | null }>(
+      "GET", "/api/build/verification/my",
+    ),
+  requestVerification: (note?: string) =>
+    call<{ request: { id: string; status: string } }>("POST", "/api/build/verification/request", { note }),
+
   publicStats: () =>
     call<{ vacancies: number; candidates: number; projects: number }>(
       "GET",

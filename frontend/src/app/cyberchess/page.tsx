@@ -2101,7 +2101,7 @@ export default function CyberChessPage(){
       sThink(false);
     },delay);
     return()=>clearTimeout(t);
-  },[bk,over,on,tab,p2pMode]);
+  },[bk,over,on,tab,p2pMode,ghostDuelMode,ghostDuelConfig,ghostDuelDivergePly]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
@@ -2265,6 +2265,8 @@ export default function CyberChessPage(){
     sVariantStartFen(startFen);sVariantArmies(armies);
     const ng=startFen?new Chess(startFen):new Chess();
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
+    // Reset Ghost Duel and P2P if they were active (new game started)
+    if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}
     reinfLastMoveRef.current=0;
     sChecksByWhite(0);sChecksByBlack(0);lastCheckBkRef.current=-1;
     sDropPool(EMPTY_POOL);sDropPickerOpen(false);sSelectedDropPiece(null);lastCaptureBkRef.current=-1;
@@ -3951,6 +3953,15 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
+          {/* P2P connection HUD during play */}
+          {p2pMode&&(tab==="play")&&<div style={{padding:"8px 14px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:`1px solid ${p2p.status==="connected"?"#10b981":"#6ee7b7"}`,display:"flex",alignItems:"center",gap:SPACE[2]}}>
+            <span style={{fontSize:16}}>🤝</span>
+            <span style={{fontWeight:900,color:"#065f46",fontSize:13}}>{p2pOpponentName}</span>
+            <span style={{fontSize:11,padding:"2px 8px",borderRadius:RADIUS.full,background:p2p.status==="connected"?"#059669":"#f59e0b",color:"#fff",fontWeight:800}}>{p2p.status==="connected"?"CONNECTED":p2p.status==="open"?"Waiting for friend…":p2p.status}</span>
+            {p2p.latencyMs>0&&<span style={{fontSize:11,color:"#065f46"}}>ping {p2p.latencyMs}ms</span>}
+            {p2pRoomId&&<span style={{fontSize:10,color:"#047857",fontFamily:"ui-monospace,monospace",marginLeft:"auto"}}>#{p2pRoomId}</span>}
+            <button onClick={()=>{p2p.disconnect();sP2pMode(false);sP2pRoomId("")}} style={{padding:"2px 8px",borderRadius:6,border:"1px solid #6ee7b7",background:"white",color:"#065f46",fontSize:10,fontWeight:800,cursor:"pointer"}}>✕ Disconnect</button>
+          </div>}
           {/* Ghost Duel HUD */}
           {ghostDuelMode&&ghostDuelConfig&&on&&!over&&(tab==="play")&&<div style={{padding:"8px 14px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"1px solid #a78bfa",display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
             <span style={{fontSize:18}}>👻</span>

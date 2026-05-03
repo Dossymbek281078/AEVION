@@ -146,6 +146,52 @@ applicationsRouter.get("/my", async (req, res) => {
 });
 
 // GET /api/build/applications/by-vacancy/:id — owner only
+// GET /api/build/applications/by-vacancy/:id/export.csv — owner downloads all applicants as CSV
+applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."title", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const rows = await pool.query(
+      `SELECT a."id", a."status", a."createdAt", a."message", a."rejectReason",
+              a."aiScoreOverall", a."matchScore",
+              u."name" AS "applicantName", u."email" AS "applicantEmail",
+              p."title" AS "profileTitle", p."city", p."experienceYears"
+       FROM "BuildApplication" a
+       JOIN "AEVIONUser" u ON u."id" = a."userId"
+       LEFT JOIN "BuildProfile" p ON p."userId" = a."userId"
+       WHERE a."vacancyId" = $1
+       ORDER BY a."createdAt" DESC`,
+      [id],
+    );
+
+    const header = ["id", "status", "createdAt", "name", "email", "city", "experienceYears", "profileTitle", "aiScore", "matchScore", "message", "rejectReason"].join(",");
+    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const body = rows.rows.map((r: Record<string, unknown>) =>
+      [r.id, r.status, r.createdAt, r.applicantName, r.applicantEmail, r.city, r.experienceYears, r.profileTitle, r.aiScoreOverall, r.matchScore, r.message, r.rejectReason]
+        .map(escape)
+        .join(","),
+    ).join("\n");
+
+    const vacancySlug = String(owner.rows[0].title || id).replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="applications-${vacancySlug}-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.send(`${header}\n${body}`);
+  } catch (err: unknown) {
+    return fail(res, 500, "applications_csv_failed", { details: (err as Error).message });
+  }
+});
+
 applicationsRouter.get("/by-vacancy/:id", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);

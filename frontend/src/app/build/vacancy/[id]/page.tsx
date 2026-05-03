@@ -140,9 +140,20 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           {isOwner && applications && (
             <div className="mt-6">
-              <h2 className="mb-3 text-lg font-semibold text-white">
-                Applications <span className="text-slate-500">({applications.length})</span>
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-white">
+                  Applications <span className="text-slate-500">({applications.length})</span>
+                </h2>
+                {applications.length > 0 && (
+                  <a
+                    href={`/api/build/applications/by-vacancy/${encodeURIComponent(vacancy.id)}/export.csv`}
+                    className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10"
+                    download
+                  >
+                    ↓ CSV
+                  </a>
+                )}
+              </div>
               {applications.length === 0 ? (
                 <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
                   No applications yet.

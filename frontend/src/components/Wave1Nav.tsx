@@ -31,6 +31,7 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/bank" style={{ color: link, fontWeight: 600 }}>Bank</Link>
       <Link href="/cyberchess" style={{ color: link, fontWeight: 600 }}>Chess</Link>
       <Link href="/qtradeoffline" style={{ color: link, fontWeight: 600 }}>QTradeOffline</Link>
+      <Link href="/healthai" style={{ color: link, fontWeight: 600 }}>HealthAI</Link>
       {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
     </nav>
   );

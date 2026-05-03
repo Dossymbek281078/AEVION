@@ -304,3 +304,91 @@ model BuildFile {
 
   @@index([projectId, createdAt(sort: Desc)])
 }
+
+// ============ HealthAI ============
+
+model HealthProfile {
+  id           String   @id
+  userId       String?
+  memberLabel  String?
+  age          Int      @default(0)
+  sex          String   @default("other")
+  heightCm     Int      @default(0)
+  weightKg     Float    @default(0)
+  conditions   String[] @default([])
+  allergies    String[] @default([])
+  medications  String[] @default([])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  symptomChecks SymptomCheck[]
+  dailyLogs     HealthDailyLog[]
+  cycleEntries  CycleEntry[]
+  planSnapshots PlanSnapshot[]
+
+  @@index([userId])
+}
+
+model CycleEntry {
+  id        String   @id
+  profileId String
+  date      String
+  flow      String?
+  symptoms  String[] @default([])
+  notes     String?
+  createdAt DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, date])
+  @@index([profileId, date])
+}
+
+model PlanSnapshot {
+  id          String   @id
+  profileId   String
+  plan        Json
+  bmi         Float?
+  avgSleep7d  Float?
+  avgMood7d   Float?
+  generatedAt DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, generatedAt])
+}
+
+model SymptomCheck {
+  id         String   @id
+  profileId  String
+  symptoms   String[] @default([])
+  severity   Int      @default(5)
+  durationH  Float    @default(0)
+  notes      String?
+  matched    Json     @default("[]")
+  generic    String?
+  disclaimer String?
+  createdAt  DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, createdAt])
+}
+
+model HealthDailyLog {
+  id          String   @id
+  profileId   String
+  date        String
+  sleepHours  Float?
+  moodScore   Int?
+  weightKg    Float?
+  waterL      Float?
+  exerciseMin Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, date])
+  @@index([profileId, date])
+}

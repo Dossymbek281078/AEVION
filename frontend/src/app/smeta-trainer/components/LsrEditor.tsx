@@ -16,10 +16,13 @@ import { Ks2View } from "./Ks2View";
 import { AiChat } from "./AiChat";
 import { StickyTotals } from "./StickyTotals";
 import { GeomHint } from "./GeomHint";
+import { DefectActView } from "./DefectActView";
+import { ExportButton } from "./ExportButton";
 
-type Tab = "lsr" | "vor" | "ssr" | "ks2" | "print";
+type Tab = "lsr" | "defect" | "vor" | "ssr" | "ks2" | "print";
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: "defect", label: "📋 Дефектная вед." },
   { key: "lsr",   label: "ЛСР (Форма 4*)" },
   { key: "vor",   label: "ВОР" },
   { key: "ssr",   label: "НР + СП" },
@@ -116,6 +119,18 @@ export function LsrEditor({ initialLsr }: Props) {
     }));
   }
 
+  function addBulkPositions(sectionId: string, positions: Omit<SmetaPosition, "id">[]) {
+    setLsr((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) =>
+        s.id === sectionId
+          ? { ...s, positions: [...s.positions, ...positions.map((p, i) => ({ ...p, id: `bulk-${Date.now()}-${i}` }))] }
+          : s
+      ),
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -149,8 +164,8 @@ export function LsrEditor({ initialLsr }: Props) {
           ))}
           <div className="ml-auto flex items-center gap-2 text-[10px] text-slate-400 pr-1">
             <GeomHint object={learningObject} />
-            <span>{lsr.indexRegion} · {lsr.indexQuarter}</span>
-            <span className={hasSaved ? "text-emerald-500" : "text-slate-300"}>
+            <ExportButton lsr={lsr} calc={calc} onImport={(imported) => setLsr(imported)} />
+            <span className={hasSaved ? "text-emerald-500" : "text-slate-300"} title={lsr.indexRegion + " · " + lsr.indexQuarter}>
               {hasSaved ? "💾" : "○"}
             </span>
             <button
@@ -174,6 +189,9 @@ export function LsrEditor({ initialLsr }: Props) {
                 onUpdateCoefs={updateCoefs}
               />
             </div>
+          )}
+          {activeTab === "defect" && (
+            <DefectActView lsr={lsr} onAddPositions={addBulkPositions} />
           )}
           {activeTab === "vor" && (
             <VorView lsr={lsr} object={learningObject} onUpdatePosition={updatePosition} />

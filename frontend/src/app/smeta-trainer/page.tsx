@@ -1,4 +1,5 @@
 import { LevelHome } from "./components/LevelHome";
+import { OnboardingModal } from "./components/OnboardingModal";
 
 export const metadata = {
   title: "Сметный тренажёр РК — AEVION",
@@ -16,9 +17,10 @@ export default function SmetaTrainerPage() {
           <span className="text-[10px] bg-emerald-700 text-emerald-200 px-2 py-0.5 rounded-full">beta</span>
         </div>
         <div className="text-[10px] text-slate-400 hidden sm:block">
-          НДЦС РК 8.01-08-2022 · 5 уровней · 88 ч · Школа №47, Алматы
+          НДЦС РК 8.01-08-2022 · 222 расценки ЭСН · 5 уровней · Школа №47, Алматы
         </div>
       </header>
+      <OnboardingModal />
       <LevelHome />
     </main>
   );

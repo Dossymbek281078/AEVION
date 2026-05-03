@@ -486,3 +486,100 @@ describe("GET /api/build/reviews/eligible", () => {
     expect(Array.isArray(res.body.data.items)).toBe(true);
   });
 });
+
+// ── Job Alerts ────────────────────────────────────────────────────────────
+
+describe("GET /api/build/alerts/me", () => {
+  test("401 without token", async () => {
+    const res = await request(makeApp()).get("/api/build/alerts/me");
+    expect(res.status).toBe(401);
+  });
+
+  test("200, returns null alert when none set", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp())
+      .get("/api/build/alerts/me")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(200);
+    expect(res.body.data.alert).toBeNull();
+  });
+});
+
+describe("POST /api/build/alerts", () => {
+  test("401 without token", async () => {
+    const res = await request(makeApp()).post("/api/build/alerts").send({ keywords: "welder" });
+    expect(res.status).toBe(401);
+  });
+
+  test("201, upserts alert and returns it", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: "c@t.com" }], rowCount: 1 })  // user lookup
+      .mockResolvedValueOnce({ rows: [{ id: "a1", userId: CLIENT, keywords: "welder", skills: "", city: null, active: true }], rowCount: 1 }); // upsert
+    const res = await request(makeApp())
+      .post("/api/build/alerts")
+      .set("Authorization", bearerOf(CLIENT))
+      .send({ keywords: "welder", skills: "AutoCAD" });
+    expect(res.status).toBe(201);
+    expect(res.body.data.alert.keywords).toBe("welder");
+  });
+});
+
+// ── Verification ──────────────────────────────────────────────────────────
+
+describe("GET /api/build/verification/my", () => {
+  test("401 without token", async () => {
+    const res = await request(makeApp()).get("/api/build/verification/my");
+    expect(res.status).toBe(401);
+  });
+
+  test("200, returns null when no request", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp())
+      .get("/api/build/verification/my")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(200);
+    expect(res.body.data.request).toBeNull();
+  });
+});
+
+describe("POST /api/build/verification/request", () => {
+  test("401 without token", async () => {
+    const res = await request(makeApp()).post("/api/build/verification/request");
+    expect(res.status).toBe(401);
+  });
+
+  test("201, creates verification request", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ verifiedAt: null }], rowCount: 1 }) // profile check
+      .mockResolvedValueOnce({ rows: [{ id: "vr1", userId: CLIENT, status: "PENDING", note: null }], rowCount: 1 }); // insert
+    const res = await request(makeApp())
+      .post("/api/build/verification/request")
+      .set("Authorization", bearerOf(CLIENT))
+      .send({ note: "My LinkedIn: ..." });
+    expect(res.status).toBe(201);
+    expect(res.body.data.request.status).toBe("PENDING");
+  });
+
+  test("409 if already verified", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ verifiedAt: new Date().toISOString() }], rowCount: 1 });
+    const res = await request(makeApp())
+      .post("/api/build/verification/request")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("already_verified");
+  });
+});
+
+// ── Stats leaderboard ─────────────────────────────────────────────────────
+
+describe("GET /api/build/stats/leaderboard", () => {
+  test("200, returns employers and workers arrays", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // employers
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // workers
+    const res = await request(makeApp()).get("/api/build/stats/leaderboard");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.employers)).toBe(true);
+    expect(Array.isArray(res.body.data.workers)).toBe(true);
+  });
+});

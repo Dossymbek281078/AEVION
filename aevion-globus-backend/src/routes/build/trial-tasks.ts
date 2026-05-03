@@ -192,3 +192,71 @@ trialTasksRouter.get("/my", async (req, res) => {
 
 void TRIAL_TASK_STATUSES;
 void vNumber;
+
+// GET /api/build/trial-tasks/:id/invoice.pdf — recruiter downloads payment invoice
+trialTasksRouter.get("/:id/invoice.pdf", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const r = await pool.query(
+      `SELECT t.*, u."name" AS "candidateName", u."email" AS "candidateEmail",
+              r."name" AS "recruiterName", v."title" AS "vacancyTitle"
+       FROM "BuildTrialTask" t
+       JOIN "AEVIONUser" u ON u."id" = t."candidateId"
+       JOIN "AEVIONUser" r ON r."id" = t."recruiterId"
+       LEFT JOIN "BuildVacancy" v ON v."id" = t."vacancyId"
+       WHERE t."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "trial_not_found");
+    const t = r.rows[0];
+    if (t.recruiterId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_recruiter");
+    if (t.status !== "APPROVED") return fail(res, 400, "trial_not_approved");
+
+    const PDFDocument = ((await import("pdfkit")) as unknown as { default: new (opts: object) => PDFKit.PDFDocument }).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    await new Promise<void>((resolve) => doc.on("end", resolve));
+
+    doc.fontSize(22).font("Helvetica-Bold").text("AEVION QBuild", 50, 50);
+    doc.fontSize(10).font("Helvetica").fillColor("#64748b").text("Trial Task Invoice", 50, 80);
+
+    doc.moveTo(50, 100).lineTo(545, 100).stroke("#e2e8f0");
+
+    doc.fillColor("#0f172a").fontSize(12).font("Helvetica-Bold").text("Invoice details", 50, 115);
+    const col = (label: string, value: string, y: number) => {
+      doc.fontSize(9).font("Helvetica").fillColor("#64748b").text(label, 50, y);
+      doc.fontSize(10).font("Helvetica").fillColor("#0f172a").text(value, 180, y);
+    };
+    col("Invoice ID", id.slice(0, 16), 140);
+    col("Date", new Date().toLocaleDateString("en-GB"), 158);
+    col("Status", "PAID", 176);
+    col("Task", t.title || "Trial task", 194);
+    col("Vacancy", t.vacancyTitle || "—", 212);
+    col("Candidate", `${t.candidateName} <${t.candidateEmail}>`, 230);
+    col("Recruiter / Payer", t.recruiterName || "—", 248);
+
+    doc.moveTo(50, 275).lineTo(545, 275).stroke("#e2e8f0");
+
+    doc.fillColor("#0f172a").fontSize(14).font("Helvetica-Bold").text("Amount due", 50, 290);
+    const amt = `${Number(t.paymentAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${t.paymentCurrency}`;
+    doc.fontSize(28).text(amt, 50, 310);
+
+    doc.fontSize(9).font("Helvetica").fillColor("#94a3b8").text(
+      "This invoice is generated automatically by AEVION QBuild. Keep for your records.",
+      50, 380, { width: 495 },
+    );
+
+    doc.end();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="qbuild-invoice-${id.slice(0, 8)}.pdf"`);
+    const pdf = Buffer.concat(chunks);
+    return res.send(pdf);
+  } catch (err: unknown) {
+    return fail(res, 500, "trial_invoice_failed", { details: (err as Error).message });
+  }
+});

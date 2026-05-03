@@ -115,6 +115,12 @@ applicationsRouter.post("/", async (req, res) => {
         });
       }
 
+      // Notify employer via webhook env (fire-and-forget)
+      void notifyNewApplication(vacancy.rows[0].clientId, {
+        applicationId: id, vacancyId: vacancyId.value, vacancyTitle: vacancy.rows[0].title,
+        candidateId: auth.sub,
+      }).catch(() => {});
+
       return ok(res, result.rows[0], 201);
     } catch (err: unknown) {
       const e = err as { code?: string };
@@ -125,6 +131,23 @@ applicationsRouter.post("/", async (req, res) => {
     return fail(res, 500, "application_create_failed", { details: (err as Error).message });
   }
 });
+
+async function notifyNewApplication(
+  employerId: string,
+  data: { applicationId: string; vacancyId: string; vacancyTitle: string; candidateId: string },
+): Promise<void> {
+  const webhookUrl = process.env.BUILD_APPLICATION_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  const secret = process.env.BUILD_PAYMENT_WEBHOOK_SECRET ?? "";
+  const payload = JSON.stringify({ event: "application.new", ...data, ts: Date.now() });
+  const sig = `sha256=${crypto.createHmac("sha256", secret).update(payload).digest("hex")}`;
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Aevion-Signature": sig, "X-Employer-Id": employerId },
+    body: payload,
+    signal: AbortSignal.timeout(5000),
+  });
+}
 
 // GET /api/build/applications/my
 applicationsRouter.get("/my", async (req, res) => {

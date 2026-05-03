@@ -40,6 +40,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/pricing", changeFrequency: "weekly", priority: 0.8 },
   { path: "/build/why-aevion", changeFrequency: "weekly", priority: 0.7 },
   { path: "/build/referrals", changeFrequency: "daily", priority: 0.5 },
+  { path: "/build/leaderboard", changeFrequency: "daily", priority: 0.6 },
 ];
 
 async function fetchIds(path: string): Promise<string[]> {

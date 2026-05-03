@@ -1,5 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import type { BuildVacancy } from "@/lib/build/api";
+import { buildApi } from "@/lib/build/api";
+import { useBuildAuth } from "@/lib/build/auth";
 import { BookmarkButton } from "./BookmarkButton";
 
 export function VacancyCard({
@@ -9,12 +14,36 @@ export function VacancyCard({
   vacancy: BuildVacancy;
   showProject?: boolean;
 }) {
+  const token = useBuildAuth((s) => s.token);
+  const me = useBuildAuth((s) => s.user);
+  const [applied, setApplied] = useState(false);
+  const [busy, setBusy] = useState(false);
+
   const isClosed = vacancy.status === "CLOSED";
+  const isOwner = me?.id === vacancy.clientId;
   const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
+  const hasQuestions = (vacancy.questions?.length ?? 0) > 0;
+
+  async function quickApply(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!token || applied || busy || isOwner) return;
+    setBusy(true);
+    try {
+      await buildApi.applyVacancy({ vacancyId: vacancy.id });
+      setApplied(true);
+    } catch {
+      // If has questions or already applied, navigate to full page
+      window.location.href = `/build/vacancy/${encodeURIComponent(vacancy.id)}`;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Link
       href={`/build/vacancy/${encodeURIComponent(vacancy.id)}`}
-      className={`group block rounded-xl border p-4 transition ${
+      className={`group relative block rounded-xl border p-4 transition ${
         isClosed
           ? "border-white/5 bg-white/[0.02] opacity-60"
           : isFeatured
@@ -57,6 +86,29 @@ export function VacancyCard({
           </span>
         )}
       </div>
+
+      {token && !isOwner && !isClosed && (
+        <div className="mt-3 flex items-center gap-2" onClick={(e) => e.preventDefault()}>
+          {applied ? (
+            <span className="text-xs font-semibold text-emerald-300">✓ Applied</span>
+          ) : hasQuestions ? (
+            <Link
+              href={`/build/vacancy/${encodeURIComponent(vacancy.id)}`}
+              className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/30"
+            >
+              Apply →
+            </Link>
+          ) : (
+            <button
+              onClick={quickApply}
+              disabled={busy}
+              className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/30 disabled:opacity-50"
+            >
+              {busy ? "…" : "Quick apply"}
+            </button>
+          )}
+        </div>
+      )}
     </Link>
   );
 }

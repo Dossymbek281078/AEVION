@@ -575,6 +575,8 @@ export const buildApi = {
     answers?: string[];
     referredByUserId?: string;
   }) => call<BuildApplication>("POST", "/api/build/applications", input),
+  applyVacancy: (input: { vacancyId: string; message?: string }) =>
+    call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
   applicationsByVacancy: (vacancyId: string) =>
     call<{ items: BuildApplication[]; total: number }>(

@@ -87,6 +87,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex items-start gap-2">
           <ShareButton projectId={project.id} />
+          {isOwner && project.status !== "DONE" && (
+            <ProjectStatusButton
+              projectId={project.id}
+              currentStatus={project.status}
+              onUpdated={refresh}
+            />
+          )}
           {client && (
             <div className="text-right text-xs text-slate-400">
               <div>Posted by</div>
@@ -584,5 +591,54 @@ function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploa
         Files are stored externally. Paste a public URL (CDN, object store).
       </p>
     </form>
+  );
+}
+
+function ProjectStatusButton({
+  projectId,
+  currentStatus,
+  onUpdated,
+}: {
+  projectId: string;
+  currentStatus: string;
+  onUpdated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const next =
+    currentStatus === "OPEN" ? "IN_PROGRESS" :
+    currentStatus === "IN_PROGRESS" ? "DONE" : null;
+
+  if (!next) return null;
+
+  const label =
+    next === "IN_PROGRESS" ? "Mark In Progress" :
+    next === "DONE" ? "Mark Complete ✓" : "";
+
+  const cls =
+    next === "DONE"
+      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
+      : "border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20";
+
+  async function advance() {
+    setBusy(true);
+    try {
+      await buildApi.updateProject(projectId, { status: next as "IN_PROGRESS" | "DONE" });
+      onUpdated();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={advance}
+      disabled={busy}
+      className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${cls}`}
+    >
+      {busy ? "…" : label}
+    </button>
   );
 }

@@ -39,3 +39,38 @@ statsRouter.get("/", async (_req, res) => {
     return fail(res, 500, "stats_failed", { details: (err as Error).message });
   }
 });
+
+// GET /api/build/stats/leaderboard — top-rated employers and workers
+statsRouter.get("/leaderboard", async (_req, res) => {
+  try {
+    const [emps, workers] = await Promise.all([
+      pool.query(
+        `SELECT p."userId", u."name", p."city", p."buildRole", p."verifiedAt",
+                ROUND(AVG(r."rating")::numeric, 2)::float8 AS "avgRating",
+                COUNT(r."id")::int AS "reviewCount"
+         FROM "BuildReview" r
+         JOIN "BuildProfile" p ON p."userId" = r."revieweeId"
+         JOIN "AEVIONUser" u ON u."id" = p."userId"
+         WHERE p."buildRole" IN ('CLIENT','CONTRACTOR')
+         GROUP BY p."userId", u."name", p."city", p."buildRole", p."verifiedAt"
+         HAVING COUNT(r."id") >= 1
+         ORDER BY AVG(r."rating") DESC, COUNT(r."id") DESC LIMIT 20`,
+      ),
+      pool.query(
+        `SELECT p."userId", u."name", p."city", p."buildRole", p."verifiedAt",
+                ROUND(AVG(r."rating")::numeric, 2)::float8 AS "avgRating",
+                COUNT(r."id")::int AS "reviewCount"
+         FROM "BuildReview" r
+         JOIN "BuildProfile" p ON p."userId" = r."revieweeId"
+         JOIN "AEVIONUser" u ON u."id" = p."userId"
+         WHERE p."buildRole" = 'WORKER'
+         GROUP BY p."userId", u."name", p."city", p."buildRole", p."verifiedAt"
+         HAVING COUNT(r."id") >= 1
+         ORDER BY AVG(r."rating") DESC, COUNT(r."id") DESC LIMIT 20`,
+      ),
+    ]);
+    return ok(res, { employers: emps.rows, workers: workers.rows });
+  } catch (err: unknown) {
+    return fail(res, 500, "leaderboard_failed", { details: (err as Error).message });
+  }
+});

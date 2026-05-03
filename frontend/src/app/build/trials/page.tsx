@@ -312,6 +312,17 @@ function TaskCard({
           </button>
         </div>
       )}
+      {role === "recruiter" && task.status === "APPROVED" && task.paymentAmount > 0 && (
+        <div className="mt-3">
+          <a
+            href={`/api/build/trial-tasks/${encodeURIComponent(task.id)}/invoice.pdf`}
+            download
+            className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
+          >
+            ⬇ Invoice PDF
+          </a>
+        </div>
+      )}
     </div>
   );
 }

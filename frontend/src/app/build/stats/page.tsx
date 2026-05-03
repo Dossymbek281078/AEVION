@@ -92,6 +92,12 @@ export default async function StatsPage() {
             Открыть QBuild →
           </Link>
           <Link
+            href="/build/leaderboard"
+            className="rounded-full border border-amber-500/40 bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-200 hover:bg-amber-500/20"
+          >
+            Leaderboard 🏆
+          </Link>
+          <Link
             href="/build/why-aevion"
             className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white hover:bg-white/5"
           >

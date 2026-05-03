@@ -56,12 +56,12 @@ const TCS: TC[] = [
   {name:"15+0",ini:900,inc:0,cat:"Rapid"},{name:"15+1",ini:900,inc:1,cat:"Rapid"},{name:"15+2",ini:900,inc:2,cat:"Rapid"},
 ];
 const ALS: AL[] = [
-  {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:6000},
-  {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:4500},
-  {name:"Club",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:3000},
-  {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:2000},
-  {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:1200},
-  {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:600},
+  {name:"Beginner",elo:400,depth:1,color:"#94a3b8",rand:200,thinkMs:600},
+  {name:"Casual",elo:800,depth:2,color:"#10b981",rand:80,thinkMs:480},
+  {name:"Club",elo:1200,depth:3,color:"#3b82f6",rand:30,thinkMs:380},
+  {name:"Advanced",elo:1600,depth:4,color:"#a78bfa",rand:12,thinkMs:280},
+  {name:"Expert",elo:2000,depth:5,color:"#f87171",rand:5,thinkMs:180},
+  {name:"Master",elo:2400,depth:6,color:"#fbbf24",rand:2,thinkMs:100},
 ];
 const SFD: Record<number,number> = {3:8,4:12,5:16};
 const RANKS = [{min:0,t:"Beginner",i:"●"},{min:600,t:"Novice",i:"◆"},{min:900,t:"Amateur",i:"■"},{min:1200,t:"Club",i:"▲"},{min:1500,t:"Tournament",i:"★"},{min:1800,t:"CM",i:"✦"},{min:2000,t:"FM",i:"✧"},{min:2200,t:"IM",i:"✪"},{min:2400,t:"GM",i:"♛"}];
@@ -1878,16 +1878,15 @@ export default function CyberChessPage(){
     const premovesNow=pmsRef.current.length;
     const isBullet=tc.ini>0&&tc.ini<=60;
     const isBlitz=tc.ini>60&&tc.ini<=300;
-    const baseFloor=isBullet?500:isBlitz?700:900;
-    const perPremoveSlot=isBullet?280:isBlitz?380:480;
+    const baseFloor=isBullet?250:isBlitz?320:400;
+    const perPremoveSlot=isBullet?80:isBlitz?100:120;
     const targetSlots=5;
     const slotsLeft=Math.max(0,targetSlots-premovesNow);
     const premoveFloor=baseFloor+slotsLeft*perPremoveSlot;
-    // Bullet 0pm: 500+5×280 = 1900ms · 5pm: 500ms
-    // Blitz  0pm: 700+5×380 = 2600ms · 5pm: 700ms
-    // Rapid  0pm: 900+5×480 = 3300ms · 5pm: 900ms
-    // Тест-режим: AI ходит минимум 5 сек чтобы можно было неспеша щупать механику.
-    const delay=Math.max(rawDelay,premoveFloor,5000);
+    // Bullet 0pm: 250+5×80  =  650ms · 5pm: 250ms
+    // Blitz  0pm: 320+5×100 =  820ms · 5pm: 320ms
+    // Rapid  0pm: 400+5×120 = 1000ms · 5pm: 400ms
+    const delay=Math.max(rawDelay,premoveFloor);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece

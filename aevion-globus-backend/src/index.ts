@@ -37,6 +37,7 @@ import { planetPayoutsRouter } from "./routes/planetPayouts";
 import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
+import { qcontractRouter } from "./routes/qcontract";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -399,6 +400,9 @@ app.use("/api/metrics", metricsRouter);
 
 // Smeta Trainer — progress sync + LMS webhook
 app.use("/api/smeta-trainer", smetaTrainerRouter);
+
+// QContract — self-destruct smart documents
+app.use("/api/qcontract", qcontractRouter);
 
 app.use(
   (

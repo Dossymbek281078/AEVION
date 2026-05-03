@@ -330,7 +330,7 @@ export const projects: GlobusProject[] = [
     description:
       "Саморазрушающиеся смарт-документы: контроль доступа, срок действия, защита контента.",
     kind: "product",
-    status: "idea",
+    status: "in_progress",
     priority: 3,
     tags: ["documents", "security"],
     createdAt: now,

@@ -93,11 +93,6 @@ export default function AdminBureauPage() {
   const [forceReason, setForceReason] = useState("");
   const [revokeCertId, setRevokeCertId] = useState("");
   const [revokeReason, setRevokeReason] = useState("");
-  const [bulkCertIds, setBulkCertIds] = useState("");
-  const [bulkAction, setBulkAction] = useState<"force-verify" | "revoke-verification">("force-verify");
-  const [bulkReason, setBulkReason] = useState("");
-  const [bulkName, setBulkName] = useState("");
-  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -172,41 +167,6 @@ export default function AdminBureauPage() {
     setForceName("");
     setForceReason("");
     loadAudit();
-  }
-
-  async function runBulk() {
-    const ids = bulkCertIds
-      .split(/\s+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (ids.length === 0) return showToast("paste at least one certId", "error");
-    if (ids.length > 100) return showToast("max 100 cert IDs per call", "error");
-    if (!bulkReason.trim()) return showToast("reason required", "error");
-    setBulkBusy(true);
-    try {
-      const items = ids.map((certId) => ({
-        certId,
-        action: bulkAction,
-        reason: bulkReason.trim(),
-        verifiedName: bulkAction === "force-verify" && bulkName.trim() ? bulkName.trim() : undefined,
-      }));
-      const r = await fetch(apiUrl(`/api/bureau/admin/bulk`), {
-        method: "PATCH",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        return showToast(`Bulk failed: ${j.error || r.status}`, "error");
-      }
-      showToast(`Applied ${j.applied}/${j.total}`, "success");
-      setBulkCertIds("");
-      setBulkReason("");
-      setBulkName("");
-      loadAudit();
-    } finally {
-      setBulkBusy(false);
-    }
   }
 
   async function revokeVerification() {
@@ -333,55 +293,6 @@ export default function AdminBureauPage() {
             />
             <button onClick={revokeVerification} style={btnDanger}>
               Revoke verification
-            </button>
-          </div>
-
-          {/* Bulk admin */}
-          <div style={{ ...card, marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 12px", color: "#0f172a" }}>
-              Bulk action — up to 100 certs
-            </h2>
-            <p style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
-              Paste cert IDs (whitespace- or newline-separated). One audit row per cert. Aborts on first invalid row — no partial writes.
-            </p>
-            <textarea
-              placeholder="cert-id-1&#10;cert-id-2&#10;..."
-              value={bulkCertIds}
-              onChange={(e) => setBulkCertIds(e.target.value)}
-              style={{ ...inputStyle, minHeight: 100, fontFamily: "ui-monospace, monospace", fontSize: 12 }}
-            />
-            <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 10, marginBottom: 10 }}>
-              <select
-                value={bulkAction}
-                onChange={(e) => setBulkAction(e.target.value as "force-verify" | "revoke-verification")}
-                style={{ ...inputStyle, marginBottom: 0 }}
-              >
-                <option value="force-verify">force-verify</option>
-                <option value="revoke-verification">revoke-verification</option>
-              </select>
-              {bulkAction === "force-verify" ? (
-                <input
-                  placeholder="Verified name (optional, applied if cert has none)"
-                  value={bulkName}
-                  onChange={(e) => setBulkName(e.target.value)}
-                  style={{ ...inputStyle, marginBottom: 0 }}
-                />
-              ) : (
-                <div />
-              )}
-            </div>
-            <textarea
-              placeholder="Reason (required, ≤500 chars)"
-              value={bulkReason}
-              onChange={(e) => setBulkReason(e.target.value)}
-              style={{ ...inputStyle, minHeight: 50, fontFamily: "inherit" }}
-            />
-            <button
-              onClick={runBulk}
-              disabled={bulkBusy}
-              style={{ ...btnPrimary, opacity: bulkBusy ? 0.6 : 1 }}
-            >
-              {bulkBusy ? "Applying…" : `Apply to ${bulkCertIds.split(/\s+/).filter(Boolean).length || 0} certs`}
             </button>
           </div>
 

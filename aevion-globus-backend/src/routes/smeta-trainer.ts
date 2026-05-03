@@ -8,11 +8,11 @@ const LMS_WEBHOOK_SECRET = process.env.SMETA_LMS_WEBHOOK_SECRET ?? "";
 
 // Lesson ref → level number mapping (mirrors LEVELS in frontend/lib/levels.ts)
 const LESSON_LEVEL_MAP: Record<string, number> = {
-  "урок-2-1": 1,
-  "урок-2-2": 2,
-  "урок-2-3": 3,
-  "урок-2-4": 4,
-  "урок-2-5": 5,
+  "lesson-2-1": 1,
+  "lesson-2-2": 2,
+  "lesson-2-3": 3,
+  "lesson-2-4": 4,
+  "lesson-2-5": 5,
 };
 
 let tablesReady = false;

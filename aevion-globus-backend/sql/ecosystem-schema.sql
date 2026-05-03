@@ -62,3 +62,23 @@ CREATE TABLE IF NOT EXISTS ecosystem_migration_state (
   chess_count     INTEGER NOT NULL,
   planet_count    INTEGER NOT NULL
 );
+
+-- CyberChess tournament schedule. Read by /api/cyberchess/upcoming and
+-- written when a tournament is finalized. Lives in this file rather than
+-- its own schema so ensureSchema() in lib/ecosystemStore.ts applies it
+-- alongside the ecosystem ledger in one bootstrap pass — without it,
+-- /api/cyberchess/upcoming throws "relation cyberchess_tournaments
+-- does not exist" on first prod query (observed on Railway 2026-05-03).
+CREATE TABLE IF NOT EXISTS cyberchess_tournaments (
+  id              TEXT PRIMARY KEY,
+  starts_at       TIMESTAMPTZ NOT NULL,
+  format          TEXT NOT NULL,
+  prize_pool      NUMERIC(18,2) NOT NULL,
+  entries         INTEGER NOT NULL DEFAULT 0,
+  capacity        INTEGER NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'upcoming',
+  inserted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cyberchess_tournaments_status_starts
+  ON cyberchess_tournaments (status, starts_at);

@@ -148,47 +148,66 @@ function ProfileBody() {
       </section>
 
       <aside>
-        <h2 className="mb-3 text-lg font-semibold text-white">My applications</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">Мои отклики</h2>
+          {applications.length > 0 && (
+            <div className="flex gap-1.5 text-[11px]">
+              {(["PENDING","ACCEPTED","REJECTED"] as const).map((s) => {
+                const cnt = applications.filter((a) => a.status === s).length;
+                if (!cnt) return null;
+                return (
+                  <span key={s} className={`rounded-full border px-2 py-0.5 font-medium ${APP_STATUS_TONE[s]}`}>
+                    {{ PENDING: "⏳", ACCEPTED: "✅", REJECTED: "✕" }[s]} {cnt}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
         {applications.length === 0 ? (
-          <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-5 text-center text-sm text-slate-400">
-            You haven&apos;t applied for any vacancies yet.
-          </p>
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center">
+            <p className="text-2xl">📤</p>
+            <p className="mt-2 text-sm font-medium text-slate-300">Откликов пока нет</p>
+            <p className="mt-1 text-xs text-slate-500">Найдите вакансию и нажмите «⚡ Quick Apply» или заполните форму отклика.</p>
+            <Link
+              href="/build/vacancies"
+              className="mt-3 inline-block rounded-lg bg-emerald-500/20 px-4 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30"
+            >
+              Смотреть вакансии →
+            </Link>
+          </div>
         ) : (
           <ul className="space-y-3">
             {applications.map((a) => (
-              <li
-                key={a.id}
-                className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
-              >
+              <li key={a.id} className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <Link
                     href={`/build/vacancy/${encodeURIComponent(a.vacancyId)}`}
-                    className="line-clamp-1 font-medium text-white hover:text-emerald-200"
+                    className="line-clamp-1 font-semibold text-white hover:text-emerald-200"
                   >
                     {a.vacancyTitle || a.vacancyId}
                   </Link>
-                  <span
-                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${APP_STATUS_TONE[a.status]}`}
-                  >
-                    {a.status}
+                  <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${APP_STATUS_TONE[a.status]}`}>
+                    {{ PENDING: "⏳ Ожидает", ACCEPTED: "✅ Принят", REJECTED: "✕ Отклонён" }[a.status]}
                   </span>
                 </div>
                 {a.projectTitle && (
-                  <Link
-                    href={`/build/project/${encodeURIComponent(a.projectId || "")}`}
-                    className="mt-0.5 line-clamp-1 text-xs text-slate-400 hover:underline"
-                  >
-                    {a.projectTitle}
+                  <Link href={`/build/project/${encodeURIComponent(a.projectId || "")}`} className="mt-0.5 line-clamp-1 text-xs text-slate-400 hover:underline">
+                    📁 {a.projectTitle}
                   </Link>
                 )}
-                <div className="mt-2 text-xs text-slate-500">
-                  {new Date(a.createdAt).toLocaleDateString()}
+                <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+                  <span>{new Date(a.createdAt).toLocaleDateString("ru-RU")}</span>
+                  {a.status === "PENDING" && (
+                    <span className="text-amber-400/70">Ждём ответа работодателя</span>
+                  )}
+                  {a.status === "ACCEPTED" && (
+                    <Link href={`/build/messages?to=${encodeURIComponent(a.userId ?? "")}`} className="text-emerald-400 hover:underline">
+                      💬 Написать работодателю
+                    </Link>
+                  )}
                 </div>
-                <TrialTaskBlock
-                  applicationId={a.id}
-                  isRecruiter={false}
-                  isCandidate
-                />
+                <TrialTaskBlock applicationId={a.id} isRecruiter={false} isCandidate />
               </li>
             ))}
           </ul>

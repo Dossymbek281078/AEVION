@@ -986,6 +986,29 @@ export default function CyberChessPage(){
     };
   },[bk,tab,setup,think,over,sfOk]);
 
+  // Real-time blunder/brilliant detection: compare eval before and after user's move.
+  const prevEvalCpRef=useRef<number>(0);
+  const prevBkRef=useRef<number>(-1);
+  useEffect(()=>{
+    if(!on||over||tab!=="play"||hist.length<1)return;
+    const lastMoveWasMine=hist.length%2===(pCol==="w"?1:0);
+    if(!lastMoveWasMine)return; // only react to user's own moves
+    const prevCp=prevEvalCpRef.current;
+    const curCp=evalCp;
+    const cpFromMePerspective=pCol==="w"?curCp:-curCp;
+    const prevFromMe=pCol==="w"?prevCp:-prevCp;
+    const drop=prevFromMe-cpFromMePerspective;
+    if(drop>=300)showToast(`?? Блундер! Потеряно ${(drop/100).toFixed(1)} (${pCol==="w"?"―"+Math.round(curCp/100):"+"+(Math.round(-curCp/100))})`, "error");
+    else if(drop>=150)showToast(`? Неточность — позиция ухудшилась`, "error");
+    else if(cpFromMePerspective-prevFromMe>=200)showToast("!! Блестящий ход", "success");
+  },[evalCp]);// eslint-disable-line react-hooks/exhaustive-deps
+  // track prev eval
+  useEffect(()=>{
+    if(bk===prevBkRef.current)return;
+    prevBkRef.current=bk;
+    prevEvalCpRef.current=evalCp;
+  },[bk]);// eslint-disable-line react-hooks/exhaustive-deps
+
   // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
   // worker on browseIdx/tab changes; deps included `tab` so every tab switch fired
   // `new SF(); s.init()` which loaded WASM and blocked the main thread ~500ms-1s each.

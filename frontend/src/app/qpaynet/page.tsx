@@ -199,9 +199,14 @@ export default function QPayNetDashboard() {
                 )}
 
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    Последние транзакции
-                  </h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Последние транзакции
+                    </h3>
+                    <Link href="/qpaynet/transactions" className="text-[11px] text-violet-400 hover:text-violet-300">
+                      Все →
+                    </Link>
+                  </div>
                   {activeTxs.length === 0 ? (
                     <div className="text-slate-600 text-sm text-center py-8 bg-slate-900 rounded-xl border border-slate-800">
                       Транзакций пока нет

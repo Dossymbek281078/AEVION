@@ -37,6 +37,7 @@ import { getValidGames as ldMasterGames, buildFenLine as masterFenLine, scoreGue
 import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as oeBlackPct, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
 import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
 import RepertoireModal, { loadRepertoire, saveRepertoire, type Repertoire } from "./Repertoire";
+import DailyMission, { bumpDaily } from "./DailyMission";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -359,19 +360,24 @@ type CellProps={
   iS:boolean;iV:boolean;iCk:boolean;iPM:boolean;iPS:boolean;
   iL:boolean;isShadow:boolean;isAnimDest:boolean;isDragOrigin:boolean;
   pmIdx?:number;
+  coordFile?:string;
+  coordRank?:number;
 };
 
-const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,pmIdx}:CellProps){
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,pmIdx,coordFile,coordRank}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
-  // Visceral grab — piece lifts визуально на нажатии: scale 1.18 + сильная тень + glow.
   const isLifted=(iS||iPS)&&!isDragOrigin;
+  // Coord label color: contrast against cell background
+  const coordCol=bg.includes("e2e8f0")||bg.includes("f8fafc")||bg.includes("cbd5e1")||bg.includes("bfdbfe")||bg.includes("dcfce7")||bg.includes("fed7aa")||bg.includes("fef9c3")?"rgba(30,41,59,0.5)":"rgba(255,255,255,0.55)";
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.12s"}}>
     {iV&&!hasPiece&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
     {hasPiece&&<div style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
+    {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
+    {coordFile&&<div style={{position:"absolute",bottom:"5%",right:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordFile}</div>}
   </div>;
 });
 
@@ -1161,9 +1167,11 @@ export default function CyberChessPage(){
                 }
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"пазл решён");
+                bumpDaily("puzzle");
                 if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
                 if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+                  bumpDaily("daily-puzzle");
                   setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
                 }
               }
@@ -1187,10 +1195,12 @@ export default function CyberChessPage(){
           }
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"пазл решён");
+          bumpDaily("puzzle");
           if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
           if(dailyState&&!dailyState.solved&&PUZZLES[dailyState.idx]?.fen===pzCurrent.fen){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
+            bumpDaily("daily-puzzle");
             setTimeout(()=>addChessy(50,"☀ пазл дня"),800);
           }
         }
@@ -1250,7 +1260,7 @@ export default function CyberChessPage(){
           // Local 2-player: no rating change, small shared Chessy for playing a full game
           const winner=game.turn()==="w"?"Чёрные":"Белые";
           r=`Checkmate — ${winner} победили`;
-          setTimeout(()=>addChessy(3,"партия сыграна"),400);
+          setTimeout(()=>{addChessy(3,"партия сыграна");bumpDaily("game")},400);
         }else{
           const w=game.turn()===aiC;r=w?"Checkmate! You win! 🏆":"Checkmate — AI wins";
           if(w){
@@ -1260,7 +1270,7 @@ export default function CyberChessPage(){
             const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
             const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
             const reward=Math.max(5,Math.round(10*aiMul*timeMul));
-            setTimeout(()=>addChessy(reward,`победа над ${lv.name}`),400);
+            setTimeout(()=>{addChessy(reward,`победа над ${lv.name}`);bumpDaily("game")},400);
             // Achievements
             const newWinCount=sts.w+1;
             setTimeout(()=>{
@@ -3508,13 +3518,18 @@ export default function CyberChessPage(){
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 const isDragOrigin=ghostFrom===sq;
                 const isAnimDest=moveAnim?.to===sq;
+                // Lichess-style board coordinates: rank on left col, file on bottom row
+                const isLeftCol=c===(flip?7:0);
+                const isBottomRow=r===(flip?0:7);
                 return <Cell key={sq} sq={sq}
                   pieceType={(p?.type as any)||null}
                   pieceColor={(p?.color as any)||null}
                   bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}
                   iS={iS} iV={iV} iCk={iCk} iPM={iPM} iPS={iPS} iL={iL}
                   isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
-                  pmIdx={pmToIdx.get(sq)}/>;
+                  pmIdx={pmToIdx.get(sq)}
+                  coordRank={isLeftCol?parseInt(sq[1]):undefined}
+                  coordFile={isBottomRow?sq[0]:undefined}/>;
               }))}
               {/* Capture animation — захваченная фигура pop+fade на cell взятия */}
               {capAnim&&(()=>{
@@ -3780,6 +3795,8 @@ export default function CyberChessPage(){
 
         {/* Right panel */}
         <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
+          {/* Daily Mission widget */}
+          {(tab==="play"||tab==="puzzles")&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
           {/* Opening Drill HUD */}
           {openingDrill&&<Card padding={SPACE[3]} tone="surface1"
             style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>

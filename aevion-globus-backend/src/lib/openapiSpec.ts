@@ -219,6 +219,51 @@ const schemas = {
       createdAt: { type: "string", format: "date-time" },
     },
   },
+  AwardSeason: {
+    type: "object",
+    required: ["id", "code", "title", "type", "status"],
+    properties: {
+      id: { type: "string" },
+      code: { type: "string", example: "music-2026-q1" },
+      title: { type: "string" },
+      type: { type: "string", enum: ["music", "film"] },
+      status: { type: "string", enum: ["draft", "open", "closed", "finalized"] },
+      productKey: { type: "string", nullable: true, description: "Planet validator routing key for entries in this season" },
+      openedAt: { type: "string", format: "date-time", nullable: true },
+      closedAt: { type: "string", format: "date-time", nullable: true },
+      finalizedAt: { type: "string", format: "date-time", nullable: true },
+    },
+  },
+  AwardEntry: {
+    type: "object",
+    required: ["id", "seasonId", "artifactVersionId", "status"],
+    properties: {
+      id: { type: "string" },
+      seasonId: { type: "string" },
+      artifactVersionId: { type: "string", description: "PlanetArtifactVersion this entry references" },
+      productKey: { type: "string" },
+      status: { type: "string", enum: ["pending", "qualified", "disqualified", "medalist"] },
+      place: { type: "integer", nullable: true, minimum: 1, description: "1-2-3 podium position when finalized" },
+      submittedAt: { type: "string", format: "date-time" },
+    },
+  },
+  PlanetStats: {
+    type: "object",
+    properties: {
+      submissions: { type: "integer", minimum: 0 },
+      eligibleParticipants: { type: "integer", minimum: 0 },
+      distinctVotersAllTime: { type: "integer", minimum: 0 },
+      certifiedArtifactVersions: { type: "integer", minimum: 0 },
+      scopedToProductKeyPrefix: {
+        type: "object",
+        nullable: true,
+        properties: {
+          submissions: { type: "integer", minimum: 0 },
+          certifiedArtifactVersions: { type: "integer", minimum: 0 },
+        },
+      },
+    },
+  },
   EcosystemEarnings: {
     type: "object",
     required: ["totals", "perSource"],
@@ -275,9 +320,9 @@ export const openapiSpec = {
   openapi: "3.1.0",
   info: {
     title: "AEVION Globus Backend",
-    version: "0.5.0",
+    version: "0.5.1",
     description:
-      "Bank-relevant endpoints (qtrade + ecosystem) and Tier 1 trust spine (qright register/verify, bureau verify, pipeline protect, planet artifact submit) carry full schemas. Tier 3 amplifier surfaces (OG cards, sitemaps, badges, RSS) and admin bulk-edit panels documented as summary entries; see per-surface specs (qsign-v2 at /api/qsign/v2/openapi.json, quantum-shield at /api/quantum-shield/openapi.json) for their full schemas.",
+      "Bank-relevant endpoints (qtrade + ecosystem) and Tier 1 trust spine (qright register/verify, bureau verify, pipeline protect, planet artifact submit + read views, awards transparency + leaderboards) carry full schemas. Tier 3 amplifier surfaces (OG cards, sitemaps, badges, RSS) and admin bulk-edit panels documented as summary entries; see per-surface specs (qsign-v2 at /api/qsign/v2/openapi.json, quantum-shield at /api/quantum-shield/openapi.json) for their full schemas.",
     contact: { name: "AEVION", url: "https://aevion.app" },
   },
   servers: [
@@ -749,6 +794,80 @@ export const openapiSpec = {
         },
       },
     },
+    "/api/planet/health": {
+      get: { summary: "Planet sub-service health probe", security: [], responses: { "200": { description: "ok" } } },
+    },
+    "/api/planet/stats": {
+      get: {
+        summary: "Cross-platform Planet statistics (no auth)",
+        security: [],
+        parameters: [
+          { in: "query", name: "productKeyPrefix", schema: { type: "string" }, description: "Scope counts to keys starting with this prefix (e.g. `awards-music-`)." },
+        ],
+        responses: {
+          "200": { description: "Counts dashboard", content: { "application/json": { schema: { $ref: "#/components/schemas/PlanetStats" } } } },
+        },
+      },
+    },
+    "/api/planet/artifacts/recent": {
+      get: {
+        summary: "Recently certified or active artifact versions (no auth)",
+        security: [],
+        parameters: [
+          { in: "query", name: "limit", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
+          { in: "query", name: "productKey", schema: { type: "string" }, description: "Filter to one validator pool" },
+        ],
+        responses: {
+          "200": {
+            description: "List of recent artifacts",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { items: { type: "array", items: { $ref: "#/components/schemas/PlanetArtifactVersion" } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/planet/artifacts/{artifactVersionId}/votes/snapshot/latest": {
+      get: {
+        summary: "Most recent vote-tally snapshot for an artifact (no auth)",
+        security: [],
+        parameters: [{ in: "path", name: "artifactVersionId", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Snapshot blob with HMAC over the canonical tally",
+            content: {
+              "application/json": {
+                example: {
+                  artifactVersionId: "art_v1",
+                  snapshotId: "snap_2026_05_03_xyz",
+                  tally: { approve: 7, reject: 1, abstain: 0 },
+                  hmac: "...",
+                  takenAt: "2026-05-03T12:00:00Z",
+                },
+              },
+            },
+          },
+          "404": { description: "No snapshot recorded for this artifact yet" },
+        },
+      },
+    },
+    "/api/planet/me/code-symbol": {
+      get: {
+        summary: "Stable per-user identity code (rotateable)",
+        responses: {
+          "200": {
+            description: "User's current code symbol",
+            content: { "application/json": { example: { symbol: "PNT-XYZ-1234", rotatedAt: "2026-04-30T12:00:00Z" } } },
+          },
+          "401": { description: "missing/invalid bearer" },
+        },
+      },
+    },
     "/api/planet/submissions": {
       post: {
         summary: "Submit an artifact version to a Planet validator quorum",
@@ -781,6 +900,173 @@ export const openapiSpec = {
         responses: {
           "201": { description: "Submission + first artifact version created", content: { "application/json": { schema: { $ref: "#/components/schemas/PlanetArtifactVersion" } } } },
           "400": { description: "Validation error" },
+          "401": { description: "missing/invalid bearer" },
+        },
+      },
+    },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Awards — read paths (admin writes documented at § Tier 3 above)
+    // ──────────────────────────────────────────────────────────────────────
+    "/api/awards/seasons": {
+      get: {
+        summary: "List all award seasons (no auth)",
+        security: [],
+        parameters: [
+          { in: "query", name: "type", schema: { type: "string", enum: ["music", "film"] }, description: "Filter to one track" },
+          { in: "query", name: "status", schema: { type: "string", enum: ["draft", "open", "closed", "finalized"] } },
+        ],
+        responses: {
+          "200": {
+            description: "Seasons list",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { items: { type: "array", items: { $ref: "#/components/schemas/AwardSeason" } } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/awards/seasons/current/{type}": {
+      get: {
+        summary: "Currently open season for a track (music or film), 404 if none",
+        security: [],
+        parameters: [{ in: "path", name: "type", required: true, schema: { type: "string", enum: ["music", "film"] } }],
+        responses: {
+          "200": { description: "Open season", content: { "application/json": { schema: { $ref: "#/components/schemas/AwardSeason" } } } },
+          "404": { description: "No open season for this track" },
+        },
+      },
+    },
+    "/api/awards/{type}/leaderboard": {
+      get: {
+        summary: "Live leaderboard for a track (no auth)",
+        security: [],
+        parameters: [
+          { in: "path", name: "type", required: true, schema: { type: "string", enum: ["music", "film"] } },
+          { in: "query", name: "limit", schema: { type: "integer", minimum: 1, maximum: 100, default: 25 } },
+        ],
+        responses: {
+          "200": {
+            description: "Ranked entries with vote tallies",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    type: { type: "string", enum: ["music", "film"] },
+                    items: {
+                      type: "array",
+                      items: {
+                        allOf: [
+                          { $ref: "#/components/schemas/AwardEntry" },
+                          {
+                            type: "object",
+                            properties: {
+                              title: { type: "string" },
+                              tally: { type: "object", properties: { approve: { type: "integer" }, reject: { type: "integer" }, abstain: { type: "integer" } } },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/awards/seasons/{seasonId}/results": {
+      get: {
+        summary: "Final results for a finalized season (podium + medals)",
+        security: [],
+        parameters: [{ in: "path", name: "seasonId", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Season + podium entries (place 1-2-3) when finalized",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    season: { $ref: "#/components/schemas/AwardSeason" },
+                    podium: { type: "array", items: { $ref: "#/components/schemas/AwardEntry" } },
+                  },
+                },
+              },
+            },
+          },
+          "404": { description: "Season not found" },
+        },
+      },
+    },
+    "/api/awards/transparency": {
+      get: {
+        summary: "Public transparency dashboard — counts per track + per season",
+        security: [],
+        responses: {
+          "200": {
+            description: "Aggregate dashboard JSON",
+            content: {
+              "application/json": {
+                example: {
+                  totals: { seasons: 4, finalizedSeasons: 2, entries: 137, medals: 6 },
+                  perTrack: [
+                    { type: "music", seasons: 2, entries: 89 },
+                    { type: "film", seasons: 2, entries: 48 },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/awards/entries": {
+      post: {
+        summary: "Submit a Planet artifact to an open Awards season",
+        description:
+          "Caller must own the underlying PlanetArtifactVersion (matched against PlanetSubmission.ownerId). Idempotent on (seasonId, artifactVersionId) — re-submitting returns the existing entry with `duplicate: true`.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["seasonId", "artifactVersionId"],
+                properties: {
+                  seasonId: { type: "string" },
+                  artifactVersionId: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Entry created", content: { "application/json": { schema: { $ref: "#/components/schemas/AwardEntry" } } } },
+          "200": { description: "Already submitted (duplicate replay)" },
+          "401": { description: "missing/invalid bearer" },
+          "403": { description: "Not owner of the artifact" },
+          "404": { description: "Season or artifact not found" },
+          "409": { description: "Season not in 'open' status" },
+        },
+      },
+    },
+    "/api/awards/me/entries": {
+      get: {
+        summary: "Caller's own award submissions",
+        responses: {
+          "200": {
+            description: "List of own entries",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { items: { type: "array", items: { $ref: "#/components/schemas/AwardEntry" } } } },
+              },
+            },
+          },
           "401": { description: "missing/invalid bearer" },
         },
       },
@@ -884,8 +1170,6 @@ export const openapiSpec = {
         responses: { "200": { description: "{ ok: true, tokenVersion: number }" }, "401": { description: "auth required" } },
       },
     },
-    "/api/planet/stats": { get: { summary: "Planet public stats", security: [] } },
-    "/api/planet/artifacts/recent": { get: { summary: "Recent certified artifacts", security: [] } },
     "/api/planet/artifacts/{artifactVersionId}/public": { get: { summary: "Public artifact + votes", security: [] } },
 
     // ──────────────────────────────────────────────────────────────────────

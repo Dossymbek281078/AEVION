@@ -25,6 +25,7 @@ export type SessionRow = {
   mode: string;
   createdAt: string;
   updatedAt: string;
+  pinned?: boolean;
 };
 
 export type RunRow = {
@@ -198,19 +199,25 @@ export async function listSessions(userId: string | null, limit = 50): Promise<S
   if (!isDbReady()) {
     const all = Array.from(memSessions.values());
     const filtered = all.filter((s) => (userId ? s.userId === userId : s.userId == null));
-    filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    // Pinned sessions float to top within the same updatedAt ordering.
+    filtered.sort((a, b) => {
+      const pa = (a as any).pinned ? 1 : 0;
+      const pb = (b as any).pinned ? 1 : 0;
+      if (pb !== pa) return pb - pa;
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
     return filtered.slice(0, lim);
   }
 
   if (userId) {
     const r = await pool.query(
-      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "updatedAt" DESC LIMIT $2`,
+      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $2`,
       [userId, lim]
     );
     return r.rows as SessionRow[];
   }
   const r = await pool.query(
-    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "updatedAt" DESC LIMIT $1`,
+    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $1`,
     [lim]
   );
   return r.rows as SessionRow[];

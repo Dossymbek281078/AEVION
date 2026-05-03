@@ -145,6 +145,7 @@ export default function HomePage() {
           {id:"aevion-awards-music",code:"AWM",name:"Music Awards",description:"AEVION Music Awards",kind:"product",status:"live",priority:7,tags:["awards"],runtime:{tier:"mvp_live",primaryPath:"/awards/music",apiHints:[],hint:"Awards showcase"}},
           {id:"aevion-awards-film",code:"AWF",name:"Film Awards",description:"AEVION Film Awards",kind:"product",status:"live",priority:8,tags:["awards"],runtime:{tier:"mvp_live",primaryPath:"/awards/film",apiHints:[],hint:"Awards showcase"}},
           {id:"qcoreai",code:"AI",name:"QCoreAI",description:"Multi-model AI engine",kind:"product",status:"live",priority:9,tags:["ai"],runtime:{tier:"mvp_live",primaryPath:"/qcoreai",apiHints:[],hint:"AI chat"}},
+          {id:"qtradeoffline",code:"QTO",name:"QTradeOffline",description:"Offline-first AEV payments",kind:"product",status:"live",priority:9,tags:["payments","offline"],runtime:{tier:"mvp_live",primaryPath:"/qtradeoffline",apiHints:[],hint:"Sign offline, sync later"}},
           {id:"auth",code:"AU",name:"Auth",description:"Identity & JWT",kind:"infra",status:"live",priority:10,tags:["auth"],runtime:{tier:"mvp_live",primaryPath:"/auth",apiHints:[],hint:"Identity"}},
         ]);
         setQRightObjects([{id:"d1",title:"AI Music Generator"},{id:"d2",title:"Quantum Shield Protocol"},{id:"d3",title:"CyberChess Engine"},{id:"d4",title:"Smart Contract"},{id:"d5",title:"Planet Validator"}]);
@@ -228,9 +229,10 @@ export default function HomePage() {
       qright: "/qright",
       qsign: "/qsign",
       "aevion-ip-bureau": "/bureau",
-      qtradeoffline: "/qtrade",
+      qtradeoffline: "/qtradeoffline",
       qcoreai: "/qcoreai",
       "multichat-engine": "/multichat-engine",
+      healthai: "/healthai",
     }),
     []
   );

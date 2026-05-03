@@ -331,161 +331,6 @@ code {
 @keyframes cc-spin {
   to { transform: rotate(360deg); }
 }
-@keyframes cc-capture-pop {
-  0% { opacity: 0.95; transform: scale(1); filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4)) brightness(1); }
-  35% { opacity: 0.85; transform: scale(1.18); filter: drop-shadow(0 6px 12px rgba(220,38,38,0.55)) brightness(1.1); }
-  100% { opacity: 0; transform: scale(0.45) rotate(-12deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)) brightness(0.7); }
-}
-
-@keyframes cc-ghost-pop {
-  0%   { transform: scale(0.92); }
-  60%  { transform: scale(1.18); }
-  100% { transform: scale(1.12); }
-}
-
-/* ── Drag-origin fade and hover ring (driven by board[data-*] attrs) ─────
-   Hook sets data-drag-from="e2" and data-hover-sq="e4" on the board element.
-   No React state needed. */
-[data-drag-from] [data-sq] > div:last-child { transition: opacity 60ms ease; }
-[data-drag-from="a1"] [data-sq="a1"] > div:last-child,
-[data-drag-from="a2"] [data-sq="a2"] > div:last-child,
-[data-drag-from="a3"] [data-sq="a3"] > div:last-child,
-[data-drag-from="a4"] [data-sq="a4"] > div:last-child,
-[data-drag-from="a5"] [data-sq="a5"] > div:last-child,
-[data-drag-from="a6"] [data-sq="a6"] > div:last-child,
-[data-drag-from="a7"] [data-sq="a7"] > div:last-child,
-[data-drag-from="a8"] [data-sq="a8"] > div:last-child,
-[data-drag-from="b1"] [data-sq="b1"] > div:last-child,
-[data-drag-from="b2"] [data-sq="b2"] > div:last-child,
-[data-drag-from="b3"] [data-sq="b3"] > div:last-child,
-[data-drag-from="b4"] [data-sq="b4"] > div:last-child,
-[data-drag-from="b5"] [data-sq="b5"] > div:last-child,
-[data-drag-from="b6"] [data-sq="b6"] > div:last-child,
-[data-drag-from="b7"] [data-sq="b7"] > div:last-child,
-[data-drag-from="b8"] [data-sq="b8"] > div:last-child,
-[data-drag-from="c1"] [data-sq="c1"] > div:last-child,
-[data-drag-from="c2"] [data-sq="c2"] > div:last-child,
-[data-drag-from="c3"] [data-sq="c3"] > div:last-child,
-[data-drag-from="c4"] [data-sq="c4"] > div:last-child,
-[data-drag-from="c5"] [data-sq="c5"] > div:last-child,
-[data-drag-from="c6"] [data-sq="c6"] > div:last-child,
-[data-drag-from="c7"] [data-sq="c7"] > div:last-child,
-[data-drag-from="c8"] [data-sq="c8"] > div:last-child,
-[data-drag-from="d1"] [data-sq="d1"] > div:last-child,
-[data-drag-from="d2"] [data-sq="d2"] > div:last-child,
-[data-drag-from="d3"] [data-sq="d3"] > div:last-child,
-[data-drag-from="d4"] [data-sq="d4"] > div:last-child,
-[data-drag-from="d5"] [data-sq="d5"] > div:last-child,
-[data-drag-from="d6"] [data-sq="d6"] > div:last-child,
-[data-drag-from="d7"] [data-sq="d7"] > div:last-child,
-[data-drag-from="d8"] [data-sq="d8"] > div:last-child,
-[data-drag-from="e1"] [data-sq="e1"] > div:last-child,
-[data-drag-from="e2"] [data-sq="e2"] > div:last-child,
-[data-drag-from="e3"] [data-sq="e3"] > div:last-child,
-[data-drag-from="e4"] [data-sq="e4"] > div:last-child,
-[data-drag-from="e5"] [data-sq="e5"] > div:last-child,
-[data-drag-from="e6"] [data-sq="e6"] > div:last-child,
-[data-drag-from="e7"] [data-sq="e7"] > div:last-child,
-[data-drag-from="e8"] [data-sq="e8"] > div:last-child,
-[data-drag-from="f1"] [data-sq="f1"] > div:last-child,
-[data-drag-from="f2"] [data-sq="f2"] > div:last-child,
-[data-drag-from="f3"] [data-sq="f3"] > div:last-child,
-[data-drag-from="f4"] [data-sq="f4"] > div:last-child,
-[data-drag-from="f5"] [data-sq="f5"] > div:last-child,
-[data-drag-from="f6"] [data-sq="f6"] > div:last-child,
-[data-drag-from="f7"] [data-sq="f7"] > div:last-child,
-[data-drag-from="f8"] [data-sq="f8"] > div:last-child,
-[data-drag-from="g1"] [data-sq="g1"] > div:last-child,
-[data-drag-from="g2"] [data-sq="g2"] > div:last-child,
-[data-drag-from="g3"] [data-sq="g3"] > div:last-child,
-[data-drag-from="g4"] [data-sq="g4"] > div:last-child,
-[data-drag-from="g5"] [data-sq="g5"] > div:last-child,
-[data-drag-from="g6"] [data-sq="g6"] > div:last-child,
-[data-drag-from="g7"] [data-sq="g7"] > div:last-child,
-[data-drag-from="g8"] [data-sq="g8"] > div:last-child,
-[data-drag-from="h1"] [data-sq="h1"] > div:last-child,
-[data-drag-from="h2"] [data-sq="h2"] > div:last-child,
-[data-drag-from="h3"] [data-sq="h3"] > div:last-child,
-[data-drag-from="h4"] [data-sq="h4"] > div:last-child,
-[data-drag-from="h5"] [data-sq="h5"] > div:last-child,
-[data-drag-from="h6"] [data-sq="h6"] > div:last-child,
-[data-drag-from="h7"] [data-sq="h7"] > div:last-child,
-[data-drag-from="h8"] [data-sq="h8"] > div:last-child { opacity: 0 !important; }
-
-/* Hover ring on drop target — uses ::after overlay, no extra DOM. */
-[data-hover-sq] [data-sq]::after { content: none; }
-[data-hover-sq="a1"] [data-sq="a1"]::after,
-[data-hover-sq="a2"] [data-sq="a2"]::after,
-[data-hover-sq="a3"] [data-sq="a3"]::after,
-[data-hover-sq="a4"] [data-sq="a4"]::after,
-[data-hover-sq="a5"] [data-sq="a5"]::after,
-[data-hover-sq="a6"] [data-sq="a6"]::after,
-[data-hover-sq="a7"] [data-sq="a7"]::after,
-[data-hover-sq="a8"] [data-sq="a8"]::after,
-[data-hover-sq="b1"] [data-sq="b1"]::after,
-[data-hover-sq="b2"] [data-sq="b2"]::after,
-[data-hover-sq="b3"] [data-sq="b3"]::after,
-[data-hover-sq="b4"] [data-sq="b4"]::after,
-[data-hover-sq="b5"] [data-sq="b5"]::after,
-[data-hover-sq="b6"] [data-sq="b6"]::after,
-[data-hover-sq="b7"] [data-sq="b7"]::after,
-[data-hover-sq="b8"] [data-sq="b8"]::after,
-[data-hover-sq="c1"] [data-sq="c1"]::after,
-[data-hover-sq="c2"] [data-sq="c2"]::after,
-[data-hover-sq="c3"] [data-sq="c3"]::after,
-[data-hover-sq="c4"] [data-sq="c4"]::after,
-[data-hover-sq="c5"] [data-sq="c5"]::after,
-[data-hover-sq="c6"] [data-sq="c6"]::after,
-[data-hover-sq="c7"] [data-sq="c7"]::after,
-[data-hover-sq="c8"] [data-sq="c8"]::after,
-[data-hover-sq="d1"] [data-sq="d1"]::after,
-[data-hover-sq="d2"] [data-sq="d2"]::after,
-[data-hover-sq="d3"] [data-sq="d3"]::after,
-[data-hover-sq="d4"] [data-sq="d4"]::after,
-[data-hover-sq="d5"] [data-sq="d5"]::after,
-[data-hover-sq="d6"] [data-sq="d6"]::after,
-[data-hover-sq="d7"] [data-sq="d7"]::after,
-[data-hover-sq="d8"] [data-sq="d8"]::after,
-[data-hover-sq="e1"] [data-sq="e1"]::after,
-[data-hover-sq="e2"] [data-sq="e2"]::after,
-[data-hover-sq="e3"] [data-sq="e3"]::after,
-[data-hover-sq="e4"] [data-sq="e4"]::after,
-[data-hover-sq="e5"] [data-sq="e5"]::after,
-[data-hover-sq="e6"] [data-sq="e6"]::after,
-[data-hover-sq="e7"] [data-sq="e7"]::after,
-[data-hover-sq="e8"] [data-sq="e8"]::after,
-[data-hover-sq="f1"] [data-sq="f1"]::after,
-[data-hover-sq="f2"] [data-sq="f2"]::after,
-[data-hover-sq="f3"] [data-sq="f3"]::after,
-[data-hover-sq="f4"] [data-sq="f4"]::after,
-[data-hover-sq="f5"] [data-sq="f5"]::after,
-[data-hover-sq="f6"] [data-sq="f6"]::after,
-[data-hover-sq="f7"] [data-sq="f7"]::after,
-[data-hover-sq="f8"] [data-sq="f8"]::after,
-[data-hover-sq="g1"] [data-sq="g1"]::after,
-[data-hover-sq="g2"] [data-sq="g2"]::after,
-[data-hover-sq="g3"] [data-sq="g3"]::after,
-[data-hover-sq="g4"] [data-sq="g4"]::after,
-[data-hover-sq="g5"] [data-sq="g5"]::after,
-[data-hover-sq="g6"] [data-sq="g6"]::after,
-[data-hover-sq="g7"] [data-sq="g7"]::after,
-[data-hover-sq="g8"] [data-sq="g8"]::after,
-[data-hover-sq="h1"] [data-sq="h1"]::after,
-[data-hover-sq="h2"] [data-sq="h2"]::after,
-[data-hover-sq="h3"] [data-sq="h3"]::after,
-[data-hover-sq="h4"] [data-sq="h4"]::after,
-[data-hover-sq="h5"] [data-sq="h5"]::after,
-[data-hover-sq="h6"] [data-sq="h6"]::after,
-[data-hover-sq="h7"] [data-sq="h7"]::after,
-[data-hover-sq="h8"] [data-sq="h8"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  box-shadow: inset 0 0 0 4px rgba(5,150,105,0.85), 0 0 18px rgba(5,150,105,0.45);
-  background: rgba(5,150,105,0.18);
-  pointer-events: none;
-  z-index: 4;
-}
 
 /* ── CyberChess utility classes ───────────────────────── */
 
@@ -497,153 +342,6 @@ code {
 
 .cc-no-scrollbar::-webkit-scrollbar { display: none; }
 .cc-no-scrollbar { scrollbar-width: none; }
-
-/* Board cell hover — subtle ring for desktop */
-@media (hover: hover) {
-  .cc-board-cell:hover::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
-    pointer-events: none;
-    transition: opacity 120ms ease;
-  }
-}
-
-/* Selected square ring overlay */
-.cc-board-cell-selected::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  box-shadow: inset 0 0 0 3px rgba(5, 150, 105, 0.85);
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Last-move highlight subtle pulse on appearance */
-.cc-board-cell-lastmove {
-  animation: cc-fade-in 200ms var(--cc-ease-out);
-}
-
-/* Launchpad card — uniform hover/press feel across the dashboard */
-.cc-launch-card {
-  position: relative;
-  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 180ms ease,
-    border-color 180ms ease;
-  will-change: transform;
-}
-@media (hover: hover) {
-  .cc-launch-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 24px -8px rgba(15, 23, 42, 0.18),
-      0 4px 8px -2px rgba(15, 23, 42, 0.06);
-  }
-}
-.cc-launch-card:active { transform: translateY(-1px) scale(0.99); }
-.cc-launch-card:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.38),
-    0 10px 24px -8px rgba(15, 23, 42, 0.18);
-}
-
-/* Section header for the launchpad — the small label above grouped cards */
-.cc-section-h {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 2px 6px;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--cc-text-dim, #64748b);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.cc-section-h::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg,
-    rgba(15, 23, 42, 0.08) 0%,
-    rgba(15, 23, 42, 0) 100%);
-}
-
-/* Stagger entry animation for launchpad sections */
-@keyframes cc-card-enter {
-  from { opacity: 0; transform: translateY(10px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-.cc-launch-card { animation: cc-card-enter 380ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-/* Stagger by visual order — section grids set --i via inline style */
-.cc-launch-card:nth-child(1) { animation-delay: 30ms; }
-.cc-launch-card:nth-child(2) { animation-delay: 80ms; }
-.cc-launch-card:nth-child(3) { animation-delay: 130ms; }
-.cc-launch-card:nth-child(4) { animation-delay: 180ms; }
-.cc-launch-card:nth-child(5) { animation-delay: 230ms; }
-.cc-launch-card:nth-child(6) { animation-delay: 280ms; }
-
-/* Respect reduced-motion preference */
-@media (prefers-reduced-motion: reduce) {
-  .cc-launch-card { animation: none; }
-  .cc-launch-card:hover { transform: none; }
-}
-
-/* First-visit hero banner */
-.cc-firstvisit {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--cc-radius-lg, 14px);
-  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 60%, #eff6ff 100%);
-  border: 1.5px solid rgba(5, 150, 105, 0.25);
-  padding: 16px 20px;
-  animation: cc-slide-up 360ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.cc-firstvisit::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(600px circle at 0% 0%, rgba(5, 150, 105, 0.18), transparent 60%);
-  pointer-events: none;
-}
-
-/* Piece pop animation when arriving on a new square (last-move destination) */
-.cc-board-cell-lastmove > div:last-child {
-  animation: cc-piece-pop 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes cc-piece-pop {
-  0% { transform: scale(0.85); }
-  60% { transform: scale(1.08); }
-  100% { transform: scale(1); }
-}
-
-
-/* Confetti for game-over win */
-.cc-confetti {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 9999;
-  overflow: hidden;
-}
-.cc-confetti-piece {
-  position: absolute;
-  width: 8px;
-  height: 14px;
-  top: -20px;
-  border-radius: 1px;
-  opacity: 0.9;
-  animation: cc-confetti-fall 3s cubic-bezier(0.5, 0, 0.5, 1) forwards;
-}
-@keyframes cc-confetti-fall {
-  0% { transform: translateY(-30px) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cc-confetti { display: none; }
-}
 
 .cc-backdrop {
   position: fixed;
@@ -709,15 +407,24 @@ code {
   }
 }
 
-/* Mobile: variant HUD should never overflow horizontally */
-@media (max-width: 480px) {
-  /* DAILY hub becomes single-column on small screens */
-  [role="dialog"] [style*="gridTemplateColumns: \"1fr 1fr\""],
-  [role="dialog"] [style*="gridTemplateColumns:\"1fr 1fr\""] {
-    grid-template-columns: 1fr !important;
-  }
-  /* Modal padding tight on phones */
-  .cc-modal-shell { max-width: calc(100vw - 16px) !important; }
+/* ── Global a11y focus ring ───────────────────────────── */
+/* All keyboard-focused interactive controls get a visible accent ring,
+   regardless of their inline-styled background. Drop-in for default outline. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Skip mouse-focus halos so visual styling stays clean on click. */
+button:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* Safe-area insets for iOS / notched devices */

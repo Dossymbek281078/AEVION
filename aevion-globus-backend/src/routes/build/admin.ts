@@ -19,12 +19,19 @@ adminRouter.get("/stats", async (req, res) => {
       pool.query(`SELECT COALESCE(SUM("cashbackAev"),0)::float8 AS "n" FROM "BuildCashback"`),
       pool.query(`SELECT COALESCE(SUM("cashbackAev"),0)::float8 AS "n" FROM "BuildCashback" WHERE "claimStatus" = 'CLAIMED'`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "AEVIONUser"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile"`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" WHERE "status" = 'PENDING'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "AEVIONUser" WHERE "createdAt" > NOW() - INTERVAL '7 days'`),
     ]);
     return ok(res, {
       leads: { total: Number(r[0].rows[0].n), last7d: Number(r[1].rows[0].n) },
       paidOrders: { count: Number(r[2].rows[0].n), totalAmount: Number(r[3].rows[0].n) },
       cashback: { totalAev: Number(r[4].rows[0].n), claimedAev: Number(r[5].rows[0].n) },
-      users: { total: Number(r[6].rows[0].n) },
+      users: { total: Number(r[6].rows[0].n), newLast7d: Number(r[10].rows[0].n) },
+      profiles: { total: Number(r[7].rows[0].n) },
+      vacancies: { open: Number(r[8].rows[0].n) },
+      applications: { pending: Number(r[9].rows[0].n) },
     });
   } catch (err: unknown) {
     return fail(res, 500, "admin_stats_failed", { details: (err as Error).message });
@@ -115,6 +122,40 @@ adminRouter.get("/leads.csv", async (req, res) => {
     return res.send(`${header}\n${body}`);
   } catch (err: unknown) {
     return fail(res, 500, "admin_leads_csv_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/users — admin-only user list
+adminRouter.get("/users", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const q = typeof req.query.q === "string" ? String(req.query.q).trim().slice(0, 100) : "";
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 50));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    const params: unknown[] = [];
+    let where = "";
+    if (q) {
+      params.push(`%${q}%`);
+      where = `WHERE (u."email" ILIKE $1 OR u."name" ILIKE $1)`;
+    }
+
+    const countRes = await pool.query(`SELECT COUNT(*)::int AS "n" FROM "AEVIONUser" u ${where}`, params);
+    params.push(limit, offset);
+    const rows = await pool.query(
+      `SELECT u."id", u."email", u."name", u."role", u."createdAt",
+              p."buildRole", p."city", p."openToWork", p."verifiedAt"
+       FROM "AEVIONUser" u LEFT JOIN "BuildProfile" p ON p."userId" = u."id"
+       ${where} ORDER BY u."createdAt" DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+    return ok(res, { items: rows.rows, total: Number(countRes.rows[0].n) });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_users_failed", { details: (err as Error).message });
   }
 });
 

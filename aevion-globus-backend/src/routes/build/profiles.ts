@@ -641,3 +641,29 @@ profilesRouter.delete("/education/:id", async (req, res) => {
     return fail(res, 500, "education_delete_failed", { details: (err as Error).message });
   }
 });
+
+// PATCH /api/build/users/me/password — change own password
+profilesRouter.patch("/users/me/password", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const current = vString(req.body?.current, "current", { min: 6, max: 200 });
+    if (!current.ok) return fail(res, 400, current.error);
+    const next = vString(req.body?.next, "next", { min: 8, max: 200 });
+    if (!next.ok) return fail(res, 400, next.error);
+
+    const u = await pool.query(`SELECT "passwordHash" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [auth.sub]);
+    if (u.rowCount === 0) return fail(res, 404, "user_not_found");
+
+    const bcrypt = await import("bcryptjs");
+    const valid = await bcrypt.compare(current.value, u.rows[0].passwordHash);
+    if (!valid) return fail(res, 401, "current_password_incorrect");
+
+    const hash = await bcrypt.hash(next.value, 10);
+    await pool.query(`UPDATE "AEVIONUser" SET "passwordHash" = $1 WHERE "id" = $2`, [hash, auth.sub]);
+    return ok(res, { changed: true });
+  } catch (err: unknown) {
+    return fail(res, 500, "password_change_failed", { details: (err as Error).message });
+  }
+});

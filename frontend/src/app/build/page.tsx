@@ -4,19 +4,28 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ProjectCard } from "@/components/build/ProjectCard";
-import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api";
+import { OnboardingChecklist } from "@/components/build/OnboardingChecklist";
+import { buildApi, type BuildProject, type ProjectStatus, type BuildProfile } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
 const STATUS_FILTERS: (ProjectStatus | "ALL")[] = ["ALL", "OPEN", "IN_PROGRESS", "DONE"];
 
 export default function BuildHomePage() {
   const token = useBuildAuth((s) => s.token);
+  const user = useBuildAuth((s) => s.user);
+  const [profile, setProfile] = useState<BuildProfile | null>(null);
   const [projects, setProjects] = useState<BuildProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ProjectStatus | "ALL">("ALL");
   const [q, setQ] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
+
+  useEffect(() => {
+    if (token) {
+      buildApi.me().then((r) => setProfile(r.profile)).catch(() => {});
+    }
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +62,10 @@ export default function BuildHomePage() {
 
   return (
     <BuildShell>
+      {token && user && (
+        <OnboardingChecklist user={user} profile={profile} />
+      )}
+
       {!token && (
         <div className="mb-8 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-slate-900 to-slate-950 px-6 py-8">
           <div className="max-w-2xl">

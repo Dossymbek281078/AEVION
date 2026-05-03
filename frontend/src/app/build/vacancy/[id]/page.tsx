@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ApplicationForm } from "@/components/build/ApplicationForm";
 import { QuickApplyButton } from "@/components/build/QuickApplyButton";
+import { HelpTip } from "@/components/build/HelpTip";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import {
   buildApi,
@@ -155,14 +156,21 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
         <aside className="space-y-4">
           {!isOwner && (
             <div className="rounded-xl border border-white/10 bg-white/5 p-5">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
-                Apply
-              </h2>
+              <div className="mb-3 flex items-center gap-1.5">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                  Откликнуться
+                </h2>
+                <HelpTip>
+                  <p className="mb-1 font-semibold text-white">Как подать отклик?</p>
+                  <p><strong>⚡ Quick Apply</strong> — один клик, система автоматически составит сопроводительное письмо из вашего профиля. Доступно если у вас заполнен профиль и в вакансии нет доп. вопросов.</p>
+                  <p className="mt-1.5"><strong>Полная форма</strong> — вручную напишите сообщение и ответьте на вопросы работодателя.</p>
+                </HelpTip>
+              </div>
               {(vacancy.questions || []).length === 0 && !myApplied && (
                 <div className="mb-3">
                   <QuickApplyButton vacancyId={vacancy.id} />
                   <p className="mt-1 text-xs text-slate-500">
-                    Один клик. Без анкет. Только если у тебя заполнен профиль.
+                    Один клик — профиль отправляется автоматически
                   </p>
                 </div>
               )}

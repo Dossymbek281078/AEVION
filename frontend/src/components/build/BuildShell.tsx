@@ -8,27 +8,27 @@ import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
 import { AppSwitcher } from "./AppSwitcher";
 
-const NAV: { href: string; label: string }[] = [
-  { href: "/build", label: "Projects" },
-  { href: "/build/vacancies", label: "Vacancies" },
-  { href: "/build/vacancies/map", label: "🗺️ Map" },
-  { href: "/build/available", label: "🟢 Available Now" },
-  { href: "/build/talent", label: "Talent" },
-  { href: "/build/team-requests", label: "Teams" },
-  { href: "/build/communities", label: "Communities" },
-  { href: "/build/shifts", label: "Shifts" },
-  { href: "/build/video", label: "Video" },
-  { href: "/build/stories", label: "📣 Stories" },
-  { href: "/build/payment-calendar", label: "💸 Payments" },
-  { href: "/build/leaderboard", label: "⭐ Leaderboard" },
-  { href: "/build/coach", label: "AI Coach" },
-  { href: "/build/saved", label: "Saved" },
-  { href: "/build/create-project", label: "New project" },
-  { href: "/build/profile", label: "Profile" },
-  { href: "/build/messages", label: "Messages" },
-  { href: "/build/pricing", label: "Pricing" },
-  { href: "/build/loyalty", label: "Loyalty" },
-  { href: "/build/why-aevion", label: "Why us" },
+const NAV: { href: string; label: string; title?: string }[] = [
+  { href: "/build", label: "Проекты", title: "Все строительные проекты на платформе" },
+  { href: "/build/vacancies", label: "Вакансии", title: "Открытые вакансии — сварщики, прорабы, монтажники" },
+  { href: "/build/vacancies/map", label: "🗺️ Карта", title: "Вакансии на карте по городу" },
+  { href: "/build/available", label: "🟢 Сейчас", title: "Работники готовые выйти прямо сейчас — как Uber" },
+  { href: "/build/talent", label: "Люди", title: "База работников — поиск по навыкам и городу" },
+  { href: "/build/team-requests", label: "Бригады", title: "Нанять целую бригаду под проект" },
+  { href: "/build/communities", label: "Чаты", title: "Групповые чаты по специальностям" },
+  { href: "/build/shifts", label: "Смены", title: "Расписание смен, GPS-отметка прихода" },
+  { href: "/build/video", label: "Видео", title: "Видеозвонки с кандидатами или заказчиками" },
+  { href: "/build/stories", label: "📣 Stories", title: "Обновления прямо с объекта — фото, прогресс" },
+  { href: "/build/payment-calendar", label: "💸 Выплаты", title: "Календарь ожидаемых выплат" },
+  { href: "/build/leaderboard", label: "⭐ Топ", title: "Лучшие работодатели и работники платформы" },
+  { href: "/build/coach", label: "AI Coach", title: "ИИ-коуч анализирует профиль и подбирает вакансии" },
+  { href: "/build/saved", label: "Избранное", title: "Сохранённые вакансии и кандидаты" },
+  { href: "/build/create-project", label: "Новый проект", title: "Создать проект и добавить вакансии" },
+  { href: "/build/profile", label: "Профиль", title: "Твоё резюме и настройки" },
+  { href: "/build/messages", label: "Сообщения", title: "Личные сообщения с кандидатами и заказчиками" },
+  { href: "/build/pricing", label: "Тарифы", title: "Тарифные планы: Free, Pro, Agency, Pay-per-Hire" },
+  { href: "/build/loyalty", label: "Лояльность", title: "Тир-система — скидки и кешбэк AEV за найм" },
+  { href: "/build/why-aevion", label: "О нас", title: "Почему QBuild лучше HH для стройки" },
 ];
 
 const TIER_CHIP: Record<string, { className: string; emoji: string }> = {
@@ -61,6 +61,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={n.href}
                   href={n.href}
+                  title={n.title}
                   className={`rounded-md px-3 py-1.5 text-sm transition ${
                     active ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
                   }`}
@@ -107,6 +108,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={n.href}
                 href={n.href}
+                title={n.title}
                 className={`shrink-0 rounded-md px-3 py-1.5 text-xs ${
                   active ? "bg-white/10 text-white" : "text-slate-400"
                 }`}

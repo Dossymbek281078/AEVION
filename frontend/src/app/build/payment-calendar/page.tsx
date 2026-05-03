@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { buildApi, type BuildPaymentEvent, type PaymentEventStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { HelpTip } from "@/components/build/HelpTip";
 
 export default function PaymentCalendarPage() {
   const [items, setItems] = useState<BuildPaymentEvent[] | null>(null);
@@ -36,7 +37,18 @@ export default function PaymentCalendarPage() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-white">💸 Платёжный календарь</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-white">💸 Платёжный календарь</h1>
+          <HelpTip>
+            <p className="mb-1 font-semibold text-white">Как это работает?</p>
+            <p>Работодатель добавляет ожидаемые выплаты — когда и сколько. Работник видит тот же календарь и подтверждает получение кнопкой «Оплачено».</p>
+            <p className="mt-1.5">Статусы: <br/>
+              🟡 PENDING — ждёт оплаты <br/>
+              🔴 OVERDUE — просрочено <br/>
+              ✅ PAID — подтверждено
+            </p>
+          </HelpTip>
+        </div>
         <p className="text-sm text-slate-400">Когда и сколько вам платят (или вы платите) — без сюрпризов.</p>
       </div>
 

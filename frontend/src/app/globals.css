@@ -407,6 +407,21 @@ code {
   }
 }
 
+/* ── Chess piece hover lift (grab cursor squares only) ── */
+/* Subtle scale on hover for grab-cursor cells (own pieces on your turn).
+   transition on the board cell itself so child inherits; no JS needed. */
+.cc-board-cell {
+  will-change: auto;
+}
+.cc-board-cell[style*="cursor: grab"]:hover {
+  z-index: 2;
+}
+/* Scale the piece wrapper (second div inside cell) on hover */
+.cc-board-cell[style*="cursor: grab"]:hover > div {
+  transition: transform 0.07s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: scale(1.07) !important;
+}
+
 /* ── Global a11y focus ring ───────────────────────────── */
 /* All keyboard-focused interactive controls get a visible accent ring,
    regardless of their inline-styled background. Drop-in for default outline. */

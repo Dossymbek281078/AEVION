@@ -260,6 +260,19 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "QCoreRun_batchId_idx" ON "QCoreRun" ("batchId") WHERE "batchId" IS NOT NULL;`
   );
 
+  // Per-user monthly spend limit. When set, /multi-agent 429s with a budget_exceeded
+  // response once the calendar-month total crosses the limit. alertAt (0..1) controls
+  // when a warning is surfaced in the UI (e.g. 0.8 = 80% of limit).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSpendLimit" (
+      "userId"          TEXT PRIMARY KEY,
+      "monthlyLimitUsd" DOUBLE PRECISION NOT NULL,
+      "alertAt"         DOUBLE PRECISION NOT NULL DEFAULT 0.8,
+      "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
   // QCoreRun — threading: parentRunId links to the previous run in a thread;
   // threadId is always set to the root run's id so we can retrieve all replies
   // in one WHERE clause. The root run has parentRunId=NULL, threadId=its own id.

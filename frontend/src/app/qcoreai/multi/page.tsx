@@ -2322,6 +2322,37 @@ export default function QCoreMultiAgentPage() {
                     >
                       {whBusy ? "…" : "Remove"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setWhBusy(true);
+                        try {
+                          const res = await fetch(apiUrl("/api/qcoreai/me/webhook/test"), {
+                            method: "POST", headers: bearerHeader(),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok) alert(`Test sent to ${data.sentTo}`);
+                          else alert(data.error || "Test failed");
+                        } catch (e: any) {
+                          alert(e?.message || "Test failed");
+                        } finally {
+                          setWhBusy(false);
+                        }
+                      }}
+                      disabled={whBusy}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "#fff",
+                        border: "1px solid #bfdbfe",
+                        color: "#1d4ed8",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Send test
+                    </button>
                   </div>
                 )}
               </div>
@@ -2412,9 +2443,12 @@ export default function QCoreMultiAgentPage() {
                 )}
               </div>
 
+              {/* V7-Budget: monthly spend summary + limit setting */}
+              <SpendLimitPanel />
+
               {/* Budget cap selector — applies to every strategy. */}
               <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 700 }}>Spend cap:</span>
+                <span style={{ fontWeight: 700 }}>Per-run cap:</span>
                 {[
                   { v: 0, label: "No cap" },
                   { v: 0.05, label: "$0.05" },
@@ -3183,6 +3217,132 @@ export default function QCoreMultiAgentPage() {
 /* ═══════════════════════════════════════════════════════════════════════
    Subcomponents
    ═══════════════════════════════════════════════════════════════════════ */
+
+function SpendLimitPanel() {
+  const [summary, setSummary] = useState<{
+    spentUsd: number; limitUsd: number | null; alertAt: number; pct: number | null;
+    alerting: boolean; exceeded: boolean;
+  } | null>(null);
+  const [limitInput, setLimitInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/qcoreai/me/spend-summary"), { headers: bearerHeader() })
+      .then((r) => r.json()).then((d) => { if (d.spentUsd !== undefined) setSummary(d); })
+      .catch(() => {});
+  }, []);
+
+  if (!summary) return null;
+
+  const pctNum = summary.pct !== null ? Math.min(100, Math.round(summary.pct * 100)) : null;
+  const barColor = summary.exceeded ? "#ef4444" : summary.alerting ? "#f59e0b" : "#10b981";
+
+  const save = async () => {
+    const v = parseFloat(limitInput);
+    if (!isFinite(v) || v <= 0) return;
+    setSaving(true);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/spend-limit"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ monthlyLimitUsd: v }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSummary((prev) => prev ? { ...prev, limitUsd: v, pct: prev.spentUsd / v, alerting: prev.spentUsd / v >= 0.8, exceeded: prev.spentUsd >= v } : prev);
+        setEditing(false);
+        setLimitInput("");
+      } else {
+        alert(data.error || "Failed to save limit");
+      }
+    } finally { setSaving(false); }
+  };
+
+  const remove = async () => {
+    setSaving(true);
+    try {
+      await fetch(apiUrl("/api/qcoreai/me/spend-limit"), { method: "DELETE", headers: bearerHeader() });
+      setSummary((prev) => prev ? { ...prev, limitUsd: null, pct: null, alerting: false, exceeded: false } : prev);
+      setEditing(false);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 12, padding: "10px 12px", borderRadius: 10,
+        border: `1px solid ${summary.alerting ? "rgba(245,158,11,0.4)" : "rgba(15,23,42,0.1)"}`,
+        background: summary.alerting ? "rgba(245,158,11,0.05)" : "#f8fafc",
+        fontSize: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ fontWeight: 800, color: "#0f172a" }}>Monthly spend</span>
+        <span style={{ fontWeight: 700, color: summary.exceeded ? "#dc2626" : "#0f172a" }}>
+          ${summary.spentUsd.toFixed(4)}
+        </span>
+        {summary.limitUsd && (
+          <span style={{ color: "#64748b" }}>/ ${summary.limitUsd.toFixed(2)}</span>
+        )}
+        {summary.alerting && !summary.exceeded && (
+          <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, background: "rgba(245,158,11,0.15)", color: "#92400e" }}>
+            ⚠ 80%+ of limit
+          </span>
+        )}
+        {summary.exceeded && (
+          <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, background: "rgba(239,68,68,0.1)", color: "#991b1b" }}>
+            LIMIT REACHED
+          </span>
+        )}
+        <button
+          onClick={() => { setEditing((v) => !v); setLimitInput(summary.limitUsd ? String(summary.limitUsd) : ""); }}
+          style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", color: "#475569" }}
+        >
+          {editing ? "Close" : summary.limitUsd ? "Edit limit" : "+ Set limit"}
+        </button>
+      </div>
+
+      {summary.limitUsd && pctNum !== null && (
+        <div style={{ height: 4, borderRadius: 2, background: "#e2e8f0", overflow: "hidden", marginBottom: editing ? 8 : 0 }}>
+          <div style={{ height: "100%", borderRadius: 2, background: barColor, width: `${pctNum}%`, transition: "width 0.5s" }} />
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: "#64748b" }}>$/month:</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={limitInput}
+            onChange={(e) => setLimitInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+            placeholder="e.g. 10"
+            style={{ width: 80, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 11, fontFamily: "inherit" }}
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {saving ? "…" : "Save"}
+          </button>
+          {summary.limitUsd && (
+            <button
+              onClick={remove}
+              disabled={saving}
+              style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LiveCostBadge({ run }: { run: RunState }) {
   const stats = runStats(run);

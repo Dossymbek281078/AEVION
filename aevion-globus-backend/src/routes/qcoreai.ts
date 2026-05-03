@@ -35,6 +35,7 @@ import {
   createEvalRun,
   createEvalSuite,
   createBatch,
+  deleteSpendLimit,
   createPrompt,
   createRun,
   createSharedPreset,
@@ -46,8 +47,11 @@ import {
   deleteTemplate,
   ensureSession,
   getBatch,
+  getMonthlySpend,
+  getSpendLimit,
   listBatches,
   listBatchRuns,
+  setSpendLimit,
   updateBatchProgress,
   finishRun,
   forkPrompt,
@@ -265,6 +269,107 @@ qcoreaiRouter.delete("/me/webhook", async (req, res) => {
     return res.json({ ok: removed });
   } catch (err: any) {
     return res.status(500).json({ error: "delete failed", details: err?.message });
+  }
+});
+
+/** POST /api/qcoreai/me/webhook/test — sends a dummy run.completed event to the configured webhook URL. */
+qcoreaiRouter.post("/me/webhook/test", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const cfg = await getUserWebhook(auth.sub);
+    const envUrl = process.env.QCORE_WEBHOOK_URL?.trim();
+    if (!cfg && !envUrl) {
+      return res.status(400).json({ error: "no webhook configured" });
+    }
+    const userOverride = cfg ? { url: cfg.url, secret: cfg.secret } : null;
+    const testEvt = {
+      event: "run.completed" as const,
+      runId: "test-run-" + Date.now(),
+      sessionId: "test-session",
+      status: "done" as const,
+      strategy: "sequential",
+      userInput: "Webhook test fired from QCoreAI settings",
+      finalContent: "This is a test notification — your webhook is working correctly.",
+      totalDurationMs: 1234,
+      totalCostUsd: 0,
+      error: null,
+      finishedAt: new Date().toISOString(),
+    };
+    await notifyEvent(testEvt, userOverride);
+    res.json({ ok: true, sentTo: userOverride?.url || envUrl });
+  } catch (err: any) {
+    res.status(500).json({ error: "test webhook failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Monthly spend limit — per-user budget gate
+   GET    /api/qcoreai/me/spend-limit
+   PUT    /api/qcoreai/me/spend-limit
+   DELETE /api/qcoreai/me/spend-limit
+   GET    /api/qcoreai/me/spend-summary  (current month usage + limit)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/me/spend-limit", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const limit = await getSpendLimit(auth.sub);
+    res.json({ limit: limit || null });
+  } catch (err: any) {
+    res.status(500).json({ error: "get limit failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.put("/me/spend-limit", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const limitUsd = parseFloat(req.body?.monthlyLimitUsd);
+  const alertAt = typeof req.body?.alertAt === "number" ? req.body.alertAt : 0.8;
+  if (!isFinite(limitUsd) || limitUsd <= 0) {
+    return res.status(400).json({ error: "monthlyLimitUsd must be a positive number" });
+  }
+  try {
+    const limit = await setSpendLimit(auth.sub, limitUsd, alertAt);
+    res.json({ limit });
+  } catch (err: any) {
+    res.status(500).json({ error: "set limit failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/me/spend-limit", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deleteSpendLimit(auth.sub);
+    res.json({ ok });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete limit failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/me/spend-summary", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const [limit, spent] = await Promise.all([
+      getSpendLimit(auth.sub),
+      getMonthlySpend(auth.sub),
+    ]);
+    const limitUsd = limit?.monthlyLimitUsd ?? null;
+    const alertAt = limit?.alertAt ?? 0.8;
+    const pct = limitUsd ? spent / limitUsd : null;
+    res.json({
+      spentUsd: spent,
+      limitUsd,
+      alertAt,
+      pct,
+      alerting: pct !== null && pct >= alertAt,
+      exceeded: pct !== null && pct >= 1,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "spend summary failed", details: err?.message });
   }
 });
 
@@ -847,6 +952,24 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const userInput = typeof req.body?.input === "string" ? req.body.input.trim().slice(0, 16000) : "";
   if (!userInput) {
     return res.status(400).json({ error: "input required" });
+  }
+
+  // V7-Budget: check monthly spend limit before starting a run.
+  if (userId) {
+    try {
+      const limit = await getSpendLimit(userId);
+      if (limit && limit.monthlyLimitUsd > 0) {
+        const spent = await getMonthlySpend(userId);
+        if (spent >= limit.monthlyLimitUsd) {
+          return res.status(429).json({
+            error: "monthly_budget_exceeded",
+            message: `Monthly spend limit of $${limit.monthlyLimitUsd.toFixed(2)} reached (current: $${spent.toFixed(4)}).`,
+            spentUsd: spent,
+            limitUsd: limit.monthlyLimitUsd,
+          });
+        }
+      }
+    } catch { /* non-critical — allow the run if limit check fails */ }
   }
 
   const strategy: PipelineStrategy =

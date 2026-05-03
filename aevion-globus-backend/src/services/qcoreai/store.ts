@@ -1899,6 +1899,106 @@ export async function getPromptVersionChain(rootId: string): Promise<PromptRow[]
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Per-user monthly spend limits — gate /multi-agent when the calendar-month
+   total exceeds monthlyLimitUsd. alertAt (0..1) triggers a warning banner.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type SpendLimitRow = {
+  userId: string;
+  monthlyLimitUsd: number;
+  alertAt: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memSpendLimits = new Map<string, SpendLimitRow>();
+
+export async function getSpendLimit(userId: string): Promise<SpendLimitRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memSpendLimits.get(userId) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreSpendLimit" WHERE "userId"=$1`, [userId]);
+  return (r.rows[0] as SpendLimitRow) || null;
+}
+
+export async function setSpendLimit(
+  userId: string,
+  monthlyLimitUsd: number,
+  alertAt = 0.8
+): Promise<SpendLimitRow> {
+  await ensureQCoreTables(pool);
+  const clamped = Math.max(0, Math.min(1000, monthlyLimitUsd));
+  const at = Math.max(0.1, Math.min(1, alertAt));
+
+  if (!isDbReady()) {
+    const row: SpendLimitRow = {
+      userId,
+      monthlyLimitUsd: clamped,
+      alertAt: at,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memSpendLimits.set(userId, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreSpendLimit" ("userId","monthlyLimitUsd","alertAt")
+     VALUES ($1,$2,$3)
+     ON CONFLICT ("userId") DO UPDATE
+       SET "monthlyLimitUsd"=$2, "alertAt"=$3, "updatedAt"=NOW()
+     RETURNING *`,
+    [userId, clamped, at]
+  );
+  return r.rows[0] as SpendLimitRow;
+}
+
+export async function deleteSpendLimit(userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const had = memSpendLimits.has(userId);
+    memSpendLimits.delete(userId);
+    return had;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreSpendLimit" WHERE "userId"=$1 RETURNING "userId"`,
+    [userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Sum of totalCostUsd for the calling user's runs in the current calendar month.
+ * Falls back to an in-memory scan for the demo mode.
+ */
+export async function getMonthlySpend(userId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  if (!isDbReady()) {
+    // In-memory: userId isn't stored on runs directly — approximate via sessions.
+    const sessions = await listSessions(userId, 200);
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    let total = 0;
+    for (const run of memRuns.values()) {
+      if (sessionIds.has(run.sessionId) && run.startedAt >= monthStart) {
+        total += run.totalCostUsd ?? 0;
+      }
+    }
+    return total;
+  }
+
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(r."totalCostUsd"), 0) AS total
+     FROM "QCoreRun" r
+     JOIN "QCoreSession" s ON s.id = r."sessionId"
+     WHERE s."userId"=$1 AND r."startedAt" >= $2`,
+    [userId, monthStart]
+  );
+  return parseFloat(r.rows[0]?.total ?? "0") || 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Run templates — reusable input + strategy + overrides bundles.
    Users save a named config once and apply it in one click; public
    templates are browsable across accounts.

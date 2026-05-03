@@ -43,6 +43,7 @@ import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from 
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
+import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -417,6 +418,9 @@ export default function CyberChessPage(){
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
   const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
+  const[ghostDuelMode,sGhostDuelMode]=useState(false);
+  const[ghostDuelConfig,sGhostDuelConfig]=useState<GhostDuelConfig|null>(null);
+  const[ghostDuelDivergePly,sGhostDuelDivergePly]=useState<number|null>(null);
   const[scratchOn,sScratchOn]=useState(false);
   const[scratchGame,sScratchGame]=useState<Chess|null>(null);
   const[scratchHist,sScratchHist]=useState<string[]>([]);

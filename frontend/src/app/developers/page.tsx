@@ -178,6 +178,31 @@ await fetch("https://aevion.app/api/auth/sign-out-everywhere", {
   headers: { "Authorization": "Bearer " + token },
 });`;
 
+const CURL_QUICKSTART = `# 1. Authenticate
+TOKEN=$(curl -s https://aevion.app/api/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"you@example.com","password":"…"}' | jq -r .token)
+
+# 2. Register IP in QRight (idempotent; safe to retry)
+curl -s https://aevion.app/api/qright/register \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: $(uuidgen)" \\
+  -d '{"title":"My AI Track","kind":"music"}'
+
+# 3. Issue a court-grade Bureau certificate
+curl -s https://aevion.app/api/bureau/protect \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title":"Whitepaper v3","description":"draft","kind":"text"}'
+
+# 4. Verify a certificate by id (no auth required for verify)
+curl -s https://aevion.app/api/bureau/verify/CERT_ID
+
+# 5. Sign out every live session for the caller
+curl -s -X POST https://aevion.app/api/auth/sign-out-everywhere \\
+  -H "Authorization: Bearer $TOKEN"`;
+
 const FACTS = [
   { kicker: "Auth",       value: "JWT Bearer",            note: "Short-lived + refresh, passkey-ready stack" },
   { kicker: "Idempotency", value: "Idempotency-Key",      note: "Header-based, 24h replay window" },
@@ -267,30 +292,57 @@ export default function DevelopersPage() {
 
         <section style={{ marginTop: 24 }}>
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 14px" }}>Quick-start</h2>
-          <div
-            style={{
-              borderRadius: 14,
-              overflow: "hidden",
-              border: "1px solid rgba(15,23,42,0.1)",
-              background: "#0f172a",
-            }}
-          >
-            <div style={{ padding: "8px 14px", fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.14em", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-              JavaScript / TypeScript
-            </div>
-            <pre
+          <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(min(440px, 100%), 1fr))" }}>
+            <div
               style={{
-                margin: 0,
-                padding: "16px 18px",
-                fontSize: 12.5,
-                lineHeight: 1.65,
-                color: "#e2e8f0",
-                fontFamily: "ui-monospace, SFMono-Regular, monospace",
-                overflowX: "auto",
+                borderRadius: 14,
+                overflow: "hidden",
+                border: "1px solid rgba(15,23,42,0.1)",
+                background: "#0f172a",
               }}
             >
-              {QUICKSTART}
-            </pre>
+              <div style={{ padding: "8px 14px", fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.14em", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                JavaScript / TypeScript
+              </div>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: "16px 18px",
+                  fontSize: 12.5,
+                  lineHeight: 1.65,
+                  color: "#e2e8f0",
+                  fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                  overflowX: "auto",
+                }}
+              >
+                {QUICKSTART}
+              </pre>
+            </div>
+            <div
+              style={{
+                borderRadius: 14,
+                overflow: "hidden",
+                border: "1px solid rgba(15,23,42,0.1)",
+                background: "#0f172a",
+              }}
+            >
+              <div style={{ padding: "8px 14px", fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.14em", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                curl / shell
+              </div>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: "16px 18px",
+                  fontSize: 12.5,
+                  lineHeight: 1.65,
+                  color: "#e2e8f0",
+                  fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                  overflowX: "auto",
+                }}
+              >
+                {CURL_QUICKSTART}
+              </pre>
+            </div>
           </div>
         </section>
 

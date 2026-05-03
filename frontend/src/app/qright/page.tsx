@@ -705,7 +705,7 @@ export default function QRightPage() {
         {/* ── Step: FORM ── */}
         {step === "form" && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 24 }}>
               {[
                 { n: "1", title: "Describe", desc: "Title and details", color: "#0d9488", tip: null },
                 { n: "2", title: "Fingerprint", desc: "Tamper-evident SHA-256", color: "#3b82f6", tip: { name: "SHA-256", text: "A cryptographic fingerprint of your work. Once registered, the smallest change in the source produces a different hash — proving the original was yours." } },

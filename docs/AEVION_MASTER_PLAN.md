@@ -173,7 +173,9 @@ parity + docs/runbook.
 | ~~P1-4~~ | ~~Backup/restore drill + `docs/RUNBOOK.md`~~ ✅ done in PR #98 (JSON-store round-trip drilled, Postgres procedures documented) | aevion-backend-modules | — |
 | P1-5 | Sentry alert rules + dashboard URL | aevion-backend-modules / aevion-core | P1-1 ✅ |
 | P1-6 | Bank prod smoke against staging URL | aevion-bank | P0-* |
-| ~~P1-7~~ | ~~OpenAPI 0.4.0 → 0.5.0 with full schemas for Tier 1 endpoints~~ ✅ done in PR #98 | aevion-backend-modules | — |
+| ~~P1-7~~ | ~~OpenAPI 0.4.0 → 0.5.0~~ → 0.5.1 ✅ done in PRs #98 + #102 (Tier 1 reads + planet/awards full schemas) | aevion-backend-modules | — |
+| ~~P1-8~~ | ~~Awards + Planet smoke scripts~~ ✅ done in PR #102 (wired into daily cron) | aevion-backend-modules | — |
+| ~~P1-9~~ | ~~Sentry alert rules spec~~ ✅ done in PR #102 (`docs/SENTRY_ALERTS.md`) — UI config separately | aevion-backend-modules | — |
 | P1-4 | Backup/restore drill — run `scripts/backup.mjs`, verify restore on a fresh DB, document RTO/RPO | aevion-backend-modules | — |
 | P1-5 | Sentry alert rules + dashboard URL in `docs/RUNBOOK.md` | aevion-backend-modules | P1-1 |
 | P1-6 | Bank prod smoke — wallet create / mint / transfer / spend / cap-status against prod, capture HAR | aevion-bank | P0-* |
@@ -222,9 +224,15 @@ When the user is in a specific window and asks "what's next?", pick from
 this section. It maps to § 4 phases and is updated as work lands.
 
 ### `aevion-backend-modules` (this window's owner)
-1. **P1-5** Sentry alert rules — wire dashboards/alerts in the Sentry project to match the service tags shipped in PR #86 (see `docs/RUNBOOK.md` § 5)
-2. **P2-* (creator hardening)** — Awards / CyberChess / QBuild prod smoke against staging URL (gated by P0-1+P0-2)
-3. **Generic OpenAPI tightening** — extend 0.5.0 to cover bureau/awards/planet read paths (P1-7 follow-up)
+**Phase 1 backlog exhausted in this window** as of 2026-05-03 16:57 UTC.
+Remaining items are gated on Phase 0 infra (DNS, SSO, Railway env wire-up
+of `npm run check:prod-env`) which belong to `aevion-core` / ops, OR
+require Sentry UI config which is not git-managed.
+
+If the user insists on more code work in this window, candidates are:
+1. CyberChess + QBuild smoke scripts (mirror planet/awards pattern)
+2. Webhook receiver smoke (qright royalties + cyberchess tournament + planet certify)
+3. Per-route response-shape tests against the new OpenAPI 0.5.1 schemas (catches drift between code and spec)
 
 ### `aevion-core`
 1. **P0-1+P0-2** DNS + SSO cutover — single biggest unblock for the whole roadmap
@@ -266,6 +274,7 @@ this section. It maps to § 4 phases and is updated as work lands.
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-03  #102 feat(platform): P1 follow-up — awards+planet smokes + OpenAPI 0.5.1 + Sentry alerts spec
 2026-05-03  #98  feat(platform): P1 bundle — auth-replay smoke + RUNBOOK.md + OpenAPI 0.5.0 (P1-2b, P1-4, P1-7 done)
 2026-05-03  #92  docs(env): PROD_ENV_CHECKLIST.md + check-prod-env validator (P0-3 done)
 2026-05-03  #89  ci(platform): daily smoke runner orchestrator + GitHub Actions cron (P1-3 done)

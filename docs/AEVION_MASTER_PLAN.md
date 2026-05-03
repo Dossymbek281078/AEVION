@@ -97,12 +97,12 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 | # | Module | Backend | Frontend | Smoke | Sentry | i18n | SEO/OG | Prod-deploy | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | Auth | ✅ | ✅ | ⚠ | ⚠ | ✅ | ⚠ | ⚠ | Security pass C1+C2+H1-3 in #74; H4+M5+M6 in PR #80 (open) |
-| 2 | QRight v3 | ✅ | ✅ | ⚠ | ⚠ | ✅ | ✅ | ⚠ | crypto stack done; verify-bundle independent of AEVION |
+| 2 | QRight v3 | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | crypto stack done; Sentry wired #86 |
 | 3 | QSign v2 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | P1-P9 + investor polish merged 2026-04-26 (PR #2) |
 | 4 | Quantum Shield | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | Working v1 in PR #23; Tier 3 amplifier wired |
-| 5 | Bureau | ✅ | ✅ | ⚠ | ⚠ | ✅ | ✅ | ⚠ | Phase A/B/C merged (#9, #75); RU partnership artifacts |
-| 6 | Pipeline (IPCertificate) | ✅ | (in /bureau) | ⚠ | ⚠ | ✅ | ✅ | ⚠ | dilithium + cosign stack |
-| 7 | Planet Compliance | ✅ | ✅ | ⚠ | ⚠ | ✅ | ✅ | ⚠ | quorum + Merkle + Tier 3 amplifier |
+| 5 | Bureau | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | Phase A/B/C merged (#9, #75); Sentry wired #86 |
+| 6 | Pipeline (IPCertificate) | ✅ | (in /bureau) | ⚠ | ✅ | ✅ | ✅ | ⚠ | dilithium + cosign + Sentry #86 |
+| 7 | Planet Compliance | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | quorum + Merkle + Sentry #86 |
 | 8 | Bank | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | ⚠ | 273-commit prod-ready PR #5; AEC + Trust Score |
 | 9 | QTrade | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | Full trading platform + AEV in PR #72 |
 | 10 | AEV token | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | ⚠ | bundled with QTrade (#72) |
@@ -112,7 +112,7 @@ Legend: ✅ done · ⚠ partial / unverified · ❌ missing · — not applicabl
 
 | # | Module | Backend | Frontend | Smoke | Sentry | i18n | SEO/OG | Prod-deploy | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| 12 | Awards | ✅ | ✅ | ⚠ | ⚠ | ✅ | ✅ | ⚠ | Music + Film tracks; admin bulk panel #59 |
+| 12 | Awards | ✅ | ✅ | ⚠ | ✅ | ✅ | ✅ | ⚠ | Music + Film tracks; admin bulk #59; Sentry #86 |
 | 13 | CyberChess | (n/a) | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | tournaments + variants + brilliancy + bot personas |
 | 14 | QBuild | ✅ | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | 10 killer features (#62); UI polish in `port-qbuild-v3` |
 | 15 | смета (smeta) | ✅ | ✅ | ⚠ | ⚠ | ⚠ | ⚠ | ⚠ | merged in #76; ESН РК corpus + export |
@@ -165,7 +165,7 @@ parity + docs/runbook.
 
 | ID | Task | Owner | Dependency |
 |---|---|---|---|
-| P1-1 | Wire Sentry into bureau / awards / planet / pipeline / qright (template: `src/lib/qshield/sentry.ts`) | aevion-backend-modules | — |
+| ~~P1-1~~ | ~~Wire Sentry into bureau / awards / planet / pipeline / qright~~ ✅ done in PR #86 | aevion-backend-modules | — |
 | P1-2 | Land PR #80 (security H4+M5+M6) and write smoke for tokenVersion replay rejection | aevion-backend-modules | review |
 | P1-3 | Daily smoke runner — wrap `aev-smoke + qsign-v2-smoke + qshield-smoke + build-smoke + tier3-smoke + payments-smoke` into one orchestrator + GitHub Actions cron | aevion-backend-modules | P0-4 |
 | P1-4 | Backup/restore drill — run `scripts/backup.mjs`, verify restore on a fresh DB, document RTO/RPO | aevion-backend-modules | — |
@@ -216,9 +216,9 @@ When the user is in a specific window and asks "what's next?", pick from
 this section. It maps to § 4 phases and is updated as work lands.
 
 ### `aevion-backend-modules` (this window's owner)
-1. **P1-1** Sentry coverage on bureau / awards / planet / pipeline / qright (~2 hours, low risk, high signal)
-2. **P1-3** Daily smoke runner orchestrator (~4 hours, prevents regression in prod)
-3. **P0-3** env audit doc — write `docs/PROD_ENV_CHECKLIST.md` listing every required env var per module
+1. **P1-3** Daily smoke runner orchestrator — wrap `aev/qsign-v2/qshield/build/tier3/payments` smokes into one CI cron
+2. **P0-3** env audit doc — write `docs/PROD_ENV_CHECKLIST.md` listing every required env var per module
+3. **P1-7** OpenAPI 0.4.0 → 0.5.0 with full request/response schemas for Tier 1 endpoints
 
 ### `aevion-core`
 1. **P0-1+P0-2** DNS + SSO cutover — single biggest unblock for the whole roadmap
@@ -260,6 +260,8 @@ this section. It maps to § 4 phases and is updated as work lands.
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-03  #86  feat(platform): Sentry coverage on 5 platform routes (P1-1 done)
+2026-05-03  #82  docs(plan): AEVION_MASTER_PLAN.md — cross-window source of truth
 2026-05-03  #78  feat(platform): og:image + ETag/304 on sitemaps+RSS + Tier 3 smoke
 2026-05-03  #76  feat(smeta-trainer): port AEVION construction estimation training app
 2026-05-03  #75  feat(bureau): Phase B+C — org members, notary registry, Notarized tier

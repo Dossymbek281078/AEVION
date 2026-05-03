@@ -17,6 +17,8 @@ import { rateLimit } from "../lib/rateLimit";
 import { refererHost } from "../lib/qrightHelpers";
 import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { makeServiceCapture } from "../lib/sentry/platform";
+const capturePlanetError = makeServiceCapture("planet");
 
 const PLANET_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "PlanetWebhook",
@@ -2442,6 +2444,7 @@ planetComplianceRouter.get("/certificates/:certId/embed", planetEmbedRateLimit, 
         : null,
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -2545,6 +2548,7 @@ planetComplianceRouter.get("/certificates/:certId/badge.svg", planetEmbedRateLim
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION PLANET", right, "#0d9488"));
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -2623,6 +2627,7 @@ planetComplianceRouter.get("/transparency", planetEmbedRateLimit, async (_req, r
       ),
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -2698,6 +2703,7 @@ planetComplianceRouter.post("/certificates/:certId/revoke", async (req, res) => 
 
     res.json({ id: certId, revokedAt: now, reasonCode, revokedBy: "owner" });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -2781,6 +2787,7 @@ planetComplianceRouter.get("/admin/certificates", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -2865,6 +2872,7 @@ planetComplianceRouter.get("/admin/certificates.csv", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send([header, ...lines].join("\r\n"));
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -2925,6 +2933,7 @@ planetComplianceRouter.post("/admin/certificates/:certId/revoke", async (req, re
 
     res.json({ id: certId, revokedAt: now, reasonCode, revokedBy: "admin" });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3010,6 +3019,7 @@ planetComplianceRouter.post("/admin/certificates/revoke-bulk", async (req, res) 
 
     res.json({ revoked, alreadyRevoked, notFound, reasonCode });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3065,6 +3075,7 @@ planetComplianceRouter.get("/admin/audit", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3112,6 +3123,7 @@ planetComplianceRouter.get("/admin/sources", async (req, res) => {
       hosts: rows,
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3157,6 +3169,7 @@ planetComplianceRouter.get("/webhooks", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3189,6 +3202,7 @@ planetComplianceRouter.post("/webhooks", async (req, res) => {
     );
     res.status(201).json({ id, url, secret });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3207,6 +3221,7 @@ planetComplianceRouter.delete("/webhooks/:id", async (req, res) => {
     if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
     res.json({ id, deleted: true });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3235,6 +3250,7 @@ planetComplianceRouter.patch("/webhooks/:id", async (req, res) => {
     if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
     res.json({ id: r.rows[0].id, url: r.rows[0].url, updated: true });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3281,6 +3297,7 @@ planetComplianceRouter.get("/webhooks/:id/deliveries", async (req, res) => {
       })),
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3330,6 +3347,7 @@ planetComplianceRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) 
       error: result.error,
     });
   } catch (err: any) {
+    capturePlanetError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -3422,6 +3440,7 @@ planetComplianceRouter.get("/og.svg", planetEmbedRateLimit, async (req, res) => 
 
     res.send(svg);
   } catch (err: any) {
+    capturePlanetError(err, { route: "index og" });
     res.status(500).json({ error: "index og failed", details: err.message });
   }
 });
@@ -3500,6 +3519,7 @@ planetComplianceRouter.get("/certificates/:certId/og.svg", planetEmbedRateLimit,
 
     res.send(svg);
   } catch (err: any) {
+    capturePlanetError(err, { route: "cert og" });
     res.status(500).json({ error: "cert og failed", details: err.message });
   }
 });
@@ -3595,6 +3615,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
+    capturePlanetError(err, { route: "cert rss" });
     res.status(500).json({ error: "cert rss failed", details: err.message });
   }
 });
@@ -3659,6 +3680,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err: any) {
+    capturePlanetError(err, { route: "sitemap" });
     res.status(500).json({ error: "sitemap failed", details: err.message });
   }
 });

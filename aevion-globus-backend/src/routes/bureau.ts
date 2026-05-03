@@ -26,6 +26,8 @@ import {
 import { rateLimit } from "../lib/rateLimit";
 import { refererHost } from "../lib/qrightHelpers";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { makeServiceCapture } from "../lib/sentry/platform";
+const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
   windowMs: 60_000,
@@ -293,6 +295,7 @@ bureauRouter.post("/verify/start", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "verify/start failed";
     console.error("[Bureau] verify/start:", msg);
+    captureBureauError(err, { route: "verify/start" });
     res.status(500).json({ error: msg });
   }
 });
@@ -390,6 +393,7 @@ bureauRouter.get("/verify/status/:verificationId", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "status failed";
     console.error("[Bureau] verify/status:", msg);
+    captureBureauError(err, { route: "verify/status" });
     res.status(500).json({ error: msg });
   }
 });
@@ -461,6 +465,7 @@ bureauRouter.post("/payment/intent", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "payment/intent failed";
     console.error("[Bureau] payment/intent:", msg);
+    captureBureauError(err, { route: "payment/intent" });
     res.status(500).json({ error: msg });
   }
 });
@@ -546,6 +551,7 @@ bureauRouter.post("/upgrade/:certId", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "upgrade failed";
     console.error("[Bureau] upgrade:", msg);
+    captureBureauError(err, { route: "upgrade" });
     res.status(500).json({ error: msg });
   }
 });
@@ -591,6 +597,7 @@ bureauRouter.get("/dashboard", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "dashboard failed";
     console.error("[Bureau] dashboard:", msg);
+    captureBureauError(err, { route: "dashboard" });
     res.status(500).json({ error: msg });
   }
 });
@@ -716,6 +723,7 @@ bureauRouter.get("/notaries", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list notaries failed";
     console.error("[Bureau] notaries list:", msg);
+    captureBureauError(err, { route: "notaries list" });
     res.status(500).json({ error: msg });
   }
 });
@@ -746,6 +754,7 @@ bureauRouter.get("/notaries/:notaryId", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "notary detail failed";
     console.error("[Bureau] notary detail:", msg);
+    captureBureauError(err, { route: "notary detail" });
     res.status(500).json({ error: msg });
   }
 });
@@ -825,6 +834,7 @@ bureauRouter.post("/org", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "create org failed";
     console.error("[Bureau] org create:", msg);
+    captureBureauError(err, { route: "org create" });
     res.status(500).json({ error: msg });
   }
 });
@@ -852,6 +862,7 @@ bureauRouter.get("/org/mine", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list orgs failed";
     console.error("[Bureau] org/mine:", msg);
+    captureBureauError(err, { route: "org/mine" });
     res.status(500).json({ error: msg });
   }
 });
@@ -906,6 +917,7 @@ bureauRouter.get("/org/:orgId", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "get org failed";
     console.error("[Bureau] org get:", msg);
+    captureBureauError(err, { route: "org get" });
     res.status(500).json({ error: msg });
   }
 });
@@ -959,6 +971,7 @@ bureauRouter.post("/org/:orgId/invite", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "invite failed";
     console.error("[Bureau] org invite:", msg);
+    captureBureauError(err, { route: "org invite" });
     res.status(500).json({ error: msg });
   }
 });
@@ -1031,6 +1044,7 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "accept failed";
     console.error("[Bureau] org accept:", msg);
+    captureBureauError(err, { route: "org accept" });
     res.status(500).json({ error: msg });
   }
 });

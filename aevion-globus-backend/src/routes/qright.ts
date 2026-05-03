@@ -278,6 +278,8 @@ function recordAudit(
 // Pure helpers (no DB / no IO) live in src/lib/qrightHelpers.ts so vitest
 // can exercise them in isolation. Imported here unchanged.
 import { readExpectedHash, timingSafeHexEq, refererHost } from "../lib/qrightHelpers";
+import { makeServiceCapture } from "../lib/sentry/platform";
+const captureQrightError = makeServiceCapture("qright");
 
 // Best-effort counter bump — fire-and-forget. Errors here must never break
 // the embed/badge response, since these endpoints are loaded by third parties.
@@ -394,6 +396,7 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       scope: "all",
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -442,6 +445,7 @@ qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
       items: result.rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -539,6 +543,7 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
       },
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -578,6 +583,7 @@ qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=60");
     res.json(row);
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -637,6 +643,7 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
     );
     res.send([header, ...rows].join("\r\n"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -748,6 +755,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
         : `/qright/object/${row.id}`,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -878,6 +886,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION QRIGHT", right, "#0d9488"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -948,6 +957,7 @@ qrightRouter.post("/objects", async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1000,6 +1010,7 @@ qrightRouter.get("/admin/objects", async (req, res) => {
       items: result.rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1086,6 +1097,7 @@ qrightRouter.get("/admin/objects.csv", async (req, res) => {
     );
     res.send([header, ...rows].join("\r\n"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1204,6 +1216,7 @@ qrightRouter.post("/admin/revoke-bulk", async (req, res) => {
       reasonCode: reasonCodeRaw,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1281,6 +1294,7 @@ qrightRouter.post("/admin/revoke/:id", async (req, res) => {
       revokeReasonCode: updated.rows[0].revokeReasonCode,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1351,6 +1365,7 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
       })),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1414,6 +1429,7 @@ qrightRouter.get("/admin/audit", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1479,6 +1495,7 @@ qrightRouter.get("/admin/sources", async (req, res) => {
       hosts: rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1577,6 +1594,7 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
       revokeReasonCode: updated.rows[0].revokeReasonCode,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1628,6 +1646,7 @@ qrightRouter.get("/webhooks", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1683,6 +1702,7 @@ qrightRouter.post("/webhooks", async (req, res) => {
       hint: "Store the secret now — it will not be shown again. Verify deliveries by recomputing HMAC-SHA256(secret, requestBody) and comparing against the X-AEVION-Signature header.",
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1706,6 +1726,7 @@ qrightRouter.delete("/webhooks/:id", async (req, res) => {
     }
     res.json({ id, deleted: true });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1741,6 +1762,7 @@ qrightRouter.patch("/webhooks/:id", async (req, res) => {
     }
     res.json({ id: result.rows[0].id, url: result.rows[0].url, updated: true });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1808,6 +1830,7 @@ qrightRouter.get("/webhooks/:id/deliveries", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1867,6 +1890,7 @@ qrightRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) => {
       error: result.error,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1938,6 +1962,7 @@ qrightRouter.get("/og.svg", embedRateLimit, async (req, res) => {
 
     res.send(svg);
   } catch (err: any) {
+    captureQrightError(err, { route: "index og" });
     res.status(500).json({ error: "index og failed", details: err.message });
   }
 });
@@ -2028,6 +2053,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
+    captureQrightError(err, { route: "object rss" });
     res.status(500).json({ error: "object rss failed", details: err.message });
   }
 });
@@ -2090,6 +2116,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err: any) {
+    captureQrightError(err, { route: "sitemap" });
     res.status(500).json({ error: "sitemap failed", details: err.message });
   }
 });

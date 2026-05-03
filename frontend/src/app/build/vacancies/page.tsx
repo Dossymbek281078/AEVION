@@ -74,12 +74,20 @@ export default function VacanciesFeedPage() {
             All open positions across QBuild projects. Filter by status, salary, or city.
           </p>
         </div>
-        <Link
-          href="/build/create-project"
-          className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
-        >
-          Post a project
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/build/vacancies/map"
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10"
+          >
+            🗺️ Map
+          </Link>
+          <Link
+            href="/build/create-project"
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+          >
+            Post a project
+          </Link>
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">

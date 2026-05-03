@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { SafetyBriefingModal } from "@/components/build/SafetyBriefingModal";
+import { HelpTip } from "@/components/build/HelpTip";
 
 type Shift = {
   id: string;
@@ -52,6 +54,7 @@ function ShiftsInner() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [briefingShift, setBriefingShift] = useState<string | null>(null);
 
   function load() {
     buildApi.myShifts().then((r) => setShifts(r.items)).catch(() => {}).finally(() => setLoading(false));
@@ -97,7 +100,17 @@ function ShiftsInner() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">📅 Управление сменами</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-white">📅 Смены</h1>
+          <HelpTip>
+            <p className="mb-1 font-semibold text-white">Как работают смены?</p>
+            <p>Работодатель добавляет смены после принятия вашего отклика.</p>
+            <p className="mt-1.5">Перед началом смены:</p>
+            <p>1. Нажмите ⛑️ <strong>ТБ</strong> — прочитайте и подпишите инструктаж по безопасности</p>
+            <p>2. Нажмите <strong>✓ Пришёл</strong> — GPS фиксирует время и место</p>
+            <p>3. По окончании — <strong>⏹ Ушёл</strong></p>
+          </HelpTip>
+        </div>
         <p className="mt-1 text-sm text-slate-400">
           Расписание, отметка прихода и ухода на объекте
         </p>
@@ -108,12 +121,30 @@ function ShiftsInner() {
           {[1,2,3].map(i => <div key={i} className="h-24 animate-pulse rounded-xl border border-white/5 bg-white/5" />)}
         </div>
       ) : shifts.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-10 text-center">
           <p className="text-4xl">📅</p>
-          <p className="mt-3 text-slate-300">Смен пока нет</p>
-          <p className="mt-1 text-sm text-slate-500">Когда работодатель добавит смену — она появится здесь</p>
+          <p className="mt-3 text-base font-semibold text-slate-200">Смен пока нет</p>
+          <p className="mt-1 text-sm text-slate-400">Смены добавляет работодатель после того, как принял ваш отклик.</p>
+          <div className="mt-4 space-y-1 text-xs text-slate-500">
+            <p>1. Откликнитесь на вакансию → работодатель принимает отклик</p>
+            <p>2. Работодатель создаёт смены в системе</p>
+            <p>3. Вы подписываете инструктаж ТБ (⛑️) и нажимаете «✓ Пришёл»</p>
+          </div>
+          <a href="/build/vacancies" className="mt-4 inline-block rounded-lg bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30">
+            Найти вакансию →
+          </a>
         </div>
-      ) : (
+      ) : null}
+
+      {briefingShift && (
+        <SafetyBriefingModal
+          shiftId={briefingShift}
+          onClose={() => setBriefingShift(null)}
+          onSigned={() => load()}
+        />
+      )}
+
+      {!loading && shifts.length > 0 && (
         <div className="space-y-6">
           {Object.entries(byDate)
             .sort(([a], [b]) => a.localeCompare(b))
@@ -146,13 +177,21 @@ function ShiftsInner() {
                       </div>
                       <div className="flex gap-2">
                         {s.status === "PLANNED" && !s.checkInAt && (
-                          <button
-                            disabled={busy === s.id}
-                            onClick={() => void checkin(s.id)}
-                            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
-                          >
-                            {busy === s.id ? "…" : "✓ Пришёл"}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setBriefingShift(s.id)}
+                              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
+                            >
+                              ⛑️ ТБ
+                            </button>
+                            <button
+                              disabled={busy === s.id}
+                              onClick={() => void checkin(s.id)}
+                              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+                            >
+                              {busy === s.id ? "…" : "✓ Пришёл"}
+                            </button>
+                          </>
                         )}
                         {s.checkInAt && !s.checkOutAt && (
                           <button

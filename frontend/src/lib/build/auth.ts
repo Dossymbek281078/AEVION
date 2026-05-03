@@ -8,6 +8,7 @@ export type BuildAuthUser = {
   email: string;
   name: string;
   role: string;
+  emailVerifiedAt?: string | null;
 };
 
 type BuildAuthState = {

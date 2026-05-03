@@ -14,10 +14,28 @@ import { AiImprove } from "./AiImprove";
 const SHIFTS: ShiftPreference[] = ["DAY", "NIGHT", "FLEX", "ANY"];
 const AVAILS: AvailabilityType[] = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"];
 
-const ROLES: { value: BuildRole; label: string; hint: string }[] = [
-  { value: "CLIENT", label: "Client", hint: "I post projects and hire" },
-  { value: "CONTRACTOR", label: "Contractor", hint: "I run construction projects" },
-  { value: "WORKER", label: "Worker", hint: "I'm looking for jobs on projects" },
+const ROLES: { value: BuildRole; label: string; hint: string; emoji: string; detail: string }[] = [
+  {
+    value: "CLIENT",
+    label: "Работодатель",
+    hint: "Размещаю проекты и вакансии",
+    emoji: "🏢",
+    detail: "Создаёте проекты, публикуете вакансии, нанимаете сварщиков, прорабов, монтажников. Платите hire-fee только при успешном найме.",
+  },
+  {
+    value: "CONTRACTOR",
+    label: "Подрядчик",
+    hint: "Веду строительные проекты",
+    emoji: "👷",
+    detail: "Берёте проекты под ключ, собираете бригаду. Можете одновременно нанимать и откликаться на субподряды.",
+  },
+  {
+    value: "WORKER",
+    label: "Работник",
+    hint: "Ищу работу на объекте",
+    emoji: "🔧",
+    detail: "Откликаетесь на вакансии, принимаете тестовые задания (с оплатой в эскроу), подтверждаете смены через GPS. Профиль видят 3 000+ работодателей.",
+  },
 ];
 
 export function ProfileForm({
@@ -80,6 +98,11 @@ export function ProfileForm({
   );
   const [safetyTrainingUntil, setSafetyTrainingUntil] = useState(initial?.safetyTrainingUntil ?? "");
   const [introVideoUrl, setIntroVideoUrl] = useState(initial?.introVideoUrl ?? "");
+
+  // KZ localisation (v3)
+  const [iin, setIin] = useState(initial?.iin ?? "");
+  const [bin, setBin] = useState(initial?.bin ?? "");
+  const [locale, setLocale] = useState<"ru" | "en" | "kz">(initial?.locale ?? "ru");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,6 +180,9 @@ export function ProfileForm({
         safetyTrainingValid,
         safetyTrainingUntil: safetyTrainingUntil.trim() || null,
         introVideoUrl: introVideoUrl.trim() || null,
+        iin: iin.trim() || null,
+        bin: bin.trim() || null,
+        locale,
       });
       setSavedAt(new Date().toISOString());
       onSaved?.(saved);
@@ -225,21 +251,54 @@ export function ProfileForm({
             className="input-build"
           />
         </Field>
-        <Field label="Role">
-          <div className="grid grid-cols-3 gap-2">
+        <Field label="🇰🇿 ИИН (KZ — 12 цифр, опционально)">
+          <input
+            value={iin}
+            onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+            inputMode="numeric"
+            placeholder="12 digits"
+            className="input-build"
+          />
+        </Field>
+        <Field label="🇰🇿 БИН (юр. лицо KZ — 12 цифр, опционально)">
+          <input
+            value={bin}
+            onChange={(e) => setBin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+            inputMode="numeric"
+            placeholder="12 digits"
+            className="input-build"
+          />
+        </Field>
+        <Field label="🌐 Язык интерфейса">
+          <select
+            value={locale}
+            onChange={(e) => setLocale(e.target.value as "ru" | "en" | "kz")}
+            className="input-build"
+          >
+            <option value="ru">Русский</option>
+            <option value="kz">Қазақша</option>
+            <option value="en">English</option>
+          </select>
+        </Field>
+        <Field label="Роль на платформе">
+          <div className="space-y-2">
             {ROLES.map((r) => (
               <button
                 type="button"
                 key={r.value}
                 onClick={() => setBuildRole(r.value)}
-                className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                className={`w-full rounded-lg border px-3 py-3 text-left text-xs transition ${
                   buildRole === r.value
                     ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
                     : "border-white/10 bg-white/5 text-slate-300 hover:border-white/30"
                 }`}
               >
-                <div className="font-semibold">{r.label}</div>
-                <div className="opacity-70">{r.hint}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{r.emoji}</span>
+                  <span className="font-semibold">{r.label}</span>
+                  <span className="opacity-60">— {r.hint}</span>
+                </div>
+                <div className="mt-1 pl-6 text-[11px] opacity-60">{r.detail}</div>
               </button>
             ))}
           </div>

@@ -32,6 +32,11 @@ import { shiftsRouter } from "./build/shifts";
 import { documentsRouter } from "./build/documents";
 import { videoRoomsRouter } from "./build/video-rooms";
 import { contractsRouter } from "./build/contracts";
+// v3 killer-feature sub-routers
+import { pushRouter } from "./build/push";
+import { safetyBriefingRouter } from "./build/safety-briefing";
+import { storiesRouter } from "./build/stories";
+import { paymentCalendarRouter } from "./build/payment-calendar";
 
 export const buildRouter = Router();
 
@@ -86,3 +91,9 @@ buildRouter.use("/shifts", shiftsRouter);
 buildRouter.use("/documents", documentsRouter);
 buildRouter.use("/video", videoRoomsRouter);
 buildRouter.use("/applications", contractsRouter);
+
+// ── v3 killer features ─────────────────────────────────────────────────
+buildRouter.use("/push", pushRouter);
+buildRouter.use("/safety-briefing", safetyBriefingRouter);
+buildRouter.use("/stories", storiesRouter);
+buildRouter.use("/payment-calendar", paymentCalendarRouter);

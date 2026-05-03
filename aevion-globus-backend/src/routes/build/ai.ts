@@ -29,7 +29,7 @@ const aiRateLimiter = rateLimit({
         if (typeof payload.sub === "string") return payload.sub;
       } catch { /**/ }
     }
-    return ipKeyGenerator(req.ip ?? "anon");
+    return ipKeyGenerator(req.ip ?? "::1");
   },
   message: {
     success: false,
@@ -261,5 +261,66 @@ ${kindGuide[kind]}
     });
   } catch (err: unknown) {
     return fail(res, 500, "ai_improve_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/generate-vacancy — turn a one-line brief into a
+// structured BuildVacancy draft (title + skills[] + description +
+// salary range guess). Recruiter UI calls this from the "create vacancy"
+// flow so they don't have to fight a blank textarea.
+aiRouter.post("/generate-vacancy", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const brief = vString(req.body?.brief, "brief", { min: 5, max: 800 });
+    if (!brief.ok) return fail(res, 400, brief.error);
+    const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 100);
+    const localeRaw = typeof req.body?.locale === "string" ? req.body.locale : "ru";
+    const locale = ["ru", "en", "kz"].includes(localeRaw) ? localeRaw : "ru";
+
+    const { callClaude } = await import("../../lib/build/ai");
+
+    const sys = `Ты — HR-эксперт стройплощадки на платформе AEVION QBuild.
+Получаешь короткий бриф вакансии от работодателя и возвращаешь СТРОГИЙ JSON со схемой:
+{
+  "title": string,            // 4–80 символов, конкретно (не "Сотрудник", а "Сварщик 5 разряда")
+  "skills": string[],         // 3–8 конкретных навыков
+  "description": string,      // 60–800 символов: задачи, требования, условия (смены, оплата, тип занятости)
+  "salaryMin": number|null,   // оценка по рынку, ${city ? `город: ${city}` : "Россия/СНГ"}
+  "salaryMax": number|null,
+  "salaryCurrency": "RUB"|"KZT"|"USD",
+  "questions": string[]       // 3–5 коротких квалификационных вопросов кандидату
+}
+
+Правила:
+- Не выдумывай факты, которых нет в брифе. Если не указано "сменно/вахта" — пиши "обсуждаемо".
+- Зарплата — вилка по рынку, не точная цифра. Если бриф не упоминает уровень — bias к низу–середине.
+- Язык всех полей: ${locale === "en" ? "English" : locale === "kz" ? "Kazakh (cyrillic)" : "Russian"}.
+- Никакого markdown, никакого text вне JSON. Только raw JSON.
+- Не пиши \`\`\`json\`\`\`-обёртку.`;
+
+    const reply = await callClaude({
+      systemPrompt: sys,
+      messages: [{ role: "user", content: brief.value }],
+      maxTokens: 1024,
+      cacheSystem: true,
+    });
+
+    const cleaned = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return fail(res, 502, "ai_returned_invalid_json", {
+        sample: cleaned.slice(0, 200),
+      });
+    }
+    return ok(res, {
+      draft: parsed,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_generate_vacancy_failed", { details: (err as Error).message });
   }
 });

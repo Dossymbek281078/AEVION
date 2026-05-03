@@ -2758,6 +2758,28 @@ export default function QCoreMultiAgentPage() {
                       {s.title || "(untitled)"}
                     </button>
                     <button
+                      onClick={async () => {
+                        const pinned = !(s as any).pinned;
+                        try {
+                          await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}/pin`), {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json", ...bearerHeader() },
+                            body: JSON.stringify({ pinned }),
+                          });
+                          setSessions((prev) => prev.map((x) => x.id === s.id ? { ...x, pinned } as any : x));
+                        } catch { /* noop */ }
+                      }}
+                      title={(s as any).pinned ? "Unpin session" : "Pin session (floats to top)"}
+                      style={{
+                        width: 24, borderRadius: 6,
+                        border: "1px solid transparent", background: "transparent",
+                        color: (s as any).pinned ? "#f59e0b" : "#94a3b8",
+                        cursor: "pointer", fontSize: 13,
+                      }}
+                    >
+                      ★
+                    </button>
+                    <button
                       onClick={() => renameSessionPrompt(s)}
                       title="Rename session"
                       style={{

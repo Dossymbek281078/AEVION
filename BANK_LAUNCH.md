@@ -1,0 +1,165 @@
+# AEVION Bank — Production Launch Checklist
+
+> Last updated: 2026-04-30 (max-without-partnerships extended). Maintainer: Bank track. Target: smooth zero-surprise prod cutover.
+
+This file lists every concrete step needed to flip AEVION Bank from "feature-complete dev branch" to "live on aevion.app". Skim this before any prod push.
+
+**Branch state at this writing:** `bank-payment-layer` is **230 commits ahead** of `main` (PR #5 open). 43+ indexable bank sub-routes plus three operations surfaces. Build green. All 18 wallet widgets are live, plus 14 standalone widget pages, plus the test-environment infrastructure and the compliance/ops trio. **Backend gaps (JWT middleware, pagination, idempotency, email lookup, ecosystem/royalties/cyberchess endpoints, planet payouts) closed in the 2026-04-29 backend block. The 2026-04-30 extension layered ops + dev-surface polish: synthetic webhook tester, daily caps, CSV exports, /api/metrics, backup/restore CLI, Sentry hook scaffold, CORS env, audit-log full-text search.**
+
+## Operations surfaces (all noindex'd)
+
+- **`/bank/smoke`** — 14-step live E2E runner (was 11; expanded to cover ecosystem/royalties/chess endpoints). Writes to backend (registers a smoke user, top-ups, transfers, signs). Use for pre-release validation. `?auto=1` runs on load.
+- **`/bank/audit-log`** — read-only compliance ledger combining `/api/qtrade/operations` with local QSign signatures. Filters (kind / date / search), summary stats, CSV / JSON / print export. For regulators, auditors and partners.
+- **`/bank/diagnostics`** — health board. Ten endpoint probes (was five; expanded to cover ecosystem/royalties/chess/planet) with latency, auth state, local signature summary, environment fingerprint. **Now includes a synthetic-webhook tester section**: three buttons fire a server-proxied webhook against /api/qright/royalties/verify-webhook, /api/cyberchess/tournament-finalized and /api/planet/payouts/certify-webhook. The synthetic event is pinned to your authenticated email so the new ledger entry lands in your own /earnings; secrets stay server-side via the `/api/bank/test-webhook/{kind}` proxy.
+
+## Test environment one-URL demo
+
+For investor walk-throughs use a single URL:
+
+> **`https://aevion.app/bank?investor=1`**
+
+It registers a fresh demo user, redirects to `/bank/smoke?auto=1`, runs all 14 wired endpoints (auth → accounts → topup → transfer → sign → verify → ecosystem → royalties → chess) live and lands on a printable signed receipt. The yellow `pre-license test mode` ribbon stays visible throughout for legal cover. See §1 below for the matching pre-merge gates.
+
+---
+
+## 0. Where things live
+
+- **Frontend repo:** `Dossymbek281078/AEVION`
+- **Active branch:** `bank-payment-layer` (PR #5 → `main`)
+- **Worktree:** `C:\Users\user\aevion-core\frontend-bank`
+- **Backend repo:** `aevion-globus-backend` (separate session)
+- **Hosts:** Vercel (frontend), Railway (backend), Postgres (Railway / Neon)
+
+Live: https://aevion.app · API: https://api.aevion.app · Status: https://status.aevion.app
+
+---
+
+## 1. Pre-merge gates (block if red)
+
+- [ ] `npm run verify` from `aevion-core/` returns green (backend `tsc` + frontend `next build`)
+- [ ] All 43+ bank routes render server-side without TypeScript errors
+- [ ] No `console.error` or hydration warnings in dev console on `/bank`, `/bank/about`, `/bank/trust`, `/bank/security`, `/bank/help`, `/bank/budget`, `/bank/calendar`, `/bank/subscriptions`, `/bank/forecast`, `/bank/changelog`, `/bank/smoke`, `/bank/audit-log`, `/bank/diagnostics`
+- [ ] `/bank/smoke?auto=1` shows 14/14 green against staging in ≤8s
+- [ ] `/bank?investor=1` provisions a demo + redirects to smoke + completes without errors
+- [ ] `/bank/diagnostics` shows all nine probes OK with avg latency under 250 ms p50
+- [ ] `/bank/audit-log` renders filtered + paginated rows; CSV / JSON / Print all download / open
+- [ ] `/api/qtrade/accounts`, `/transfers`, `/operations` resolve under 200ms p95 in staging
+- [ ] `/api/qtrade/{topup,transfer}` enforce `Idempotency-Key` (replay test passes)
+- [ ] QSign sign + verify round-trips on staging within 100ms p95
+- [ ] No 401/403 from `/api/auth/me` while logged in
+- [ ] `NEXT_PUBLIC_BANK_MODE=production` set so the yellow test-mode ribbon is hidden in prod (or kept visible if shipping pre-license)
+
+## 2. Backend prep (separate session, but fronted track owns the audit)
+
+- [ ] Prisma migrations applied to prod DB (`npx prisma migrate deploy` from CI)
+- [ ] All env vars set in Railway:
+  - `DATABASE_URL` (prod Postgres)
+  - `AUTH_JWT_SECRET` (rotated, ≥32 bytes random)
+  - `QSIGN_KEYPAIR` (prod Ed25519)
+  - `CORS_ALLOWED_ORIGINS` set to `https://aevion.app[,https://www.aevion.app]` (comma-separated). Until set, CORS is fully permissive.
+  - `QRIGHT_WEBHOOK_SECRET`, `CYBERCHESS_WEBHOOK_SECRET`, `PLANET_WEBHOOK_SECRET` (rotated from dev defaults)
+  - `BANK_DAILY_TOPUP_CAP` (default 5000), `BANK_DAILY_TRANSFER_CAP` (default 2000)
+  - `METRICS_TOKEN` (gates `/api/metrics` from the public internet)
+  - `SENTRY_DSN` (optional; activates the hook in `lib/sentry.ts`. SDK is opt-in: `npm install @sentry/node` in the backend image when wanted)
+- [ ] Railway service has health-check on `/api/health` returning `{ ok: true }`
+- [ ] DB has nightly backup configured (Railway → Backups, retention 7 days minimum)
+- [ ] Pre-Postgres safety net: `npm --prefix aevion-globus-backend run backup -- --keep 30` cron on the Railway shell or sidecar (snapshots `.aevion-data/*.json` into `.aevion-backups/`)
+- [ ] Sentry DSN set + `@sentry/node` installed; verify `aevion_sentry_enabled 1` in `/api/metrics` and one test event flowing
+
+## 3. Frontend Vercel config
+
+- [ ] `NEXT_PUBLIC_SITE_URL=https://aevion.app` set in prod env
+- [ ] `BACKEND_PROXY_TARGET=https://api.aevion.app` for `/api/*` rewrites
+- [ ] Edge runtime quotas reviewed (OG images + manifest run on edge)
+- [ ] Image domains allowlist: `aevion.app`, `cdn.aevion.app` (if any external assets)
+- [ ] Analytics: `@vercel/analytics` active OR self-hosted Plausible script
+
+## 4. Domain & DNS
+
+- [ ] `aevion.app` apex points at Vercel
+- [ ] `api.aevion.app` CNAME → Railway
+- [ ] `status.aevion.app` set up (Better Uptime / Statuspage)
+- [ ] HTTPS active everywhere; HSTS header enabled by Vercel default
+- [ ] `manifest.webmanifest` served with correct MIME type
+- [ ] `/sitemap.xml` reachable, `/robots.txt` reachable
+
+## 5. Observability
+
+- [ ] Sentry sourcemaps uploaded for the prod build
+- [ ] Backend rate-limit (`/api/auth/login`, `/api/qtrade/transfers`) tested at 10 req/min per IP
+- [ ] Daily caps tested: a topup or transfer over `BANK_DAILY_TOPUP_CAP` / `BANK_DAILY_TRANSFER_CAP` returns 429 + `Retry-After`
+- [ ] `/api/metrics` scraped by Prometheus / Grafana. Required gauges: `aevion_accounts_total`, `aevion_transfers_total`, `aevion_uptime_seconds`, `aevion_sentry_enabled`. Auth via `Authorization: Bearer $METRICS_TOKEN`.
+- [ ] Audit log retention: signatures kept ≥200 entries client-side (verified via `MAX_KEEP` in `_lib/signatures.ts`)
+- [ ] Status page lists: API, Frontend, DB, QSign as separate components
+
+## 6. Smoke tests on prod (run after DNS flip)
+
+Run these in order. Each should take <5 seconds.
+
+| # | Action | Expected |
+|---|---|---|
+| 1 | Open `https://aevion.app` | landing renders |
+| 2 | Open `/bank` while logged out | redirects to `/auth` |
+| 3 | Sign up `smoke+<ts>@aevion.test` | account created, JWT in localStorage |
+| 4 | `/bank` after sign-in | balance card renders, ops list empty |
+| 5 | Top up 100 AEC | balance reflects 100, op appears, signed |
+| 6 | Click on op → opens `/bank/receipt/<id>` | receipt renders with QSign verified badge |
+| 7 | Open `/bank/about` in incognito | page loads, OG image lifts via `curl -I` |
+| 8 | Open `/bank/help`, search "AEC" | matching answer expands |
+| 9 | Open `/bank/glossary`, scroll to Trust group | 4 trust terms render |
+| 10 | Run `curl https://aevion.app/sitemap.xml` | XML with 55+ urls |
+| 11 | Test PWA install on mobile | install prompt appears |
+| 12 | Open `/bank/budget`, set a category cap | cap saves, pace + projection populate |
+| 13 | Open `/bank/calendar` | heat-mapped 30-day grid renders |
+| 14 | Open `/bank/subscriptions` | scanner runs, flag counts surface |
+| 15 | Open `/bank/forecast` | 3 scenario × 3 horizon controls work |
+| 16 | Open `/bank/changelog` | timeline groups render with type tags |
+| 17 | Cmd+K → "Jump to Budget Caps" while on `/bank/insights` | navigates to `/bank#bank-anchor-budget` |
+
+## 7. Rollback plan
+
+- Git revert PR #5 → push `main` → Vercel auto-rebuilds in ~2 min
+- For DB migration rollback: keep the previous Prisma migration's `down` SQL ready in `_rollback/`
+- For JSON ledger corruption: `npm --prefix aevion-globus-backend run backup:list` to find a clean snapshot, then `npm run restore -- <stamp> --yes`. The restore script first preserves the current state into `<now>.pre-restore/` so the rollback is itself reversible.
+- For QSign keypair rotation: keep N-1 verifier keys for 7 days to avoid breaking existing signatures
+
+## 8. Day-1 monitoring
+
+- [ ] Sentry: zero errors in first 4 hours
+- [ ] Backend p95 latency stable below 250ms
+- [ ] No 5xx spikes on `/api/qtrade/*`
+- [ ] Active session count growing (if marketing was triggered)
+- [ ] Twitter / LinkedIn social previews lift OG images correctly (test with metatags.io)
+
+## 9. Post-launch (week 1)
+
+- [x] ~~Migrate mock-zone modules: QRight royalties → real `/api/qright/royalties`~~ — endpoint shipped 2026-04-29; UI auto-flips MOCK → PARTIAL via live probe
+- [x] ~~CyberChess winnings → real `/api/cyberchess/results`~~ — endpoint shipped 2026-04-29; UI auto-flips MOCK → PARTIAL via live probe
+- [x] ~~Planet bonuses → real `/api/planet/payouts`~~ — endpoint shipped 2026-04-29 (no mock surfaces left)
+- [ ] Wire actual webhook callers: rights body POSTs to `/api/qright/royalties/verify-webhook` (X-QRight-Secret), tournament service POSTs to `/api/cyberchess/tournament-finalized` (X-CyberChess-Secret), Planet certifier POSTs to `/api/planet/payouts/certify-webhook` (X-Planet-Secret) — endpoints + synthetic tester ready, partners not yet integrated
+- [ ] Move ecosystem ledger from in-memory to Postgres before any traffic that matters (current safety net: `npm run backup` + `restore`)
+- [ ] Lift hardcoded `aevion.app` from sample env to env var-driven
+- [ ] Compose post-mortem doc if any incidents fired
+
+---
+
+## Estimated days at current pace
+
+| stage | days | notes |
+|---|---|---|
+| Pre-merge gates | 0.5 | mostly automated; verify green now |
+| Backend prep | 1 | separate session, can parallelise |
+| Vercel + DNS | 0.5 | one-time |
+| Observability | 0.5 | Sentry + status page |
+| Smoke tests | 0.5 | once everything's flipped |
+| **Total to working v1** | **~2 days** | with mocks for QRight/Chess/Planet |
+| Post-launch mock removal | 1-2 weeks | depends on other module sessions |
+
+---
+
+## Open questions for the team
+
+- KYC posture: are we declaring AEC explicitly as ecosystem credit (not regulated)? Add disclaimer to /bank footer if yes.
+- Multi-region: is Vercel's edge enough or do we need a secondary backend region for KZ users?
+- Analytics consent: do we need a cookie banner for EU traffic, or is the local-only data model enough to skip it?
+- Press / launch coordination: who owns the announcement timing, and is the GTM track ready?

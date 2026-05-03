@@ -1,0 +1,114 @@
+# Daily smoke — boots an ephemeral Postgres + the backend and runs every
+# smoke script (qsign-v2 / qshield / aev / build / qcore / tier3) against
+# the live HTTP surface. Catches regressions that pure unit tests miss
+# because they exercise routing, middleware, env wiring and DB shape.
+#
+# Triggers:
+#   - cron: 08:00 UTC daily
+#   - workflow_dispatch with optional base_url to point at staging/prod
+#   - push to main only when this file or scripts/*-smoke.js changes
+#     (so we catch a broken smoke before merging into main's daily run)
+#
+# Failure semantics:
+#   The orchestrator exits 1 on any smoke failure. This job goes red, the
+#   GitHub UI shows which step exited; downstream issue creation is wired
+#   only on cron runs (manual dispatch surfaces the failure to the human
+#   who triggered it, no extra noise needed).
+
+name: Daily smoke
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "BASE URL for smokes (default ephemeral http://127.0.0.1:4001)"
+        required: false
+        default: "http://127.0.0.1:4001"
+      read_only:
+        description: "Only run read-only smokes (safe for prod)"
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "aevion-globus-backend/scripts/*-smoke.js"
+      - "aevion-globus-backend/scripts/all-smokes.js"
+      - ".github/workflows/daily-smoke.yml"
+
+jobs:
+  daily-smoke:
+    name: Daily smoke (ephemeral pg + backend)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aevion
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aevion
+      JWT_SECRET: ci-smoke-jwt-secret-do-not-use-in-prod-32chars-min
+      QSIGN_HMAC_V1_SECRET: ci-smoke-hmac-do-not-use-in-prod
+      # Tier 3 amplifier ETag fingerprints depend on row counts, which
+      # start at 0 in a fresh DB — that's fine for smoke shape checks.
+      AWARDS_BACKDOOR: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Generate ephemeral Ed25519 key for QSign v2
+        run: |
+          PRIV=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+          echo "QSIGN_ED25519_V1_PRIVATE=$PRIV" >> $GITHUB_ENV
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Start backend (background)
+        run: |
+          node dist/index.js > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
+          for i in $(seq 1 60); do
+            if curl -sSf http://127.0.0.1:4001/api/health >/dev/null 2>&1; then
+              echo "backend ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "backend failed to start within 60s"
+          tail -100 /tmp/backend.log
+          exit 1
+
+      - name: Run all smokes
+        env:
+          BASE: ${{ inputs.base_url || 'http://127.0.0.1:4001' }}
+          READ_ONLY: ${{ inputs.read_only && '1' || '0' }}
+        run: npm run smoke:all
+
+      - name: Backend logs (always)
+        if: always()
+        run: tail -200 /tmp/backend.log || true
+
+      - name: Stop backend
+        if: always()
+        run: kill $(cat /tmp/backend.pid) 2>/dev/null || true

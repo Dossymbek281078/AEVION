@@ -3,6 +3,7 @@
 import { useCallback, useRef, useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 type Msg = { role: "user" | "assistant" | "system"; content: string };
@@ -434,6 +435,8 @@ export default function QCoreAIPage() {
             </div>
           </div>
         </div>
+
+        <PitchValueCallout moduleId="qcoreai" variant="dark" />
 
         {/* ── Active model indicator ── */}
         {activeProviderName && activeModel && (

@@ -9,6 +9,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 const cardStyle: CSSProperties = {
@@ -23,6 +24,7 @@ export default function PlanetArtifactPublicPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
   const { showToast } = useToast();
+  const { t } = useI18n();
 
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -128,9 +130,9 @@ export default function PlanetArtifactPublicPage() {
   const vote = async () => {
     setBusy(true);
     try {
-      if (!token) throw new Error("Нужен вход: /auth");
+      if (!token) throw new Error(t("planetArt.toast.needLogin"));
       const normalizedScore = clampScore(Number.isFinite(score) ? score : 5);
-      if (!Number.isFinite(normalizedScore)) throw new Error("Некорректная rating");
+      if (!Number.isFinite(normalizedScore)) throw new Error(t("planetArt.toast.invalidRating"));
       const r = await fetch(apiUrl(`/api/planet/artifacts/${id}/vote`), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -138,11 +140,11 @@ export default function PlanetArtifactPublicPage() {
       });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.error || "vote failed");
-      showToast(`Голос принят. Ваш публичный символ: ${j.codeSymbol}`, "success");
+      showToast(t("planetArt.toast.voteAccepted", { sym: j.codeSymbol }), "success");
       setScore(normalizedScore);
       await loadPublic();
     } catch (e: any) {
-      showToast(e?.message || "Error votesания", "error");
+      showToast(e?.message || t("planetArt.toast.voteError"), "error");
     } finally {
       setBusy(false);
     }
@@ -151,7 +153,7 @@ export default function PlanetArtifactPublicPage() {
   const finalizeSnapshot = async () => {
     setBusy(true);
     try {
-      if (!token) throw new Error("Нужен вход (только владелец artifactа)");
+      if (!token) throw new Error(t("planetArt.toast.needLoginOwner"));
       const r = await fetch(apiUrl(`/api/planet/artifacts/${id}/votes/snapshot`), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -159,11 +161,11 @@ export default function PlanetArtifactPublicPage() {
       });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.error || "snapshot failed");
-      showToast(`Снапшот сезона зафиксирован. rootHash: ${j.rootHash}`, "success");
+      showToast(t("planetArt.toast.snapshotOk", { hash: j.rootHash }), "success");
       setProofJson(null);
       await loadPublic();
     } catch (e: any) {
-      showToast(e?.message || "Error снапшота", "error");
+      showToast(e?.message || t("planetArt.toast.snapshotError"), "error");
     } finally {
       setBusy(false);
     }
@@ -174,9 +176,9 @@ export default function PlanetArtifactPublicPage() {
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
-      showToast("Ссылка скопирована", "success", 3200);
+      showToast(t("planetArt.toast.linkCopied"), "success", 3200);
     } catch {
-      showToast("Не удалось скопировать (разрешите доступ к буферу)", "error");
+      showToast(t("planetArt.toast.linkCopyFail"), "error");
     }
   };
 
@@ -184,7 +186,7 @@ export default function PlanetArtifactPublicPage() {
     setBusy(true);
     setProofJson(null);
     try {
-      if (!token) throw new Error("Нужен вход");
+      if (!token) throw new Error(t("planetArt.toast.needLoginShort"));
       const r = await fetch(
         `${apiUrl(`/api/planet/artifacts/${id}/votes/my-proof`)}?seasonId=${encodeURIComponent(seasonId.trim())}&categoryId=${encodeURIComponent(categoryId.trim() || "general")}`,
         { headers: { Authorization: `Bearer ${token}` } },
@@ -192,9 +194,9 @@ export default function PlanetArtifactPublicPage() {
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.error || "proof failed");
       setProofJson(JSON.stringify(j, null, 2));
-      showToast("Merkle-proof загружен", "info");
+      showToast(t("planetArt.toast.proofLoaded"), "info");
     } catch (e: any) {
-      showToast(e?.message || "Error proof", "error");
+      showToast(e?.message || t("planetArt.toast.proofError"), "error");
     } finally {
       setBusy(false);
     }
@@ -205,7 +207,7 @@ export default function PlanetArtifactPublicPage() {
       <main>
         <ProductPageShell maxWidth={960}>
           <Wave1Nav hidePlanet />
-          Некорректный id
+          {t("planetArt.invalidId")}
         </ProductPageShell>
       </main>
     );
@@ -217,11 +219,11 @@ export default function PlanetArtifactPublicPage() {
       <Wave1Nav hidePlanet />
       <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: "8px 12px", alignItems: "center" }}>
         <Link href="/planet" style={{ color: "#0f172a", fontWeight: 600 }}>
-          ← Planet lab
+          {t("planetArt.nav.planet")}
         </Link>
         <span style={{ color: "#94a3b8" }}>|</span>
         <Link href="/awards" style={{ color: "#0f172a", fontWeight: 600 }}>
-          Awards hub
+          {t("planetArt.nav.awards")}
         </Link>
         <button
           type="button"
@@ -238,21 +240,20 @@ export default function PlanetArtifactPublicPage() {
             cursor: "pointer",
           }}
         >
-          Скопировать ссылку
+          {t("planetArt.btn.copyLink")}
         </button>
       </div>
 
-      <h1 style={{ fontSize: 26, marginBottom: 8 }}>Публичная витрина artifactа</h1>
+      <h1 style={{ fontSize: 26, marginBottom: 8 }}>{t("planetArt.h1")}</h1>
       <div style={{ color: "#666", marginBottom: 16, lineHeight: 1.5 }}>
-        Видно всем только если есть сертификат (compliance passed). Votes отображаются по{" "}
-        <b>CodeSymbol</b>, без email/имени. Снапшот сезона фиксирует Merkle root для проверки.
+        {t("planetArt.intro")}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         {[
-          ["#summary", "Сводка"],
-          ["#votes", "Voting"],
-          ["#season", "Сезон"],
-          ["#snapshot", "Снапшот"],
+          ["#summary", t("planetArt.anchor.summary")],
+          ["#votes", t("planetArt.anchor.voting")],
+          ["#season", t("planetArt.anchor.season")],
+          ["#snapshot", t("planetArt.anchor.snapshot")],
         ].map(([href, label]) => (
           <a
             key={href}
@@ -273,9 +274,9 @@ export default function PlanetArtifactPublicPage() {
         ))}
       </div>
       <div className="aevion-sticky-vote">
-        <span style={{ fontSize: 12, color: "#475569", fontWeight: 700 }}>Быстрое действие:</span>
+        <span style={{ fontSize: 12, color: "#475569", fontWeight: 700 }}>{t("planetArt.quick.label")}</span>
         <label style={{ fontSize: 12, color: "#334155" }}>
-          Оценка{" "}
+          {t("planetArt.quick.score")}{" "}
           <input
             type="number"
             min={1}
@@ -304,7 +305,7 @@ export default function PlanetArtifactPublicPage() {
             opacity: busy ? 0.75 : 1,
           }}
         >
-          Vote
+          {t("planetArt.btn.vote")}
         </button>
         <a
           href="#votes"
@@ -319,7 +320,7 @@ export default function PlanetArtifactPublicPage() {
             background: "#fff",
           }}
         >
-          К полному блоку →
+          {t("planetArt.btn.toFull")}
         </a>
       </div>
 
@@ -344,13 +345,13 @@ export default function PlanetArtifactPublicPage() {
           <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
             {data.artifact.artifactType} • v{data.artifact.versionNo} • {data.artifact.status}
           </div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>artifactVersionId</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>{t("planetArt.summary.versionIdLabel")}</div>
           <div style={{ fontFamily: "monospace", wordBreak: "break-all", fontSize: 12 }}>{data.artifact.id}</div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>evidenceRoot</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>{t("planetArt.summary.evidenceRootLabel")}</div>
           <div style={{ fontFamily: "monospace", wordBreak: "break-all", fontSize: 12 }}>{data.artifact.evidenceRoot}</div>
           {data.versionLineage?.parentVersionId && data.versionLineage?.parentVersion ? (
             <div style={{ marginTop: 12, fontSize: 13 }}>
-              <span style={{ color: "#666" }}>Предыдущая версия (пересдача): </span>
+              <span style={{ color: "#666" }}>{t("planetArt.summary.lineageBefore")} </span>
               <Link href={`/planet/artifact/${data.versionLineage.parentVersion.id}`} style={{ fontWeight: 700 }}>
                 v{data.versionLineage.parentVersion.versionNo} →
               </Link>
@@ -361,7 +362,7 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.certificate ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Certificate (public payload)</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.cert.title")}</div>
           <pre style={{ background: "#f5f5f5", padding: 12, borderRadius: 10, fontSize: 11, overflow: "auto" }}>
             {JSON.stringify(data.certificate.publicPayloadJson || data.certificate, null, 2)}
           </pre>
@@ -370,28 +371,28 @@ export default function PlanetArtifactPublicPage() {
 
       {planetStats ? (
         <section style={{ ...cardStyle, background: "#fafafa" }}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Participantи Planet (для «X из Y»)</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.stats.title")}</div>
           <div style={{ fontSize: 14, lineHeight: 1.55 }}>
-            <strong>Y</strong> (активный CodeSymbol): <b>{planetStats.eligibleParticipants}</b>
+            <strong>Y</strong> {t("planetArt.stats.eligibleBefore")} <b>{planetStats.eligibleParticipants}</b>
             <br />
-            Уникальных votesавших (всё время): <b>{planetStats.distinctVotersAllTime}</b>
+            {t("planetArt.stats.distinctVoters")} <b>{planetStats.distinctVotersAllTime}</b>
           </div>
           <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-            Метрики из <code>GET /api/planet/stats</code> — см. <code>AEVION_AWARDS_SPEC.md</code>.
+            {t("planetArt.stats.source")} <code>GET /api/planet/stats</code> {t("planetArt.stats.sourceTail")} <code>AEVION_AWARDS_SPEC.md</code>.
           </div>
         </section>
       ) : null}
 
       {data?.voteStats?.count > 0 ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Статистика votes</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.voteStats.title")}</div>
           <div style={{ fontSize: 14, marginBottom: 10 }}>
-            Голосов: <b>{voteCount}</b>, среднее: <b>{voteAverage ?? "—"}</b>
+            {t("planetArt.voteStats.count")} <b>{voteCount}</b>, {t("planetArt.voteStats.avg")} <b>{voteAverage ?? "—"}</b>
           </div>
           {planetStats?.eligibleParticipants ? (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
-                Coverage votesания: {voteCount} из {planetStats.eligibleParticipants} ({voteProgressPercent}%)
+                {t("planetArt.voteStats.coverage", { n: voteCount, y: planetStats.eligibleParticipants, p: voteProgressPercent })}
               </div>
               <div
                 style={{
@@ -419,7 +420,7 @@ export default function PlanetArtifactPublicPage() {
 
       {categoryRows.length > 0 ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Votes по номинациям</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.cats.title")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 12 }}>
             {categoryRows.slice(0, 3).map((row) => (
               <article
@@ -431,10 +432,10 @@ export default function PlanetArtifactPublicPage() {
                   background: "rgba(15,23,42,0.02)",
                 }}
               >
-                <div style={{ fontSize: 12, color: "#64748b" }}>Топ номинация</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>{t("planetArt.cats.topNomination")}</div>
                 <div style={{ marginTop: 3, fontWeight: 800, fontSize: 13 }}>{row.label}</div>
                 <div style={{ marginTop: 3, fontSize: 12, color: "#334155" }}>
-                  Голосов: <b>{row.count}</b> · Среднее: <b>{row.average ?? "—"}</b>
+                  {t("planetArt.cats.cardCount")} <b>{row.count}</b> · {t("planetArt.cats.cardAvg")} <b>{row.average ?? "—"}</b>
                 </div>
               </article>
             ))}
@@ -443,10 +444,10 @@ export default function PlanetArtifactPublicPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 560 }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-                  <th style={{ padding: 8 }}>Номинация</th>
-                  <th style={{ padding: 8 }}>categoryId</th>
-                  <th style={{ padding: 8 }}>Голосов</th>
-                  <th style={{ padding: 8 }}>Среднее</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.cats.col.label")}</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.cats.col.id")}</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.cats.col.count")}</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.cats.col.avg")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -466,9 +467,9 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.complianceSummary?.plagiarism || data?.complianceSummary?.license ? (
         <section style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Краткий compliance-отчёт (публично)</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.compliance.title")}</div>
           <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
-            Плагиат/лицензия — сжато для витрины; полный список валидаторов ниже при необходимости.
+            {t("planetArt.compliance.subtitle")}
           </div>
           <pre style={{ background: "#f8f8f8", padding: 12, borderRadius: 10, fontSize: 11, overflow: "auto" }}>
             {JSON.stringify(
@@ -485,18 +486,18 @@ export default function PlanetArtifactPublicPage() {
       ) : null}
 
       <section id="votes" style={cardStyle}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Voting (внутри системы)</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.voting.title")}</div>
         <div style={{ fontSize: 13, color: "#555", marginBottom: 10 }}>
-          Ваш текущий CodeSymbol: <b>{codeSymbol || "— (войдите и обновите страницу)"}</b>
+          {t("planetArt.voting.codeSymbol.before")} <b>{codeSymbol || t("planetArt.voting.codeSymbol.empty")}</b>
         </div>
         {data?.artifact?.artifactType ? (
           <div style={{ fontSize: 12, color: "#666", marginBottom: 10 }}>
-            Nominations для типа <b>{data.artifact.artifactType}</b> (стабильные <code>categoryId</code> для премий).
+            {t("planetArt.voting.nominationsBefore")} <b>{data.artifact.artifactType}</b> {t("planetArt.voting.nominationsAfter")}
           </div>
         ) : null}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <label>
-            Оценка 1–5:{" "}
+            {t("planetArt.voting.scoreLabel")}{" "}
             <input
               type="number"
               min={1}
@@ -510,7 +511,7 @@ export default function PlanetArtifactPublicPage() {
             />
           </label>
           <label>
-            Номинация:{" "}
+            {t("planetArt.voting.nominationLabel")}{" "}
             <select
               value={nominationOptions.some((o) => o.id === categoryId) ? categoryId : "general"}
               onChange={(e) => setCategoryId(e.target.value)}
@@ -529,7 +530,7 @@ export default function PlanetArtifactPublicPage() {
             disabled={busy}
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", fontWeight: 800 }}
           >
-            Проvotesать
+            {t("planetArt.btn.castVote")}
           </button>
           <Link
             href={artifactType === "music" ? "/awards/music" : artifactType === "movie" ? "/awards/film" : "/awards"}
@@ -543,18 +544,18 @@ export default function PlanetArtifactPublicPage() {
               textDecoration: "none",
             }}
           >
-            К витрине премии
+            {t("planetArt.btn.toShowcase")}
           </Link>
         </div>
       </section>
 
       <section id="season" style={cardStyle}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Сезон и снапшот (владелец artifactа)</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.season.title")}</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <input
             value={seasonId}
             onChange={(e) => setSeasonId(e.target.value)}
-            placeholder="season id"
+            placeholder={t("planetArt.season.placeholder")}
             style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc", minWidth: 200 }}
           />
           <button
@@ -563,7 +564,7 @@ export default function PlanetArtifactPublicPage() {
             disabled={busy}
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #b80", background: "#fff", color: "#b80", fontWeight: 800 }}
           >
-            Зафиксировать снапшот votes
+            {t("planetArt.btn.finalizeSnapshot")}
           </button>
           <button
             type="button"
@@ -571,7 +572,7 @@ export default function PlanetArtifactPublicPage() {
             disabled={busy}
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #111", background: "#fff", color: "#111", fontWeight: 800 }}
           >
-            Мой Merkle-proof
+            {t("planetArt.btn.myProof")}
           </button>
         </div>
         {proofJson ? (
@@ -583,15 +584,15 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.votes?.length ? (
         <section style={cardStyle}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Votes (только CodeSymbol)</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.votesList.title")}</div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 680 }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-                  <th style={{ padding: 8 }}>CodeSymbol</th>
-                  <th style={{ padding: 8 }}>Score</th>
-                  <th style={{ padding: 8 }}>Category</th>
-                  <th style={{ padding: 8 }}>leafHash</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.votesList.col.codeSymbol")}</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.votesList.col.score")}</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.votesList.col.category")}</th>
+                  <th style={{ padding: 8 }}>{t("planetArt.votesList.col.leaf")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -611,7 +612,7 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.validators ? (
         <details style={{ marginBottom: 16, border: "1px solid rgba(0,0,0,0.12)", borderRadius: 14, padding: 12 }}>
-          <summary style={{ cursor: "pointer", fontWeight: 800 }}>Все валидаторы (raw JSON)</summary>
+          <summary style={{ cursor: "pointer", fontWeight: 800 }}>{t("planetArt.validators.summary")}</summary>
           <pre style={{ marginTop: 10, background: "#fafafa", padding: 12, borderRadius: 10, fontSize: 10, overflow: "auto", maxHeight: 420 }}>
             {JSON.stringify(data.validators, null, 2)}
           </pre>
@@ -620,7 +621,7 @@ export default function PlanetArtifactPublicPage() {
 
       {data?.latestSnapshot ? (
         <section id="snapshot" style={{ ...cardStyle, marginBottom: 0 }}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Последний снапшот</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("planetArt.snapshotLast.title")}</div>
           <pre style={{ background: "#f5f5f5", padding: 12, borderRadius: 10, fontSize: 11, overflow: "auto" }}>
             {JSON.stringify(
               {

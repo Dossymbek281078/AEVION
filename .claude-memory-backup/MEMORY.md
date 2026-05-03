@@ -1,0 +1,6 @@
+- [Default yes — big blocks, no confirmations](feedback_default_yes.md) — globally: act by default, no "should I?" prompts, do all obvious next steps in one turn
+- [AEVION projects overview](project_aevion.md) — 27-project roadmap, bureau/qsign/qright worktrees, where each one lives
+- [AEVION — prefer decisive action](feedback_aevion_decisions.md) — on AEVION, pick best option and execute, don't present A/B/C menus
+- [AEVION — auto-commit+push on feature branches](feedback_aevion_git_push.md) — commit+push logical units on feat/* branches without asking; still pause for main/force/PRs
+- [AEVION Bureau — local dev setup](reference_aevion_bureau_dev.md) — ports, env flags, in-memory mode, seed-id quirk, Windows ghost-process gotcha
+- [AEVION subagents — perms + skill pivots](feedback_aevion_subagents.md) — patch worktree settings.local.json with Edit/Write/Read + git/npm before dispatching; tell them NOT to invoke skills

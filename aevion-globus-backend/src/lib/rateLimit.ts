@@ -3,10 +3,16 @@ import type { Request, Response, NextFunction } from "express";
 type Bucket = { count: number; resetAt: number };
 
 export interface RateLimitOptions {
-  windowMs: number;
-  max: number;
+  windowMs?: number;
+  max?: number;
+  /** Alias for max — token-bucket style naming used by bank routes. */
+  capacity?: number;
   keyPrefix?: string;
   message?: string;
+  /** Ignored compat field from bank token-bucket API. */
+  refillPerSec?: number;
+  /** Ignored compat field — per-request key customisation not supported in this impl. */
+  keyFn?: (req: import("express").Request) => string;
 }
 
 const GLOBAL_BUCKETS = new Map<string, Bucket>();
@@ -18,7 +24,9 @@ let lastSweep = 0;
  * limiter if the app ever runs on multiple instances.
  */
 export function rateLimit(opts: RateLimitOptions) {
-  const { windowMs, max, keyPrefix = "rl", message = "Too many requests" } = opts;
+  const windowMs = opts.windowMs ?? 60_000;
+  const max = opts.max ?? opts.capacity ?? 60;
+  const { keyPrefix = "rl", message = "Too many requests" } = opts;
 
   return function rateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
     const now = Date.now();

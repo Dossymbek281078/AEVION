@@ -2494,3 +2494,134 @@ export async function listBatchRuns(batchId: string): Promise<RunRow[]> {
   );
   return r.rows as RunRow[];
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run comments (public — no auth, authorName is free-text)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type CommentRow = {
+  id: string;
+  runId: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+};
+
+const memComments = new Map<string, CommentRow[]>();
+
+export async function createComment(runId: string, authorName: string, content: string): Promise<CommentRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const name = (authorName || "Anonymous").trim().slice(0, 60) || "Anonymous";
+  const text = (content || "").trim().slice(0, 2000);
+  if (!text) throw new Error("content required");
+  if (!isDbReady()) {
+    const row: CommentRow = { id, runId, authorName: name, content: text, createdAt: nowIso() };
+    const existing = memComments.get(runId) ?? [];
+    existing.push(row);
+    memComments.set(runId, existing);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreRunComment" ("id","runId","authorName","content") VALUES ($1,$2,$3,$4) RETURNING *`,
+    [id, runId, name, text]
+  );
+  return r.rows[0] as CommentRow;
+}
+
+export async function listComments(runId: string): Promise<CommentRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return (memComments.get(runId) ?? []).slice();
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRunComment" WHERE "runId"=$1 ORDER BY "createdAt" ASC`,
+    [runId]
+  );
+  return r.rows as CommentRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompt library audit log
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type AuditLogRow = {
+  id: string;
+  userId: string;
+  promptId: string;
+  promptName: string;
+  action: "create" | "update" | "delete";
+  changedFields: string | null;
+  createdAt: string;
+};
+
+const memAuditLog: AuditLogRow[] = [];
+
+export async function logPromptAudit(
+  userId: string, promptId: string, promptName: string,
+  action: "create" | "update" | "delete", changedFields?: string
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  if (!isDbReady()) {
+    memAuditLog.push({ id, userId, promptId, promptName, action, changedFields: changedFields ?? null, createdAt: nowIso() });
+    return;
+  }
+  await pool.query(
+    `INSERT INTO "QCorePresetAuditLog" ("id","userId","promptId","promptName","action","changedFields") VALUES ($1,$2,$3,$4,$5,$6)`,
+    [id, userId, promptId, promptName, action, changedFields ?? null]
+  );
+}
+
+export async function listPromptAudit(userId: string, limit = 100): Promise<AuditLogRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(500, limit));
+  if (!isDbReady()) return memAuditLog.filter((e) => e.userId === userId).slice(-lim).reverse();
+  const r = await pool.query(
+    `SELECT * FROM "QCorePresetAuditLog" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
+    [userId, lim]
+  );
+  return r.rows as AuditLogRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Workspaces — shared session collections with role-based access
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type WorkspaceRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memWorkspaces = new Map<string, WorkspaceRow>();
+
+export async function createWorkspace(opts: { name: string; description?: string | null; ownerId: string }): Promise<WorkspaceRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: WorkspaceRow = { id, name: opts.name.slice(0, 80), description: opts.description ?? null, ownerId: opts.ownerId, createdAt: nowIso(), updatedAt: nowIso() };
+  if (!isDbReady()) { memWorkspaces.set(id, row); return row; }
+  const r = await pool.query(
+    `INSERT INTO "QCoreWorkspace" ("id","name","description","ownerId") VALUES ($1,$2,$3,$4) RETURNING *`,
+    [id, row.name, row.description, row.ownerId]
+  );
+  return r.rows[0] as WorkspaceRow;
+}
+
+export async function listWorkspaces(userId: string): Promise<WorkspaceRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memWorkspaces.values()).filter((w) => w.ownerId === userId);
+  const r = await pool.query(
+    `SELECT w.* FROM "QCoreWorkspace" w LEFT JOIN "QCoreWorkspaceMember" m ON m."workspaceId"=w."id" AND m."userId"=$1 WHERE w."ownerId"=$1 OR m."userId"=$1 ORDER BY w."updatedAt" DESC`,
+    [userId]
+  );
+  return r.rows as WorkspaceRow[];
+}
+
+export async function getWorkspace(id: string): Promise<WorkspaceRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memWorkspaces.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreWorkspace" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as WorkspaceRow) || null;
+}

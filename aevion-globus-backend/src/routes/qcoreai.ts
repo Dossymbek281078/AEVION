@@ -41,7 +41,14 @@ import {
   createPrompt,
   createRun,
   createSharedPreset,
+  createComment,
   createTemplate,
+  createWorkspace,
+  getWorkspace,
+  listComments,
+  listPromptAudit,
+  listWorkspaces,
+  logPromptAudit,
   deleteEvalSuite,
   deletePrompt,
   deleteSession,
@@ -2054,7 +2061,7 @@ qcoreaiRouter.post("/schedules/:id/run-now", batchLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const sched = await getScheduledBatch(req.params.id);
+    const sched = await getScheduledBatch(String(req.params.id));
     if (!sched || sched.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
 
     const strategy = (["sequential", "parallel", "debate"].includes(sched.strategy)
@@ -2152,6 +2159,93 @@ export function startScheduler(): void {
   setInterval(tick, 60_000);
   console.log("[QCoreAI] scheduler started (1-min poll)");
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run comments — public, no auth required
+   POST /api/qcoreai/runs/:id/comments
+   GET  /api/qcoreai/runs/:id/comments
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/comments", async (req, res) => {
+  try {
+    const { authorName, content } = req.body || {};
+    if (!content?.trim()) return res.status(400).json({ error: "content required" });
+    const comment = await createComment(req.params.id, authorName || "Anonymous", content);
+    res.status(201).json({ comment });
+  } catch (err: any) {
+    res.status(500).json({ error: "create comment failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/runs/:id/comments", async (req, res) => {
+  try {
+    const comments = await listComments(req.params.id);
+    res.json({ items: comments });
+  } catch (err: any) {
+    res.status(500).json({ error: "list comments failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Prompt audit log
+   GET /api/qcoreai/prompts/audit
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/prompts/audit", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = parseInt(String(req.query.limit || "100"), 10) || 100;
+    const items = await listPromptAudit(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list audit failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Workspaces — shared session collections
+   POST /api/qcoreai/workspaces
+   GET  /api/qcoreai/workspaces
+   GET  /api/qcoreai/workspaces/:id
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/workspaces", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description } = req.body || {};
+    if (!name?.trim()) return res.status(400).json({ error: "name required" });
+    const workspace = await createWorkspace({ name: String(name), description: description ?? null, ownerId: auth.sub });
+    res.status(201).json({ workspace });
+  } catch (err: any) {
+    res.status(500).json({ error: "create workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listWorkspaces(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list workspaces failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/workspaces/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const workspace = await getWorkspace(req.params.id);
+    if (!workspace) return res.status(404).json({ error: "not found" });
+    if (workspace.ownerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    res.json({ workspace });
+  } catch (err: any) {
+    res.status(500).json({ error: "get workspace failed", details: err?.message });
+  }
+});
 
 /* ═══════════════════════════════════════════════════════════════════════
    Role + strategy defaults (for UI to pre-populate config dropdowns)

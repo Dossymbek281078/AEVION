@@ -115,6 +115,9 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreMessage — per-call cost (computed from provider/model/tokens at runtime).
   await pool.query(`ALTER TABLE "QCoreMessage" ADD COLUMN IF NOT EXISTS "costUsd" DOUBLE PRECISION;`);
 
+  // QCoreSession — pin to top of sidebar.
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT false;`);
+
   // QCoreRun — free-form tags ([]) + GIN index for tag-filter chip strip.
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_tags_gin_idx" ON "QCoreRun" USING GIN ("tags");`);
@@ -234,8 +237,64 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       ON "QCorePrompt" ("isPublic", "importCount" DESC, "updatedAt" DESC);
   `);
 
+  // Public comments on shared runs. No auth required to post — authorName is free-text.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunComment" (
+      "id"         TEXT PRIMARY KEY,
+      "runId"      TEXT NOT NULL,
+      "authorName" TEXT NOT NULL DEFAULT 'Anonymous',
+      "content"    TEXT NOT NULL,
+      "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunComment_runId_idx" ON "QCoreRunComment" ("runId", "createdAt" ASC);`);
+
+  // Audit log for prompt library changes (create / update / delete).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePresetAuditLog" (
+      "id"           TEXT PRIMARY KEY,
+      "userId"       TEXT NOT NULL,
+      "promptId"     TEXT NOT NULL,
+      "promptName"   TEXT NOT NULL,
+      "action"       TEXT NOT NULL,
+      "changedFields" TEXT,
+      "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePresetAuditLog_user_idx" ON "QCorePresetAuditLog" ("userId", "createdAt" DESC);`);
+
+  // Workspaces — shared session collections with role-based access.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspace" (
+      "id"          TEXT PRIMARY KEY,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "ownerId"     TEXT NOT NULL,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspace_owner_idx" ON "QCoreWorkspace" ("ownerId");`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspaceMember" (
+      "workspaceId" TEXT NOT NULL,
+      "userId"      TEXT NOT NULL,
+      "role"        TEXT NOT NULL DEFAULT 'viewer',
+      "joinedAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("workspaceId", "userId")
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspaceSession" (
+      "workspaceId" TEXT NOT NULL,
+      "sessionId"   TEXT NOT NULL,
+      "addedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("workspaceId", "sessionId")
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspaceSession_session_idx" ON "QCoreWorkspaceSession" ("sessionId");`);
+
   // Batch runs — run N prompts against the same agent config in one call.
-  // Each individual QCoreRun gets a batchId FK; the batch row tracks aggregate progress.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreBatch" (
       "id"             TEXT PRIMARY KEY,
@@ -252,17 +311,11 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       "completedAt"    TIMESTAMPTZ
     );
   `);
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS "QCoreBatch_owner_created_idx" ON "QCoreBatch" ("ownerUserId", "createdAt" DESC);`
-  );
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreBatch_owner_created_idx" ON "QCoreBatch" ("ownerUserId", "createdAt" DESC);`);
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "batchId" TEXT;`);
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS "QCoreRun_batchId_idx" ON "QCoreRun" ("batchId") WHERE "batchId" IS NOT NULL;`
-  );
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_batchId_idx" ON "QCoreRun" ("batchId") WHERE "batchId" IS NOT NULL;`);
 
-  // Per-user monthly spend limit. When set, /multi-agent 429s with a budget_exceeded
-  // response once the calendar-month total crosses the limit. alertAt (0..1) controls
-  // when a warning is surfaced in the UI (e.g. 0.8 = 80% of limit).
+  // Per-user monthly spend limit.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreSpendLimit" (
       "userId"          TEXT PRIMARY KEY,
@@ -273,8 +326,7 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
 
-  // Scheduled batch runs — fire a batch on a recurring or one-shot schedule.
-  // schedule: "once" | "hourly" | "daily" | "weekly". nextRunAt is always UTC.
+  // Scheduled batch runs.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreScheduledBatch" (
       "id"          TEXT PRIMARY KEY,
@@ -292,23 +344,15 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_owner_idx" ON "QCoreScheduledBatch" ("ownerUserId", "createdAt" DESC);`
-  );
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_nextRun_idx" ON "QCoreScheduledBatch" ("nextRunAt") WHERE "enabled"=TRUE AND "nextRunAt" IS NOT NULL;`
-  );
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_owner_idx" ON "QCoreScheduledBatch" ("ownerUserId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_nextRun_idx" ON "QCoreScheduledBatch" ("nextRunAt") WHERE "enabled"=TRUE AND "nextRunAt" IS NOT NULL;`);
 
-  // QCoreRun — threading: parentRunId links to the previous run in a thread;
-  // threadId is always set to the root run's id so we can retrieve all replies
-  // in one WHERE clause. The root run has parentRunId=NULL, threadId=its own id.
+  // QCoreRun — threading.
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "parentRunId" TEXT;`);
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "threadId" TEXT;`);
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS "QCoreRun_threadId_startedAt_idx" ON "QCoreRun" ("threadId", "startedAt");`
-  );
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_threadId_startedAt_idx" ON "QCoreRun" ("threadId", "startedAt");`);
 
-  // Run templates — save input + strategy + overrides as a named, reusable bundle.
+  // Run templates.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreTemplate" (
       "id"          TEXT PRIMARY KEY,
@@ -324,14 +368,8 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS "QCoreTemplate_owner_updated_idx"
-      ON "QCoreTemplate" ("ownerUserId", "updatedAt" DESC);
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS "QCoreTemplate_public_uses_idx"
-      ON "QCoreTemplate" ("isPublic", "useCount" DESC, "updatedAt" DESC);
-  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_owner_updated_idx" ON "QCoreTemplate" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_public_uses_idx" ON "QCoreTemplate" ("isPublic", "useCount" DESC, "updatedAt" DESC);`);
 
     dbReady = true;
     ensured = true;

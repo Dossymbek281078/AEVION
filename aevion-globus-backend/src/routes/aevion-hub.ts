@@ -149,6 +149,8 @@ aevionHubRouter.get("/openapi.json", (req, res) => {
           "@aevion/qshield-client",
           "@aevion/pipeline-client",
           "@aevion/qright-client",
+          "@aevion/planet-client",
+          "@aevion/bureau-client",
         ],
         docs: "https://aevion.com/docs/sdk",
       },
@@ -161,6 +163,21 @@ aevionHubRouter.get("/openapi.json", (req, res) => {
  * GET /api/aevion/version — quick build-info probe (process metadata only,
  * no DB). Useful for "what's deployed?" dashboard tiles.
  */
+/** GET /api/aevion/sitemap.xml — platform-wide XML sitemap index. */
+aevionHubRouter.get("/sitemap.xml", (_req, res) => {
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
+  const modules = [
+    "/qright", "/qsign", "/bureau", "/qcoreai", "/cyberchess",
+    "/planet", "/awards", "/bank", "/healthai", "/qtrade", "/quantum-shield",
+  ];
+  const urls = modules
+    .map((p) => `  <url><loc>${base}${p}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`)
+    .join("\n");
+  res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
+});
+
 aevionHubRouter.get("/version", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({

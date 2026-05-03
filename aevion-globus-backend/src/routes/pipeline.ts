@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
@@ -35,6 +36,9 @@ import {
   reverifyAuthorCosign,
   verifyAuthorCosign,
 } from "../lib/cosign/authorCosign";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { makeServiceCapture } from "../lib/sentry/platform";
+const capturePipelineError = makeServiceCapture("pipeline");
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -43,6 +47,12 @@ const demoRateLimiter = createInMemoryRateLimiter({ max: 10 });
 // 30 / мин / IP — достаточно для легитимного клиента-проверяющего, но
 // отсекает грубый перебор shard-комбинаций (brute-force Lagrange probe).
 const reconstructRateLimiter = createInMemoryRateLimiter({ max: 30 });
+// 20 / мин / IP — /protect writes 4 rows + Ed25519 keygen + OTS calendar
+// hit, so unauthenticated mass-spam is a real DoS vector.
+const protectRateLimiter = createInMemoryRateLimiter({ max: 20 });
+// 30 / мин / IP / certId — /verify increments verifiedCount on every GET,
+// so anyone could pump a cert's count and game the «Most verified» sort.
+const verifyRateLimiter = createInMemoryRateLimiter({ max: 30 });
 
 interface QSignPayload {
   objectId: string;
@@ -209,6 +219,34 @@ async function ensureTables(): Promise<void> {
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsUpgradedAt" TIMESTAMPTZ;`,
   );
+  // fileHash: SHA-256 of raw file bytes, supplied client-side when the user
+  // uploads a file. Stored alongside contentHash (which is the canonical
+  // text-field hash) so prior-art search can match either.
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "fileHash" TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE "QRightObject" ADD COLUMN IF NOT EXISTS "fileHash" TEXT;`,
+  );
+
+  // Tier 2: append-only admin audit (force-revoke, etc).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PipelineAuditLog" (
+      "id" TEXT PRIMARY KEY,
+      "action" TEXT NOT NULL,
+      "certId" TEXT,
+      "objectId" TEXT,
+      "actor" TEXT,
+      "payload" JSONB,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_at_idx" ON "PipelineAuditLog" ("at" DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_action_at_idx" ON "PipelineAuditLog" ("action", "at" DESC);`,
+  );
 
   tablesReady = true;
 }
@@ -338,7 +376,21 @@ async function resolveUser(
  */
 pipelineRouter.post("/protect", async (req, res) => {
   try {
+    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    const rl = protectRateLimiter.check(ip);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
+      return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
+    }
     await ensureTables();
+
+    // Sane caps on free-text fields — title 500c, description 10kc.
+    if (typeof req.body?.title === "string" && req.body.title.length > 500) {
+      return res.status(400).json({ error: "title must be ≤ 500 characters" });
+    }
+    if (typeof req.body?.description === "string" && req.body.description.length > 10_000) {
+      return res.status(400).json({ error: "description must be ≤ 10,000 characters" });
+    }
 
     const {
       title,
@@ -350,6 +402,7 @@ pipelineRouter.post("/protect", async (req, res) => {
       city,
       authorPublicKey,
       authorSignature,
+      fileHash,
     } = req.body;
 
     if (!title || !description) {
@@ -357,6 +410,10 @@ pipelineRouter.post("/protect", async (req, res) => {
         .status(400)
         .json({ error: "title and description are required" });
     }
+    if (fileHash !== undefined && fileHash !== null && !/^[a-f0-9]{64}$/i.test(String(fileHash))) {
+      return res.status(400).json({ error: "fileHash must be a 64-character lowercase hex SHA-256" });
+    }
+    const safeFileHash: string | null = fileHash ? String(fileHash).toLowerCase() : null;
 
     const user = await resolveUser(req);
     const authorName = ownerName || user.name || null;
@@ -462,14 +519,15 @@ pipelineRouter.post("/protect", async (req, res) => {
       await client.query("BEGIN");
 
       await client.query(
-        `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())`,
+        `INSERT INTO "QRightObject" ("id","title","description","kind","contentHash","fileHash","ownerName","ownerEmail","ownerUserId","country","city","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
         [
           objectId,
           title,
           description,
           effectiveKind,
           contentHash,
+          safeFileHash,
           authorName,
           authorEmail,
           authorUserId,
@@ -520,8 +578,8 @@ pipelineRouter.post("/protect", async (req, res) => {
       );
 
       await client.query(
-        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'active',$19,$20,$21,$22,$23,$24)`,
+        `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25)`,
         [
           certId,
           objectId,
@@ -534,6 +592,7 @@ pipelineRouter.post("/protect", async (req, res) => {
           country || null,
           city || null,
           contentHash,
+          safeFileHash,
           signatureHmac,
           signatureEd25519,
           publicKeySpkiHex,
@@ -1032,6 +1091,12 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     await ensureTables();
 
     const { certId } = req.params;
+    // Per-(IP, certId) limiter so the verifiedCount column can't be pumped
+    // by a single attacker — the bureau «Most verified» sort would otherwise
+    // be game-able for free.
+    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    const rl = verifyRateLimiter.check(`${ip}:${certId}`);
+    const skipIncrement = !rl.allowed;
     const { rows } = await pool.query(
       `SELECT * FROM "IPCertificate" WHERE "id" = $1`,
       [certId],
@@ -1045,11 +1110,13 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
 
     const cert = rows[0];
 
-    /* Increment verify count */
-    await pool.query(
-      `UPDATE "IPCertificate" SET "verifiedCount" = "verifiedCount" + 1, "lastVerifiedAt" = NOW() WHERE "id" = $1`,
-      [certId],
-    );
+    /* Increment verify count — gated by per-(IP, certId) rate limit above. */
+    if (!skipIncrement) {
+      await pool.query(
+        `UPDATE "IPCertificate" SET "verifiedCount" = "verifiedCount" + 1, "lastVerifiedAt" = NOW() WHERE "id" = $1`,
+        [certId],
+      );
+    }
 
     /* Re-verify content hash (canonical: NFC + sorted keys + null defaults) */
     const hashCheck = canonicalContentHash({
@@ -1176,9 +1243,11 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         kind: cert.kind,
         description: cert.description,
         author: cert.authorName || "Anonymous",
-        email: cert.authorEmail || null,
+        // email: intentionally omitted from public response — would let
+        // anyone scrape every author email by enumerating cert IDs.
         location: [cert.city, cert.country].filter(Boolean).join(", ") || null,
         contentHash: cert.contentHash,
+        fileHash: cert.fileHash || null,
         signatureHmac: cert.signatureHmac,
         signatureEd25519: cert.signatureEd25519
           ? cert.signatureEd25519.slice(0, 64) + "..."
@@ -1281,7 +1350,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     await ensureTables();
 
     const { rows } = await pool.query(
-      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","algorithm","status","protectedAt","verifiedCount"
+      `SELECT "id","objectId","shieldId","title","kind","authorName","country","city","contentHash","fileHash","algorithm","status","protectedAt","verifiedCount"
        FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`,
     );
 
@@ -1293,6 +1362,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         author: r.authorName || "Anonymous",
         location: [r.city, r.country].filter(Boolean).join(", ") || null,
         contentHash: r.contentHash,
+        fileHash: r.fileHash || null,
         algorithm: r.algorithm,
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,
@@ -2116,5 +2186,499 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: msg });
     }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 2: transparency + admin + audit
+// (Embed/badge for individual certs lives at /api/bureau/cert/:certId/* —
+//  Bureau owns the per-cert public surface; Pipeline owns lifecycle ops.)
+// ─────────────────────────────────────────────────────────────────────────
+
+function pipelineAdminEmailsAllowlist(): Set<string> {
+  const raw = String(process.env.PIPELINE_ADMIN_EMAILS || "").trim();
+  if (!raw) return new Set();
+  return new Set(
+    raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+  );
+}
+
+function isPipelineAdmin(req: Request): { ok: boolean; email: string | null; reason: string | null } {
+  const auth = String(req.headers.authorization || "");
+  if (!auth.startsWith("Bearer ")) return { ok: false, email: null, reason: "no-bearer" };
+  const token = auth.slice(7).trim();
+  try {
+    const secret = process.env.JWT_SECRET || "dev-secret-change-me";
+    const decoded = jwt.verify(token, secret) as Record<string, unknown>;
+    const email = String(decoded.email || "").toLowerCase();
+    const role = String(decoded.role || "").toLowerCase();
+    if (role === "admin") return { ok: true, email, reason: null };
+    const allow = pipelineAdminEmailsAllowlist();
+    if (allow.has(email)) return { ok: true, email, reason: null };
+    return { ok: false, email, reason: "not-in-allowlist" };
+  } catch {
+    return { ok: false, email: null, reason: "invalid-token" };
+  }
+}
+
+async function logPipelineAudit(opts: {
+  action: string;
+  certId: string | null;
+  objectId: string | null;
+  actor: string | null;
+  payload: Record<string, unknown> | null;
+}): Promise<void> {
+  await pool
+    .query(
+      `INSERT INTO "PipelineAuditLog" ("id","action","certId","objectId","actor","payload")
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        crypto.randomUUID(),
+        opts.action,
+        opts.certId,
+        opts.objectId,
+        opts.actor,
+        opts.payload ? JSON.stringify(opts.payload) : null,
+      ]
+    )
+    .catch(() => {});
+}
+
+// 🔹 GET /transparency — public counts only (no PII).
+pipelineRouter.get("/transparency", async (_req, res) => {
+  try {
+    await ensureTables();
+    const totals = await pool.query(
+      `SELECT COUNT(*)::int AS "n",
+              SUM(CASE WHEN "status"='active' THEN 1 ELSE 0 END)::int AS "active",
+              SUM(CASE WHEN "status"='revoked' THEN 1 ELSE 0 END)::int AS "revoked"
+       FROM "IPCertificate"`
+    );
+    const byKind = await pool.query(
+      `SELECT "kind","status", COUNT(*)::int AS "n"
+       FROM "IPCertificate" GROUP BY "kind","status" ORDER BY "n" DESC`
+    );
+    const byCountry = await pool.query(
+      `SELECT "country", COUNT(*)::int AS "n"
+       FROM "IPCertificate" WHERE "country" IS NOT NULL
+       GROUP BY "country" ORDER BY "n" DESC LIMIT 10`
+    );
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      totals: {
+        certificates: totals.rows[0]?.n || 0,
+        active: totals.rows[0]?.active || 0,
+        revoked: totals.rows[0]?.revoked || 0,
+      },
+      byKind: byKind.rows.map((r: any) => ({ kind: r.kind, status: r.status, count: r.n })),
+      topCountries: byCountry.rows.map((r: any) => ({ country: r.country, count: r.n })),
+    });
+  } catch (err: any) {
+    capturePipelineError(err, { route: "transparency" });
+    res.status(500).json({ error: "transparency failed", details: err.message });
+  }
+});
+
+// 🔹 Admin probe.
+pipelineRouter.get("/admin/whoami", (req, res) => {
+  const a = isPipelineAdmin(req);
+  res.json({ isAdmin: a.ok, email: a.email, reason: a.reason });
+});
+
+// 🔹 Admin: list certs (?status, ?kind, ?q, ?limit≤200).
+pipelineRouter.get("/admin/certificates", async (req, res) => {
+  const a = isPipelineAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureTables();
+  const status = String(req.query.status || "").trim();
+  const kind = String(req.query.kind || "").trim();
+  const q = String(req.query.q || "").trim();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+  const conds: string[] = [];
+  const args: any[] = [];
+  if (status) { args.push(status); conds.push(`"status" = $${args.length}`); }
+  if (kind) { args.push(kind); conds.push(`"kind" = $${args.length}`); }
+  if (q && q.length >= 2) { args.push(`%${q}%`); conds.push(`"title" ILIKE $${args.length}`); }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  args.push(limit);
+  const r = await pool.query(
+    `SELECT "id","objectId","title","kind","authorName","country","status","protectedAt","authorVerificationLevel"
+     FROM "IPCertificate" ${where}
+     ORDER BY "protectedAt" DESC LIMIT $${args.length}`,
+    args
+  );
+  res.json({ items: r.rows });
+});
+
+// 🔹 Admin: force-revoke a cert (reason required, audit logged).
+pipelineRouter.post("/admin/certificate/:certId/revoke", async (req, res) => {
+  const a = isPipelineAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureTables();
+  const certId = String(req.params.certId);
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
+  if (!reason) return res.status(400).json({ error: "reason_required" });
+  const cur = await pool.query(
+    `SELECT "id","objectId","status" FROM "IPCertificate" WHERE "id" = $1`,
+    [certId]
+  );
+  if (cur.rowCount === 0) return res.status(404).json({ error: "cert_not_found" });
+  if (cur.rows[0].status === "revoked") return res.status(409).json({ error: "already_revoked" });
+  await pool.query(`UPDATE "IPCertificate" SET "status" = 'revoked' WHERE "id" = $1`, [certId]);
+  await logPipelineAudit({
+    action: "admin.revoke-cert",
+    certId,
+    objectId: cur.rows[0].objectId,
+    actor: a.email,
+    payload: { reason, prevStatus: cur.rows[0].status },
+  });
+  res.json({ ok: true });
+});
+
+// 🔹 Admin: audit reader.
+pipelineRouter.get("/admin/audit", async (req, res) => {
+  const a = isPipelineAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureTables();
+  const action = String(req.query.action || "").trim();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+  const args: any[] = [];
+  let where = "";
+  if (action) { args.push(action); where = `WHERE "action" = $1`; }
+  args.push(limit);
+  const r = await pool.query(
+    `SELECT "id","action","certId","objectId","actor","payload","at"
+     FROM "PipelineAuditLog" ${where}
+     ORDER BY "at" DESC LIMIT $${args.length}`,
+    args
+  );
+  res.json({ items: r.rows });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — OG cards, sitemap, per-cert RSS
+// (Pipeline has no /pipeline/* frontend; public cert page lives at
+//  /bureau/cert/:certId since both surfaces share IPCertificate.)
+// ─────────────────────────────────────────────────────────────────────────
+
+function pipelineEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function pipelineWrap(text: string, perLine: number, maxLines: number): string[] {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    if ((current + " " + w).trim().length > perLine) {
+      if (current) lines.push(current);
+      current = w;
+      if (lines.length >= maxLines - 1) break;
+    } else {
+      current = (current + " " + w).trim();
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  const consumed = lines.join(" ").split(/\s+/).filter(Boolean).length;
+  if (consumed < words.length && lines.length === maxLines) {
+    lines[maxLines - 1] = (lines[maxLines - 1] || "").replace(/\s+\S+$/, "") + "…";
+  }
+  return lines;
+}
+
+// 🔹 GET /certificate/:certId/og.svg — 1200x630 social-share card.
+//    Status drives accent (green=active, red=revoked).
+pipelineRouter.get("/certificate/:certId/og.svg", async (req, res) => {
+  try {
+    await ensureTables();
+    const certId = String(req.params.certId);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const r = await pool.query(
+      `SELECT "id","title","kind","authorName","status","protectedAt","country"
+       FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    if (r.rowCount === 0) {
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="320" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="900" fill="#e2e8f0">Certificate not found</text>
+  <text x="60" y="380" font-family="ui-monospace, monospace" font-size="24" fill="#64748b">${pipelineEsc(certId)}</text>
+</svg>`;
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(fallback);
+    }
+    const row = r.rows[0] as any;
+    const status = String(row.status || "active");
+    const protectedAtMs = row.protectedAt
+      ? (row.protectedAt instanceof Date ? row.protectedAt.getTime() : new Date(row.protectedAt).getTime())
+      : 0;
+    if (applyOgEtag(req, res, `pipeline-cert-${certId}-${status}-${protectedAtMs}`)) return;
+    const isRevoked = status === "revoked";
+    const accent = isRevoked ? "#dc2626" : "#16a34a";
+    const label = isRevoked ? "REVOKED" : "ACTIVE";
+    const titleLines = pipelineWrap(row.title || certId, 24, 2);
+    const protectedAt = row.protectedAt
+      ? (row.protectedAt instanceof Date ? row.protectedAt.toISOString() : String(row.protectedAt)).slice(0, 10)
+      : null;
+    const subLine = [
+      row.authorName ? `by ${row.authorName}` : "anonymous author",
+      row.kind ? `kind=${row.kind}` : null,
+      row.country ? row.country : null,
+      protectedAt ? `protected ${protectedAt}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const subLines = pipelineWrap(subLine, 60, 2);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${accent}"/>
+      <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION PIPELINE</text>
+    <g transform="translate(60, 170)">
+      ${titleLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 92}" font-size="80" font-weight="900" letter-spacing="-2">${pipelineEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, ${170 + titleLines.length * 92 + 40})">
+      ${subLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 38}" font-size="28" font-weight="500" fill="#cbd5e1">${pipelineEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, 540)">
+      <rect width="${label.length * 18 + 56}" height="44" rx="22" fill="${accent}" fill-opacity="0.18" stroke="${accent}" stroke-width="2"/>
+      <text x="22" y="30" font-size="22" font-weight="900" fill="${accent}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${pipelineEsc(label)}</text>
+    </g>
+    <g transform="translate(${1200 - 60}, 540)" text-anchor="end">
+      <text font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">${pipelineEsc(certId.slice(0, 18))}</text>
+    </g>
+  </g>
+</svg>`;
+
+    res.send(svg);
+  } catch (err: any) {
+    capturePipelineError(err, { route: "cert og" });
+    res.status(500).json({ error: "cert og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /og.svg — index-page social-share card (totals + active + revoked).
+pipelineRouter.get("/og.svg", async (req, res) => {
+  try {
+    await ensureTables();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT COUNT(*)::int AS "n",
+              SUM(CASE WHEN "status"='active' THEN 1 ELSE 0 END)::int AS "active",
+              SUM(CASE WHEN "status"='revoked' THEN 1 ELSE 0 END)::int AS "revoked"
+       FROM "IPCertificate"`
+    );
+    const t = (totals.rows[0] || {}) as any;
+    const total = t.n || 0;
+    const active = t.active || 0;
+    const revoked = t.revoked || 0;
+    if (applyOgEtag(req, res, `pipeline-index-${total}-${active}-${revoked}`)) return;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#16a34a"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION PIPELINE</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${pipelineEsc(String(total))} certificates</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Tamper-evident IP protection — HMAC + Ed25519 + OTS.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#16a34a" fill-opacity="0.15" stroke="#16a34a" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#16a34a">${pipelineEsc(String(active))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#86efac">ACTIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#dc2626" fill-opacity="0.15" stroke="#dc2626" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#fca5a5">${pipelineEsc(String(revoked))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / pipeline</text>
+  </g>
+</svg>`;
+
+    res.send(svg);
+  } catch (err: any) {
+    capturePipelineError(err, { route: "index og" });
+    res.status(500).json({ error: "index og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /certificate/:certId/changelog.rss — RSS 2.0 of admin events
+//    (force-revoke etc.) sourced from PipelineAuditLog.
+pipelineRouter.get("/certificate/:certId/changelog.rss", async (req, res) => {
+  try {
+    await ensureTables();
+    const certId = String(req.params.certId);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/pipeline/certificate/${encodeURIComponent(certId)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/bureau/cert/${encodeURIComponent(certId)}`;
+
+    const certRow = await pool.query(
+      `SELECT "title" FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    const certTitle = certRow.rows[0]?.title || certId;
+
+    const r = await pool.query(
+      `SELECT "id","action","actor","payload","at"
+       FROM "PipelineAuditLog"
+       WHERE "certId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [certId, limit]
+    );
+
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `pipeline-cert-${certId}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
+    function describe(row: any): string {
+      const p = row.payload || {};
+      switch (row.action) {
+        case "admin.revoke-cert":
+          return `Force-revoked by ${row.actor || "admin"}${p.reason ? ` — ${p.reason}` : ""}`;
+        default:
+          return row.action || "Pipeline event";
+      }
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${certTitle} — ${summary}`;
+        const guid = `aevion-pipeline-${row.id}`;
+        return `    <item>
+      <title>${pipelineEsc(title)}</title>
+      <link>${pipelineEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${pipelineEsc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${pipelineEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION Pipeline · ${pipelineEsc(certTitle)} — events</title>
+    <link>${pipelineEsc(siteUrl)}</link>
+    <atom:link href="${pipelineEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Admin events for AEVION Pipeline certificate ${pipelineEsc(certId)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    capturePipelineError(err, { route: "cert rss" });
+    res.status(500).json({ error: "cert rss failed", details: err.message });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap. Pipeline has no /pipeline/* frontend, so
+//    each cert links to its public Bureau page (/bureau/cert/:id). Limited
+//    to active certs (revoked → de-indexed).
+pipelineRouter.get("/sitemap.xml", async (req, res) => {
+  try {
+    await ensureTables();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT "id","protectedAt"
+       FROM "IPCertificate"
+       WHERE "status" = 'active'
+       ORDER BY "protectedAt" DESC
+       LIMIT 5000`
+    );
+
+    const rows = r.rows as any[];
+    const latestSrc = rows[0]?.protectedAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(latestSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `pipeline-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
+    const urls: string[] = [];
+    for (const row of rows) {
+      const lastmodSrc = row.protectedAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${pipelineEsc(origin)}/bureau/cert/${pipelineEsc(row.id)}</loc>
+    <lastmod>${pipelineEsc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    capturePipelineError(err, { route: "sitemap" });
+    res.status(500).json({ error: "sitemap failed", details: err.message });
   }
 });

@@ -1,0 +1,76 @@
+import type { ReactNode } from "react";
+
+export const metadata = {
+  title: "Сметный тренажёр — AEVION",
+  description: "AI-тренажёр сметного дела РК. Учебный режим: подбор расценок, расчёт ЛСР, AI-советник.",
+};
+
+export default function SmetaTrainerLayout({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <style>{`
+        /* ── Print ─────────────────────────────── */
+        @media print {
+          header, aside, nav, .print-hidden,
+          [class*="print:hidden"] { display: none !important; }
+          main { margin: 0 !important; padding: 0 !important; }
+          .overflow-auto, .overflow-x-auto { overflow: visible !important; }
+          table { page-break-inside: auto; font-size: 8pt; border-collapse: collapse; }
+          tr { page-break-inside: avoid; }
+          td, th { border: 1px solid #999 !important; }
+          thead { display: table-header-group; }
+          body { background: white !important; }
+          @page { margin: 1.5cm; size: A4 portrait; }
+          /* Certificate specific */
+          .certificate-page { box-shadow: none !important; }
+        }
+
+        /* ── Mobile helpers ────────────────────── */
+        @media (max-width: 640px) {
+          .mobile-hide { display: none !important; }
+          .mobile-full { width: 100% !important; }
+          /* Collapse fixed-width level sidebars on small screens */
+          .level-aside-collapse {
+            display: none;
+          }
+          .level-aside-collapse.open {
+            display: flex;
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            z-index: 40;
+            overflow-y: auto;
+          }
+        }
+
+        /* ── Table horizontal scroll on small screens ── */
+        .lsr-table-wrap {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        /* ── Smooth drawer ─────────────────────── */
+        .rate-drawer {
+          transition: transform 0.2s ease-out;
+        }
+
+        /* ── Typing animation ──────────────────── */
+        @keyframes pulse-dots {
+          0%, 80%, 100% { opacity: 0.3; }
+          40% { opacity: 1; }
+        }
+        .dot-1 { animation: pulse-dots 1.4s infinite 0s; }
+        .dot-2 { animation: pulse-dots 1.4s infinite 0.2s; }
+        .dot-3 { animation: pulse-dots 1.4s infinite 0.4s; }
+
+        /* ── Line clamp polyfill ────────────────── */
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+      `}</style>
+      {children}
+    </>
+  );
+}

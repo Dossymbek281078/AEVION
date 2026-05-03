@@ -20,8 +20,11 @@ Award type → Planet productKey prefix is hard-mapped:
 
 ```ts
 const AWARD_TYPE_TO_PRODUCT_PREFIX = {
-  music: "awards.music",
-  film:  "awards.film",
+  music:   "awards.music",
+  film:    "awards.film",
+  code:    "awards.code",
+  design:  "awards.design",
+  science: "awards.science",
 };
 ```
 

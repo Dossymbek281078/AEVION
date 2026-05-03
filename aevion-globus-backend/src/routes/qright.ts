@@ -4,10 +4,27 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { deliverWebhook } from "../lib/webhookDelivery";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+
+const QRIGHT_WEBHOOK_DELIVERY_CFG = {
+  webhookTable: "QRightWebhook",
+  deliveryTable: "QRightWebhookDelivery",
+  entityColumn: "objectId",
+  userAgent: "AEVION-QRight-Webhook/1.0",
+} as const;
 
 export const qrightRouter = Router();
 
 const pool = getPool();
+
+qrightRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "qright",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 const objectsRateLimit = rateLimit({
   windowMs: 60_000,
@@ -172,69 +189,15 @@ async function attemptWebhookDelivery(opts: {
   objectId: string | null;
   isRetry: boolean;
 }): Promise<{ ok: boolean; statusCode: number | null; error: string | null }> {
-  const sig = crypto.createHmac("sha256", opts.secret).update(opts.body).digest("hex");
-  let ok = false;
-  let statusCode: number | null = null;
-  let error: string | null = null;
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 5000);
-    const r = await fetch(opts.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "AEVION-QRight-Webhook/1.0",
-        "X-AEVION-Event": opts.eventType,
-        "X-AEVION-Signature": `sha256=${sig}`,
-      },
-      body: opts.body,
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    statusCode = r.status;
-    ok = r.ok;
-    if (!r.ok) error = `HTTP ${r.status}`;
-  } catch (err) {
-    error = (err as Error).message.slice(0, 500);
-  }
-
-  // Persist log row + bump per-webhook last* counters in parallel.
-  pool
-    .query(
-      `INSERT INTO "QRightWebhookDelivery"
-         ("id", "webhookId", "objectId", "eventType", "requestBody", "statusCode", "ok", "error", "isRetry")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        crypto.randomUUID(),
-        opts.webhookId,
-        opts.objectId,
-        opts.eventType,
-        opts.body,
-        statusCode,
-        ok,
-        error,
-        opts.isRetry,
-      ]
-    )
-    .catch((e: Error) => {
-      console.warn(`[qright] delivery log insert failed:`, e.message);
-    });
-  if (ok) {
-    pool
-      .query(
-        `UPDATE "QRightWebhook" SET "lastDeliveredAt" = NOW(), "lastError" = NULL WHERE "id" = $1`,
-        [opts.webhookId]
-      )
-      .catch(() => {});
-  } else {
-    pool
-      .query(
-        `UPDATE "QRightWebhook" SET "lastFailedAt" = NOW(), "lastError" = $2 WHERE "id" = $1`,
-        [opts.webhookId, error || "delivery failed"]
-      )
-      .catch(() => {});
-  }
-  return { ok, statusCode, error };
+  return deliverWebhook(pool, QRIGHT_WEBHOOK_DELIVERY_CFG, {
+    webhookId: opts.webhookId,
+    url: opts.url,
+    secret: opts.secret,
+    body: opts.body,
+    eventType: opts.eventType,
+    entityId: opts.objectId,
+    isRetry: opts.isRetry,
+  });
 }
 
 // Fan out a revoke event to every webhook registered by the object's owner.
@@ -315,6 +278,8 @@ function recordAudit(
 // Pure helpers (no DB / no IO) live in src/lib/qrightHelpers.ts so vitest
 // can exercise them in isolation. Imported here unchanged.
 import { readExpectedHash, timingSafeHexEq, refererHost } from "../lib/qrightHelpers";
+import { makeServiceCapture } from "../lib/sentry/platform";
+const captureQrightError = makeServiceCapture("qright");
 
 // Best-effort counter bump — fire-and-forget. Errors here must never break
 // the embed/badge response, since these endpoints are loaded by third parties.
@@ -431,6 +396,7 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       scope: "all",
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -479,6 +445,7 @@ qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
       items: result.rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -576,6 +543,7 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
       },
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -615,6 +583,7 @@ qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=60");
     res.json(row);
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -674,6 +643,7 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
     );
     res.send([header, ...rows].join("\r\n"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -785,6 +755,7 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
         : `/qright/object/${row.id}`,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -915,6 +886,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION QRIGHT", right, "#0d9488"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -985,6 +957,7 @@ qrightRouter.post("/objects", async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1037,6 +1010,7 @@ qrightRouter.get("/admin/objects", async (req, res) => {
       items: result.rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1123,6 +1097,7 @@ qrightRouter.get("/admin/objects.csv", async (req, res) => {
     );
     res.send([header, ...rows].join("\r\n"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1241,6 +1216,7 @@ qrightRouter.post("/admin/revoke-bulk", async (req, res) => {
       reasonCode: reasonCodeRaw,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1318,6 +1294,7 @@ qrightRouter.post("/admin/revoke/:id", async (req, res) => {
       revokeReasonCode: updated.rows[0].revokeReasonCode,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1388,6 +1365,7 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
       })),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1451,6 +1429,7 @@ qrightRouter.get("/admin/audit", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1516,6 +1495,7 @@ qrightRouter.get("/admin/sources", async (req, res) => {
       hosts: rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1614,6 +1594,7 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
       revokeReasonCode: updated.rows[0].revokeReasonCode,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
@@ -1665,6 +1646,7 @@ qrightRouter.get("/webhooks", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1720,6 +1702,7 @@ qrightRouter.post("/webhooks", async (req, res) => {
       hint: "Store the secret now — it will not be shown again. Verify deliveries by recomputing HMAC-SHA256(secret, requestBody) and comparing against the X-AEVION-Signature header.",
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1743,6 +1726,7 @@ qrightRouter.delete("/webhooks/:id", async (req, res) => {
     }
     res.json({ id, deleted: true });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1778,6 +1762,7 @@ qrightRouter.patch("/webhooks/:id", async (req, res) => {
     }
     res.json({ id: result.rows[0].id, url: result.rows[0].url, updated: true });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1845,6 +1830,7 @@ qrightRouter.get("/webhooks/:id/deliveries", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
   }
 });
@@ -1904,6 +1890,233 @@ qrightRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) => {
       error: result.error,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — index OG, sitemap, per-object RSS
+// (Per-object OG is already provided by frontend/.../opengraph-image.tsx
+//  so we don't duplicate it here.)
+// ─────────────────────────────────────────────────────────────────────────
+
+function qrEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// 🔹 GET /og.svg — index card. Pulls live counters so a paste of /qright
+//    reflects current state.
+qrightRouter.get("/og.svg", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT COUNT(*) AS "total", COUNT("revokedAt") AS "revoked" FROM "QRightObject"`
+    );
+    const t = totals.rows[0] as { total: string; revoked: string };
+    const total = Number(t.total) || 0;
+    const revoked = Number(t.revoked) || 0;
+    const active = total - revoked;
+    if (applyOgEtag(req, res, `qright-index-${total}-${active}-${revoked}`)) return;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QRIGHT</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${qrEsc(String(total))} registrations</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Independent IP registry — provable, instant, ownerless.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#0d9488" fill-opacity="0.15" stroke="#0d9488" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#5eead4">${qrEsc(String(active))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#a5f3fc">ACTIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#dc2626" fill-opacity="0.15" stroke="#dc2626" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#fca5a5">${qrEsc(String(revoked))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / qright</text>
+  </g>
+</svg>`;
+
+    res.send(svg);
+  } catch (err: any) {
+    captureQrightError(err, { route: "index og" });
+    res.status(500).json({ error: "index og failed", details: err.message });
+  }
+});
+
+// 🔹 GET /objects/:id/changelog.rss — RSS 2.0 of audit events for one
+//    QRight object. Sourced from QRightAuditLog with targetId === id.
+qrightRouter.get("/objects/:id/changelog.rss", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const selfUrl = `${proto}://${host}/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/qright/object/${encodeURIComponent(id)}`;
+
+    const objRow = await pool.query(
+      `SELECT "title" FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    const objTitle = objRow.rows[0]?.title || id;
+
+    const r = await pool.query(
+      `SELECT "id","actor","action","payload","at"
+       FROM "QRightAuditLog"
+       WHERE "targetId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qright-object-${id}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
+    function describe(row: any): string {
+      const p = row.payload || {};
+      const reason = p.reason ? ` — ${p.reason}` : "";
+      const actor = row.actor ? ` by ${row.actor}` : "";
+      switch (row.action) {
+        case "object.revoke":
+        case "admin.revoke":
+          return `Revoked${actor}${reason}`;
+        case "object.create":
+          return `Registered${actor}`;
+        default:
+          return `${row.action || "QRight event"}${actor}`;
+      }
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${objTitle} — ${summary}`;
+        const guid = `aevion-qright-${row.id}`;
+        return `    <item>
+      <title>${qrEsc(title)}</title>
+      <link>${qrEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${qrEsc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${qrEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION QRight · ${qrEsc(String(objTitle))} — events</title>
+    <link>${qrEsc(siteUrl)}</link>
+    <atom:link href="${qrEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Audit events for AEVION QRight object ${qrEsc(id)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    captureQrightError(err, { route: "object rss" });
+    res.status(500).json({ error: "object rss failed", details: err.message });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap for the QRight surface. Covers /qright,
+//    /qright/transparency, and a page per non-revoked object.
+qrightRouter.get("/sitemap.xml", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.tech";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT "id","createdAt"
+       FROM "QRightObject"
+       WHERE "revokedAt" IS NULL
+       ORDER BY "createdAt" DESC
+       LIMIT 5000`
+    );
+
+    const rows = r.rows as any[];
+    const latestSrc = rows[0]?.createdAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(latestSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qright-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
+    const urls: string[] = [];
+    urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`);
+    urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright/transparency</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    for (const row of rows) {
+      const lastmodSrc = row.createdAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright/object/${qrEsc(String(row.id))}</loc>
+    <lastmod>${qrEsc(lastmod)}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    captureQrightError(err, { route: "sitemap" });
+    res.status(500).json({ error: "sitemap failed", details: err.message });
   }
 });

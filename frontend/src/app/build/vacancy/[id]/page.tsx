@@ -168,6 +168,30 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               />
             </div>
           )}
+          {isOwner && (applications !== null || vacancy.viewCount != null) && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Analytics</div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-xl font-bold text-white">{vacancy.viewCount ?? "—"}</div>
+                  <div className="text-[10px] text-slate-500">Views</div>
+                </div>
+                <div>
+                  <div className="text-xl font-bold text-white">{applications?.length ?? "—"}</div>
+                  <div className="text-[10px] text-slate-500">Applied</div>
+                </div>
+                <div>
+                  <div className="text-xl font-bold text-white">
+                    {vacancy.viewCount && applications?.length
+                      ? `${Math.round((applications.length / vacancy.viewCount) * 100)}%`
+                      : "—"}
+                  </div>
+                  <div className="text-[10px] text-slate-500">Conv.</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <ShareVacancyBlock vacancyId={vacancy.id} />
 
           {vacancy.clientId && (
@@ -456,9 +480,10 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           <button
             disabled={busy}
             onClick={async () => {
+              const reason = prompt("Reason for rejection (optional, shown to candidate):");
               setBusy(true);
               try {
-                await buildApi.updateApplication(app.id, "REJECTED");
+                await buildApi.updateApplication(app.id, "REJECTED", reason?.trim() || undefined);
                 onChanged();
               } finally {
                 setBusy(false);

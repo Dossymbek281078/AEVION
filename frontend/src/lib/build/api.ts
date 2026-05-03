@@ -579,11 +579,11 @@ export const buildApi = {
       "GET",
       `/api/build/applications/by-vacancy/${encodeURIComponent(vacancyId)}`,
     ),
-  updateApplication: (id: string, status: ApplicationStatus) =>
+  updateApplication: (id: string, status: ApplicationStatus, rejectReason?: string) =>
     call<BuildApplication & { hireOrder: BuildOrderRow | null }>(
       "PATCH",
       `/api/build/applications/${encodeURIComponent(id)}`,
-      { status },
+      { status, ...(rejectReason ? { rejectReason } : {}) },
     ),
 
   // Messages

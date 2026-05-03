@@ -172,13 +172,13 @@ parity + docs/runbook.
 | ~~P1-3~~ | ~~Daily smoke runner — orchestrator + GitHub Actions cron~~ ✅ done in PR #89 | aevion-backend-modules | — |
 | ~~P1-4~~ | ~~Backup/restore drill + `docs/RUNBOOK.md`~~ ✅ done in PR #98 (JSON-store round-trip drilled, Postgres procedures documented) | aevion-backend-modules | — |
 | P1-5 | Sentry alert rules + dashboard URL | aevion-backend-modules / aevion-core | P1-1 ✅ |
-| P1-6 | Bank prod smoke against staging URL | aevion-bank | P0-* |
+| ~~P1-6~~ | ~~Bank prod smoke~~ ✅ done in PR #103 — `aevion-globus-backend/scripts/bank-prod-smoke.js` (`npm run smoke:bank-prod`); 19/19 PASS through Vercel rewrite; SMOKE_PROD.md + first artifact in `docs/bank/` | aevion-bank | — |
 | ~~P1-7~~ | ~~OpenAPI 0.4.0 → 0.5.0~~ → 0.5.1 ✅ done in PRs #98 + #102 (Tier 1 reads + planet/awards full schemas) | aevion-backend-modules | — |
 | ~~P1-8~~ | ~~Awards + Planet smoke scripts~~ ✅ done in PR #102 (wired into daily cron) | aevion-backend-modules | — |
 | ~~P1-9~~ | ~~Sentry alert rules spec~~ ✅ done in PR #102 (`docs/SENTRY_ALERTS.md`) — UI config separately | aevion-backend-modules | — |
 | P1-4 | Backup/restore drill — run `scripts/backup.mjs`, verify restore on a fresh DB, document RTO/RPO | aevion-backend-modules | — |
 | P1-5 | Sentry alert rules + dashboard URL in `docs/RUNBOOK.md` | aevion-backend-modules | P1-1 |
-| P1-6 | Bank prod smoke — wallet create / mint / transfer / spend / cap-status against prod, capture HAR | aevion-bank | P0-* |
+| ~~P1-6~~ | ~~Bank prod smoke~~ ✅ duplicate row — see updated entry above (PR #103) | aevion-bank | — |
 | P1-7 | OpenAPI 0.4.0 → 0.5.0 with full request/response schemas for Tier 1 endpoints (currently summary-only) | aevion-backend-modules | — |
 
 ### Phase 2 — Tier 2 + Tier 3 hardening (1-2 weeks, parallelisable)
@@ -240,9 +240,9 @@ If the user insists on more code work in this window, candidates are:
 3. Frontend i18n parity audit on the 5 layouts shipped in PR #78 (kk + ru completeness)
 
 ### `aevion-bank`
-1. **P1-6** Bank prod smoke against staging URL (after P0-3)
-2. AEC ↔ fiat boundary doc — required before P3-4
-3. Resolve `bank-payment-layer` branch — currently 1 commit ahead of main with cyberchess diag
+1. **AEC ↔ fiat boundary doc** — required before P3-4 (first paid Bureau cert via Stripe)
+2. Resolve `bank-payment-layer` branch — currently ahead of main with cyberchess diag, decide merge vs delete
+3. Wire `npm run smoke:bank-prod` into the daily cron (PR #103 shipped the harness; `smoke:all` orchestrator pickup pending)
 
 ### `aevion-qsign`
 1. **Do nothing without checking PR list** — P1-P9 already merged via PR #2 on 2026-04-26

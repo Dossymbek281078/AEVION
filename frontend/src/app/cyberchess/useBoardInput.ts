@@ -116,15 +116,27 @@ export function useBoardInput(opts: BoardInputOptions) {
 
   // ── Ghost DOM mutation helpers ────────────────────────────────────────────
   const showGhost = useCallback((from: Square, x: number, y: number, cw: number) => {
-    const el = ghostRef.current; if (!el) return;
+    const el = ghostRef.current;
+    // Telemetry — HUD listens to this.
+    if (typeof window!=="undefined") {
+      window.dispatchEvent(new CustomEvent("aevion-drag-debug", {
+        detail: { type: "showGhost", from, x, y, cw, ghostElExists: !!el, html: el?.innerHTML?.length || 0 }
+      }));
+    }
+    if (!el) return;
     const sz = Math.max(48, Math.round(cw * 1.15));
     el.style.width = `${sz}px`;
     el.style.height = `${sz}px`;
     el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
     el.style.visibility = "visible";
     el.dataset.from = from;
-    el.innerHTML = optsRef.current.getPieceHtml(from, sz);
-    // Mark board so CSS fades the source-square piece (via [data-drag-from]).
+    const html = optsRef.current.getPieceHtml(from, sz);
+    el.innerHTML = html;
+    if (typeof window!=="undefined") {
+      window.dispatchEvent(new CustomEvent("aevion-drag-debug", {
+        detail: { type: "showGhost-done", from, sz, htmlLen: html.length, vis: el.style.visibility }
+      }));
+    }
     const board = boardRef.current;
     if (board) board.dataset.dragFrom = from;
   }, []);

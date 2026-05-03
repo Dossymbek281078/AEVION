@@ -20,7 +20,9 @@ export function BoardDebugHud({ boardRef, ghostRef, ghostFrom, dragHover }: Debu
     try { return typeof window!=="undefined" && localStorage.getItem("aevion_chess_debug")==="1"; }
     catch { return false; }
   });
+  const HOOK_VERSION = "v3-DOM-imperative-2026-05-03";
   const [counts, setCounts] = useState({down:0, move:0, up:0, cancel:0, lastEvent:""});
+  const [hookCalls, setHookCalls] = useState<{showGhost:number; lastDetail:string}>({showGhost:0, lastDetail:"(none)"});
   const [boardRect, setBoardRect] = useState<{l:number;t:number;w:number;h:number}|null>(null);
   const [ghostStyle, setGhostStyle] = useState<{visibility:string;transform:string;w:string;h:string}|null>(null);
 
@@ -64,15 +66,25 @@ export function BoardDebugHud({ boardRef, ghostRef, ghostFrom, dragHover }: Debu
       if (!isBoardEvent(e)) return;
       setCounts(c => ({...c, cancel: c.cancel+1, lastEvent: `cancel`}));
     };
+    const onHookEvent = (e: Event) => {
+      const ce = e as CustomEvent;
+      const d = ce.detail || {};
+      setHookCalls(c => ({
+        showGhost: d.type === "showGhost" ? c.showGhost + 1 : c.showGhost,
+        lastDetail: `${d.type}: ${JSON.stringify(d).slice(0, 140)}`
+      }));
+    };
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("pointermove", onMove, true);
     window.addEventListener("pointerup", onUp, true);
     window.addEventListener("pointercancel", onCancel, true);
+    window.addEventListener("aevion-drag-debug", onHookEvent);
     return () => {
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("pointermove", onMove, true);
       window.removeEventListener("pointerup", onUp, true);
       window.removeEventListener("pointercancel", onCancel, true);
+      window.removeEventListener("aevion-drag-debug", onHookEvent);
     };
   }, [visible, boardRef]);
 
@@ -107,12 +119,15 @@ export function BoardDebugHud({ boardRef, ghostRef, ghostFrom, dragHover }: Debu
       whiteSpace: "pre-wrap" as const,
     }}>
       <div style={{fontWeight: 900, color: "#0ff", marginBottom: 4}}>♟ BOARD DEBUG · Ctrl+Shift+D toggle</div>
+      <div style={{color:"#f0f", fontWeight:900, marginBottom:4}}>HOOK: {HOOK_VERSION}</div>
       <div>events: down={counts.down}  move={counts.move}  up={counts.up}  cancel={counts.cancel}</div>
       <div style={{color:"#ff0"}}>last: {counts.lastEvent || "(none — try clicking the board)"}</div>
       <div style={{marginTop:6}}>boardRef: {boardRect ? `${boardRect.w}×${boardRect.h} @ ${boardRect.l},${boardRect.t}` : "(null!)"}</div>
       <div>ghostRef: {ghostStyle ? `vis=${ghostStyle.visibility} ${ghostStyle.w}×${ghostStyle.h}` : "(null!)"}</div>
       {ghostStyle && <div style={{color:"#aaa",fontSize:10}}>tx: {ghostStyle.transform}</div>}
       <div style={{marginTop:6,color:"#0ff"}}>state: ghostFrom={ghostFrom||"null"}  hover={dragHover||"null"}</div>
+      <div style={{marginTop:4,color:"#fa0",fontWeight:900}}>showGhost calls: {hookCalls.showGhost}</div>
+      {hookCalls.showGhost>0 && <div style={{color:"#fa0",fontSize:10}}>last: {hookCalls.lastDetail}</div>}
       <div style={{marginTop:4,fontSize:10,color:"#888"}}>If down=0 — events don't reach the board (parent stops them).{"\n"}If move=0 after down — pointer capture or scroll intercepts.{"\n"}If ghostFrom=null after a drag — sGhostFrom not firing.{"\n"}If ghostFrom set but vis=hidden — ancestor transform breaks position:fixed.</div>
     </div>
   );

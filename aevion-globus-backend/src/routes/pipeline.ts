@@ -37,6 +37,8 @@ import {
   verifyAuthorCosign,
 } from "../lib/cosign/authorCosign";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { makeServiceCapture } from "../lib/sentry/platform";
+const capturePipelineError = makeServiceCapture("pipeline");
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -2273,6 +2275,7 @@ pipelineRouter.get("/transparency", async (_req, res) => {
       topCountries: byCountry.rows.map((r: any) => ({ country: r.country, count: r.n })),
     });
   } catch (err: any) {
+    capturePipelineError(err, { route: "transparency" });
     res.status(500).json({ error: "transparency failed", details: err.message });
   }
 });
@@ -2478,6 +2481,7 @@ pipelineRouter.get("/certificate/:certId/og.svg", async (req, res) => {
 
     res.send(svg);
   } catch (err: any) {
+    capturePipelineError(err, { route: "cert og" });
     res.status(500).json({ error: "cert og failed", details: err.message });
   }
 });
@@ -2536,6 +2540,7 @@ pipelineRouter.get("/og.svg", async (req, res) => {
 
     res.send(svg);
   } catch (err: any) {
+    capturePipelineError(err, { route: "index og" });
     res.status(500).json({ error: "index og failed", details: err.message });
   }
 });
@@ -2621,6 +2626,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
+    capturePipelineError(err, { route: "cert rss" });
     res.status(500).json({ error: "cert rss failed", details: err.message });
   }
 });
@@ -2672,6 +2678,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err: any) {
+    capturePipelineError(err, { route: "sitemap" });
     res.status(500).json({ error: "sitemap failed", details: err.message });
   }
 });

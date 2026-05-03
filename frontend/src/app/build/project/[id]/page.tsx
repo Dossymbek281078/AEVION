@@ -173,6 +173,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             {isOwner && <OwnerStatusControls project={project} onUpdated={refresh} />}
           </div>
 
+          {vacancies.length > 0 && (
+            <HiringProgressCard vacancies={vacancies} />
+          )}
+
           {isOwner && <OwnerFileUpload projectId={project.id} onUploaded={refresh} />}
 
           {isOwner && <ProjectAnalyticsWidget projectId={project.id} />}
@@ -593,6 +597,44 @@ function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploa
         Files are stored externally. Paste a public URL (CDN, object store).
       </p>
     </form>
+  );
+}
+
+function HiringProgressCard({ vacancies }: { vacancies: { status: string; applicationsCount?: number }[] }) {
+  const total = vacancies.length;
+  const closed = vacancies.filter((v) => v.status === "CLOSED").length;
+  const open = vacancies.filter((v) => v.status === "OPEN").length;
+  const pct = total > 0 ? Math.round((closed / total) * 100) : 0;
+  const totalApps = vacancies.reduce((acc, v) => acc + (v.applicationsCount ?? 0), 0);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Hiring progress</div>
+      <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+        <span>{closed}/{total} positions filled</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-white/10">
+        <div
+          className="h-2 rounded-full bg-emerald-500 transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+        <div>
+          <div className="font-bold text-white">{total}</div>
+          <div className="text-slate-500">Total</div>
+        </div>
+        <div>
+          <div className="font-bold text-emerald-300">{open}</div>
+          <div className="text-slate-500">Open</div>
+        </div>
+        <div>
+          <div className="font-bold text-slate-300">{totalApps}</div>
+          <div className="text-slate-500">Applies</div>
+        </div>
+      </div>
+    </div>
   );
 }
 

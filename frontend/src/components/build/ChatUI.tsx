@@ -85,8 +85,10 @@ export function ChatUI({
                 }`}
               >
                 <div className="whitespace-pre-wrap break-words">{m.content}</div>
-                <div className={`mt-1 text-[10px] opacity-60`}>
-                  {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                <div className="mt-1 flex items-center gap-1 text-[10px] opacity-60">
+                  <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  {mine && m.readAt && <span title="Read">✓✓</span>}
+                  {mine && !m.readAt && <span title="Sent">✓</span>}
                 </div>
               </div>
             </div>

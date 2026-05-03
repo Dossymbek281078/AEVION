@@ -5658,7 +5658,15 @@ export default function CyberChessPage(){
           ["M","Вкл./выкл. звук"],
           ["N","Новая партия (в Play, до старта)"],
           ["R","📚 Открыть / закрыть Репертуар дебютов"],
+          ["Ctrl+Shift+D","Debug HUD (drag-механика)"],
           ["?","Показать / скрыть эту подсказку"],
+        ]},
+        {title:"Эксклюзивные фичи AEVION",rows:[
+          ["⚔ в «Мои партии»","Ghost Duel — дуэль с прошлой собой"],
+          ["🤝 Друг онлайн","P2P без сервера — отправь другу ссылку"],
+          ["BoardArt в Настройках","Декор доски: Шанырак, Волна, Klimt…"],
+          ["?? / !! тосты","Авто-обнаружение блунда/брилланта"],
+          ["WhatIf в Analysis","AI объяснит любую кандидатную линию"],
         ]},
       ] as const).map(grp=><div key={grp.title} style={{marginBottom:SPACE[3]}}>
         <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6}}>{grp.title}</div>

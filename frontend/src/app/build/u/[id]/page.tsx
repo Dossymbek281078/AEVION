@@ -415,9 +415,51 @@ export default async function PublicProfilePage({ params }: Props) {
           initialAvg={data.avgRating}
           initialCount={data.reviewCount}
         />
+
+        {data.skills.length > 0 && <MatchingVacanciesBlock skill={data.skills[0]} />}
       </div>
     </main>
   );
+}
+
+async function MatchingVacanciesBlock({ skill }: { skill: string }) {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/build/vacancies?status=OPEN&skill=${encodeURIComponent(skill)}&limit=3`,
+      { cache: "no-store", signal: AbortSignal.timeout(4000) },
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    const items = j?.data?.items as { id: string; title: string; salary: number; city: string | null }[];
+    if (!items || items.length === 0) return null;
+    return (
+      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
+        <h2 className="mb-3 text-sm font-semibold text-white">
+          Open vacancies matching «{skill}»
+        </h2>
+        <div className="space-y-2">
+          {items.map((v) => (
+            <Link
+              key={v.id}
+              href={`/build/vacancy/${encodeURIComponent(v.id)}`}
+              className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2.5 text-sm transition hover:border-white/20"
+            >
+              <span className="text-white">{v.title}</span>
+              <span className="text-emerald-300">
+                {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+                {v.city ? ` · ${v.city}` : ""}
+              </span>
+            </Link>
+          ))}
+        </div>
+        <Link href={`/build/vacancies?skill=${encodeURIComponent(skill)}`} className="mt-3 inline-block text-xs text-emerald-300 hover:underline">
+          See all →
+        </Link>
+      </div>
+    );
+  } catch {
+    return null;
+  }
 }
 
 function KV({ k, children }: { k: string; children: React.ReactNode }) {

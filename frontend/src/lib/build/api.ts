@@ -500,6 +500,10 @@ export const buildApi = {
       files: BuildFile[];
       client: { id: string; email: string; name: string; city: string | null; buildRole: BuildRole | null } | null;
     }>("GET", `/api/build/projects/${encodeURIComponent(id)}`, undefined, { auth: false }),
+  popularSkills: () =>
+    call<{ items: { skill: string; count: number }[] }>(
+      "GET", "/api/build/vacancies/skills/popular", undefined, { auth: false },
+    ),
   projectAnalytics: (id: string) =>
     call<{
       vacancies: { total: number; open: number; closed: number; totalViews: number };

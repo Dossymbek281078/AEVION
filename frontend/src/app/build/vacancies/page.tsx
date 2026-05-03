@@ -20,6 +20,11 @@ export default function VacanciesFeedPage() {
   const [minSalary, setMinSalary] = useState<string>("");
   const [skill, setSkill] = useState("");
   const [sort, setSort] = useState<"recent" | "salary" | "popular">("recent");
+  const [popularSkills, setPopularSkills] = useState<string[]>([]);
+
+  useEffect(() => {
+    buildApi.popularSkills().then((r) => setPopularSkills(r.items.slice(0, 12).map((s) => s.skill))).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -140,6 +145,29 @@ export default function VacanciesFeedPage() {
           ))}
         </div>
       </div>
+
+      {popularSkills.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {popularSkills.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSkill(skill === s ? "" : s)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+                skill === s
+                  ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-200"
+                  : "border-white/10 bg-white/5 text-slate-400 hover:border-white/30 hover:text-slate-200"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+          {skill && (
+            <button onClick={() => setSkill("")} className="rounded-full border border-white/5 px-2.5 py-0.5 text-xs text-slate-500 hover:text-slate-300">
+              ✕ clear
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">

@@ -151,6 +151,32 @@ vacanciesRouter.get("/", async (req, res) => {
   }
 });
 
+// GET /api/build/vacancies/skills/popular — top N skills from open vacancies for autocomplete
+vacanciesRouter.get("/skills/popular", async (_req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT "skillsJson" FROM "BuildVacancy" WHERE "status" = 'OPEN' LIMIT 500`,
+    );
+    const freq: Record<string, number> = {};
+    for (const row of r.rows as { skillsJson: string }[]) {
+      try {
+        const skills: string[] = JSON.parse(row.skillsJson);
+        for (const s of skills) {
+          const key = s.trim().toLowerCase();
+          if (key) freq[key] = (freq[key] ?? 0) + 1;
+        }
+      } catch { /* skip bad JSON */ }
+    }
+    const top = Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 40)
+      .map(([skill, count]) => ({ skill, count }));
+    return ok(res, { items: top });
+  } catch (err: unknown) {
+    return fail(res, 500, "skills_popular_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/by-project/:id
 vacanciesRouter.get("/by-project/:id", async (req, res) => {
   try {

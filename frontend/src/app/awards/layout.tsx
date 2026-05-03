@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { getApiBase } from "@/lib/apiBase";
 
 const SITE = getSiteUrl();
+// Live OG card from /api/awards/og.svg — counts re-render on every fetch
+// (ETag-cached upstream, so repeat crawler hits return 304).
+const OG_IMAGE = `${getApiBase()}/api/awards/og.svg`;
 
 export const metadata: Metadata = {
   title: "AEVION Awards · Music & Film recognition with AEC payouts",
@@ -12,8 +16,14 @@ export const metadata: Metadata = {
     description: "QRight register → submit → Planet validate → AEC payout.",
     type: "website",
     siteName: "AEVION",
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "AEVION Awards" }],
   },
-  twitter: { card: "summary_large_image", title: "AEVION Awards", description: "AI-music & AI-film awards with AEC prizes." },
+  twitter: {
+    card: "summary_large_image",
+    title: "AEVION Awards",
+    description: "AI-music & AI-film awards with AEC prizes.",
+    images: [OG_IMAGE],
+  },
   alternates: { canonical: "/awards" },
 };
 

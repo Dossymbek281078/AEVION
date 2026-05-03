@@ -374,10 +374,10 @@ export default function BureauPage() {
               {
                 name: "Notarized",
                 price: "From $89 / cert",
-                blurb: "Licensed notary in KZ co-signs the certificate, producing an apostille-ready document admissible in EAEU courts. Filed-tier upgrade leads to full Kazpatent / WIPO PCT submission.",
-                badge: "soon",
-                badgeColor: "#94a3b8",
-                cta: null as { label: string; href: string } | null,
+                blurb: "Licensed notary co-signs the certificate with Ed25519, producing an apostille-ready document admissible in EAEU courts.",
+                badge: "▲ live",
+                badgeColor: "#7c3aed",
+                cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },
             ].map((tier) => (
               <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
@@ -393,29 +393,9 @@ export default function BureauPage() {
                   </Link>
                 )}
                 {tier.name === "Notarized" && (
-                  waitlistDone ? (
-                    <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)", fontSize: 11, color: "#4f46e5", fontWeight: 700, textAlign: "center" as const }}>
-                      ✓ You&apos;re on the list — we&apos;ll email you when Notarized launches.
-                    </div>
-                  ) : (
-                    <form onSubmit={submitWaitlist} style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                      <input
-                        type="email"
-                        required
-                        value={waitlistEmail}
-                        onChange={(e) => setWaitlistEmail(e.target.value)}
-                        placeholder="your@email.com"
-                        style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(99,102,241,0.25)", fontSize: 12, outline: "none", minWidth: 0 }}
-                      />
-                      <button
-                        type="submit"
-                        disabled={waitlistBusy}
-                        style={{ padding: "7px 12px", borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", border: "none", fontWeight: 800, fontSize: 12, cursor: waitlistBusy ? "default" : "pointer", opacity: waitlistBusy ? 0.7 : 1, whiteSpace: "nowrap" as const }}
-                      >
-                        {waitlistBusy ? "…" : "Notify me"}
-                      </button>
-                    </form>
-                  )
+                  <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", fontSize: 11, color: "#7c3aed", fontWeight: 700, textAlign: "center" as const }}>
+                    Upgrade your Verified cert — select a notary and submit a request.
+                  </div>
                 )}
               </div>
             ))}

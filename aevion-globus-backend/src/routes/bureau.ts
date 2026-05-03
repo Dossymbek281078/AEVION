@@ -1878,3 +1878,318 @@ bureauRouter.patch("/admin/bulk", async (req, res) => {
     res.status(500).json({ error: "bulk failed", details: err.message });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase B: Org member management
+// ─────────────────────────────────────────────────────────────────────────
+
+/** DELETE /api/bureau/org/:orgId/members/:memberId — remove a member. Owner/admin only; cannot remove the org owner. */
+bureauRouter.delete("/org/:orgId/members/:memberId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { orgId, memberId } = req.params;
+    const myAccess = await pool.query(
+      `SELECT "role" FROM "BureauMember" WHERE "orgId" = $1 AND "userId" = $2`,
+      [orgId, user.userId],
+    );
+    if (myAccess.rows.length === 0 || !["owner", "admin"].includes(myAccess.rows[0].role)) {
+      return res.status(403).json({ error: "owner/admin role required" });
+    }
+    const target = await pool.query(
+      `SELECT "role","userId" FROM "BureauMember" WHERE "id" = $1 AND "orgId" = $2`,
+      [memberId, orgId],
+    );
+    if (target.rows.length === 0) return res.status(404).json({ error: "member not found" });
+    if (target.rows[0].role === "owner") return res.status(400).json({ error: "cannot remove the org owner" });
+    if (target.rows[0].userId === user.userId) return res.status(400).json({ error: "cannot remove yourself" });
+    await pool.query(`DELETE FROM "BureauMember" WHERE "id" = $1`, [memberId]);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /api/bureau/org/:orgId/members/:memberId — change a member's role. Owner only. */
+bureauRouter.patch("/org/:orgId/members/:memberId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { orgId, memberId } = req.params;
+    const myAccess = await pool.query(
+      `SELECT "role" FROM "BureauMember" WHERE "orgId" = $1 AND "userId" = $2`,
+      [orgId, user.userId],
+    );
+    if (myAccess.rows.length === 0 || myAccess.rows[0].role !== "owner") {
+      return res.status(403).json({ error: "owner role required to change roles" });
+    }
+    const { role } = req.body || {};
+    if (!["admin", "member"].includes(role)) {
+      return res.status(400).json({ error: "role must be 'admin' or 'member'" });
+    }
+    const target = await pool.query(
+      `SELECT "role","userId" FROM "BureauMember" WHERE "id" = $1 AND "orgId" = $2`,
+      [memberId, orgId],
+    );
+    if (target.rows.length === 0) return res.status(404).json({ error: "member not found" });
+    if (target.rows[0].role === "owner") return res.status(400).json({ error: "cannot change the owner's role" });
+    await pool.query(`UPDATE "BureauMember" SET "role" = $1 WHERE "id" = $2`, [role, memberId]);
+    res.json({ ok: true, role });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /api/bureau/org/:orgId/invites/:inviteId — cancel a pending invite. Owner/admin only. */
+bureauRouter.delete("/org/:orgId/invites/:inviteId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { orgId, inviteId } = req.params;
+    const myAccess = await pool.query(
+      `SELECT "role" FROM "BureauMember" WHERE "orgId" = $1 AND "userId" = $2`,
+      [orgId, user.userId],
+    );
+    if (myAccess.rows.length === 0 || !["owner", "admin"].includes(myAccess.rows[0].role)) {
+      return res.status(403).json({ error: "owner/admin role required" });
+    }
+    await pool.query(`DELETE FROM "BureauOrgInvite" WHERE "id" = $1 AND "orgId" = $2`, [inviteId, orgId]);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase C: Notarized tier — request + status + admin sign + seed
+// ─────────────────────────────────────────────────────────────────────────
+
+async function ensureNotarizeColumns(): Promise<void> {
+  await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'pending';`);
+  await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "requestedByUserId" TEXT;`);
+}
+
+/**
+ * POST /api/bureau/cert/:certId/notarize/request
+ * Body: { notaryId }
+ * Creates a pending notarization request. Cert must be at 'verified' tier.
+ */
+bureauRouter.post("/cert/:certId/notarize/request", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    await ensureNotarizeColumns();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { certId } = req.params;
+    const { notaryId } = req.body || {};
+    if (!notaryId) return res.status(400).json({ error: "notaryId is required" });
+
+    const certRow = await pool.query(
+      `SELECT c."id", c."contentHash", c."authorVerificationLevel", c."notarySignatureId"
+         FROM "IPCertificate" c
+         JOIN "QRightObject" o ON o."id" = c."objectId"
+        WHERE c."id" = $1 AND o."ownerUserId" = $2`,
+      [certId, user.userId],
+    );
+    if (certRow.rows.length === 0) return res.status(404).json({ error: "cert not found or not yours" });
+    const cert = certRow.rows[0];
+    if (cert.authorVerificationLevel !== "verified") {
+      return res.status(400).json({ error: "cert must be at Verified tier before requesting notarization" });
+    }
+    if (cert.notarySignatureId) {
+      const existing = await pool.query(
+        `SELECT "status" FROM "BureauNotarySignature" WHERE "id" = $1`,
+        [cert.notarySignatureId],
+      );
+      if (existing.rows.length > 0 && existing.rows[0].status !== "rejected") {
+        return res.status(409).json({ error: "a notarization request already exists", status: existing.rows[0].status });
+      }
+    }
+
+    const notary = await pool.query(
+      `SELECT "id","fullName","active" FROM "BureauNotary" WHERE "id" = $1`,
+      [notaryId],
+    );
+    if (notary.rows.length === 0 || !notary.rows[0].active) {
+      return res.status(404).json({ error: "notary not found or inactive" });
+    }
+
+    const signedHash = crypto.createHash("sha256").update(cert.contentHash).digest("hex");
+    const sigId = "nsig-" + crypto.randomBytes(8).toString("hex");
+    await pool.query(
+      `INSERT INTO "BureauNotarySignature" ("id","notaryId","certId","signedHash","signature","status","requestedByUserId")
+       VALUES ($1,$2,$3,$4,'pending','pending',$5)`,
+      [sigId, notaryId, certId, signedHash, user.userId],
+    );
+    await pool.query(`UPDATE "IPCertificate" SET "notarySignatureId" = $1 WHERE "id" = $2`, [sigId, certId]);
+    res.status(201).json({ id: sigId, status: "pending", notaryId, notaryName: notary.rows[0].fullName });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/bureau/cert/:certId/notarize/status
+ * Returns current notarization status for a cert.
+ */
+bureauRouter.get("/cert/:certId/notarize/status", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    await ensureNotarizeColumns();
+    const { certId } = req.params;
+    const r = await pool.query(
+      `SELECT s."id", s."status", s."notaryId", s."signedHash", s."signedAt", s."revokedAt",
+              s."notaryRegistryRef", s."requestedByUserId",
+              n."fullName" as "notaryName", n."jurisdiction", n."publicKeyFingerprint"
+         FROM "BureauNotarySignature" s
+         JOIN "BureauNotary" n ON n."id" = s."notaryId"
+        WHERE s."certId" = $1
+        ORDER BY s."signedAt" DESC
+        LIMIT 1`,
+      [certId],
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: "no notarization request found" });
+    res.json(r.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/bureau/admin/cert/:certId/notarize/sign
+ * Admin-only: approve and sign a pending notarization request (demo uses Ed25519-like HMAC stub).
+ */
+bureauRouter.post("/admin/cert/:certId/notarize/sign", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  try {
+    await ensureBureauTables();
+    await ensureNotarizeColumns();
+    const { certId } = req.params;
+    const registryRef = String(req.body?.registryRef || "").trim() || null;
+
+    const cert = await pool.query(
+      `SELECT "notarySignatureId","contentHash","title" FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
+    if (cert.rows.length === 0) return res.status(404).json({ error: "cert not found" });
+    const { notarySignatureId, contentHash } = cert.rows[0];
+    if (!notarySignatureId) return res.status(400).json({ error: "no pending notarization request" });
+
+    const sigRow = await pool.query(
+      `SELECT "id","status","signedHash","notaryId" FROM "BureauNotarySignature" WHERE "id" = $1`,
+      [notarySignatureId],
+    );
+    if (sigRow.rows.length === 0) return res.status(404).json({ error: "signature record not found" });
+    if (sigRow.rows[0].status !== "pending") {
+      return res.status(409).json({ error: "request is not in pending state", status: sigRow.rows[0].status });
+    }
+
+    const notary = await pool.query(
+      `SELECT "publicKeyEd25519","fullName" FROM "BureauNotary" WHERE "id" = $1`,
+      [sigRow.rows[0].notaryId],
+    );
+    // Demo: HMAC-SHA256 with notary public key as secret (real impl would use Ed25519 private key held by notary).
+    const demoSig = crypto.createHmac("sha256", notary.rows[0].publicKeyEd25519 || "demo-key")
+      .update(`${certId}:${contentHash}`)
+      .digest("hex");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `UPDATE "BureauNotarySignature"
+            SET "signature" = $1, "status" = 'signed', "signedAt" = NOW(), "notaryRegistryRef" = $2
+          WHERE "id" = $3`,
+        [demoSig, registryRef, notarySignatureId],
+      );
+      await client.query(
+        `UPDATE "IPCertificate"
+            SET "authorVerificationLevel" = 'notarized'
+          WHERE "id" = $1`,
+        [certId],
+      );
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
+    await logBureauAudit({
+      action: "admin.notarize.sign",
+      certId,
+      verificationId: notarySignatureId,
+      actor: a.email,
+      payload: { notaryName: notary.rows[0].fullName, registryRef },
+    });
+    res.json({ ok: true, signatureId: notarySignatureId, status: "signed" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/bureau/admin/notary/seed
+ * Admin-only: seed demo notaries. Idempotent — skips rows with existing licenseNumber.
+ */
+bureauRouter.post("/admin/notary/seed", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+
+  const demoNotaries = [
+    {
+      id: "notary-demo-kz-01",
+      fullName: "Askar Bekzhanov",
+      licenseNumber: "KZ-NOTARY-2024-001",
+      jurisdiction: "KZ",
+      city: "Almaty",
+      contactEmail: "bekzhanov@demo.bureau.aevion.io",
+      monthlyVolumeLimit: 500,
+    },
+    {
+      id: "notary-demo-kz-02",
+      fullName: "Zarina Moldakhmetova",
+      licenseNumber: "KZ-NOTARY-2024-002",
+      jurisdiction: "KZ",
+      city: "Astana",
+      contactEmail: "moldakhmetova@demo.bureau.aevion.io",
+      monthlyVolumeLimit: 300,
+    },
+    {
+      id: "notary-demo-eu-01",
+      fullName: "Elena Petrov",
+      licenseNumber: "EU-NOTARY-2024-001",
+      jurisdiction: "EU",
+      city: "Tallinn",
+      contactEmail: "petrov@demo.bureau.aevion.io",
+      monthlyVolumeLimit: 200,
+    },
+  ];
+
+  const results: Array<{ id: string; skipped: boolean }> = [];
+  for (const n of demoNotaries) {
+    const exists = await pool.query(
+      `SELECT 1 FROM "BureauNotary" WHERE "licenseNumber" = $1`,
+      [n.licenseNumber],
+    );
+    if (exists.rows.length > 0) {
+      results.push({ id: n.id, skipped: true });
+      continue;
+    }
+    const pubKey = crypto.randomBytes(32).toString("hex");
+    const fingerprint = crypto.createHash("sha256").update(pubKey).digest("hex").slice(0, 16);
+    await pool.query(
+      `INSERT INTO "BureauNotary"
+         ("id","fullName","licenseNumber","jurisdiction","city","publicKeyEd25519","publicKeyFingerprint","contactEmail","contractSignedAt","monthlyVolumeLimit")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9)`,
+      [n.id, n.fullName, n.licenseNumber, n.jurisdiction, n.city, pubKey, fingerprint, n.contactEmail, n.monthlyVolumeLimit],
+    );
+    results.push({ id: n.id, skipped: false });
+  }
+  res.json({ ok: true, results });
+});

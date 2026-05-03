@@ -13,6 +13,7 @@ import {
 import type { GlobusProject } from "../types/globus";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { applyOgEtag } from "../lib/ogEtag";
 import {
   ensureModuleWebhookTables,
   fireModuleWebhook,
@@ -1231,6 +1232,7 @@ modulesRouter.get("/:id/og.svg", modulesEmbedRateLimit, async (req, res) => {
 
     const overrides = await loadOverrides();
     const p = applyOverride(enrichProject(base), overrides.get(id));
+    if (applyOgEtag(req, res, `modules-${id}-${p.effectiveTier}-${p.effectiveStatus}`)) return;
     const tierColor =
       p.effectiveTier === "mvp_live"
         ? "#0d9488"
@@ -1281,7 +1283,6 @@ modulesRouter.get("/:id/og.svg", modulesEmbedRateLimit, async (req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "og failed", details: err.message });
@@ -1457,12 +1458,15 @@ ${urls.join("\n")}
 // 🔹 GET /og.svg — index-page social-share card. Same dimensions and
 //    style as /:id/og.svg but for the registry root. Used by /modules
 //    via og:image so a share of "all 27 modules" renders nicely too.
-modulesRouter.get("/og.svg", modulesEmbedRateLimit, async (_req, res) => {
+modulesRouter.get("/og.svg", modulesEmbedRateLimit, async (req, res) => {
   try {
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     const enriched = await loadAllEnriched();
     const live = enriched.filter((p) => p.effectiveTier === "mvp_live").length;
     const api = enriched.filter((p) => p.effectiveTier === "platform_api").length;
     const portal = enriched.filter((p) => p.effectiveTier === "portal_only").length;
+    if (applyOgEtag(req, res, `modules-index-${enriched.length}-${live}-${api}-${portal}`)) return;
 
     function esc(s: string): string {
       return String(s)
@@ -1513,7 +1517,6 @@ modulesRouter.get("/og.svg", modulesEmbedRateLimit, async (_req, res) => {
 </svg>`;
 
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(svg);
   } catch (err: any) {

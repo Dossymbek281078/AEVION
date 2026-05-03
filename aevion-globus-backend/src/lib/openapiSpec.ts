@@ -170,9 +170,9 @@ export const openapiSpec = {
   openapi: "3.1.0",
   info: {
     title: "AEVION Globus Backend",
-    version: "0.3.0",
+    version: "0.4.0",
     description:
-      "Bank-relevant endpoints (qtrade + ecosystem) carry full schemas. Legacy globus / qsign routes use summary-only entries.",
+      "Bank-relevant endpoints (qtrade + ecosystem) carry full schemas. Tier 3 amplifier surfaces (OG cards, sitemaps, badges, RSS) and admin bulk-edit panels documented as summary entries; see per-surface specs (qsign-v2, quantum-shield) for full schemas.",
     contact: { name: "AEVION", url: "https://aevion.app" },
   },
   servers: [
@@ -555,5 +555,85 @@ export const openapiSpec = {
     "/api/planet/stats": { get: { summary: "Planet public stats", security: [] } },
     "/api/planet/artifacts/recent": { get: { summary: "Recent certified artifacts", security: [] } },
     "/api/planet/artifacts/{artifactVersionId}/public": { get: { summary: "Public artifact + votes", security: [] } },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Tier 3 amplifier surfaces (OG cards, sitemaps, RSS, badges)
+    // ──────────────────────────────────────────────────────────────────────
+    // Public crawler-facing endpoints. All use weak ETag + Cache-Control:
+    // public,max-age=300 — repeat fetches return 304 Not Modified.
+    // Rate-limited per-IP by `*EmbedRateLimit` (240/min/ip).
+
+    "/api/modules/og.svg": { get: { summary: "Modules registry OG card (1200x630, ETag/304)", security: [] } },
+    "/api/modules/sitemap.xml": { get: { summary: "Modules registry XML sitemap", security: [] } },
+    "/api/modules/{id}/og.svg": { get: { summary: "Per-module OG card with effective tier+status (ETag/304)", security: [] } },
+    "/api/modules/{id}/badge.svg": { get: { summary: "Embeddable per-module status badge (SVG)", security: [] } },
+
+    "/api/bureau/og.svg": { get: { summary: "Bureau index OG card (verified/notarized/anon counts, ETag/304)", security: [] } },
+    "/api/bureau/sitemap.xml": { get: { summary: "Bureau certificates XML sitemap", security: [] } },
+    "/api/bureau/cert/{certId}/og.svg": { get: { summary: "Per-cert OG card (ETag/304)", security: [] } },
+    "/api/bureau/cert/{certId}/badge.svg": { get: { summary: "Embeddable per-cert badge (SVG)", security: [] } },
+
+    "/api/awards/og.svg": { get: { summary: "Awards index OG card (seasons/finalized/entries/medals, ETag/304)", security: [] } },
+    "/api/awards/sitemap.xml": { get: { summary: "Awards XML sitemap (seasons + entries)", security: [] } },
+    "/api/awards/entries/{entryId}/og.svg": { get: { summary: "Per-entry OG card with podium place (ETag/304)", security: [] } },
+    "/api/awards/entries/{entryId}/badge.svg": { get: { summary: "Embeddable per-entry medal badge (SVG)", security: [] } },
+
+    "/api/pipeline/og.svg": { get: { summary: "Pipeline registry OG card (ETag/304)", security: [] } },
+    "/api/pipeline/sitemap.xml": { get: { summary: "Pipeline certificates XML sitemap", security: [] } },
+    "/api/pipeline/certificate/{certId}/og.svg": { get: { summary: "Per-IPCertificate OG card (ETag/304)", security: [] } },
+
+    "/api/quantum-shield/og.svg": { get: { summary: "Quantum Shield registry OG card (ETag/304)", security: [] } },
+    "/api/quantum-shield/sitemap.xml": { get: { summary: "Quantum Shield XML sitemap", security: [] } },
+    "/api/quantum-shield/{id}/og.svg": { get: { summary: "Per-shield OG card with k-of-n threshold (ETag/304)", security: [] } },
+
+    "/api/qright/og.svg": { get: { summary: "QRight registry OG card (ETag/304)", security: [] } },
+    "/api/qright/sitemap.xml": { get: { summary: "QRight XML sitemap", security: [] } },
+    "/api/qright/badge/{id}.svg": { get: { summary: "Embeddable per-object QRight badge (SVG)", security: [] } },
+
+    "/api/planet/og.svg": { get: { summary: "Planet Compliance registry OG card (ETag/304)", security: [] } },
+    "/api/planet/sitemap.xml": { get: { summary: "Planet Compliance XML sitemap", security: [] } },
+    "/api/planet/certificates/{certId}/og.svg": { get: { summary: "Per-cert OG card (ETag/304)", security: [] } },
+    "/api/planet/certificates/{certId}/badge.svg": { get: { summary: "Embeddable per-cert badge (SVG)", security: [] } },
+
+    "/api/aevion/sitemap.xml": { get: { summary: "Cross-surface sitemap-index pointing at every per-surface sitemap", security: [] } },
+    "/api/aevion/openapi.json": { get: { summary: "Index of OpenAPI specs across all AEVION surfaces", security: [] } },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Admin bulk-edit panels (Tier 3 ops surface)
+    // ──────────────────────────────────────────────────────────────────────
+    // All require admin role. Single-transaction; abort-on-first-error so
+    // partial writes never reach disk. Cap 100 items per call. One audit-log
+    // row per item.
+
+    "/api/modules/admin/bulk": {
+      patch: {
+        summary: "Bulk override module status/tier/hint (admin, ≤100 items)",
+        responses: {
+          "200": { description: "Updated rows" },
+          "400": { description: "validation error — no writes" },
+          "403": { description: "admin role required" },
+        },
+      },
+    },
+    "/api/bureau/admin/bulk": {
+      patch: {
+        summary: "Bulk verify/revoke certs (admin, ≤100 items)",
+        responses: {
+          "200": { description: "Updated rows" },
+          "400": { description: "validation error — no writes" },
+          "403": { description: "admin role required" },
+        },
+      },
+    },
+    "/api/awards/admin/entries/bulk": {
+      patch: {
+        summary: "Bulk qualify/disqualify entries (admin, ≤100 items)",
+        responses: {
+          "200": { description: "Updated rows" },
+          "400": { description: "validation error — no writes" },
+          "403": { description: "admin role required" },
+        },
+      },
+    },
   },
 };

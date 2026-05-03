@@ -32,6 +32,7 @@ import {
 // symbol export for any legacy test or analytics code that references it.
 import { _legacyGenerateShards } from "../lib/shamir/legacy";
 void _legacyGenerateShards;
+import { applyOgEtag } from "../lib/ogEtag";
 
 export const quantumShieldRouter = Router();
 const pool = getPool();
@@ -677,7 +678,7 @@ function qsWrap(text: string, perLine: number, maxLines: number): string[] {
 }
 
 // 🔹 GET /og.svg — index card (totals + active + revoked).
-quantumShieldRouter.get("/og.svg", async (_req, res) => {
+quantumShieldRouter.get("/og.svg", async (req, res) => {
   try {
     await ensureShieldTable();
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
@@ -693,6 +694,7 @@ quantumShieldRouter.get("/og.svg", async (_req, res) => {
     const total = t.n || 0;
     const active = t.active || 0;
     const revoked = t.revoked || 0;
+    if (applyOgEtag(req, res, `qshield-index-${total}-${active}-${revoked}`)) return;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
@@ -727,7 +729,6 @@ quantumShieldRouter.get("/og.svg", async (_req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err) {
     res.status(500).json({ error: "index og failed", details: err instanceof Error ? err.message : String(err) });
@@ -761,6 +762,7 @@ quantumShieldRouter.get("/:id/og.svg", async (req, res) => {
     }
     const row = r.rows[0] as Record<string, unknown>;
     const status = String(row.status || "active");
+    if (applyOgEtag(req, res, `qshield-${id}-${status}-${row.threshold}-${row.totalShards}`)) return;
     const isRevoked = status === "revoked";
     const accent = isRevoked ? "#dc2626" : "#7c3aed";
     const label = isRevoked ? "REVOKED" : "ACTIVE";
@@ -803,7 +805,6 @@ quantumShieldRouter.get("/:id/og.svg", async (req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err) {
     res.status(500).json({ error: "shield og failed", details: err instanceof Error ? err.message : String(err) });

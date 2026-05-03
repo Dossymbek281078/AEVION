@@ -16,6 +16,7 @@ import { rateLimit } from "../lib/rateLimit";
 // behaviour, same lowercasing/www-strip, "(direct)" fallback.
 import { refererHost } from "../lib/qrightHelpers";
 import { deliverWebhook } from "../lib/webhookDelivery";
+import { applyOgEtag } from "../lib/ogEtag";
 
 const PLANET_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "PlanetWebhook",
@@ -3360,7 +3361,7 @@ function planetWrap(text: string, perLine: number, maxLines: number): string[] {
 }
 
 // 🔹 GET /og.svg — index card. Totals from PlanetCertificate.
-planetComplianceRouter.get("/og.svg", planetEmbedRateLimit, async (_req, res) => {
+planetComplianceRouter.get("/og.svg", planetEmbedRateLimit, async (req, res) => {
   try {
     await ensurePlanetTables();
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
@@ -3376,6 +3377,7 @@ planetComplianceRouter.get("/og.svg", planetEmbedRateLimit, async (_req, res) =>
     const total = t.n || 0;
     const active = t.active || 0;
     const revoked = t.revoked || 0;
+    if (applyOgEtag(req, res, `planet-index-${total}-${active}-${revoked}`)) return;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
@@ -3410,7 +3412,6 @@ planetComplianceRouter.get("/og.svg", planetEmbedRateLimit, async (_req, res) =>
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "index og failed", details: err.message });
@@ -3445,7 +3446,9 @@ planetComplianceRouter.get("/certificates/:certId/og.svg", planetEmbedRateLimit,
       return res.send(fallback);
     }
     const row = r.rows[0] as Record<string, unknown>;
-    const isRevoked = !!row.revokedAt || row.status === "revoked";
+    const status = row.revokedAt ? "revoked" : String(row.status || "active");
+    if (applyOgEtag(req, res, `planet-cert-${certId}-${status}`)) return;
+    const isRevoked = status === "revoked";
     const accent = isRevoked ? "#dc2626" : "#0d9488";
     const label = isRevoked ? "REVOKED" : "ACTIVE";
     const titleLines = planetWrap(String(row.submissionTitle || certId), 24, 2);
@@ -3487,7 +3490,6 @@ planetComplianceRouter.get("/certificates/:certId/og.svg", planetEmbedRateLimit,
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "cert og failed", details: err.message });

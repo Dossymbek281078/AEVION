@@ -25,6 +25,7 @@ import {
 } from "../lib/payment";
 import { rateLimit } from "../lib/rateLimit";
 import { refererHost } from "../lib/qrightHelpers";
+import { applyOgEtag } from "../lib/ogEtag";
 
 const bureauEmbedRateLimit = rateLimit({
   windowMs: 60_000,
@@ -1456,6 +1457,12 @@ bureauRouter.get("/cert/:certId/og.svg", bureauEmbedRateLimit, async (req, res) 
     const row = r.rows[0] as any;
     const lvl = String(row.authorVerificationLevel || "anonymous");
     const status = String(row.status || "active");
+    const verifiedAtMs = row.authorVerifiedAt
+      ? (row.authorVerifiedAt instanceof Date
+          ? row.authorVerifiedAt.getTime()
+          : new Date(row.authorVerifiedAt).getTime())
+      : 0;
+    if (applyOgEtag(req, res, `bureau-cert-${certId}-${lvl}-${status}-${verifiedAtMs}`)) return;
     const theme = bureauLevelTheme(lvl, status);
     const titleLines = bureauWrap(row.title || certId, 24, 2);
     const verifiedAt = row.authorVerifiedAt
@@ -1505,7 +1512,6 @@ bureauRouter.get("/cert/:certId/og.svg", bureauEmbedRateLimit, async (req, res) 
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "cert og failed", details: err.message });
@@ -1515,7 +1521,7 @@ bureauRouter.get("/cert/:certId/og.svg", bureauEmbedRateLimit, async (req, res) 
 // 🔹 GET /og.svg — index-page social-share card for /bureau. Mirrors the
 //    transparency totals so a share of the bureau root reflects current
 //    verification volume.
-bureauRouter.get("/og.svg", bureauEmbedRateLimit, async (_req, res) => {
+bureauRouter.get("/og.svg", bureauEmbedRateLimit, async (req, res) => {
   try {
     await ensureBureauTables();
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
@@ -1531,6 +1537,7 @@ bureauRouter.get("/og.svg", bureauEmbedRateLimit, async (_req, res) => {
     const notarized = byLevel.notarized || 0;
     const anon = byLevel.anonymous || 0;
     const total = verified + notarized + anon;
+    if (applyOgEtag(req, res, `bureau-index-${verified}-${notarized}-${anon}`)) return;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
@@ -1571,7 +1578,6 @@ bureauRouter.get("/og.svg", bureauEmbedRateLimit, async (_req, res) => {
   </g>
 </svg>`;
 
-    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svg);
   } catch (err: any) {
     res.status(500).json({ error: "index og failed", details: err.message });

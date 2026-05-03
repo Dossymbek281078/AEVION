@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
 import { EmailVerifyBanner } from "./EmailVerifyBanner";
+import { AppSwitcher } from "./AppSwitcher";
 
 const NAV: { href: string; label: string }[] = [
   { href: "/build", label: "Projects" },
@@ -71,6 +72,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2 text-xs">
+            <AppSwitcher />
             {hydrated && user ? (
               <>
                 {user.role === "ADMIN" && (

@@ -31,15 +31,18 @@ import {
 import {
   applyRefinement,
   buildHistoryContext,
+  buildThreadContext,
   createEvalRun,
   createEvalSuite,
   createPrompt,
   createRun,
   createSharedPreset,
+  createTemplate,
   deleteEvalSuite,
   deletePrompt,
   deleteSession,
   deleteSharedPreset,
+  deleteTemplate,
   ensureSession,
   finishRun,
   forkPrompt,
@@ -55,6 +58,8 @@ import {
   getSession,
   getSessionPublic,
   getSharedPreset,
+  getTemplate,
+  getThread,
   getTopUserTags,
   importSharedPreset,
   insertMessage,
@@ -63,9 +68,11 @@ import {
   listPrompts,
   listPublicPrompts,
   listPublicSharedPresets,
+  listPublicTemplates,
   listRuns,
   listSessions,
   listSuiteRuns,
+  listTemplates,
   renameSession,
   renameSessionIfDefault,
   searchRuns,
@@ -75,6 +82,8 @@ import {
   unshareRun,
   updateEvalSuite,
   updatePrompt,
+  updateTemplate,
+  useTemplate,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -723,6 +732,27 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Thread — fetch all runs in a conversation thread
+   GET /api/qcoreai/runs/:id/thread
+   Returns the full chain: root run + all reply runs ordered oldest→newest.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/runs/:id/thread", async (req, res) => {
+  try {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(run.sessionId, auth?.sub ?? null);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const threadId = run.threadId ?? run.id;
+    const runs = await getThread(threadId);
+    res.json({ threadId, runs });
+  } catch (err: any) {
+    res.status(500).json({ error: "thread fetch failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    Multi-agent pipeline (Server-Sent Events)
    POST /api/qcoreai/multi-agent
    ═══════════════════════════════════════════════════════════════════════ */
@@ -886,11 +916,29 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     ? `${renderAttachmentsContext(attachments)}\n\n[User question]\n${userInput}`
     : userInput;
 
+  // V7-T: optional thread continuation — pass continueFromRunId to build
+  // full thread context and link new run as a reply in the same thread.
+  const continueFromRunId: string | null =
+    typeof req.body?.continueFromRunId === "string" ? req.body.continueFromRunId : null;
+  let parentRun: import("../services/qcoreai/store").RunRow | null = null;
+  if (continueFromRunId) {
+    try {
+      parentRun = await getRun(continueFromRunId);
+      if (!parentRun) {
+        return res.status(404).json({ error: "continueFromRunId not found" });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ error: "thread lookup failed", details: err?.message });
+    }
+  }
+
   let sessionId: string;
   let runId: string;
   try {
     const session = await ensureSession({
-      sessionId: typeof req.body?.sessionId === "string" ? req.body.sessionId : null,
+      // When continuing a thread, re-use the parent's session so the reply
+      // appears in the same sidebar entry.
+      sessionId: parentRun?.sessionId ?? (typeof req.body?.sessionId === "string" ? req.body.sessionId : null),
       userId,
       seedTitle: userInput,
     });
@@ -900,6 +948,8 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
       userInput,
       agentConfig: { strategy, maxRevisions, overrides },
       strategy,
+      parentRunId: parentRun?.id ?? null,
+      threadId: parentRun?.threadId ?? null,
     });
     runId = run.id;
     await insertMessage({
@@ -966,7 +1016,11 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const guidanceBus = await getGuidanceBus();
   await guidanceBus.register(runId);
 
-  const history = await buildHistoryContext(sessionId, 6);
+  // When continuing a thread, walk up the parent chain for precise context;
+  // otherwise use the session's recent runs (less precise but good for new threads).
+  const history = parentRun
+    ? await buildThreadContext(parentRun.id, 12)
+    : await buildHistoryContext(sessionId, 6);
 
   const runStart = Date.now();
   // ordering=0 is the user prompt (inserted in session-init block); slot 1
@@ -1417,6 +1471,122 @@ qcoreaiRouter.post("/prompts/:id/fork", async (req, res) => {
     res.json({ ok: true, prompt: forked });
   } catch (err: any) {
     res.status(500).json({ error: "fork prompt failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run templates — save / browse / apply named input+strategy+overrides bundles
+   POST   /api/qcoreai/templates
+   GET    /api/qcoreai/templates          (own)
+   GET    /api/qcoreai/templates/public   (public browse)
+   GET    /api/qcoreai/templates/:id
+   PATCH  /api/qcoreai/templates/:id
+   DELETE /api/qcoreai/templates/:id
+   POST   /api/qcoreai/templates/:id/use  (bumps useCount, returns template)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/templates", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, input, strategy, overrides, isPublic } = req.body || {};
+    if (!name?.trim()) return res.status(400).json({ error: "name required" });
+    if (!input?.trim()) return res.status(400).json({ error: "input required" });
+    const t = await createTemplate({
+      ownerUserId: auth.sub,
+      name: String(name),
+      description: description ?? null,
+      input: String(input),
+      strategy: strategy || "sequential",
+      overrides: overrides && typeof overrides === "object" ? overrides : {},
+      isPublic: Boolean(isPublic),
+    });
+    res.status(201).json({ template: t });
+  } catch (err: any) {
+    res.status(500).json({ error: "create template failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/templates/public", async (req, res) => {
+  try {
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const limit = Math.min(50, parseInt(String(req.query.limit || "30"), 10) || 30);
+    const items = await listPublicTemplates(q, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public templates failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/templates", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listTemplates(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list templates failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/templates/:id", async (req, res) => {
+  try {
+    const t = await getTemplate(req.params.id);
+    if (!t) return res.status(404).json({ error: "template not found" });
+    const auth = verifyBearerOptional(req);
+    if (!t.isPublic && t.ownerUserId !== auth?.sub) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+    res.json({ template: t });
+  } catch (err: any) {
+    res.status(500).json({ error: "get template failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/templates/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description, input, strategy, overrides, isPublic } = req.body || {};
+    const t = await updateTemplate(req.params.id, auth.sub, {
+      ...(name !== undefined && { name: String(name) }),
+      ...(description !== undefined && { description }),
+      ...(input !== undefined && { input: String(input) }),
+      ...(strategy !== undefined && { strategy }),
+      ...(overrides !== undefined && { overrides }),
+      ...(isPublic !== undefined && { isPublic: Boolean(isPublic) }),
+    });
+    if (!t) return res.status(404).json({ error: "template not found or forbidden" });
+    res.json({ template: t });
+  } catch (err: any) {
+    res.status(500).json({ error: "update template failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/templates/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteTemplate(req.params.id, auth.sub);
+    if (!ok) return res.status(404).json({ error: "template not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete template failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/templates/:id/use", async (req, res) => {
+  try {
+    const t = await getTemplate(req.params.id);
+    if (!t) return res.status(404).json({ error: "template not found" });
+    const auth = verifyBearerOptional(req);
+    if (!t.isPublic && t.ownerUserId !== auth?.sub) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+    const updated = await useTemplate(req.params.id);
+    res.json({ template: updated || t });
+  } catch (err: any) {
+    res.status(500).json({ error: "use template failed", details: err?.message });
   }
 });
 

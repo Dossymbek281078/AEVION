@@ -234,6 +234,40 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       ON "QCorePrompt" ("isPublic", "importCount" DESC, "updatedAt" DESC);
   `);
 
+  // QCoreRun — threading: parentRunId links to the previous run in a thread;
+  // threadId is always set to the root run's id so we can retrieve all replies
+  // in one WHERE clause. The root run has parentRunId=NULL, threadId=its own id.
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "parentRunId" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "threadId" TEXT;`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QCoreRun_threadId_startedAt_idx" ON "QCoreRun" ("threadId", "startedAt");`
+  );
+
+  // Run templates — save input + strategy + overrides as a named, reusable bundle.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreTemplate" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "input"       TEXT NOT NULL,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "useCount"    INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreTemplate_owner_updated_idx"
+      ON "QCoreTemplate" ("ownerUserId", "updatedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreTemplate_public_uses_idx"
+      ON "QCoreTemplate" ("isPublic", "useCount" DESC, "updatedAt" DESC);
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

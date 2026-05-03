@@ -42,6 +42,8 @@ export type RunRow = {
   startedAt: string;
   finishedAt: string | null;
   tags?: string[];
+  parentRunId?: string | null;
+  threadId?: string | null;
 };
 
 export type SearchHit = {
@@ -286,9 +288,14 @@ export async function createRun(opts: {
   userInput: string;
   agentConfig?: unknown;
   strategy?: string | null;
+  parentRunId?: string | null;
+  threadId?: string | null;
 }): Promise<RunRow> {
   await ensureQCoreTables(pool);
   const id = crypto.randomUUID();
+  const parentRunId = opts.parentRunId ?? null;
+  // threadId = root run's id. If continuing a thread, inherit; else this run IS the root.
+  const threadId = opts.threadId ?? (parentRunId ? null : id);
 
   if (!isDbReady()) {
     const row: RunRow = {
@@ -305,6 +312,8 @@ export async function createRun(opts: {
       shareToken: null,
       startedAt: nowIso(),
       finishedAt: null,
+      parentRunId,
+      threadId: threadId ?? id,
     };
     memRuns.set(id, row);
     memMessagesByRun.set(id, []);
@@ -312,8 +321,8 @@ export async function createRun(opts: {
   }
 
   const r = await pool.query(
-    `INSERT INTO "QCoreRun" ("id","sessionId","userInput","status","agentConfig","strategy")
-     VALUES ($1,$2,$3,'running',$4,$5)
+    `INSERT INTO "QCoreRun" ("id","sessionId","userInput","status","agentConfig","strategy","parentRunId","threadId")
+     VALUES ($1,$2,$3,'running',$4,$5,$6,$7)
      RETURNING *`,
     [
       id,
@@ -321,6 +330,8 @@ export async function createRun(opts: {
       opts.userInput,
       opts.agentConfig ? JSON.stringify(opts.agentConfig) : null,
       opts.strategy ?? null,
+      parentRunId,
+      threadId ?? id,
     ]
   );
   return r.rows[0] as RunRow;
@@ -1182,6 +1193,47 @@ export async function buildHistoryContext(sessionId: string, maxTurns = 6): Prom
   return out;
 }
 
+/** Returns all runs in a thread ordered oldest→newest (root included). */
+export async function getThread(threadId: string): Promise<RunRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const rows = Array.from(memRuns.values()).filter(
+      (r) => r.threadId === threadId || r.id === threadId
+    );
+    rows.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    return rows;
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRun" WHERE "threadId"=$1 ORDER BY "startedAt" ASC`,
+    [threadId]
+  );
+  return r.rows as RunRow[];
+}
+
+/**
+ * Builds a ChatMessage[] conversation history by walking UP the parent chain
+ * from the given run (not including it). Used when continuing a specific run
+ * so the agent sees the full thread context, not just the session's last N turns.
+ */
+export async function buildThreadContext(runId: string, maxTurns = 12): Promise<ChatMessage[]> {
+  await ensureQCoreTables(pool);
+  const chain: RunRow[] = [];
+  let current: RunRow | null = await getRun(runId);
+  let steps = 0;
+  while (current && steps < maxTurns) {
+    chain.unshift(current);
+    if (!current.parentRunId) break;
+    current = await getRun(current.parentRunId);
+    steps++;
+  }
+  const out: ChatMessage[] = [];
+  for (const run of chain) {
+    if (run.userInput) out.push({ role: "user", content: run.userInput });
+    if (run.finalContent) out.push({ role: "assistant", content: run.finalContent });
+  }
+  return out;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Eval harness
    ═══════════════════════════════════════════════════════════════════════
@@ -1840,4 +1892,177 @@ export async function getPromptVersionChain(rootId: string): Promise<PromptRow[]
     }
   }
   return chain.sort((a, b) => a.version - b.version);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run templates — reusable input + strategy + overrides bundles.
+   Users save a named config once and apply it in one click; public
+   templates are browsable across accounts.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type TemplateRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  input: string;
+  strategy: string;
+  overrides: Record<string, unknown>;
+  isPublic: boolean;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memTemplates = new Map<string, TemplateRow>();
+
+export async function createTemplate(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  input: string;
+  strategy?: string;
+  overrides?: Record<string, unknown>;
+  isPublic?: boolean;
+}): Promise<TemplateRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: TemplateRow = {
+    id,
+    ownerUserId: opts.ownerUserId,
+    name: opts.name.slice(0, 80),
+    description: opts.description?.slice(0, 400) ?? null,
+    input: opts.input.slice(0, 16000),
+    strategy: opts.strategy || "sequential",
+    overrides: opts.overrides ?? {},
+    isPublic: opts.isPublic ?? false,
+    useCount: 0,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  if (!isDbReady()) {
+    memTemplates.set(id, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreTemplate"
+       ("id","ownerUserId","name","description","input","strategy","overrides","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     RETURNING *`,
+    [id, row.ownerUserId, row.name, row.description, row.input, row.strategy,
+     JSON.stringify(row.overrides), row.isPublic]
+  );
+  return r.rows[0] as TemplateRow;
+}
+
+export async function listTemplates(ownerUserId: string, limit = 50): Promise<TemplateRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memTemplates.values())
+      .filter((t) => t.ownerUserId === ownerUserId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreTemplate" WHERE "ownerUserId"=$1 ORDER BY "updatedAt" DESC LIMIT $2`,
+    [ownerUserId, limit]
+  );
+  return r.rows as TemplateRow[];
+}
+
+export async function listPublicTemplates(query?: string, limit = 30): Promise<TemplateRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  if (!isDbReady()) {
+    const q = (query || "").toLowerCase();
+    return Array.from(memTemplates.values())
+      .filter((t) => t.isPublic && (!q || t.name.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q)))
+      .sort((a, b) => b.useCount - a.useCount || b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, lim);
+  }
+  if (query?.trim()) {
+    const q = `%${query.trim()}%`;
+    const r = await pool.query(
+      `SELECT * FROM "QCoreTemplate"
+        WHERE "isPublic"=TRUE AND ("name" ILIKE $1 OR "description" ILIKE $1)
+        ORDER BY "useCount" DESC, "updatedAt" DESC LIMIT $2`,
+      [q, lim]
+    );
+    return r.rows as TemplateRow[];
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreTemplate" WHERE "isPublic"=TRUE ORDER BY "useCount" DESC, "updatedAt" DESC LIMIT $1`,
+    [lim]
+  );
+  return r.rows as TemplateRow[];
+}
+
+export async function getTemplate(id: string): Promise<TemplateRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memTemplates.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreTemplate" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as TemplateRow) || null;
+}
+
+export async function updateTemplate(
+  id: string,
+  ownerUserId: string,
+  patch: Partial<Pick<TemplateRow, "name" | "description" | "input" | "strategy" | "overrides" | "isPublic">>
+): Promise<TemplateRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memTemplates.get(id);
+    if (!t || t.ownerUserId !== ownerUserId) return null;
+    const updated = { ...t, ...patch, updatedAt: nowIso() };
+    memTemplates.set(id, updated);
+    return updated;
+  }
+  const sets: string[] = [];
+  const vals: unknown[] = [id, ownerUserId];
+  let idx = 3;
+  if (patch.name !== undefined) { sets.push(`"name"=$${idx++}`); vals.push(patch.name.slice(0, 80)); }
+  if (patch.description !== undefined) { sets.push(`"description"=$${idx++}`); vals.push(patch.description?.slice(0, 400) ?? null); }
+  if (patch.input !== undefined) { sets.push(`"input"=$${idx++}`); vals.push(patch.input.slice(0, 16000)); }
+  if (patch.strategy !== undefined) { sets.push(`"strategy"=$${idx++}`); vals.push(patch.strategy); }
+  if (patch.overrides !== undefined) { sets.push(`"overrides"=$${idx++}`); vals.push(JSON.stringify(patch.overrides)); }
+  if (patch.isPublic !== undefined) { sets.push(`"isPublic"=$${idx++}`); vals.push(patch.isPublic); }
+  if (!sets.length) return getTemplate(id);
+  sets.push(`"updatedAt"=NOW()`);
+  const r = await pool.query(
+    `UPDATE "QCoreTemplate" SET ${sets.join(",")} WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING *`,
+    vals
+  );
+  return (r.rows[0] as TemplateRow) || null;
+}
+
+export async function deleteTemplate(id: string, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memTemplates.get(id);
+    if (!t || t.ownerUserId !== ownerUserId) return false;
+    memTemplates.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreTemplate" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, ownerUserId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function useTemplate(id: string): Promise<TemplateRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memTemplates.get(id);
+    if (!t) return null;
+    t.useCount++;
+    return t;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreTemplate" SET "useCount"="useCount"+1,"updatedAt"=NOW() WHERE "id"=$1 RETURNING *`,
+    [id]
+  );
+  return (r.rows[0] as TemplateRow) || null;
 }

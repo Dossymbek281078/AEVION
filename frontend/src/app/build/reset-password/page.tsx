@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
@@ -9,7 +9,9 @@ import { requestPasswordReset, completePasswordReset, BuildApiError } from "@/li
 export default function ResetPasswordPage() {
   return (
     <BuildShell>
-      <ResetPasswordBody />
+      <Suspense fallback={null}>
+        <ResetPasswordBody />
+      </Suspense>
     </BuildShell>
   );
 }

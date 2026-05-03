@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
@@ -10,7 +10,9 @@ import { useBuildAuth } from "@/lib/build/auth";
 export default function VerifyEmailPage() {
   return (
     <BuildShell>
-      <VerifyEmailBody />
+      <Suspense fallback={null}>
+        <VerifyEmailBody />
+      </Suspense>
     </BuildShell>
   );
 }

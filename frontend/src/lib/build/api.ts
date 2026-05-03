@@ -671,6 +671,12 @@ export const buildApi = {
     rating: number;
     comment?: string | null;
   }) => call<BuildReview>("POST", "/api/build/reviews", input),
+  createReview: (input: {
+    projectId: string;
+    revieweeId: string;
+    rating: number;
+    comment?: string | null;
+  }) => call<BuildReview>("POST", "/api/build/reviews", input),
   reviewsByUser: (userId: string, limit = 50, offset = 0) =>
     call<{
       items: BuildReview[];

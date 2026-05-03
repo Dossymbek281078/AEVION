@@ -282,8 +282,36 @@ applicationsRouter.patch("/:id", async (req, res) => {
       }
     }
 
+    // Fire-and-forget email notification to candidate
+    const candidateId = row.rows[0].userId;
+    void notifyCandidate(candidateId, status.value as "ACCEPTED" | "REJECTED").catch(() => {});
+
     return ok(res, { ...result.rows[0], hireOrder });
   } catch (err: unknown) {
     return fail(res, 500, "application_update_failed", { details: (err as Error).message });
   }
 });
+
+async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECTED") {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return; // email not configured
+  try {
+    const u = await pool.query(`SELECT "email","name" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [candidateId]);
+    if (!u.rows[0]) return;
+    const { email, name } = u.rows[0] as { email: string; name: string };
+    const subject = status === "ACCEPTED"
+      ? "Your application was accepted — AEVION QBuild"
+      : "Update on your application — AEVION QBuild";
+    const text = status === "ACCEPTED"
+      ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.tech/build/applications\n\n— AEVION QBuild`
+      : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.tech/build/vacancies\n\n— AEVION QBuild`;
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: "QBuild <noreply@aevion.tech>", to: email, subject, text }),
+    });
+    console.info(`[build] email sent to ${email} (${status})`);
+  } catch (e) {
+    console.warn("[build] email notify failed:", (e as Error).message);
+  }
+}

@@ -41,6 +41,42 @@ statsRouter.get("/", async (_req, res) => {
   }
 });
 
+// GET /api/build/stats/salary?skill=AutoCAD — salary market data for a skill
+statsRouter.get("/salary", async (req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=7200");
+  try {
+    const skill = typeof req.query.skill === "string" ? req.query.skill.trim().slice(0, 60) : "";
+
+    let query: string;
+    let params: unknown[];
+    if (skill) {
+      query = `SELECT AVG("salary")::float8 AS "avg", PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "salary") AS "median",
+               MIN("salary") AS "min", MAX("salary") AS "max", COUNT(*)::int AS "count"
+               FROM "BuildVacancy"
+               WHERE "salary" > 0 AND "skillsJson" ILIKE $1`;
+      params = [`%${skill}%`];
+    } else {
+      query = `SELECT AVG("salary")::float8 AS "avg", PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "salary") AS "median",
+               MIN("salary") AS "min", MAX("salary") AS "max", COUNT(*)::int AS "count"
+               FROM "BuildVacancy" WHERE "salary" > 0`;
+      params = [];
+    }
+
+    const r = await pool.query(query, params);
+    const row = r.rows[0];
+    return ok(res, {
+      skill: skill || null,
+      avg: Math.round(Number(row.avg ?? 0)),
+      median: Math.round(Number(row.median ?? 0)),
+      min: Number(row.min ?? 0),
+      max: Number(row.max ?? 0),
+      count: Number(row.count ?? 0),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "salary_stats_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/stats/hires — recent accepted hires for success-stories page
 statsRouter.get("/hires", async (req, res) => {
   res.setHeader("Cache-Control", "public, max-age=120, s-maxage=300");

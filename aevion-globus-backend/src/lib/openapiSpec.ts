@@ -114,6 +114,111 @@ const schemas = {
       source: { type: "string", enum: ["planet"] },
     },
   },
+  // ──────────────────────────────────────────────────────────────────────
+  // Tier 1 trust spine — full schemas (added in 0.5.0)
+  // ──────────────────────────────────────────────────────────────────────
+  QRightObject: {
+    type: "object",
+    required: ["id", "title", "kind", "author", "contentHash", "protectedAt"],
+    properties: {
+      id: { type: "string", example: "qr_2026_05_03_abcd1234" },
+      title: { type: "string", example: "My AI-music track v3" },
+      kind: { type: "string", enum: ["audio", "video", "image", "text", "code", "other"], example: "audio" },
+      description: { type: "string", nullable: true },
+      author: { type: "string", example: "alice@aevion.test" },
+      email: { type: "string", format: "email", nullable: true },
+      location: { type: "string", nullable: true, example: "Berlin, DE" },
+      contentHash: { type: "string", description: "SHA-256 of canonical payload (hex)" },
+      signatureHmac: { type: "string", description: "HMAC-SHA256 over canonical payload (hex)" },
+      signatureEd25519: { type: "string", description: "Ed25519 signature (hex)" },
+      shieldId: { type: "string", description: "Quantum Shield record id" },
+      shards: { type: "integer", minimum: 2, example: 3 },
+      threshold: { type: "integer", minimum: 1, example: 2 },
+      algorithm: { type: "string", example: "ed25519+shamir-2of3" },
+      protectedAt: { type: "string", format: "date-time" },
+      verifyUrl: { type: "string", example: "/qright/verify/qr_2026_05_03_abcd1234" },
+      revokedAt: { type: "string", format: "date-time", nullable: true },
+    },
+  },
+  IPCertificate: {
+    type: "object",
+    required: ["id", "objectId", "title", "contentHash", "status", "protectedAt"],
+    properties: {
+      id: { type: "string", example: "ipc_2026_05_03_xyz" },
+      objectId: { type: "string", description: "QRight object id this cert protects" },
+      title: { type: "string" },
+      contentHash: { type: "string", description: "SHA-256 of canonical payload (hex)" },
+      hmacSignature: { type: "string", description: "HMAC-SHA256 over {objectId,title,contentHash,timestamp} (hex)" },
+      cosignSignatures: {
+        type: "array",
+        description: "Optional witness co-signatures (Ed25519). Empty for self-signed certs.",
+        items: {
+          type: "object",
+          properties: {
+            witnessId: { type: "string" },
+            signature: { type: "string" },
+            algorithm: { type: "string", enum: ["ed25519"] },
+          },
+        },
+      },
+      otsAnchor: {
+        type: "object",
+        nullable: true,
+        description: "OpenTimestamps anchor proof (Bitcoin-blockchain attestation).",
+        properties: {
+          calendar: { type: "string" },
+          height: { type: "integer", nullable: true },
+          completeAt: { type: "string", format: "date-time", nullable: true },
+        },
+      },
+      status: { type: "string", enum: ["active", "revoked"], example: "active" },
+      protectedAt: { type: "string", format: "date-time" },
+      revokedAt: { type: "string", format: "date-time", nullable: true },
+      revocationReason: { type: "string", nullable: true },
+    },
+  },
+  BureauCert: {
+    type: "object",
+    required: ["id", "objectId", "authorVerificationLevel", "status"],
+    properties: {
+      id: { type: "string" },
+      objectId: { type: "string", description: "underlying IPCertificate id" },
+      authorVerificationLevel: {
+        type: "string",
+        enum: ["anonymous", "verified", "notarized"],
+        description: "anonymous = self-signed; verified = KYC + payment; notarized = quorum-attested by registered notaries",
+      },
+      authorName: { type: "string", nullable: true },
+      authorVerifiedAt: { type: "string", format: "date-time", nullable: true },
+      kycSessionId: { type: "string", nullable: true },
+      paymentIntentId: { type: "string", nullable: true },
+      paymentAmountCents: { type: "integer", nullable: true },
+      paymentCurrency: { type: "string", nullable: true, example: "USD" },
+      status: { type: "string", enum: ["active", "revoked"] },
+    },
+  },
+  PlanetArtifactVersion: {
+    type: "object",
+    required: ["id", "submissionId", "version", "createdAt"],
+    properties: {
+      id: { type: "string" },
+      submissionId: { type: "string" },
+      version: { type: "integer", minimum: 1 },
+      contentHash: { type: "string" },
+      productKey: { type: "string", nullable: true, example: "awards-music-2026-Q1" },
+      certificateId: { type: "string", nullable: true },
+      certifiedAt: { type: "string", format: "date-time", nullable: true },
+      voteTally: {
+        type: "object",
+        properties: {
+          approve: { type: "integer", minimum: 0 },
+          reject: { type: "integer", minimum: 0 },
+          abstain: { type: "integer", minimum: 0 },
+        },
+      },
+      createdAt: { type: "string", format: "date-time" },
+    },
+  },
   EcosystemEarnings: {
     type: "object",
     required: ["totals", "perSource"],
@@ -170,9 +275,9 @@ export const openapiSpec = {
   openapi: "3.1.0",
   info: {
     title: "AEVION Globus Backend",
-    version: "0.4.0",
+    version: "0.5.0",
     description:
-      "Bank-relevant endpoints (qtrade + ecosystem) carry full schemas. Tier 3 amplifier surfaces (OG cards, sitemaps, badges, RSS) and admin bulk-edit panels documented as summary entries; see per-surface specs (qsign-v2, quantum-shield) for full schemas.",
+      "Bank-relevant endpoints (qtrade + ecosystem) and Tier 1 trust spine (qright register/verify, bureau verify, pipeline protect, planet artifact submit) carry full schemas. Tier 3 amplifier surfaces (OG cards, sitemaps, badges, RSS) and admin bulk-edit panels documented as summary entries; see per-surface specs (qsign-v2 at /api/qsign/v2/openapi.json, quantum-shield at /api/quantum-shield/openapi.json) for their full schemas.",
     contact: { name: "AEVION", url: "https://aevion.app" },
   },
   servers: [
@@ -452,7 +557,234 @@ export const openapiSpec = {
     "/api/globus/projects/{id}": { get: { summary: "Single project + runtime", security: [] } },
     "/api/modules/status": { get: { summary: "Modules dashboard payload", security: [] } },
     "/api/modules/{id}/health": { get: { summary: "Per-module health stub", security: [] } },
-    "/api/qright/objects": { get: { summary: "List QRight" }, post: { summary: "Create QRight object" } },
+    "/api/qright/objects": {
+      get: {
+        summary: "List own QRight objects (paginated)",
+        parameters: paginationParams,
+        responses: {
+          "200": {
+            description: "Page of QRight objects.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["items"],
+                  properties: {
+                    items: { type: "array", items: { $ref: "#/components/schemas/QRightObject" } },
+                    nextCursor: { type: ["string", "null"] },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "missing/invalid bearer", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+      post: {
+        summary: "Register a new QRight object — full crypto pipeline",
+        description:
+          "Hashes the canonical payload (SHA-256), seals with HMAC, signs with Ed25519, threshold-shards the secret on Quantum Shield (default 2-of-3), persists IPCertificate. Returns the object plus verifyUrl. Rate-limited per JWT sub.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title", "kind", "contentHash"],
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 200 },
+                  kind: { type: "string", enum: ["audio", "video", "image", "text", "code", "other"] },
+                  description: { type: "string", maxLength: 2000 },
+                  author: { type: "string", description: "Display name. Defaults to authed user's name." },
+                  email: { type: "string", format: "email" },
+                  location: { type: "string", description: "Free-form geo. Auto-filled from Globus when bearer has it." },
+                  contentHash: { type: "string", pattern: "^[0-9a-f]{64}$", description: "Pre-computed SHA-256 of the work payload (hex)." },
+                  shards: { type: "integer", minimum: 2, maximum: 16, default: 3 },
+                  threshold: { type: "integer", minimum: 1, default: 2 },
+                },
+              },
+              example: {
+                title: "AEVION pitch demo — Berlin session 1",
+                kind: "audio",
+                description: "Test track for the registry walkthrough",
+                contentHash: "a6f9c5e0d3b18a4f7c92e10b2d88a73f04e6c5d9b127a3f0e5d76c8a4be2913f",
+                shards: 3,
+                threshold: 2,
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/QRightObject" } } } },
+          "400": { description: "Missing/invalid fields", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "401": { description: "missing/invalid bearer" },
+          "429": { description: "Rate limit — see Retry-After" },
+        },
+      },
+    },
+    "/api/qright/objects/{id}/public": {
+      get: {
+        summary: "Public verification view (no auth)",
+        security: [],
+        parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Public-safe slice of the object — verifyable signatures, no PII beyond the author display name.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/QRightObject" } } },
+          },
+          "404": { description: "Not found / revoked" },
+        },
+      },
+    },
+    "/api/pipeline/protect": {
+      post: {
+        summary: "Mint an IPCertificate over a QRight object (HMAC + optional cosign + optional OTS anchor)",
+        description:
+          "Backbone of the Tier 1 trust spine. Re-canonicalises the payload, HMAC-seals, optionally collects witness co-signatures (Ed25519), optionally submits to OpenTimestamps for blockchain attestation. Idempotent on objectId — calling twice on the same object returns the existing cert.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["objectId"],
+                properties: {
+                  objectId: { type: "string", description: "QRight object id this cert covers" },
+                  cosignWitnesses: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Optional list of witness public-key ids (Ed25519). Each witness must be reachable.",
+                  },
+                  anchorOts: { type: "boolean", default: false, description: "Submit cert hash to OpenTimestamps for Bitcoin-anchored proof." },
+                },
+              },
+              example: { objectId: "qr_2026_05_03_abcd1234", anchorOts: true },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Cert minted", content: { "application/json": { schema: { $ref: "#/components/schemas/IPCertificate" } } } },
+          "200": { description: "Already protected (idempotent replay)" },
+          "404": { description: "Object not found / not owned" },
+          "401": { description: "missing/invalid bearer" },
+        },
+      },
+    },
+    "/api/pipeline/verify/{certId}": {
+      get: {
+        summary: "Verify an IPCertificate (no auth)",
+        security: [],
+        parameters: [{ in: "path", name: "certId", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Verification result + cert payload",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    valid: { type: "boolean" },
+                    reason: { type: "string", nullable: true, description: "When valid=false, why" },
+                    cert: { $ref: "#/components/schemas/IPCertificate" },
+                  },
+                },
+              },
+            },
+          },
+          "404": { description: "Cert not found" },
+        },
+      },
+    },
+    "/api/bureau/cert/{certId}/verify/start": {
+      post: {
+        summary: "Begin Verified-tier upgrade (KYC + payment intent)",
+        description:
+          "Creates a KYC session via the configured provider (BUREAU_KYC_PROVIDER) and a payment intent (BUREAU_PAYMENT_PROVIDER). Cert flips to 'verified' once both come back successful.",
+        parameters: [{ in: "path", name: "certId", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["declaredName", "declaredCountry"],
+                properties: {
+                  declaredName: { type: "string", maxLength: 200 },
+                  declaredCountry: { type: "string", description: "ISO-3166-1 alpha-2", example: "KZ" },
+                  email: { type: "string", format: "email" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "KYC + payment session created",
+            content: {
+              "application/json": {
+                example: {
+                  kycSessionId: "kyc-stub-1714000000-abc",
+                  kycRedirectUrl: "/bureau/upgrade/kyc-stub-1714000000-abc",
+                  paymentIntentId: "pay-stub-1714000000-xyz",
+                  paymentAmountCents: 1900,
+                  paymentCurrency: "USD",
+                },
+              },
+            },
+          },
+          "404": { description: "Cert not found / not owned" },
+          "409": { description: "Cert already verified" },
+          "401": { description: "missing/invalid bearer" },
+        },
+      },
+    },
+    "/api/bureau/cert/{certId}/public": {
+      get: {
+        summary: "Public verification view of a Bureau cert (no auth)",
+        security: [],
+        parameters: [{ in: "path", name: "certId", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "Public-safe Bureau cert slice", content: { "application/json": { schema: { $ref: "#/components/schemas/BureauCert" } } } },
+          "404": { description: "Not found / revoked" },
+        },
+      },
+    },
+    "/api/planet/submissions": {
+      post: {
+        summary: "Submit an artifact version to a Planet validator quorum",
+        description:
+          "Creates a PlanetSubmission + PlanetArtifactVersion (v1). Validators on the configured product key vote; once quorum approves, a PlanetCertificate is minted and the AEC reward (if any) settles to the author's Bank wallet via /api/planet/payouts/certify-webhook.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title", "productKey", "contentHash"],
+                properties: {
+                  title: { type: "string", maxLength: 200 },
+                  productKey: { type: "string", description: "Validator pool routing key, e.g. 'awards-music-2026-Q1'" },
+                  contentHash: { type: "string", pattern: "^[0-9a-f]{64}$" },
+                  qrightObjectId: { type: "string", description: "Optional — links to a pre-existing QRight registration" },
+                  metadata: { type: "object", additionalProperties: true },
+                },
+              },
+              example: {
+                title: "AI-music track for Awards Q1",
+                productKey: "awards-music-2026-Q1",
+                contentHash: "a6f9c5e0d3b18a4f7c92e10b2d88a73f04e6c5d9b127a3f0e5d76c8a4be2913f",
+                qrightObjectId: "qr_2026_05_03_abcd1234",
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Submission + first artifact version created", content: { "application/json": { schema: { $ref: "#/components/schemas/PlanetArtifactVersion" } } } },
+          "400": { description: "Validation error" },
+          "401": { description: "missing/invalid bearer" },
+        },
+      },
+    },
     "/api/qcoreai/chat": {
       post: {
         summary: "Chat (5 LLM providers + stub fallback)",

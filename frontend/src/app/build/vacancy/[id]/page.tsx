@@ -83,11 +83,14 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
       <div className="mt-2 mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">{vacancy.title}</h1>
-          <div className="mt-1 text-xs text-slate-400">
-            Posted {new Date(vacancy.createdAt).toLocaleDateString()} ·{" "}
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <span>Posted {new Date(vacancy.createdAt).toLocaleDateString()}</span>
             <span className={vacancy.status === "OPEN" ? "text-emerald-300" : "text-slate-500"}>
               {vacancy.status}
             </span>
+            {isOwner && vacancy.viewCount != null && vacancy.viewCount > 0 && (
+              <span title="Total page views">👁 {vacancy.viewCount} views</span>
+            )}
           </div>
         </div>
         <div className="text-right">

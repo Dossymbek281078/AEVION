@@ -148,6 +148,7 @@ export type BuildVacancy = {
   city?: string | null;
   salaryCurrency?: string | null;
   questions?: string[];
+  viewCount?: number;
 };
 
 export type ApplicationAiScores = {
@@ -181,6 +182,7 @@ export type BuildApplication = {
   answersJson?: string;
   aiScoresJson?: string | null;
   aiScoreOverall?: number | null;
+  rejectReason?: string | null;
 };
 
 export type BuildMessage = {

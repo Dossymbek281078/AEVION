@@ -169,6 +169,8 @@ vacanciesRouter.get("/by-project/:id", async (req, res) => {
 vacanciesRouter.get("/:id", async (req, res) => {
   try {
     const id = String(req.params.id);
+    // Increment view counter fire-and-forget (best-effort, non-blocking)
+    pool.query(`UPDATE "BuildVacancy" SET "viewCount" = COALESCE("viewCount", 0) + 1 WHERE "id" = $1`, [id]).catch(() => {});
     const result = await pool.query(
       `SELECT v.*, p."title" AS "projectTitle", p."status" AS "projectStatus", p."clientId",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"

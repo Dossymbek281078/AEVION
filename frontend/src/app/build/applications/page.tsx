@@ -140,6 +140,11 @@ function ApplicationCard({ app }: { app: BuildApplication }) {
               &ldquo;{app.message}&rdquo;
             </p>
           )}
+          {app.status === "REJECTED" && app.rejectReason && (
+            <p className="mt-1.5 rounded-md bg-rose-500/10 px-2.5 py-1 text-xs text-rose-200">
+              Reason: {app.rejectReason}
+            </p>
+          )}
         </div>
         <div className="shrink-0 text-right">
           {app.salary ? (

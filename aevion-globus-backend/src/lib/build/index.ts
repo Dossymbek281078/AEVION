@@ -211,6 +211,7 @@ async function _doEnsureBuildTables(): Promise<void> {
   // every applicant must answer. Replaces the HH "free-form cover
   // letter" with structured signal.
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "questionsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "viewCount" INT NOT NULL DEFAULT 0;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (
@@ -230,6 +231,7 @@ async function _doEnsureBuildTables(): Promise<void> {
   // link with ?ref=<userId>, we capture who drove the application.
   // Used downstream for referrer rewards / leaderboard.
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "referredByUserId" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildApplication_vacancy_user_uniq" ON "BuildApplication" ("vacancyId", "userId");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_user_created_idx" ON "BuildApplication" ("userId", "createdAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_vacancy_status_idx" ON "BuildApplication" ("vacancyId", "status");`);

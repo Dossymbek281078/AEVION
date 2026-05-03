@@ -229,9 +229,17 @@ applicationsRouter.patch("/:id", async (req, res) => {
       return fail(res, 403, "only_vacancy_owner_can_update");
     }
 
+    const rejectReason = status.value === "REJECTED" && req.body?.rejectReason
+      ? String(req.body.rejectReason).slice(0, 500)
+      : null;
+
     const result = await pool.query(
-      `UPDATE "BuildApplication" SET "status" = $1, "updatedAt" = NOW() WHERE "id" = $2 RETURNING *`,
-      [status.value, id],
+      `UPDATE "BuildApplication"
+       SET "status" = $1, "updatedAt" = NOW()
+         ${rejectReason !== null ? `, "rejectReason" = $3` : ""}
+       WHERE "id" = $2
+       RETURNING *`,
+      rejectReason !== null ? [status.value, id, rejectReason] : [status.value, id],
     );
 
     let hireOrder: Record<string, unknown> | null = null;

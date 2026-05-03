@@ -1946,6 +1946,29 @@ export default function CyberChessPage(){
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(hotseat)return; // two-player hotseat: no AI moves
     if(p2pMode)return; // P2P mode: opponent is human, no AI
+    // Ghost Duel: replay past game moves as ghost's turns
+    if(ghostDuelMode&&ghostDuelConfig){
+      const ply=hist.length;
+      const ghostSan=getGhostMoveAt(ghostDuelConfig,ply);
+      if(ghostSan){
+        const fenAtTrigger2=game.fen();
+        const t2=setTimeout(()=>{
+          try{
+            if(game.fen()!==fenAtTrigger2){sThink(false);return}
+            const mv=game.move(ghostSan);
+            if(mv){
+              sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);
+              snd(mv.captured?"capture":mv.san.includes("O-")?"castle":game.isCheck()?"check":"move");
+              const div=checkDivergence(ghostDuelConfig,[...hist,mv.san]);
+              if(div!==null&&ghostDuelDivergePly===null){sGhostDuelDivergePly(div);showToast(`👻 Отклонение от прошлой партии на ходу ${Math.floor(div/2)+1}!`,"info")}
+            }
+          }catch{}
+          sThink(false);
+        },600+Math.random()*400);
+        return()=>clearTimeout(t2);
+      }
+      // past game ended → fall through to Stockfish
+    }
     if(openingDrill)return; // Opening Trainer plays bot moves from script
     if(game.turn()===pCol)return;
     sThink(true);

@@ -177,7 +177,7 @@ export const projects: GlobusProject[] = [
     description:
       "Персональный ИИ-доктор и тренер здоровья: рекомендации, трекеры, персональные планы.",
     kind: "product",
-    status: "planning",
+    status: "mvp",
     priority: 2,
     tags: ["health", "ai", "coach"],
     createdAt: now,
@@ -369,7 +369,7 @@ export const projects: GlobusProject[] = [
     description:
       "Платформа найма для строительной вертикали: проекты, вакансии, тестовые задания, AI-оценка резюме, лояльность и cashback в AEV.",
     kind: "product",
-    status: "in_progress",
+    status: "mvp",
     priority: 1,
     tags: ["hiring", "construction", "ai", "marketplace"],
     createdAt: now,

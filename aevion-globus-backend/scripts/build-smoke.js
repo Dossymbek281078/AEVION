@@ -535,6 +535,17 @@ async function main() {
     step += 1;
     console.log(`  ${String(step).padStart(2, "0")}  SKIP  HIRE_FEE in ledger (vacancy salary may be 0)`);
   }
+  // 38. Notifications list — synthetic feed
+  r = await call("GET", "/api/build/notifications", null, clientToken);
+  if (is2xx(r) && Array.isArray(unwrap(r)?.items)) {
+    ok("GET /notifications", `items=${unwrap(r).items.length}`);
+  } else return fail("notifications list", `status=${r.status}`);
+
+  // 39. Mark notifications read
+  r = await call("POST", "/api/build/notifications/mark-read", {}, clientToken);
+  if (is2xx(r) && unwrap(r)?.marked === true) {
+    ok("POST /notifications/mark-read");
+  } else return fail("notifications mark-read", `status=${r.status}`);
 }
 
 main()

@@ -146,13 +146,6 @@ profilesRouter.post("/profiles", async (req, res) => {
       ? null : String(req.body.safetyTrainingUntil).trim().slice(0, 32) || null;
     const introVideoUrl = req.body?.introVideoUrl == null
       ? null : String(req.body.introVideoUrl).trim().slice(0, 500) || null;
-    // KZ localisation (v3) — optional, format-validated.
-    const iinRaw = req.body?.iin == null ? null : String(req.body.iin).replace(/\D/g, "").slice(0, 12);
-    const iin = iinRaw && iinRaw.length === 12 ? iinRaw : null;
-    const binRaw = req.body?.bin == null ? null : String(req.body.bin).replace(/\D/g, "").slice(0, 12);
-    const bin = binRaw && binRaw.length === 12 ? binRaw : null;
-    const localeRaw = typeof req.body?.locale === "string" ? req.body.locale.trim().toLowerCase() : null;
-    const locale = ["ru", "en", "kz"].includes(localeRaw || "") ? (localeRaw as string) : "ru";
 
     const id = crypto.randomUUID();
     const result = await pool.query(
@@ -165,10 +158,9 @@ profilesRouter.post("/profiles", async (req, res) => {
           "driversLicense","shiftPreference","availabilityType","readyFromDate",
           "preferredLocationsJson","toolsOwnedJson",
           "medicalCheckValid","medicalCheckUntil",
-          "safetyTrainingValid","safetyTrainingUntil","introVideoUrl",
-          "iin","bin","locale")
+          "safetyTrainingValid","safetyTrainingUntil","introVideoUrl")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)
+               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
        ON CONFLICT ("userId") DO UPDATE SET
          "name" = EXCLUDED."name", "phone" = EXCLUDED."phone",
          "city" = EXCLUDED."city", "description" = EXCLUDED."description",
@@ -194,9 +186,6 @@ profilesRouter.post("/profiles", async (req, res) => {
          "safetyTrainingValid" = EXCLUDED."safetyTrainingValid",
          "safetyTrainingUntil" = EXCLUDED."safetyTrainingUntil",
          "introVideoUrl" = EXCLUDED."introVideoUrl",
-         "iin" = EXCLUDED."iin",
-         "bin" = EXCLUDED."bin",
-         "locale" = EXCLUDED."locale",
          "updatedAt" = NOW()
        RETURNING *`,
       [
@@ -209,7 +198,6 @@ profilesRouter.post("/profiles", async (req, res) => {
         driversLicense, shiftPreference, availabilityType, readyFromDate,
         JSON.stringify(preferredLocations), JSON.stringify(toolsOwned),
         medicalCheckValid, medicalCheckUntil, safetyTrainingValid, safetyTrainingUntil, introVideoUrl,
-        iin, bin, locale,
       ],
     );
 
@@ -651,5 +639,31 @@ profilesRouter.delete("/education/:id", async (req, res) => {
     return ok(res, { id, deleted: true });
   } catch (err: unknown) {
     return fail(res, 500, "education_delete_failed", { details: (err as Error).message });
+  }
+});
+
+// PATCH /api/build/users/me/password — change own password
+profilesRouter.patch("/users/me/password", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const current = vString(req.body?.current, "current", { min: 6, max: 200 });
+    if (!current.ok) return fail(res, 400, current.error);
+    const next = vString(req.body?.next, "next", { min: 8, max: 200 });
+    if (!next.ok) return fail(res, 400, next.error);
+
+    const u = await pool.query(`SELECT "passwordHash" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [auth.sub]);
+    if (u.rowCount === 0) return fail(res, 404, "user_not_found");
+
+    const bcrypt = await import("bcryptjs");
+    const valid = await bcrypt.compare(current.value, u.rows[0].passwordHash);
+    if (!valid) return fail(res, 401, "current_password_incorrect");
+
+    const hash = await bcrypt.hash(next.value, 10);
+    await pool.query(`UPDATE "AEVIONUser" SET "passwordHash" = $1 WHERE "id" = $2`, [hash, auth.sub]);
+    return ok(res, { changed: true });
+  } catch (err: unknown) {
+    return fail(res, 500, "password_change_failed", { details: (err as Error).message });
   }
 });

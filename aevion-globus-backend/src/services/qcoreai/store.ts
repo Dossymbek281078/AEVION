@@ -2800,3 +2800,18 @@ export async function getSessionCostSummary(
   );
   return r.rows;
 }
+
+export async function pinSession(id: string, userId: string | null, pinned: boolean): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memSessions.get(id);
+    if (!s) return false;
+    (s as any).pinned = pinned;
+    return true;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreSession" SET "pinned"=$1 WHERE "id"=$2 AND ("userId"=$3 OR "userId" IS NULL) RETURNING "id"`,
+    [pinned, id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}

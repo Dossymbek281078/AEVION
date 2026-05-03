@@ -46,6 +46,7 @@ import {
   createComment,
   deleteRunsBulk,
   getSessionCostSummary,
+  pinSession,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -440,6 +441,19 @@ qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
     res.json({ session: updated });
   } catch (err: any) {
     res.status(500).json({ error: "rename failed", details: err?.message });
+  }
+});
+
+/** PATCH /sessions/:id/pin — toggle session pin (starred sessions float to top). */
+qcoreaiRouter.patch("/sessions/:id/pin", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const pinned = typeof req.body?.pinned === "boolean" ? req.body.pinned : true;
+    const ok = await pinSession(String(req.params.id), auth?.sub ?? null, pinned);
+    if (!ok) return res.status(404).json({ error: "session not found" });
+    res.json({ ok: true, pinned });
+  } catch (err: any) {
+    res.status(500).json({ error: "pin failed", details: err?.message });
   }
 });
 
@@ -1368,6 +1382,8 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
               : costUsd(meta?.provider || "", meta?.model || "", evt.tokensIn, evt.tokensOut);
           totalCost += agentCost;
           lastAgentContent = evt.content;
+          // V9: emit running cost total after every agent turn so UI can display live spend.
+          send({ type: "cost_tick", runId, accumulatedCostUsd: totalCost });
           await insertMessage({
             runId,
             role: evt.role,

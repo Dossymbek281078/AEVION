@@ -11,11 +11,6 @@ import {
   APPLICATION_STATUSES,
   getRecruiterTier,
 } from "../../lib/build";
-import {
-  sendNewApplication,
-  sendApplicationAccepted,
-  sendApplicationRejected,
-} from "../../lib/build/email";
 
 export const applicationsRouter = Router();
 
@@ -111,36 +106,6 @@ applicationsRouter.post("/", async (req, res) => {
         [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId],
       );
 
-      // Notify client (fire-and-forget)
-      void (async () => {
-        try {
-          const emails = await pool.query(
-            `SELECT u."email", u."name", p."name" AS "wName",
-                    v."title" AS "vacTitle", proj."title" AS "projTitle",
-                    cu."email" AS "clientEmail", cu."name" AS "clientName"
-             FROM "BuildApplication" a
-             LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
-             LEFT JOIN "BuildProject" proj ON proj."id" = v."projectId"
-             LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
-             LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
-             LEFT JOIN "AEVIONUser" cu ON cu."id" = proj."clientId"
-             WHERE a."id" = $1 LIMIT 1`,
-            [id],
-          );
-          const e = emails.rows[0];
-          if (e?.clientEmail) {
-            sendNewApplication({
-              clientEmail: e.clientEmail,
-              clientName: e.clientName ?? "",
-              workerName: e.wName ?? e.name ?? "Работник",
-              vacancyTitle: e.vacTitle ?? "",
-              projectTitle: e.projTitle ?? "",
-              applicationId: id,
-            });
-          }
-        } catch {/**/}
-      })();
-
       if (questions.length > 0 && process.env.ANTHROPIC_API_KEY) {
         void scoreApplicationAsync(id, {
           vacancyTitle: vacancy.rows[0].title,
@@ -181,6 +146,52 @@ applicationsRouter.get("/my", async (req, res) => {
 });
 
 // GET /api/build/applications/by-vacancy/:id — owner only
+// GET /api/build/applications/by-vacancy/:id/export.csv — owner downloads all applicants as CSV
+applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."title", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const rows = await pool.query(
+      `SELECT a."id", a."status", a."createdAt", a."message", a."rejectReason",
+              a."aiScoreOverall", a."matchScore",
+              u."name" AS "applicantName", u."email" AS "applicantEmail",
+              p."title" AS "profileTitle", p."city", p."experienceYears"
+       FROM "BuildApplication" a
+       JOIN "AEVIONUser" u ON u."id" = a."userId"
+       LEFT JOIN "BuildProfile" p ON p."userId" = a."userId"
+       WHERE a."vacancyId" = $1
+       ORDER BY a."createdAt" DESC`,
+      [id],
+    );
+
+    const header = ["id", "status", "createdAt", "name", "email", "city", "experienceYears", "profileTitle", "aiScore", "matchScore", "message", "rejectReason"].join(",");
+    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const body = rows.rows.map((r: Record<string, unknown>) =>
+      [r.id, r.status, r.createdAt, r.applicantName, r.applicantEmail, r.city, r.experienceYears, r.profileTitle, r.aiScoreOverall, r.matchScore, r.message, r.rejectReason]
+        .map(escape)
+        .join(","),
+    ).join("\n");
+
+    const vacancySlug = String(owner.rows[0].title || id).replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="applications-${vacancySlug}-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.send(`${header}\n${body}`);
+  } catch (err: unknown) {
+    return fail(res, 500, "applications_csv_failed", { details: (err as Error).message });
+  }
+});
+
 applicationsRouter.get("/by-vacancy/:id", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
@@ -264,46 +275,18 @@ applicationsRouter.patch("/:id", async (req, res) => {
       return fail(res, 403, "only_vacancy_owner_can_update");
     }
 
-    const result = await pool.query(
-      `UPDATE "BuildApplication" SET "status" = $1, "updatedAt" = NOW() WHERE "id" = $2 RETURNING *`,
-      [status.value, id],
-    );
+    const rejectReason = status.value === "REJECTED" && req.body?.rejectReason
+      ? String(req.body.rejectReason).slice(0, 500)
+      : null;
 
-    // Email notification to worker (fire-and-forget)
-    void (async () => {
-      try {
-        const ctx = await pool.query(
-          `SELECT u."email", u."name" AS "workerName",
-                  cu."name" AS "clientName",
-                  v."title" AS "vacTitle", proj."title" AS "projTitle"
-           FROM "BuildApplication" a
-           LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
-           LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
-           LEFT JOIN "BuildProject" proj ON proj."id" = v."projectId"
-           LEFT JOIN "AEVIONUser" cu ON cu."id" = proj."clientId"
-           WHERE a."id" = $1 LIMIT 1`,
-          [id],
-        );
-        const c = ctx.rows[0];
-        if (!c?.email) return;
-        if (status.value === "ACCEPTED") {
-          sendApplicationAccepted({
-            workerEmail: c.email,
-            workerName: c.workerName ?? "",
-            vacancyTitle: c.vacTitle ?? "",
-            projectTitle: c.projTitle ?? "",
-            clientName: c.clientName ?? "",
-          });
-        } else if (status.value === "REJECTED") {
-          sendApplicationRejected({
-            workerEmail: c.email,
-            workerName: c.workerName ?? "",
-            vacancyTitle: c.vacTitle ?? "",
-            projectTitle: c.projTitle ?? "",
-          });
-        }
-      } catch {/**/}
-    })();
+    const result = await pool.query(
+      `UPDATE "BuildApplication"
+       SET "status" = $1, "updatedAt" = NOW()
+         ${rejectReason !== null ? `, "rejectReason" = $3` : ""}
+       WHERE "id" = $2
+       RETURNING *`,
+      rejectReason !== null ? [status.value, id, rejectReason] : [status.value, id],
+    );
 
     let hireOrder: Record<string, unknown> | null = null;
     if (status.value === "ACCEPTED") {
@@ -353,106 +336,36 @@ applicationsRouter.patch("/:id", async (req, res) => {
       }
     }
 
+    // Fire-and-forget email notification to candidate
+    const candidateId = row.rows[0].userId;
+    void notifyCandidate(candidateId, status.value as "ACCEPTED" | "REJECTED").catch(() => {});
+
     return ok(res, { ...result.rows[0], hireOrder });
   } catch (err: unknown) {
     return fail(res, 500, "application_update_failed", { details: (err as Error).message });
   }
 });
 
-// POST /api/build/applications/quick — 1-tap apply for a known
-// candidate with a complete profile. Skips the questions/answers form,
-// auto-fills a short message from the profile, and only requires the
-// vacancyId. The vacancy author still sees AI scoring + match badge.
-applicationsRouter.post("/quick", async (req, res) => {
+async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECTED") {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return; // email not configured
   try {
-    const auth = requireBuildAuth(req, res);
-    if (!auth) return;
-    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 200 });
-    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
-
-    // Quick Apply requires a profile so the recruiter has something to read.
-    const profile = await pool.query(
-      `SELECT "name","title","city","summary","skillsJson","experienceYears"
-       FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
-      [auth.sub],
-    );
-    if (profile.rowCount === 0) return fail(res, 400, "profile_required_for_quick_apply");
-    const p = profile.rows[0];
-    const skills = safeParseJson(p.skillsJson, [] as string[]);
-
-    const vacancy = await pool.query(
-      `SELECT v."id", v."status" AS "vacancyStatus", v."title", v."description",
-              v."skillsJson", v."questionsJson", p."clientId"
-       FROM "BuildVacancy" v LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
-       WHERE v."id" = $1 LIMIT 1`,
-      [vacancyId.value],
-    );
-    if (vacancy.rowCount === 0) return fail(res, 404, "vacancy_not_found");
-    if (vacancy.rows[0].vacancyStatus === "CLOSED") return fail(res, 409, "vacancy_closed");
-    if (vacancy.rows[0].clientId === auth.sub) return fail(res, 400, "cannot_apply_to_own_vacancy");
-
-    const referredByRaw = req.body?.referredByUserId;
-    const referredByUserId =
-      typeof referredByRaw === "string" && referredByRaw.trim().length > 0 && referredByRaw.trim() !== auth.sub
-        ? referredByRaw.trim().slice(0, 200) : null;
-
-    const autoMessage = `${p.title || p.name} — ${p.experienceYears ?? 0} лет опыта${p.city ? `, ${p.city}` : ""}.${skills.length ? `\nКлючевые навыки: ${skills.slice(0, 6).join(", ")}.` : ""}${p.summary ? `\n\n${String(p.summary).slice(0, 600)}` : ""}\n\n— Quick Apply через QBuild.`;
-
-    const id = crypto.randomUUID();
-    try {
-      const result = await pool.query(
-        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId")
-         VALUES ($1,$2,$3,$4,'[]',$5) RETURNING *`,
-        [id, vacancyId.value, auth.sub, autoMessage, referredByUserId],
-      );
-
-      void (async () => {
-        try {
-          const emails = await pool.query(
-            `SELECT u."name" AS "uname", bp."name" AS "wName",
-                    v."title" AS "vacTitle", proj."title" AS "projTitle",
-                    cu."email" AS "clientEmail", cu."name" AS "clientName"
-             FROM "BuildApplication" a
-             LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
-             LEFT JOIN "BuildProject" proj ON proj."id" = v."projectId"
-             LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
-             LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
-             LEFT JOIN "AEVIONUser" cu ON cu."id" = proj."clientId"
-             WHERE a."id" = $1 LIMIT 1`,
-            [id],
-          );
-          const e = emails.rows[0];
-          if (e?.clientEmail) {
-            sendNewApplication({
-              clientEmail: e.clientEmail,
-              clientName: e.clientName ?? "",
-              workerName: e.wName ?? e.uname ?? "Работник",
-              vacancyTitle: e.vacTitle ?? "",
-              projectTitle: e.projTitle ?? "",
-              applicationId: id,
-            });
-          }
-        } catch {/**/}
-      })();
-
-      const questions = safeParseJson(vacancy.rows[0].questionsJson, [] as string[]);
-      if (questions.length === 0 && process.env.ANTHROPIC_API_KEY) {
-        // No questions to answer — score based purely on profile vs vacancy.
-        void scoreApplicationAsync(id, {
-          vacancyTitle: vacancy.rows[0].title,
-          vacancyDescription: vacancy.rows[0].description,
-          requiredSkills: safeParseJson(vacancy.rows[0].skillsJson, [] as string[]),
-          questions: [], answers: [], candidateUserId: auth.sub,
-        });
-      }
-
-      return ok(res, result.rows[0], 201);
-    } catch (err: unknown) {
-      const e = err as { code?: string };
-      if (e.code === "23505") return fail(res, 409, "already_applied");
-      throw err;
-    }
-  } catch (err: unknown) {
-    return fail(res, 500, "quick_apply_failed", { details: (err as Error).message });
+    const u = await pool.query(`SELECT "email","name" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [candidateId]);
+    if (!u.rows[0]) return;
+    const { email, name } = u.rows[0] as { email: string; name: string };
+    const subject = status === "ACCEPTED"
+      ? "Your application was accepted — AEVION QBuild"
+      : "Update on your application — AEVION QBuild";
+    const text = status === "ACCEPTED"
+      ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.tech/build/applications\n\n— AEVION QBuild`
+      : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.tech/build/vacancies\n\n— AEVION QBuild`;
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: "QBuild <noreply@aevion.tech>", to: email, subject, text }),
+    });
+    console.info(`[build] email sent to ${email} (${status})`);
+  } catch (e) {
+    console.warn("[build] email notify failed:", (e as Error).message);
   }
-});
+}

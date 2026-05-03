@@ -5,8 +5,6 @@ import { use } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ApplicationForm } from "@/components/build/ApplicationForm";
-import { QuickApplyButton } from "@/components/build/QuickApplyButton";
-import { HelpTip } from "@/components/build/HelpTip";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import {
   buildApi,
@@ -75,76 +73,87 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
   return (
     <BuildShell>
-      <nav className="mb-3 flex items-center gap-2 text-xs text-slate-500">
-        <Link href="/build/vacancies" className="hover:text-slate-300">Вакансии</Link>
-        <span>›</span>
-        <span className="text-slate-400 truncate max-w-xs">{vacancy.title}</span>
-      </nav>
+      <Link
+        href={`/build/project/${encodeURIComponent(vacancy.projectId)}`}
+        className="text-xs text-slate-400 underline-offset-2 hover:underline"
+      >
+        ← {vacancy.projectTitle || "Back to project"}
+      </Link>
 
-      <div className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
-                vacancy.status === "OPEN"
-                  ? "bg-emerald-500/20 text-emerald-300"
-                  : "bg-slate-500/20 text-slate-400"
-              }`}>
-                {vacancy.status === "OPEN" ? "● Открыта" : "✕ Закрыта"}
-              </span>
-              {vacancy.city && (
-                <span className="text-xs text-slate-400">📍 {vacancy.city}</span>
-              )}
-              <span className="text-xs text-slate-500">
-                Опубликована {new Date(vacancy.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
-              </span>
-            </div>
-            <h1 className="mt-2 text-2xl font-bold text-white">{vacancy.title}</h1>
-            {vacancy.projectTitle && (
-              <p className="mt-1 text-sm text-slate-400">
-                Проект: <Link href={`/build/project/${encodeURIComponent(vacancy.projectId)}`} className="text-emerald-300 hover:underline">{vacancy.projectTitle}</Link>
-              </p>
-            )}
-          </div>
-          <div className="shrink-0 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-3 text-center">
-            <div className="text-xs text-slate-400">Зарплата</div>
-            {vacancy.salary > 0 ? (
-              <div className="text-2xl font-bold text-emerald-300">
-                {vacancy.salary.toLocaleString("ru-RU")}
-                <span className="ml-1 text-sm font-normal text-slate-400">{vacancy.salaryCurrency || "₽"}</span>
-              </div>
-            ) : (
-              <div className="text-base text-slate-400">По договору</div>
+      <div className="mt-2 mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">{vacancy.title}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <span>Posted {new Date(vacancy.createdAt).toLocaleDateString()}</span>
+            <span className={vacancy.status === "OPEN" ? "text-emerald-300" : "text-slate-500"}>
+              {vacancy.status}
+            </span>
+            {isOwner && vacancy.viewCount != null && vacancy.viewCount > 0 && (
+              <span title="Total page views">👁 {vacancy.viewCount} views</span>
             )}
           </div>
         </div>
-        {vacancy.skills && vacancy.skills.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {vacancy.skills.map((s) => (
-              <span key={s} className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-200">
-                {s}
-              </span>
-            ))}
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wider text-slate-400">Salary</div>
+            <div className="text-2xl font-semibold text-emerald-300">
+              {vacancy.salary > 0 ? `$${vacancy.salary.toLocaleString()}` : "—"}
+            </div>
           </div>
-        )}
+          {isOwner && (
+            <VacancyStatusToggle
+              vacancyId={vacancy.id}
+              currentStatus={vacancy.status}
+              onToggled={refresh}
+            />
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-              Описание вакансии
+              Role description
             </h2>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{vacancy.description}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-200">{vacancy.description}</p>
+            {vacancy.skills && vacancy.skills.length > 0 && (
+              <div className="mt-4">
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Required skills
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {vacancy.skills.map((s) => (
+                    <span
+                      key={s}
+                      className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs text-emerald-200"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {isOwner && <SuggestedCandidates vacancyId={vacancy.id} />}
 
           {isOwner && applications && (
             <div className="mt-6">
-              <h2 className="mb-3 text-lg font-semibold text-white">
-                Applications <span className="text-slate-500">({applications.length})</span>
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-white">
+                  Applications <span className="text-slate-500">({applications.length})</span>
+                </h2>
+                {applications.length > 0 && (
+                  <a
+                    href={`/api/build/applications/by-vacancy/${encodeURIComponent(vacancy.id)}/export.csv`}
+                    className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10"
+                    download
+                  >
+                    ↓ CSV
+                  </a>
+                )}
+              </div>
               {applications.length === 0 ? (
                 <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
                   No applications yet.
@@ -168,24 +177,9 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
         <aside className="space-y-4">
           {!isOwner && (
             <div className="rounded-xl border border-white/10 bg-white/5 p-5">
-              <div className="mb-3 flex items-center gap-1.5">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-                  Откликнуться
-                </h2>
-                <HelpTip>
-                  <p className="mb-1 font-semibold text-white">Как подать отклик?</p>
-                  <p><strong>⚡ Quick Apply</strong> — один клик, система автоматически составит сопроводительное письмо из вашего профиля. Доступно если у вас заполнен профиль и в вакансии нет доп. вопросов.</p>
-                  <p className="mt-1.5"><strong>Полная форма</strong> — вручную напишите сообщение и ответьте на вопросы работодателя.</p>
-                </HelpTip>
-              </div>
-              {(vacancy.questions || []).length === 0 && !myApplied && (
-                <div className="mb-3">
-                  <QuickApplyButton vacancyId={vacancy.id} />
-                  <p className="mt-1 text-xs text-slate-500">
-                    Один клик — профиль отправляется автоматически
-                  </p>
-                </div>
-              )}
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Apply
+              </h2>
               <ApplicationForm
                 vacancyId={vacancy.id}
                 alreadyApplied={myApplied}
@@ -194,7 +188,43 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               />
             </div>
           )}
+          {isOwner && (applications !== null || vacancy.viewCount != null) && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Analytics</div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-xl font-bold text-white">{vacancy.viewCount ?? "—"}</div>
+                  <div className="text-[10px] text-slate-500">Views</div>
+                </div>
+                <div>
+                  <div className="text-xl font-bold text-white">{applications?.length ?? "—"}</div>
+                  <div className="text-[10px] text-slate-500">Applied</div>
+                </div>
+                <div>
+                  <div className="text-xl font-bold text-white">
+                    {vacancy.viewCount && applications?.length
+                      ? `${Math.round((applications.length / vacancy.viewCount) * 100)}%`
+                      : "—"}
+                  </div>
+                  <div className="text-[10px] text-slate-500">Conv.</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <ShareVacancyBlock vacancyId={vacancy.id} />
+
+          {vacancy.clientId && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Employer</div>
+              <Link
+                href={`/build/u/${encodeURIComponent(vacancy.clientId)}`}
+                className="text-emerald-300 hover:underline"
+              >
+                View employer profile →
+              </Link>
+            </div>
+          )}
         </aside>
       </div>
     </BuildShell>
@@ -257,7 +287,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                 : "bg-slate-500/15 text-slate-300";
           const initials = c.name
             .split(/\s+/)
-            .map((s: any) => s.charAt(0))
+            .map((s) => s.charAt(0))
             .join("")
             .toUpperCase()
             .slice(0, 2);
@@ -302,7 +332,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                   </div>
                   {c.matchedSkills.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      {c.matchedSkills.slice(0, 6).map((s: any) => (
+                      {c.matchedSkills.slice(0, 6).map((s) => (
                         <span
                           key={s}
                           className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
@@ -411,13 +441,12 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-400">
             {app.applicantCity && <span>📍 {app.applicantCity}</span>}
             {app.applicantExperienceYears != null && app.applicantExperienceYears > 0 && (
-              <span>⏱ {app.applicantExperienceYears} лет опыта</span>
+              <span>⏱ {app.applicantExperienceYears}y</span>
             )}
-            <span className="text-slate-500">{new Date(app.createdAt).toLocaleDateString("ru-RU")}</span>
           </div>
           {(app.matchedSkills?.length ?? 0) > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
-              {app.matchedSkills!.slice(0, 6).map((s: any) => (
+              {app.matchedSkills!.slice(0, 6).map((s) => (
                 <span
                   key={s}
                   className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
@@ -429,9 +458,9 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           )}
         </div>
         <span
-          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_TONE[app.status]}`}
+          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${STATUS_TONE[app.status]}`}
         >
-          {{ PENDING: "⏳ Ожидает", ACCEPTED: "✅ Принят", REJECTED: "✕ Отклонён" }[app.status] ?? app.status}
+          {app.status}
         </span>
       </div>
       {app.message && (
@@ -442,13 +471,7 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           href={`/build/messages?to=${encodeURIComponent(app.userId)}`}
           className="rounded-md bg-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/20"
         >
-          💬 Написать
-        </Link>
-        <Link
-          href={`/build/u/${encodeURIComponent(app.userId)}`}
-          className="rounded-md bg-white/5 px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
-        >
-          Профиль →
+          Message
         </Link>
         {app.status !== "ACCEPTED" && (
           <button
@@ -458,35 +481,29 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
               try {
                 const r = await buildApi.updateApplication(app.id, "ACCEPTED");
                 onChanged();
-                if (r.hireOrder && r.hireOrder.amount > 0 && r.hireOrder.status === "PENDING") {
-                  // Open Stripe Checkout or dev-mode pay
-                  try {
-                    const checkout = await buildApi.checkoutOrder(r.hireOrder.id);
-                    if (checkout.url) {
-                      window.location.href = checkout.url;
-                    } else if (checkout.devMode) {
-                      alert(`[Dev] Hire fee ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} помечен как оплаченный (dev mode).`);
-                    }
-                  } catch {
-                    alert(`Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency}. Оплатите в разделе «Мои заказы».`);
-                  }
+                if (r.hireOrder && r.hireOrder.amount > 0) {
+                  // Surface the hire fee so the recruiter knows to pay it.
+                  alert(
+                    `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в разделе «Мои заказы».`,
+                  );
                 }
               } finally {
                 setBusy(false);
               }
             }}
-            className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+            className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
           >
-            ✓ Принять
+            Accept
           </button>
         )}
         {app.status !== "REJECTED" && (
           <button
             disabled={busy}
             onClick={async () => {
+              const reason = prompt("Reason for rejection (optional, shown to candidate):");
               setBusy(true);
               try {
-                await buildApi.updateApplication(app.id, "REJECTED");
+                await buildApi.updateApplication(app.id, "REJECTED", reason?.trim() || undefined);
                 onChanged();
               } finally {
                 setBusy(false);
@@ -494,20 +511,7 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
             }}
             className="rounded-md bg-rose-500/20 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
           >
-            ✕ Отклонить
-          </button>
-        )}
-        {app.status === "ACCEPTED" && (
-          <button
-            onClick={async () => {
-              try {
-                const r = await buildApi.generateContract(app.id);
-                window.open(r.qsignUrl, "_blank", "noreferrer");
-              } catch {/**/}
-            }}
-            className="rounded-md border border-teal-500/30 bg-teal-500/10 px-3 py-1.5 text-xs font-medium text-teal-200 hover:bg-teal-500/20"
-          >
-            📄 Договор (QSign)
+            Reject
           </button>
         )}
       </div>
@@ -599,5 +603,42 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
         {copied && <span className="text-xs text-emerald-300">Скопировано ✓</span>}
       </div>
     </div>
+  );
+}
+
+function VacancyStatusToggle({
+  vacancyId,
+  currentStatus,
+  onToggled,
+}: {
+  vacancyId: string;
+  currentStatus: string;
+  onToggled: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const isOpen = currentStatus === "OPEN";
+  async function toggle() {
+    setBusy(true);
+    try {
+      await buildApi.patchVacancy(vacancyId, { status: isOpen ? "CLOSED" : "OPEN" });
+      onToggled();
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+        isOpen
+          ? "border border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
+          : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
+      }`}
+    >
+      {busy ? "…" : isOpen ? "Close vacancy" : "Reopen vacancy"}
+    </button>
   );
 }

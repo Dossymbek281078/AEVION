@@ -61,10 +61,6 @@ export type BuildProfile = {
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
   introVideoUrl: string | null;
-  // KZ localisation (v3)
-  iin: string | null;
-  bin: string | null;
-  locale: "ru" | "en" | "kz";
 };
 
 export type BuildExperience = {
@@ -152,6 +148,7 @@ export type BuildVacancy = {
   city?: string | null;
   salaryCurrency?: string | null;
   questions?: string[];
+  viewCount?: number;
 };
 
 export type ApplicationAiScores = {
@@ -185,6 +182,7 @@ export type BuildApplication = {
   answersJson?: string;
   aiScoresJson?: string | null;
   aiScoreOverall?: number | null;
+  rejectReason?: string | null;
 };
 
 export type BuildMessage = {
@@ -419,9 +417,6 @@ export const buildApi = {
     safetyTrainingValid?: boolean;
     safetyTrainingUntil?: string | null;
     introVideoUrl?: string | null;
-    iin?: string | null;
-    bin?: string | null;
-    locale?: "ru" | "en" | "kz";
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
@@ -557,6 +552,8 @@ export const buildApi = {
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
   updateVacancy: (id: string, status: VacancyStatus) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
+  patchVacancy: (id: string, fields: Partial<{ status: VacancyStatus; title: string; description: string; salary: number }>) =>
+    call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, fields),
   matchCandidates: (vacancyId: string) =>
     call<{
       items: (TalentRow & { matchScore: number; matchedSkills: string[] })[];
@@ -584,11 +581,11 @@ export const buildApi = {
       "GET",
       `/api/build/applications/by-vacancy/${encodeURIComponent(vacancyId)}`,
     ),
-  updateApplication: (id: string, status: ApplicationStatus) =>
+  updateApplication: (id: string, status: ApplicationStatus, rejectReason?: string) =>
     call<BuildApplication & { hireOrder: BuildOrderRow | null }>(
       "PATCH",
       `/api/build/applications/${encodeURIComponent(id)}`,
-      { status },
+      { status, ...(rejectReason ? { rejectReason } : {}) },
     ),
 
   // Messages
@@ -673,6 +670,12 @@ export const buildApi = {
     }>("GET", "/api/build/loyalty/me"),
   // Reviews
   submitReview: (input: {
+    projectId: string;
+    revieweeId: string;
+    rating: number;
+    comment?: string | null;
+  }) => call<BuildReview>("POST", "/api/build/reviews", input),
+  createReview: (input: {
     projectId: string;
     revieweeId: string;
     rating: number;
@@ -790,6 +793,13 @@ export const buildApi = {
         applicantName: string | null;
       }[];
     }>("GET", "/api/build/referrals/me"),
+  publicStats: () =>
+    call<{ vacancies: number; candidates: number; projects: number }>(
+      "GET",
+      "/api/build/health",
+      undefined,
+      { auth: false },
+    ),
   buildStats: () =>
     call<{
       vacancies: { open: number; total: number };
@@ -880,11 +890,6 @@ export const buildApi = {
     ),
   myOrders: () =>
     call<{ items: BuildOrderRow[]; total: number }>("GET", "/api/build/orders/me"),
-  checkoutOrder: (id: string) =>
-    call<{ url: string | null; sessionId?: string; alreadyPaid?: boolean; devMode?: boolean; order?: BuildOrderRow }>(
-      "POST",
-      `/api/build/orders/${encodeURIComponent(id)}/checkout`,
-    ),
   payOrder: (id: string) =>
     call<{ order: BuildOrderRow; alreadyPaid?: boolean }>(
       "POST",
@@ -902,6 +907,26 @@ export const buildApi = {
   notificationsRead: (senderId: string) =>
     call<{ markedRead: number }>("POST", "/api/build/notifications/read", { senderId }),
 
+  notifications: () =>
+    call<{
+      items: {
+        id: string;
+        kind: string;
+        title: string;
+        body: string;
+        href: string;
+        read: boolean;
+        at: string;
+      }[];
+      total: number;
+    }>("GET", "/api/build/notifications"),
+
+  markNotificationsRead: () =>
+    call<{ marked: boolean }>("POST", "/api/build/notifications/mark-read"),
+
+  changePassword: (current: string, next: string) =>
+    call<{ changed: boolean }>("PATCH", "/api/build/users/me/password", { current, next }),
+
   // Files
   uploadFile: (input: {
     projectId: string;
@@ -910,267 +935,6 @@ export const buildApi = {
     mimeType?: string;
     sizeBytes?: number;
   }) => call<BuildFile>("POST", "/api/build/files/upload", input),
-
-  // ── v2 Killer Features ────────────────────────────────────────────────
-
-  // 1. Available Now
-  setAvailability: (on: boolean, hours?: number) =>
-    call<{ userId: string; availableNow: boolean; availableUntil: string | null }>(
-      "POST", "/api/build/availability", { on, hours },
-    ),
-  myAvailability: () =>
-    call<{ availableNow: boolean; availableUntil: string | null }>("GET", "/api/build/availability/me"),
-  availableWorkers: (params?: { city?: string; specialty?: string; limit?: number }) =>
-    call<{ items: BuildProfile[]; total: number; asOf: string }>(
-      "GET",
-      `/api/build/availability/workers?${new URLSearchParams(
-        Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])),
-      )}`,
-    ),
-
-  // 2. Portfolio Photos
-  addPortfolioPhoto: (input: { url: string; caption?: string; projectType?: string; takenAt?: string }) =>
-    call<{ id: string; url: string; caption: string | null; projectType: string | null; createdAt: string }>(
-      "POST", "/api/build/portfolio/photos", input,
-    ),
-  portfolioPhotos: (userId: string) =>
-    call<{ items: Array<{ id: string; url: string; caption: string | null; projectType: string | null; sortOrder: number; createdAt: string }>; total: number }>(
-      "GET", `/api/build/portfolio/photos/${encodeURIComponent(userId)}`,
-    ),
-  deletePortfolioPhoto: (id: string) =>
-    call<{ deleted: boolean }>("DELETE", `/api/build/portfolio/photos/${encodeURIComponent(id)}`),
-  updatePortfolioPhoto: (id: string, input: { caption?: string; sortOrder?: number }) =>
-    call<{ id: string }>("PATCH", `/api/build/portfolio/photos/${encodeURIComponent(id)}`, input),
-
-  // 3. Salary Stats
-  salaryStats: (params?: { q?: string; city?: string }) =>
-    call<{
-      workerExpectations: { sampleSize: number; p25: number | null; p50: number | null; p75: number | null; currency: string };
-      employerOffers: { sampleSize: number; p25: number | null; p50: number | null; p75: number | null; currency: string };
-      topCities: Array<{ city: string; vacancyCount: number; avgSalary: number | null }>;
-      query: { q: string | null; city: string | null };
-    }>(
-      "GET",
-      `/api/build/salary-stats?${new URLSearchParams(
-        Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v).map(([k, v]) => [k, String(v)])),
-      )}`,
-    ),
-
-  // 4. Contracts (QSign deep-link)
-  generateContract: (applicationId: string) =>
-    call<{ contractPayload: Record<string, unknown>; qsignUrl: string; hint: string }>(
-      "POST", `/api/build/applications/${encodeURIComponent(applicationId)}/contract`,
-    ),
-
-  // 5. Communities
-  communities: () =>
-    call<{ items: Array<{ id: string; slug: string; name: string; specialty: string; description: string | null; memberCount: number; lastMessageAt: string | null }>; total: number }>(
-      "GET", "/api/build/communities",
-    ),
-  community: (slug: string) =>
-    call<{ community: { id: string; slug: string; name: string; specialty: string; memberCount: number }; messages: Array<{ id: string; userId: string; content: string; createdAt: string; authorName: string | null; authorPhoto: string | null; buildRole: string | null }>; total: number }>(
-      "GET", `/api/build/communities/${encodeURIComponent(slug)}`,
-    ),
-  joinCommunity: (slug: string) =>
-    call<{ joined: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/join`),
-  leaveCommunity: (slug: string) =>
-    call<{ left: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/leave`),
-  sendCommunityMessage: (slug: string, content: string) =>
-    call<{ id: string; content: string; createdAt: string }>(
-      "POST", `/api/build/communities/${encodeURIComponent(slug)}/messages`, { content },
-    ),
-
-  // 6. Team Hiring
-  createTeamRequest: (input: { title: string; description: string; roles: Array<{ specialty: string; count: number; salary?: number | null }>; city?: string; startDate?: string }) =>
-    call<{ id: string; title: string; roles: Array<{ specialty: string; count: number; salary: number | null }> }>(
-      "POST", "/api/build/team-requests", input,
-    ),
-  teamRequests: (params?: { city?: string; specialty?: string; limit?: number }) =>
-    call<{ items: Array<{ id: string; title: string; description: string; rolesJson: string; city: string | null; clientName: string | null; applicantCount: number; createdAt: string }>; total: number }>(
-      "GET",
-      `/api/build/team-requests?${new URLSearchParams(
-        Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])),
-      )}`,
-    ),
-  teamRequest: (id: string) =>
-    call<{ id: string; title: string; description: string; roles: Array<{ specialty: string; count: number; salary: number | null }>; city: string | null; clientName: string | null; applications: Array<{ id: string; userId: string; roleIndex: number; message: string | null; status: string; applicantName: string | null }>; createdAt: string }>(
-      "GET", `/api/build/team-requests/${encodeURIComponent(id)}`,
-    ),
-  applyToTeam: (teamRequestId: string, roleIndex: number, message?: string) =>
-    call<{ id: string; status: string; role: { specialty: string; count: number } }>(
-      "POST", `/api/build/team-requests/${encodeURIComponent(teamRequestId)}/apply`, { roleIndex, message },
-    ),
-
-  // 7. Shifts
-  createShift: (input: { applicationId: string; shiftDate: string; startTime?: string; endTime?: string; notes?: string }) =>
-    call<{ id: string; shiftDate: string; status: string }>("POST", "/api/build/shifts", input),
-  myShifts: (from?: string) =>
-    call<{ items: Array<{ id: string; applicationId: string; workerId: string; clientId: string; shiftDate: string; startTime: string | null; endTime: string | null; status: string; checkInAt: string | null; checkOutAt: string | null; workerName: string | null; clientName: string | null }>; total: number }>(
-      "GET", `/api/build/shifts/my${from ? `?from=${encodeURIComponent(from)}` : ""}`,
-    ),
-  shiftCheckin: (id: string, lat?: number, lng?: number) =>
-    call<{ id: string; status: string; checkInAt: string }>(
-      "PATCH",
-      `/api/build/shifts/${encodeURIComponent(id)}/checkin`,
-      lat != null && lng != null ? { lat, lng } : undefined,
-    ),
-  shiftCheckout: (id: string) => call<{ id: string; status: string; checkOutAt: string }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkout`),
-
-  // 9. Video Rooms
-  createVideoRoom: (input: { guestId?: string; scheduledAt?: string }) =>
-    call<{ id: string; roomUrl: string; roomName: string; status: string }>("POST", "/api/build/video/rooms", input),
-  myVideoRooms: () =>
-    call<{ items: Array<{ id: string; roomUrl: string; hostId: string; guestId: string | null; scheduledAt: string | null; status: string; hostName: string | null; guestName: string | null; createdAt: string }>; total: number }>(
-      "GET", "/api/build/video/rooms/my",
-    ),
-  inviteToVideoRoom: (roomId: string, guestId: string) =>
-    call<{ invited: boolean; roomUrl: string }>("POST", `/api/build/video/rooms/${encodeURIComponent(roomId)}/invite`, { guestId }),
-
-  // 10. Documents
-  uploadDocument: (input: { fileUrl: string; docType: string }) =>
-    call<{ id: string; docType: string; status: string; createdAt: string }>("POST", "/api/build/documents", input),
-  myDocuments: () =>
-    call<{ items: Array<{ id: string; docType: string; status: string; verifiedAt: string | null; rejectReason: string | null; fileUrl: string }>; total: number }>(
-      "GET", "/api/build/documents/me",
-    ),
-  userDocuments: (userId: string) =>
-    call<{ items: Array<{ id: string; docType: string; status: string; verifiedAt: string | null }>; total: number }>(
-      "GET", `/api/build/documents/user/${encodeURIComponent(userId)}`,
-    ),
-  adminPendingDocuments: () =>
-    call<{ items: Array<{ id: string; userId: string; docType: string; fileUrl: string; createdAt: string; userName: string | null; userEmail: string | null }>; total: number }>(
-      "GET", "/api/build/documents/admin/pending",
-    ),
-  verifyDocument: (id: string) => call<{ id: string; status: string }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/verify`),
-  rejectDocument: (id: string, reason?: string) => call<{ id: string; status: string }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/reject`, { reason }),
-
-  // ── V3: Push notifications ─────────────────────────────────────
-  pushPublicKey: () => call<{ publicKey: string }>("GET", "/api/build/push/public-key", undefined, { auth: false }),
-  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
-    call<{ id: string; refreshed: boolean }>("POST", "/api/build/push/subscribe", sub),
-  pushUnsubscribe: (endpoint: string) =>
-    call<{ removed: number }>("POST", "/api/build/push/unsubscribe", { endpoint }),
-  pushTest: () =>
-    call<{ sent: number; removed: number; configured: boolean }>("POST", "/api/build/push/test"),
-
-  // ── V3: Safety briefing ─────────────────────────────────────
-  safetyTemplate: () => call<{ items: string[] }>("GET", "/api/build/safety-briefing/template", undefined, { auth: false }),
-  signSafetyBriefing: (shiftId: string, items?: string[]) =>
-    call<{ id: string; shiftId: string; signedAt: string }>("POST", "/api/build/safety-briefing", { shiftId, items }),
-  briefingsForShift: (shiftId: string) =>
-    call<{ items: Array<{ id: string; workerId: string; signedAt: string; items: string[] }>; total: number }>(
-      "GET", `/api/build/safety-briefing/shift/${encodeURIComponent(shiftId)}`,
-    ),
-
-  // ── V3: Site stories ─────────────────────────────────────
-  storiesFeed: (opts?: { before?: string; limit?: number }) => {
-    const q = new URLSearchParams();
-    if (opts?.before) q.set("before", opts.before);
-    if (opts?.limit) q.set("limit", String(opts.limit));
-    const qs = q.toString();
-    return call<{ items: Array<BuildStory>; total: number }>(
-      "GET", `/api/build/stories${qs ? `?${qs}` : ""}`, undefined, { auth: false },
-    );
-  },
-  storiesByUser: (userId: string) =>
-    call<{ items: Array<BuildStory>; total: number }>("GET", `/api/build/stories/by-user/${encodeURIComponent(userId)}`, undefined, { auth: false }),
-  createStory: (input: { content: string; projectId?: string | null; mediaUrl?: string | null; mediaType?: "image" | "video" | null }) =>
-    call<BuildStory>("POST", "/api/build/stories", input),
-  toggleStoryLike: (id: string) =>
-    call<{ liked: boolean; likeCount: number }>("POST", `/api/build/stories/${encodeURIComponent(id)}/like`),
-  deleteStory: (id: string) => call<{ ok: true }>("DELETE", `/api/build/stories/${encodeURIComponent(id)}`),
-
-  // ── V3: Payment calendar ─────────────────────────────────────
-  createPaymentEvent: (input: {
-    applicationId: string;
-    amount: number;
-    currency?: string;
-    dueDate: string;
-    note?: string | null;
-  }) => call<BuildPaymentEvent>("POST", "/api/build/payment-calendar", input),
-  myPaymentCalendar: (opts?: { from?: string; to?: string }) => {
-    const q = new URLSearchParams();
-    if (opts?.from) q.set("from", opts.from);
-    if (opts?.to) q.set("to", opts.to);
-    const qs = q.toString();
-    return call<{
-      items: Array<BuildPaymentEvent>;
-      total: number;
-      summary: { due: number; paid: number; overdue: number };
-    }>("GET", `/api/build/payment-calendar/my${qs ? `?${qs}` : ""}`);
-  },
-  updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus; note?: string | null }) =>
-    call<BuildPaymentEvent>("PATCH", `/api/build/payment-calendar/${encodeURIComponent(id)}`, patch),
-  deletePaymentEvent: (id: string) =>
-    call<{ ok: true }>("DELETE", `/api/build/payment-calendar/${encodeURIComponent(id)}`),
-
-  // ── V3: AI vacancy generator + Quick Apply + Leaderboard ──────
-  aiGenerateVacancy: (input: { brief: string; city?: string | null; locale?: "ru" | "en" | "kz" }) =>
-    call<{ draft: AiVacancyDraft; usage: { input: number; output: number } }>(
-      "POST", "/api/build/ai/generate-vacancy", input,
-    ),
-  quickApply: (input: { vacancyId: string; referredByUserId?: string }) =>
-    call<BuildApplication>("POST", "/api/build/applications/quick", input),
-  leaderboard: (kind: "employer" | "worker", limit = 20) =>
-    call<{ items: LeaderboardRow[]; total: number; kind: string }>(
-      "GET", `/api/build/stats/leaderboard?kind=${kind}&limit=${limit}`, undefined, { auth: false },
-    ),
-};
-
-// ── V3 types ─────────────────────────────────────────────────────────
-
-export type BuildStory = {
-  id: string;
-  userId: string;
-  projectId: string | null;
-  content: string;
-  mediaUrl: string | null;
-  mediaType: "image" | "video" | null;
-  likeCount: number;
-  createdAt: string;
-  userName?: string;
-  userPhoto?: string | null;
-  userCity?: string | null;
-  projectTitle?: string | null;
-};
-
-export type PaymentEventStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
-export type BuildPaymentEvent = {
-  id: string;
-  applicationId: string;
-  clientId: string;
-  workerId: string;
-  amount: number;
-  currency: string;
-  dueDate: string;
-  status: PaymentEventStatus;
-  paidAt: string | null;
-  note: string | null;
-  createdAt: string;
-};
-
-export type AiVacancyDraft = {
-  title: string;
-  skills: string[];
-  description: string;
-  salaryMin: number | null;
-  salaryMax: number | null;
-  salaryCurrency: "RUB" | "KZT" | "USD";
-  questions: string[];
-};
-
-export type LeaderboardRow = {
-  userId: string;
-  name: string;
-  city: string | null;
-  photoUrl: string | null;
-  hires?: number;
-  trialsApproved?: number;
-  tierKey?: TierKey;
-  tierLabel?: string;
-  avgRating: number | null;
-  reviewCount: number;
-  title?: string | null;
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─
@@ -1181,7 +945,6 @@ export type BuildAuthLike = {
   name: string;
   role: string;
   createdAt?: string;
-  emailVerifiedAt?: string | null;
 };
 
 export async function buildLogin(email: string, password: string): Promise<{ token: string; user: BuildAuthLike }> {
@@ -1205,58 +968,5 @@ export async function buildRegister(email: string, password: string, name: strin
   });
   const json = await res.json();
   if (!res.ok) throw new BuildApiError(res.status, json?.error || "register_failed", json);
-  return json;
-}
-
-// ── Email verification ────────────────────────────────────────────────
-
-export async function requestEmailVerification(): Promise<{ ok: boolean; email: string; devToken?: string; alreadyVerified?: boolean }> {
-  const token = getAuthToken();
-  const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    cache: "no-store",
-  });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "verify_request_failed", json);
-  return json;
-}
-
-export async function completeEmailVerification(token: string): Promise<{ ok: boolean }> {
-  const authToken = getAuthToken();
-  const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
-    body: JSON.stringify({ token }),
-    cache: "no-store",
-  });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "verify_complete_failed", json);
-  return json;
-}
-
-// ── Password reset (no auth required) ────────────────────────────────
-
-export async function requestPasswordReset(email: string): Promise<{ ok: boolean; devToken?: string }> {
-  const res = await fetch(apiUrl("/api/auth/password/reset/request"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-    cache: "no-store",
-  });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "reset_request_failed", json);
-  return json;
-}
-
-export async function completePasswordReset(email: string, token: string, newPassword: string): Promise<{ ok: boolean }> {
-  const res = await fetch(apiUrl("/api/auth/password/reset/complete"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, token, newPassword }),
-    cache: "no-store",
-  });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "reset_complete_failed", json);
   return json;
 }

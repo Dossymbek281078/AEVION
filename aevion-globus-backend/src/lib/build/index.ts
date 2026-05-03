@@ -144,213 +144,6 @@ async function _doEnsureBuildTables(): Promise<void> {
   // on the public profile. Replaces HH "wall of text" cover letters with
   // a face + voice — recruiters skim 10× faster.
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "introVideoUrl" TEXT;`);
-  // Available Now (v2): Uber-style instant availability toggle.
-  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availableNow" BOOLEAN NOT NULL DEFAULT FALSE;`);
-  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availableUntil" TIMESTAMPTZ;`);
-
-  // Kazakhstan localisation (v3): IIN (individual) / BIN (legal entity) +
-  // preferred locale for UI + payout currency. Optional everywhere — KZ
-  // users opt in by filling them.
-  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "iin" TEXT;`);
-  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "bin" TEXT;`);
-  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "locale" TEXT NOT NULL DEFAULT 'ru';`);
-
-  // Portfolio photos (v2): per-photo rows instead of a JSON array so we
-  // can add likes/ordering without migrating the whole profile blob.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildPortfolioPhoto" (
-      "id" TEXT PRIMARY KEY,
-      "userId" TEXT NOT NULL,
-      "url" TEXT NOT NULL,
-      "caption" TEXT,
-      "projectType" TEXT,
-      "takenAt" TEXT,
-      "sortOrder" INT NOT NULL DEFAULT 0,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPortfolioPhoto_user_idx" ON "BuildPortfolioPhoto" ("userId");`);
-
-  // Community chats (v2): speciality-based group channels.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildCommunity" (
-      "id" TEXT PRIMARY KEY,
-      "slug" TEXT NOT NULL UNIQUE,
-      "name" TEXT NOT NULL,
-      "specialty" TEXT NOT NULL,
-      "description" TEXT,
-      "memberCount" INT NOT NULL DEFAULT 0,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildCommunityMember" (
-      "communityId" TEXT NOT NULL,
-      "userId" TEXT NOT NULL,
-      "joinedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY ("communityId", "userId")
-    );
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildCommunityMessage" (
-      "id" TEXT PRIMARY KEY,
-      "communityId" TEXT NOT NULL,
-      "userId" TEXT NOT NULL,
-      "content" TEXT NOT NULL,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildCommunityMessage_community_idx" ON "BuildCommunityMessage" ("communityId", "createdAt" DESC);`);
-
-  // Team requests (v2): hire a full brigade in one post.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildTeamRequest" (
-      "id" TEXT PRIMARY KEY,
-      "clientId" TEXT NOT NULL,
-      "title" TEXT NOT NULL,
-      "description" TEXT NOT NULL,
-      "rolesJson" TEXT NOT NULL DEFAULT '[]',
-      "city" TEXT,
-      "startDate" TEXT,
-      "status" TEXT NOT NULL DEFAULT 'OPEN',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildTeamApplication" (
-      "id" TEXT PRIMARY KEY,
-      "teamRequestId" TEXT NOT NULL,
-      "userId" TEXT NOT NULL,
-      "roleIndex" INT NOT NULL,
-      "message" TEXT,
-      "status" TEXT NOT NULL DEFAULT 'PENDING',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildTeamApplication_uniq" ON "BuildTeamApplication" ("teamRequestId", "userId", "roleIndex");`);
-
-  // Shift management (v2): post-hire shift tracking.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildShift" (
-      "id" TEXT PRIMARY KEY,
-      "applicationId" TEXT NOT NULL,
-      "workerId" TEXT NOT NULL,
-      "clientId" TEXT NOT NULL,
-      "shiftDate" TEXT NOT NULL,
-      "startTime" TEXT,
-      "endTime" TEXT,
-      "status" TEXT NOT NULL DEFAULT 'PLANNED',
-      "checkInAt" TIMESTAMPTZ,
-      "checkOutAt" TIMESTAMPTZ,
-      "notes" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildShift_worker_idx" ON "BuildShift" ("workerId", "shiftDate");`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildShift_client_idx" ON "BuildShift" ("clientId", "shiftDate");`);
-
-  // Document verification (v2): certified credentials with admin review.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildDocument" (
-      "id" TEXT PRIMARY KEY,
-      "userId" TEXT NOT NULL,
-      "docType" TEXT NOT NULL,
-      "fileUrl" TEXT NOT NULL,
-      "status" TEXT NOT NULL DEFAULT 'PENDING',
-      "verifiedBy" TEXT,
-      "verifiedAt" TIMESTAMPTZ,
-      "rejectReason" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildDocument_user_idx" ON "BuildDocument" ("userId");`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildDocument_status_idx" ON "BuildDocument" ("status");`);
-
-  // Push notification subscriptions (v3)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildPushSubscription" (
-      "id" TEXT PRIMARY KEY,
-      "userId" TEXT NOT NULL,
-      "endpoint" TEXT NOT NULL UNIQUE,
-      "p256dh" TEXT NOT NULL,
-      "auth" TEXT NOT NULL,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPushSub_user" ON "BuildPushSubscription" ("userId");`);
-
-  // Safety briefings (v3): pre-shift safety checklist sign-off
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildSafetyBriefing" (
-      "id" TEXT PRIMARY KEY,
-      "shiftId" TEXT NOT NULL,
-      "workerId" TEXT NOT NULL,
-      "items" TEXT NOT NULL DEFAULT '[]',
-      "signedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildSafetyBriefing_shift" ON "BuildSafetyBriefing" ("shiftId","workerId");`);
-
-  // Site stories / project updates (v3)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildStory" (
-      "id" TEXT PRIMARY KEY,
-      "userId" TEXT NOT NULL,
-      "projectId" TEXT,
-      "content" TEXT NOT NULL,
-      "mediaUrl" TEXT,
-      "mediaType" TEXT,
-      "likeCount" INT NOT NULL DEFAULT 0,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildStory_user" ON "BuildStory" ("userId","createdAt" DESC);`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildStoryLike" (
-      "storyId" TEXT NOT NULL,
-      "userId" TEXT NOT NULL,
-      PRIMARY KEY ("storyId","userId")
-    );
-  `);
-
-  // Payment calendar events (v3)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildPaymentEvent" (
-      "id" TEXT PRIMARY KEY,
-      "applicationId" TEXT NOT NULL,
-      "clientId" TEXT NOT NULL,
-      "workerId" TEXT NOT NULL,
-      "amount" FLOAT8 NOT NULL,
-      "currency" TEXT NOT NULL DEFAULT 'RUB',
-      "dueDate" TEXT NOT NULL,
-      "status" TEXT NOT NULL DEFAULT 'PENDING',
-      "paidAt" TIMESTAMPTZ,
-      "note" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_client" ON "BuildPaymentEvent" ("clientId","dueDate");`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_worker" ON "BuildPaymentEvent" ("workerId","dueDate");`);
-
-  // Video rooms (v3): Daily.co-backed video calls + scheduled meetings.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "BuildVideoRoom" (
-      "id" TEXT PRIMARY KEY,
-      "hostId" TEXT NOT NULL,
-      "guestId" TEXT,
-      "roomName" TEXT NOT NULL UNIQUE,
-      "roomUrl" TEXT NOT NULL,
-      "scheduledAt" TIMESTAMPTZ,
-      "startedAt" TIMESTAMPTZ,
-      "endedAt" TIMESTAMPTZ,
-      "status" TEXT NOT NULL DEFAULT 'CREATED',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVideoRoom_host_idx" ON "BuildVideoRoom" ("hostId");`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVideoRoom_guest_idx" ON "BuildVideoRoom" ("guestId");`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
@@ -418,6 +211,7 @@ async function _doEnsureBuildTables(): Promise<void> {
   // every applicant must answer. Replaces the HH "free-form cover
   // letter" with structured signal.
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "questionsJson" TEXT NOT NULL DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "viewCount" INT NOT NULL DEFAULT 0;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (
@@ -437,6 +231,7 @@ async function _doEnsureBuildTables(): Promise<void> {
   // link with ?ref=<userId>, we capture who drove the application.
   // Used downstream for referrer rewards / leaderboard.
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "referredByUserId" TEXT;`);
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildApplication_vacancy_user_uniq" ON "BuildApplication" ("vacancyId", "userId");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_user_created_idx" ON "BuildApplication" ("userId", "createdAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_vacancy_status_idx" ON "BuildApplication" ("vacancyId", "status");`);

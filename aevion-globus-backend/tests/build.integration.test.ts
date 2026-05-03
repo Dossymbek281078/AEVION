@@ -354,3 +354,135 @@ describe("PATCH /api/build/applications/:id", () => {
     expect(res.body.error).toMatch(/status/);
   });
 });
+
+// ── Notifications ─────────────────────────────────────────────────────────
+
+describe("GET /api/build/notifications/summary", () => {
+  test("200, returns numeric totals", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ c: 2 }], rowCount: 1 })   // unread messages
+      .mockResolvedValueOnce({ rows: [{ c: 1 }], rowCount: 1 })   // pending apps
+      .mockResolvedValueOnce({ rows: [{ c: 0 }], rowCount: 1 });  // app updates
+    const res = await request(makeApp())
+      .get("/api/build/notifications/summary")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(200);
+    expect(res.body.data.unreadMessages).toBe(2);
+    expect(res.body.data.pendingApplications).toBe(1);
+    expect(res.body.data.total).toBe(3);
+  });
+
+  test("401 without token", async () => {
+    const res = await request(makeApp()).get("/api/build/notifications/summary");
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/build/notifications", () => {
+  test("200, returns items array", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })  // messages
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })  // app updates
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // pending apps
+    const res = await request(makeApp())
+      .get("/api/build/notifications")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.items)).toBe(true);
+    expect(typeof res.body.data.total).toBe("number");
+  });
+});
+
+describe("POST /api/build/notifications/mark-read", () => {
+  test("200, returns marked=true", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp())
+      .post("/api/build/notifications/mark-read")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(200);
+    expect(res.body.data.marked).toBe(true);
+  });
+});
+
+// ── Password change ───────────────────────────────────────────────────────
+
+describe("PATCH /api/build/users/me/password", () => {
+  test("401 without token", async () => {
+    const res = await request(makeApp())
+      .patch("/api/build/users/me/password")
+      .send({ current: "old123", next: "newpass123" });
+    expect(res.status).toBe(401);
+  });
+
+  test("400 if next password too short", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ passwordHash: "$2b$10$xxx" }], rowCount: 1 });
+    const res = await request(makeApp())
+      .patch("/api/build/users/me/password")
+      .set("Authorization", bearerOf(CLIENT))
+      .send({ current: "old123", next: "short" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/next/);
+  });
+
+  test("404 if user not found in DB", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp())
+      .patch("/api/build/users/me/password")
+      .set("Authorization", bearerOf(CLIENT))
+      .send({ current: "old123456", next: "newpass456" });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── Admin users ───────────────────────────────────────────────────────────
+
+describe("GET /api/build/admin/users", () => {
+  test("403 for non-admin user", async () => {
+    const res = await request(makeApp())
+      .get("/api/build/admin/users")
+      .set("Authorization", bearerOf(CLIENT, "USER"));
+    expect(res.status).toBe(403);
+  });
+
+  test("200, returns items + total for admin", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ n: 5 }], rowCount: 1 })  // count
+      .mockResolvedValueOnce({ rows: [{ id: "u1", email: "a@b.com", name: "A", role: "USER", createdAt: new Date().toISOString(), buildRole: null, city: null, openToWork: false, verifiedAt: null }], rowCount: 1 }); // rows
+    const res = await request(makeApp())
+      .get("/api/build/admin/users")
+      .set("Authorization", bearerOf("admin-id", "ADMIN"));
+    expect(res.status).toBe(200);
+    expect(res.body.data.total).toBe(5);
+    expect(Array.isArray(res.body.data.items)).toBe(true);
+  });
+});
+
+// ── Reviews ───────────────────────────────────────────────────────────────
+
+describe("GET /api/build/reviews/by-user/:userId", () => {
+  test("200, public — no auth needed", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })  // count
+      .mockResolvedValueOnce({ rows: [{ n: "4.5" }], rowCount: 1 }) // avg
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // items
+    const res = await request(makeApp()).get(`/api/build/reviews/by-user/${CLIENT}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.items)).toBe(true);
+  });
+});
+
+describe("GET /api/build/reviews/eligible", () => {
+  test("401 without token", async () => {
+    const res = await request(makeApp()).get("/api/build/reviews/eligible");
+    expect(res.status).toBe(401);
+  });
+
+  test("200, returns eligible pairs", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp())
+      .get("/api/build/reviews/eligible")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.items)).toBe(true);
+  });
+});

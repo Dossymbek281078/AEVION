@@ -4,28 +4,32 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ProjectCard } from "@/components/build/ProjectCard";
-import { OnboardingChecklist } from "@/components/build/OnboardingChecklist";
-import { buildApi, type BuildProject, type ProjectStatus, type BuildProfile } from "@/lib/build/api";
+import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
 const STATUS_FILTERS: (ProjectStatus | "ALL")[] = ["ALL", "OPEN", "IN_PROGRESS", "DONE"];
 
 export default function BuildHomePage() {
   const token = useBuildAuth((s) => s.token);
-  const user = useBuildAuth((s) => s.user);
-  const [profile, setProfile] = useState<BuildProfile | null>(null);
+  const hydrated = useBuildAuth((s) => s.hydrated);
   const [projects, setProjects] = useState<BuildProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ProjectStatus | "ALL">("ALL");
   const [q, setQ] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
+  const [publicStats, setPublicStats] = useState<{
+    vacancies: number;
+    candidates: number;
+    projects: number;
+  } | null>(null);
 
   useEffect(() => {
-    if (token) {
-      buildApi.me().then((r) => setProfile(r.profile)).catch(() => {});
-    }
-  }, [token]);
+    buildApi
+      .publicStats()
+      .then((r) => setPublicStats(r))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,64 +66,21 @@ export default function BuildHomePage() {
 
   return (
     <BuildShell>
-      {token && user && (
-        <OnboardingChecklist user={user} profile={profile} />
-      )}
-
-      {!token && (
-        <div className="mb-8 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-slate-900 to-slate-950 px-6 py-8">
-          <div className="max-w-2xl">
-            <div className="mb-1 text-xs font-bold uppercase tracking-widest text-emerald-400">AEVION QBuild</div>
-            <h1 className="mb-3 text-3xl font-bold text-white">
-              Биржа строительного найма.<br />
-              <span className="text-emerald-400">Лучше HeadHunter — для стройки.</span>
-            </h1>
-            <p className="mb-5 text-sm text-slate-300">
-              Найди сварщика, прораба или бригаду за часы, а не недели. Открытые вакансии, видео-интервью,
-              тестовые задания с эскроу, карта объектов — всё в одном месте.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Link href="/build/vacancies" className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-emerald-950 hover:bg-emerald-400">
-                Найти работу →
-              </Link>
-              <Link href="/build/create-project" className="rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/5">
-                Разместить вакансию
-              </Link>
-              <Link href="/build/why-aevion" className="rounded-lg border border-white/10 px-5 py-2.5 text-sm text-slate-400 hover:text-white">
-                Почему QBuild?
-              </Link>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-4 text-xs text-slate-500">
-              <span>⚡ Quick Apply за 1 клик</span>
-              <span>📣 Site Stories с площадок</span>
-              <span>⭐ Лидерборд работодателей</span>
-              <span>🗺️ Карта вакансий</span>
-            </div>
-          </div>
-        </div>
-      )}
+      {hydrated && !token && <LandingHero publicStats={publicStats} />}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Проекты на платформе</h1>
+          <h1 className="text-2xl font-bold text-white">Construction projects</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Открытые строительные проекты. Нашли нужный — откройте, посмотрите вакансии, откликнитесь.
+            Browse open projects, post a vacancy, or apply directly.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/build/vacancies"
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10"
-          >
-            Все вакансии
-          </Link>
-          <Link
-            href="/build/create-project"
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
-          >
-            + Новый проект
-          </Link>
-        </div>
+        <Link
+          href="/build/create-project"
+          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+        >
+          + New project
+        </Link>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -150,7 +111,7 @@ export default function BuildHomePage() {
           </button>
         )}
         <div className="flex items-center gap-1">
-          {STATUS_FILTERS.map((s: any) => (
+          {STATUS_FILTERS.map((s) => (
             <button
               key={s}
               onClick={() => setStatus(s)}
@@ -192,6 +153,82 @@ export default function BuildHomePage() {
         ))}
       </div>
     </BuildShell>
+  );
+}
+
+function LandingHero({ publicStats }: { publicStats: { vacancies: number; candidates: number; projects: number } | null }) {
+  return (
+    <section className="mb-10 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/60 via-slate-900 to-slate-900 px-6 py-10 sm:px-10 sm:py-14">
+      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        AEVION QBuild · Construction Recruiting
+      </div>
+      <h1 className="mt-4 text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">
+        Нанимайте бригады.<br />
+        <span className="text-emerald-400">Платите когда нашли.</span>
+      </h1>
+      <p className="mt-4 max-w-2xl text-base text-slate-300">
+        Строительная биржа нового поколения. Без платы за публикацию вакансии. База резюме на любом тарифе.
+        Комиссия Pay-per-Hire — <strong className="text-white">от 6%</strong> вместо 15–25% у агентств.
+        AI-скоринг заявок, видеорезюме, Trial Jobs.
+      </p>
+
+      <div className="mt-6 flex flex-wrap gap-2 text-xs">
+        {[
+          "0 ₽ за вакансию",
+          "AI-скоринг кандидатов",
+          "Видеорезюме",
+          "Trial Jobs",
+          "2% AEV cashback",
+          "Прямые сообщения без премиума",
+        ].map((t) => (
+          <span
+            key={t}
+            className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-200"
+          >
+            {t}
+          </span>
+        ))}
+      </div>
+
+      {publicStats && (
+        <div className="mt-6 flex flex-wrap gap-6 text-sm">
+          <LiveStat n={publicStats.projects} label="открытых проектов" />
+          <LiveStat n={publicStats.vacancies} label="вакансий сейчас" />
+          <LiveStat n={publicStats.candidates} label="резюме в базе" />
+        </div>
+      )}
+
+      <div className="mt-8 flex flex-wrap gap-3">
+        <Link
+          href="/build/profile"
+          className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+        >
+          Создать профиль бесплатно →
+        </Link>
+        <Link
+          href="/build/vacancies"
+          className="rounded-lg border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+        >
+          Смотреть вакансии
+        </Link>
+        <Link
+          href="/build/why-aevion"
+          className="rounded-lg border border-white/10 px-5 py-2.5 text-sm font-medium text-slate-400 transition hover:text-white"
+        >
+          Сравнить с HH →
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function LiveStat({ n, label }: { n: number; label: string }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-2xl font-extrabold text-emerald-300">{n.toLocaleString("ru-RU")}</span>
+      <span className="text-slate-400">{label}</span>
+    </div>
   );
 }
 

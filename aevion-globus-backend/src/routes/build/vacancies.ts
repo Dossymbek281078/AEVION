@@ -169,6 +169,8 @@ vacanciesRouter.get("/by-project/:id", async (req, res) => {
 vacanciesRouter.get("/:id", async (req, res) => {
   try {
     const id = String(req.params.id);
+    // Increment view counter fire-and-forget (best-effort, non-blocking)
+    pool.query(`UPDATE "BuildVacancy" SET "viewCount" = COALESCE("viewCount", 0) + 1 WHERE "id" = $1`, [id]).catch(() => {});
     const result = await pool.query(
       `SELECT v.*, p."title" AS "projectTitle", p."status" AS "projectStatus", p."clientId",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
@@ -319,5 +321,46 @@ vacanciesRouter.patch("/:id", async (req, res) => {
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_update_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/duplicate — clone into another project
+vacanciesRouter.post("/:id/duplicate", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const src = await pool.query(
+      `SELECT v.*, p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (src.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (src.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const targetProjectId = vString(req.body?.projectId, "projectId", { min: 1, max: 200 });
+    if (!targetProjectId.ok) return fail(res, 400, targetProjectId.error);
+
+    const proj = await pool.query(
+      `SELECT "id","clientId" FROM "BuildProject" WHERE "id" = $1 LIMIT 1`,
+      [targetProjectId.value],
+    );
+    if (proj.rowCount === 0) return fail(res, 404, "target_project_not_found");
+    if (proj.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_project_owner");
+
+    const s = src.rows[0];
+    const newId = crypto.randomUUID();
+    const result = await pool.query(
+      `INSERT INTO "BuildVacancy"
+         ("id","projectId","title","description","salary","status","skillsJson","city","salaryCurrency","questionsJson")
+       VALUES ($1,$2,$3,$4,$5,'OPEN',$6,$7,$8,$9)
+       RETURNING *`,
+      [newId, targetProjectId.value, `${s.title} (copy)`, s.description, s.salary, s.skillsJson, s.city, s.salaryCurrency, s.questionsJson],
+    );
+    return ok(res, result.rows[0], 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_duplicate_failed", { details: (err as Error).message });
   }
 });

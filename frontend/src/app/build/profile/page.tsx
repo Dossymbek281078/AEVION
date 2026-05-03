@@ -18,7 +18,6 @@ import { AiCoachChat } from "@/components/build/AiCoachChat";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import { AiImprove } from "@/components/build/AiImprove";
 import { ProfileCompletenessMeter } from "@/components/build/ProfileCompletenessMeter";
-import { PushSubscribeButton } from "@/components/build/PushSubscribeButton";
 
 export default function ProfilePage() {
   return (
@@ -110,6 +109,8 @@ function ProfileBody() {
             Tell clients and project owners who you are. Required to apply for vacancies.
           </p>
 
+          {!profile && <OnboardingChecklist />}
+
           {profile && (
             <div className="mb-4">
               <ProfileCompletenessMeter profile={profile} />
@@ -130,84 +131,54 @@ function ProfileBody() {
           <div className="rounded-xl border border-white/10 bg-white/5 p-6">
             <ProfileForm initial={profile} onSaved={(p) => setProfile(p)} />
           </div>
-          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-5">
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-300">
-              🔔 Push-уведомления
-            </h3>
-            <p className="mb-3 text-xs text-slate-400">
-              Получай новые сообщения, отклики и события смены прямо в браузер. Работает на десктопе и Android.
-            </p>
-            <PushSubscribeButton />
-          </div>
         </div>
 
         <ExperienceEditor items={experiences} onChange={loadResume} />
         <EducationEditor items={education} onChange={loadResume} />
-        <PortfolioPhotosSection userId={me?.id} />
-        <DocumentsSection />
       </section>
 
       <aside>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Мои отклики</h2>
-          {applications.length > 0 && (
-            <div className="flex gap-1.5 text-[11px]">
-              {(["PENDING","ACCEPTED","REJECTED"] as const).map((s) => {
-                const cnt = applications.filter((a) => a.status === s).length;
-                if (!cnt) return null;
-                return (
-                  <span key={s} className={`rounded-full border px-2 py-0.5 font-medium ${APP_STATUS_TONE[s]}`}>
-                    {{ PENDING: "⏳", ACCEPTED: "✅", REJECTED: "✕" }[s]} {cnt}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <h2 className="mb-3 text-lg font-semibold text-white">My applications</h2>
         {applications.length === 0 ? (
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center">
-            <p className="text-2xl">📤</p>
-            <p className="mt-2 text-sm font-medium text-slate-300">Откликов пока нет</p>
-            <p className="mt-1 text-xs text-slate-500">Найдите вакансию и нажмите «⚡ Quick Apply» или заполните форму отклика.</p>
-            <Link
-              href="/build/vacancies"
-              className="mt-3 inline-block rounded-lg bg-emerald-500/20 px-4 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30"
-            >
-              Смотреть вакансии →
-            </Link>
-          </div>
+          <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-5 text-center text-sm text-slate-400">
+            You haven&apos;t applied for any vacancies yet.
+          </p>
         ) : (
           <ul className="space-y-3">
             {applications.map((a) => (
-              <li key={a.id} className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+              <li
+                key={a.id}
+                className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <Link
                     href={`/build/vacancy/${encodeURIComponent(a.vacancyId)}`}
-                    className="line-clamp-1 font-semibold text-white hover:text-emerald-200"
+                    className="line-clamp-1 font-medium text-white hover:text-emerald-200"
                   >
                     {a.vacancyTitle || a.vacancyId}
                   </Link>
-                  <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${APP_STATUS_TONE[a.status]}`}>
-                    {{ PENDING: "⏳ Ожидает", ACCEPTED: "✅ Принят", REJECTED: "✕ Отклонён" }[a.status]}
+                  <span
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${APP_STATUS_TONE[a.status]}`}
+                  >
+                    {a.status}
                   </span>
                 </div>
                 {a.projectTitle && (
-                  <Link href={`/build/project/${encodeURIComponent(a.projectId || "")}`} className="mt-0.5 line-clamp-1 text-xs text-slate-400 hover:underline">
-                    📁 {a.projectTitle}
+                  <Link
+                    href={`/build/project/${encodeURIComponent(a.projectId || "")}`}
+                    className="mt-0.5 line-clamp-1 text-xs text-slate-400 hover:underline"
+                  >
+                    {a.projectTitle}
                   </Link>
                 )}
-                <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
-                  <span>{new Date(a.createdAt).toLocaleDateString("ru-RU")}</span>
-                  {a.status === "PENDING" && (
-                    <span className="text-amber-400/70">Ждём ответа работодателя</span>
-                  )}
-                  {a.status === "ACCEPTED" && (
-                    <Link href={`/build/messages?to=${encodeURIComponent(a.userId ?? "")}`} className="text-emerald-400 hover:underline">
-                      💬 Написать работодателю
-                    </Link>
-                  )}
+                <div className="mt-2 text-xs text-slate-500">
+                  {new Date(a.createdAt).toLocaleDateString()}
                 </div>
-                <TrialTaskBlock applicationId={a.id} isRecruiter={false} isCandidate />
+                <TrialTaskBlock
+                  applicationId={a.id}
+                  isRecruiter={false}
+                  isCandidate
+                />
               </li>
             ))}
           </ul>
@@ -664,149 +635,38 @@ function EducationEditor({
   );
 }
 
-// ── Portfolio Photos Section ──────────────────────────────────────────
-
-type Photo = { id: string; url: string; caption: string | null; projectType: string | null; sortOrder: number };
-
-function PortfolioPhotosSection({ userId }: { userId?: string }) {
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [url, setUrl] = useState("");
-  const [caption, setCaption] = useState("");
-  const [projectType, setProjectType] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function load() {
-    if (!userId) return;
-    buildApi.portfolioPhotos(userId).then((r) => setPhotos(r.items)).catch(() => {});
-  }
-
-  useEffect(() => { load(); }, [userId]);
-
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    if (!url.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await buildApi.addPortfolioPhoto({ url: url.trim(), caption: caption.trim() || undefined, projectType: projectType.trim() || undefined });
-      setUrl(""); setCaption(""); setProjectType("");
-      load();
-    } catch { setError("Ошибка добавления фото"); }
-    finally { setBusy(false); }
-  }
-
-  async function remove(id: string) {
-    await buildApi.deletePortfolioPhoto(id);
-    load();
-  }
-
+function OnboardingChecklist() {
+  const steps = [
+    { done: false, label: "Fill in your profile", href: "#profile-form", cta: "Do it ↓" },
+    { done: false, label: "Add work experience", href: "#experience", cta: "Add ↓" },
+    { done: false, label: "Browse open vacancies", href: "/build/vacancies", cta: "Browse →" },
+    { done: false, label: "Apply for a vacancy", href: "/build/vacancies", cta: "Apply →" },
+    { done: false, label: "Ask the AI Career Coach", href: "/build/coach", cta: "Open Coach →" },
+  ];
   return (
-    <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
-      <h3 className="mb-3 text-sm font-semibold text-white">📸 Фото-портфолио объектов</h3>
-      <form onSubmit={(e) => void add(e)} className="space-y-2 text-sm mb-4">
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL фото (Imgur, Google Drive, etc.) *" required className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
-        <div className="flex gap-2">
-          <input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Описание (необязательно)" className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
-          <input value={projectType} onChange={(e) => setProjectType(e.target.value)} placeholder="Тип объекта" className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
-        </div>
-        {error && <p className="text-xs text-rose-400">{error}</p>}
-        <button type="submit" disabled={busy} className="rounded-lg bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50">
-          {busy ? "…" : "+ Добавить фото"}
-        </button>
-      </form>
-      {photos.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {photos.map((p) => (
-            <div key={p.id} className="group relative overflow-hidden rounded-xl aspect-video bg-slate-800">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt={p.caption ?? ""} className="h-full w-full object-cover" />
-              <button
-                onClick={() => void remove(p.id)}
-                className="absolute right-1 top-1 hidden rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] text-rose-300 group-hover:block hover:bg-black/80"
-              >×</button>
-              {(p.caption || p.projectType) && (
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 px-2 py-1.5">
-                  {p.projectType && <p className="text-[10px] text-slate-400">{p.projectType}</p>}
-                  {p.caption && <p className="text-[10px] text-white">{p.caption}</p>}
-                </div>
-              )}
+    <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-300">
+        👋 Welcome to QBuild — 5 steps to get hired
+      </div>
+      <ol className="space-y-2">
+        {steps.map((s, i) => (
+          <li key={i} className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-200">
+                {i + 1}
+              </span>
+              <span className="text-slate-300">{s.label}</span>
             </div>
-          ))}
-        </div>
-      )}
+            <Link
+              href={s.href}
+              className="rounded-md bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/30"
+            >
+              {s.cta}
+            </Link>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
 
-// ── Documents Section ─────────────────────────────────────────────────
-
-const DOC_TYPES_RU: Record<string, string> = {
-  WELDER: "Удостоверение сварщика",
-  ELECTRICIAN: "Удостоверение электрика",
-  DRIVER_LICENSE: "Водительское удостоверение",
-  MEDICAL: "Медицинская комиссия",
-  SAFETY: "Удостоверение по ОТ",
-  PLUMBER: "Удостоверение сантехника",
-  ENGINEER: "Диплом инженера",
-  OTHER: "Другой документ",
-};
-
-type MyDoc = { id: string; docType: string; status: string; verifiedAt: string | null; rejectReason: string | null; fileUrl: string };
-
-const DOC_STATUS_STYLE: Record<string, string> = {
-  PENDING: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  VERIFIED: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-  REJECTED: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-};
-
-function DocumentsSection() {
-  const [docs, setDocs] = useState<MyDoc[]>([]);
-  const [docType, setDocType] = useState("MEDICAL");
-  const [fileUrl, setFileUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function load() { buildApi.myDocuments().then((r) => setDocs(r.items)).catch(() => {}); }
-  useEffect(() => { load(); }, []);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!fileUrl.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await buildApi.uploadDocument({ fileUrl: fileUrl.trim(), docType });
-      setFileUrl("");
-      load();
-    } catch { setError("Ошибка загрузки. Проверьте URL."); }
-    finally { setBusy(false); }
-  }
-
-  return (
-    <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
-      <h3 className="mb-1 text-sm font-semibold text-white">🏅 Верификация документов</h3>
-      <p className="mb-3 text-xs text-slate-400">Загрузите скан/фото — администратор проверит и поставит галочку на вашем профиле</p>
-      <form onSubmit={(e) => void submit(e)} className="space-y-2 text-sm mb-4">
-        <select value={docType} onChange={(e) => setDocType(e.target.value)} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white">
-          {Object.entries(DOC_TYPES_RU).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="URL файла (Google Drive, Dropbox, Imgur…) *" required className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
-        {error && <p className="text-xs text-rose-400">{error}</p>}
-        <button type="submit" disabled={busy} className="rounded-lg bg-teal-500/20 px-4 py-2 text-sm font-medium text-teal-200 hover:bg-teal-500/30 disabled:opacity-50">
-          {busy ? "…" : "Отправить на проверку"}
-        </button>
-      </form>
-      {docs.length > 0 && (
-        <div className="space-y-2">
-          {docs.map((doc) => (
-            <div key={doc.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${DOC_STATUS_STYLE[doc.status] ?? DOC_STATUS_STYLE.PENDING}`}>
-              <span>{DOC_TYPES_RU[doc.docType] ?? doc.docType}</span>
-              <span className="font-bold">{doc.status === "VERIFIED" ? "✓ Подтверждён" : doc.status === "REJECTED" ? "✗ Отклонён" : "⏳ На проверке"}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

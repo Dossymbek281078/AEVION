@@ -13,7 +13,7 @@ import {
 import type { GlobusProject } from "../types/globus";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
-import { applyOgEtag } from "../lib/ogEtag";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import {
   ensureModuleWebhookTables,
   fireModuleWebhook,
@@ -1075,6 +1075,12 @@ modulesRouter.get("/changelog.rss", modulesEmbedRateLimit, async (req, res) => {
     const selfUrl = `${proto}://${host}/api/modules/changelog.rss`;
     const siteUrl = `${proto}://${host}/modules`;
 
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `modules-changelog-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
     function esc(s: string): string {
       return String(s)
         .replace(/&/g, "&amp;")
@@ -1134,9 +1140,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "rss failed", details: err.message });
@@ -1324,6 +1327,12 @@ modulesRouter.get("/:id/changelog.rss", modulesEmbedRateLimit, async (req, res) 
       [id, limit]
     );
 
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `modules-${id}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
     function describe(row: any): string {
       const before = row.oldState || {};
       const after = row.newState || {};
@@ -1373,9 +1382,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "module rss failed", details: err.message });
@@ -1402,6 +1408,17 @@ modulesRouter.get("/sitemap.xml", modulesEmbedRateLimit, async (req, res) => {
     }
 
     const today = new Date().toISOString().slice(0, 10);
+    let latestOverrideMs = 0;
+    for (const p of enriched) {
+      const u = p.override?.updatedAt || p.updatedAt;
+      if (!u) continue;
+      const ms = new Date(u).getTime();
+      if (Number.isFinite(ms) && ms > latestOverrideMs) latestOverrideMs = ms;
+    }
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `modules-${enriched.length}-${latestOverrideMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
     const urls: string[] = [];
     urls.push(`  <url>
     <loc>${esc(origin)}/modules</loc>
@@ -1442,9 +1459,6 @@ modulesRouter.get("/sitemap.xml", modulesEmbedRateLimit, async (req, res) => {
 ${urls.join("\n")}
 </urlset>`;
 
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=600");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "sitemap failed", details: err.message });
@@ -1553,7 +1567,7 @@ modulesRouter.get("/tags/:tag/changelog.rss", modulesEmbedRateLimit, async (req,
     const selfUrl = `${proto}://${host}/api/modules/tags/${encodeURIComponent(tag)}/changelog.rss`;
     const siteUrl = `${proto}://${host}/modules/tags/${encodeURIComponent(tag)}`;
 
-    let items = "";
+    let rows: any[] = [];
     if (matchingIds.length > 0) {
       const r = await pool.query(
         `SELECT "id","moduleId","oldState","newState","at"
@@ -1563,38 +1577,45 @@ modulesRouter.get("/tags/:tag/changelog.rss", modulesEmbedRateLimit, async (req,
          LIMIT $2`,
         [matchingIds, limit]
       );
-      function describe(row: any): string {
-        const before = row.oldState || {};
-        const after = row.newState || {};
-        const parts: string[] = [];
-        if (before.status !== after.status) parts.push(`status: ${before.status} → ${after.status}`);
-        if (before.tier !== after.tier) parts.push(`tier: ${before.tier} → ${after.tier}`);
-        if (before.hint !== after.hint) parts.push(`hint changed`);
-        if (parts.length === 0 && !before.hadOverride && after.hadOverride) {
-          return "Admin override applied.";
-        }
-        if (parts.length === 0 && before.hadOverride && !after.hadOverride) {
-          return "Admin override cleared.";
-        }
-        return parts.join("; ") || "Override changed.";
+      rows = r.rows as any[];
+    }
+    const latestAt = rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `modules-tag-${tag}-${matchingIds.length}-${rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
+    function describe(row: any): string {
+      const before = row.oldState || {};
+      const after = row.newState || {};
+      const parts: string[] = [];
+      if (before.status !== after.status) parts.push(`status: ${before.status} → ${after.status}`);
+      if (before.tier !== after.tier) parts.push(`tier: ${before.tier} → ${after.tier}`);
+      if (before.hint !== after.hint) parts.push(`hint changed`);
+      if (parts.length === 0 && !before.hadOverride && after.hadOverride) {
+        return "Admin override applied.";
       }
-      items = r.rows
-        .map((row: any) => {
-          const at = row.at instanceof Date ? row.at : new Date(row.at);
-          const pubDate = at.toUTCString();
-          const title = `${row.moduleId} — ${describe(row)}`;
-          const guid = `aevion-modules-${row.id}`;
-          const link = `${proto}://${host}/modules/${encodeURIComponent(row.moduleId)}`;
-          return `    <item>
+      if (parts.length === 0 && before.hadOverride && !after.hadOverride) {
+        return "Admin override cleared.";
+      }
+      return parts.join("; ") || "Override changed.";
+    }
+    const items = rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const title = `${row.moduleId} — ${describe(row)}`;
+        const guid = `aevion-modules-${row.id}`;
+        const link = `${proto}://${host}/modules/${encodeURIComponent(row.moduleId)}`;
+        return `    <item>
       <title>${esc(title)}</title>
       <link>${esc(link)}</link>
       <guid isPermaLink="false">${esc(guid)}</guid>
       <pubDate>${pubDate}</pubDate>
       <description>${esc(describe(row))}</description>
     </item>`;
-        })
-        .join("\n");
-    }
+      })
+      .join("\n");
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
@@ -1609,9 +1630,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "tag rss failed", details: err.message });

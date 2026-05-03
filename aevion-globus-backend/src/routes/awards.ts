@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { refererHost } from "../lib/qrightHelpers";
-import { applyOgEtag } from "../lib/ogEtag";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 
 export const awardsRouter = Router();
 
@@ -1399,6 +1399,12 @@ awardsRouter.get("/seasons/:seasonId/changelog.rss", awardsEmbedRateLimit, async
       [seasonId, limit]
     );
 
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `awards-season-${seasonId}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
     function describe(row: any): string {
       const p = row.payload || {};
       switch (row.action) {
@@ -1451,9 +1457,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "season rss failed", details: err.message });
@@ -1479,6 +1482,13 @@ awardsRouter.get("/sitemap.xml", awardsEmbedRateLimit, async (req, res) => {
        ORDER BY m."awardedAt" DESC
        LIMIT 5000`
     );
+
+    const medalRows = medals.rows as any[];
+    const latestMedalSrc = medalRows[0]?.awardedAt;
+    const latestMedalMs = latestMedalSrc instanceof Date ? latestMedalSrc.getTime() : (latestMedalSrc ? new Date(latestMedalSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `awards-${medalRows.length}-${latestMedalMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
 
     const urls: string[] = [];
     urls.push(`  <url>
@@ -1519,9 +1529,6 @@ awardsRouter.get("/sitemap.xml", awardsEmbedRateLimit, async (req, res) => {
 ${urls.join("\n")}
 </urlset>`;
 
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=600");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "sitemap failed", details: err.message });

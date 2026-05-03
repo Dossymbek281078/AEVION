@@ -32,7 +32,7 @@ import {
 // symbol export for any legacy test or analytics code that references it.
 import { _legacyGenerateShards } from "../lib/shamir/legacy";
 void _legacyGenerateShards;
-import { applyOgEtag } from "../lib/ogEtag";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 
 export const quantumShieldRouter = Router();
 const pool = getPool();
@@ -842,6 +842,12 @@ quantumShieldRouter.get("/:id/changelog.rss", async (req, res) => {
       [id, limit]
     );
 
+    const latestSrc = r.rows[0]?.createdAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(String(latestSrc)).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qshield-${id}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
     function describe(row: Record<string, unknown>): string {
       const ev = String(row.event || "shield.event");
       const actor = row.actorUserId ? ` by ${row.actorUserId}` : "";
@@ -882,9 +888,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err) {
     res.status(500).json({ error: "shield rss failed", details: err instanceof Error ? err.message : String(err) });
@@ -908,6 +911,13 @@ quantumShieldRouter.get("/sitemap.xml", async (req, res) => {
        LIMIT 5000`
     );
 
+    const rows = r.rows as Record<string, unknown>[];
+    const latestSrc = rows[0]?.createdAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(String(latestSrc)).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qshield-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
     const urls: string[] = [];
     urls.push(`  <url>
     <loc>${qsEsc(origin)}/quantum-shield</loc>
@@ -915,7 +925,7 @@ quantumShieldRouter.get("/sitemap.xml", async (req, res) => {
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>`);
-    for (const row of r.rows as Record<string, unknown>[]) {
+    for (const row of rows) {
       const lastmodSrc = row.createdAt;
       const lastmod = lastmodSrc
         ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
@@ -933,9 +943,6 @@ quantumShieldRouter.get("/sitemap.xml", async (req, res) => {
 ${urls.join("\n")}
 </urlset>`;
 
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=600");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err) {
     res.status(500).json({ error: "sitemap failed", details: err instanceof Error ? err.message : String(err) });

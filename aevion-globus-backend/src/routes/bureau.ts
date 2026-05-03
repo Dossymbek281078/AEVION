@@ -25,7 +25,7 @@ import {
 } from "../lib/payment";
 import { rateLimit } from "../lib/rateLimit";
 import { refererHost } from "../lib/qrightHelpers";
-import { applyOgEtag } from "../lib/ogEtag";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 
 const bureauEmbedRateLimit = rateLimit({
   windowMs: 60_000,
@@ -1614,6 +1614,12 @@ bureauRouter.get("/cert/:certId/changelog.rss", bureauEmbedRateLimit, async (req
       [certId, limit]
     );
 
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `bureau-cert-${certId}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
     function describe(row: any): string {
       const p = row.payload || {};
       switch (row.action) {
@@ -1660,9 +1666,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "cert rss failed", details: err.message });
@@ -1688,6 +1691,13 @@ bureauRouter.get("/sitemap.xml", bureauEmbedRateLimit, async (req, res) => {
        ORDER BY COALESCE("authorVerifiedAt","protectedAt") DESC
        LIMIT 5000`
     );
+
+    const rows = r.rows as any[];
+    const latestSrc = rows[0]?.authorVerifiedAt || rows[0]?.protectedAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(latestSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `bureau-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
 
     const urls: string[] = [];
     urls.push(`  <url>
@@ -1726,9 +1736,6 @@ bureauRouter.get("/sitemap.xml", bureauEmbedRateLimit, async (req, res) => {
 ${urls.join("\n")}
 </urlset>`;
 
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=600");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "sitemap failed", details: err.message });

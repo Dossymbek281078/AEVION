@@ -3092,7 +3092,7 @@ export default function CyberChessPage(){
           {(()=>{
             type DashId="play"|"learn"|"meta";
             const dashes:{id:DashId;icon:string;title:string;hint:string;tint:string;ring:string;active:number}[]=[
-              {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · Турниры",         tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)},
+              {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · P2P · Ghost Duel", tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)+(p2pMode?1:0)+(ghostDuelMode?1:0)},
               {id:"learn",icon:"🎓",title:"Тренировка",   hint:"Координаты · Эндшпиль · Личность · Editor",tint:"linear-gradient(135deg,#fef3c7,#fde68a)",ring:"#d97706",active:0},
               {id:"meta", icon:"📊",title:"Анализ & Стрим",hint:"Game DNA · Insights · OBS · Live-озвучка", tint:"linear-gradient(135deg,#ede9fe,#ddd6fe)",ring:"#7c3aed",active:(streamerMode?1:0)+(liveCommentary?1:0)},
             ];
@@ -3876,7 +3876,7 @@ export default function CyberChessPage(){
               const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
               const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
               const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
-              const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:accuracy?{white:accuracy.white,black:accuracy.black}:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
+              const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
               const blob=new Blob([svg],{type:"image/svg+xml"});
               downloadFile(blob,`aevion-chess-${new Date().toISOString().slice(0,10)}.svg`);
               showToast("SVG скачан — открой в браузере чтобы поделиться","success");

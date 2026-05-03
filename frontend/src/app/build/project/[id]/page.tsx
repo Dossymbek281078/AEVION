@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { AiImprove } from "@/components/build/AiImprove";
+import { AiVacancyGen } from "@/components/build/AiVacancyGen";
 import {
   EligibleReviewsBlock,
   ReviewsByProjectSection,
@@ -402,6 +403,15 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
       onSubmit={submit}
       className="w-full space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm"
     >
+      <AiVacancyGen
+        onApply={(draft) => {
+          setTitle(draft.title);
+          setDescription(draft.description);
+          setSkills(draft.skills);
+          if (draft.salaryMin != null) setSalary(String(draft.salaryMin));
+          if (draft.questions.length > 0) setQuestions(draft.questions.slice(0, 5));
+        }}
+      />
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}

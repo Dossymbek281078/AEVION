@@ -1181,6 +1181,7 @@ export type BuildAuthLike = {
   name: string;
   role: string;
   createdAt?: string;
+  emailVerifiedAt?: string | null;
 };
 
 export async function buildLogin(email: string, password: string): Promise<{ token: string; user: BuildAuthLike }> {
@@ -1204,5 +1205,58 @@ export async function buildRegister(email: string, password: string, name: strin
   });
   const json = await res.json();
   if (!res.ok) throw new BuildApiError(res.status, json?.error || "register_failed", json);
+  return json;
+}
+
+// ── Email verification ────────────────────────────────────────────────
+
+export async function requestEmailVerification(): Promise<{ ok: boolean; email: string; devToken?: string; alreadyVerified?: boolean }> {
+  const token = getAuthToken();
+  const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "verify_request_failed", json);
+  return json;
+}
+
+export async function completeEmailVerification(token: string): Promise<{ ok: boolean }> {
+  const authToken = getAuthToken();
+  const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    body: JSON.stringify({ token }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "verify_complete_failed", json);
+  return json;
+}
+
+// ── Password reset (no auth required) ────────────────────────────────
+
+export async function requestPasswordReset(email: string): Promise<{ ok: boolean; devToken?: string }> {
+  const res = await fetch(apiUrl("/api/auth/password/reset/request"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "reset_request_failed", json);
+  return json;
+}
+
+export async function completePasswordReset(email: string, token: string, newPassword: string): Promise<{ ok: boolean }> {
+  const res = await fetch(apiUrl("/api/auth/password/reset/complete"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, token, newPassword }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "reset_complete_failed", json);
   return json;
 }

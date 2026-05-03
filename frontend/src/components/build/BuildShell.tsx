@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
+import { EmailVerifyBanner } from "./EmailVerifyBanner";
 
 const NAV: { href: string; label: string }[] = [
   { href: "/build", label: "Projects" },
@@ -115,6 +116,9 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
 
+      {hydrated && user && !user.emailVerifiedAt && (
+        <EmailVerifyBanner email={user.email} />
+      )}
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
     </div>
@@ -465,6 +469,13 @@ export function SignInPanel() {
           {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
       </form>
+      {mode === "login" && (
+        <div className="mt-2 text-right">
+          <Link href="/build/reset-password" className="text-xs text-slate-500 hover:text-emerald-400">
+            Забыли пароль?
+          </Link>
+        </div>
+      )}
       <p className="mt-3 text-xs text-slate-500">
         Single AEVION account — works across QBuild, QRight, QSign and other modules.
       </p>

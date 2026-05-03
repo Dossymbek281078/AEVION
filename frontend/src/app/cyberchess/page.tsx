@@ -142,33 +142,24 @@ function getAudioCtx():AudioContext|null{
 }
 function snd(t:string){if(isMuted())return;try{
   const x=getAudioCtx();if(!x)return;const n=x.currentTime;
-  // Generate short noise burst
-  const dur = t==="capture"?0.12 : t==="check"?0.08 : t==="premove"?0.04 : t==="x"?0.25 : 0.05;
-  const bufSize = Math.floor(x.sampleRate * dur);
-  const buf = x.createBuffer(1, bufSize, x.sampleRate);
-  const data = buf.getChannelData(0);
-  // White noise with fast exponential decay envelope
-  for(let i=0; i<bufSize; i++){
-    const env = Math.exp(-i/(bufSize*0.2)); // sharp attack, quick decay
-    data[i] = (Math.random()*2-1) * env;
-  }
-  const src = x.createBufferSource();
-  src.buffer = buf;
-  // Low-pass filter to remove harsh highs → wooden/tapping quality
-  const filt = x.createBiquadFilter();
-  filt.type = "lowpass";
-  filt.frequency.value = t==="capture" ? 800 : t==="check" ? 2000 : t==="premove" ? 1500 : 1200;
-  filt.Q.value = 1;
-  // High-pass to remove rumble
-  const hp = x.createBiquadFilter();
-  hp.type = "highpass";
-  hp.frequency.value = 200;
-  const g = x.createGain();
-  const vol = t==="premove"?0.15 : t==="capture"?0.3 : t==="x"?0.18 : 0.22;
-  g.gain.setValueAtTime(vol, n);
-  g.gain.exponentialRampToValueAtTime(0.001, n+dur);
-  src.connect(hp); hp.connect(filt); filt.connect(g); g.connect(x.destination);
-  src.start(n);
+  const makeBurst=(at:number,dur:number,lpFreq:number,vol:number)=>{
+    const bufSize=Math.floor(x.sampleRate*dur);
+    const buf=x.createBuffer(1,bufSize,x.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<bufSize;i++){d[i]=(Math.random()*2-1)*Math.exp(-i/(bufSize*0.18));}
+    const src=x.createBufferSource();src.buffer=buf;
+    const lp=x.createBiquadFilter();lp.type="lowpass";lp.frequency.value=lpFreq;lp.Q.value=0.8;
+    const hp=x.createBiquadFilter();hp.type="highpass";hp.frequency.value=180;
+    const g=x.createGain();g.gain.setValueAtTime(vol,at);g.gain.exponentialRampToValueAtTime(0.001,at+dur);
+    src.connect(hp);hp.connect(lp);lp.connect(g);g.connect(x.destination);src.start(at);
+  };
+  if(t==="move")   makeBurst(n,0.06,1400,0.22);
+  else if(t==="capture")  {makeBurst(n,0.10,700,0.35);makeBurst(n+0.03,0.07,1000,0.15);}
+  else if(t==="check")    makeBurst(n,0.07,2400,0.28);
+  else if(t==="castle")   {makeBurst(n,0.05,1200,0.2);makeBurst(n+0.08,0.05,1200,0.18);}
+  else if(t==="premove")  makeBurst(n,0.04,1800,0.12);
+  else if(t==="x")        {for(let i=0;i<4;i++)makeBurst(n+i*0.08,0.07,600-i*60,0.15);}
+  else                    makeBurst(n,0.05,1200,0.20);
 }catch{}}
 
 /* ═══ Rating ═══ */

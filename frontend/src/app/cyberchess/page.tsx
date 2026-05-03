@@ -3911,7 +3911,7 @@ export default function CyberChessPage(){
             enabled={coachAIEnabled}
             onToggle={()=>sCoachAIEnabled(v=>!v)}
             runEngine={runEnginePromise}
-          />
+          />}
           {/* Opening Drill HUD */}
           {openingDrill&&<Card padding={SPACE[3]} tone="surface1"
             style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>

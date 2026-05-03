@@ -3404,9 +3404,12 @@ export default function CyberChessPage(){
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
-            <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onBoardMove} onPointerUp={onBoardUp} onPointerCancel={onBoardCancel}
+            <div ref={boardRef}
+              onPointerDown={onBoardDown}
+              draggable={false}
+              onDragStart={e=>e.preventDefault()}
               onClick={e=>{
-                if(Date.now()-recentDragRef.current<150)return;
+                if(Date.now()-recentDragRef.current<200)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
                 // Левый клик чистит размышляющие стрелки/хайлайты во всех режимах.
                 if(arrows.length>0||sqHL.length>0)clearAnnotations();

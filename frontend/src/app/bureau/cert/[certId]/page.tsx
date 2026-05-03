@@ -347,6 +347,22 @@ export default async function BureauCertPage({ params }: Props) {
                 Upgrade to Verified →
               </Link>
             )}
+            {data.verificationLevel === "verified" && !isRevoked && (
+              <Link
+                href={`/bureau/cert/${certId}/notarize`}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#fff",
+                  background: "#7c3aed",
+                  textDecoration: "none",
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                }}
+              >
+                Request Notarization →
+              </Link>
+            )}
             <a
               href={embedJsonUrl}
               target="_blank"

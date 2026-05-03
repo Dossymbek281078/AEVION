@@ -174,6 +174,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
 
           {isOwner && <OwnerFileUpload projectId={project.id} onUploaded={refresh} />}
+
+          {isOwner && <ProjectAnalyticsWidget projectId={project.id} />}
         </aside>
       </div>
 
@@ -591,6 +593,42 @@ function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploa
         Files are stored externally. Paste a public URL (CDN, object store).
       </p>
     </form>
+  );
+}
+
+function ProjectAnalyticsWidget({ projectId }: { projectId: string }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.projectAnalytics>> | null>(null);
+
+  useEffect(() => {
+    buildApi.projectAnalytics(projectId).then(setData).catch(() => {});
+  }, [projectId]);
+
+  if (!data) return null;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Analytics</div>
+      <div className="grid grid-cols-2 gap-2 text-center">
+        <Metric label="Views" value={data.vacancies.totalViews} />
+        <Metric label="Applied" value={data.applications.total} />
+        <Metric label="Accepted" value={data.applications.accepted} tone="emerald" />
+        <Metric label="Conv%" value={`${data.applications.conversionRate}%`} />
+      </div>
+      {data.reviews.count > 0 && (
+        <div className="mt-3 border-t border-white/5 pt-3 text-center text-xs text-slate-400">
+          {"★".repeat(Math.round(data.reviews.avgRating))} {data.reviews.avgRating.toFixed(1)} ({data.reviews.count} review{data.reviews.count !== 1 ? "s" : ""})
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Metric({ label, value, tone }: { label: string; value: number | string; tone?: "emerald" }) {
+  return (
+    <div className="rounded-lg border border-white/5 bg-white/5 py-2">
+      <div className={`text-lg font-bold ${tone === "emerald" ? "text-emerald-300" : "text-white"}`}>{value}</div>
+      <div className="text-[10px] text-slate-500">{label}</div>
+    </div>
   );
 }
 

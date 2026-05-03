@@ -41,6 +41,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/why-aevion", changeFrequency: "weekly", priority: 0.7 },
   { path: "/build/referrals", changeFrequency: "daily", priority: 0.5 },
   { path: "/build/leaderboard", changeFrequency: "daily", priority: 0.6 },
+  { path: "/build/help", changeFrequency: "weekly", priority: 0.5 },
 ];
 
 async function fetchIds(path: string): Promise<string[]> {

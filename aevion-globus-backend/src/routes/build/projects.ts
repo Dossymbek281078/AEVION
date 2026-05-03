@@ -198,3 +198,56 @@ projectsRouter.patch("/:id", async (req, res) => {
     return fail(res, 500, "project_update_failed", { details: (err as Error).message });
   }
 });
+
+// GET /api/build/projects/:id/analytics — owner-only project summary
+projectsRouter.get("/:id/analytics", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const project = await pool.query(`SELECT "clientId" FROM "BuildProject" WHERE "id" = $1 LIMIT 1`, [id]);
+    if (project.rowCount === 0) return fail(res, 404, "project_not_found");
+    if (project.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const [vacStats, appStats, reviewStats] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS "total", SUM("viewCount")::int AS "totalViews",
+                SUM(CASE WHEN "status"='OPEN' THEN 1 ELSE 0 END)::int AS "open",
+                SUM(CASE WHEN "status"='CLOSED' THEN 1 ELSE 0 END)::int AS "closed"
+         FROM "BuildVacancy" WHERE "projectId" = $1`,
+        [id],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS "total",
+                SUM(CASE WHEN a."status"='ACCEPTED' THEN 1 ELSE 0 END)::int AS "accepted",
+                SUM(CASE WHEN a."status"='PENDING' THEN 1 ELSE 0 END)::int AS "pending",
+                SUM(CASE WHEN a."status"='REJECTED' THEN 1 ELSE 0 END)::int AS "rejected"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         WHERE v."projectId" = $1`,
+        [id],
+      ),
+      pool.query(
+        `SELECT ROUND(AVG("rating")::numeric,2)::float8 AS "avg", COUNT(*)::int AS "count"
+         FROM "BuildReview" WHERE "projectId" = $1`,
+        [id],
+      ),
+    ]);
+
+    const v = vacStats.rows[0];
+    const a = appStats.rows[0];
+    const r = reviewStats.rows[0];
+
+    return ok(res, {
+      vacancies: { total: v.total, open: v.open, closed: v.closed, totalViews: v.totalViews ?? 0 },
+      applications: {
+        total: a.total, accepted: a.accepted, pending: a.pending, rejected: a.rejected,
+        conversionRate: v.totalViews > 0 ? Math.round((a.total / v.totalViews) * 1000) / 10 : 0,
+      },
+      reviews: { avgRating: r.avg ?? 0, count: r.count },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "project_analytics_failed", { details: (err as Error).message });
+  }
+});

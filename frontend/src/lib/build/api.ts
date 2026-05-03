@@ -500,6 +500,12 @@ export const buildApi = {
       files: BuildFile[];
       client: { id: string; email: string; name: string; city: string | null; buildRole: BuildRole | null } | null;
     }>("GET", `/api/build/projects/${encodeURIComponent(id)}`, undefined, { auth: false }),
+  projectAnalytics: (id: string) =>
+    call<{
+      vacancies: { total: number; open: number; closed: number; totalViews: number };
+      applications: { total: number; accepted: number; pending: number; rejected: number; conversionRate: number };
+      reviews: { avgRating: number; count: number };
+    }>("GET", `/api/build/projects/${encodeURIComponent(id)}/analytics`),
   updateProject: (id: string, patch: Partial<{ title: string; description: string; budget: number; status: ProjectStatus; city: string | null }>) =>
     call<BuildProject>("PATCH", `/api/build/projects/${encodeURIComponent(id)}`, patch),
 

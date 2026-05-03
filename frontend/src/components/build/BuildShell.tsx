@@ -21,6 +21,7 @@ const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build/pricing", label: "Pricing" },
   { href: "/build/loyalty", label: "Loyalty" },
   { href: "/build/leaderboard", label: "Leaderboard" },
+  { href: "/build/help", label: "Help" },
   { href: "/build/why-aevion", label: "Why us" },
 ];
 

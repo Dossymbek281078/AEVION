@@ -44,6 +44,7 @@ import {
   addWorkspaceMember,
   addWorkspaceSession,
   createComment,
+  deleteRunsBulk,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -212,6 +213,7 @@ qcoreaiRouter.get("/health", async (_req, res) => {
   } catch { /* tolerable */ }
   res.json({
     service: "qcoreai",
+    version: "8.0.0",
     ok: true,
     configuredProviders: configured.map((p) => p.id),
     totalProviders: providers.length,
@@ -219,8 +221,14 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     storage: isDbReady() ? "postgres" : "in-memory",
     storageError: isDbReady() ? null : getDbError(),
     webhookConfigured: isWebhookConfigured(),
+    webhookEvents: ["run.started", "agent.turn", "run.completed"],
     guidanceBus: guidanceBusKind,
     liveRuns,
+    features: [
+      "multi-agent", "eval-harness", "prompts-library", "threading",
+      "templates", "batch-runs", "scheduled-batches", "spend-limits",
+      "workspaces", "run-comments", "prompt-audit", "sdk-v0.4",
+    ],
     at: new Date().toISOString(),
   });
 });
@@ -853,6 +861,69 @@ qcoreaiRouter.get("/analytics/timeseries", async (req, res) => {
     res.json({ items, days });
   } catch (err: any) {
     res.status(500).json({ error: "timeseries failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/runs/:id/cost-breakdown
+ * Per-agent cost + token breakdown for a run. Useful for the shared detail page
+ * and for SDK consumers building cost attribution tools.
+ */
+qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
+  try {
+    const run = await getRun(String(req.params.id));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const messages = await listMessages(run.id);
+    const agentMessages = messages.filter(
+      (m) => ["analyst", "writer", "critic", "pro", "con", "moderator", "judge"].includes(m.role)
+    );
+    const breakdown = agentMessages.map((m) => ({
+      role: m.role,
+      stage: m.stage,
+      instance: m.instance,
+      provider: m.provider,
+      model: m.model,
+      tokensIn: m.tokensIn,
+      tokensOut: m.tokensOut,
+      costUsd: m.costUsd,
+      durationMs: m.durationMs,
+    }));
+    const totalCostUsd = breakdown.reduce((s, b) => s + (b.costUsd ?? 0), 0);
+    const totalTokensIn = breakdown.reduce((s, b) => s + (b.tokensIn ?? 0), 0);
+    const totalTokensOut = breakdown.reduce((s, b) => s + (b.tokensOut ?? 0), 0);
+    const byProvider: Record<string, { calls: number; costUsd: number; tokensIn: number; tokensOut: number }> = {};
+    for (const b of breakdown) {
+      const p = b.provider || "unknown";
+      if (!byProvider[p]) byProvider[p] = { calls: 0, costUsd: 0, tokensIn: 0, tokensOut: 0 };
+      byProvider[p].calls++;
+      byProvider[p].costUsd += b.costUsd ?? 0;
+      byProvider[p].tokensIn += b.tokensIn ?? 0;
+      byProvider[p].tokensOut += b.tokensOut ?? 0;
+    }
+    res.json({ breakdown, totalCostUsd, totalTokensIn, totalTokensOut, byProvider });
+  } catch (err: any) {
+    res.status(500).json({ error: "cost breakdown failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/analytics/export?format=csv&days=30
+ * Export analytics as CSV for spreadsheet analysis.
+ */
+qcoreaiRouter.get("/analytics/export", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const days = Math.min(90, parseInt(String(req.query.days || "30"), 10) || 30);
+    const data = await getCostTimeseries(auth?.sub ?? null, days);
+    const csv = [
+      "date,runs,costUsd",
+      ...data.map((r: any) => `${r.date},${r.runs},${(r.costUsd ?? 0).toFixed(6)}`),
+    ].join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="qcoreai-analytics-${days}d.csv"`);
+    res.send(csv);
+  } catch (err: any) {
+    res.status(500).json({ error: "analytics export failed", details: err?.message });
   }
 });
 
@@ -2193,6 +2264,27 @@ export function startScheduler(): void {
   setInterval(tick, 60_000);
   console.log("[QCoreAI] scheduler started (1-min poll)");
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Bulk delete runs — DELETE /api/qcoreai/runs/bulk
+   Body: { runIds: string[] }. Only deletes runs the caller owns.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.delete("/runs/bulk", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const rawIds = req.body?.runIds;
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      return res.status(400).json({ error: "runIds[] required" });
+    }
+    const ids: string[] = rawIds.slice(0, 100).filter((x: unknown) => typeof x === "string");
+    const deleted = await deleteRunsBulk(ids, auth.sub);
+    res.json({ deleted });
+  } catch (err: any) {
+    res.status(500).json({ error: "bulk delete failed", details: err?.message });
+  }
+});
 
 /* ═══════════════════════════════════════════════════════════════════════
    Run comments — public, no auth required

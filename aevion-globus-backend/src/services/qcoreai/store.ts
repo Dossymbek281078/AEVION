@@ -2744,3 +2744,23 @@ export async function listWorkspaceSessions(workspaceId: string): Promise<Array<
   );
   return r.rows;
 }
+
+export async function deleteRunsBulk(ids: string[], userId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    let deleted = 0;
+    for (const id of ids) {
+      const run = memRuns.get(id);
+      // In-memory: no user ownership check (userId on session not tracked in mem-run)
+      if (run) { memRuns.delete(id); deleted++; }
+    }
+    return deleted;
+  }
+  const result = await pool.query(
+    `DELETE FROM "QCoreRun" WHERE "id"=ANY($1::text[]) AND "sessionId" IN (
+       SELECT "id" FROM "QCoreSession" WHERE "userId"=$2
+     ) RETURNING "id"`,
+    [ids, userId]
+  );
+  return result.rowCount ?? 0;
+}

@@ -119,6 +119,11 @@ export default function SharedRunClient() {
   const [commentName, setCommentName] = useState("");
   const [commentText, setCommentText] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
+  const [costBreakdown, setCostBreakdown] = useState<Array<{
+    role: string; stage: string | null; provider: string | null; model: string | null;
+    tokensIn: number | null; tokensOut: number | null; costUsd: number | null; durationMs: number | null;
+  }> | null>(null);
+  const [showCost, setShowCost] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -395,7 +400,20 @@ export default function SharedRunClient() {
           <span>Exported from <b style={{ color: "#0f172a" }}>AEVION QCoreAI</b></span>
           <span>·</span>
           <span>Run started {new Date(run.startedAt).toLocaleString()}</span>
-          <span style={{ marginLeft: "auto" }}>
+          <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <button
+              onClick={async () => {
+                if (!showCost && !costBreakdown) {
+                  const r = await fetch(apiUrl(`/api/qcoreai/runs/${run.id}/cost-breakdown`));
+                  const d = await r.json().catch(() => ({}));
+                  if (Array.isArray(d?.breakdown)) setCostBreakdown(d.breakdown);
+                }
+                setShowCost((v) => !v);
+              }}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#6d28d9", fontWeight: 700, fontSize: 11 }}
+            >
+              {showCost ? "Hide" : "💲 Cost breakdown"}
+            </button>
             <a
               href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
               target="_blank" rel="noreferrer"
@@ -405,6 +423,23 @@ export default function SharedRunClient() {
             </a>
           </span>
         </footer>
+        {showCost && costBreakdown && (
+          <div style={{ marginTop: 8, padding: "10px 14px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(124,58,237,0.12)", fontSize: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6, color: "#0f172a" }}>Per-agent cost</div>
+            {costBreakdown.map((b, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontWeight: 700, color: "#6d28d9", minWidth: 60 }}>{b.role}</span>
+                <span style={{ color: "#64748b" }}>{b.provider || ""} {b.model ? `· ${b.model.split("-").slice(0, 2).join("-")}` : ""}</span>
+                <span style={{ marginLeft: "auto", fontWeight: 700, color: "#0f172a" }}>
+                  {b.costUsd != null ? `$${b.costUsd.toFixed(5)}` : "—"}
+                </span>
+                <span style={{ color: "#94a3b8" }}>
+                  {((b.tokensIn ?? 0) + (b.tokensOut ?? 0)).toLocaleString()} tok
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Comments */}
         <section style={{ marginTop: 28 }}>

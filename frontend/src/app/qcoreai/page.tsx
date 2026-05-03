@@ -659,6 +659,37 @@ export default function QCoreAIPage() {
             ))}
           </div>
         </div>
+        {/* V7 feature grid */}
+        <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+          {[
+            { href: "/qcoreai/multi",      icon: "🤖", t: "Multi-agent pipeline",   d: "Analyst → Writer → Critic with 3 strategies" },
+            { href: "/qcoreai/eval",       icon: "🧪", t: "Eval harness",            d: "Regression testing with 6+ judge types" },
+            { href: "/qcoreai/prompts",    icon: "📝", t: "Prompts library",         d: "Versioned system prompts, fork & share" },
+            { href: "/qcoreai/analytics",  icon: "📊", t: "Analytics",               d: "Cost tracking, token usage, trends" },
+            { href: "/qcoreai/batch",      icon: "⚡", t: "Batch runs",              d: "20 prompts in parallel, one call" },
+            { href: "/qcoreai/schedule",   icon: "🕐", t: "Scheduled batches",       d: "Hourly, daily, weekly automation" },
+            { href: "/qcoreai/workspaces", icon: "🗂️", t: "Workspaces",              d: "Share session collections with your team" },
+          ].map(({ href, icon, t, d }) => (
+            <a
+              key={href}
+              href={href}
+              style={{
+                display: "block", padding: "12px 14px", borderRadius: 12,
+                border: "1px solid rgba(15,23,42,0.1)", background: "#fff",
+                textDecoration: "none", color: "inherit",
+                transition: "box-shadow 0.15s",
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 20 }}>{icon}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{t}</div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>{d}</div>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
       </ProductPageShell>
     </main>
   );

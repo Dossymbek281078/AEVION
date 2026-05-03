@@ -240,9 +240,10 @@ If the user insists on more code work in this window, candidates are:
 3. Frontend i18n parity audit on the 5 layouts shipped in PR #78 (kk + ru completeness)
 
 ### `aevion-bank`
-1. **AEC ↔ fiat boundary doc** — required before P3-4 (first paid Bureau cert via Stripe)
-2. Resolve `bank-payment-layer` branch — currently ahead of main with cyberchess diag, decide merge vs delete
+1. ~~**AEC ↔ fiat boundary doc**~~ ✅ done — `docs/bank/AEC_FIAT_BOUNDARY.md` (4 canonical rules R1–R4, P3-4 flow diagram, legal positioning, pre-P3-4 checklist)
+2. Resolve `bank-payment-layer` branch — 256 commits ahead of main (squash-diverged); decide: archive as tag + delete, or open PR to merge net-new bank features into main
 3. Wire `npm run smoke:bank-prod` into the daily cron (PR #103 shipped the harness; `smoke:all` orchestrator pickup pending)
+4. **P3-4** First paid Bureau cert E2E — prereqs now met (AEC boundary doc done); implement Trust Graph edge record + connect prod Stripe keys
 
 ### `aevion-qsign`
 1. **Do nothing without checking PR list** — P1-P9 already merged via PR #2 on 2026-04-26
@@ -274,6 +275,7 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-03  —    docs(bank): AEC ↔ fiat boundary rules shipped to main (R1–R4, P3-4 prereq done)
 2026-05-03  #102 feat(platform): P1 follow-up — awards+planet smokes + OpenAPI 0.5.1 + Sentry alerts spec
 2026-05-03  #98  feat(platform): P1 bundle — auth-replay smoke + RUNBOOK.md + OpenAPI 0.5.0 (P1-2b, P1-4, P1-7 done)
 2026-05-03  #92  docs(env): PROD_ENV_CHECKLIST.md + check-prod-env validator (P0-3 done)

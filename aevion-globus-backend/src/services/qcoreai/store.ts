@@ -2625,3 +2625,122 @@ export async function getWorkspace(id: string): Promise<WorkspaceRow | null> {
   const r = await pool.query(`SELECT * FROM "QCoreWorkspace" WHERE "id"=$1`, [id]);
   return (r.rows[0] as WorkspaceRow) || null;
 }
+
+export async function updateWorkspace(id: string, ownerId: string, patch: { name?: string; description?: string | null }): Promise<WorkspaceRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const w = memWorkspaces.get(id);
+    if (!w || w.ownerId !== ownerId) return null;
+    const updated = { ...w, ...patch, updatedAt: nowIso() };
+    memWorkspaces.set(id, updated);
+    return updated;
+  }
+  const sets: string[] = ["\"updatedAt\"=NOW()"];
+  const vals: unknown[] = [id, ownerId];
+  let idx = 3;
+  if (patch.name !== undefined) { sets.push(`"name"=$${idx++}`); vals.push(patch.name); }
+  if (patch.description !== undefined) { sets.push(`"description"=$${idx++}`); vals.push(patch.description); }
+  const r = await pool.query(
+    `UPDATE "QCoreWorkspace" SET ${sets.join(",")} WHERE "id"=$1 AND "ownerId"=$2 RETURNING *`,
+    vals
+  );
+  return (r.rows[0] as WorkspaceRow) || null;
+}
+
+export async function deleteWorkspace(id: string, ownerId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const w = memWorkspaces.get(id);
+    if (!w || w.ownerId !== ownerId) return false;
+    memWorkspaces.delete(id);
+    return true;
+  }
+  const r = await pool.query(`DELETE FROM "QCoreWorkspace" WHERE "id"=$1 AND "ownerId"=$2 RETURNING "id"`, [id, ownerId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export type MemberRow = { workspaceId: string; userId: string; role: string; joinedAt: string };
+const memMembers = new Map<string, MemberRow[]>(); // key = workspaceId
+
+export async function addWorkspaceMember(workspaceId: string, userId: string, role: string): Promise<MemberRow> {
+  await ensureQCoreTables(pool);
+  const row: MemberRow = { workspaceId, userId, role, joinedAt: nowIso() };
+  if (!isDbReady()) {
+    const list = memMembers.get(workspaceId) ?? [];
+    const idx = list.findIndex((m) => m.userId === userId);
+    if (idx >= 0) list[idx] = row; else list.push(row);
+    memMembers.set(workspaceId, list);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreWorkspaceMember" ("workspaceId","userId","role") VALUES ($1,$2,$3)
+     ON CONFLICT ("workspaceId","userId") DO UPDATE SET "role"=$3 RETURNING *`,
+    [workspaceId, userId, role]
+  );
+  return r.rows[0] as MemberRow;
+}
+
+export async function listWorkspaceMembers(workspaceId: string): Promise<MemberRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memMembers.get(workspaceId) ?? [];
+  const r = await pool.query(`SELECT * FROM "QCoreWorkspaceMember" WHERE "workspaceId"=$1`, [workspaceId]);
+  return r.rows as MemberRow[];
+}
+
+export async function removeWorkspaceMember(workspaceId: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const list = memMembers.get(workspaceId) ?? [];
+    const next = list.filter((m) => m.userId !== userId);
+    memMembers.set(workspaceId, next);
+    return list.length !== next.length;
+  }
+  const r = await pool.query(`DELETE FROM "QCoreWorkspaceMember" WHERE "workspaceId"=$1 AND "userId"=$2 RETURNING "userId"`, [workspaceId, userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+const memWorkspaceSessions = new Map<string, string[]>(); // workspaceId → sessionId[]
+
+export async function addWorkspaceSession(workspaceId: string, sessionId: string): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const list = memWorkspaceSessions.get(workspaceId) ?? [];
+    if (!list.includes(sessionId)) list.push(sessionId);
+    memWorkspaceSessions.set(workspaceId, list);
+    return;
+  }
+  await pool.query(
+    `INSERT INTO "QCoreWorkspaceSession" ("workspaceId","sessionId") VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+    [workspaceId, sessionId]
+  );
+}
+
+export async function removeWorkspaceSession(workspaceId: string, sessionId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const list = memWorkspaceSessions.get(workspaceId) ?? [];
+    const next = list.filter((s) => s !== sessionId);
+    memWorkspaceSessions.set(workspaceId, next);
+    return list.length !== next.length;
+  }
+  const r = await pool.query(`DELETE FROM "QCoreWorkspaceSession" WHERE "workspaceId"=$1 AND "sessionId"=$2 RETURNING "sessionId"`, [workspaceId, sessionId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listWorkspaceSessions(workspaceId: string): Promise<Array<{ id: string; title: string; updatedAt: string }>> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const ids = memWorkspaceSessions.get(workspaceId) ?? [];
+    return ids.map((id) => {
+      const s = Array.from(memSessions.values()).find((x) => x.id === id);
+      return s ? { id: s.id, title: s.title, updatedAt: s.updatedAt } : { id, title: id, updatedAt: "" };
+    });
+  }
+  const r = await pool.query(
+    `SELECT s."id", s."title", s."updatedAt" FROM "QCoreSession" s
+     JOIN "QCoreWorkspaceSession" ws ON ws."sessionId"=s."id"
+     WHERE ws."workspaceId"=$1 ORDER BY s."updatedAt" DESC`,
+    [workspaceId]
+  );
+  return r.rows;
+}

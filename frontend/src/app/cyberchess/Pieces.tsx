@@ -66,6 +66,36 @@ const CBURNETT: Record<string,string> = {
 // Unicode glyphs (filled black-piece glyphs render as solid silhouettes — used for both colors with CSS).
 const GLYPH: Record<PieceType,string> = { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" };
 
+/** Returns raw HTML string for the given piece+set, sized to fit `sizePx`.
+    Used by useBoardInput to populate the drag-ghost via direct DOM mutation
+    (no React state in the hot path). */
+export function pieceHtml(type: PieceType, color: PieceColor, set: PieceSetId, sizePx: number): string {
+  if (set === "cburnett") {
+    const inner = CBURNETT[`${color}${type}`];
+    if (!inner) return "";
+    return `<svg viewBox="0 0 45 45" width="${sizePx}" height="${sizePx}" xmlns="http://www.w3.org/2000/svg" style="display:block;pointer-events:none">${inner}</svg>`;
+  }
+  const g = GLYPH[type];
+  let fill = "#fff", stroke = "#000", glow = "", weight = 900, font = "'Noto Sans Symbols 2','Segoe UI Symbol','Apple Symbols',sans-serif";
+  if (set === "neon") {
+    fill = color === "w" ? "#e0f2fe" : "#1e1b4b";
+    stroke = color === "w" ? "#22d3ee" : "#7c3aed";
+    glow = color === "w"
+      ? "0 0 6px #22d3ee, 0 0 14px rgba(34,211,238,0.65), 0 0 22px rgba(34,211,238,0.35)"
+      : "0 0 6px #a855f7, 0 0 14px rgba(168,85,247,0.6), 0 0 22px rgba(168,85,247,0.3)";
+  } else if (set === "minimal") {
+    fill = color === "w" ? "#fafafa" : "#0f172a";
+    stroke = color === "w" ? "#475569" : "#0f172a";
+    weight = 500;
+  } else { // bold
+    fill = color === "w" ? "#ffffff" : "#000000";
+    stroke = "#000000";
+    font = "'DejaVu Sans','Liberation Sans',Georgia,serif";
+  }
+  const fs = Math.round(sizePx * 0.92);
+  return `<div style="width:${sizePx}px;height:${sizePx}px;display:flex;align-items:center;justify-content:center;pointer-events:none;user-select:none;"><span style="font-size:${fs}px;line-height:1;font-weight:${weight};font-family:${font};color:${fill};-webkit-text-stroke:1px ${stroke};text-shadow:${glow||"none"};transform:translateY(-4%);">${g}</span></div>`;
+}
+
 function GlyphPiece({ type, color, size, fill, stroke, glow, weight, font }:{
   type:PieceType; color:PieceColor; size:number|string;
   fill:{w:string;b:string}; stroke:{w:string;b:string}; glow?:string; weight:number; font?:string;

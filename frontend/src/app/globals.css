@@ -331,49 +331,160 @@ code {
 @keyframes cc-spin {
   to { transform: rotate(360deg); }
 }
-@keyframes cc-tip-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes cc-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-4px); opacity: 1; }
-}
-@keyframes cc-piece-place {
-  0%   { transform: scale(0.78) translateY(-3px); }
-  55%  { transform: scale(1.10) translateY(0); }
-  100% { transform: scale(1.04) translateY(0); }
-}
-@keyframes cc-piece-breathe {
-  0%, 100% { transform: scale(1.08); }
-  50%      { transform: scale(1.13); }
-}
 @keyframes cc-capture-pop {
   0% { opacity: 0.95; transform: scale(1); filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4)) brightness(1); }
   35% { opacity: 0.85; transform: scale(1.18); filter: drop-shadow(0 6px 12px rgba(220,38,38,0.55)) brightness(1.1); }
   100% { opacity: 0; transform: scale(0.45) rotate(-12deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)) brightness(0.7); }
 }
+
 @keyframes cc-ghost-pop {
   0%   { transform: scale(0.92); }
   60%  { transform: scale(1.18); }
   100% { transform: scale(1.12); }
 }
 
-.cc-desktop-only { display: initial; }
-.cc-mobile-only { display: none; }
-@media (max-width: 767px) {
-  .cc-desktop-only { display: none !important; }
-  .cc-mobile-only { display: initial !important; }
-}
+/* ── Drag-origin fade and hover ring (driven by board[data-*] attrs) ─────
+   Hook sets data-drag-from="e2" and data-hover-sq="e4" on the board element.
+   No React state needed. */
+[data-drag-from] [data-sq] > div:last-child { transition: opacity 60ms ease; }
+[data-drag-from="a1"] [data-sq="a1"] > div:last-child,
+[data-drag-from="a2"] [data-sq="a2"] > div:last-child,
+[data-drag-from="a3"] [data-sq="a3"] > div:last-child,
+[data-drag-from="a4"] [data-sq="a4"] > div:last-child,
+[data-drag-from="a5"] [data-sq="a5"] > div:last-child,
+[data-drag-from="a6"] [data-sq="a6"] > div:last-child,
+[data-drag-from="a7"] [data-sq="a7"] > div:last-child,
+[data-drag-from="a8"] [data-sq="a8"] > div:last-child,
+[data-drag-from="b1"] [data-sq="b1"] > div:last-child,
+[data-drag-from="b2"] [data-sq="b2"] > div:last-child,
+[data-drag-from="b3"] [data-sq="b3"] > div:last-child,
+[data-drag-from="b4"] [data-sq="b4"] > div:last-child,
+[data-drag-from="b5"] [data-sq="b5"] > div:last-child,
+[data-drag-from="b6"] [data-sq="b6"] > div:last-child,
+[data-drag-from="b7"] [data-sq="b7"] > div:last-child,
+[data-drag-from="b8"] [data-sq="b8"] > div:last-child,
+[data-drag-from="c1"] [data-sq="c1"] > div:last-child,
+[data-drag-from="c2"] [data-sq="c2"] > div:last-child,
+[data-drag-from="c3"] [data-sq="c3"] > div:last-child,
+[data-drag-from="c4"] [data-sq="c4"] > div:last-child,
+[data-drag-from="c5"] [data-sq="c5"] > div:last-child,
+[data-drag-from="c6"] [data-sq="c6"] > div:last-child,
+[data-drag-from="c7"] [data-sq="c7"] > div:last-child,
+[data-drag-from="c8"] [data-sq="c8"] > div:last-child,
+[data-drag-from="d1"] [data-sq="d1"] > div:last-child,
+[data-drag-from="d2"] [data-sq="d2"] > div:last-child,
+[data-drag-from="d3"] [data-sq="d3"] > div:last-child,
+[data-drag-from="d4"] [data-sq="d4"] > div:last-child,
+[data-drag-from="d5"] [data-sq="d5"] > div:last-child,
+[data-drag-from="d6"] [data-sq="d6"] > div:last-child,
+[data-drag-from="d7"] [data-sq="d7"] > div:last-child,
+[data-drag-from="d8"] [data-sq="d8"] > div:last-child,
+[data-drag-from="e1"] [data-sq="e1"] > div:last-child,
+[data-drag-from="e2"] [data-sq="e2"] > div:last-child,
+[data-drag-from="e3"] [data-sq="e3"] > div:last-child,
+[data-drag-from="e4"] [data-sq="e4"] > div:last-child,
+[data-drag-from="e5"] [data-sq="e5"] > div:last-child,
+[data-drag-from="e6"] [data-sq="e6"] > div:last-child,
+[data-drag-from="e7"] [data-sq="e7"] > div:last-child,
+[data-drag-from="e8"] [data-sq="e8"] > div:last-child,
+[data-drag-from="f1"] [data-sq="f1"] > div:last-child,
+[data-drag-from="f2"] [data-sq="f2"] > div:last-child,
+[data-drag-from="f3"] [data-sq="f3"] > div:last-child,
+[data-drag-from="f4"] [data-sq="f4"] > div:last-child,
+[data-drag-from="f5"] [data-sq="f5"] > div:last-child,
+[data-drag-from="f6"] [data-sq="f6"] > div:last-child,
+[data-drag-from="f7"] [data-sq="f7"] > div:last-child,
+[data-drag-from="f8"] [data-sq="f8"] > div:last-child,
+[data-drag-from="g1"] [data-sq="g1"] > div:last-child,
+[data-drag-from="g2"] [data-sq="g2"] > div:last-child,
+[data-drag-from="g3"] [data-sq="g3"] > div:last-child,
+[data-drag-from="g4"] [data-sq="g4"] > div:last-child,
+[data-drag-from="g5"] [data-sq="g5"] > div:last-child,
+[data-drag-from="g6"] [data-sq="g6"] > div:last-child,
+[data-drag-from="g7"] [data-sq="g7"] > div:last-child,
+[data-drag-from="g8"] [data-sq="g8"] > div:last-child,
+[data-drag-from="h1"] [data-sq="h1"] > div:last-child,
+[data-drag-from="h2"] [data-sq="h2"] > div:last-child,
+[data-drag-from="h3"] [data-sq="h3"] > div:last-child,
+[data-drag-from="h4"] [data-sq="h4"] > div:last-child,
+[data-drag-from="h5"] [data-sq="h5"] > div:last-child,
+[data-drag-from="h6"] [data-sq="h6"] > div:last-child,
+[data-drag-from="h7"] [data-sq="h7"] > div:last-child,
+[data-drag-from="h8"] [data-sq="h8"] > div:last-child { opacity: 0 !important; }
 
-@media (max-width: 767px) {
-  .cc-page-bottom-pad { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
-}
-
-.cc-embed-mode > div {
-  padding: 4px 4px 8px !important;
-  max-width: 100vw !important;
-  margin: 0 !important;
+/* Hover ring on drop target — uses ::after overlay, no extra DOM. */
+[data-hover-sq] [data-sq]::after { content: none; }
+[data-hover-sq="a1"] [data-sq="a1"]::after,
+[data-hover-sq="a2"] [data-sq="a2"]::after,
+[data-hover-sq="a3"] [data-sq="a3"]::after,
+[data-hover-sq="a4"] [data-sq="a4"]::after,
+[data-hover-sq="a5"] [data-sq="a5"]::after,
+[data-hover-sq="a6"] [data-sq="a6"]::after,
+[data-hover-sq="a7"] [data-sq="a7"]::after,
+[data-hover-sq="a8"] [data-sq="a8"]::after,
+[data-hover-sq="b1"] [data-sq="b1"]::after,
+[data-hover-sq="b2"] [data-sq="b2"]::after,
+[data-hover-sq="b3"] [data-sq="b3"]::after,
+[data-hover-sq="b4"] [data-sq="b4"]::after,
+[data-hover-sq="b5"] [data-sq="b5"]::after,
+[data-hover-sq="b6"] [data-sq="b6"]::after,
+[data-hover-sq="b7"] [data-sq="b7"]::after,
+[data-hover-sq="b8"] [data-sq="b8"]::after,
+[data-hover-sq="c1"] [data-sq="c1"]::after,
+[data-hover-sq="c2"] [data-sq="c2"]::after,
+[data-hover-sq="c3"] [data-sq="c3"]::after,
+[data-hover-sq="c4"] [data-sq="c4"]::after,
+[data-hover-sq="c5"] [data-sq="c5"]::after,
+[data-hover-sq="c6"] [data-sq="c6"]::after,
+[data-hover-sq="c7"] [data-sq="c7"]::after,
+[data-hover-sq="c8"] [data-sq="c8"]::after,
+[data-hover-sq="d1"] [data-sq="d1"]::after,
+[data-hover-sq="d2"] [data-sq="d2"]::after,
+[data-hover-sq="d3"] [data-sq="d3"]::after,
+[data-hover-sq="d4"] [data-sq="d4"]::after,
+[data-hover-sq="d5"] [data-sq="d5"]::after,
+[data-hover-sq="d6"] [data-sq="d6"]::after,
+[data-hover-sq="d7"] [data-sq="d7"]::after,
+[data-hover-sq="d8"] [data-sq="d8"]::after,
+[data-hover-sq="e1"] [data-sq="e1"]::after,
+[data-hover-sq="e2"] [data-sq="e2"]::after,
+[data-hover-sq="e3"] [data-sq="e3"]::after,
+[data-hover-sq="e4"] [data-sq="e4"]::after,
+[data-hover-sq="e5"] [data-sq="e5"]::after,
+[data-hover-sq="e6"] [data-sq="e6"]::after,
+[data-hover-sq="e7"] [data-sq="e7"]::after,
+[data-hover-sq="e8"] [data-sq="e8"]::after,
+[data-hover-sq="f1"] [data-sq="f1"]::after,
+[data-hover-sq="f2"] [data-sq="f2"]::after,
+[data-hover-sq="f3"] [data-sq="f3"]::after,
+[data-hover-sq="f4"] [data-sq="f4"]::after,
+[data-hover-sq="f5"] [data-sq="f5"]::after,
+[data-hover-sq="f6"] [data-sq="f6"]::after,
+[data-hover-sq="f7"] [data-sq="f7"]::after,
+[data-hover-sq="f8"] [data-sq="f8"]::after,
+[data-hover-sq="g1"] [data-sq="g1"]::after,
+[data-hover-sq="g2"] [data-sq="g2"]::after,
+[data-hover-sq="g3"] [data-sq="g3"]::after,
+[data-hover-sq="g4"] [data-sq="g4"]::after,
+[data-hover-sq="g5"] [data-sq="g5"]::after,
+[data-hover-sq="g6"] [data-sq="g6"]::after,
+[data-hover-sq="g7"] [data-sq="g7"]::after,
+[data-hover-sq="g8"] [data-sq="g8"]::after,
+[data-hover-sq="h1"] [data-sq="h1"]::after,
+[data-hover-sq="h2"] [data-sq="h2"]::after,
+[data-hover-sq="h3"] [data-sq="h3"]::after,
+[data-hover-sq="h4"] [data-sq="h4"]::after,
+[data-hover-sq="h5"] [data-sq="h5"]::after,
+[data-hover-sq="h6"] [data-sq="h6"]::after,
+[data-hover-sq="h7"] [data-sq="h7"]::after,
+[data-hover-sq="h8"] [data-sq="h8"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 4px rgba(5,150,105,0.85), 0 0 18px rgba(5,150,105,0.45);
+  background: rgba(5,150,105,0.18);
+  pointer-events: none;
+  z-index: 4;
 }
 
 /* ── CyberChess utility classes ───────────────────────── */

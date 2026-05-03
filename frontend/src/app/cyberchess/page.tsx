@@ -7,7 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
-import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
+import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet, pieceHtml } from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
@@ -2516,8 +2516,13 @@ export default function CyberChessPage(){
     }catch{return game;}
   },[game,bk,pms,pCol]);
   // ── Board input hook (drag/click/premove) ──────────────────────────────────
-  // Owns drag state, ghost RAF positioning, window pointer listeners,
-  // click-vs-drag distinction, premove + scratch + dice paths, and salvage.
+  const getPieceHtml = useCallback((sq: Square, sizePx: number) => {
+    const board = scratchOn && scratchGame ? scratchGame : (virtualGame || game);
+    const p = board.get(sq);
+    if (!p) return "";
+    return pieceHtml(p.type as any, p.color as any, activePieceSet, sizePx);
+  }, [game, virtualGame, scratchOn, scratchGame, activePieceSet]);
+
   const _bi = useBoardInput({
     game, virtualGame, pCol, on, over, flip, tab,
     sel, vm, pms, pmSel, pmLim,
@@ -2529,6 +2534,7 @@ export default function CyberChessPage(){
     sScratchSel, sScratchVm, sScratchBk, sScratchHist, sScratchLm,
     snd, click,
     filterMovesByDice,
+    getPieceHtml,
   });
   const boardRef = _bi.boardRef;
   const ghostRef = _bi.ghostRef;
@@ -7394,25 +7400,13 @@ export default function CyberChessPage(){
 
     </ProductPageShell>
     {typeof document!=="undefined" && createPortal(
-      (()=>{
-        const gp=ghostFrom?(virtualGame.get(ghostFrom)||game.get(ghostFrom)):null;
-        const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
-        const sz=ghostSizeRef.current;
-        const overIllegal=ghostFrom&&dragHover&&vm.size>0&&!vm.has(dragHover);
-        return <div ref={ghostRef} style={{
-          position:"fixed",left:0,top:0,width:sz,height:sz,
-          transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,
-          pointerEvents:"none",zIndex:99999,willChange:"transform",
-          visibility:ghostFrom&&gp?"visible":"hidden"
-        }}>
-          {gp&&<div style={{width:"100%",height:"100%",opacity:overIllegal?0.55:1,
-            animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",
-            filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))",
-            transition:"opacity 80ms ease"}}>
-            <Piece type={gp.type} color={gp.color}/>
-          </div>}
-        </div>;
-      })(),
+      <div ref={ghostRef} style={{
+        position:"fixed",left:0,top:0,width:0,height:0,
+        transform:"translate3d(-9999px,-9999px,0)",
+        pointerEvents:"none",zIndex:99999,willChange:"transform",
+        visibility:"hidden",
+        filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))",
+      }}/>,
       document.body
     )}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>

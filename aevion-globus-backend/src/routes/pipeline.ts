@@ -45,6 +45,12 @@ const demoRateLimiter = createInMemoryRateLimiter({ max: 10 });
 // 30 / мин / IP — достаточно для легитимного клиента-проверяющего, но
 // отсекает грубый перебор shard-комбинаций (brute-force Lagrange probe).
 const reconstructRateLimiter = createInMemoryRateLimiter({ max: 30 });
+// 20 / мин / IP — /protect writes 4 rows + Ed25519 keygen + OTS calendar
+// hit, so unauthenticated mass-spam is a real DoS vector.
+const protectRateLimiter = createInMemoryRateLimiter({ max: 20 });
+// 30 / мин / IP / certId — /verify increments verifiedCount on every GET,
+// so anyone could pump a cert's count and game the «Most verified» sort.
+const verifyRateLimiter = createInMemoryRateLimiter({ max: 30 });
 
 interface QSignPayload {
   objectId: string;
@@ -368,7 +374,21 @@ async function resolveUser(
  */
 pipelineRouter.post("/protect", async (req, res) => {
   try {
+    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    const rl = protectRateLimiter.check(ip);
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
+      return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
+    }
     await ensureTables();
+
+    // Sane caps on free-text fields — title 500c, description 10kc.
+    if (typeof req.body?.title === "string" && req.body.title.length > 500) {
+      return res.status(400).json({ error: "title must be ≤ 500 characters" });
+    }
+    if (typeof req.body?.description === "string" && req.body.description.length > 10_000) {
+      return res.status(400).json({ error: "description must be ≤ 10,000 characters" });
+    }
 
     const {
       title,
@@ -1069,6 +1089,12 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     await ensureTables();
 
     const { certId } = req.params;
+    // Per-(IP, certId) limiter so the verifiedCount column can't be pumped
+    // by a single attacker — the bureau «Most verified» sort would otherwise
+    // be game-able for free.
+    const ip = (req.ip || req.socket.remoteAddress || "unknown") as string;
+    const rl = verifyRateLimiter.check(`${ip}:${certId}`);
+    const skipIncrement = !rl.allowed;
     const { rows } = await pool.query(
       `SELECT * FROM "IPCertificate" WHERE "id" = $1`,
       [certId],
@@ -1082,11 +1108,13 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
 
     const cert = rows[0];
 
-    /* Increment verify count */
-    await pool.query(
-      `UPDATE "IPCertificate" SET "verifiedCount" = "verifiedCount" + 1, "lastVerifiedAt" = NOW() WHERE "id" = $1`,
-      [certId],
-    );
+    /* Increment verify count — gated by per-(IP, certId) rate limit above. */
+    if (!skipIncrement) {
+      await pool.query(
+        `UPDATE "IPCertificate" SET "verifiedCount" = "verifiedCount" + 1, "lastVerifiedAt" = NOW() WHERE "id" = $1`,
+        [certId],
+      );
+    }
 
     /* Re-verify content hash (canonical: NFC + sorted keys + null defaults) */
     const hashCheck = canonicalContentHash({
@@ -1213,7 +1241,8 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         kind: cert.kind,
         description: cert.description,
         author: cert.authorName || "Anonymous",
-        email: cert.authorEmail || null,
+        // email: intentionally omitted from public response — would let
+        // anyone scrape every author email by enumerating cert IDs.
         location: [cert.city, cert.country].filter(Boolean).join(", ") || null,
         contentHash: cert.contentHash,
         fileHash: cert.fileHash || null,

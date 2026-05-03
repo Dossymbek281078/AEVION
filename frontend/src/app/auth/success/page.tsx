@@ -26,6 +26,12 @@ export default function AuthSuccessPage() {
     try {
       localStorage.setItem(TOKEN_KEY, token);
     } catch {}
+    // Strip token from URL bar before any third-party asset can read it via
+    // Referer, before browser sync ships history to other devices, and before
+    // server access logs would otherwise capture the secret.
+    try {
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch {}
     setStatus("ok");
     // Brief delay so the user can see the confirmation, then bounce home.
     const t = window.setTimeout(() => router.replace("/auth"), 800);

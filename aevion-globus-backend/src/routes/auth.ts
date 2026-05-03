@@ -262,12 +262,12 @@ const emailVerifyRateLimit = rateLimit({
 // Existing endpoints — unchanged contract, additive Tier 2 wiring
 // ─────────────────────────────────────────────────────────────────────────
 
-authRouter.post("/register", async (req, res) => {
+authRouter.post("/register", registerLimiter, async (req, res) => {
   try {
     await ensureAuthTier2Tables();
 
-    const { email, password, name } = req.body || {};
-    if (!email || !password || !name) {
+    const { email: rawEmail, password, name } = req.body || {};
+    if (!rawEmail || !password || !name) {
       return res.status(400).json({
         error: "email, password, name are required",
       });
@@ -279,12 +279,21 @@ authRouter.post("/register", async (req, res) => {
       });
     }
 
+    // Canonicalise email casing on insert — login/reset paths already do
+    // LOWER("email"), but raw insert previously preserved casing, allowing
+    // User@x.com and user@x.com to register as separate accounts.
+    const email = String(rawEmail).trim().toLowerCase();
+
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // MVP heuristic: if first user, make ADMIN. Otherwise USER.
-    const cnt = await pool.query('SELECT COUNT(*)::int as c FROM "AEVIONUser"');
-    const isFirst = Number((cnt.rows?.[0] as { c: number })?.c || 0) === 0;
-    const role = isFirst ? "ADMIN" : "USER";
+    // ADMIN is gated behind an explicit allowlist env var (comma-separated
+    // emails). The legacy "first user wins" heuristic is unsafe in production
+    // because anyone hitting the live site after a fresh deploy gets admin.
+    const adminAllowlist = (process.env.AEVION_ADMIN_EMAILS || "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const role = adminAllowlist.includes(email) ? "ADMIN" : "USER";
 
     const id = crypto.randomUUID();
 

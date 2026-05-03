@@ -28,7 +28,18 @@ export type JwtPayload = {
 };
 
 export function getJwtSecret(): string {
-  return process.env.AUTH_JWT_SECRET || "dev-auth-secret";
+  const secret = process.env.AUTH_JWT_SECRET;
+  // In production we refuse to issue or verify with a default/dev secret —
+  // anything else lets anyone with the OSS code forge tokens.
+  if (process.env.NODE_ENV === "production") {
+    if (!secret || secret.length < 32 || secret.startsWith("dev-")) {
+      throw new Error(
+        "AUTH_JWT_SECRET is missing or weak in production — refusing to mint/verify JWTs",
+      );
+    }
+    return secret;
+  }
+  return secret || "dev-auth-secret";
 }
 
 /** Returns payload or null if missing/invalid token (no HTTP response). */
@@ -37,7 +48,7 @@ export function verifyBearerOptional(req: Request): JwtPayload | null {
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return null;
   try {
-    return jwt.verify(token, getJwtSecret()) as JwtPayload;
+    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
   } catch {
     return null;
   }
@@ -51,7 +62,7 @@ export function verifyBearerOptional(req: Request): JwtPayload | null {
 export function verifyBearerToken(token: string | null | undefined): JwtPayload | null {
   if (!token) return null;
   try {
-    return jwt.verify(token, getJwtSecret()) as JwtPayload;
+    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
   } catch {
     return null;
   }

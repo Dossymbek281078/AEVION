@@ -39,6 +39,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
@@ -266,14 +267,19 @@ authOauthRouter.get("/:provider/callback", async (req, res) => {
     );
     let user = existing.rows?.[0] as { id: string; email: string; name: string; role: string } | undefined;
     if (!user) {
-      const cnt = await pool.query('SELECT COUNT(*)::int as c FROM "AEVIONUser"');
-      const isFirst = Number(cnt.rows?.[0]?.c || 0) === 0;
-      const role = isFirst ? "ADMIN" : "USER";
+      const adminAllowlist = (process.env.AEVION_ADMIN_EMAILS || "")
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+      const role = adminAllowlist.includes(email.toLowerCase()) ? "ADMIN" : "USER";
       const userId = crypto.randomUUID();
-      // Store a random unusable password — OAuth users sign in via the
-      // provider; this lets them later "forgot password" to enable email
-      // login if they want it.
-      const placeholderHash = crypto.randomBytes(48).toString("base64");
+      // Store a bcrypt-hashed random secret so any future code path that
+      // string-compares passwordHash can't be tricked. OAuth users sign in
+      // via the provider; "forgot password" still works to enable email login.
+      const placeholderHash = await bcrypt.hash(
+        crypto.randomBytes(48).toString("base64"),
+        10,
+      );
       await pool.query(
         `INSERT INTO "AEVIONUser" ("id","email","passwordHash","name","role")
          VALUES ($1,$2,$3,$4,$5)`,

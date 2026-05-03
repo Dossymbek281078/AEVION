@@ -4200,6 +4200,17 @@ function RunCard({
                 >
                   ⬇ JSON
                 </a>
+                <a
+                  href={`/qcoreai/compare?a=${run.id}`}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid #c7d2fe",
+                    color: "#4338ca", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Compare this run with another"
+                >
+                  ⚖️ Compare
+                </a>
               </>
             )}
             {!hasAgents && run.finalContent && onLoadDetails && (

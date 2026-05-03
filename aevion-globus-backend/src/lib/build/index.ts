@@ -418,6 +418,73 @@ async function _doEnsureBuildTables(): Promise<void> {
   // every applicant must answer. Replaces the HH "free-form cover
   // letter" with structured signal.
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "questionsJson" TEXT NOT NULL DEFAULT '[]';`);
+  // Urgent hiring (v4): recruiter marks vacancy as urgent with expiry.
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "urgent" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "urgentUntil" TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "urgentNote" TEXT;`);
+  // Salary range (v4): separate min/max for cleaner benchmark display.
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "salaryMin" DOUBLE PRECISION;`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "salaryMax" DOUBLE PRECISION;`);
+
+  // Interview scheduler (v4): recruiter proposes time slots, candidate picks one.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildInterview" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "recruiterId" TEXT NOT NULL,
+      "candidateId" TEXT NOT NULL,
+      "proposedSlots" TEXT NOT NULL DEFAULT '[]',
+      "confirmedSlot" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'PROPOSED',
+      "notes" TEXT,
+      "meetingUrl" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildInterview_app_uniq" ON "BuildInterview" ("applicationId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildInterview_candidate_idx" ON "BuildInterview" ("candidateId", "status");`);
+
+  // Skill badges (v4): verified competency badges on worker profiles.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildSkillTest" (
+      "id" TEXT PRIMARY KEY,
+      "skill" TEXT NOT NULL UNIQUE,
+      "title" TEXT NOT NULL,
+      "description" TEXT,
+      "questionsJson" TEXT NOT NULL DEFAULT '[]',
+      "passMark" INT NOT NULL DEFAULT 70,
+      "active" BOOLEAN NOT NULL DEFAULT TRUE,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildSkillBadge" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "skill" TEXT NOT NULL,
+      "score" INT NOT NULL,
+      "earnedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildSkillBadge_user_skill_uniq" ON "BuildSkillBadge" ("userId","skill");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildSkillBadge_user_idx" ON "BuildSkillBadge" ("userId");`);
+
+  // Reference check (v4): after project DONE, client leaves a structured reference.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildReference" (
+      "id" TEXT PRIMARY KEY,
+      "projectId" TEXT NOT NULL,
+      "workerId" TEXT NOT NULL,
+      "clientId" TEXT NOT NULL,
+      "wouldHireAgain" BOOLEAN,
+      "quality" INT,
+      "reliability" INT,
+      "comment" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildReference_project_worker_uniq" ON "BuildReference" ("projectId","workerId");`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (

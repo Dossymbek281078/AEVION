@@ -69,12 +69,17 @@ vacanciesRouter.post("/", async (req, res) => {
     const questions = Array.isArray(req.body?.questions)
       ? req.body.questions.map((q: unknown) => String(q).trim()).filter((q: string) => q.length > 0 && q.length <= 200).slice(0, 5)
       : [];
+    const salaryMin = req.body?.salaryMin != null ? Number(req.body.salaryMin) || null : null;
+    const salaryMax = req.body?.salaryMax != null ? Number(req.body.salaryMax) || null : null;
+    const urgent = req.body?.urgent === true;
+    const urgentNote = urgent && typeof req.body?.urgentNote === "string" ? req.body.urgentNote.trim().slice(0, 300) || null : null;
+    const urgentUntil = urgent ? new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString() : null;
 
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions)],
+      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson","salaryMin","salaryMax","urgent","urgentUntil","urgentNote")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions), salaryMin, salaryMax, urgent, urgentUntil, urgentNote],
     );
     const row = result.rows[0];
     return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]), questions: safeParseJson(row.questionsJson, [] as string[]) }, 201);
@@ -115,8 +120,11 @@ vacanciesRouter.get("/", async (req, res) => {
       params.push(`%"${req.query.skill.trim().toLowerCase()}"%`);
       where.push(`lower(v."skillsJson") ILIKE $${params.length}`);
     }
+    if (req.query.urgent === "true") {
+      where.push(`v."urgent" = TRUE AND (v."urgentUntil" IS NULL OR v."urgentUntil" > NOW())`);
+    }
 
-    const limitRaw = req.query.limit !== undefined ? vNumber(req.query.limit, "limit", { min: 1, max: 100 }) : { ok: true as const, value: 50 };
+    const limitRaw = req.query.limit !== undefined ? vNumber(req.query.limit, "limit", { min: 1, max: 200 }) : { ok: true as const, value: 50 };
     if (limitRaw.ok === false) return fail(res, 400, limitRaw.error);
     params.push(limitRaw.value);
 
@@ -124,11 +132,11 @@ vacanciesRouter.get("/", async (req, res) => {
     const sortClause =
       sortRaw === "salary" ? `v."salary" DESC NULLS LAST, v."createdAt" DESC`
       : sortRaw === "popular" ? `(SELECT COUNT(*) FROM "BuildApplication" a2 WHERE a2."vacancyId" = v."id") DESC, v."createdAt" DESC`
-      : `((SELECT MAX(b2."endsAt") FROM "BuildBoost" b2 WHERE b2."vacancyId" = v."id" AND b2."endsAt" > NOW())) DESC NULLS LAST, v."createdAt" DESC`;
+      : `v."urgent" DESC, ((SELECT MAX(b2."endsAt") FROM "BuildBoost" b2 WHERE b2."vacancyId" = v."id" AND b2."endsAt" > NOW())) DESC NULLS LAST, v."createdAt" DESC`;
 
     const result = await pool.query(
-      `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
-              v."skillsJson",
+      `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."salaryMin", v."salaryMax", v."salaryCurrency", v."status", v."createdAt",
+              v."skillsJson", v."city", v."urgent", v."urgentUntil", v."urgentNote",
               p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
@@ -297,15 +305,13 @@ vacanciesRouter.post("/:id/boost", async (req, res) => {
   }
 });
 
-// PATCH /api/build/vacancies/:id — toggle status
+// PATCH /api/build/vacancies/:id — update status and/or urgent flag
 vacanciesRouter.patch("/:id", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
     const id = String(req.params.id);
-    const status = vEnum(req.body?.status, "status", VACANCY_STATUSES);
-    if (!status.ok) return fail(res, 400, status.error);
 
     const row = await pool.query(
       `SELECT v."id", p."clientId" FROM "BuildVacancy" v
@@ -315,9 +321,141 @@ vacanciesRouter.patch("/:id", async (req, res) => {
     if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
     if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "only_project_owner_can_update_vacancy");
 
-    const result = await pool.query(`UPDATE "BuildVacancy" SET "status" = $1 WHERE "id" = $2 RETURNING *`, [status.value, id]);
+    const sets: string[] = [];
+    const params: unknown[] = [];
+
+    if (req.body?.status !== undefined) {
+      const status = vEnum(req.body.status, "status", VACANCY_STATUSES);
+      if (!status.ok) return fail(res, 400, status.error);
+      params.push(status.value); sets.push(`"status" = $${params.length}`);
+    }
+    if (req.body?.urgent !== undefined) {
+      const urgent = req.body.urgent === true;
+      params.push(urgent); sets.push(`"urgent" = $${params.length}`);
+      const urgentUntil = urgent ? new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString() : null;
+      params.push(urgentUntil); sets.push(`"urgentUntil" = $${params.length}`);
+      const note = urgent && typeof req.body?.urgentNote === "string" ? req.body.urgentNote.trim().slice(0, 300) || null : null;
+      params.push(note); sets.push(`"urgentNote" = $${params.length}`);
+    }
+    if (sets.length === 0) return fail(res, 400, "no_changes");
+
+    params.push(id);
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET ${sets.join(", ")} WHERE "id" = $${params.length} RETURNING *`,
+      params,
+    );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_update_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/multi-post — clone a vacancy to multiple projects at once.
+vacanciesRouter.post("/multi-post", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const title = vString(req.body?.title, "title", { min: 3, max: 200 });
+    if (!title.ok) return fail(res, 400, title.error);
+    const description = vString(req.body?.description, "description", { min: 10, max: 10_000 });
+    if (!description.ok) return fail(res, 400, description.error);
+    const projectIds = Array.isArray(req.body?.projectIds) ? req.body.projectIds.map((p: unknown) => String(p)).slice(0, 20) : [];
+    if (projectIds.length === 0) return fail(res, 400, "projectIds required");
+
+    const salary = req.body?.salary != null ? Math.max(0, Number(req.body.salary) || 0) : 0;
+    const salaryMin = req.body?.salaryMin != null ? Number(req.body.salaryMin) || null : null;
+    const salaryMax = req.body?.salaryMax != null ? Number(req.body.salaryMax) || null : null;
+    const skills = Array.isArray(req.body?.skills) ? req.body.skills.map((s: unknown) => String(s).trim()).filter(Boolean).slice(0, 30) : [];
+    const salaryCurrency = String(req.body?.salaryCurrency || "RUB").slice(0, 8);
+    const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 100) || null;
+    const questions = Array.isArray(req.body?.questions) ? req.body.questions.map((q: unknown) => String(q).trim()).filter(Boolean).slice(0, 5) : [];
+    const urgent = req.body?.urgent === true;
+    const urgentNote = urgent && typeof req.body?.urgentNote === "string" ? req.body.urgentNote.trim().slice(0, 300) || null : null;
+    const urgentUntil = urgent ? new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString() : null;
+
+    // Verify all projects belong to caller
+    const projects = await pool.query(
+      `SELECT "id" FROM "BuildProject" WHERE "id" = ANY($1::text[]) AND "clientId" = $2`,
+      [projectIds, auth.sub],
+    );
+    if (projects.rowCount !== projectIds.length && auth.role !== "ADMIN") {
+      return fail(res, 403, "some_projects_not_owned");
+    }
+
+    const created: string[] = [];
+    for (const projectId of projectIds) {
+      const id = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson","salaryMin","salaryMax","urgent","urgentUntil","urgentNote")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [id, projectId, title.value, description.value, salary, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions), salaryMin, salaryMax, urgent, urgentUntil, urgentNote],
+      );
+      created.push(id);
+    }
+    return ok(res, { created, count: created.length }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "multi_post_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/notify-workers — push urgent notification to matching workers
+vacanciesRouter.post("/:id/notify-workers", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const vac = await pool.query(
+      `SELECT v.*, p."clientId", p."city" AS "projectCity" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (vac.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (vac.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "forbidden");
+
+    const vacancy = vac.rows[0];
+    const skills: string[] = safeParseJson(vacancy.skillsJson, []);
+    const city = vacancy.city || vacancy.projectCity || null;
+
+    // Find workers with matching skills who have push subscriptions
+    let workerQuery = `
+      SELECT DISTINCT ps."userId"
+      FROM "BuildPushSubscription" ps
+      JOIN "BuildProfile" bp ON bp."userId" = ps."userId"
+      WHERE bp."buildRole" IN ('WORKER','CONTRACTOR') AND bp."openToWork" = TRUE
+    `;
+    const qParams: unknown[] = [];
+    if (city) {
+      qParams.push(`%${city}%`);
+      workerQuery += ` AND (bp."city" ILIKE $${qParams.length} OR bp."preferredLocationsJson" ILIKE $${qParams.length})`;
+    }
+    if (skills.length > 0) {
+      const skillConds = skills.map((s) => {
+        qParams.push(`%${s.toLowerCase()}%`);
+        return `lower(bp."skillsJson") LIKE $${qParams.length}`;
+      });
+      workerQuery += ` AND (${skillConds.join(" OR ")})`;
+    }
+    workerQuery += " LIMIT 500";
+
+    const workers = await pool.query(workerQuery, qParams);
+
+    const { sendToUser } = await import("./push");
+    let sent = 0;
+    for (const w of workers.rows as Array<{ userId: string }>) {
+      const r = await sendToUser(w.userId, {
+        title: `🚨 Срочная вакансия: ${vacancy.title}`,
+        body: `${city ? city + " · " : ""}${vacancy.salary > 0 ? vacancy.salary.toLocaleString("ru-RU") + " ₽" : "Зарплата по договору"}`,
+        url: `/build/vacancy/${id}`,
+        tag: `urgent-${id}`,
+      });
+      sent += r.sent;
+    }
+
+    return ok(res, { notified: workers.rowCount, sent });
+  } catch (err: unknown) {
+    return fail(res, 500, "notify_workers_failed", { details: (err as Error).message });
   }
 });

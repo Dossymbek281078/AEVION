@@ -7,6 +7,8 @@ import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { AiImprove } from "@/components/build/AiImprove";
 import { AiVacancyGen } from "@/components/build/AiVacancyGen";
+import { SalaryBenchmark } from "@/components/build/SalaryBenchmark";
+import { ProjectCertificate } from "@/components/build/ProjectCertificate";
 import {
   EligibleReviewsBlock,
   ReviewsByProjectSection,
@@ -112,7 +114,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <h2 className="text-lg font-semibold text-white">
                 Vacancies <span className="text-slate-500">({vacancies.length})</span>
               </h2>
-              {isOwner && <NewVacancyButton projectId={project.id} onCreated={refresh} />}
+              {isOwner && <NewVacancyButton projectId={project.id} city={project.city} onCreated={refresh} />}
             </div>
             {vacancies.length === 0 ? (
               <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
@@ -168,6 +170,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
 
           {isOwner && <OwnerFileUpload projectId={project.id} onUploaded={refresh} />}
+          {project.status === "DONE" && (
+            <ProjectCertificate projectId={project.id} />
+          )}
         </aside>
       </div>
 
@@ -321,7 +326,7 @@ function OwnerStatusControls({
   );
 }
 
-function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
+function NewVacancyButton({ projectId, city, onCreated }: { projectId: string; city?: string | null; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -330,6 +335,8 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
   const [skillInput, setSkillInput] = useState("");
   const [questions, setQuestions] = useState<string[]>([]);
   const [questionInput, setQuestionInput] = useState("");
+  const [urgent, setUrgent] = useState(false);
+  const [urgentNote, setUrgentNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -365,7 +372,9 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
         salary: salary ? Number(salary) : undefined,
         skills,
         questions,
-      });
+        urgent,
+        urgentNote: urgent ? urgentNote.trim() || undefined : undefined,
+      } as Parameters<typeof buildApi.createVacancy>[0]);
       setOpen(false);
       setTitle("");
       setDescription("");
@@ -441,9 +450,27 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
         step="any"
         value={salary}
         onChange={(e) => setSalary(e.target.value)}
-        placeholder="Monthly salary (USD, optional)"
+        placeholder="Зарплата ₽/мес (необязательно)"
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
+      <SalaryBenchmark skill={skills[0]} city={city} />
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={urgent}
+          onChange={(e) => setUrgent(e.target.checked)}
+          className="h-4 w-4 accent-rose-500"
+        />
+        <span className="text-sm text-slate-300">🚨 Срочная вакансия — нужен работник сегодня/завтра</span>
+      </label>
+      {urgent && (
+        <input
+          value={urgentNote}
+          onChange={(e) => setUrgentNote(e.target.value)}
+          placeholder="Причина срочности (отправим пуш подходящим работникам)"
+          className="w-full rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+        />
+      )}
       <div className="rounded-md border border-white/10 bg-white/5 p-2">
         <div className="mb-1 text-xs text-slate-400">Required skills (Enter to add — used for match score)</div>
         <div className="flex flex-wrap gap-1.5">

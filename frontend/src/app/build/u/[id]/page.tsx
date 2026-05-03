@@ -182,13 +182,33 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+async function loadBadges(id: string): Promise<Array<{ skill: string; score: number; title?: string | null }>> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/build/skill-badges/user/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return [];
+    const json = await res.json() as { success: boolean; data?: { items: Array<{ skill: string; score: number; title?: string | null }> } };
+    return json?.data?.items ?? [];
+  } catch { return []; }
+}
+
+async function loadReferences(id: string): Promise<Array<{ id: string; projectTitle?: string | null; clientName?: string | null; wouldHireAgain: boolean | null; quality: number | null; reliability: number | null; comment: string | null }>> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/build/projects/worker-references/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return [];
+    const json = await res.json() as { success: boolean; data?: { items: Array<{ id: string; projectTitle?: string | null; clientName?: string | null; wouldHireAgain: boolean | null; quality: number | null; reliability: number | null; comment: string | null }> } };
+    return json?.data?.items ?? [];
+  } catch { return []; }
+}
+
 export default async function PublicProfilePage({ params }: Props) {
   const { id } = await params;
-  const [data, photos, docs, salaryStats] = await Promise.all([
+  const [data, photos, docs, salaryStats, badges, references] = await Promise.all([
     load(id),
     loadPhotos(id),
     loadDocs(id),
     load(id).then((d) => d ? loadSalaryStats(d.title, d.city) : null),
+    loadBadges(id),
+    loadReferences(id),
   ]);
 
   if (!data) {
@@ -527,6 +547,46 @@ export default async function PublicProfilePage({ params }: Props) {
         {data.description && (
           <Section title="About">
             <p className="whitespace-pre-wrap text-sm text-slate-300">{data.description}</p>
+          </Section>
+        )}
+
+        {badges.length > 0 && (
+          <Section title="🏅 Верифицированные навыки">
+            <div className="flex flex-wrap gap-2">
+              {badges.map((b) => (
+                <div key={b.skill} className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5">
+                  <span className="text-base">🏅</span>
+                  <span className="text-sm font-semibold text-emerald-200">{b.title || b.skill}</span>
+                  <span className="text-xs text-emerald-400">{b.score}%</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Подтверждено тестом на платформе AEVION QBuild</p>
+          </Section>
+        )}
+
+        {references.length > 0 && (
+          <Section title="🤝 Рекомендации работодателей">
+            <div className="space-y-3">
+              {references.map((ref) => (
+                <div key={ref.id} className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-white">{ref.clientName ?? "Работодатель"}</span>
+                    {ref.projectTitle && <span className="text-xs text-slate-400">· {ref.projectTitle}</span>}
+                    {ref.wouldHireAgain === true && (
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                        ✓ Нанял бы снова
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-3 text-xs text-slate-400 mb-1">
+                    {ref.quality != null && <span>Качество: {ref.quality}/5</span>}
+                    {ref.reliability != null && <span>Надёжность: {ref.reliability}/5</span>}
+                  </div>
+                  {ref.comment && <p className="text-sm text-slate-300 italic">"{ref.comment}"</p>}
+                </div>
+              ))}
+            </div>
           </Section>
         )}
 

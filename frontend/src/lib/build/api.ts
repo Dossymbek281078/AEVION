@@ -1115,6 +1115,71 @@ export const buildApi = {
     call<{ items: LeaderboardRow[]; total: number; kind: string }>(
       "GET", `/api/build/stats/leaderboard?kind=${kind}&limit=${limit}`, undefined, { auth: false },
     ),
+
+  // ── V4: Urgent Hiring ────────────────────────────────────────
+  setUrgent: (vacancyId: string, urgent: boolean, urgentNote?: string) =>
+    call<{ urgent: boolean }>("PATCH", `/api/build/vacancies/${encodeURIComponent(vacancyId)}`, { urgent, urgentNote }),
+  notifyWorkers: (vacancyId: string) =>
+    call<{ notified: number; sent: number }>("POST", `/api/build/vacancies/${encodeURIComponent(vacancyId)}/notify-workers`),
+  multiPost: (input: {
+    title: string; description: string; projectIds: string[];
+    salary?: number; salaryMin?: number; salaryMax?: number; salaryCurrency?: string;
+    skills?: string[]; city?: string | null; questions?: string[];
+    urgent?: boolean; urgentNote?: string;
+  }) => call<{ created: string[]; count: number }>("POST", "/api/build/vacancies/multi-post", input),
+
+  // ── V4: Interview Scheduler ──────────────────────────────────
+  proposeInterview: (input: { applicationId: string; slots: string[]; notes?: string; meetingUrl?: string }) =>
+    call<BuildInterview>("POST", "/api/build/interviews", input),
+  myInterviews: () =>
+    call<{ items: BuildInterview[]; total: number }>("GET", "/api/build/interviews/my"),
+  interviewByApplication: (applicationId: string) =>
+    call<BuildInterview | null>("GET", `/api/build/interviews/by-application/${encodeURIComponent(applicationId)}`),
+  confirmInterview: (id: string, slot: string) =>
+    call<BuildInterview>("PATCH", `/api/build/interviews/${encodeURIComponent(id)}/confirm`, { slot }),
+  cancelInterview: (id: string) =>
+    call<BuildInterview>("PATCH", `/api/build/interviews/${encodeURIComponent(id)}/cancel`),
+
+  // ── V4: Skill Badges ────────────────────────────────────────
+  skillTests: () =>
+    call<{ items: Array<{ id: string; skill: string; title: string; description: string; passMark: number }>; total: number }>(
+      "GET", "/api/build/skill-badges/tests", undefined, { auth: false },
+    ),
+  skillTest: (skill: string) =>
+    call<{ id: string; skill: string; title: string; description: string; passMark: number; questions: Array<{ q: string; options: string[] }> }>(
+      "GET", `/api/build/skill-badges/tests/${encodeURIComponent(skill)}`, undefined, { auth: false },
+    ),
+  submitSkillTest: (skill: string, answers: number[]) =>
+    call<{ score: number; passed: boolean; correct: number; total: number; passMark: number; badge: { skill: string; score: number } | null }>(
+      "POST", `/api/build/skill-badges/tests/${encodeURIComponent(skill)}/submit`, { answers },
+    ),
+  myBadges: () =>
+    call<{ items: Array<BuildSkillBadge>; total: number }>("GET", "/api/build/skill-badges/my"),
+  userBadges: (userId: string) =>
+    call<{ items: Array<BuildSkillBadge>; total: number }>("GET", `/api/build/skill-badges/user/${encodeURIComponent(userId)}`, undefined, { auth: false }),
+
+  // ── V4: Completion Certificate + Reference ──────────────────
+  projectCertificate: (projectId: string) =>
+    call<{ certId: string; project: Record<string, unknown>; client: Record<string, unknown>; workers: Array<Record<string, unknown>>; issuedAt: string; qsignUrl: string }>(
+      "GET", `/api/build/projects/${encodeURIComponent(projectId)}/certificate`,
+    ),
+  leaveReference: (projectId: string, input: { workerId: string; wouldHireAgain: boolean; quality?: number; reliability?: number; comment?: string }) =>
+    call<BuildReference>("POST", `/api/build/projects/${encodeURIComponent(projectId)}/reference`, input),
+  projectReferences: (projectId: string) =>
+    call<{ items: BuildReference[]; total: number }>("GET", `/api/build/projects/${encodeURIComponent(projectId)}/references`),
+  workerReferences: (userId: string) =>
+    call<{ items: BuildReference[]; total: number }>("GET", `/api/build/projects/worker-references/${encodeURIComponent(userId)}`, undefined, { auth: false }),
+
+  // ── V4: Salary Benchmark ─────────────────────────────────────
+  salaryBenchmark: (skill?: string, city?: string) => {
+    const q = new URLSearchParams();
+    if (skill) q.set("skill", skill);
+    if (city) q.set("city", city);
+    const qs = q.toString();
+    return call<{ workerExpectations: { p25: number | null; p50: number | null; p75: number | null; currency: string }; employerOffers: { p25: number | null; p50: number | null; p75: number | null; currency: string }; count: number }>(
+      "GET", `/api/build/salary-stats${qs ? `?${qs}` : ""}`, undefined, { auth: false },
+    );
+  },
 };
 
 // ── V3 types ─────────────────────────────────────────────────────────
@@ -1157,6 +1222,42 @@ export type AiVacancyDraft = {
   salaryMax: number | null;
   salaryCurrency: "RUB" | "KZT" | "USD";
   questions: string[];
+};
+
+export type BuildInterview = {
+  id: string;
+  applicationId: string;
+  recruiterId: string;
+  candidateId: string;
+  slots: string[];
+  confirmedSlot: string | null;
+  status: "PROPOSED" | "CONFIRMED" | "CANCELED";
+  notes: string | null;
+  meetingUrl: string | null;
+  vacancyTitle?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BuildSkillBadge = {
+  skill: string;
+  score: number;
+  earnedAt: string;
+  title?: string | null;
+};
+
+export type BuildReference = {
+  id: string;
+  projectId: string;
+  workerId: string;
+  clientId: string;
+  wouldHireAgain: boolean | null;
+  quality: number | null;
+  reliability: number | null;
+  comment: string | null;
+  createdAt: string;
+  clientName?: string | null;
+  projectTitle?: string | null;
 };
 
 export type LeaderboardRow = {

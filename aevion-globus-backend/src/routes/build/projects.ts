@@ -198,3 +198,126 @@ projectsRouter.patch("/:id", async (req, res) => {
     return fail(res, 500, "project_update_failed", { details: (err as Error).message });
   }
 });
+
+// GET /api/build/projects/:id/certificate — completion certificate (when status=DONE)
+projectsRouter.get("/:id/certificate", async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const proj = await pool.query(
+      `SELECT p.*, u."name" AS "clientName", u."email" AS "clientEmail"
+       FROM "BuildProject" p
+       LEFT JOIN "AEVIONUser" u ON u."id" = p."clientId"
+       WHERE p."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (proj.rowCount === 0) return fail(res, 404, "project_not_found");
+    const p = proj.rows[0] as Record<string, unknown>;
+    if (p.status !== "DONE") return fail(res, 400, "project_not_done");
+
+    const workers = await pool.query(
+      `SELECT DISTINCT u."id", u."name", bp."title" AS "role", bp."city",
+              a."updatedAt" AS "hiredAt"
+       FROM "BuildApplication" a
+       JOIN "AEVIONUser" u ON u."id" = a."userId"
+       LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       WHERE v."projectId" = $1 AND a."status" = 'ACCEPTED'`,
+      [id],
+    );
+
+    const cert = {
+      certId: `QBUILD-${id.slice(0, 8).toUpperCase()}`,
+      project: {
+        id: p.id,
+        title: p.title,
+        city: p.city,
+        budget: p.budget,
+        completedAt: p.updatedAt,
+      },
+      client: { name: p.clientName, email: p.clientEmail },
+      workers: workers.rows,
+      issuedAt: new Date().toISOString(),
+      platform: "AEVION QBuild",
+      qsignUrl: `/qsign?payload=${encodeURIComponent(JSON.stringify({ type: "QBUILD_CERT", projectId: id }))}`,
+    };
+
+    return ok(res, cert);
+  } catch (err: unknown) {
+    return fail(res, 500, "certificate_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/projects/:id/reference — client leaves reference for a worker
+projectsRouter.post("/:id/reference", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const projectId = String(req.params.id);
+
+    const proj = await pool.query(`SELECT "clientId","status" FROM "BuildProject" WHERE "id" = $1 LIMIT 1`, [projectId]);
+    if (proj.rowCount === 0) return fail(res, 404, "project_not_found");
+    if (proj.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "only_client_can_leave_reference");
+    if (proj.rows[0].status !== "DONE") return fail(res, 400, "project_must_be_done");
+
+    const workerId = String(req.body?.workerId || "");
+    if (!workerId) return fail(res, 400, "workerId required");
+    const wouldHireAgain = req.body?.wouldHireAgain === true;
+    const quality = typeof req.body?.quality === "number" ? Math.max(1, Math.min(5, Math.round(req.body.quality))) : null;
+    const reliability = typeof req.body?.reliability === "number" ? Math.max(1, Math.min(5, Math.round(req.body.reliability))) : null;
+    const comment = req.body?.comment == null ? null : String(req.body.comment).trim().slice(0, 1000) || null;
+
+    const id = crypto.randomUUID();
+    try {
+      const r = await pool.query(
+        `INSERT INTO "BuildReference" ("id","projectId","workerId","clientId","wouldHireAgain","quality","reliability","comment")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [id, projectId, workerId, auth.sub, wouldHireAgain, quality, reliability, comment],
+      );
+      return ok(res, r.rows[0], 201);
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === "23505") {
+        const existing = await pool.query(
+          `SELECT * FROM "BuildReference" WHERE "projectId" = $1 AND "workerId" = $2 LIMIT 1`,
+          [projectId, workerId],
+        );
+        return ok(res, existing.rows[0]);
+      }
+      throw err;
+    }
+  } catch (err: unknown) {
+    return fail(res, 500, "reference_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/projects/:id/references — list references for a project
+projectsRouter.get("/:id/references", async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT ref.*, u."name" AS "clientName"
+       FROM "BuildReference" ref
+       LEFT JOIN "AEVIONUser" u ON u."id" = ref."clientId"
+       WHERE ref."projectId" = $1`,
+      [req.params.id],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "references_list_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/references/worker/:id — all references for a worker (public)
+projectsRouter.get("/worker-references/:id", async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT ref.*, u."name" AS "clientName", p."title" AS "projectTitle"
+       FROM "BuildReference" ref
+       LEFT JOIN "AEVIONUser" u ON u."id" = ref."clientId"
+       LEFT JOIN "BuildProject" p ON p."id" = ref."projectId"
+       WHERE ref."workerId" = $1 ORDER BY ref."createdAt" DESC`,
+      [req.params.id],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "worker_references_failed", { details: (err as Error).message });
+  }
+});

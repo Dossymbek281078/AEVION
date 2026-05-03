@@ -21,6 +21,8 @@ const NAV: { href: string; label: string; title?: string }[] = [
   { href: "/build/stories", label: "📣 Stories", title: "Обновления прямо с объекта — фото, прогресс" },
   { href: "/build/payment-calendar", label: "💸 Выплаты", title: "Календарь ожидаемых выплат" },
   { href: "/build/leaderboard", label: "⭐ Топ", title: "Лучшие работодатели и работники платформы" },
+  { href: "/build/interviews", label: "📆 Интервью", title: "Запланированные собеседования" },
+  { href: "/build/skill-tests", label: "🏅 Навыки", title: "Верифицированные тесты навыков — бейджи на профиль" },
   { href: "/build/coach", label: "AI Coach", title: "ИИ-коуч анализирует профиль и подбирает вакансии" },
   { href: "/build/saved", label: "Избранное", title: "Сохранённые вакансии и кандидаты" },
   { href: "/build/create-project", label: "Новый проект", title: "Создать проект и добавить вакансии" },

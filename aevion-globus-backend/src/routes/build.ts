@@ -37,6 +37,9 @@ import { pushRouter } from "./build/push";
 import { safetyBriefingRouter } from "./build/safety-briefing";
 import { storiesRouter } from "./build/stories";
 import { paymentCalendarRouter } from "./build/payment-calendar";
+// v4 killer-feature sub-routers
+import { interviewsRouter } from "./build/interviews";
+import { skillBadgesRouter } from "./build/skill-badges";
 
 export const buildRouter = Router();
 
@@ -97,3 +100,7 @@ buildRouter.use("/push", pushRouter);
 buildRouter.use("/safety-briefing", safetyBriefingRouter);
 buildRouter.use("/stories", storiesRouter);
 buildRouter.use("/payment-calendar", paymentCalendarRouter);
+
+// ── v4 killer features ─────────────────────────────────────────────────
+buildRouter.use("/interviews", interviewsRouter);
+buildRouter.use("/skill-badges", skillBadgesRouter);

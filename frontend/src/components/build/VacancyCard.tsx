@@ -13,6 +13,10 @@ export function VacancyCard({
 }) {
   const isClosed = vacancy.status === "CLOSED";
   const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
+  const isUrgent = !!(vacancy as Record<string, unknown>).urgent && (
+    !(vacancy as Record<string, unknown>).urgentUntil ||
+    new Date(String((vacancy as Record<string, unknown>).urgentUntil)) > new Date()
+  );
   const daysAgo = Math.floor((Date.now() - new Date(vacancy.createdAt).getTime()) / 86400000);
 
   return (
@@ -28,6 +32,11 @@ export function VacancyCard({
     >
       {/* Top badges row */}
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        {isUrgent && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-200 animate-pulse">
+            🚨 Срочно
+          </span>
+        )}
         {isFeatured && (
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
             ★ В топе

@@ -2764,3 +2764,39 @@ export async function deleteRunsBulk(ids: string[], userId: string): Promise<num
   );
   return result.rowCount ?? 0;
 }
+
+export async function getSessionCostSummary(
+  userId: string | null,
+  days = 7,
+  limit = 10
+): Promise<Array<{ id: string; title: string; updatedAt: string; runCount: number; totalCostUsd: number; totalDurationMs: number }>> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(50, limit));
+  const since = new Date(Date.now() - days * 86400_000).toISOString();
+  if (!isDbReady()) {
+    const sessions = Array.from(memSessions.values()).filter((s) => !userId || s.userId === userId);
+    return sessions.slice(0, lim).map((s) => {
+      const runs = Array.from(memRuns.values()).filter((r) => r.sessionId === s.id && r.startedAt >= since);
+      return {
+        id: s.id, title: s.title, updatedAt: s.updatedAt,
+        runCount: runs.length,
+        totalCostUsd: runs.reduce((acc, r) => acc + (r.totalCostUsd ?? 0), 0),
+        totalDurationMs: runs.reduce((acc, r) => acc + (r.totalDurationMs ?? 0), 0),
+      };
+    }).filter((s) => s.runCount > 0).sort((a, b) => b.totalCostUsd - a.totalCostUsd);
+  }
+  const r = await pool.query(
+    `SELECT s."id", s."title", s."updatedAt",
+            COUNT(r."id")::int AS "runCount",
+            COALESCE(SUM(r."totalCostUsd"),0) AS "totalCostUsd",
+            COALESCE(SUM(r."totalDurationMs"),0) AS "totalDurationMs"
+     FROM "QCoreSession" s
+     JOIN "QCoreRun" r ON r."sessionId"=s."id"
+     WHERE s."userId"=$1 AND r."startedAt">=$2
+     GROUP BY s."id", s."title", s."updatedAt"
+     ORDER BY "totalCostUsd" DESC
+     LIMIT $3`,
+    [userId, since, lim]
+  );
+  return r.rows;
+}

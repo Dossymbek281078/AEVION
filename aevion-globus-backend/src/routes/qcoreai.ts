@@ -45,6 +45,7 @@ import {
   addWorkspaceSession,
   createComment,
   deleteRunsBulk,
+  getSessionCostSummary,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -903,6 +904,22 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
     res.json({ breakdown, totalCostUsd, totalTokensIn, totalTokensOut, byProvider });
   } catch (err: any) {
     res.status(500).json({ error: "cost breakdown failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/analytics/sessions?days=7&limit=10
+ * Top sessions by cost for the given window (for the authenticated user).
+ */
+qcoreaiRouter.get("/analytics/sessions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const days = Math.min(90, parseInt(String(req.query.days || "7"), 10) || 7);
+    const limit = Math.min(50, parseInt(String(req.query.limit || "10"), 10) || 10);
+    const items = await getSessionCostSummary(auth?.sub ?? null, days, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "session analytics failed", details: err?.message });
   }
 });
 

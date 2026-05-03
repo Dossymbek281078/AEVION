@@ -180,6 +180,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           {isOwner && <OwnerFileUpload projectId={project.id} onUploaded={refresh} />}
 
           {isOwner && <ProjectAnalyticsWidget projectId={project.id} />}
+
+          {isOwner && (
+            <a
+              href={`/api/build/projects/${encodeURIComponent(project.id)}/export.pdf`}
+              download
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs font-medium text-slate-300 transition hover:bg-white/5"
+            >
+              ⬇ Export project PDF
+            </a>
+          )}
         </aside>
       </div>
 

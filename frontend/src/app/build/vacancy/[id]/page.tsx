@@ -216,6 +216,10 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           {isOwner && <InviteCandidateBlock vacancyId={vacancy.id} />}
 
+          {!isOwner && vacancy.skills && vacancy.skills.length > 0 && (
+            <SalaryMarketWidget skill={vacancy.skills[0]} />
+          )}
+
           {vacancy.clientId && (
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Employer</div>
@@ -604,6 +608,28 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
         )}
         {copied && <span className="text-xs text-emerald-300">Скопировано ✓</span>}
       </div>
+    </div>
+  );
+}
+
+function SalaryMarketWidget({ skill }: { skill: string }) {
+  const [data, setData] = useState<{ median: number; count: number } | null>(null);
+
+  useEffect(() => {
+    buildApi.salaryStats(skill).then(setData).catch(() => {});
+  }, [skill]);
+
+  if (!data || data.count < 3) return null;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        Market salary for «{skill}»
+      </div>
+      <div className="text-xl font-bold text-emerald-300">
+        ${data.median.toLocaleString()} <span className="text-xs font-normal text-slate-400">median</span>
+      </div>
+      <div className="mt-0.5 text-[10px] text-slate-500">Based on {data.count} vacancies on QBuild</div>
     </div>
   );
 }

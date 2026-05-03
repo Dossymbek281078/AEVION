@@ -251,3 +251,75 @@ projectsRouter.get("/:id/analytics", async (req, res) => {
     return fail(res, 500, "project_analytics_failed", { details: (err as Error).message });
   }
 });
+
+// GET /api/build/projects/:id/export.pdf — owner downloads full project report
+projectsRouter.get("/:id/export.pdf", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const [proj, vacs, apps] = await Promise.all([
+      pool.query(
+        `SELECT p.*, u."name" AS "clientName" FROM "BuildProject" p
+         JOIN "AEVIONUser" u ON u."id" = p."clientId"
+         WHERE p."id" = $1 LIMIT 1`,
+        [id],
+      ),
+      pool.query(`SELECT * FROM "BuildVacancy" WHERE "projectId" = $1 ORDER BY "createdAt" ASC`, [id]),
+      pool.query(
+        `SELECT a.*, u."name" AS "applicantName", v."title" AS "vacancyTitle"
+         FROM "BuildApplication" a
+         JOIN "AEVIONUser" u ON u."id" = a."userId"
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         WHERE v."projectId" = $1 ORDER BY a."createdAt" DESC LIMIT 100`,
+        [id],
+      ),
+    ]);
+
+    if (proj.rowCount === 0) return fail(res, 404, "project_not_found");
+    if (proj.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const p = proj.rows[0];
+    const PDFDocument = ((await import("pdfkit")) as unknown as { default: new (opts: object) => PDFKit.PDFDocument }).default;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    await new Promise<void>((resolve) => doc.on("end", resolve));
+
+    // Header
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QBuild — Project Report");
+    doc.fontSize(10).font("Helvetica").fillColor("#64748b").text(`Generated ${new Date().toLocaleDateString("en-GB")} · ${p.status}`);
+    doc.moveDown(0.5);
+    doc.fontSize(16).font("Helvetica-Bold").fillColor("#0f172a").text(p.title || "Untitled project");
+    if (p.city) doc.fontSize(10).font("Helvetica").fillColor("#334155").text(`📍 ${p.city}`);
+    if (p.budget > 0) doc.fontSize(10).fillColor("#334155").text(`Budget: $${Number(p.budget).toLocaleString()}`);
+    doc.fontSize(10).fillColor("#334155").text(`Client: ${p.clientName}`);
+    doc.moveDown(0.5);
+    if (p.description) doc.fontSize(10).fillColor("#0f172a").text(String(p.description), { width: 495 });
+
+    // Vacancies
+    doc.moveDown(1);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text(`Vacancies (${vacs.rowCount})`);
+    for (const v of vacs.rows as { title: string; salary: number; status: string }[]) {
+      doc.fontSize(10).font("Helvetica").fillColor("#334155").text(`• ${v.title} — ${v.status}${v.salary > 0 ? ` · $${v.salary.toLocaleString()}` : ""}`);
+    }
+
+    // Applications
+    doc.moveDown(1);
+    const accepted = (apps.rows as { status: string }[]).filter((a) => a.status === "ACCEPTED");
+    doc.fontSize(13).font("Helvetica-Bold").fillColor("#0f172a").text(`Applications (${apps.rowCount} total, ${accepted.length} accepted)`);
+    for (const a of apps.rows as { applicantName: string; vacancyTitle: string; status: string }[]) {
+      const statusEmoji = a.status === "ACCEPTED" ? "✓" : a.status === "REJECTED" ? "✗" : "○";
+      doc.fontSize(9).font("Helvetica").fillColor("#475569").text(`${statusEmoji} ${a.applicantName} → ${a.vacancyTitle} [${a.status}]`);
+    }
+
+    doc.end();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="qbuild-project-${id.slice(0, 8)}.pdf"`);
+    return res.send(Buffer.concat(chunks));
+  } catch (err: unknown) {
+    return fail(res, 500, "project_export_failed", { details: (err as Error).message });
+  }
+});

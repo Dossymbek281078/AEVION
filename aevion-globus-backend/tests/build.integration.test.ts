@@ -583,3 +583,96 @@ describe("GET /api/build/stats/leaderboard", () => {
     expect(Array.isArray(res.body.data.workers)).toBe(true);
   });
 });
+
+// ── Salary stats ──────────────────────────────────────────────────────────
+
+describe("GET /api/build/stats/salary", () => {
+  test("200, returns salary stats", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ avg: 2000, median: 1800, min: 500, max: 5000, count: 10 }], rowCount: 1,
+    });
+    const res = await request(makeApp()).get("/api/build/stats/salary?skill=AutoCAD");
+    expect(res.status).toBe(200);
+    expect(res.body.data.median).toBe(1800);
+    expect(res.body.data.count).toBe(10);
+  });
+
+  test("200, no skill param returns overall", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ avg: 1500, median: 1200, min: 0, max: 8000, count: 50 }], rowCount: 1,
+    });
+    const res = await request(makeApp()).get("/api/build/stats/salary");
+    expect(res.status).toBe(200);
+    expect(res.body.data.skill).toBeNull();
+  });
+});
+
+// ── Stats hires ───────────────────────────────────────────────────────────
+
+describe("GET /api/build/stats/hires", () => {
+  test("200, returns items array", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp()).get("/api/build/stats/hires");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.items)).toBe(true);
+  });
+});
+
+// ── Popular skills ────────────────────────────────────────────────────────
+
+describe("GET /api/build/vacancies/skills/popular", () => {
+  test("200, returns items with skill + count", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ skillsJson: '["AutoCAD","Welding"]' }, { skillsJson: '["AutoCAD"]' }], rowCount: 2,
+    });
+    const res = await request(makeApp()).get("/api/build/vacancies/skills/popular");
+    expect(res.status).toBe(200);
+    const items = res.body.data.items as { skill: string; count: number }[];
+    expect(Array.isArray(items)).toBe(true);
+    const autocad = items.find((i) => i.skill === "autocad");
+    expect(autocad?.count).toBe(2);
+  });
+});
+
+// ── Project analytics ─────────────────────────────────────────────────────
+
+describe("GET /api/build/projects/:id/analytics", () => {
+  test("401 without token", async () => {
+    const res = await request(makeApp()).get(`/api/build/projects/${PROJECT}/analytics`);
+    expect(res.status).toBe(401);
+  });
+
+  test("200, returns vacancy/application/review stats for owner", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ clientId: CLIENT }], rowCount: 1 }) // auth check
+      .mockResolvedValueOnce({ rows: [{ total: 3, open: 2, closed: 1, totalViews: 120 }], rowCount: 1 }) // vac stats
+      .mockResolvedValueOnce({ rows: [{ total: 10, accepted: 3, pending: 5, rejected: 2 }], rowCount: 1 }) // app stats
+      .mockResolvedValueOnce({ rows: [{ avg: 4.2, count: 5 }], rowCount: 1 }); // reviews
+    const res = await request(makeApp())
+      .get(`/api/build/projects/${PROJECT}/analytics`)
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(200);
+    expect(res.body.data.vacancies.totalViews).toBe(120);
+    expect(res.body.data.applications.accepted).toBe(3);
+  });
+});
+
+// ── Admin bulk close expired ──────────────────────────────────────────────
+
+describe("POST /api/build/admin/vacancies/close-expired", () => {
+  test("403 for non-admin", async () => {
+    const res = await request(makeApp())
+      .post("/api/build/admin/vacancies/close-expired")
+      .set("Authorization", bearerOf(CLIENT));
+    expect(res.status).toBe(403);
+  });
+
+  test("200, returns closed count for admin", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await request(makeApp())
+      .post("/api/build/admin/vacancies/close-expired")
+      .set("Authorization", bearerOf("admin-id", "ADMIN"));
+    expect(res.status).toBe(200);
+    expect(typeof res.body.data.closed).toBe("number");
+  });
+});

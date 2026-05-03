@@ -53,6 +53,7 @@ function Body() {
         <Tile label="Profiles" value={stats ? (stats as AdminStats & { profiles?: { total: number } }).profiles?.total ?? "…" : "…"} />
         <Tile label="Open vacancies" value={stats ? (stats as AdminStats & { vacancies?: { open: number } }).vacancies?.open ?? "…" : "…"} tone="emerald" />
         <Tile label="Pending apps" value={stats ? (stats as AdminStats & { applications?: { pending: number } }).applications?.pending ?? "…" : "…"} tone="amber" />
+        <Tile label="Verify queue" value={stats ? (stats as AdminStats & { verificationPending?: number }).verificationPending ?? 0 : "…"} tone="amber" />
         <Tile
           label="Leads"
           value={stats?.leads.total ?? "…"}

@@ -67,6 +67,7 @@ export default function BuildHomePage() {
   return (
     <BuildShell>
       {hydrated && !token && <LandingHero publicStats={publicStats} />}
+      {hydrated && token && <SmartSuggestions />}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -153,6 +154,51 @@ export default function BuildHomePage() {
         ))}
       </div>
     </BuildShell>
+  );
+}
+
+function SmartSuggestions() {
+  const [items, setItems] = useState<import("@/lib/build/api").BuildVacancy[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    // Load profile to get skills, then suggest matching vacancies
+    import("@/lib/build/api").then(({ buildApi }) => {
+      buildApi.me().then((m) => {
+        const skills = m.profile?.skills ?? [];
+        if (skills.length === 0) { setLoaded(true); return; }
+        const skill = skills[0];
+        return buildApi.listVacancies({ status: "OPEN", skill, limit: 4 }).then((r) => {
+          setItems(r.items);
+          setLoaded(true);
+        });
+      }).catch(() => setLoaded(true));
+    });
+  }, []);
+
+  if (!loaded || items.length === 0) return null;
+
+  return (
+    <div className="mb-8 rounded-xl border border-sky-500/20 bg-sky-500/5 p-5">
+      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-sky-300">
+        ✨ Suggested for you
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((v) => (
+          <Link
+            key={v.id}
+            href={`/build/vacancy/${encodeURIComponent(v.id)}`}
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-sky-500/30 hover:bg-sky-500/5"
+          >
+            <div className="font-semibold text-white text-sm">{v.title}</div>
+            <div className="mt-0.5 text-xs text-slate-400">
+              {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+              {v.city ? ` · ${v.city}` : ""}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
 

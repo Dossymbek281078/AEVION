@@ -23,6 +23,7 @@ adminRouter.get("/stats", async (req, res) => {
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" WHERE "status" = 'PENDING'`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "AEVIONUser" WHERE "createdAt" > NOW() - INTERVAL '7 days'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVerificationRequest" WHERE "status" = 'PENDING'`).catch(() => ({ rows: [{ n: 0 }] })),
     ]);
     return ok(res, {
       leads: { total: Number(r[0].rows[0].n), last7d: Number(r[1].rows[0].n) },
@@ -32,6 +33,7 @@ adminRouter.get("/stats", async (req, res) => {
       profiles: { total: Number(r[7].rows[0].n) },
       vacancies: { open: Number(r[8].rows[0].n) },
       applications: { pending: Number(r[9].rows[0].n) },
+      verificationPending: Number(r[11].rows[0].n),
     });
   } catch (err: unknown) {
     return fail(res, 500, "admin_stats_failed", { details: (err as Error).message });

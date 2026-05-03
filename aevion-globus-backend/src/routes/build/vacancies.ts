@@ -160,6 +160,47 @@ vacanciesRouter.get("/", async (req, res) => {
   }
 });
 
+// POST /api/build/vacancies/:id/invite — owner invites a candidate by email
+vacanciesRouter.post("/:id/invite", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const emailVal = vString(req.body?.email, "email", { min: 3, max: 200 });
+    if (!emailVal.ok) return fail(res, 400, emailVal.error);
+
+    const owner = await pool.query(
+      `SELECT v."title", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const apiKey = process.env.RESEND_API_KEY;
+    if (apiKey) {
+      const recruiter = await pool.query(`SELECT "name" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [auth.sub]);
+      const recruiterName = recruiter.rows[0]?.name || "An employer";
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: "QBuild <noreply@aevion.tech>",
+          to: emailVal.value,
+          subject: `You've been invited to apply — ${owner.rows[0].title}`,
+          text: `Hi,\n\n${recruiterName} thinks you'd be a great fit for:\n\n"${owner.rows[0].title}"\n\nApply here: https://aevion.tech/build/vacancy/${id}\n\n— AEVION QBuild`,
+        }),
+      }).catch(() => {});
+    }
+
+    return ok(res, { invited: true, email: emailVal.value });
+  } catch (err: unknown) {
+    return fail(res, 500, "invite_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/skills/popular — top N skills from open vacancies for autocomplete
 vacanciesRouter.get("/skills/popular", async (_req, res) => {
   try {

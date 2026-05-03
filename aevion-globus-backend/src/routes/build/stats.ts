@@ -5,6 +5,7 @@ export const statsRouter = Router();
 
 // GET /api/build/stats — public platform-wide stats, no auth.
 statsRouter.get("/", async (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
   try {
     const r = await Promise.all([
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
@@ -40,8 +41,34 @@ statsRouter.get("/", async (_req, res) => {
   }
 });
 
+// GET /api/build/stats/hires — recent accepted hires for success-stories page
+statsRouter.get("/hires", async (req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=120, s-maxage=300");
+  try {
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const r = await pool.query(
+      `SELECT v."title" AS "vacancyTitle", p."title" AS "projectTitle", p."city" AS "projectCity",
+              rc."name" AS "recruiterName", wk."name" AS "workerName",
+              v."salary", v."salaryCurrency",
+              a."updatedAt" AS "acceptedAt"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       JOIN "AEVIONUser" rc ON rc."id" = p."clientId"
+       JOIN "AEVIONUser" wk ON wk."id" = a."userId"
+       WHERE a."status" = 'ACCEPTED'
+       ORDER BY a."updatedAt" DESC LIMIT $1`,
+      [limit],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "hires_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/stats/leaderboard — top-rated employers and workers
 statsRouter.get("/leaderboard", async (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
   try {
     const [emps, workers] = await Promise.all([
       pool.query(

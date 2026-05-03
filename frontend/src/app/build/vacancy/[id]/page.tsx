@@ -214,6 +214,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           <ShareVacancyBlock vacancyId={vacancy.id} />
 
+          {isOwner && <InviteCandidateBlock vacancyId={vacancy.id} />}
+
           {vacancy.clientId && (
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Employer</div>
@@ -602,6 +604,52 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
         )}
         {copied && <span className="text-xs text-emerald-300">Скопировано ✓</span>}
       </div>
+    </div>
+  );
+}
+
+function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function invite() {
+    if (!email.trim()) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await buildApi.inviteCandidate(vacancyId, email.trim());
+      setMsg({ ok: true, text: `Invite sent to ${email}` });
+      setEmail("");
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Invite candidate</div>
+      <div className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="candidate@email.com"
+          className="flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
+        />
+        <button
+          onClick={invite}
+          disabled={busy || !email.trim()}
+          className="rounded-md bg-sky-500/20 px-3 py-1.5 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/30 disabled:opacity-50"
+        >
+          {busy ? "…" : "Send"}
+        </button>
+      </div>
+      {msg && (
+        <p className={`mt-1.5 text-xs ${msg.ok ? "text-emerald-300" : "text-rose-300"}`}>{msg.text}</p>
+      )}
     </div>
   );
 }

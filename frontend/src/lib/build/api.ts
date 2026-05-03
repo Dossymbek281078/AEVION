@@ -500,6 +500,10 @@ export const buildApi = {
       files: BuildFile[];
       client: { id: string; email: string; name: string; city: string | null; buildRole: BuildRole | null } | null;
     }>("GET", `/api/build/projects/${encodeURIComponent(id)}`, undefined, { auth: false }),
+  inviteCandidate: (vacancyId: string, email: string) =>
+    call<{ invited: boolean; email: string }>(
+      "POST", `/api/build/vacancies/${encodeURIComponent(vacancyId)}/invite`, { email },
+    ),
   popularSkills: () =>
     call<{ items: { skill: string; count: number }[] }>(
       "GET", "/api/build/vacancies/skills/popular", undefined, { auth: false },

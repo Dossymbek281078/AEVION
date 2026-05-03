@@ -36,6 +36,14 @@ const bureauEmbedRateLimit = rateLimit({
 export const bureauRouter = Router();
 const pool = getPool();
 
+bureauRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "bureau",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 let bureauTablesReady = false;
 
 async function ensureBureauTables(): Promise<void> {

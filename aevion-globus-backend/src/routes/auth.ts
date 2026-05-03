@@ -17,6 +17,14 @@ const loginLimiter = rateLimit({ windowMs: 60000, max: 30 });
 
 const pool = getPool();
 
+authRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "auth",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tier 2 — schema bootstrap
 // ─────────────────────────────────────────────────────────────────────────

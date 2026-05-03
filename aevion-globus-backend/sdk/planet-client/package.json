@@ -1,0 +1,24 @@
+{
+  "name": "@aevion/planet-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for AEVION Planet — compliance pipeline (validators, evidence root, certificates, votes, awards).",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "exports": { ".": { "types": "./index.d.ts", "default": "./index.js" } },
+  "files": ["index.ts", "index.js", "index.d.ts", "README.md"],
+  "keywords": ["aevion", "planet", "compliance", "validators", "awards", "voting"],
+  "homepage": "https://aevion.com/planet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "aevion-globus-backend/sdk/planet-client"
+  },
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "peerDependencies": {},
+  "devDependencies": { "typescript": "^5.0.0" },
+  "scripts": {
+    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck"
+  }
+}

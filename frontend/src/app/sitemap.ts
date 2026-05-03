@@ -27,6 +27,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/aev", changeFrequency: "daily", priority: 0.8 },
   { path: "/aev/tokenomics", changeFrequency: "weekly", priority: 0.7 },
   { path: "/smeta-trainer", changeFrequency: "weekly", priority: 0.75 },
+  { path: "/status", changeFrequency: "hourly", priority: 0.5 },
   { path: "/payments", changeFrequency: "weekly", priority: 0.9 },
   { path: "/payments/links", changeFrequency: "weekly", priority: 0.7 },
   { path: "/payments/methods", changeFrequency: "weekly", priority: 0.7 },

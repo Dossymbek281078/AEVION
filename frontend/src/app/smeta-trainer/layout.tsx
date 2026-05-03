@@ -20,13 +20,26 @@ export default function SmetaTrainerLayout({ children }: { children: ReactNode }
           td, th { border: 1px solid #999 !important; }
           thead { display: table-header-group; }
           body { background: white !important; }
-          @page { margin: 1.5cm; size: A4 landscape; }
+          @page { margin: 1.5cm; size: A4 portrait; }
+          /* Certificate specific */
+          .certificate-page { box-shadow: none !important; }
         }
 
         /* ── Mobile helpers ────────────────────── */
-        @media (max-width: 768px) {
+        @media (max-width: 640px) {
           .mobile-hide { display: none !important; }
           .mobile-full { width: 100% !important; }
+          /* Collapse fixed-width level sidebars on small screens */
+          .level-aside-collapse {
+            display: none;
+          }
+          .level-aside-collapse.open {
+            display: flex;
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            z-index: 40;
+            overflow-y: auto;
+          }
         }
 
         /* ── Table horizontal scroll on small screens ── */
@@ -48,6 +61,14 @@ export default function SmetaTrainerLayout({ children }: { children: ReactNode }
         .dot-1 { animation: pulse-dots 1.4s infinite 0s; }
         .dot-2 { animation: pulse-dots 1.4s infinite 0.2s; }
         .dot-3 { animation: pulse-dots 1.4s infinite 0.4s; }
+
+        /* ── Line clamp polyfill ────────────────── */
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
       `}</style>
       {children}
     </>

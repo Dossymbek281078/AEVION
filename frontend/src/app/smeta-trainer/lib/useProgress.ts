@@ -6,7 +6,7 @@ export type LevelStatus = "locked" | "open" | "in-progress" | "done";
 
 export interface LevelProgress {
   status: LevelStatus;
-  score?: number;       // для уровней с тестами (0–100)
+  score?: number;       // 0–100
   completedAt?: string; // ISO date
   attempts?: number;
 }
@@ -14,6 +14,9 @@ export interface LevelProgress {
 export interface CourseProgress {
   levels: Record<number, LevelProgress>;
   lastVisited?: number;
+  studentName?: string;
+  studentGroup?: string;
+  startedAt?: string;
 }
 
 const KEY = "aevion-smeta-progress-v1";
@@ -43,11 +46,16 @@ function save(p: CourseProgress) {
 }
 
 export function useProgress() {
-  // Всегда начинаем с DEFAULT — localStorage читается в useEffect (fix hydration mismatch)
+  // Начинаем с DEFAULT — localStorage читается в useEffect (fix hydration mismatch)
   const [progress, setProgress] = useState<CourseProgress>(DEFAULT);
 
   useEffect(() => {
-    setProgress(load());
+    const loaded = load();
+    if (!loaded.startedAt) {
+      loaded.startedAt = new Date().toISOString();
+      save(loaded);
+    }
+    setProgress(loaded);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,7 +87,15 @@ export function useProgress() {
     });
   }, []);
 
+  const setStudentInfo = useCallback((name: string, group?: string) => {
+    setProgress((prev) => {
+      const next = { ...prev, studentName: name.trim() || prev.studentName, studentGroup: group?.trim() || prev.studentGroup };
+      save(next);
+      return next;
+    });
+  }, []);
+
   const reset = useCallback(() => { save(DEFAULT); setProgress(DEFAULT); }, []);
 
-  return { progress, setLevel, markVisit, reset };
+  return { progress, setLevel, markVisit, setStudentInfo, reset };
 }

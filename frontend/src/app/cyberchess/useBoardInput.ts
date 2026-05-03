@@ -36,6 +36,20 @@ const FILES = ["a","b","c","d","e","f","g","h"] as const;
 
 type Pre = { from: Square; to: Square; pr?: "q"|"r"|"b"|"n" };
 
+/** Legal premove moves: load virtual position, force user's color to move,
+    return moves verbose for `from` square. Required because chess.js
+    moves() only returns moves for the side currently on move. */
+function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): any[] {
+  try {
+    const g = new Chess(virtualGame.fen());
+    const fp = g.fen().split(" ");
+    fp[1] = pCol;
+    // Reset en-passant + castling can be skipped — chess.js will accept them as-is.
+    try { g.load(fp.join(" ")); } catch { return []; }
+    return g.moves({ square: from, verbose: true });
+  } catch { return []; }
+}
+
 interface BoardInputOptions {
   game: Chess;
   virtualGame: Chess;
@@ -235,13 +249,24 @@ export function useBoardInput(opts: BoardInputOptions) {
       }
       return;
     }
-    // Premove (not user's turn)
+    // Premove (not user's turn) — must be a legal move on the virtual board
+    // with user's color forced on move.
     if (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over) {
       if (o.pmsRef.current.length >= o.pmLim) return;
-      const p = o.virtualGame.get(from) || o.game.get(from);
+      const piece = o.virtualGame.get(from);
+      if (!piece || piece.color !== o.pCol) {
+        o.sPmSel(null); o.sVm(new Set());
+        return;
+      }
+      const legal = premoveLegalMoves(o.virtualGame, o.pCol, from);
+      const matched = legal.find((m: any) => m.to === to);
+      if (!matched) {
+        o.sPmSel(null); o.sVm(new Set());
+        return;
+      }
       const pre: Pre = { from, to };
       const promoRank = o.pCol === "w" ? "8" : "1";
-      if (p?.type === "p" && to[1] === promoRank) pre.pr = "q";
+      if (piece.type === "p" && to[1] === promoRank) pre.pr = "q";
       o.sPms(v => [...v, pre]);
       o.sPmSel(null);
       o.sVm(new Set());
@@ -389,19 +414,28 @@ export function useBoardInput(opts: BoardInputOptions) {
         o.sVm(new Set());
         return;
       }
-      // Priority 2: complete a premove selection.
+      // Priority 2: complete a premove selection — validate legality.
       if (isPM && o.pmSelRef.current && sq !== o.pmSelRef.current && o.pmsRef.current.length < o.pmLim) {
         const f = o.pmSelRef.current;
-        const vp = o.virtualGame.get(f) || o.game.get(f);
-        const pre: Pre = { from: f, to: sq };
-        const pr = o.pCol === "w" ? "8" : "1";
-        if (vp?.type === "p" && sq[1] === pr) pre.pr = "q";
-        e.preventDefault();
-        o.sPms(v => [...v, pre]);
+        const piece = o.virtualGame.get(f);
+        if (piece && piece.color === o.pCol) {
+          const legal = premoveLegalMoves(o.virtualGame, o.pCol, f);
+          const matched = legal.find((m: any) => m.to === sq);
+          if (matched) {
+            const pre: Pre = { from: f, to: sq };
+            const pr = o.pCol === "w" ? "8" : "1";
+            if (piece.type === "p" && sq[1] === pr) pre.pr = "q";
+            e.preventDefault();
+            o.sPms(v => [...v, pre]);
+            o.sPmSel(null);
+            o.sVm(new Set());
+            o.snd("premove");
+            return;
+          }
+        }
+        // Illegal premove target — fall through to normal click handling.
         o.sPmSel(null);
         o.sVm(new Set());
-        o.snd("premove");
-        return;
       }
       // Tap same selected piece again → deselect.
       if (!isPM && o.sel === sq && !o.vm.has(sq)) {
@@ -434,9 +468,11 @@ export function useBoardInput(opts: BoardInputOptions) {
       o.sVm(new Set(filtered.map((m: any) => m.to)));
     } else if (o.on) {
       o.sPmSel(sq);
-      try {
-        o.sVm(new Set(o.virtualGame.moves({ square: sq, verbose: true }).map(m => m.to)));
-      } catch {}
+      // Use forced-turn helper — chess.js moves() returns nothing for the
+      // wrong side. premoveLegalMoves loads virtual FEN with our color
+      // forced on move, so dots reflect actual legal premove targets.
+      const legal = premoveLegalMoves(o.virtualGame, o.pCol, sq);
+      o.sVm(new Set(legal.map((m: any) => m.to)));
     }
   }, [sqFromBoard]);
 

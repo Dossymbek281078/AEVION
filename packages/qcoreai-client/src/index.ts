@@ -1029,6 +1029,126 @@ export class QCoreClient {
     if (cur.status === "error") throw new Error(`eval run failed: ${cur.errorMessage || "unknown"}`);
     return cur;
   }
+
+  /* ─── V8: cost breakdown + analytics export + comments + workspaces ── */
+
+  /** Get per-agent cost breakdown for a run. */
+  async getRunCostBreakdown(runId: string): Promise<{
+    breakdown: Array<{ role: string; stage: string | null; provider: string | null; model: string | null; tokensIn: number | null; tokensOut: number | null; costUsd: number | null; durationMs: number | null }>;
+    totalCostUsd: number;
+    totalTokensIn: number;
+    totalTokensOut: number;
+    byProvider: Record<string, { calls: number; costUsd: number; tokensIn: number; tokensOut: number }>;
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/cost-breakdown`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunCostBreakdown failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get public comments on a shared run (by share token). No auth. */
+  async getSharedRunComments(token: string): Promise<Array<{ id: string; authorName: string; content: string; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/shared/${encodeURIComponent(token)}/comments`));
+    if (!res.ok) throw new Error(`getSharedRunComments failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Post a public comment on a shared run. No auth required. */
+  async postSharedRunComment(token: string, content: string, authorName?: string): Promise<{ id: string; authorName: string; content: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/shared/${encodeURIComponent(token)}/comments`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, authorName: authorName || "Anonymous" }),
+    });
+    if (!res.ok) throw new Error(`postSharedRunComment failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.comment;
+  }
+
+  /** Get monthly spend summary (spentUsd, limitUsd, pct, alerting, exceeded). */
+  async getSpendSummary(): Promise<{ spentUsd: number; limitUsd: number | null; alertAt: number; pct: number | null; alerting: boolean; exceeded: boolean }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/spend-summary"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getSpendSummary failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Set monthly spend limit (USD). */
+  async setSpendLimit(monthlyLimitUsd: number, alertAt = 0.8): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/spend-limit"), {
+      method: "PUT",
+      headers: this.headers(),
+      body: JSON.stringify({ monthlyLimitUsd, alertAt }),
+    });
+    if (!res.ok) throw new Error(`setSpendLimit failed: ${await safeError(res)}`);
+  }
+
+  /** Bulk delete runs (owner-scoped, up to 100 IDs). Returns count deleted. */
+  async deleteRunsBulk(runIds: string[]): Promise<number> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/runs/bulk"), {
+      method: "DELETE",
+      headers: this.headers(),
+      body: JSON.stringify({ runIds }),
+    });
+    if (!res.ok) throw new Error(`deleteRunsBulk failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.deleted ?? 0;
+  }
+
+  /** Create a workspace. */
+  async createWorkspace(name: string, description?: string | null): Promise<{ id: string; name: string; description: string | null; ownerId: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/workspaces"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ name, description }),
+    });
+    if (!res.ok) throw new Error(`createWorkspace failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.workspace;
+  }
+
+  /** List the caller's workspaces. */
+  async listWorkspaces(): Promise<Array<{ id: string; name: string; description: string | null; ownerId: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/workspaces"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listWorkspaces failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Create a scheduled batch. */
+  async createScheduledBatch(opts: {
+    name: string;
+    inputs: string[];
+    strategy?: "sequential" | "parallel" | "debate";
+    schedule?: "once" | "hourly" | "daily" | "weekly";
+    nextRunAt?: string;
+  }): Promise<{ id: string; name: string; schedule: string; nextRunAt: string | null }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/schedules"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createScheduledBatch failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.schedule;
+  }
+
+  /** List the caller's scheduled batches. */
+  async listScheduledBatches(): Promise<Array<{ id: string; name: string; schedule: string; nextRunAt: string | null; lastRunAt: string | null; enabled: boolean }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/schedules"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listScheduledBatches failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Trigger a scheduled batch immediately. */
+  async runScheduleNow(scheduleId: string): Promise<{ batchId: string; runIds: string[] }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/schedules/${encodeURIComponent(scheduleId)}/run-now`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`runScheduleNow failed: ${await safeError(res)}`);
+    return res.json();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -1,5 +1,6 @@
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
+import { ProgressSync } from "./components/ProgressSync";
 
 export const metadata = {
   title: "Сметный тренажёр РК — AEVION",
@@ -21,6 +22,7 @@ export default function SmetaTrainerPage() {
         </div>
       </header>
       <OnboardingModal />
+      <ProgressSync />
       <LevelHome />
     </main>
   );

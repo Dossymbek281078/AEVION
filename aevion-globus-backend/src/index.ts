@@ -36,6 +36,7 @@ import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { planetPayoutsRouter } from "./routes/planetPayouts";
 import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
+import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -395,6 +396,9 @@ app.use("/api/bank", bankTestRouter);
 
 // Prometheus metrics. Public unless METRICS_TOKEN is set in env.
 app.use("/api/metrics", metricsRouter);
+
+// Smeta Trainer — progress sync + LMS webhook
+app.use("/api/smeta-trainer", smetaTrainerRouter);
 
 app.use(
   (

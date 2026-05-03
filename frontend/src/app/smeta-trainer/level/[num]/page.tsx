@@ -1,8 +1,11 @@
+import { Suspense } from "react";
 import { Level1View } from "../../components/Level1View";
 import { Level2View } from "../../components/Level2View";
 import { Level3View } from "../../components/Level3View";
 import { Level4View } from "../../components/Level4View";
 import { Level5View } from "../../components/Level5View";
+import { ProgressSync } from "../../components/ProgressSync";
+import { LmsActivator } from "../../components/LmsActivator";
 import Link from "next/link";
 import { LEVELS } from "../../lib/levels";
 
@@ -59,11 +62,19 @@ export default function LevelPage({ params }: Props) {
               }`}
               title={`${l.role} — ${l.title}`}
             >
-              {l.icon} <span className="hidden sm:inline">{l.num}</span><span className="sm:hidden">{l.num}</span>
+              {l.icon} {l.num}
             </Link>
           ))}
         </div>
       </header>
+
+      {/* Sync + LMS activator (render nothing, side-effects only) */}
+      <ProgressSync />
+      {levelDef && (
+        <Suspense>
+          <LmsActivator currentLevel={numInt} />
+        </Suspense>
+      )}
 
       {/* Контент уровня */}
       <div className="flex-1 overflow-hidden">

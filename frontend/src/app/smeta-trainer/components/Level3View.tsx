@@ -5,6 +5,7 @@ import { LEVEL1_LSR } from "../lib/levels";
 import { calcLsr } from "../lib/calc";
 import { useProgress } from "../lib/useProgress";
 import { Ks2View } from "./Ks2View";
+import { ZachetBanner } from "./ZachetBanner";
 
 const DOPRABOTY_LSR = {
   ...LEVEL1_LSR,
@@ -37,16 +38,20 @@ type KsTab = "main" | "dop";
 export function Level3View() {
   const { setLevel } = useProgress();
   const [ksTab, setKsTab] = useState<KsTab>("main");
+  const [toastVisible, setToastVisible] = useState(false);
   const mainCalc = useMemo(() => calcLsr(LEVEL1_LSR), []);
   const dopCalc = useMemo(() => calcLsr(DOPRABOTY_LSR), []);
 
   function handleZachet() {
     setLevel(3, { status: "done", completedAt: new Date().toISOString() });
-    alert("Уровень 3 зачтён! КС-2 за 6 месяцев + допработы.");
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 5000);
   }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+      <ZachetBanner visible={toastVisible} level={3} passed />
+
       {/* Левая панель — роль ПТО */}
       <aside className="w-64 shrink-0 bg-slate-900 text-white flex flex-col overflow-auto">
         <div className="px-4 py-3 border-b border-slate-700">

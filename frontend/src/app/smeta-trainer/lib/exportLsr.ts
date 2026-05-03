@@ -90,15 +90,22 @@ export function exportToJson(lsr: Lsr): void {
   downloadText(json, `smeta_backup_${lsr.id}.json`, "application/json");
 }
 
-export function importFromJson(file: File, onLoad: (lsr: Lsr) => void): void {
+export function importFromJson(
+  file: File,
+  onLoad: (lsr: Lsr) => void,
+  onError?: (msg: string) => void,
+): void {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
       const lsr = JSON.parse(e.target?.result as string) as Lsr;
-      if (lsr.id && Array.isArray(lsr.sections)) onLoad(lsr);
-      else alert("Неверный формат файла — ожидается JSON сметы AEVION.");
+      if (lsr.id && Array.isArray(lsr.sections)) {
+        onLoad(lsr);
+      } else {
+        onError?.("Неверный формат файла — ожидается JSON сметы AEVION.");
+      }
     } catch {
-      alert("Ошибка чтения файла.");
+      onError?.("Ошибка чтения файла.");
     }
   };
   reader.readAsText(file);

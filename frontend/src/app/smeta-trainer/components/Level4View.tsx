@@ -6,6 +6,7 @@ import { useProgress } from "../lib/useProgress";
 import { LsrFormHeader } from "./LsrFormHeader";
 import { LsrFormTable } from "./LsrFormTable";
 import { SsrView } from "./SsrView";
+import { ZachetBanner } from "./ZachetBanner";
 import type { Lsr } from "../lib/types";
 
 // 4 ЛСР для полного комплекта
@@ -115,6 +116,7 @@ const SSR_CHAPTERS = [
 export function Level4View() {
   const { setLevel } = useProgress();
   const [activeView, setActiveView] = useState<"ssr" | string>("ssr");
+  const [toastVisible, setToastVisible] = useState(false);
 
   const calcs = useMemo(
     () => Object.fromEntries(LSRS.map((l) => [l.id, calcLsr(l)])),
@@ -125,7 +127,8 @@ export function Level4View() {
 
   function handleZachet() {
     setLevel(4, { status: "done", completedAt: new Date().toISOString() });
-    alert("Уровень 4 зачтён! Полный комплект ПСД.");
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 5000);
   }
 
   const activeLsr = LSRS.find((l) => l.id === activeView);
@@ -133,6 +136,8 @@ export function Level4View() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+      <ZachetBanner visible={toastVisible} level={4} passed />
+
       {/* Навигация по документам */}
       <aside className="w-64 shrink-0 bg-slate-800 text-white flex flex-col overflow-auto">
         <div className="px-4 py-3 border-b border-slate-700">

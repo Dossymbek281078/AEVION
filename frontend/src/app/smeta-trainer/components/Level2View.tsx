@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useProgress } from "../lib/useProgress";
 import { applyDemoFill } from "../lib/demoFill";
 import { LsrEditor } from "./LsrEditor";
+import { ZachetBanner } from "./ZachetBanner";
 import type { Lsr } from "../lib/types";
 
 const INITIAL_LSR: Lsr = {
@@ -51,6 +52,7 @@ export function Level2View() {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [lsr, setLsr] = useState(INITIAL_LSR);
   const [demoApplied, setDemoApplied] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
 
   function handleDemo() {
     if (confirm("Заполнить смету примером? Текущие данные будут заменены демо-данными.")) {
@@ -72,11 +74,14 @@ export function Level2View() {
 
   function handleZachet() {
     setLevel(2, { status: "done", completedAt: new Date().toISOString() });
-    alert("Уровень 2 зачтён! Переходите на уровень 3 (ПТО).");
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 5000);
   }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+      <ZachetBanner visible={toastVisible} level={2} passed />
+
       {/* Task card боковая */}
       {showTask && (
         <aside className="w-72 shrink-0 bg-amber-50 border-r border-amber-200 flex flex-col overflow-auto">

@@ -4,6 +4,7 @@ import { getApiBase } from "@/lib/apiBase";
 import { VideoEmbed } from "@/components/build/VideoEmbed";
 import { StarsDisplay } from "@/components/build/StarRating";
 import { ReviewsByUserSection } from "@/components/build/ReviewsSection";
+import { ShareProfileButton } from "@/components/build/ShareProfileButton";
 
 export const dynamic = "force-dynamic";
 
@@ -149,14 +150,17 @@ export default async function PublicProfilePage({ params }: Props) {
           <Link href="/build/talent" className="text-xs text-slate-400 hover:underline">
             ← Talent search
           </Link>
-          <a
-            href={`${getApiBase()}/api/build/profiles/${encodeURIComponent(id)}/resume.pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
-          >
-            ⬇ Resume PDF
-          </a>
+          <div className="flex items-center gap-2">
+            <ShareProfileButton userId={id} />
+            <a
+              href={`${getApiBase()}/api/build/profiles/${encodeURIComponent(id)}/resume.pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
+            >
+              ⬇ Resume PDF
+            </a>
+          </div>
         </div>
 
         <header className="mt-3 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 sm:flex-row sm:items-start sm:gap-6">
@@ -459,3 +463,4 @@ function Avatar({ src, name }: { src: string | null; name: string }) {
     </div>
   );
 }
+

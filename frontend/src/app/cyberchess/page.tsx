@@ -6,7 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
-import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet, pieceHtml } from "./Pieces";
+import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
@@ -2515,13 +2515,6 @@ export default function CyberChessPage(){
     }catch{return game;}
   },[game,bk,pms,pCol]);
   // ── Board input hook (drag/click/premove) ──────────────────────────────────
-  const getPieceHtml = useCallback((sq: Square, sizePx: number) => {
-    const board = scratchOn && scratchGame ? scratchGame : (virtualGame || game);
-    const p = board.get(sq);
-    if (!p) return "";
-    return pieceHtml(p.type as any, p.color as any, activePieceSet, sizePx);
-  }, [game, virtualGame, scratchOn, scratchGame, activePieceSet]);
-
   const _bi = useBoardInput({
     game, virtualGame, pCol, on, over, flip, tab,
     sel, vm, pms, pmSel, pmLim,
@@ -2533,7 +2526,6 @@ export default function CyberChessPage(){
     sScratchSel, sScratchVm, sScratchBk, sScratchHist, sScratchLm,
     snd, click,
     filterMovesByDice,
-    getPieceHtml,
   });
   const boardRef = _bi.boardRef;
   const ghostRef = _bi.ghostRef;
@@ -3545,7 +3537,17 @@ export default function CyberChessPage(){
                 const ringCol=isLegal?"#10b981":"#94a3b8";
                 return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
               })()}
-              {/* Ghost portaled to document.body — see end of return. */}
+              {/* Ghost piece following cursor during drag */}
+              {ghostFrom&&(()=>{
+                const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
+                if(!gp)return null;
+                const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
+                return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(56px,9vw,88px)",height:"clamp(56px,9vw,88px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform"}}>
+                  <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}>
+                    <Piece type={gp.type as any} color={gp.color as any}/>
+                  </div>
+                </div>;
+              })()}
 
               {/* Move slide animation — летящая фигура поверх board */}
               {moveAnim&&(()=>{

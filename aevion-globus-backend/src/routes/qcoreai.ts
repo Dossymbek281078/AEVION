@@ -16,7 +16,7 @@ import {
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { rateLimit } from "../lib/rateLimit";
-import { isWebhookConfigured, notifyRunCompleted } from "../lib/qcoreWebhook";
+import { isWebhookConfigured, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
   fetchQRightAttachments,
   normalizeAttachmentIds,
@@ -34,6 +34,7 @@ import {
   buildThreadContext,
   createEvalRun,
   createEvalSuite,
+  createBatch,
   createPrompt,
   createRun,
   createSharedPreset,
@@ -44,6 +45,10 @@ import {
   deleteSharedPreset,
   deleteTemplate,
   ensureSession,
+  getBatch,
+  listBatches,
+  listBatchRuns,
+  updateBatchProgress,
   finishRun,
   forkPrompt,
   getAnalytics,
@@ -1016,6 +1021,27 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   const guidanceBus = await getGuidanceBus();
   await guidanceBus.register(runId);
 
+  // V7-W: fire run.started webhook (non-blocking, no-op if no webhook configured).
+  void (async () => {
+    let userOverrideWh: { url: string; secret: string | null } | null = null;
+    if (userId) {
+      try {
+        const cfg = await getUserWebhook(userId);
+        if (cfg) userOverrideWh = { url: cfg.url, secret: cfg.secret };
+      } catch { /* ignore */ }
+    }
+    if (userOverrideWh || isWebhookConfigured()) {
+      await notifyEvent({
+        event: "run.started",
+        runId,
+        sessionId,
+        strategy,
+        userInput,
+        startedAt: new Date().toISOString(),
+      }, userOverrideWh);
+    }
+  })();
+
   // When continuing a thread, walk up the parent chain for precise context;
   // otherwise use the session's recent runs (less precise but good for new threads).
   const history = parentRun
@@ -1098,6 +1124,24 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
             ordering: ordering++,
           });
           pendingByKey.delete(key);
+          // V7-W: fire agent.turn webhook (fire-and-forget, low priority).
+          if (isWebhookConfigured() || userId) {
+            void notifyEvent({
+              event: "agent.turn",
+              runId,
+              sessionId,
+              role: evt.role,
+              stage: evt.stage,
+              instance: evt.instance ?? null,
+              provider: meta?.provider ?? "",
+              model: meta?.model ?? "",
+              tokensIn: evt.tokensIn ?? null,
+              tokensOut: evt.tokensOut ?? null,
+              durationMs: evt.durationMs,
+              costUsd: agentCost,
+              contentPreview: (evt.content || "").slice(0, 500),
+            });
+          }
           break;
         }
         case "final":
@@ -1587,6 +1631,203 @@ qcoreaiRouter.post("/templates/:id/use", async (req, res) => {
     res.json({ template: updated || t });
   } catch (err: any) {
     res.status(500).json({ error: "use template failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Batch runs — run N prompts against a shared config in one call.
+   POST /api/qcoreai/batch  — create + start (async)
+   GET  /api/qcoreai/batches — list user's batches
+   GET  /api/qcoreai/batch/:id — status + per-run details
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const MAX_BATCH_INPUTS = 20;
+const BATCH_CONCURRENCY = 5;
+
+/**
+ * Run a single batch item to completion (no SSE — persist-only).
+ * Returns { costUsd, status } for progress tracking.
+ */
+async function runBatchItem(opts: {
+  runId: string;
+  sessionId: string;
+  batchId: string;
+  userInput: string;
+  strategy: PipelineStrategy;
+  overrides: { analyst?: AgentOverride; writer?: AgentOverride; writerB?: AgentOverride; critic?: AgentOverride };
+  maxRevisions: number;
+  maxCostUsd?: number;
+}): Promise<{ costUsd: number; status: "done" | "error" }> {
+  let ordering = 2;
+  let finalContent: string | null = null;
+  let hadError: string | null = null;
+  let totalCost = 0;
+  const pendingByKey = new Map<string, { provider: string; model: string }>();
+  const stageKey = (role: string, stage: string, inst?: string) => `${role}|${stage}|${inst || ""}`;
+
+  try {
+    for await (const evt of runMultiAgent({
+      userInput: opts.userInput,
+      strategy: opts.strategy,
+      overrides: opts.overrides,
+      maxRevisions: opts.maxRevisions,
+      history: [],
+      guidanceProvider: () => [],
+      maxCostUsd: opts.maxCostUsd,
+    }) as AsyncGenerator<OrchestratorEvent>) {
+      switch (evt.type) {
+        case "agent_start":
+          pendingByKey.set(stageKey(evt.role, evt.stage, evt.instance), { provider: evt.provider, model: evt.model });
+          break;
+        case "agent_end": {
+          const meta = pendingByKey.get(stageKey(evt.role, evt.stage, evt.instance));
+          const agentCost = typeof evt.costUsd === "number"
+            ? evt.costUsd
+            : costUsd(meta?.provider || "", meta?.model || "", evt.tokensIn, evt.tokensOut);
+          totalCost += agentCost;
+          await insertMessage({
+            runId: opts.runId, role: evt.role, stage: evt.stage,
+            instance: evt.instance ?? null, provider: meta?.provider ?? null,
+            model: meta?.model ?? null, content: evt.content,
+            tokensIn: evt.tokensIn ?? null, tokensOut: evt.tokensOut ?? null,
+            durationMs: evt.durationMs, costUsd: agentCost, ordering: ordering++,
+          });
+          pendingByKey.delete(stageKey(evt.role, evt.stage, evt.instance));
+          break;
+        }
+        case "final":
+          finalContent = evt.content;
+          await insertMessage({ runId: opts.runId, role: "final", content: evt.content, ordering: ordering++ });
+          break;
+        case "error":
+          hadError = evt.message;
+          break;
+        default:
+          break;
+      }
+    }
+  } catch (e: any) {
+    hadError = e?.message || "batch item crashed";
+  }
+
+  const status = hadError && !finalContent ? "error" : "done";
+  await finishRun(opts.runId, status, {
+    error: hadError,
+    finalContent,
+    totalCostUsd: totalCost,
+  });
+  return { costUsd: totalCost, status };
+}
+
+const batchLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qcore-batch", message: "Too many batch runs. Try again in a minute." });
+
+qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+
+    const rawInputs = req.body?.inputs;
+    if (!Array.isArray(rawInputs) || rawInputs.length === 0) {
+      return res.status(400).json({ error: "inputs[] required (array of strings)" });
+    }
+    const inputs: string[] = rawInputs
+      .filter((s: unknown) => typeof s === "string" && s.trim())
+      .map((s: string) => s.trim().slice(0, 16000))
+      .slice(0, MAX_BATCH_INPUTS);
+    if (inputs.length === 0) return res.status(400).json({ error: "no valid inputs" });
+
+    const strategy: PipelineStrategy =
+      req.body?.strategy === "parallel" ? "parallel" :
+      req.body?.strategy === "debate" ? "debate" : "sequential";
+    const maxRevisions = typeof req.body?.maxRevisions === "number"
+      ? Math.max(0, Math.min(2, req.body.maxRevisions)) : 0;
+    let maxCostUsd: number | undefined;
+    if (typeof req.body?.maxCostUsd === "number" && isFinite(req.body.maxCostUsd) && req.body.maxCostUsd > 0) {
+      maxCostUsd = Math.min(50, req.body.maxCostUsd);
+    }
+    const overrides = {
+      analyst: parseAgentOverride(req.body?.overrides?.analyst),
+      writer: parseAgentOverride(req.body?.overrides?.writer),
+      writerB: parseAgentOverride(req.body?.overrides?.writerB),
+      critic: parseAgentOverride(req.body?.overrides?.critic),
+    };
+
+    const batch = await createBatch({ ownerUserId: auth.sub, strategy, overrides, inputs });
+
+    // Create a single shared session for all batch runs.
+    const session = await ensureSession({ userId: auth.sub, seedTitle: `Batch: ${inputs[0].slice(0, 40)}` });
+
+    // Persist all run stubs so clients can see them immediately.
+    const runIds: string[] = [];
+    for (const input of inputs) {
+      const run = await createRun({
+        sessionId: session.id, userInput: input,
+        agentConfig: { strategy, maxRevisions, overrides }, strategy, batchId: batch.id,
+      });
+      await insertMessage({ runId: run.id, role: "user", content: input, ordering: 0 });
+      runIds.push(run.id);
+    }
+
+    res.status(202).json({ batchId: batch.id, sessionId: session.id, totalRuns: inputs.length, runIds });
+
+    // Fire all items in background with a concurrency cap.
+    void (async () => {
+      const queue = runIds.map((runId, i) => ({ runId, input: inputs[i] }));
+      let active = 0;
+      let idx = 0;
+      await new Promise<void>((resolve) => {
+        const next = () => {
+          if (idx >= queue.length && active === 0) { resolve(); return; }
+          while (active < BATCH_CONCURRENCY && idx < queue.length) {
+            const { runId, input } = queue[idx++];
+            active++;
+            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions, maxCostUsd })
+              .then(({ costUsd: c, status }) => updateBatchProgress(batch.id, {
+                completedDelta: status === "done" ? 1 : 0,
+                failedDelta: status === "error" ? 1 : 0,
+                costDelta: c,
+              }))
+              .catch(() => updateBatchProgress(batch.id, { failedDelta: 1 }))
+              .finally(() => { active--; next(); });
+          }
+        };
+        next();
+      });
+    })();
+  } catch (err: any) {
+    if (!res.headersSent) res.status(500).json({ error: "batch create failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/batches", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listBatches(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list batches failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/batch/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const batch = await getBatch(req.params.id);
+    if (!batch) return res.status(404).json({ error: "batch not found" });
+    if (batch.ownerUserId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    const runs = await listBatchRuns(req.params.id);
+    // Slim down runs for the summary view — full content is in GET /runs/:id
+    const runSummaries = runs.map((r) => ({
+      id: r.id, userInput: r.userInput, status: r.status,
+      totalCostUsd: r.totalCostUsd,
+      finalContentPreview: r.finalContent ? r.finalContent.slice(0, 300) : null,
+      startedAt: r.startedAt, finishedAt: r.finishedAt,
+    }));
+    res.json({ batch, runs: runSummaries });
+  } catch (err: any) {
+    res.status(500).json({ error: "get batch failed", details: err?.message });
   }
 });
 

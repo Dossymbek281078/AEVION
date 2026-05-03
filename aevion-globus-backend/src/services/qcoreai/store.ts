@@ -44,6 +44,7 @@ export type RunRow = {
   tags?: string[];
   parentRunId?: string | null;
   threadId?: string | null;
+  batchId?: string | null;
 };
 
 export type SearchHit = {
@@ -290,12 +291,13 @@ export async function createRun(opts: {
   strategy?: string | null;
   parentRunId?: string | null;
   threadId?: string | null;
+  batchId?: string | null;
 }): Promise<RunRow> {
   await ensureQCoreTables(pool);
   const id = crypto.randomUUID();
   const parentRunId = opts.parentRunId ?? null;
-  // threadId = root run's id. If continuing a thread, inherit; else this run IS the root.
   const threadId = opts.threadId ?? (parentRunId ? null : id);
+  const batchId = opts.batchId ?? null;
 
   if (!isDbReady()) {
     const row: RunRow = {
@@ -314,6 +316,7 @@ export async function createRun(opts: {
       finishedAt: null,
       parentRunId,
       threadId: threadId ?? id,
+      batchId,
     };
     memRuns.set(id, row);
     memMessagesByRun.set(id, []);
@@ -321,8 +324,8 @@ export async function createRun(opts: {
   }
 
   const r = await pool.query(
-    `INSERT INTO "QCoreRun" ("id","sessionId","userInput","status","agentConfig","strategy","parentRunId","threadId")
-     VALUES ($1,$2,$3,'running',$4,$5,$6,$7)
+    `INSERT INTO "QCoreRun" ("id","sessionId","userInput","status","agentConfig","strategy","parentRunId","threadId","batchId")
+     VALUES ($1,$2,$3,'running',$4,$5,$6,$7,$8)
      RETURNING *`,
     [
       id,
@@ -332,6 +335,7 @@ export async function createRun(opts: {
       opts.strategy ?? null,
       parentRunId,
       threadId ?? id,
+      batchId,
     ]
   );
   return r.rows[0] as RunRow;
@@ -2065,4 +2069,138 @@ export async function useTemplate(id: string): Promise<TemplateRow | null> {
     [id]
   );
   return (r.rows[0] as TemplateRow) || null;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Batch runs — send N prompts against a shared config in one call.
+   QCoreBatch tracks aggregate progress; each individual run links back via
+   batchId. The route fires runs asynchronously (max 5 parallel) and polls
+   completedRuns + failedRuns to determine when the batch is done.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type BatchRow = {
+  id: string;
+  ownerUserId: string;
+  strategy: string;
+  overrides: Record<string, unknown>;
+  status: "running" | "done" | "error";
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  totalCostUsd: number;
+  inputs: string[];
+  createdAt: string;
+  completedAt: string | null;
+};
+
+const memBatches = new Map<string, BatchRow>();
+
+export async function createBatch(opts: {
+  ownerUserId: string;
+  strategy?: string;
+  overrides?: Record<string, unknown>;
+  inputs: string[];
+}): Promise<BatchRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: BatchRow = {
+    id,
+    ownerUserId: opts.ownerUserId,
+    strategy: opts.strategy || "sequential",
+    overrides: opts.overrides ?? {},
+    status: "running",
+    totalRuns: opts.inputs.length,
+    completedRuns: 0,
+    failedRuns: 0,
+    totalCostUsd: 0,
+    inputs: opts.inputs,
+    createdAt: nowIso(),
+    completedAt: null,
+  };
+
+  if (!isDbReady()) {
+    memBatches.set(id, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreBatch"
+       ("id","ownerUserId","strategy","overrides","status","totalRuns","inputs")
+     VALUES ($1,$2,$3,$4,'running',$5,$6)
+     RETURNING *`,
+    [id, row.ownerUserId, row.strategy, JSON.stringify(row.overrides), row.totalRuns, JSON.stringify(row.inputs)]
+  );
+  return r.rows[0] as BatchRow;
+}
+
+export async function getBatch(id: string): Promise<BatchRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memBatches.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreBatch" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as BatchRow) || null;
+}
+
+export async function listBatches(ownerUserId: string, limit = 30): Promise<BatchRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memBatches.values())
+      .filter((b) => b.ownerUserId === ownerUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreBatch" WHERE "ownerUserId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
+    [ownerUserId, limit]
+  );
+  return r.rows as BatchRow[];
+}
+
+export async function updateBatchProgress(
+  batchId: string,
+  delta: { completedDelta?: number; failedDelta?: number; costDelta?: number }
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const b = memBatches.get(batchId);
+    if (!b) return;
+    b.completedRuns += delta.completedDelta ?? 0;
+    b.failedRuns += delta.failedDelta ?? 0;
+    b.totalCostUsd += delta.costDelta ?? 0;
+    if (b.completedRuns + b.failedRuns >= b.totalRuns) {
+      b.status = b.failedRuns === b.totalRuns ? "error" : "done";
+      b.completedAt = nowIso();
+    }
+    return;
+  }
+  await pool.query(
+    `UPDATE "QCoreBatch"
+       SET "completedRuns" = "completedRuns" + $2,
+           "failedRuns"    = "failedRuns"    + $3,
+           "totalCostUsd"  = "totalCostUsd"  + $4,
+           "status" = CASE
+             WHEN "completedRuns" + $2 + "failedRuns" + $3 >= "totalRuns"
+             THEN CASE WHEN "completedRuns" + $2 = 0 THEN 'error' ELSE 'done' END
+             ELSE 'running'
+           END,
+           "completedAt" = CASE
+             WHEN "completedRuns" + $2 + "failedRuns" + $3 >= "totalRuns" THEN NOW()
+             ELSE NULL
+           END
+     WHERE "id" = $1`,
+    [batchId, delta.completedDelta ?? 0, delta.failedDelta ?? 0, delta.costDelta ?? 0]
+  );
+}
+
+export async function listBatchRuns(batchId: string): Promise<RunRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memRuns.values())
+      .filter((r) => r.batchId === batchId)
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRun" WHERE "batchId"=$1 ORDER BY "startedAt" ASC`,
+    [batchId]
+  );
+  return r.rows as RunRow[];
 }

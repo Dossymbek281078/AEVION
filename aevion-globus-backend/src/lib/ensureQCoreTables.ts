@@ -234,6 +234,32 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       ON "QCorePrompt" ("isPublic", "importCount" DESC, "updatedAt" DESC);
   `);
 
+  // Batch runs — run N prompts against the same agent config in one call.
+  // Each individual QCoreRun gets a batchId FK; the batch row tracks aggregate progress.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreBatch" (
+      "id"             TEXT PRIMARY KEY,
+      "ownerUserId"    TEXT NOT NULL,
+      "strategy"       TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "status"         TEXT NOT NULL DEFAULT 'running',
+      "totalRuns"      INTEGER NOT NULL DEFAULT 0,
+      "completedRuns"  INTEGER NOT NULL DEFAULT 0,
+      "failedRuns"     INTEGER NOT NULL DEFAULT 0,
+      "totalCostUsd"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "inputs"         JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "completedAt"    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QCoreBatch_owner_created_idx" ON "QCoreBatch" ("ownerUserId", "createdAt" DESC);`
+  );
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "batchId" TEXT;`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "QCoreRun_batchId_idx" ON "QCoreRun" ("batchId") WHERE "batchId" IS NOT NULL;`
+  );
+
   // QCoreRun — threading: parentRunId links to the previous run in a thread;
   // threadId is always set to the root run's id so we can retrieve all replies
   // in one WHERE clause. The root run has parentRunId=NULL, threadId=its own id.

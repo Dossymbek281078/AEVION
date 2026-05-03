@@ -80,6 +80,8 @@ export type RunOptions = {
   maxCostUsd?: number;
   /** Run tags (drives /tags chip strip and /search). */
   tags?: string[];
+  /** V7-T: continue an existing run in a thread — passes full thread context as history. */
+  continueFromRunId?: string;
 };
 
 export type OrchestratorEvent =
@@ -191,6 +193,69 @@ export type Prompt = {
   updatedAt: string;
 };
 
+/* ─── V7 types ────────────────────────────────────────────────────────── */
+
+export type Template = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  input: string;
+  strategy: Strategy;
+  overrides: Partial<Record<ConfigRoleId, AgentOverride>>;
+  isPublic: boolean;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ThreadRun = {
+  id: string;
+  userInput: string;
+  finalContent: string | null;
+  status: string;
+  strategy: string | null;
+  totalCostUsd: number | null;
+  startedAt: string;
+  parentRunId: string | null;
+  threadId: string | null;
+};
+
+export type Thread = {
+  threadId: string;
+  runs: ThreadRun[];
+};
+
+export type BatchRunSummary = {
+  id: string;
+  userInput: string;
+  status: string;
+  totalCostUsd: number | null;
+  finalContentPreview: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
+export type Batch = {
+  id: string;
+  ownerUserId: string;
+  strategy: Strategy;
+  overrides: Partial<Record<ConfigRoleId, AgentOverride>>;
+  status: "running" | "done" | "error";
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  totalCostUsd: number;
+  inputs: string[];
+  createdAt: string;
+  completedAt: string | null;
+};
+
+export type BatchDetail = {
+  batch: Batch;
+  runs: BatchRunSummary[];
+};
+
 export type ClientOptions = {
   /** Base URL of the AEVION backend, e.g. "https://api.aevion.io". */
   baseUrl: string;
@@ -267,15 +332,16 @@ export class QCoreClient {
   /** Async-iterate the SSE stream; yields each OrchestratorEvent. */
   async *runStream(opts: RunOptions): AsyncGenerator<OrchestratorEvent> {
     const body = JSON.stringify({
-      userInput: opts.input,
+      input: opts.input,
       strategy: opts.strategy || "sequential",
       overrides: opts.overrides,
       promptOverrides: opts.promptOverrides,
       maxRevisions: opts.maxRevisions,
       sessionId: opts.sessionId,
-      attachmentIds: opts.attachmentIds,
+      qrightAttachmentIds: opts.attachmentIds,
       maxCostUsd: opts.maxCostUsd,
       tags: opts.tags,
+      continueFromRunId: opts.continueFromRunId,
     });
 
     const res = await this.fetchImpl(this.url("/api/qcoreai/multi-agent"), {
@@ -762,6 +828,180 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`forkPrompt failed: ${await safeError(res)}`);
     const data = await res.json();
     return data.prompt;
+  }
+
+  /* ─── V7-T: Threading ─────────────────────────────────────────────────── */
+
+  /**
+   * Fetch the full conversation thread for a run (root + all replies, ordered oldest→newest).
+   * @example
+   * ```ts
+   * const thread = await client.getThread(runId);
+   * console.log(`Thread has ${thread.runs.length} turns`);
+   * ```
+   */
+  async getThread(runId: string): Promise<Thread> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/thread`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getThread failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V7-Tmpl: Templates ───────────────────────────────────────────────── */
+
+  /** Create a named template from an input + strategy + overrides bundle. */
+  async createTemplate(opts: {
+    name: string;
+    input: string;
+    description?: string | null;
+    strategy?: Strategy;
+    overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+    isPublic?: boolean;
+  }): Promise<Template> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/templates"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /** List the caller's own templates (most recently updated first). */
+  async listTemplates(limit = 50): Promise<Template[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listTemplates failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Browse community public templates (sorted by useCount desc). */
+  async listPublicTemplates(query?: string, limit = 30): Promise<Template[]> {
+    const p = new URLSearchParams();
+    if (query) p.set("q", query);
+    p.set("limit", String(limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/public?${p}`));
+    if (!res.ok) throw new Error(`listPublicTemplates failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Fetch a template by id. Throws 403 if it's private and not yours. */
+  async getTemplate(id: string): Promise<Template> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /** Update template metadata. Owner-only. */
+  async updateTemplate(
+    id: string,
+    patch: Partial<Pick<Template, "name" | "description" | "input" | "strategy" | "overrides" | "isPublic">>
+  ): Promise<Template> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updateTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /** Delete a template. Owner-only. */
+  async deleteTemplate(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deleteTemplate failed: ${await safeError(res)}`);
+  }
+
+  /** Apply a template (increments useCount). Returns updated template. */
+  async useTemplate(id: string): Promise<Template> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}/use`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`useTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /* ─── V7-B: Batch runs ─────────────────────────────────────────────────── */
+
+  /**
+   * Submit N prompts as a batch. Runs execute asynchronously (up to 5 parallel).
+   * Returns immediately with batchId — poll with `getBatch` or use `waitForBatch`.
+   * @example
+   * ```ts
+   * const { batchId } = await client.createBatch({
+   *   inputs: ["Summarise X", "Compare Y vs Z", "Critique this: …"],
+   *   strategy: "sequential",
+   * });
+   * const result = await client.waitForBatch(batchId);
+   * console.log(`Done: ${result.batch.completedRuns}/${result.batch.totalRuns} runs`);
+   * ```
+   */
+  async createBatch(opts: {
+    inputs: string[];
+    strategy?: Strategy;
+    overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+    maxCostUsd?: number;
+  }): Promise<{ batchId: string; sessionId: string; totalRuns: number; runIds: string[] }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/batch"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createBatch failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get current batch status and per-run summaries. */
+  async getBatch(id: string): Promise<BatchDetail> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/batch/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getBatch failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List the caller's recent batches. */
+  async listBatches(limit = 30): Promise<Batch[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/batches?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listBatches failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /**
+   * Poll until a batch finishes (status = "done" | "error") or timeout.
+   * Polls every `pollMs` (default 3000ms).
+   */
+  async waitForBatch(
+    id: string,
+    opts: { pollMs?: number; timeoutMs?: number } = {}
+  ): Promise<BatchDetail> {
+    const pollMs = Math.max(500, opts.pollMs ?? 3000);
+    const timeoutMs = opts.timeoutMs ?? 600_000;
+    const deadline = Date.now() + timeoutMs;
+    let cur = await this.getBatch(id);
+    while (cur.batch.status === "running") {
+      if (Date.now() > deadline) throw new Error(`waitForBatch timed out after ${timeoutMs}ms`);
+      await new Promise((r) => setTimeout(r, pollMs));
+      cur = await this.getBatch(id);
+    }
+    return cur;
   }
 
   /**

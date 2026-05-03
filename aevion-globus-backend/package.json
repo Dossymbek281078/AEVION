@@ -12,6 +12,7 @@
     "smoke:tier3": "node scripts/tier3-smoke.js",
     "smoke:all": "node scripts/all-smokes.js",
     "smoke:read-only": "READ_ONLY=1 node scripts/all-smokes.js",
+    "check:prod-env": "node scripts/check-prod-env.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "test": "vitest run",
     "test:watch": "vitest"

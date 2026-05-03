@@ -8,11 +8,11 @@ import { useBuildAuth } from "@/lib/build/auth";
 
 export default function AdminIndexPage() {
   return (
-    <RequireAuth>
-      <BuildShell>
+    <BuildShell>
+      <RequireAuth>
         <Body />
-      </BuildShell>
-    </RequireAuth>
+      </RequireAuth>
+    </BuildShell>
   );
 }
 

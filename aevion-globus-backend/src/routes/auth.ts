@@ -6,24 +6,10 @@ import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
-import { sendVerificationEmail, sendPasswordResetEmail } from "../lib/build/email";
 
 export const authRouter = Router();
 
-// 10 register attempts per minute per IP, refilled gradually.
-// Login gets a more relaxed bucket (legitimate password retries are common).
-const registerLimiter = rateLimit({ windowMs: 60000, max: 10 });
-const loginLimiter = rateLimit({ windowMs: 60000, max: 30 });
-
 const pool = getPool();
-
-authRouter.get("/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    service: "auth",
-    timestamp: new Date().toISOString(),
-  });
-});
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tier 2 — schema bootstrap
@@ -170,29 +156,9 @@ function requireAuth(req: any, res: any) {
 async function requireAuthStrict(req: any, res: any) {
   const payload = requireAuth(req, res);
   if (!payload) return null;
-  await ensureAuthTier2Tables();
-
-  // tokenVersion check (sign-out-everywhere): the AEVIONUser row carries a
-  // monotonic counter; bumping it MUST invalidate every previously-issued
-  // token. Tokens minted before the column existed have no `tv` claim and
-  // are accepted only while the stored counter is still 0.
-  const tokenTv = ((payload as any).tv as number | undefined) ?? 0;
-  const userRow = await pool.query(
-    `SELECT "tokenVersion" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`,
-    [payload.sub],
-  );
-  if (userRow.rowCount === 0) {
-    res.status(401).json({ error: "user no longer exists" });
-    return null;
-  }
-  const dbTv = Number((userRow.rows[0] as { tokenVersion: number | null })?.tokenVersion ?? 0);
-  if (tokenTv !== dbTv) {
-    res.status(401).json({ error: "session signed out everywhere — sign in again" });
-    return null;
-  }
-
   const sid = (payload as any).sid as string | undefined;
   if (!sid) return payload;
+  await ensureAuthTier2Tables();
   const r = await pool.query(
     `SELECT "revokedAt" FROM "AuthSession" WHERE "id" = $1 AND "userId" = $2 LIMIT 1`,
     [sid, payload.sub]
@@ -291,12 +257,12 @@ const emailVerifyRateLimit = rateLimit({
 // Existing endpoints — unchanged contract, additive Tier 2 wiring
 // ─────────────────────────────────────────────────────────────────────────
 
-authRouter.post("/register", registerLimiter, async (req, res) => {
+authRouter.post("/register", async (req, res) => {
   try {
     await ensureAuthTier2Tables();
 
-    const { email: rawEmail, password, name } = req.body || {};
-    if (!rawEmail || !password || !name) {
+    const { email, password, name } = req.body || {};
+    if (!email || !password || !name) {
       return res.status(400).json({
         error: "email, password, name are required",
       });
@@ -308,21 +274,12 @@ authRouter.post("/register", registerLimiter, async (req, res) => {
       });
     }
 
-    // Canonicalise email casing on insert — login/reset paths already do
-    // LOWER("email"), but raw insert previously preserved casing, allowing
-    // User@x.com and user@x.com to register as separate accounts.
-    const email = String(rawEmail).trim().toLowerCase();
-
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // ADMIN is gated behind an explicit allowlist env var (comma-separated
-    // emails). The legacy "first user wins" heuristic is unsafe in production
-    // because anyone hitting the live site after a fresh deploy gets admin.
-    const adminAllowlist = (process.env.AEVION_ADMIN_EMAILS || "")
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-    const role = adminAllowlist.includes(email) ? "ADMIN" : "USER";
+    // MVP heuristic: if first user, make ADMIN. Otherwise USER.
+    const cnt = await pool.query('SELECT COUNT(*)::int as c FROM "AEVIONUser"');
+    const isFirst = Number((cnt.rows?.[0] as { c: number })?.c || 0) === 0;
+    const role = isFirst ? "ADMIN" : "USER";
 
     const id = crypto.randomUUID();
 
@@ -335,20 +292,6 @@ authRouter.post("/register", registerLimiter, async (req, res) => {
     const sid = await createSession(id, req);
     const token = signToken({ sub: id, email, role, sid });
     recordAuthAudit(id, "register", req, { sid });
-
-    // Send verification email async — fire-and-forget, don't block response.
-    void (async () => {
-      try {
-        const minted = await mintToken();
-        const vId = crypto.randomUUID();
-        const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
-        await pool.query(
-          `INSERT INTO "EmailVerifyToken" ("id","userId","tokenHash","expiresAt") VALUES ($1,$2,$3,$4)`,
-          [vId, id, minted.hash, expiresAt],
-        );
-        sendVerificationEmail({ to: email, name: String(name), token: minted.plaintext });
-      } catch { /**/ }
-    })();
 
     res.status(201).json({
       token,
@@ -672,11 +615,6 @@ authRouter.post("/password/reset/request", passwordResetRateLimit, async (req, r
         [id, userId, minted.hash, expiresAt]
       );
       recordAuthAudit(userId, "password.reset.request", req, { tokenId: id });
-
-      // Send reset email — fire-and-forget
-      const nameQ = await pool.query(`SELECT "name" FROM "AEVIONUser" WHERE "id" = $1`, [userId]);
-      const userName = (nameQ.rows[0] as { name: string } | undefined)?.name ?? "пользователь";
-      sendPasswordResetEmail({ to: email, name: userName, token: plaintext! });
     } else {
       // Audit the attempt anyway — useful for spotting enumeration sweeps.
       recordAuthAudit(null, "password.reset.request.unknown", req, { email });
@@ -786,11 +724,6 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
       [id, user.id, minted.hash, expiresAt]
     );
     recordAuthAudit(user.id, "email.verify.request", req, { tokenId: id });
-
-    // Get user name for the email
-    const nameQ = await pool.query(`SELECT "name" FROM "AEVIONUser" WHERE "id" = $1`, [user.id]);
-    const userName = (nameQ.rows[0] as { name: string } | undefined)?.name ?? "пользователь";
-    sendVerificationEmail({ to: user.email, name: userName, token: minted.plaintext });
 
     const dev = process.env.NODE_ENV !== "production";
     res.json({

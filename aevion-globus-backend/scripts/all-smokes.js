@@ -37,6 +37,7 @@ const SMOKES = [
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).
+  { name: "auth-replay", script: "auth-replay-smoke.js", readOnly: false },
   { name: "qsign-v2", script: "qsign-v2-smoke.js", readOnly: false },
   { name: "qshield", script: "qshield-smoke.js", readOnly: false },
   { name: "aev", script: "aev-smoke.js", readOnly: false },

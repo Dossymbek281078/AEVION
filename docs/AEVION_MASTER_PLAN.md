@@ -166,7 +166,8 @@ parity + docs/runbook.
 | ID | Task | Owner | Dependency |
 |---|---|---|---|
 | ~~P1-1~~ | ~~Wire Sentry into bureau / awards / planet / pipeline / qright~~ ✅ done in PR #86 | aevion-backend-modules | — |
-| P1-2 | Land PR #80 (security H4+M5+M6) and write smoke for tokenVersion replay rejection | aevion-backend-modules | review |
+| ~~P1-2~~ | ~~Security H4+M5+M6 (tokenVersion + OAuth sid + cookie append)~~ ✅ done in PR #80 + polish in #85 | aevion-backend-modules | — |
+| P1-2b | Smoke for tokenVersion replay rejection (auth) — verify the security fix end-to-end | aevion-backend-modules | — |
 | P1-3 | Daily smoke runner — wrap `aev-smoke + qsign-v2-smoke + qshield-smoke + build-smoke + tier3-smoke + payments-smoke` into one orchestrator + GitHub Actions cron | aevion-backend-modules | P0-4 |
 | P1-4 | Backup/restore drill — run `scripts/backup.mjs`, verify restore on a fresh DB, document RTO/RPO | aevion-backend-modules | — |
 | P1-5 | Sentry alert rules + dashboard URL in `docs/RUNBOOK.md` | aevion-backend-modules | P1-1 |
@@ -260,8 +261,11 @@ this section. It maps to § 4 phases and is updated as work lands.
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-03  #87  docs(plan): mark P1-1 done — Sentry coverage shipped
 2026-05-03  #86  feat(platform): Sentry coverage on 5 platform routes (P1-1 done)
+2026-05-03  #85  feat: mobile reflow + curl quick-start in /developers
 2026-05-03  #82  docs(plan): AEVION_MASTER_PLAN.md — cross-window source of truth
+2026-05-03  #80  fix(security): H4 tokenVersion + M5 OAuth sid + M6 cookie append (P1-2 done)
 2026-05-03  #78  feat(platform): og:image + ETag/304 on sitemaps+RSS + Tier 3 smoke
 2026-05-03  #76  feat(smeta-trainer): port AEVION construction estimation training app
 2026-05-03  #75  feat(bureau): Phase B+C — org members, notary registry, Notarized tier

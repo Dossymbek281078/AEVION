@@ -41,14 +41,23 @@ import {
   createPrompt,
   createRun,
   createSharedPreset,
+  addWorkspaceMember,
+  addWorkspaceSession,
   createComment,
+  deleteRunsBulk,
   createTemplate,
   createWorkspace,
+  deleteWorkspace,
   getWorkspace,
   listComments,
   listPromptAudit,
+  listWorkspaceMembers,
+  listWorkspaceSessions,
   listWorkspaces,
   logPromptAudit,
+  removeWorkspaceMember,
+  removeWorkspaceSession,
+  updateWorkspace,
   deleteEvalSuite,
   deletePrompt,
   deleteSession,
@@ -204,6 +213,7 @@ qcoreaiRouter.get("/health", async (_req, res) => {
   } catch { /* tolerable */ }
   res.json({
     service: "qcoreai",
+    version: "8.0.0",
     ok: true,
     configuredProviders: configured.map((p) => p.id),
     totalProviders: providers.length,
@@ -211,8 +221,14 @@ qcoreaiRouter.get("/health", async (_req, res) => {
     storage: isDbReady() ? "postgres" : "in-memory",
     storageError: isDbReady() ? null : getDbError(),
     webhookConfigured: isWebhookConfigured(),
+    webhookEvents: ["run.started", "agent.turn", "run.completed"],
     guidanceBus: guidanceBusKind,
     liveRuns,
+    features: [
+      "multi-agent", "eval-harness", "prompts-library", "threading",
+      "templates", "batch-runs", "scheduled-batches", "spend-limits",
+      "workspaces", "run-comments", "prompt-audit", "sdk-v0.4",
+    ],
     at: new Date().toISOString(),
   });
 });
@@ -521,6 +537,32 @@ qcoreaiRouter.get("/shared/:token", sharedLimiter, async (req, res) => {
   }
 });
 
+/** GET /shared/:token/comments — list public comments on a shared run. */
+qcoreaiRouter.get("/shared/:token/comments", sharedLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const items = await listComments(run.id);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list comments failed", details: err?.message });
+  }
+});
+
+/** POST /shared/:token/comments — post a public comment (no auth needed). */
+qcoreaiRouter.post("/shared/:token/comments", sharedLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const { authorName, content } = req.body || {};
+    if (!content?.trim()) return res.status(400).json({ error: "content required" });
+    const comment = await createComment(run.id, authorName || "Anonymous", content);
+    res.status(201).json({ comment });
+  } catch (err: any) {
+    res.status(500).json({ error: "create comment failed", details: err?.message });
+  }
+});
+
 /* ═══════════════════════════════════════════════════════════════════════
    Analytics
    ═══════════════════════════════════════════════════════════════════════ */
@@ -819,6 +861,69 @@ qcoreaiRouter.get("/analytics/timeseries", async (req, res) => {
     res.json({ items, days });
   } catch (err: any) {
     res.status(500).json({ error: "timeseries failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/runs/:id/cost-breakdown
+ * Per-agent cost + token breakdown for a run. Useful for the shared detail page
+ * and for SDK consumers building cost attribution tools.
+ */
+qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
+  try {
+    const run = await getRun(String(req.params.id));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const messages = await listMessages(run.id);
+    const agentMessages = messages.filter(
+      (m) => ["analyst", "writer", "critic", "pro", "con", "moderator", "judge"].includes(m.role)
+    );
+    const breakdown = agentMessages.map((m) => ({
+      role: m.role,
+      stage: m.stage,
+      instance: m.instance,
+      provider: m.provider,
+      model: m.model,
+      tokensIn: m.tokensIn,
+      tokensOut: m.tokensOut,
+      costUsd: m.costUsd,
+      durationMs: m.durationMs,
+    }));
+    const totalCostUsd = breakdown.reduce((s, b) => s + (b.costUsd ?? 0), 0);
+    const totalTokensIn = breakdown.reduce((s, b) => s + (b.tokensIn ?? 0), 0);
+    const totalTokensOut = breakdown.reduce((s, b) => s + (b.tokensOut ?? 0), 0);
+    const byProvider: Record<string, { calls: number; costUsd: number; tokensIn: number; tokensOut: number }> = {};
+    for (const b of breakdown) {
+      const p = b.provider || "unknown";
+      if (!byProvider[p]) byProvider[p] = { calls: 0, costUsd: 0, tokensIn: 0, tokensOut: 0 };
+      byProvider[p].calls++;
+      byProvider[p].costUsd += b.costUsd ?? 0;
+      byProvider[p].tokensIn += b.tokensIn ?? 0;
+      byProvider[p].tokensOut += b.tokensOut ?? 0;
+    }
+    res.json({ breakdown, totalCostUsd, totalTokensIn, totalTokensOut, byProvider });
+  } catch (err: any) {
+    res.status(500).json({ error: "cost breakdown failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/analytics/export?format=csv&days=30
+ * Export analytics as CSV for spreadsheet analysis.
+ */
+qcoreaiRouter.get("/analytics/export", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const days = Math.min(90, parseInt(String(req.query.days || "30"), 10) || 30);
+    const data = await getCostTimeseries(auth?.sub ?? null, days);
+    const csv = [
+      "date,runs,costUsd",
+      ...data.map((r: any) => `${r.date},${r.runs},${(r.costUsd ?? 0).toFixed(6)}`),
+    ].join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="qcoreai-analytics-${days}d.csv"`);
+    res.send(csv);
+  } catch (err: any) {
+    res.status(500).json({ error: "analytics export failed", details: err?.message });
   }
 });
 
@@ -2161,6 +2266,27 @@ export function startScheduler(): void {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Bulk delete runs — DELETE /api/qcoreai/runs/bulk
+   Body: { runIds: string[] }. Only deletes runs the caller owns.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.delete("/runs/bulk", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const rawIds = req.body?.runIds;
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      return res.status(400).json({ error: "runIds[] required" });
+    }
+    const ids: string[] = rawIds.slice(0, 100).filter((x: unknown) => typeof x === "string");
+    const deleted = await deleteRunsBulk(ids, auth.sub);
+    res.json({ deleted });
+  } catch (err: any) {
+    res.status(500).json({ error: "bulk delete failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    Run comments — public, no auth required
    POST /api/qcoreai/runs/:id/comments
    GET  /api/qcoreai/runs/:id/comments
@@ -2238,12 +2364,114 @@ qcoreaiRouter.get("/workspaces/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const workspace = await getWorkspace(req.params.id);
+    const workspace = await getWorkspace(String(req.params.id));
     if (!workspace) return res.status(404).json({ error: "not found" });
     if (workspace.ownerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     res.json({ workspace });
   } catch (err: any) {
     res.status(500).json({ error: "get workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/workspaces/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, description } = req.body || {};
+    const ws = await updateWorkspace(String(req.params.id), auth.sub, {
+      ...(name !== undefined && { name: String(name) }),
+      ...(description !== undefined && { description }),
+    });
+    if (!ws) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ workspace: ws });
+  } catch (err: any) {
+    res.status(500).json({ error: "update workspace failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteWorkspace(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete workspace failed", details: err?.message });
+  }
+});
+
+// Members
+qcoreaiRouter.get("/workspaces/:id/members", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listWorkspaceMembers(String(req.params.id));
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list members failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/workspaces/:id/members", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ws = await getWorkspace(String(req.params.id));
+    if (!ws || ws.ownerId !== auth.sub) return res.status(403).json({ error: "owner only" });
+    const { userId, role } = req.body || {};
+    if (!userId?.trim()) return res.status(400).json({ error: "userId required" });
+    const member = await addWorkspaceMember(String(req.params.id), String(userId), role === "editor" ? "editor" : "viewer");
+    res.status(201).json({ member });
+  } catch (err: any) {
+    res.status(500).json({ error: "invite failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id/members/:userId", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await removeWorkspaceMember(String(req.params.id), String(req.params.userId));
+    res.json({ ok });
+  } catch (err: any) {
+    res.status(500).json({ error: "remove member failed", details: err?.message });
+  }
+});
+
+// Sessions
+qcoreaiRouter.get("/workspaces/:id/sessions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listWorkspaceSessions(String(req.params.id));
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list workspace sessions failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/workspaces/:id/sessions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { sessionId } = req.body || {};
+    if (!sessionId?.trim()) return res.status(400).json({ error: "sessionId required" });
+    await addWorkspaceSession(String(req.params.id), String(sessionId));
+    res.status(201).json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "add session failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/workspaces/:id/sessions/:sessionId", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await removeWorkspaceSession(String(req.params.id), String(req.params.sessionId));
+    res.json({ ok });
+  } catch (err: any) {
+    res.status(500).json({ error: "remove session failed", details: err?.message });
   }
 });
 

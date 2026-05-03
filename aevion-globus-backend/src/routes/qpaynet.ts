@@ -1,0 +1,415 @@
+/**
+ * QPayNet Embedded — платёжная инфраструктура AEVION
+ *
+ * Endpoints:
+ *   POST /api/qpaynet/wallets              create wallet
+ *   GET  /api/qpaynet/wallets              list my wallets
+ *   GET  /api/qpaynet/wallets/:id          wallet detail + balance
+ *   POST /api/qpaynet/deposit              top up wallet
+ *   POST /api/qpaynet/withdraw             withdraw
+ *   POST /api/qpaynet/transfer             P2P transfer
+ *   GET  /api/qpaynet/transactions         my transaction history
+ *   POST /api/qpaynet/merchant/keys        create merchant API key
+ *   GET  /api/qpaynet/merchant/keys        list my merchant keys
+ *   DELETE /api/qpaynet/merchant/keys/:id  revoke key
+ *   POST /api/qpaynet/merchant/charge      charge via merchant key (public, key-auth)
+ *   GET  /api/qpaynet/stats                public aggregate stats
+ */
+
+import { Router } from "express";
+import { randomUUID, createHash, randomBytes } from "node:crypto";
+import { getPool } from "../lib/dbPool";
+import { verifyBearerOptional } from "../lib/authJwt";
+
+export const qpaynetRouter = Router();
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+
+let tablesReady = false;
+
+async function ensureTables(): Promise<void> {
+  if (tablesReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_wallets (
+        id          TEXT PRIMARY KEY,
+        owner_id    TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        currency    TEXT NOT NULL DEFAULT 'KZT',
+        balance     BIGINT NOT NULL DEFAULT 0,    -- stored in tiin (1 KZT = 100 tiin)
+        status      TEXT NOT NULL DEFAULT 'active',
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpw_owner ON qpaynet_wallets (owner_id);
+
+      CREATE TABLE IF NOT EXISTS qpaynet_transactions (
+        id          TEXT PRIMARY KEY,
+        wallet_id   TEXT NOT NULL,
+        owner_id    TEXT NOT NULL,
+        type        TEXT NOT NULL,   -- deposit|withdraw|transfer_out|transfer_in|merchant_charge
+        amount      BIGINT NOT NULL, -- tiin
+        fee         BIGINT NOT NULL DEFAULT 0,
+        currency    TEXT NOT NULL DEFAULT 'KZT',
+        description TEXT,
+        ref_tx_id   TEXT,            -- paired transfer
+        merchant_id TEXT,
+        status      TEXT NOT NULL DEFAULT 'completed',
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpt_wallet ON qpaynet_transactions (wallet_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_qpt_owner  ON qpaynet_transactions (owner_id,  created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS qpaynet_merchant_keys (
+        id          TEXT PRIMARY KEY,
+        owner_id    TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        key_hash    TEXT UNIQUE NOT NULL,
+        key_prefix  TEXT NOT NULL,  -- first 8 chars for display
+        wallet_id   TEXT NOT NULL,
+        revoked_at  TIMESTAMPTZ,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpmk_owner ON qpaynet_merchant_keys (owner_id);
+      CREATE INDEX IF NOT EXISTS idx_qpmk_hash  ON qpaynet_merchant_keys (key_hash);
+    `);
+    tablesReady = true;
+  } catch (err) {
+    console.warn("[qpaynet] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const FEE_PCT = 0.001; // 0.1% on transfers
+
+function toTiin(kzt: number): bigint { return BigInt(Math.round(kzt * 100)); }
+function fromTiin(t: bigint): number { return Number(t) / 100; }
+function feeFor(amount: bigint): bigint { return BigInt(Math.ceil(Number(amount) * FEE_PCT)); }
+
+function makeMerchantKey(): { raw: string; hash: string; prefix: string } {
+  const raw = "qpn_live_" + randomBytes(24).toString("base64url");
+  const hash = createHash("sha256").update(raw).digest("hex");
+  return { raw, hash, prefix: raw.slice(0, 12) };
+}
+
+// ── Wallets ───────────────────────────────────────────────────────────────────
+
+qpaynetRouter.post("/wallets", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { name = "Мой кошелёк", currency = "KZT" } = req.body as { name?: string; currency?: string };
+  const pool = getPool();
+  const id = randomUUID();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  await pool.query(
+    "INSERT INTO qpaynet_wallets (id, owner_id, name, currency) VALUES ($1,$2,$3,$4)",
+    [id, ownerId, name.slice(0, 80), currency.toUpperCase().slice(0, 3)],
+  );
+  res.status(201).json({ id, name, currency: currency.toUpperCase(), balance: 0, status: "active" });
+});
+
+qpaynetRouter.get("/wallets", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const result = await pool.query(
+    "SELECT id, name, currency, balance, status, created_at FROM qpaynet_wallets WHERE owner_id=$1 ORDER BY created_at DESC",
+    [auth.sub ?? auth.email ?? "anon"],
+  );
+  res.json({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    wallets: result.rows.map((r: any) => ({ ...r, balance: fromTiin(BigInt(r.balance)) })),
+  });
+});
+
+qpaynetRouter.get("/wallets/:id", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const w = await pool.query(
+    "SELECT id, name, currency, balance, status, created_at FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
+    [req.params.id, ownerId],
+  );
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+  const r = w.rows[0];
+  res.json({ ...r, balance: fromTiin(BigInt(r.balance)) });
+});
+
+// ── Deposit ───────────────────────────────────────────────────────────────────
+
+qpaynetRouter.post("/deposit", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { walletId, amount, description } = req.body as { walletId?: string; amount?: number; description?: string };
+  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const w = await pool.query(
+    "SELECT id, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
+    [walletId, ownerId],
+  );
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+  if (w.rows[0].status !== "active") return res.status(400).json({ error: "wallet_inactive" });
+
+  const tiin = toTiin(amount);
+  const txId = randomUUID();
+
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, walletId]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description) VALUES ($1,$2,$3,'deposit',$4,$5)",
+    [txId, walletId, ownerId, tiin, description ?? "Пополнение"],
+  );
+
+  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [walletId]);
+  res.json({ txId, amount, newBalance: fromTiin(BigInt(updated.rows[0].balance)) });
+});
+
+// ── Withdraw ─────────────────────────────────────────────────────────────────
+
+qpaynetRouter.post("/withdraw", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { walletId, amount, description } = req.body as { walletId?: string; amount?: number; description?: string };
+  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const w = await pool.query(
+    "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
+    [walletId, ownerId],
+  );
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+
+  const tiin = toTiin(amount);
+  const fee = feeFor(tiin);
+  const total = tiin + fee;
+  if (BigInt(w.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+
+  const txId = randomUUID();
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, walletId]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description) VALUES ($1,$2,$3,'withdraw',$4,$5,$6)",
+    [txId, walletId, ownerId, tiin, fee, description ?? "Вывод"],
+  );
+
+  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [walletId]);
+  res.json({ txId, amount, fee: fromTiin(fee), newBalance: fromTiin(BigInt(updated.rows[0].balance)) });
+});
+
+// ── Transfer ──────────────────────────────────────────────────────────────────
+
+qpaynetRouter.post("/transfer", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { fromWalletId, toWalletId, amount, description } = req.body as {
+    fromWalletId?: string; toWalletId?: string; amount?: number; description?: string;
+  };
+  if (!fromWalletId || !toWalletId || !amount || amount <= 0) {
+    return res.status(400).json({ error: "fromWalletId, toWalletId and positive amount required" });
+  }
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  const from = await pool.query(
+    "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
+    [fromWalletId, ownerId],
+  );
+  if (!from.rows[0]) return res.status(404).json({ error: "from_wallet_not_found" });
+  if (from.rows[0].status !== "active") return res.status(400).json({ error: "from_wallet_inactive" });
+
+  const to = await pool.query("SELECT id, owner_id, status FROM qpaynet_wallets WHERE id=$1", [toWalletId]);
+  if (!to.rows[0]) return res.status(404).json({ error: "to_wallet_not_found" });
+
+  const tiin = toTiin(amount);
+  const fee = feeFor(tiin);
+  const total = tiin + fee;
+  if (BigInt(from.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+
+  const txOutId = randomUUID();
+  const txInId  = randomUUID();
+  const desc = description ?? `Перевод → ${toWalletId.slice(0, 8)}`;
+
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, fromWalletId]);
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, toWalletId]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_out',$4,$5,$6,$7)",
+    [txOutId, fromWalletId, ownerId, tiin, fee, desc, txInId],
+  );
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
+    [txInId, toWalletId, to.rows[0].owner_id, tiin, desc, txOutId],
+  );
+
+  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
+  res.json({ txOutId, txInId, amount, fee: fromTiin(fee), newBalance: fromTiin(BigInt(updated.rows[0].balance)) });
+});
+
+// ── Transactions ──────────────────────────────────────────────────────────────
+
+qpaynetRouter.get("/transactions", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const walletId = req.query.walletId as string | undefined;
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  const params: unknown[] = [ownerId, limit];
+  const walletFilter = walletId ? " AND wallet_id=$3" : "";
+  if (walletId) params.push(walletId);
+
+  const result = await pool.query(
+    `SELECT id, wallet_id, type, amount, fee, currency, description, status, created_at
+     FROM qpaynet_transactions WHERE owner_id=$1${walletFilter}
+     ORDER BY created_at DESC LIMIT $2`,
+    params,
+  );
+  res.json({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    transactions: result.rows.map((r: any) => ({
+      ...r,
+      amount: fromTiin(BigInt(r.amount)),
+      fee: fromTiin(BigInt(r.fee)),
+    })),
+  });
+});
+
+// ── Merchant keys ─────────────────────────────────────────────────────────────
+
+qpaynetRouter.post("/merchant/keys", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { name = "API Key", walletId } = req.body as { name?: string; walletId?: string };
+  if (!walletId) return res.status(400).json({ error: "walletId required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const w = await pool.query("SELECT id FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2", [walletId, ownerId]);
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+
+  const { raw, hash, prefix } = makeMerchantKey();
+  const id = randomUUID();
+  await pool.query(
+    "INSERT INTO qpaynet_merchant_keys (id, owner_id, name, key_hash, key_prefix, wallet_id) VALUES ($1,$2,$3,$4,$5,$6)",
+    [id, ownerId, name.slice(0, 80), hash, prefix, walletId],
+  );
+  res.status(201).json({ id, name, keyPrefix: prefix, key: raw, message: "Save this key — it won't be shown again." });
+});
+
+qpaynetRouter.get("/merchant/keys", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const result = await pool.query(
+    "SELECT id, name, key_prefix, wallet_id, revoked_at, created_at FROM qpaynet_merchant_keys WHERE owner_id=$1 ORDER BY created_at DESC",
+    [auth.sub ?? auth.email ?? "anon"],
+  );
+  res.json({ keys: result.rows });
+});
+
+qpaynetRouter.delete("/merchant/keys/:id", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_merchant_keys SET revoked_at=NOW() WHERE id=$1 AND owner_id=$2 AND revoked_at IS NULL RETURNING id",
+    [req.params.id, auth.sub ?? auth.email ?? "anon"],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "key_not_found_or_revoked" });
+  res.json({ ok: true });
+});
+
+// POST /api/qpaynet/merchant/charge — charge a user wallet via merchant key
+qpaynetRouter.post("/merchant/charge", async (req, res) => {
+  await ensureTables();
+  const apiKey = req.headers["x-api-key"] as string | undefined;
+  if (!apiKey) return res.status(401).json({ error: "x-api-key header required" });
+
+  const keyHash = createHash("sha256").update(apiKey).digest("hex");
+  const pool = getPool();
+  const mk = await pool.query(
+    "SELECT id, wallet_id, owner_id FROM qpaynet_merchant_keys WHERE key_hash=$1 AND revoked_at IS NULL",
+    [keyHash],
+  );
+  if (!mk.rows[0]) return res.status(403).json({ error: "invalid_or_revoked_key" });
+
+  const { amount, description, customerWalletId } = req.body as {
+    amount?: number; description?: string; customerWalletId?: string;
+  };
+  if (!amount || amount <= 0 || !customerWalletId) {
+    return res.status(400).json({ error: "amount and customerWalletId required" });
+  }
+
+  const merchantWalletId = mk.rows[0].wallet_id;
+  if (merchantWalletId === customerWalletId) return res.status(400).json({ error: "cannot_charge_own_wallet" });
+
+  const tiin = toTiin(amount);
+  const fee = feeFor(tiin);
+  const total = tiin + fee;
+
+  const from = await pool.query("SELECT balance, status FROM qpaynet_wallets WHERE id=$1", [customerWalletId]);
+  if (!from.rows[0]) return res.status(404).json({ error: "customer_wallet_not_found" });
+  if (BigInt(from.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+
+  const txOutId = randomUUID();
+  const txInId  = randomUUID();
+  const desc = description ?? "Merchant charge";
+
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, customerWalletId]);
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, merchantWalletId]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, merchant_id) VALUES ($1,$2,$3,'merchant_charge',$4,$5,$6,$7)",
+    [txOutId, customerWalletId, mk.rows[0].owner_id, tiin, fee, desc, mk.rows[0].id],
+  );
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, merchant_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
+    [txInId, merchantWalletId, mk.rows[0].owner_id, tiin, desc, mk.rows[0].id],
+  );
+
+  res.json({ ok: true, txId: txOutId, amount, fee: fromTiin(fee) });
+});
+
+// GET /api/qpaynet/stats
+qpaynetRouter.get("/stats", async (_req, res) => {
+  await ensureTables();
+  try {
+    const pool = getPool();
+    const [wallets, txs, vol] = await Promise.all([
+      pool.query("SELECT COUNT(*) AS n FROM qpaynet_wallets WHERE status='active'"),
+      pool.query("SELECT COUNT(*) AS n FROM qpaynet_transactions"),
+      pool.query("SELECT COALESCE(SUM(amount),0) AS v FROM qpaynet_transactions WHERE type='deposit'"),
+    ]);
+    res.json({
+      activeWallets: Number(wallets.rows[0]?.n ?? 0),
+      totalTransactions: Number(txs.rows[0]?.n ?? 0),
+      totalDepositedKzt: fromTiin(BigInt(vol.rows[0]?.v ?? 0)),
+    });
+  } catch {
+    res.json({ activeWallets: 0, totalTransactions: 0, totalDepositedKzt: 0 });
+  }
+});

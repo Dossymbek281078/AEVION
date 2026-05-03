@@ -5,30 +5,22 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
-import { EmailVerifyBanner } from "./EmailVerifyBanner";
-import { AppSwitcher } from "./AppSwitcher";
 
-const NAV: { href: string; label: string; title?: string }[] = [
-  { href: "/build", label: "Проекты", title: "Все строительные проекты на платформе" },
-  { href: "/build/vacancies", label: "Вакансии", title: "Открытые вакансии — сварщики, прорабы, монтажники" },
-  { href: "/build/vacancies/map", label: "🗺️ Карта", title: "Вакансии на карте по городу" },
-  { href: "/build/available", label: "🟢 Сейчас", title: "Работники готовые выйти прямо сейчас — как Uber" },
-  { href: "/build/talent", label: "Люди", title: "База работников — поиск по навыкам и городу" },
-  { href: "/build/team-requests", label: "Бригады", title: "Нанять целую бригаду под проект" },
-  { href: "/build/communities", label: "Чаты", title: "Групповые чаты по специальностям" },
-  { href: "/build/shifts", label: "Смены", title: "Расписание смен, GPS-отметка прихода" },
-  { href: "/build/video", label: "Видео", title: "Видеозвонки с кандидатами или заказчиками" },
-  { href: "/build/stories", label: "📣 Stories", title: "Обновления прямо с объекта — фото, прогресс" },
-  { href: "/build/payment-calendar", label: "💸 Выплаты", title: "Календарь ожидаемых выплат" },
-  { href: "/build/leaderboard", label: "⭐ Топ", title: "Лучшие работодатели и работники платформы" },
-  { href: "/build/coach", label: "AI Coach", title: "ИИ-коуч анализирует профиль и подбирает вакансии" },
-  { href: "/build/saved", label: "Избранное", title: "Сохранённые вакансии и кандидаты" },
-  { href: "/build/create-project", label: "Новый проект", title: "Создать проект и добавить вакансии" },
-  { href: "/build/profile", label: "Профиль", title: "Твоё резюме и настройки" },
-  { href: "/build/messages", label: "Сообщения", title: "Личные сообщения с кандидатами и заказчиками" },
-  { href: "/build/pricing", label: "Тарифы", title: "Тарифные планы: Free, Pro, Agency, Pay-per-Hire" },
-  { href: "/build/loyalty", label: "Лояльность", title: "Тир-система — скидки и кешбэк AEV за найм" },
-  { href: "/build/why-aevion", label: "О нас", title: "Почему QBuild лучше HH для стройки" },
+const NAV: { href: string; label: string; authOnly?: boolean }[] = [
+  { href: "/build", label: "Projects" },
+  { href: "/build/vacancies", label: "Vacancies" },
+  { href: "/build/talent", label: "Talent", authOnly: true },
+  { href: "/build/coach", label: "AI Coach", authOnly: true },
+  { href: "/build/applications", label: "My Apps", authOnly: true },
+  { href: "/build/trials", label: "Trials", authOnly: true },
+  { href: "/build/reviews", label: "Reviews", authOnly: true },
+  { href: "/build/saved", label: "Saved", authOnly: true },
+  { href: "/build/create-project", label: "New project", authOnly: true },
+  { href: "/build/profile", label: "Profile", authOnly: true },
+  { href: "/build/messages", label: "Messages", authOnly: true },
+  { href: "/build/pricing", label: "Pricing" },
+  { href: "/build/loyalty", label: "Loyalty" },
+  { href: "/build/why-aevion", label: "Why us" },
 ];
 
 const TIER_CHIP: Record<string, { className: string; emoji: string }> = {
@@ -55,13 +47,12 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="hidden items-center gap-1 sm:flex">
-            {NAV.map((n) => {
+            {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
               const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
               return (
                 <Link
                   key={n.href}
                   href={n.href}
-                  title={n.title}
                   className={`rounded-md px-3 py-1.5 text-sm transition ${
                     active ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
                   }`}
@@ -73,7 +64,6 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2 text-xs">
-            <AppSwitcher />
             {hydrated && user ? (
               <>
                 {user.role === "ADMIN" && (
@@ -87,13 +77,13 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                 <PlanBadge />
                 <TierBadge />
                 <NotificationBell />
-                <span className="hidden text-slate-400 sm:inline">{user.email}</span>
-                <button
-                  onClick={logout}
-                  className="rounded-md border border-white/10 px-3 py-1.5 text-slate-200 hover:bg-white/10"
+                <Link
+                  href="/build/settings"
+                  title="Account settings"
+                  className={`rounded-md border border-white/10 px-2.5 py-1.5 text-slate-200 hover:bg-white/10 ${pathname === "/build/settings" ? "bg-white/10" : ""}`}
                 >
-                  Sign out
-                </button>
+                  ⚙
+                </Link>
               </>
             ) : (
               <span className="text-slate-500">Not signed in</span>
@@ -102,13 +92,12 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex items-center gap-1 overflow-x-auto border-t border-white/5 px-4 py-2 sm:hidden">
-          {NAV.map((n) => {
+          {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
             const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                title={n.title}
                 className={`shrink-0 rounded-md px-3 py-1.5 text-xs ${
                   active ? "bg-white/10 text-white" : "text-slate-400"
                 }`}
@@ -120,9 +109,6 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
 
-      {hydrated && user && !user.emailVerifiedAt && (
-        <EmailVerifyBanner email={user.email} />
-      )}
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
     </div>
@@ -319,8 +305,9 @@ function NotificationBell() {
           className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-white/10 bg-slate-900 p-3 text-sm shadow-xl"
           onMouseLeave={() => setOpen(false)}
         >
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Notifications
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notifications</span>
+            <Link href="/build/notifications" onClick={() => setOpen(false)} className="text-[10px] text-emerald-300 hover:underline">See all →</Link>
           </div>
           {!summary ? (
             <p className="text-xs text-slate-500">Loading…</p>
@@ -359,7 +346,7 @@ function NotificationBell() {
               {summary.applicationUpdates > 0 && (
                 <li>
                   <Link
-                    href="/build/profile"
+                    href="/build/notifications"
                     onClick={() => setOpen(false)}
                     className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white/5"
                   >
@@ -473,13 +460,6 @@ export function SignInPanel() {
           {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
       </form>
-      {mode === "login" && (
-        <div className="mt-2 text-right">
-          <Link href="/build/reset-password" className="text-xs text-slate-500 hover:text-emerald-400">
-            Забыли пароль?
-          </Link>
-        </div>
-      )}
       <p className="mt-3 text-xs text-slate-500">
         Single AEVION account — works across QBuild, QRight, QSign and other modules.
       </p>

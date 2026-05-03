@@ -1,7 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber } from "../../lib/build";
-import { sendNewMessage } from "../../lib/build/email";
 
 export const messagingRouter = Router();
 
@@ -26,27 +25,6 @@ messagingRouter.post("/messages", async (req, res) => {
       `INSERT INTO "BuildMessage" ("id","senderId","receiverId","content") VALUES ($1,$2,$3,$4) RETURNING *`,
       [id, auth.sub, receiverId.value, content.value],
     );
-    // Notify receiver by email (fire-and-forget)
-    void (async () => {
-      try {
-        const recRow = await pool.query(
-          `SELECT u."email", su."name" AS "senderName"
-           FROM "AEVIONUser" u
-           LEFT JOIN "AEVIONUser" su ON su."id" = $2
-           WHERE u."id" = $1 LIMIT 1`,
-          [receiverId.value, auth.sub],
-        );
-        const r = recRow.rows[0];
-        if (r?.email) {
-          sendNewMessage({
-            receiverEmail: r.email,
-            senderName: r.senderName ?? "Пользователь",
-            preview: content.value,
-          });
-        }
-      } catch {/**/}
-    })();
-
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
     return fail(res, 500, "message_send_failed", { details: (err as Error).message });
@@ -203,5 +181,69 @@ messagingRouter.get("/notifications/summary", async (req, res) => {
     return ok(res, { unreadMessages, pendingApplications, applicationUpdates, total: unreadMessages + pendingApplications + applicationUpdates });
   } catch (err: unknown) {
     return fail(res, 500, "notifications_summary_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/notifications — paginated synthetic notification feed
+messagingRouter.get("/notifications", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+
+    const [msgs, appUpdates, pending] = await Promise.all([
+      pool.query(
+        `SELECT m."id", m."senderId", m."content", m."createdAt", m."readAt",
+                u."name" AS "senderName", u."email" AS "senderEmail"
+         FROM "BuildMessage" m LEFT JOIN "AEVIONUser" u ON u."id" = m."senderId"
+         WHERE m."receiverId" = $1 ORDER BY m."createdAt" DESC LIMIT $2`,
+        [auth.sub, limit],
+      ),
+      pool.query(
+        `SELECT a."id", a."status", a."updatedAt", v."title" AS "vacancyTitle"
+         FROM "BuildApplication" a JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         WHERE a."userId" = $1 AND a."status" IN ('ACCEPTED','REJECTED')
+           AND a."updatedAt" > NOW() - INTERVAL '30 days'
+         ORDER BY a."updatedAt" DESC LIMIT $2`,
+        [auth.sub, limit],
+      ),
+      pool.query(
+        `SELECT a."id", a."createdAt", v."title" AS "vacancyTitle", u."name" AS "applicantName"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "AEVIONUser" u ON u."id" = a."userId"
+         WHERE p."clientId" = $1 AND a."status" = 'PENDING'
+         ORDER BY a."createdAt" DESC LIMIT $2`,
+        [auth.sub, limit],
+      ),
+    ]);
+
+    const items: { id: string; kind: string; title: string; body: string; href: string; read: boolean; at: string }[] = [];
+    for (const m of msgs.rows) {
+      items.push({ id: `msg-${m.id}`, kind: "message", title: `Message from ${m.senderName || m.senderEmail || "someone"}`, body: String(m.content).slice(0, 120), href: `/build/messages?to=${encodeURIComponent(m.senderId)}`, read: !!m.readAt, at: m.createdAt });
+    }
+    for (const a of appUpdates.rows) {
+      items.push({ id: `app-${a.id}`, kind: a.status === "ACCEPTED" ? "accepted" : "rejected", title: a.status === "ACCEPTED" ? "Application accepted" : "Application declined", body: `Your application for "${a.vacancyTitle}" was ${a.status.toLowerCase()}.`, href: `/build/vacancies`, read: false, at: a.updatedAt });
+    }
+    for (const p of pending.rows) {
+      items.push({ id: `pend-${p.id}`, kind: "pending", title: "New application", body: `${p.applicantName || "Someone"} applied for "${p.vacancyTitle}".`, href: `/build/vacancy/${encodeURIComponent(p.id)}`, read: false, at: p.createdAt });
+    }
+    items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return ok(res, { items: items.slice(0, limit), total: items.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "notifications_list_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/notifications/mark-read — mark all incoming messages as read
+messagingRouter.post("/notifications/mark-read", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    await pool.query(`UPDATE "BuildMessage" SET "readAt" = NOW() WHERE "receiverId" = $1 AND "readAt" IS NULL`, [auth.sub]);
+    return ok(res, { marked: true });
+  } catch (err: unknown) {
+    return fail(res, 500, "notifications_mark_read_failed", { details: (err as Error).message });
   }
 });

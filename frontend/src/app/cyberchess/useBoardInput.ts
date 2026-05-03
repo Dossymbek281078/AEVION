@@ -256,8 +256,16 @@ export function useBoardInput(opts: BoardInputOptions) {
       const wasActive = d.active;
       hideGhost();
       if (!wasActive) {
+        // For non-drag clicks: the board div's onClick handler fires ~10ms later
+        // and will call click(sq) itself. Calling it here too would double-execute.
+        // Exception: if the pointer moved to a DIFFERENT square between down and up
+        // (fast swipe without crossing the drag threshold), we handle it here and
+        // set recentDragRef so onClick ignores it.
         const sq = sqFromCachedRect(e.clientX, e.clientY, d.bRect) || sqFromBoard(e.clientX, e.clientY);
-        if (sq && sq !== d.from) optsRef.current.click(sq);
+        if (sq && sq !== d.from) {
+          recentDragRef.current = Date.now();
+          optsRef.current.click(sq);
+        }
         return;
       }
       recentDragRef.current = Date.now();

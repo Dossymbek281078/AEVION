@@ -1,9 +1,14 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PrismaClient = any;
 import { verifyBearerOptional } from "../lib/authJwt";
 
+// HealthAI tables aren't in prisma/schema.prisma yet — the route stays
+// in-memory until they are. The Prisma branches below are kept as
+// scaffolding for the eventual cutover; `prisma` is typed `any` so the
+// type checker doesn't insist on models that don't exist yet, and the
+// `useDb` flag stays false at runtime so those branches never execute.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PrismaClient = any;
 /**
  * HealthAI v1 — Personal AI Doctor MVP.
  *
@@ -92,6 +97,7 @@ const planSnapshotsMem = new Map<string, any[]>();
  * in-memory Maps. Init выполняется лениво при первом use, чтобы не
  * падать на старте если БД ещё не готова.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let prisma: PrismaClient | null = null;
 let useDb = false;
 let dbInitTried = false;

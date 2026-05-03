@@ -52,6 +52,11 @@ const SERVICE_LABELS: Record<string, string> = {
   planet: "Planet Compliance",
   bureau: "IP Bureau",
   auth: "Auth",
+  qcontract: "QContract",
+  qpaynet: "QPayNet",
+  healthai: "HealthAI",
+  "smeta-trainer": "Smeta Trainer",
+  qbuild: "QBuild",
 };
 
 const SERVICE_LINKS: Record<string, string> = {
@@ -63,6 +68,11 @@ const SERVICE_LINKS: Record<string, string> = {
   planet: "/planet",
   bureau: "/bureau",
   auth: "/account",
+  qcontract: "/qcontract",
+  qpaynet: "/qpaynet",
+  healthai: "/healthai",
+  "smeta-trainer": "/smeta-trainer",
+  qbuild: "/build",
 };
 
 export default function StatusPage() {

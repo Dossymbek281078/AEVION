@@ -41,6 +41,8 @@ import DailyMission, { bumpDaily } from "./DailyMission";
 import WhatIfButton from "./WhatIfButton";
 import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from "./BoardArt";
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
+import { generateShareSVG, downloadFile } from "./gameShare";
+import CoachPredictions from "./CoachPredictions";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -3816,7 +3818,7 @@ export default function CyberChessPage(){
             {pms.length>0&&<Btn size="sm" variant="secondary" onClick={()=>{sPms([]);sPmSel(null)}} style={{background:"#fef2f2",color:CC.danger,borderColor:"#fca5a5"}}>✕ Clear ({pms.length})</Btn>}
           </div>
           {on&&!over&&!setup&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
-            <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
+            <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
             <Btn size="sm" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
             <Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{
               if(hist.length<2){showToast("No moves","error");return}
@@ -3857,6 +3859,15 @@ export default function CyberChessPage(){
               const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
               sReelMeta({white,black,result});sShowReel(true);
             }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Auto-Reel</Btn>
+            <Btn size="sm" variant="secondary" onClick={()=>{
+              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+              const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
+              const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:accuracy?{white:accuracy.white,black:accuracy.black}:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
+              const blob=new Blob([svg],{type:"image/svg+xml"});
+              downloadFile(blob,`aevion-chess-${new Date().toISOString().slice(0,10)}.svg`);
+              showToast("SVG скачан — открой в браузере чтобы поделиться","success");
+            }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Share SVG</Btn>
           </div>}
         </div>
 
@@ -3864,6 +3875,16 @@ export default function CyberChessPage(){
         <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
           {/* Daily Mission widget */}
           {(tab==="play"||tab==="puzzles")&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
+          {/* Coach Predictions: shows opponent's likely next moves while AI thinks */}
+          {tab==="play"&&on&&!over&&!hotseat&&sfOk&&<CoachPredictions
+            fen={game.fen()}
+            opponentColor={pCol==="w"?"b":"w"}
+            isOpponentTurn={game.turn()!==pCol}
+            lastMoveUci={lm?`${lm.from}${lm.to}`:null}
+            enabled={coachAIEnabled}
+            onToggle={()=>sCoachAIEnabled(v=>!v)}
+            runEngine={runEnginePromise}
+          />
           {/* Opening Drill HUD */}
           {openingDrill&&<Card padding={SPACE[3]} tone="surface1"
             style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>

@@ -824,13 +824,19 @@ export async function maybeCleanupExpiredBoosts(): Promise<number> {
   if (now - lastCleanupAt < CLEANUP_COOLDOWN_MS) return 0;
   lastCleanupAt = now;
   try {
-    const r = await pool.query(
-      `DELETE FROM "BuildBoost" WHERE "endsAt" < NOW() - INTERVAL '7 days'`,
-    );
-    return r.rowCount ?? 0;
+    const [boosts, vacancies] = await Promise.all([
+      pool.query(`DELETE FROM "BuildBoost" WHERE "endsAt" < NOW() - INTERVAL '7 days'`),
+      // Auto-close vacancies whose expiresAt has passed
+      pool.query(
+        `UPDATE "BuildVacancy" SET "status" = 'CLOSED'
+         WHERE "status" = 'OPEN' AND "expiresAt" IS NOT NULL AND "expiresAt" < NOW()`,
+      ),
+    ]);
+    const total = (boosts.rowCount ?? 0) + (vacancies.rowCount ?? 0);
+    if (total > 0) console.info(`[build] cleanup: removed ${boosts.rowCount} old boosts, closed ${vacancies.rowCount} expired vacancies`);
+    return total;
   } catch (err) {
-    // Don't break user-facing requests over a maintenance task.
-    console.warn("[build] expired-boost cleanup failed:", (err as Error).message);
+    console.warn("[build] cleanup failed:", (err as Error).message);
     return 0;
   }
 }

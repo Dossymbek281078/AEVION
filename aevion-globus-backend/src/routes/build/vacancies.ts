@@ -71,11 +71,20 @@ vacanciesRouter.post("/", async (req, res) => {
       ? req.body.questions.map((q: unknown) => String(q).trim()).filter((q: string) => q.length > 0 && q.length <= 200).slice(0, 5)
       : [];
 
+    // Optional expiry date (ISO string). Default: 60 days if not provided.
+    let expiresAt: Date | null = null;
+    if (req.body?.expiresAt) {
+      try { expiresAt = new Date(String(req.body.expiresAt)); } catch { /* ignore */ }
+    }
+    if (!expiresAt || isNaN(expiresAt.getTime())) {
+      expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days default
+    }
+
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions)],
+      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson","expiresAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions), expiresAt],
     );
     const row = result.rows[0];
     // Fire job alerts asynchronously — non-blocking

@@ -452,7 +452,7 @@ profilesRouter.get("/profiles/:id/resume.pdf", async (req, res) => {
     if (p.title) doc.fontSize(13).fillColor("#0d9488").text(p.title);
     if (p.verifiedAt) doc.fontSize(10).fillColor("#0284c7").text(`✓ Verified${p.verifiedReason ? ` (${p.verifiedReason})` : ""}`);
     doc.moveDown(0.3);
-    const metaLine = [p.city, p.experienceYears ? `${p.experienceYears}y experience` : null, p.buildRole, p.openToWork ? "Open to work" : null,
+    const metaLine = [p.email, p.phone, p.city, p.experienceYears ? `${p.experienceYears}y experience` : null, p.buildRole, p.openToWork ? "Open to work" : null,
       p.salaryMin || p.salaryMax ? `${p.salaryMin || "—"}–${p.salaryMax || "—"} ${p.salaryCurrency || "RUB"}` : null].filter(Boolean).join("  ·  ");
     if (metaLine) doc.fontSize(10).fillColor("#334155").text(metaLine);
 

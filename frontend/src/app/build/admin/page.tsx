@@ -71,6 +71,11 @@ function Body() {
         />
       </div>
 
+      <h2 className="pt-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Quick actions</h2>
+      <div className="flex flex-wrap gap-2">
+        <BulkActionButton token={token} label="Close expired vacancies" endpoint="/api/build/admin/vacancies/close-expired" />
+      </div>
+
       <h2 className="pt-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Sections</h2>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <NavCard href="/build/admin/leads" title="Leads" body="Email captures from /build/why-aevion. Search, filter, CSV export." />
@@ -80,6 +85,7 @@ function Body() {
         <NavCard href="/build/pricing" title="Pricing" body="Plans, loyalty tiers, AEV cashback. Marketing-facing." />
         <NavCard href="/build/referrals" title="Referrals" body="Top-50 referral leaderboard. Public page." />
         <NavCard href="/build/vacancies" title="Vacancies" body="Browse all open vacancies with skills + sort filters." />
+        <NavCard href="/build/leaderboard" title="Leaderboard" body="Top-rated employers and workers by review score." />
       </div>
     </section>
   );
@@ -107,6 +113,39 @@ function Tile({
         {value}
       </div>
       {sub && <div className="mt-1 text-[11px] text-slate-500">{sub}</div>}
+    </div>
+  );
+}
+
+function BulkActionButton({ token, label, endpoint }: { token: string | null; label: string; endpoint: string }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    if (!token) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await fetch(endpoint, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const j = await r.json();
+      setResult(j.success ? `Done: ${JSON.stringify(j.data)}` : j.error);
+    } catch (e) {
+      setResult((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={run}
+        disabled={busy}
+        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
+      >
+        {busy ? "…" : label}
+      </button>
+      {result && <span className="text-xs text-slate-400">{result}</span>}
     </div>
   );
 }

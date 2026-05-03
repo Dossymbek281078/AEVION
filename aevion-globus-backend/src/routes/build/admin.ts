@@ -195,5 +195,22 @@ adminRouter.delete("/users/:id/verify", async (req, res) => {
   }
 });
 
+// POST /api/build/admin/vacancies/close-expired — bulk close vacancies past expiresAt
+adminRouter.post("/vacancies/close-expired", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const r = await pool.query(
+      `UPDATE "BuildVacancy" SET "status" = 'CLOSED'
+       WHERE "status" = 'OPEN' AND "expiresAt" IS NOT NULL AND "expiresAt" < NOW()
+       RETURNING "id"`,
+    );
+    return ok(res, { closed: r.rowCount, ids: r.rows.map((row: { id: string }) => row.id) });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_close_expired_failed", { details: (err as Error).message });
+  }
+});
+
 // Suppress unused import warning — crypto used for future admin routes
 void crypto;

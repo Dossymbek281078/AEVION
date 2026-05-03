@@ -5,7 +5,7 @@ import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
-import { applyOgEtag } from "../lib/ogEtag";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 
 const QRIGHT_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "QRightWebhook",
@@ -1963,6 +1963,12 @@ qrightRouter.get("/objects/:id/changelog.rss", embedRateLimit, async (req, res) 
       [id, limit]
     );
 
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qright-object-${id}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
     function describe(row: any): string {
       const p = row.payload || {};
       const reason = p.reason ? ` — ${p.reason}` : "";
@@ -2012,9 +2018,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "object rss failed", details: err.message });
@@ -2039,6 +2042,13 @@ qrightRouter.get("/sitemap.xml", embedRateLimit, async (req, res) => {
        LIMIT 5000`
     );
 
+    const rows = r.rows as any[];
+    const latestSrc = rows[0]?.createdAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(latestSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qright-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
     const urls: string[] = [];
     urls.push(`  <url>
     <loc>${qrEsc(origin)}/qright</loc>
@@ -2052,7 +2062,7 @@ qrightRouter.get("/sitemap.xml", embedRateLimit, async (req, res) => {
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>`);
-    for (const row of r.rows as any[]) {
+    for (const row of rows) {
       const lastmodSrc = row.createdAt;
       const lastmod = lastmodSrc
         ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
@@ -2070,9 +2080,6 @@ qrightRouter.get("/sitemap.xml", embedRateLimit, async (req, res) => {
 ${urls.join("\n")}
 </urlset>`;
 
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=600");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "sitemap failed", details: err.message });

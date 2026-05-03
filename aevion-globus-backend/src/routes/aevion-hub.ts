@@ -8,6 +8,7 @@
  */
 
 import { Router, type Request } from "express";
+import { applyEtag } from "../lib/ogEtag";
 
 export const aevionHubRouter = Router();
 
@@ -209,8 +210,8 @@ ${items}
 </sitemapindex>`;
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=600");
   res.setHeader("Access-Control-Allow-Origin", "*");
+  if (applyEtag(req, res, `aevion-index-${modules.length}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
   res.send(xml);
 });
 

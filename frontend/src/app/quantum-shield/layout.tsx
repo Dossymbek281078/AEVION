@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { getApiBase } from "@/lib/apiBase";
 
 const SITE = getSiteUrl();
+const OG_IMAGE = `${getApiBase()}/api/quantum-shield/og.svg`;
 
 export const metadata: Metadata = {
   title: "AEVION Quantum Shield — Shamir's Secret Sharing + Ed25519 protection",
@@ -13,11 +15,13 @@ export const metadata: Metadata = {
       "Threshold-secret sharding (k of n), Ed25519 signing, post-quantum-ready key derivation. The shared crypto layer of every AEVION module.",
     type: "website",
     siteName: "AEVION",
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "AEVION Quantum Shield" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "AEVION Quantum Shield",
     description: "Shamir secret sharing + Ed25519 + post-quantum-ready KDF.",
+    images: [OG_IMAGE],
   },
   alternates: { canonical: "/quantum-shield" },
 };

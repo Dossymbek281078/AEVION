@@ -36,7 +36,7 @@ import {
   reverifyAuthorCosign,
   verifyAuthorCosign,
 } from "../lib/cosign/authorCosign";
-import { applyOgEtag } from "../lib/ogEtag";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 
 export const pipelineRouter = Router();
 const pool = getPool();
@@ -2569,6 +2569,12 @@ pipelineRouter.get("/certificate/:certId/changelog.rss", async (req, res) => {
       [certId, limit]
     );
 
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `pipeline-cert-${certId}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
     function describe(row: any): string {
       const p = row.payload || {};
       switch (row.action) {
@@ -2613,9 +2619,6 @@ ${items}
   </channel>
 </rss>`;
 
-    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "cert rss failed", details: err.message });
@@ -2641,8 +2644,15 @@ pipelineRouter.get("/sitemap.xml", async (req, res) => {
        LIMIT 5000`
     );
 
+    const rows = r.rows as any[];
+    const latestSrc = rows[0]?.protectedAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(latestSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `pipeline-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
     const urls: string[] = [];
-    for (const row of r.rows as any[]) {
+    for (const row of rows) {
       const lastmodSrc = row.protectedAt;
       const lastmod = lastmodSrc
         ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
@@ -2660,9 +2670,6 @@ pipelineRouter.get("/sitemap.xml", async (req, res) => {
 ${urls.join("\n")}
 </urlset>`;
 
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=600");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(xml);
   } catch (err: any) {
     res.status(500).json({ error: "sitemap failed", details: err.message });

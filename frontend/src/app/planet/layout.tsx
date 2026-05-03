@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { getApiBase } from "@/lib/apiBase";
 
 const SITE = getSiteUrl();
+const OG_IMAGE = `${getApiBase()}/api/planet/og.svg`;
 
 export const metadata: Metadata = {
   title: "AEVION Planet — validator network for AI artifacts",
@@ -13,11 +15,13 @@ export const metadata: Metadata = {
       "Independent validators certify originality on-chain. Submit through QRight, route to Bank. The transparent jury for AI music, film, code and web.",
     type: "website",
     siteName: "AEVION",
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "AEVION Planet" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "AEVION Planet",
     description: "Public validator quorum for AI artifacts. QRight → Planet → Bank.",
+    images: [OG_IMAGE],
   },
   alternates: { canonical: "/planet" },
 };

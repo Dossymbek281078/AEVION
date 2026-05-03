@@ -1,0 +1,21 @@
+/* TEAM */
+Founder & Engineering: Dossymbek (yahiin1978@gmail.com)
+Location: Kazakhstan / Worldwide
+Languages: en, ru, kk
+
+/* THANKS */
+Anthropic Claude — pair-programming partner across 27 nodes.
+Open-source: Next.js, React, Node, PostgreSQL, Ed25519, Shamir's Secret Sharing.
+
+/* SITE */
+Last update: 2026-04-28
+Standards: HTML5, CSS3, JSON-LD, schema.org, RFC 9116 (security.txt).
+Components: Next.js 16 App Router, Tailwind v4, edge-runtime OG.
+Software stack: TypeScript, Node 20+, PostgreSQL.
+
+/* PROJECT */
+AEVION is a trust infrastructure platform for digital creation:
+QRight (registry) · QSign (signatures) · Bureau (certificates) ·
+Planet (validators) · Bank (AEC) · Awards (Music + Film) ·
+CyberChess · QCoreAI · QTrade · Multichat · Quantum Shield.
+27 nodes, one Trust Graph, EN/RU/KK from day one.

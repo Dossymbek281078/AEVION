@@ -1,16 +1,19 @@
 # Быстрый gate: обе части стека собираются без ручных переключений папок.
+# Backend matrix runs tsc *and* the integration suite so a regression in any
+# of the bank-track routes (qtrade / ecosystem / cyberchess / planet payouts /
+# qright royalties / metrics) lights the PR red.
 name: CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, bank-payment-layer]
   pull_request:
     branches: [main, master, develop]
   workflow_dispatch:
 
 jobs:
   backend:
-    name: Backend (tsc)
+    name: Backend (tsc + integration tests)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -19,10 +22,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: aevion-globus-backend/package-lock.json
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - run: npm run build
       - run: npm test
 
@@ -36,8 +39,73 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install --include=optional --no-audit --no-fund
+      - run: npm run build
+
+  payments-smoke:
+    name: Payments Rail (api smoke)
+    runs-on: ubuntu-latest
+    needs: frontend
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      - run: npm install --include=optional --no-audit --no-fund
       - run: npm run build
+      - name: Start next server
+        run: |
+          npm start &
+          echo $! > /tmp/next.pid
+          for i in $(seq 1 40); do
+            if curl -sSf http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+              echo "next ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+      - name: Probe /api/health
+        run: |
+          curl -sSf http://127.0.0.1:3000/api/health | tee /tmp/health.json
+          jq -e '.status == "ok"' /tmp/health.json
+          jq -e '.version' /tmp/health.json
+      - name: Probe /api/openapi.json
+        run: |
+          curl -sSf http://127.0.0.1:3000/api/openapi.json | jq -e '.openapi == "3.1.0"'
+      - name: Auth gate (no token → 401)
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/payments/v1/links)
+          test "$code" = "401"
+      - name: Create + read a link
+        run: |
+          KEY="sk_test_smoke$(date +%s)abc"
+          curl -sSf -X POST http://127.0.0.1:3000/api/payments/v1/links \
+            -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"amount":9900,"currency":"USD","title":"CI smoke"}' \
+            | tee /tmp/link.json
+          ID=$(jq -r .id /tmp/link.json)
+          curl -sSf -H "Authorization: Bearer $KEY" \
+            "http://127.0.0.1:3000/api/payments/v1/links/$ID" | jq -e '.status == "active"'
+      - name: Audit captured the create
+        run: |
+          KEY="sk_test_smokeaudit$(date +%s)xyz"
+          curl -sSf -X POST http://127.0.0.1:3000/api/payments/v1/links \
+            -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"amount":4200,"currency":"EUR","title":"Audit probe"}' >/dev/null
+          curl -sSf -H "Authorization: Bearer $KEY" \
+            "http://127.0.0.1:3000/api/payments/v1/audit?action=link.created&limit=5" \
+            | jq -e '.data | length >= 1'
+      - name: Stop next server
+        if: always()
+        run: |
+          kill $(cat /tmp/next.pid) 2>/dev/null || true

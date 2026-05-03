@@ -1,6 +1,114 @@
-# AEVION CyberChess — HANDOFF (2026-04-26 → 04-27 night session)
+# AEVION CyberChess — HANDOFF (живой)
 
-Этот документ — точка входа для продолжения работы на другом ноутбуке.
+> **Последнее обновление:** 2026-05-02 ночь — полный overhaul drag/click/premove механики (9 фиксов, commits `54bdfc4`/`bf11b9c`/`c74e8fa` на chess-tournaments + `69e4aa4` на main).
+> Dev server: `cd frontend-chess && npm run dev` → http://localhost:3000/cyberchess
+
+---
+
+## Drag/click/premove overhaul 2026-05-02
+
+### Корневые баги которые починили:
+1. `sqFromPoint` → `boardRef.current.getBoundingClientRect()` прямая математика. `elementsFromPoint` ненадёжен: пропускает `pointer-events:none` элементы и зависит от z-index.
+2. `window.addEventListener("pointermove"/"pointerup")` нативные — React synthetic events + `setPointerCapture` теряют события когда мышь выходит за пределы доски на Windows/Chrome.
+3. Ghost always rendered (`visibility:hidden` когда idle) — `ghostRef.current=null` на первом кадре drag → ghost невидим.
+4. `ghostSizeRef` = 1.2× ширина клетки (lichess feel).
+5. `onBoardUp` → `click(sq)` явно для не-drag кликов (e.preventDefault глушил synthetic click).
+6. Priority check в `onBoardDown`: sel+vm.has(sq) → exec без второго drag.
+7. Точки валидных ходов при premove-drag.
+8. Click-deselect (повторный клик снимает выбор).
+
+### Что тестировать утром:
+- Клик на пешку → зелёные точки появляются мгновенно
+- Клик на точку → ход делается
+- Drag пешки → ghost следует за курсором сразу
+- Повторный клик на выбранную фигуру → снимает выбор
+- Ход AI → поставить 2-3 премува во время его раздумья
+
+---
+
+> **Предыдущее обновление:** 2026-05-01 — слил `chess-tournaments` в `main`. Tournaments / Variants / Brilliancy / GhostMode / Leaderboards / Coach Knowledge / 18 новых модулей теперь на main. См. раздел «Состояние после merge 2026-05-01».
+
+---
+
+## Состояние после merge 2026-05-01
+
+### Что добавилось (chess-tournaments → main)
+
+**22 новых модуля в `frontend/src/app/cyberchess/`:**
+
+- `tournament.ts` + `MultiPanel.tsx` — knockout-турниры на 8 ботов (killer #6). Persona-aware bracket, призы, тренировка против "the one who beat me last time".
+- `variants.ts` (633 строки) — 11 вариантов: Chess960 (Fischer Random), KingOfTheHill, ThreeCheck, Atomic, KnightRiders, PawnApocalypse, TwinKings, Reinforcement (random army), BuildArmy (drafted army), CrazyHouse, PowerDrop. Daily Variant Challenge + per-variant stats + per-variant achievements.
+- `brilliancy.ts` — Daily Brilliancy Hunt: историческая позиция, найди brilliant move (!!) — система подсказок, simulated leaderboard, рейтинг.
+- `ghostMode.ts` — игра против "призраков" известных мастеров (Capablanca / Tal / Petrosian / etc.) с воспроизведением их стиля.
+- `leaderboards.ts` — simulated global rankings (rapid/blitz/bullet/puzzle), find-my-rank, top-around-me board.
+- `coachKnowledge.ts` (525 строк) + `CoachKnowledgeModal.tsx` — структурированная база знаний для Coach (positional/tactical/endgame/openings).
+- `coachPhase.ts` — auto-detect фазы партии (opening/middlegame/endgame) с per-phase tips.
+- `personality.ts` — chess personality quiz, выдаёт стиль (Tal / Petrosian / Karpov / Kasparov / Carlsen).
+- `boardEditor.ts` — собственный editor позиций (FEN ↔ board grid), валидация.
+- `coordTrainer.ts` — тренировка координат клеток (a1/h8/etc.), session leaderboard.
+- `positionWhisper.ts` — text-to-speech описание позиции для accessibility.
+- `powerDrop.ts` — drop-pool логика (для CrazyHouse / PowerDrop вариантов).
+- `reelsGen.ts` (342 строки) — auto-генерация highlight-reel SVG из партии (best moves / blunders / finish).
+- `styleCloner.ts` — анализ Lichess партий пользователя → "style profile" → AI клонирует твой стиль.
+- `threatMap.ts` — overlay угроз / защит на доске.
+- `masters.ts` — refactored Famous Games (replaced `FamousGames.tsx`).
+- `openingExplorer.ts` — refactored Opening Explorer (replaced `OpeningExplorer.tsx`).
+- `tablebase.ts` — refactored Tablebase (replaced `Tablebase.tsx`).
+- `insights.ts` — пост-партийная аналитика, weakness detection.
+- `symbols.tsx` — система иконок/badges/crests для UI.
+
+### Файлы удалены при cleanup
+
+- `OpeningExplorer.tsx` → `openingExplorer.ts`
+- `Tablebase.tsx` → `tablebase.ts`
+- `FamousGames.tsx` → `masters.ts`
+- `page_v33_backup.tsx` (старый снапшот, не использовался)
+
+### Re-ported после merge
+
+- ✅ **`Repertoire.tsx`** (2026-05-01, commit `31b745f`) — RepertoireModal вновь в page.tsx: state + persist, R-хоткей, кнопка «📚 Репертуар» в панели Аналитики (показывает кол-во линий + uses), запись в Help-модал. `onPlayMove` играет ход из сохранённой книги.
+
+### Orphan-файлы из main, ждут re-port в новый page.tsx
+
+Эти компоненты лежат в `frontend/src/app/cyberchess/`, но `page.tsx` их не импортирует (chess-tournaments переписал page.tsx с нуля и эти фичи туда не попали). **Полезные — порт следующей сессией:**
+
+- `P2P.tsx` (🌐 friend play через WebRTC + PeerJS, ?room= deeplinks) — **HIGH VALUE**. Tricky: hook завязан на game state, нужна аккуратная интеграция (override moves когда в P2P-сессии).
+- `BoardArt.tsx` (5 SVG art overlays — Hokusai/Эйфель/шанырак/персидская геометрия/Klimt). Нужен absolute-overlay внутри board container — найти правильный JSX-контейнер.
+- `DailyMission.tsx` (4-target daily plan). Возможно, частично перекрывается с `brilliancy.ts` Daily Hunt.
+- `CoachPredictions.tsx` (top-3 opponent moves widget).
+- `WhatIfButton.tsx` (per-multipv Coach explanation).
+- `gameShare.ts` (SVG share image для соцсетей). Возможно, перекрывается с `reelsGen.ts`.
+- `studio/` (Studio Mode со streamers + Twitch chat overlay + PiP мини-шахматы). Это subroute `/cyberchess/studio` — может работать независимо, нужно проверить что не сломано.
+
+### Известные UI-висяки в page.tsx
+
+- **Opening Trainer modal** (`showOpeningTrainer` state, modal at line ~5726) — нет триггера-кнопки нигде в UI. Модал unreachable. Нужна кнопка типа Repertoire.
+
+### Roadmap (после merge)
+
+**Приоритет 1 (быстрые wins):**
+- [ ] Re-port `Repertoire.tsx` в новый page.tsx (модал + state + R-хоткей + match-bar в opening detection card).
+- [ ] Re-port `P2P.tsx` (route param `?room=`, WebRTC через useP2P, override game state в P2P-режиме).
+- [ ] Re-port `BoardArt.tsx` (overlay + slider opacity, persist в `aevion_board_art_v1`).
+- [ ] Re-port Studio mode (отдельный subroute `/cyberchess/studio`).
+
+**Приоритет 2:**
+- [ ] Tournament Mode UI polish — bracket visualization, persona quotes after wins/losses.
+- [ ] Variants UX — per-variant tutorial overlays, win-condition animations (KOTH center pulse, ThreeCheck counter, etc.).
+- [ ] Brilliancy Hunt — добавить ежедневное напоминание-уведомление если streak ≥ 3.
+- [ ] Speech-to-move через Whisper API (на сервере) — заменит Web Speech, точнее.
+- [ ] Replay studio polish — `reelsGen.ts` существует, нужен UI для шеринга.
+
+**Приоритет 3 (амбициозное):**
+- [ ] AR-режим через WebXR.
+- [ ] Voice + face emotion — Coach реагирует на blunder.
+- [ ] Глобальная P2P-лестница без центрального сервера.
+
+---
+
+## Историческая часть — ночная сессия 2026-04-26 → 04-27
+
+> Этот раздел описывает СОСТОЯНИЕ ДО merge chess-tournaments. Часть фич перекрыта/заменена — для актуального состояния смотри раздел выше.
 
 ---
 
@@ -33,7 +141,21 @@ npm start  # слушает 4001
 
 ---
 
-## Что сделано в эту ночную сессию (2026-04-26)
+## Что сделано в эту ночную сессию (2026-04-26 → 04-27)
+
+> Серия из 6 commits на `main`. Production build (`npx next build`) зелёный после каждого.
+> Последний commit: см. `git log --oneline -1`.
+
+### Файлы новые в эту сессию (всего)
+- `BoardArt.tsx` — 5 SVG-узоров (Hokusai, Эйфель, шанырак, персидская геометрия, Klimt).
+- `OpeningExplorer.tsx` — дерево вариантов из текущей позиции с ECO band.
+- `P2P.tsx` — useP2P hook поверх PeerJS CDN, WebRTC data channel.
+- `Repertoire.tsx` — модал «📚 Мой дебютный репертуар» с persist + stats per entry.
+- `Tablebase.tsx` — панель perfect-play для ≤7 фигур через tablebase.lichess.ovh.
+- `FamousGames.tsx` — библиотека из 10 классических партий (PGN).
+
+### Backbone-фичи (большие)
+
 
 ### 🤖 Bot personalities (вместо безликих AI-уровней)
 
@@ -168,6 +290,72 @@ Storage key bumped `_v1` → `_v2` чтобы новые юзеры старто
 ### 🐛 Bug fix
 
 - `ChessyState.owned: Record<string, boolean>` → `Record<string, boolean|string>` (`page.tsx:165`) — позволяет хранить `hint_credits` (строка с числом) и `daily_double_until` (строка с timestamp). Production build теперь зелёный.
+
+### 📚 Personal Opening Repertoire (`Repertoire.tsx`)
+
+- Модал «📚 Мой репертуар» — сохраняй текущую дебютную последовательность как именованную линию для своего цвета (white / black).
+- Storage в `aevion_repertoire_v1`. Per-entry stats: uses, wins, losses, draws, win rate.
+- В live-game в opening detection card два бейджа: **📖 В РЕПЕРТУАРЕ** (зелёный) если текущая позиция совпадает с сохранённой линией, **↗ ВНЕ КНИГИ** (оранжевый) если ушёл от своего репертуара.
+- Если в книге и есть запланированный продолжение: кнопка ▶ {nextMove} играет его одним кликом.
+- Stats авто-обновляются при game-over для самой глубокой совпавшей линии.
+- Хоткей **R** открывает / закрывает модал.
+
+### 🧮 Tablebase для эндшпилей (`Tablebase.tsx`)
+
+- В analysis/coach табе (после 14 ходов) появляется панель TABLEBASE.
+- Запрос к `https://tablebase.lichess.ovh/standard?fen=...` (бесплатный публичный API).
+- Только для позиций с ≤7 фигур (для них существует решённая 7-фигурная база Lomonosov 2018).
+- Throttle 350мс + module-level cache по FEN.
+- Показывает классификацию (WIN/LOSS/DRAW + cursed-win/blessed-loss), DTZ, до 8 best-moves кнопок.
+- Клик играет ход.
+
+### 🏆 Famous Games library (`FamousGames.tsx`)
+
+- 10 классических партий (PGN, public domain — нотация не охраняется авторским правом):
+  - Морфи vs герцог Брауншвейгский (Опера, 1858)
+  - Андерссен vs Кизерицкий (Бессмертная, 1851)
+  - Андерссен vs Дюфрень (Вечнозелёная, 1852)
+  - Каспаров vs Топалов (Вейк-ан-Зее 1999, «Бессмертная Каспарова»)
+  - Фишер vs Спасский партия 6 (WC 1972)
+  - Полугаевский vs Нежметдинов (Сочи 1958)
+  - Бирн vs Фишер «Партия века» (NY 1956)
+  - Карлсен vs Ананд WC 2013 партия 9
+  - Карлсен vs Каруана WC 2018 партия 12
+  - Каспаров vs Deep Blue 1996 партия 1
+- Каждая партия: emoji, lesson (один абзац — почему важна), ECO, players.
+- Карточка «🏆 Великие партии» в Launchpad → модал → клик загружает PGN в Analysis tab.
+- Хоткей **G** открывает модал.
+
+### 📝 PGN export с annotations
+
+- `buildPGN()` теперь принимает `analysis` массив и эмитит PGN NAGs:
+  - `$1` = `!`, `$2` = `?`, `$3` = `!!`, `$4` = `??`, `$5` = `!?`, `$6` = `?!`
+- Каждый ход получает `[%eval +0.42]` или `[%eval #5]` комментарий.
+- Header `[Annotator "AEVION Stockfish"]` добавлен.
+- Экспортированный PGN сразу совместим с lichess.org/import, chess.com analysis, scid и др.
+
+### 🎭 Persona-aware "thinking" lines
+
+- Каждый бот теперь имеет свою фразу когда думает:
+  - Рома — «хм…»
+  - Сара — «размышляю»
+  - Клаус — «планирую»
+  - Анна — «анализирую»
+  - Эрик — «вижу комбинацию»
+  - Магнус — «считаю варианты»
+- Status-bar labels переведены на RU.
+
+### ⌨ Новые хоткеи
+
+- `R` — toggle 📚 Repertoire модал
+- `G` — toggle 🏆 Great Games модал
+- (старые: ←/→ ходы, Home/End, F flip, M mute, N new game, Esc clear premoves, ?  help, ПКМ-drag arrows)
+- Help модал обновлён.
+
+### 👋 Onboarding
+
+- Первый визит в `/cyberchess` показывает плавающую welcome-карточку справа-снизу с 5 пунктами (Quick Start / С другом / Репертуар / Великие партии / Coach).
+- Скрывается через 22 сек или по кнопке «Понял». Persistent flag `aevion_cc_visited_v1`.
 
 ---
 

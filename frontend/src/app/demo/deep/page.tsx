@@ -18,7 +18,7 @@ export default function DemoDeepPage() {
 
         <header style={{ marginBottom: 36 }}>
           <p style={{ margin: 0, fontSize: 13, color: "#94a3b8", letterSpacing: "0.04em" }}>
-            AEVION · техническая демонстрация
+            AEVION · technical deep dive
           </p>
           <h1 style={{ fontSize: "clamp(1.65rem, 4vw, 2.25rem)", fontWeight: 800, margin: "12px 0 10px", lineHeight: 1.2 }}>
             {demoDeepIntro.title}
@@ -40,7 +40,22 @@ export default function DemoDeepPage() {
                 fontSize: 14,
               }}
             >
-              ← Спектакль /demo
+              ← Product tour /demo
+            </Link>
+            <Link
+              href="/pitch"
+              style={{
+                padding: "10px 18px",
+                borderRadius: 10,
+                background: "rgba(251,191,36,0.15)",
+                border: "1px solid rgba(251,191,36,0.4)",
+                color: "#fbbf24",
+                fontWeight: 700,
+                textDecoration: "none",
+                fontSize: 14,
+              }}
+            >
+              Investor pitch /pitch
             </Link>
             <Link
               href="/"
@@ -55,7 +70,7 @@ export default function DemoDeepPage() {
                 fontSize: 14,
               }}
             >
-              Главная
+              Home
             </Link>
             <a
               href={`${origin}/api/openapi.json`}
@@ -88,7 +103,7 @@ export default function DemoDeepPage() {
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 800, color: "#94a3b8", marginBottom: 12, letterSpacing: "0.06em" }}>
-            ОГЛАВЛЕНИЕ
+            CONTENTS
           </div>
           <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 1.9, fontSize: 14 }}>
             {demoDeepSections.map((s) => (
@@ -152,13 +167,34 @@ export default function DemoDeepPage() {
         ))}
 
         <footer style={{ marginTop: 32, textAlign: "center", color: "#94a3b8", fontSize: 14, lineHeight: 1.6 }}>
-          <p style={{ margin: "0 0 16px" }}>
-            Полный визуальный нарратив по 27 узлам — на{" "}
+          <p style={{ margin: "0 0 20px" }}>
+            Full visual narrative across the 27 nodes lives at{" "}
             <Link href="/demo" style={{ color: "#5eead4" }}>
               /demo
             </Link>
+            . The investor view (TAM, network effects, defensibility, GTM, ARR trajectory) lives at{" "}
+            <Link href="/pitch" style={{ color: "#fbbf24", fontWeight: 700 }}>
+              /pitch
+            </Link>
             .
           </p>
+          <Link
+            href="/pitch"
+            style={{
+              display: "inline-block",
+              padding: "12px 24px",
+              borderRadius: 12,
+              background: "linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.18))",
+              border: "1px solid rgba(251,191,36,0.55)",
+              color: "#fef3c7",
+              fontWeight: 800,
+              textDecoration: "none",
+              fontSize: 15,
+              boxShadow: "0 8px 32px rgba(251,191,36,0.25)",
+            }}
+          >
+            Investor pitch · why $1B+ →
+          </Link>
         </footer>
       </div>
     </div>

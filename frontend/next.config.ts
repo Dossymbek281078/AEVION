@@ -100,6 +100,17 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
         ],
       },
+      {
+        // QCoreAI embed widget — read-only multi-agent run snapshot,
+        // embeddable on landing pages, docs, customer portals.
+        source: "/qcoreai/embed/:path*",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+        ],
+      },
     ];
   },
 

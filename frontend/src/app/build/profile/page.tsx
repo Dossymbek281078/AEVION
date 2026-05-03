@@ -109,6 +109,8 @@ function ProfileBody() {
             Tell clients and project owners who you are. Required to apply for vacancies.
           </p>
 
+          {!profile && <OnboardingChecklist />}
+
           {profile && (
             <div className="mb-4">
               <ProfileCompletenessMeter profile={profile} />
@@ -632,3 +634,39 @@ function EducationEditor({
     </div>
   );
 }
+
+function OnboardingChecklist() {
+  const steps = [
+    { done: false, label: "Fill in your profile", href: "#profile-form", cta: "Do it ↓" },
+    { done: false, label: "Add work experience", href: "#experience", cta: "Add ↓" },
+    { done: false, label: "Browse open vacancies", href: "/build/vacancies", cta: "Browse →" },
+    { done: false, label: "Apply for a vacancy", href: "/build/vacancies", cta: "Apply →" },
+    { done: false, label: "Ask the AI Career Coach", href: "/build/coach", cta: "Open Coach →" },
+  ];
+  return (
+    <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-300">
+        👋 Welcome to QBuild — 5 steps to get hired
+      </div>
+      <ol className="space-y-2">
+        {steps.map((s, i) => (
+          <li key={i} className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-200">
+                {i + 1}
+              </span>
+              <span className="text-slate-300">{s.label}</span>
+            </div>
+            <Link
+              href={s.href}
+              className="rounded-md bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/30"
+            >
+              {s.cta}
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+

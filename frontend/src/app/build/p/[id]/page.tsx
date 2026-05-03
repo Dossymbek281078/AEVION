@@ -65,6 +65,20 @@ async function loadPublic(id: string): Promise<PublicView | null> {
   }
 }
 
+async function loadReviews(projectId: string): Promise<{ items: { id: string; rating: number; comment: string | null; reviewerName: string | null; createdAt: string }[]; total: number }> {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/build/reviews/by-project/${encodeURIComponent(projectId)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(4000) },
+    );
+    if (!res.ok) return { items: [], total: 0 };
+    const j = await res.json();
+    return j?.data ?? { items: [], total: 0 };
+  } catch {
+    return { items: [], total: 0 };
+  }
+}
+
 async function getOrigin(): Promise<string> {
   try {
     const h = await headers();
@@ -179,7 +193,10 @@ export default async function PublicProjectPage({ params }: Props) {
     );
   }
 
-  const { project, vacancies, files, client } = data;
+  const [{ project, vacancies, files, client }, reviews] = await Promise.all([
+    Promise.resolve(data),
+    loadReviews(id),
+  ]);
   const tone = statusTone(project.status);
   const detailUrl = origin ? `${origin}/build/p/${project.id}` : `/build/p/${project.id}`;
   const openVacancies = vacancies.filter((v) => v.status === "OPEN");
@@ -329,6 +346,33 @@ export default async function PublicProjectPage({ params }: Props) {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {reviews.items.length > 0 && (
+          <div style={{ ...card, marginBottom: 14 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 800, margin: 0, marginBottom: 12, color: "#fff" }}>
+              Reviews ({reviews.total})
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {reviews.items.slice(0, 5).map((r) => (
+                <div
+                  key={r.id}
+                  style={{ padding: 12, borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ color: "#facc15", fontSize: 14 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                    <span style={{ fontSize: 12, color: "#64748b" }}>{r.reviewerName || "Anonymous"}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "#475569" }}>{r.createdAt.slice(0, 10)}</span>
+                  </div>
+                  {r.comment && (
+                    <p style={{ margin: 0, fontSize: 13, color: "#cbd5e1", fontStyle: "italic" }}>
+                      &ldquo;{r.comment}&rdquo;
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

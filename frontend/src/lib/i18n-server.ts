@@ -21,9 +21,15 @@
 //   }
 
 import { cookies, headers } from "next/headers";
-import { LANG_COOKIE, interpolate, translations, type Lang } from "./i18n";
+// Import from the pure data module — NOT from "./i18n", which is a "use client"
+// boundary. Importing translations through that boundary returns an opaque
+// client-reference stub on the server, which made tServer() throw
+// "Cannot read properties of undefined (reading <key>)" for every SSR page
+// that wasn't a static route (observed on /globus, /qbuild, /qtradeoffline,
+// /aevion-ip-bureau, /awards on Vercel 2026-05-03).
+import { LANG_COOKIE, interpolate, translations, type Lang } from "./i18n-data";
 
-export type { Lang } from "./i18n";
+export type { Lang } from "./i18n-data";
 
 function isLang(x: unknown): x is Lang {
   return x === "en" || x === "ru" || x === "kk";

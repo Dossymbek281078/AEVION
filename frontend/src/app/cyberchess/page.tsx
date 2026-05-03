@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -16,6 +17,7 @@ import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
+import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
 import { ldTournament, svTournament, ldTrophies, svTrophies, createTournament, resolveBotMatches, applyPlayerResult, advanceBracket, nextPlayerMatch, finalPlace, placeReward, defeatedByPlayer, type Tournament, type Trophy, type Persona, PERSONAS } from "./tournament";
 import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode, shareCodeToProfile, clonePreferredMove, styleVerdict, type CloneProfile } from "./styleCloner";
@@ -3538,11 +3540,7 @@ export default function CyberChessPage(){
                 const ringCol=isLegal?"#10b981":"#94a3b8";
                 return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
               })()}
-              {/* Ghost piece following pointer during drag.
-                  Outer div: GPU-композитная позиция через translate3d (обновляется в flushGhost).
-                  Inner div: pop-анимация при mount'е — даёт визуальное «отлипание от доски».
-                  willChange: transform — даёт браузеру upfront create compositor layer. */}
-              {(()=>{const gp=ghostFrom?(game.get(ghostFrom)):null;const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;const sz=ghostSizeRef.current;const overIllegal=ghostFrom&&dragHover&&vm.size>0&&!vm.has(dragHover);return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:sz,height:sz,transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform",visibility:ghostFrom&&gp?"visible":"hidden"}}>{gp&&<div style={{width:"100%",height:"100%",opacity:overIllegal?0.55:1,animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}><Piece type={gp.type} color={gp.color}/></div>}</div>;})()}
+              {/* Ghost portaled to document.body — see end of return. */}
 
               {/* Move slide animation — летящая фигура поверх board */}
               {moveAnim&&(()=>{
@@ -7394,5 +7392,29 @@ export default function CyberChessPage(){
       })()}
     </Modal>
 
-    </ProductPageShell></main>);
+    </ProductPageShell>
+    {typeof document!=="undefined" && createPortal(
+      (()=>{
+        const gp=ghostFrom?(virtualGame.get(ghostFrom)||game.get(ghostFrom)):null;
+        const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
+        const sz=ghostSizeRef.current;
+        const overIllegal=ghostFrom&&dragHover&&vm.size>0&&!vm.has(dragHover);
+        return <div ref={ghostRef} style={{
+          position:"fixed",left:0,top:0,width:sz,height:sz,
+          transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,
+          pointerEvents:"none",zIndex:99999,willChange:"transform",
+          visibility:ghostFrom&&gp?"visible":"hidden"
+        }}>
+          {gp&&<div style={{width:"100%",height:"100%",opacity:overIllegal?0.55:1,
+            animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",
+            filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))",
+            transition:"opacity 80ms ease"}}>
+            <Piece type={gp.type} color={gp.color}/>
+          </div>}
+        </div>;
+      })(),
+      document.body
+    )}
+    <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
+    </main>);
 }

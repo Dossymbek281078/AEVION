@@ -6,6 +6,7 @@ import { getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { sendVerificationEmail, sendPasswordResetEmail } from "../lib/build/email";
 
 export const authRouter = Router();
 
@@ -306,6 +307,20 @@ authRouter.post("/register", registerLimiter, async (req, res) => {
     const sid = await createSession(id, req);
     const token = signToken({ sub: id, email, role, sid });
     recordAuthAudit(id, "register", req, { sid });
+
+    // Send verification email async — fire-and-forget, don't block response.
+    void (async () => {
+      try {
+        const minted = await mintToken();
+        const vId = crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
+        await pool.query(
+          `INSERT INTO "EmailVerifyToken" ("id","userId","tokenHash","expiresAt") VALUES ($1,$2,$3,$4)`,
+          [vId, id, minted.hash, expiresAt],
+        );
+        sendVerificationEmail({ to: email, name: String(name), token: minted.plaintext });
+      } catch { /**/ }
+    })();
 
     res.status(201).json({
       token,
@@ -629,6 +644,11 @@ authRouter.post("/password/reset/request", passwordResetRateLimit, async (req, r
         [id, userId, minted.hash, expiresAt]
       );
       recordAuthAudit(userId, "password.reset.request", req, { tokenId: id });
+
+      // Send reset email — fire-and-forget
+      const nameQ = await pool.query(`SELECT "name" FROM "AEVIONUser" WHERE "id" = $1`, [userId]);
+      const userName = (nameQ.rows[0] as { name: string } | undefined)?.name ?? "пользователь";
+      sendPasswordResetEmail({ to: email, name: userName, token: plaintext! });
     } else {
       // Audit the attempt anyway — useful for spotting enumeration sweeps.
       recordAuthAudit(null, "password.reset.request.unknown", req, { email });
@@ -738,6 +758,11 @@ authRouter.post("/email/verify/request", emailVerifyRateLimit, async (req, res) 
       [id, user.id, minted.hash, expiresAt]
     );
     recordAuthAudit(user.id, "email.verify.request", req, { tokenId: id });
+
+    // Get user name for the email
+    const nameQ = await pool.query(`SELECT "name" FROM "AEVIONUser" WHERE "id" = $1`, [user.id]);
+    const userName = (nameQ.rows[0] as { name: string } | undefined)?.name ?? "пользователь";
+    sendVerificationEmail({ to: user.email, name: userName, token: minted.plaintext });
 
     const dev = process.env.NODE_ENV !== "production";
     res.json({

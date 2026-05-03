@@ -191,6 +191,52 @@ export function sendTrialTaskApproved(opts: {
   );
 }
 
+// ── Auth emails ──────────────────────────────────────────────────────
+
+export function sendVerificationEmail(opts: {
+  to: string;
+  name: string;
+  token: string;
+}): void {
+  const link = `${BASE}/build/verify-email?token=${encodeURIComponent(opts.token)}`;
+  void send(
+    opts.to,
+    "Подтвердите email — AEVION QBuild",
+    layout(`
+      <h2>Подтвердите ваш email</h2>
+      <p>Привет, <strong>${opts.name}</strong>! Для активации аккаунта нажмите кнопку ниже.</p>
+      <p>Ссылка действует 24 часа.</p>
+      <a class="btn" href="${link}">Подтвердить email</a>
+      <p style="margin-top:24px;font-size:12px;color:#64748b">
+        Если кнопка не работает, скопируйте ссылку:<br>${link}
+      </p>
+      <p style="font-size:12px;color:#64748b">Если вы не регистрировались — проигнорируйте это письмо.</p>
+    `),
+  );
+}
+
+export function sendPasswordResetEmail(opts: {
+  to: string;
+  name: string;
+  token: string;
+}): void {
+  const link = `${BASE}/build/reset-password?token=${encodeURIComponent(opts.token)}&email=${encodeURIComponent(opts.to)}`;
+  void send(
+    opts.to,
+    "Сброс пароля — AEVION QBuild",
+    layout(`
+      <h2>Сброс пароля</h2>
+      <p>Привет, <strong>${opts.name}</strong>! Кто-то запросил сброс пароля для вашего аккаунта.</p>
+      <p>Нажмите кнопку ниже — ссылка действует 1 час.</p>
+      <a class="btn" href="${link}">Сбросить пароль</a>
+      <p style="margin-top:24px;font-size:12px;color:#64748b">
+        Если кнопка не работает, скопируйте ссылку:<br>${link}
+      </p>
+      <p style="font-size:12px;color:#64748b">Если вы не запрашивали сброс — просто проигнорируйте это письмо. Ваш пароль не изменится.</p>
+    `),
+  );
+}
+
 // ── Available Now ─────────────────────────────────────────────────────
 
 export function sendAvailabilityExpiringSoon(opts: {

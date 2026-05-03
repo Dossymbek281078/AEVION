@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "smoke:build": "node scripts/build-smoke.js",
+    "smoke:tier3": "node scripts/tier3-smoke.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "test": "vitest run",
     "test:watch": "vitest"

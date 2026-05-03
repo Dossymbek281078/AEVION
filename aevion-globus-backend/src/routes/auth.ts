@@ -161,9 +161,29 @@ function requireAuth(req: any, res: any) {
 async function requireAuthStrict(req: any, res: any) {
   const payload = requireAuth(req, res);
   if (!payload) return null;
+  await ensureAuthTier2Tables();
+
+  // tokenVersion check (sign-out-everywhere): the AEVIONUser row carries a
+  // monotonic counter; bumping it MUST invalidate every previously-issued
+  // token. Tokens minted before the column existed have no `tv` claim and
+  // are accepted only while the stored counter is still 0.
+  const tokenTv = ((payload as any).tv as number | undefined) ?? 0;
+  const userRow = await pool.query(
+    `SELECT "tokenVersion" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`,
+    [payload.sub],
+  );
+  if (userRow.rowCount === 0) {
+    res.status(401).json({ error: "user no longer exists" });
+    return null;
+  }
+  const dbTv = Number((userRow.rows[0] as { tokenVersion: number | null })?.tokenVersion ?? 0);
+  if (tokenTv !== dbTv) {
+    res.status(401).json({ error: "session signed out everywhere — sign in again" });
+    return null;
+  }
+
   const sid = (payload as any).sid as string | undefined;
   if (!sid) return payload;
-  await ensureAuthTier2Tables();
   const r = await pool.query(
     `SELECT "revokedAt" FROM "AuthSession" WHERE "id" = $1 AND "userId" = $2 LIMIT 1`,
     [sid, payload.sub]

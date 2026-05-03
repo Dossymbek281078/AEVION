@@ -166,6 +166,18 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             </div>
           )}
           <ShareVacancyBlock vacancyId={vacancy.id} />
+
+          {vacancy.clientId && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Employer</div>
+              <Link
+                href={`/build/u/${encodeURIComponent(vacancy.clientId)}`}
+                className="text-emerald-300 hover:underline"
+              >
+                View employer profile →
+              </Link>
+            </div>
+          )}
         </aside>
       </div>
     </BuildShell>

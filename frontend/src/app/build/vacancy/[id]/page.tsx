@@ -93,11 +93,20 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             )}
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs uppercase tracking-wider text-slate-400">Salary</div>
-          <div className="text-2xl font-semibold text-emerald-300">
-            {vacancy.salary > 0 ? `$${vacancy.salary.toLocaleString()}` : "—"}
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wider text-slate-400">Salary</div>
+            <div className="text-2xl font-semibold text-emerald-300">
+              {vacancy.salary > 0 ? `$${vacancy.salary.toLocaleString()}` : "—"}
+            </div>
           </div>
+          {isOwner && (
+            <VacancyStatusToggle
+              vacancyId={vacancy.id}
+              currentStatus={vacancy.status}
+              onToggled={refresh}
+            />
+          )}
         </div>
       </div>
 
@@ -583,5 +592,42 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
         {copied && <span className="text-xs text-emerald-300">Скопировано ✓</span>}
       </div>
     </div>
+  );
+}
+
+function VacancyStatusToggle({
+  vacancyId,
+  currentStatus,
+  onToggled,
+}: {
+  vacancyId: string;
+  currentStatus: string;
+  onToggled: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const isOpen = currentStatus === "OPEN";
+  async function toggle() {
+    setBusy(true);
+    try {
+      await buildApi.patchVacancy(vacancyId, { status: isOpen ? "CLOSED" : "OPEN" });
+      onToggled();
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+        isOpen
+          ? "border border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
+          : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
+      }`}
+    >
+      {busy ? "…" : isOpen ? "Close vacancy" : "Reopen vacancy"}
+    </button>
   );
 }

@@ -552,6 +552,8 @@ export const buildApi = {
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
   updateVacancy: (id: string, status: VacancyStatus) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
+  patchVacancy: (id: string, fields: Partial<{ status: VacancyStatus; title: string; description: string; salary: number }>) =>
+    call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, fields),
   matchCandidates: (vacancyId: string) =>
     call<{
       items: (TalentRow & { matchScore: number; matchedSkills: string[] })[];

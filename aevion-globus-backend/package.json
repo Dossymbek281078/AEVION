@@ -10,6 +10,7 @@
     "smoke:qsign-v2": "node scripts/qsign-v2-smoke.js",
     "smoke:build": "node scripts/build-smoke.js",
     "smoke:tier3": "node scripts/tier3-smoke.js",
+    "smoke:bank-prod": "node scripts/bank-prod-smoke.js",
     "smoke:all": "node scripts/all-smokes.js",
     "smoke:read-only": "READ_ONLY=1 node scripts/all-smokes.js",
     "smoke:auth-replay": "node scripts/auth-replay-smoke.js",

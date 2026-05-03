@@ -1,0 +1,453 @@
+{
+  "base": "https://aevion-8bxyonhba-aevion.vercel.app/api-backend",
+  "runAt": "2026-05-03T16:54:38.822Z",
+  "device": "bank-smoke-1777827271658",
+  "email": "smoke+1777827271658@aevion.test",
+  "stepsTotal": 19,
+  "stepsFailed": 0,
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/aev/stats",
+      "status": 200,
+      "durMs": 645,
+      "body": null,
+      "response": {
+        "ok": true,
+        "wallets": 1,
+        "ledgerEntries": 3,
+        "aggregate": {
+          "totalMined": 5,
+          "totalSpent": 0.75,
+          "totalBalance": 1
+        },
+        "capRemaining": 20999995
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/aev/wallet/bank-smoke-1777827271658/mint",
+      "status": 200,
+      "durMs": 621,
+      "body": {
+        "amount": 0.5,
+        "sourceKind": "play",
+        "sourceModule": "smoke",
+        "reason": "smoke-mint-1"
+      },
+      "response": {
+        "ok": true,
+        "wallet": {
+          "deviceId": "bank-smoke-1777827271658",
+          "userId": null,
+          "balance": 0.5,
+          "lifetimeMined": 0.5,
+          "lifetimeSpent": 0,
+          "globalSupplyMined": 0.5,
+          "dividendsClaimed": 0,
+          "modes": {
+            "play": true,
+            "compute": false,
+            "stewardship": true
+          },
+          "startTs": 1777827273045,
+          "updatedAt": 1777827273045,
+          "createdAt": 1777827273045
+        },
+        "entry": {
+          "id": "c22c2014-7433-4559-8ec7-bddf0233cc5b",
+          "deviceId": "bank-smoke-1777827271658",
+          "kind": "mint",
+          "amount": 0.5,
+          "sourceKind": "play",
+          "sourceModule": "smoke",
+          "reason": "smoke-mint-1",
+          "balanceAfter": 0.5,
+          "ts": 1777827273045
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/aev/wallet/bank-smoke-1777827271658/mint",
+      "status": 200,
+      "durMs": 415,
+      "body": {
+        "amount": 1.25,
+        "sourceKind": "play",
+        "sourceModule": "smoke"
+      },
+      "response": {
+        "ok": true,
+        "wallet": {
+          "deviceId": "bank-smoke-1777827271658",
+          "userId": null,
+          "balance": 1.75,
+          "lifetimeMined": 1.75,
+          "lifetimeSpent": 0,
+          "globalSupplyMined": 1.75,
+          "dividendsClaimed": 0,
+          "modes": {
+            "play": true,
+            "compute": false,
+            "stewardship": true
+          },
+          "startTs": 1777827273045,
+          "updatedAt": 1777827273456,
+          "createdAt": 1777827273045
+        },
+        "entry": {
+          "id": "e7df1643-bf02-4210-833a-d1a455385ef7",
+          "deviceId": "bank-smoke-1777827271658",
+          "kind": "mint",
+          "amount": 1.25,
+          "sourceKind": "play",
+          "sourceModule": "smoke",
+          "balanceAfter": 1.75,
+          "ts": 1777827273456
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/aev/wallet/bank-smoke-1777827271658/sync",
+      "status": 200,
+      "durMs": 303,
+      "body": {
+        "balance": 1.75,
+        "lifetimeMined": 5,
+        "modes": {
+          "play": false,
+          "compute": true,
+          "stewardship": true
+        }
+      },
+      "response": {
+        "ok": true,
+        "wallet": {
+          "deviceId": "bank-smoke-1777827271658",
+          "userId": null,
+          "balance": 1.75,
+          "lifetimeMined": 5,
+          "lifetimeSpent": 0,
+          "globalSupplyMined": 1.75,
+          "dividendsClaimed": 0,
+          "modes": {
+            "play": false,
+            "compute": true,
+            "stewardship": true
+          },
+          "startTs": 1777827273045,
+          "updatedAt": 1777827273762,
+          "createdAt": 1777827273045
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/aev/wallet/bank-smoke-1777827271658/spend",
+      "status": 200,
+      "durMs": 410,
+      "body": {
+        "amount": 0.75,
+        "reason": "smoke-spend-1"
+      },
+      "response": {
+        "ok": true,
+        "wallet": {
+          "deviceId": "bank-smoke-1777827271658",
+          "userId": null,
+          "balance": 1,
+          "lifetimeMined": 5,
+          "lifetimeSpent": 0.75,
+          "globalSupplyMined": 1.75,
+          "dividendsClaimed": 0,
+          "modes": {
+            "play": false,
+            "compute": true,
+            "stewardship": true
+          },
+          "startTs": 1777827273045,
+          "updatedAt": 1777827274167,
+          "createdAt": 1777827273045
+        },
+        "entry": {
+          "id": "5ef97f55-a8e6-4e5d-8a44-58743280c87c",
+          "deviceId": "bank-smoke-1777827271658",
+          "kind": "spend",
+          "amount": 0.75,
+          "reason": "smoke-spend-1",
+          "balanceAfter": 1,
+          "ts": 1777827274167
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/aev/wallet/bank-smoke-1777827271658/spend",
+      "status": 409,
+      "durMs": 422,
+      "body": {
+        "amount": 999
+      },
+      "response": {
+        "error": "insufficient_funds",
+        "balance": 1,
+        "requested": 999
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/aev/ledger/bank-smoke-1777827271658?limit=10",
+      "status": 200,
+      "durMs": 416,
+      "body": null,
+      "response": {
+        "ok": true,
+        "deviceId": "bank-smoke-1777827271658",
+        "count": 3,
+        "entries": [
+          {
+            "id": "5ef97f55-a8e6-4e5d-8a44-58743280c87c",
+            "deviceId": "bank-smoke-1777827271658",
+            "kind": "spend",
+            "amount": 0.75,
+            "reason": "smoke-spend-1",
+            "balanceAfter": 1,
+            "ts": 1777827274167
+          },
+          {
+            "id": "e7df1643-bf02-4210-833a-d1a455385ef7",
+            "deviceId": "bank-smoke-1777827271658",
+            "kind": "mint",
+            "amount": 1.25,
+            "sourceKind": "play",
+            "sourceModule": "smoke",
+            "balanceAfter": 1.75,
+            "ts": 1777827273456
+          },
+          {
+            "id": "c22c2014-7433-4559-8ec7-bddf0233cc5b",
+            "deviceId": "bank-smoke-1777827271658",
+            "kind": "mint",
+            "amount": 0.5,
+            "sourceKind": "play",
+            "sourceModule": "smoke",
+            "reason": "smoke-mint-1",
+            "balanceAfter": 0.5,
+            "ts": 1777827273045
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/aev/wallet/bank-smoke-1777827271658",
+      "status": 200,
+      "durMs": 413,
+      "body": null,
+      "response": {
+        "ok": true,
+        "wallet": {
+          "deviceId": "bank-smoke-1777827271658",
+          "userId": null,
+          "balance": 1,
+          "lifetimeMined": 5,
+          "lifetimeSpent": 0.75,
+          "globalSupplyMined": 1.75,
+          "dividendsClaimed": 0,
+          "modes": {
+            "play": false,
+            "compute": true,
+            "stewardship": true
+          },
+          "startTs": 1777827273045,
+          "updatedAt": 1777827274167,
+          "createdAt": 1777827273045
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/aev/wallet/x",
+      "status": 400,
+      "durMs": 391,
+      "body": null,
+      "response": {
+        "error": "invalid_device_id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register",
+      "status": 201,
+      "durMs": 352,
+      "body": {
+        "email": "smoke+1777827271658@aevion.test",
+        "password": "smoke-password-1234",
+        "name": "Bank Prod Smoke"
+      },
+      "response": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYTcxZGUzZC0wMmUzLTRmOWItYjNiNi01ZDIwMmE0OWE2ODIiLCJlbWFpbCI6InNtb2tlKzE3Nzc4MjcyNzE2NThAYWV2aW9uLnRlc3QiLCJyb2xlIjoiVVNFUiIsInNpZCI6IjQ2ZDllMDg0LWRiMGMtNDM1ZS04Yzg5LTM5ZTU2ZDhkYzNlYyIsImlhdCI6MTc3NzgyNzI3NiwiZXhwIjoxNzc4NDMyMDc2fQ.5jb1hBEWYTKP_TLcSEEOHzGCDqnErbgk8g5WF3Ra8Tc",
+        "sessionId": "46d9e084-db0c-435e-8c89-39e56d8dc3ec",
+        "user": {
+          "id": "1a71de3d-02e3-4f9b-b3b6-5d202a49a682",
+          "email": "smoke+1777827271658@aevion.test",
+          "name": "Bank Prod Smoke",
+          "role": "USER"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200,
+      "durMs": 269,
+      "body": null,
+      "response": {
+        "user": {
+          "id": "1a71de3d-02e3-4f9b-b3b6-5d202a49a682",
+          "email": "smoke+1777827271658@aevion.test",
+          "name": "Bank Prod Smoke",
+          "role": "USER",
+          "createdAt": "2026-05-03T16:54:36.156Z",
+          "emailVerifiedAt": null
+        },
+        "tokenPayload": {
+          "sub": "1a71de3d-02e3-4f9b-b3b6-5d202a49a682",
+          "email": "smoke+1777827271658@aevion.test",
+          "role": "USER",
+          "sid": "46d9e084-db0c-435e-8c89-39e56d8dc3ec",
+          "iat": 1777827276,
+          "exp": 1778432076
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/qtrade/accounts",
+      "status": 201,
+      "durMs": 313,
+      "body": null,
+      "response": {
+        "id": "acc_70e7a2b6-73f9-474b-8814-0e87a88170cd",
+        "owner": "smoke+1777827271658@aevion.test",
+        "balance": 0,
+        "createdAt": "2026-05-03T16:54:36.749Z"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/qtrade/accounts",
+      "status": 201,
+      "durMs": 251,
+      "body": null,
+      "response": {
+        "id": "acc_ff97244a-912d-4f28-bf2f-567132acf46e",
+        "owner": "smoke+1777827271658@aevion.test",
+        "balance": 0,
+        "createdAt": "2026-05-03T16:54:37.000Z"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/qtrade/topup",
+      "status": 200,
+      "durMs": 438,
+      "body": {
+        "accountId": "acc_70e7a2b6-73f9-474b-8814-0e87a88170cd",
+        "amount": 100
+      },
+      "response": {
+        "id": "acc_70e7a2b6-73f9-474b-8814-0e87a88170cd",
+        "balance": 100,
+        "updatedAt": "2026-05-03T16:54:37.439Z"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/qtrade/transfer",
+      "status": 200,
+      "durMs": 277,
+      "body": {
+        "from": "acc_70e7a2b6-73f9-474b-8814-0e87a88170cd",
+        "to": "acc_ff97244a-912d-4f28-bf2f-567132acf46e",
+        "amount": 35,
+        "memo": "smoke-transfer"
+      },
+      "response": {
+        "id": "tx_c357a882-1ffb-48a7-bf85-e16e87c7c2c9",
+        "from": "acc_70e7a2b6-73f9-474b-8814-0e87a88170cd",
+        "to": "acc_ff97244a-912d-4f28-bf2f-567132acf46e",
+        "amount": 35,
+        "createdAt": "2026-05-03T16:54:37.717Z",
+        "memo": "smoke-transfer"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/qtrade/transfers",
+      "status": 200,
+      "durMs": 281,
+      "body": null,
+      "response": {
+        "items": [
+          {
+            "id": "tx_c357a882-1ffb-48a7-bf85-e16e87c7c2c9",
+            "from": "acc_70e7a2b6-73f9-474b-8814-0e87a88170cd",
+            "to": "acc_ff97244a-912d-4f28-bf2f-567132acf46e",
+            "amount": 35,
+            "createdAt": "2026-05-03T16:54:37.717Z",
+            "memo": "smoke-transfer"
+          }
+        ],
+        "nextCursor": null
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/qtrade/cap-status",
+      "status": 200,
+      "durMs": 265,
+      "body": null,
+      "response": {
+        "topup": {
+          "used": 100,
+          "cap": 5000,
+          "remainingSec": 25522
+        },
+        "transfer": {
+          "used": 35,
+          "cap": 2000,
+          "remainingSec": 25522
+        },
+        "resetsAtIso": "2026-05-04T00:00:00.263Z"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/qtrade/summary",
+      "status": 200,
+      "durMs": 278,
+      "body": null,
+      "response": {
+        "accounts": 2,
+        "transfers": 1,
+        "operations": 2,
+        "totalBalance": 100,
+        "totalTransferVolume": 35,
+        "totalTopupVolume": 100
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/account",
+      "status": 200,
+      "durMs": 399,
+      "body": null,
+      "response": {
+        "deleted": true
+      }
+    }
+  ]
+}

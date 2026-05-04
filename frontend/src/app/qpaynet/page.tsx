@@ -115,6 +115,7 @@ export default function QPayNetDashboard() {
         <div className="flex items-center gap-3">
           <Link href="/" className="text-xs text-slate-400 hover:text-white">← AEVION</Link>
           {token && <Link href="/qpaynet/requests" className="text-xs text-slate-400 hover:text-white">📥 Запросы</Link>}
+          {token && <Link href="/qpaynet/kyc" className="text-xs text-slate-400 hover:text-white">🛡 KYC</Link>}
           <Link href="/qpaynet/merchant" className="text-xs text-slate-400 hover:text-white">Merchant API</Link>
           {token && (
             <button onClick={() => setShowCreate(true)}

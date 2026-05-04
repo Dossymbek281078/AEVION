@@ -193,8 +193,34 @@ async function run() {
   assert("delivery has status field", typeof deliveries.body.status === "string");
   assert("delivery has notifyUrl", deliveries.body.notifyUrl === "https://example.com/hook");
 
-  // 17. Insufficient balance
-  console.log("\n12. Edge cases");
+  // 17. KYC stub
+  console.log("\n12. KYC");
+  const kycStatus0 = await req("GET", "/api/qpaynet/kyc/status", null, auth);
+  assert("GET /kyc/status → 200", kycStatus0.status === 200);
+  assert("kyc threshold field present", typeof kycStatus0.body.thresholdKzt === "number");
+
+  const kycBad = await req("POST", "/api/qpaynet/kyc/submit", { fullName: "X", iin: "123" }, auth);
+  assert("kyc submit short name → 400", kycBad.status === 400);
+
+  const kycShortIin = await req("POST", "/api/qpaynet/kyc/submit", { fullName: "Иванов Иван", iin: "1234" }, auth);
+  assert("kyc submit short iin → 400", kycShortIin.status === 400 && kycShortIin.body.error === "iin_must_be_12_digits");
+
+  // 18. Generic merchant webhook subscriptions
+  console.log("\n13. Webhook subs");
+  const subCreate = await req("POST", "/api/qpaynet/webhook-subs", { url: "https://example.com/hook" }, auth);
+  assert("POST /webhook-subs → 201", subCreate.status === 201);
+  assert("returns secret", typeof subCreate.body.secret === "string" && subCreate.body.secret.length > 20);
+  const subId = subCreate.body.id;
+
+  const subList = await req("GET", "/api/qpaynet/webhook-subs", null, auth);
+  assert("GET /webhook-subs → 200", subList.status === 200);
+  assert("list has the new sub", subList.body.subscriptions?.some(s => s.id === subId));
+
+  const subDel = await req("DELETE", `/api/qpaynet/webhook-subs/${subId}`, null, auth);
+  assert("DELETE /webhook-subs/:id → 200", subDel.status === 200);
+
+  // 19. Insufficient balance
+  console.log("\n14. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

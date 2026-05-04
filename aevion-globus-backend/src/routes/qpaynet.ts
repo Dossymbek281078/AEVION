@@ -102,6 +102,68 @@ async function ensureTables(): Promise<void> {
 const FEE_PCT = 0.001; // 0.1% on transfers
 const DAILY_DEPOSIT_CAP_KZT = parseInt(process.env.QPAYNET_DAILY_DEPOSIT_CAP ?? "500000", 10);
 const MAX_TRANSFER_KZT      = parseInt(process.env.QPAYNET_MAX_TRANSFER ?? "100000", 10);
+const KYC_THRESHOLD_KZT     = parseInt(process.env.QPAYNET_KYC_THRESHOLD ?? "1000000", 10); // monthly cumulative
+const KYC_AUTO_VERIFY       = process.env.QPAYNET_KYC_AUTO_VERIFY === "1";
+
+let kycTableReady = false;
+let merchantWebhooksTableReady = false;
+
+async function ensureKycTable(): Promise<void> {
+  if (kycTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_kyc (
+        owner_id      TEXT PRIMARY KEY,
+        status        TEXT NOT NULL DEFAULT 'pending',  -- pending|verified|rejected
+        full_name     TEXT NOT NULL,
+        iin           TEXT NOT NULL,                     -- 12-digit Kazakh tax ID
+        address       TEXT,
+        rejected_reason TEXT,
+        submitted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        verified_at   TIMESTAMPTZ,
+        rejected_at   TIMESTAMPTZ
+      );
+    `);
+    kycTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet kyc] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function ensureMerchantWebhooksTable(): Promise<void> {
+  if (merchantWebhooksTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_merchant_webhooks (
+        id            TEXT PRIMARY KEY,
+        owner_id      TEXT NOT NULL,
+        url           TEXT NOT NULL,
+        secret        TEXT NOT NULL,
+        events        TEXT NOT NULL DEFAULT 'payment_request.paid',  -- comma-sep
+        revoked_at    TIMESTAMPTZ,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpmw_owner ON qpaynet_merchant_webhooks (owner_id) WHERE revoked_at IS NULL;
+    `);
+    merchantWebhooksTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet mwh] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+// Sum of outgoing amounts (transfer_out + merchant_charge) for a user this month, in tiin.
+async function monthlyOutgoing(pool: ReturnType<typeof getPool>, ownerId: string): Promise<bigint> {
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS s
+     FROM qpaynet_transactions
+     WHERE owner_id = $1 AND type IN ('transfer_out', 'merchant_charge')
+       AND created_at >= date_trunc('month', NOW())`,
+    [ownerId],
+  );
+  return BigInt(r.rows[0]?.s ?? 0);
+}
 
 function toTiin(kzt: number): bigint { return BigInt(Math.round(kzt * 100)); }
 function fromTiin(t: bigint): number { return Number(t) / 100; }
@@ -306,6 +368,23 @@ qpaynetRouter.post("/transfer", async (req, res) => {
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  // KYC soft enforcement: monthly outgoing > threshold requires verified status.
+  await ensureKycTable();
+  const monthly = await monthlyOutgoing(pool, ownerId);
+  const projected = monthly + toTiin(amount);
+  if (projected > toTiin(KYC_THRESHOLD_KZT)) {
+    const kyc = await pool.query("SELECT status FROM qpaynet_kyc WHERE owner_id=$1", [ownerId]);
+    if (kyc.rows[0]?.status !== "verified") {
+      return res.status(403).json({
+        error: "kyc_required",
+        thresholdKzt: KYC_THRESHOLD_KZT,
+        monthlyOutgoingKzt: fromTiin(monthly),
+        kycStatus: kyc.rows[0]?.status ?? "none",
+        message: "Submit KYC at /qpaynet/kyc to lift the monthly transfer limit.",
+      });
+    }
+  }
 
   const from = await pool.query(
     "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
@@ -535,6 +614,158 @@ qpaynetRouter.get("/stats", async (_req, res) => {
     res.json({ activeWallets: 0, totalTransactions: 0, totalDepositedKzt: 0 });
   }
 });
+
+// ── KYC ──────────────────────────────────────────────────────────────────────
+// Compliance stub for РК. Soft-blocks transfers when monthly outgoing
+// exceeds QPAYNET_KYC_THRESHOLD (default 1M KZT) and KYC isn't verified.
+
+// POST /api/qpaynet/kyc/submit
+qpaynetRouter.post("/kyc/submit", async (req, res) => {
+  await ensureKycTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { fullName, iin, address } = req.body as { fullName?: string; iin?: string; address?: string };
+  if (!fullName?.trim() || fullName.trim().length < 5) return res.status(400).json({ error: "full_name_required" });
+  if (!iin || !/^\d{12}$/.test(iin)) return res.status(400).json({ error: "iin_must_be_12_digits" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const status = KYC_AUTO_VERIFY ? "verified" : "pending";
+
+  await pool.query(
+    `INSERT INTO qpaynet_kyc (owner_id, status, full_name, iin, address, submitted_at, verified_at)
+     VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+     ON CONFLICT (owner_id) DO UPDATE SET
+       status = EXCLUDED.status,
+       full_name = EXCLUDED.full_name,
+       iin = EXCLUDED.iin,
+       address = EXCLUDED.address,
+       submitted_at = NOW(),
+       verified_at = EXCLUDED.verified_at,
+       rejected_at = NULL,
+       rejected_reason = NULL`,
+    [ownerId, status, fullName.trim().slice(0, 200), iin, address?.trim().slice(0, 500) ?? null, KYC_AUTO_VERIFY ? new Date() : null],
+  );
+  res.json({ ok: true, status, autoVerified: KYC_AUTO_VERIFY });
+});
+
+// GET /api/qpaynet/kyc/status
+qpaynetRouter.get("/kyc/status", async (req, res) => {
+  await ensureKycTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const r = await pool.query(
+    "SELECT status, full_name, iin, address, submitted_at, verified_at, rejected_at, rejected_reason FROM qpaynet_kyc WHERE owner_id=$1",
+    [ownerId],
+  );
+  const monthly = await monthlyOutgoing(pool, ownerId);
+  const monthlyKzt = fromTiin(monthly);
+  const remainingBeforeKyc = Math.max(0, KYC_THRESHOLD_KZT - monthlyKzt);
+
+  if (!r.rows[0]) {
+    return res.json({
+      status: "none",
+      thresholdKzt: KYC_THRESHOLD_KZT,
+      monthlyOutgoingKzt: monthlyKzt,
+      remainingKztBeforeKycRequired: remainingBeforeKyc,
+      autoVerifyEnabled: KYC_AUTO_VERIFY,
+    });
+  }
+  const k = r.rows[0];
+  res.json({
+    status: k.status,
+    fullName: k.full_name,
+    iinMasked: k.iin ? `${k.iin.slice(0,4)}********` : null,
+    address: k.address,
+    submittedAt: k.submitted_at,
+    verifiedAt: k.verified_at,
+    rejectedAt: k.rejected_at,
+    rejectedReason: k.rejected_reason,
+    thresholdKzt: KYC_THRESHOLD_KZT,
+    monthlyOutgoingKzt: monthlyKzt,
+    remainingKztBeforeKycRequired: remainingBeforeKyc,
+  });
+});
+
+// ── Generic merchant webhook subscriptions ───────────────────────────────────
+// Set-once per owner (vs per-request notifyUrl). Fan out alongside the
+// per-request webhook on payment_request.paid.
+
+// POST /api/qpaynet/webhook-subs
+qpaynetRouter.post("/webhook-subs", async (req, res) => {
+  await ensureMerchantWebhooksTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { url, events = "payment_request.paid" } = req.body as { url?: string; events?: string };
+  if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: "url_must_be_http_or_https" });
+
+  const pool = getPool();
+  const id = randomUUID();
+  const secret = randomBytes(24).toString("base64url");
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  await pool.query(
+    "INSERT INTO qpaynet_merchant_webhooks (id, owner_id, url, secret, events) VALUES ($1,$2,$3,$4,$5)",
+    [id, ownerId, url, secret, events.slice(0, 200)],
+  );
+  res.status(201).json({ id, url, events, secret, message: "Save the secret — it won't be shown again." });
+});
+
+// GET /api/qpaynet/webhook-subs
+qpaynetRouter.get("/webhook-subs", async (req, res) => {
+  await ensureMerchantWebhooksTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "SELECT id, url, events, revoked_at, created_at FROM qpaynet_merchant_webhooks WHERE owner_id=$1 ORDER BY created_at DESC",
+    [auth.sub ?? auth.email ?? "anon"],
+  );
+  res.json({ subscriptions: r.rows });
+});
+
+// DELETE /api/qpaynet/webhook-subs/:id
+qpaynetRouter.delete("/webhook-subs/:id", async (req, res) => {
+  await ensureMerchantWebhooksTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_merchant_webhooks SET revoked_at=NOW() WHERE id=$1 AND owner_id=$2 AND revoked_at IS NULL RETURNING id",
+    [req.params.id, auth.sub ?? auth.email ?? "anon"],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_already_revoked" });
+  res.json({ ok: true });
+});
+
+// Helper: fan out an event to all active merchant webhooks for an owner.
+async function fanOutToOwner(
+  pool: ReturnType<typeof getPool>,
+  ownerId: string,
+  eventName: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await ensureMerchantWebhooksTable();
+    const r = await pool.query(
+      "SELECT url, secret, events FROM qpaynet_merchant_webhooks WHERE owner_id=$1 AND revoked_at IS NULL",
+      [ownerId],
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subs = r.rows.filter((s: any) => (s.events as string).split(",").map(e => e.trim()).includes(eventName));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await Promise.all(subs.map((s: any) => fireRequestWebhook(s.url, s.secret, payload)));
+  } catch (err) {
+    console.warn("[qpaynet fanout] failed:", err instanceof Error ? err.message : err);
+  }
+}
 
 // ── Payment Requests ─────────────────────────────────────────────────────────
 // Public "request money" link: owner creates → shares link → payer pays.
@@ -834,19 +1065,24 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
   const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
 
   // Async webhook with retry queue (handled by background worker on failure).
+  const payload = {
+    event: "payment_request.paid",
+    requestId: pr.id,
+    token: req.params.token,
+    amount: fromTiin(tiin),
+    fee: fromTiin(fee),
+    currency: "KZT",
+    description: pr.description,
+    paidBy: fromWalletId,
+    paidTxId: txOutId,
+    paidAt: new Date().toISOString(),
+  };
+  // Fan out to recipient owner's generic webhook subscriptions (set-once).
+  const recipientOwnerId = toWallet.rows[0]?.owner_id;
+  if (recipientOwnerId) {
+    void fanOutToOwner(pool, recipientOwnerId, "payment_request.paid", payload);
+  }
   if (pr.notify_url && pr.notify_secret) {
-    const payload = {
-      event: "payment_request.paid",
-      requestId: pr.id,
-      token: req.params.token,
-      amount: fromTiin(tiin),
-      fee: fromTiin(fee),
-      currency: "KZT",
-      description: pr.description,
-      paidBy: fromWalletId,
-      paidTxId: txOutId,
-      paidAt: new Date().toISOString(),
-    };
     fireRequestWebhook(pr.notify_url, pr.notify_secret, payload).then(async (result) => {
       if (result.ok) {
         await pool.query(

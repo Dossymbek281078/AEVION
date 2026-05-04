@@ -394,6 +394,93 @@ Pick up to 3 strongest candidates. Возвращай только JSON в фо�
   }
 });
 
+// POST /api/build/ai/translate-vacancy
+// Body: { title: string, description: string, targetLocales?: string[] }
+// Returns { translations: { [locale]: { title, description } } } for the
+// requested locales (defaults to ["ru", "en", "kz"] minus whatever locale
+// the source is already in).
+//
+// Stateless — caller decides whether to persist the result. We keep it
+// stateless so a recruiter can preview translations on a draft vacancy
+// before saving, and because storing them per-vacancy would balloon
+// schema across modules we don't own here.
+aiRouter.post("/translate-vacancy", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const title = vString(req.body?.title, "title", { min: 3, max: 200 });
+    if (!title.ok) return fail(res, 400, title.error);
+    const description = vString(req.body?.description, "description", { min: 10, max: 10_000 });
+    if (!description.ok) return fail(res, 400, description.error);
+
+    const allLocales = ["ru", "en", "kz"] as const;
+    type Loc = (typeof allLocales)[number];
+    const requested: Loc[] = Array.isArray(req.body?.targetLocales)
+      ? (req.body.targetLocales as unknown[]).filter((x): x is Loc =>
+          allLocales.includes(x as Loc),
+        )
+      : ["ru", "en", "kz"];
+    if (requested.length === 0) return fail(res, 400, "no_target_locales");
+
+    const labels: Record<Loc, string> = {
+      ru: "Russian (Russia)",
+      en: "English (US)",
+      kz: "Kazakh (cyrillic)",
+    };
+
+    const userPayload = `SOURCE TITLE: ${title.value}
+
+SOURCE DESCRIPTION:
+${description.value}
+
+Translate into the following locales: ${requested.map((l) => labels[l]).join(", ")}.
+
+Return ONLY valid JSON in this exact shape, no markdown, no preamble:
+{"translations": {${requested.map((l) => `"${l}": {"title": "...", "description": "..."}`).join(", ")}}}`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `You are a professional construction-industry translator for AEVION QBuild.
+
+Hard rules:
+- Translate the vacancy title and description into the requested locales.
+- Preserve technical terms (welding, scaffolding, AutoCAD, etc.) — use the
+  natural local form, do not translate brand names.
+- Match the register of the source (formal job posting), no marketing fluff.
+- Keep paragraph breaks. No markdown headings.
+- Return ONLY a JSON object — no preamble, no code fences.
+- Do not invent facts that aren't in the source.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 2200,
+      cacheSystem: false,
+    });
+
+    const stripped = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: { translations?: Record<string, { title?: string; description?: string }> } = {};
+    try {
+      parsed = JSON.parse(stripped) as typeof parsed;
+    } catch {
+      return fail(res, 502, "ai_translate_invalid_json", { details: stripped.slice(0, 200) });
+    }
+
+    const translations: Record<string, { title: string; description: string }> = {};
+    for (const loc of requested) {
+      const t = parsed.translations?.[loc];
+      if (t && typeof t.title === "string" && typeof t.description === "string") {
+        translations[loc] = { title: t.title, description: t.description };
+      }
+    }
+
+    return ok(res, {
+      translations,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_translate_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/ai/cover-letter
 // Body: { vacancyId: string, locale?: "ru" | "en" | "kz" }
 // Generates a tailored cover note from the user's profile + vacancy. The

@@ -485,6 +485,19 @@ export const buildApi = {
       `/api/build/profiles/search${qs ? "?" + qs : ""}`,
     );
   },
+  availableWorkers: (q?: { city?: string; specialty?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (q?.city) params.set("city", q.city);
+    if (q?.specialty) params.set("specialty", q.specialty);
+    if (q?.limit) params.set("limit", String(q.limit));
+    const qs = params.toString();
+    return call<{ items: TalentRow[]; total: number; asOf: string }>(
+      "GET",
+      `/api/build/availability/workers${qs ? "?" + qs : ""}`,
+      undefined,
+      { auth: false },
+    );
+  },
   addExperience: (input: {
     title: string;
     company: string;
@@ -977,6 +990,41 @@ export const buildApi = {
     mimeType?: string;
     sizeBytes?: number;
   }) => call<BuildFile>("POST", "/api/build/files/upload", input),
+
+  // Availability
+  myAvailability: () =>
+    call<{ availableNow: boolean; availableUntil: string | null }>("GET", "/api/build/availability/me"),
+  setAvailability: (availableNow: boolean, hours: number) =>
+    call<{ availableNow: boolean; availableUntil: string | null }>("POST", "/api/build/availability", { availableNow, hours }),
+  availableWorkers: (q: { city?: string; specialty?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (q.city) params.set("city", q.city);
+    if (q.specialty) params.set("specialty", q.specialty);
+    if (q.limit != null) params.set("limit", String(q.limit));
+    const qs = params.toString();
+    return call<{ items: unknown[]; asOf: string }>("GET", `/api/build/availability/workers${qs ? `?${qs}` : ""}`);
+  },
+
+  // Communities
+  communities: () =>
+    call<{
+      items: {
+        id: string; slug: string; name: string; specialty: string;
+        description: string | null; memberCount: number; lastMessageAt: string | null;
+      }[];
+    }>("GET", "/api/build/communities"),
+  community: (slug: string) =>
+    call<{
+      community: { id: string; slug: string; name: string; specialty: string; memberCount: number };
+      messages: {
+        id: string; userId: string; content: string; createdAt: string;
+        authorName: string | null; authorPhoto: string | null; buildRole: string | null;
+      }[];
+    }>("GET", `/api/build/communities/${encodeURIComponent(slug)}`),
+  joinCommunity: (slug: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/join`),
+  sendCommunityMessage: (slug: string, content: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/messages`, { content }),
 
   // Documents (admin verification)
   adminPendingDocuments: () =>

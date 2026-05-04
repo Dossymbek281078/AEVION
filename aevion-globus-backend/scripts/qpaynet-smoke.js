@@ -107,8 +107,33 @@ async function run() {
   const mkRevoke = await req("DELETE", `/api/qpaynet/merchant/keys/${mkId}`, null, auth);
   assert("DELETE /api/qpaynet/merchant/keys/:id → 200", mkRevoke.status === 200);
 
-  // 12. Insufficient balance
-  console.log("\n7. Edge cases");
+  // 12. Public recipient lookup (no auth)
+  console.log("\n7. Recipient lookup");
+  const pub = await req("GET", `/api/qpaynet/wallets/${walletId}/public`);
+  assert("GET wallets/:id/public → 200", pub.status === 200);
+  assert("public has name, no balance", typeof pub.body.name === "string" && pub.body.balance === undefined);
+  assert("public.active === true", pub.body.active === true);
+  const pubMissing = await req("GET", "/api/qpaynet/wallets/00000000-0000-0000-0000-000000000000/public");
+  assert("public lookup of missing → 404", pubMissing.status === 404);
+
+  // 13. Wallet rename
+  console.log("\n8. Wallet rename");
+  const rename = await req("PATCH", `/api/qpaynet/wallets/${walletId}`, { name: "Renamed Smoke" }, auth);
+  assert("PATCH wallets/:id → 200", rename.status === 200);
+  assert("name updated", rename.body.name === "Renamed Smoke");
+  const renameNo = await req("PATCH", `/api/qpaynet/wallets/${walletId}`, { name: "" }, auth);
+  assert("PATCH empty name → 400", renameNo.status === 400);
+
+  // 14. CSV export
+  console.log("\n9. CSV export");
+  const csvR = await fetch(`${BASE}/api/qpaynet/transactions.csv`, { headers: auth });
+  const csvText = await csvR.text();
+  assert("GET transactions.csv → 200", csvR.status === 200);
+  assert("csv has header row", csvText.startsWith("id,wallet_id,type,"));
+  assert("csv has data", csvText.split("\n").length > 1);
+
+  // 15. Insufficient balance
+  console.log("\n10. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

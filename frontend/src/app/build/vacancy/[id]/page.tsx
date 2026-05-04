@@ -15,6 +15,8 @@ import {
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { emailError, isEmail } from "@/lib/build/validate";
+import { useToast } from "@/components/build/Toast";
+import { VacancyDetailSkeleton } from "@/components/build/Skeleton";
 
 export default function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -55,7 +57,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   if (loading) {
     return (
       <BuildShell>
-        <p className="py-8 text-sm text-slate-400">Loading vacancy…</p>
+        <VacancyDetailSkeleton />
       </BuildShell>
     );
   }
@@ -383,6 +385,7 @@ const STATUS_TONE: Record<ApplicationStatus, string> = {
 function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const toast = useToast();
   const matchScore = app.matchScore;
   const matchTone =
     matchScore == null
@@ -490,10 +493,11 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
                 const r = await buildApi.updateApplication(app.id, "ACCEPTED");
                 onChanged();
                 if (r.hireOrder && r.hireOrder.amount > 0) {
-                  // Surface the hire fee so the recruiter knows to pay it.
-                  alert(
-                    `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в разделе «Мои заказы».`,
+                  toast.success(
+                    `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в «Settings → Orders».`,
                   );
+                } else {
+                  toast.success("Candidate accepted.");
                 }
               } finally {
                 setBusy(false);

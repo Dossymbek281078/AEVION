@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
+import { ToastProvider } from "./Toast";
 
 const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build", label: "Projects" },
@@ -41,6 +42,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
   const hydrated = useBuildAuth((s) => s.hydrated);
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
@@ -128,6 +130,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
         </div>
       </footer>
     </div>
+    </ToastProvider>
   );
 }
 

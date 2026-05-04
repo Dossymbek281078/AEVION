@@ -18,6 +18,7 @@ import {
   type ProjectStatus,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "@/components/build/Toast";
 
 const STATUSES: ProjectStatus[] = ["OPEN", "IN_PROGRESS", "DONE"];
 
@@ -235,6 +236,7 @@ function VacancyBoostButton({
   onUpdated: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
   return (
     <button
@@ -250,13 +252,15 @@ function VacancyBoostButton({
         try {
           const r = await buildApi.boostVacancy(vacancy.id, 7);
           onUpdated();
-          alert(
-            r.source === "PLAN"
-              ? "Boost activated! Vacancy is now featured for 7 days."
-              : `Boost recorded as a pending order (id ${r.orderId?.slice(0, 8)}…). Pay it on the Pricing page to activate.`,
-          );
+          if (r.source === "PLAN") {
+            toast.success("Boost activated! Vacancy is featured for 7 days.");
+          } else {
+            toast.info(
+              `Boost is a pending order (id ${r.orderId?.slice(0, 8)}…). Pay on Pricing to activate.`,
+            );
+          }
         } catch (err) {
-          alert((err as Error).message);
+          toast.error((err as Error).message);
         } finally {
           setBusy(false);
         }
@@ -694,6 +698,7 @@ function ProjectStatusButton({
   onUpdated: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   const next =
     currentStatus === "OPEN" ? "IN_PROGRESS" :
@@ -714,9 +719,10 @@ function ProjectStatusButton({
     setBusy(true);
     try {
       await buildApi.updateProject(projectId, { status: next as "IN_PROGRESS" | "DONE" });
+      toast.success(next === "DONE" ? "Project marked complete ✓" : "Project moved to In Progress");
       onUpdated();
     } catch (e) {
-      alert((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setBusy(false);
     }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "@/components/build/Toast";
 
 type RichTrialTask = BuildTrialTask & { vacancyTitle?: string; projectTitle?: string };
 
@@ -28,6 +29,7 @@ export default function TrialsPage() {
 
 function Body() {
   const me = useBuildAuth((s) => s.user);
+  const toast = useToast();
   const [items, setItems] = useState<RichTrialTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
@@ -53,9 +55,10 @@ function Body() {
   async function accept(id: string) {
     try {
       await buildApi.acceptTrialTask(id);
+      toast.success("Trial task accepted");
       await load();
     } catch (e) {
-      alert((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 
@@ -68,18 +71,20 @@ function Body() {
       setSubmitting(null);
       setSubmitUrl("");
       setSubmitNote("");
+      toast.success("Submission sent — recruiter will review.");
       await load();
     } catch (e) {
-      alert((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 
   async function approve(id: string) {
     try {
       await buildApi.approveTrialTask(id);
+      toast.success("Trial approved");
       await load();
     } catch (e) {
-      alert((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 
@@ -87,9 +92,10 @@ function Body() {
     const reason = prompt("Reason for rejection (optional):");
     try {
       await buildApi.rejectTrialTask(id, reason ?? "");
+      toast.info("Trial rejected");
       await load();
     } catch (e) {
-      alert((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 

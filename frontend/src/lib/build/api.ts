@@ -1124,6 +1124,16 @@ export const buildApi = {
       draft: AiVacancyDraft;
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/generate-vacancy", input),
+  aiMatchVacancy: (input: { profileText: string; vacancyText: string }) =>
+    call<{
+      match: { score: number; label: string; strengths: string[]; gaps: string[]; tip: string };
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/match-vacancy", input),
+  aiCoverLetter: (input: { profileText: string; vacancyText: string; tone: "professional" | "friendly" | "concise" }) =>
+    call<{
+      coverLetter: string;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/cover-letter", input),
   createTeamRequest: (input: {
     title: string; description: string; city?: string;
     startDate?: string;

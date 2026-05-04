@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ProjectCard } from "@/components/build/ProjectCard";
+import { Skeleton } from "@/components/build/Skeleton";
 import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
@@ -134,7 +135,21 @@ export default function BuildHomePage() {
         </p>
       )}
 
-      {loading && <p className="text-sm text-slate-400">Loading…</p>}
+      {loading && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <Skeleton width="70%" height={16} />
+              <Skeleton width="100%" height={11} className="mt-3" />
+              <Skeleton width="85%" height={11} className="mt-1.5" />
+              <div className="mt-3 flex justify-between">
+                <Skeleton width={70} height={11} />
+                <Skeleton width={50} height={11} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && projects.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">

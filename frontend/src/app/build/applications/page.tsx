@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildApplication, type ApplicationStatus } from "@/lib/build/api";
+import { Skeleton } from "@/components/build/Skeleton";
 
 const STATUS_COLOR: Record<ApplicationStatus, string> = {
   PENDING: "text-amber-200 bg-amber-500/10 border-amber-500/20",
@@ -83,7 +84,20 @@ function Body() {
         ))}
       </div>
 
-      {loading && <p className="text-sm text-slate-400">Loading…</p>}
+      {loading && (
+        <div className="space-y-3" aria-busy="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex justify-between">
+                <Skeleton width="50%" height={16} />
+                <Skeleton width={80} height={20} />
+              </div>
+              <Skeleton width="80%" height={11} className="mt-3" />
+              <Skeleton width="30%" height={11} className="mt-1.5" />
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && filtered.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">

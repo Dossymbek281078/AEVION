@@ -18,6 +18,7 @@ import { AiCoachChat } from "@/components/build/AiCoachChat";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
 import { AiImprove } from "@/components/build/AiImprove";
 import { ProfileCompletenessMeter } from "@/components/build/ProfileCompletenessMeter";
+import { ProfileSkeleton } from "@/components/build/Skeleton";
 
 export default function ProfilePage() {
   return (
@@ -81,7 +82,7 @@ function ProfileBody() {
     loadResume();
   }, [loadResume]);
 
-  if (loading) return <p className="text-sm text-slate-400">Loading…</p>;
+  if (loading) return <ProfileSkeleton />;
   if (error) return (
     <p className="rounded-md border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
       Failed to load profile: {error}

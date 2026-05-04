@@ -132,8 +132,33 @@ async function run() {
   assert("csv has header row", csvText.startsWith("id,wallet_id,type,"));
   assert("csv has data", csvText.split("\n").length > 1);
 
-  // 15. Insufficient balance
-  console.log("\n10. Edge cases");
+  // 15. Payment requests (tracked)
+  console.log("\n10. Payment requests");
+  const prCreate = await req("POST", "/api/qpaynet/requests", {
+    toWalletId: walletId, amount: 500, description: "Smoke pay request",
+  }, auth);
+  assert("POST /requests → 201", prCreate.status === 201);
+  assert("has token + payUrl", typeof prCreate.body.token === "string" && typeof prCreate.body.payUrl === "string");
+  const prToken = prCreate.body.token;
+  const prId = prCreate.body.id;
+
+  const prPublic = await req("GET", `/api/qpaynet/requests/${prToken}`);
+  assert("GET /requests/:token (public) → 200", prPublic.status === 200);
+  assert("public amount is 500", prPublic.body.amount === 500);
+  assert("public status is pending", prPublic.body.status === "pending");
+
+  const prList = await req("GET", "/api/qpaynet/requests", null, auth);
+  assert("GET /requests → 200", prList.status === 200);
+  assert("list contains created", prList.body.requests?.some(r => r.id === prId));
+
+  const prCancel = await req("DELETE", `/api/qpaynet/requests/${prId}`, null, auth);
+  assert("DELETE /requests/:id → 200", prCancel.status === 200);
+
+  const prAfter = await req("GET", `/api/qpaynet/requests/${prToken}`);
+  assert("cancelled status reflected", prAfter.body.status === "cancelled");
+
+  // 16. Insufficient balance
+  console.log("\n11. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

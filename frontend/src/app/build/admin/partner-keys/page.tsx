@@ -92,6 +92,23 @@ function Body() {
         </p>
       </header>
 
+      <details className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3 text-xs">
+        <summary className="cursor-pointer font-semibold text-emerald-200">
+          Drop-in widget (auto-renders feed on a partner site)
+        </summary>
+        <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 font-mono text-[11px] text-slate-200">{`<div data-aevion-build
+     data-key="qb_pk_..."
+     data-limit="6"
+     data-city="Astana"
+     data-skill="welding"></div>
+<script src="https://aevion.tech/api/build/public/widget.js" defer></script>`}</pre>
+        <p className="mt-2 text-slate-400">
+          One <code className="rounded bg-white/5 px-1 py-0.5">&lt;script&gt;</code>, no framework
+          deps, no bundler. The widget queries the public feed using the key you provide and
+          renders a styled list of open roles.
+        </p>
+      </details>
+
       {error && (
         <p className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
           {error}

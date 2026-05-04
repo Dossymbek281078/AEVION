@@ -2,10 +2,11 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { captureError } from "@/lib/build/errorReporter";
 
 // Catches uncaught render/effect errors in any /build/* route so a single
-// crashing widget can't take the whole platform down. Logs to the console
-// (dev) and Sentry (if wired) and offers the user a recovery path.
+// crashing widget can't take the whole platform down. Forwards to Sentry
+// when NEXT_PUBLIC_SENTRY_DSN is set, falls back to console otherwise.
 export default function BuildError({
   error,
   reset,
@@ -14,10 +15,7 @@ export default function BuildError({
   reset: () => void;
 }) {
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      // eslint-disable-next-line no-console
-      console.error("[/build error boundary]", error);
-    }
+    captureError(error, { boundary: "/build", digest: error?.digest ?? null });
   }, [error]);
 
   return (

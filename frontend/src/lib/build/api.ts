@@ -1011,6 +1011,32 @@ export const buildApi = {
       applications: { day: string; n: number }[];
       projects: { day: string; n: number }[];
     }>("GET", "/api/build/stats/timeseries", undefined, { auth: false }),
+  adminListPartnerKeys: () =>
+    call<{
+      items: {
+        id: string;
+        label: string;
+        scopesJson: string;
+        ownerUserId: string | null;
+        lastUsedAt: string | null;
+        usageCount: number;
+        revokedAt: string | null;
+        createdAt: string;
+      }[];
+      total: number;
+    }>("GET", "/api/build/admin/partner-keys"),
+  adminCreatePartnerKey: (label: string) =>
+    call<{
+      id: string;
+      label: string;
+      plaintext: string;
+      createdAt: string;
+    }>("POST", "/api/build/admin/partner-keys", { label }),
+  adminRevokePartnerKey: (id: string) =>
+    call<{ id: string; revokedAt: string }>(
+      "POST",
+      `/api/build/admin/partner-keys/${encodeURIComponent(id)}/revoke`,
+    ),
   adminStats: () =>
     call<{
       leads: { total: number; last7d: number };

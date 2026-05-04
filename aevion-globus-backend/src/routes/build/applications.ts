@@ -391,10 +391,10 @@ applicationsRouter.get("/:id/notes", async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT "id","applicationId","authorUserId","body","createdAt"
+      `SELECT "id","applicationId","authorUserId","body","isPinned","createdAt"
        FROM "BuildApplicationNote"
        WHERE "applicationId" = $1
-       ORDER BY "createdAt" DESC
+       ORDER BY "isPinned" DESC, "createdAt" DESC
        LIMIT 200`,
       [id],
     );
@@ -438,6 +438,42 @@ applicationsRouter.post("/:id/notes", async (req, res) => {
   }
 });
 
+// PATCH /api/build/applications/:id/notes/:noteId — toggle isPinned.
+applicationsRouter.patch("/:id/notes/:noteId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const noteId = String(req.params.noteId);
+    if (typeof req.body?.isPinned !== "boolean") {
+      return fail(res, 400, "isPinned_required");
+    }
+    const isPinned: boolean = req.body.isPinned;
+
+    const note = await pool.query(
+      `SELECT n."authorUserId", p."clientId"
+       FROM "BuildApplicationNote" n
+       LEFT JOIN "BuildApplication" a ON a."id" = n."applicationId"
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE n."id" = $1 AND n."applicationId" = $2 LIMIT 1`,
+      [noteId, id],
+    );
+    if (note.rowCount === 0) return fail(res, 404, "note_not_found");
+    if (note.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_pin");
+    }
+
+    const r = await pool.query(
+      `UPDATE "BuildApplicationNote" SET "isPinned" = $2 WHERE "id" = $1 RETURNING *`,
+      [noteId, isPinned],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_note_pin_failed", { details: (err as Error).message });
+  }
+});
+
 // DELETE /api/build/applications/:id/notes/:noteId — owner or note author deletes.
 applicationsRouter.delete("/:id/notes/:noteId", async (req, res) => {
   try {
@@ -464,6 +500,73 @@ applicationsRouter.delete("/:id/notes/:noteId", async (req, res) => {
     return ok(res, { id: noteId });
   } catch (err: unknown) {
     return fail(res, 500, "application_note_delete_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/bulk-message
+// Owner sends the same DM to every applicant matching `status` (default PENDING).
+// Mounted under /applications because it derives the recipient set from
+// applications, even though the URL parameter is a vacancyId. We also expose
+// it under /vacancies via the alias below in vacancies.ts.
+applicationsRouter.post("/bulk-message/:vacancyId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const vacancyId = String(req.params.vacancyId);
+
+    const content = vString(req.body?.content, "content", { min: 1, max: 4000 });
+    if (!content.ok) return fail(res, 400, content.error);
+    const statusFilter = typeof req.body?.status === "string"
+      ? String(req.body.status).toUpperCase()
+      : "PENDING";
+    if (!["PENDING", "ACCEPTED", "REJECTED", "ALL"].includes(statusFilter)) {
+      return fail(res, 400, "invalid_status_filter");
+    }
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [vacancyId],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_bulk_message");
+    }
+
+    const params: unknown[] = [vacancyId];
+    let extra = "";
+    if (statusFilter !== "ALL") {
+      params.push(statusFilter);
+      extra = ` AND a."status" = $2`;
+    }
+    const recipients = await pool.query(
+      `SELECT DISTINCT a."userId" FROM "BuildApplication" a
+       WHERE a."vacancyId" = $1${extra} AND a."userId" <> '${auth.sub.replace(/'/g, "''")}'`,
+      params,
+    );
+
+    const ids: string[] = recipients.rows.map((r: Record<string, unknown>) => String(r.userId));
+    if (ids.length === 0) return ok(res, { sent: 0, recipients: [] });
+
+    // Cap at 200 per call so a runaway loop can't spam.
+    const capped = ids.slice(0, 200);
+    let sent = 0;
+    for (const rid of capped) {
+      try {
+        const id = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO "BuildMessage" ("id","senderId","receiverId","content") VALUES ($1,$2,$3,$4)`,
+          [id, auth.sub, rid, content.value],
+        );
+        sent += 1;
+      } catch {
+        // Continue on per-row errors (e.g. unique violation, deleted user)
+      }
+    }
+    return ok(res, { sent, recipients: capped });
+  } catch (err: unknown) {
+    return fail(res, 500, "bulk_message_failed", { details: (err as Error).message });
   }
 });
 

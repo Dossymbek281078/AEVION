@@ -511,10 +511,12 @@ async function _doEnsureBuildTables(): Promise<void> {
       "applicationId" TEXT NOT NULL,
       "authorUserId" TEXT NOT NULL,
       "body" TEXT NOT NULL,
+      "isPinned" BOOLEAN NOT NULL DEFAULT FALSE,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationNote_app_idx" ON "BuildApplicationNote" ("applicationId", "createdAt" DESC);`);
+  await pool.query(`ALTER TABLE "BuildApplicationNote" ADD COLUMN IF NOT EXISTS "isPinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationNote_app_idx" ON "BuildApplicationNote" ("applicationId", "isPinned" DESC, "createdAt" DESC);`);
 
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.

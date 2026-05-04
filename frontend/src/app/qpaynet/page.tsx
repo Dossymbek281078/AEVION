@@ -194,7 +194,16 @@ export default function QPayNetDashboard() {
                           className="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 rounded-lg text-xs font-semibold">→ Отправить</Link>
                       </div>
                     </div>
-                    <div className="text-[10px] text-slate-600 font-mono">ID: {activeW.id}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="text-[10px] text-slate-600 font-mono truncate">{activeW.id}</div>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(activeW.id); }}
+                        title="Скопировать ID кошелька"
+                        className="shrink-0 text-[10px] text-slate-500 hover:text-slate-300 px-1.5 py-0.5 bg-slate-800 rounded"
+                      >
+                        📋
+                      </button>
+                    </div>
                   </div>
                 )}
 

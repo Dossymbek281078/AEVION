@@ -33,6 +33,7 @@ export default function QContractHome() {
   const [token, setToken] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
@@ -118,10 +119,12 @@ export default function QContractHome() {
       {/* Dashboard */}
       {token && (
         <div className="max-w-4xl mx-auto px-6 py-8">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div>
               <h2 className="text-xl font-bold">Мои документы</h2>
-              <p className="text-xs text-slate-400 mt-0.5">{docs.length} документов</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {docs.length} всего · {docs.filter(d => !d.expired).length} активных · {docs.filter(d => d.expired).length} истёкших
+              </p>
             </div>
             <Link
               href="/qcontract/create"
@@ -130,6 +133,19 @@ export default function QContractHome() {
               + Создать
             </Link>
           </div>
+
+          {/* Search bar */}
+          {docs.length > 0 && (
+            <div className="mb-4">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 Поиск по названию документа..."
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors"
+              />
+            </div>
+          )}
 
           {loading && (
             <div className="text-slate-500 text-sm py-12 text-center">Загрузка...</div>
@@ -146,7 +162,7 @@ export default function QContractHome() {
           )}
 
           <div className="space-y-3">
-            {docs.map((doc) => (
+            {docs.filter((d) => !search || d.title.toLowerCase().includes(search.toLowerCase())).map((doc) => (
               <div
                 key={doc.id}
                 className={`border rounded-xl p-4 transition-colors ${

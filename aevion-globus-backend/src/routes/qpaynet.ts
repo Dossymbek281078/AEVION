@@ -34,12 +34,18 @@
  * Verify: HMAC-SHA256(notifySecret, `${timestamp}.${rawBody}`).
  */
 
-import { Router } from "express";
+import { Router, raw } from "express";
 import { randomUUID, createHash, createHmac, randomBytes } from "node:crypto";
+import Stripe from "stripe";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 
 export const qpaynetRouter = Router();
+
+const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
+const STRIPE_WH = process.env.QPAYNET_STRIPE_WEBHOOK_SECRET?.trim();
+const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, { apiVersion: "2026-04-22.dahlia" }) : null;
+const FRONTEND = (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -107,6 +113,9 @@ const KYC_AUTO_VERIFY       = process.env.QPAYNET_KYC_AUTO_VERIFY === "1";
 
 let kycTableReady = false;
 let merchantWebhooksTableReady = false;
+let payoutsTableReady = false;
+let notificationsTableReady = false;
+let depositCheckoutsTableReady = false;
 
 async function ensureKycTable(): Promise<void> {
   if (kycTableReady) return;
@@ -128,6 +137,109 @@ async function ensureKycTable(): Promise<void> {
     kycTableReady = true;
   } catch (err) {
     console.warn("[qpaynet kyc] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function ensurePayoutsTable(): Promise<void> {
+  if (payoutsTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_payouts (
+        id            TEXT PRIMARY KEY,
+        owner_id      TEXT NOT NULL,
+        wallet_id     TEXT NOT NULL,
+        amount        BIGINT NOT NULL,                  -- tiin
+        currency      TEXT NOT NULL DEFAULT 'KZT',
+        method        TEXT NOT NULL,                    -- card|bank_transfer|kaspi
+        destination   TEXT NOT NULL,                    -- masked card / IBAN / phone
+        status        TEXT NOT NULL DEFAULT 'requested', -- requested|approved|paid|rejected
+        rejected_reason TEXT,
+        approved_by   TEXT,
+        paid_external_ref TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        approved_at   TIMESTAMPTZ,
+        paid_at       TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpp_owner ON qpaynet_payouts (owner_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_qpp_status ON qpaynet_payouts (status, created_at DESC);
+    `);
+    payoutsTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet payouts] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function ensureNotificationsTable(): Promise<void> {
+  if (notificationsTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_notifications (
+        id          TEXT PRIMARY KEY,
+        owner_id    TEXT NOT NULL,
+        kind        TEXT NOT NULL,           -- payment_received|payout_approved|payout_paid|kyc_verified
+        title       TEXT NOT NULL,
+        body        TEXT,
+        ref_id      TEXT,
+        amount      BIGINT,
+        read_at     TIMESTAMPTZ,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpn_owner ON qpaynet_notifications (owner_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_qpn_unread ON qpaynet_notifications (owner_id) WHERE read_at IS NULL;
+    `);
+    notificationsTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet notif] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function ensureDepositCheckoutsTable(): Promise<void> {
+  if (depositCheckoutsTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_deposit_checkouts (
+        id            TEXT PRIMARY KEY,
+        owner_id      TEXT NOT NULL,
+        wallet_id     TEXT NOT NULL,
+        amount        BIGINT NOT NULL,         -- tiin
+        currency      TEXT NOT NULL DEFAULT 'KZT',
+        provider      TEXT NOT NULL,           -- stripe|stub
+        external_id   TEXT,                    -- stripe session id
+        status        TEXT NOT NULL DEFAULT 'open',  -- open|paid|expired|failed
+        tx_id         TEXT,                    -- credited transaction id
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at  TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpd_owner ON qpaynet_deposit_checkouts (owner_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_qpd_external ON qpaynet_deposit_checkouts (external_id);
+    `);
+    depositCheckoutsTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet checkout] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+// Insert a notification row + return id; safe to fire-and-forget.
+async function notify(
+  pool: ReturnType<typeof getPool>,
+  ownerId: string,
+  kind: string,
+  title: string,
+  body?: string,
+  refId?: string,
+  amountTiin?: bigint,
+): Promise<void> {
+  try {
+    await ensureNotificationsTable();
+    await pool.query(
+      "INSERT INTO qpaynet_notifications (id, owner_id, kind, title, body, ref_id, amount) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+      [randomUUID(), ownerId, kind, title.slice(0, 200), body?.slice(0, 1000) ?? null, refId ?? null, amountTiin ?? null],
+    );
+  } catch (err) {
+    console.warn("[qpaynet notify] failed:", err instanceof Error ? err.message : err);
   }
 }
 
@@ -1081,6 +1193,12 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
   const recipientOwnerId = toWallet.rows[0]?.owner_id;
   if (recipientOwnerId) {
     void fanOutToOwner(pool, recipientOwnerId, "payment_request.paid", payload);
+    // In-app notification for the recipient.
+    void notify(
+      pool, recipientOwnerId, "payment_received",
+      `Получено ${fromTiin(tiin).toLocaleString("ru-RU")} ₸`,
+      pr.description, pr.id, tiin,
+    );
   }
   if (pr.notify_url && pr.notify_secret) {
     fireRequestWebhook(pr.notify_url, pr.notify_secret, payload).then(async (result) => {
@@ -1145,6 +1263,345 @@ qpaynetRouter.get("/requests/:id/deliveries", async (req, res) => {
     deliveredAt: d.notified_at,
     status: d.notified_at ? "delivered" : (d.notify_attempts >= MAX_NOTIFY_ATTEMPTS ? "exhausted" : (d.notify_attempts > 0 ? "retrying" : "pending")),
   });
+});
+
+// ── Deposit checkout (Stripe) ────────────────────────────────────────────────
+// Real card payment flow. With STRIPE_SECRET_KEY: creates Stripe Checkout
+// Session in KZT. Without: stub session that auto-credits via /confirm-stub
+// so dev/staging UX can be exercised end-to-end.
+
+// POST /api/qpaynet/deposit/checkout — create Stripe Checkout Session
+qpaynetRouter.post("/deposit/checkout", async (req, res) => {
+  await ensureTables();
+  await ensureDepositCheckoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { walletId, amount } = req.body as { walletId?: string; amount?: number };
+  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
+  if (amount > DAILY_DEPOSIT_CAP_KZT) {
+    return res.status(400).json({ error: "amount_exceeds_daily_cap", capKzt: DAILY_DEPOSIT_CAP_KZT });
+  }
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const w = await pool.query("SELECT id, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2", [walletId, ownerId]);
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+  if (w.rows[0].status !== "active") return res.status(400).json({ error: "wallet_inactive" });
+
+  const id = randomUUID();
+  const tiin = toTiin(amount);
+
+  if (stripe) {
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: {
+          currency: "kzt",
+          unit_amount: Math.round(amount * 100), // Stripe expects smallest unit (tiin for KZT)
+          product_data: { name: "AEVION QPayNet — пополнение кошелька" },
+        },
+        quantity: 1,
+      }],
+      success_url: `${FRONTEND}/qpaynet/deposit/success?cid=${id}`,
+      cancel_url:  `${FRONTEND}/qpaynet/deposit?cancelled=1`,
+      client_reference_id: id,
+      metadata: { qpaynet_checkout_id: id, walletId, ownerId },
+    });
+    await pool.query(
+      "INSERT INTO qpaynet_deposit_checkouts (id, owner_id, wallet_id, amount, provider, external_id) VALUES ($1,$2,$3,$4,'stripe',$5)",
+      [id, ownerId, walletId, tiin, session.id],
+    );
+    return res.json({ id, url: session.url, provider: "stripe" });
+  }
+
+  // Stub: no Stripe key — return a confirmation URL the frontend can hit.
+  await pool.query(
+    "INSERT INTO qpaynet_deposit_checkouts (id, owner_id, wallet_id, amount, provider) VALUES ($1,$2,$3,$4,'stub')",
+    [id, ownerId, walletId, tiin],
+  );
+  res.json({
+    id, provider: "stub",
+    url: `${FRONTEND}/qpaynet/deposit/success?cid=${id}&stub=1`,
+    hint: "Stripe not configured — use POST /deposit/confirm-stub to finalize.",
+  });
+});
+
+// POST /api/qpaynet/deposit/confirm-stub — dev-only: simulate webhook for stub flow
+qpaynetRouter.post("/deposit/confirm-stub", async (req, res) => {
+  if (stripe) return res.status(400).json({ error: "stripe_configured_use_real_webhook" });
+  await ensureTables();
+  await ensureDepositCheckoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { id } = req.body as { id?: string };
+  if (!id) return res.status(400).json({ error: "id required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const c = await pool.query(
+    "SELECT id, wallet_id, amount, status FROM qpaynet_deposit_checkouts WHERE id=$1 AND owner_id=$2 AND provider='stub'",
+    [id, ownerId],
+  );
+  if (!c.rows[0]) return res.status(404).json({ error: "checkout_not_found" });
+  if (c.rows[0].status !== "open") return res.status(400).json({ error: `already_${c.rows[0].status}` });
+
+  await creditDeposit(pool, c.rows[0].id, c.rows[0].wallet_id, ownerId, BigInt(c.rows[0].amount), "Stub-пополнение (dev)");
+  res.json({ ok: true });
+});
+
+// POST /api/qpaynet/deposit/webhook — Stripe webhook (raw body, signature verified)
+qpaynetRouter.post("/deposit/webhook", raw({ type: "application/json" }), async (req, res) => {
+  if (!stripe || !STRIPE_WH) return res.status(503).json({ error: "stripe_or_webhook_secret_missing" });
+  const sig = req.headers["stripe-signature"] as string | undefined;
+  if (!sig) return res.status(400).json({ error: "missing_signature" });
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body as Buffer, sig, STRIPE_WH);
+  } catch (err) {
+    return res.status(400).json({ error: "signature_verification_failed", detail: err instanceof Error ? err.message : String(err) });
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const checkoutId = session.metadata?.qpaynet_checkout_id ?? session.client_reference_id;
+    if (checkoutId) {
+      await ensureDepositCheckoutsTable();
+      const pool = getPool();
+      const c = await pool.query(
+        "SELECT id, owner_id, wallet_id, amount, status FROM qpaynet_deposit_checkouts WHERE id=$1",
+        [checkoutId],
+      );
+      if (c.rows[0] && c.rows[0].status === "open") {
+        await creditDeposit(pool, c.rows[0].id, c.rows[0].wallet_id, c.rows[0].owner_id, BigInt(c.rows[0].amount), "Пополнение карты (Stripe)");
+      }
+    }
+  }
+  res.json({ received: true });
+});
+
+async function creditDeposit(
+  pool: ReturnType<typeof getPool>,
+  checkoutId: string,
+  walletId: string,
+  ownerId: string,
+  tiin: bigint,
+  description: string,
+): Promise<void> {
+  const txId = randomUUID();
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, walletId]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description) VALUES ($1,$2,$3,'deposit',$4,$5)",
+    [txId, walletId, ownerId, tiin, description],
+  );
+  await pool.query(
+    "UPDATE qpaynet_deposit_checkouts SET status='paid', tx_id=$1, completed_at=NOW() WHERE id=$2",
+    [txId, checkoutId],
+  );
+  await notify(pool, ownerId, "deposit_received", `Пополнено ${fromTiin(tiin).toLocaleString("ru-RU")} ₸`, description, txId, tiin);
+}
+
+// GET /api/qpaynet/deposit/checkout/:id — owner polls status
+qpaynetRouter.get("/deposit/checkout/:id", async (req, res) => {
+  await ensureDepositCheckoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "SELECT id, wallet_id, amount, currency, provider, status, tx_id, created_at, completed_at FROM qpaynet_deposit_checkouts WHERE id=$1 AND owner_id=$2",
+    [req.params.id, auth.sub ?? auth.email ?? "anon"],
+  );
+  if (!r.rows[0]) return res.status(404).json({ error: "not_found" });
+  res.json({ ...r.rows[0], amount: fromTiin(BigInt(r.rows[0].amount)) });
+});
+
+// ── Payouts (settlements) ────────────────────────────────────────────────────
+// User requests a payout to external rail (bank card, Kaspi). Funds debit
+// immediately (with reversal on rejected). Admin approves → marks paid with
+// external ref. Manual rail until partnership is signed.
+
+// POST /api/qpaynet/payouts — request payout
+qpaynetRouter.post("/payouts", async (req, res) => {
+  await ensureTables();
+  await ensurePayoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { walletId, amount, method, destination } = req.body as {
+    walletId?: string; amount?: number; method?: string; destination?: string;
+  };
+  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
+  if (!method || !["card", "bank_transfer", "kaspi"].includes(method)) return res.status(400).json({ error: "method_must_be_card_bank_transfer_or_kaspi" });
+  if (!destination || destination.length < 4) return res.status(400).json({ error: "destination_required" });
+  if (amount > MAX_TRANSFER_KZT) return res.status(400).json({ error: "payout_exceeds_max", maxKzt: MAX_TRANSFER_KZT });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const w = await pool.query(
+    "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
+    [walletId, ownerId],
+  );
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+  if (w.rows[0].status !== "active") return res.status(400).json({ error: "wallet_inactive" });
+
+  const tiin = toTiin(amount);
+  const fee = feeFor(tiin);
+  const total = tiin + fee;
+  if (BigInt(w.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+
+  const id = randomUUID();
+  const txId = randomUUID();
+
+  // Debit immediately; if admin rejects later, we issue a reversal tx.
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, walletId]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, status) VALUES ($1,$2,$3,'withdraw',$4,$5,$6,'pending')",
+    [txId, walletId, ownerId, tiin, fee, `Payout (${method}): ${destination.slice(-4)}`],
+  );
+  await pool.query(
+    `INSERT INTO qpaynet_payouts (id, owner_id, wallet_id, amount, method, destination, paid_external_ref)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [id, ownerId, walletId, tiin, method, destination.slice(0, 100), txId],
+  );
+
+  res.status(201).json({ id, amount, fee: fromTiin(fee), method, status: "requested", txId });
+});
+
+// GET /api/qpaynet/payouts — list my payouts
+qpaynetRouter.get("/payouts", async (req, res) => {
+  await ensurePayoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    `SELECT id, wallet_id, amount, currency, method, destination, status, rejected_reason,
+            paid_external_ref, created_at, approved_at, paid_at
+     FROM qpaynet_payouts WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100`,
+    [auth.sub ?? auth.email ?? "anon"],
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  res.json({ payouts: r.rows.map((x: any) => ({ ...x, amount: fromTiin(BigInt(x.amount)) })) });
+});
+
+// POST /api/qpaynet/admin/payouts/:id/approve — admin marks paid
+// Soft-admin: gated via env QPAYNET_ADMIN_EMAILS comma-list.
+qpaynetRouter.post("/admin/payouts/:id/:action", async (req, res) => {
+  await ensurePayoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const adminEmails = (process.env.QPAYNET_ADMIN_EMAILS ?? "")
+    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  const callerEmail = (auth.email ?? "").toLowerCase();
+  if (adminEmails.length > 0 && !adminEmails.includes(callerEmail)) {
+    return res.status(403).json({ error: "not_admin" });
+  }
+
+  const action = req.params.action;
+  if (!["approve", "mark-paid", "reject"].includes(action)) return res.status(400).json({ error: "invalid_action" });
+
+  const pool = getPool();
+  const p = await pool.query("SELECT id, owner_id, wallet_id, amount, paid_external_ref, status FROM qpaynet_payouts WHERE id=$1", [req.params.id]);
+  if (!p.rows[0]) return res.status(404).json({ error: "not_found" });
+  const po = p.rows[0];
+
+  if (action === "approve" && po.status === "requested") {
+    await pool.query("UPDATE qpaynet_payouts SET status='approved', approved_at=NOW(), approved_by=$1 WHERE id=$2", [callerEmail, po.id]);
+    await notify(pool, po.owner_id, "payout_approved", `Payout одобрен`, undefined, po.id, BigInt(po.amount));
+    return res.json({ ok: true, status: "approved" });
+  }
+  if (action === "mark-paid" && (po.status === "approved" || po.status === "requested")) {
+    const externalRef = (req.body as { externalRef?: string }).externalRef ?? `manual-${Date.now()}`;
+    await pool.query(
+      "UPDATE qpaynet_payouts SET status='paid', paid_at=NOW(), paid_external_ref=$1, approved_by=$2 WHERE id=$3",
+      [externalRef, callerEmail, po.id],
+    );
+    await pool.query("UPDATE qpaynet_transactions SET status='completed' WHERE id=$1", [po.paid_external_ref]);
+    await notify(pool, po.owner_id, "payout_paid", `Выплата отправлена`, externalRef, po.id, BigInt(po.amount));
+    return res.json({ ok: true, status: "paid", externalRef });
+  }
+  if (action === "reject" && po.status === "requested") {
+    const reason = (req.body as { reason?: string }).reason ?? "Without reason";
+    // Reverse the debit: credit wallet back, mark tx reversed.
+    const tiin = BigInt(po.amount);
+    const feeBack = feeFor(tiin);
+    await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin + feeBack, po.wallet_id]);
+    await pool.query("UPDATE qpaynet_transactions SET status='reversed', description = description || ' [reversed]' WHERE id=$1", [po.paid_external_ref]);
+    await pool.query("UPDATE qpaynet_payouts SET status='rejected', rejected_reason=$1, approved_by=$2 WHERE id=$3", [reason.slice(0, 200), callerEmail, po.id]);
+    await notify(pool, po.owner_id, "payout_rejected", `Payout отклонён: ${reason.slice(0, 100)}`, undefined, po.id, BigInt(po.amount));
+    return res.json({ ok: true, status: "rejected" });
+  }
+  return res.status(400).json({ error: "invalid_state_transition", currentStatus: po.status });
+});
+
+// ── In-app notifications ─────────────────────────────────────────────────────
+
+// GET /api/qpaynet/notifications
+qpaynetRouter.get("/notifications", async (req, res) => {
+  await ensureNotificationsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const onlyUnread = req.query.unread === "1";
+  const where = onlyUnread ? "owner_id=$1 AND read_at IS NULL" : "owner_id=$1";
+  const r = await pool.query(
+    `SELECT id, kind, title, body, ref_id, amount, read_at, created_at FROM qpaynet_notifications
+     WHERE ${where} ORDER BY created_at DESC LIMIT $2`,
+    [ownerId, limit],
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  res.json({ notifications: r.rows.map((x: any) => ({ ...x, amount: x.amount ? fromTiin(BigInt(x.amount)) : null })) });
+});
+
+// GET /api/qpaynet/notifications/unread-count
+qpaynetRouter.get("/notifications/unread-count", async (req, res) => {
+  await ensureNotificationsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "SELECT COUNT(*) AS n FROM qpaynet_notifications WHERE owner_id=$1 AND read_at IS NULL",
+    [auth.sub ?? auth.email ?? "anon"],
+  );
+  res.json({ unread: Number(r.rows[0]?.n ?? 0) });
+});
+
+// POST /api/qpaynet/notifications/:id/read
+qpaynetRouter.post("/notifications/:id/read", async (req, res) => {
+  await ensureNotificationsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_notifications SET read_at=NOW() WHERE id=$1 AND owner_id=$2 AND read_at IS NULL RETURNING id",
+    [req.params.id, auth.sub ?? auth.email ?? "anon"],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_already_read" });
+  res.json({ ok: true });
+});
+
+// POST /api/qpaynet/notifications/read-all
+qpaynetRouter.post("/notifications/read-all", async (req, res) => {
+  await ensureNotificationsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  await pool.query(
+    "UPDATE qpaynet_notifications SET read_at=NOW() WHERE owner_id=$1 AND read_at IS NULL",
+    [auth.sub ?? auth.email ?? "anon"],
+  );
+  res.json({ ok: true });
 });
 
 // POST /api/qpaynet/webhooks/test — merchant smoke-tests their endpoint before going live.

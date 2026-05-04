@@ -114,7 +114,9 @@ export default function QPayNetDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <Link href="/" className="text-xs text-slate-400 hover:text-white">← AEVION</Link>
+          {token && <NotificationBell token={token} />}
           {token && <Link href="/qpaynet/requests" className="text-xs text-slate-400 hover:text-white">📥 Запросы</Link>}
+          {token && <Link href="/qpaynet/payouts" className="text-xs text-slate-400 hover:text-white">🏦 Выплаты</Link>}
           {token && <Link href="/qpaynet/kyc" className="text-xs text-slate-400 hover:text-white">🛡 KYC</Link>}
           <Link href="/qpaynet/merchant" className="text-xs text-slate-400 hover:text-white">Merchant API</Link>
           {token && (
@@ -283,5 +285,31 @@ export default function QPayNetDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+function NotificationBell({ token }: { token: string }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      fetch("/api/qpaynet/notifications/unread-count", { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : { unread: 0 })
+        .then(d => { if (!cancelled) setCount(d.unread ?? 0); })
+        .catch(() => {});
+    };
+    tick();
+    const iv = setInterval(tick, 60000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token]);
+  return (
+    <Link href="/qpaynet/notifications" className="relative text-xs text-slate-400 hover:text-white">
+      🔔
+      {count > 0 && (
+        <span className="absolute -top-1.5 -right-2 bg-amber-500 text-slate-950 text-[9px] font-bold rounded-full px-1.5 min-w-[18px] text-center">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
   );
 }

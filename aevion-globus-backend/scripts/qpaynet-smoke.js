@@ -219,8 +219,37 @@ async function run() {
   const subDel = await req("DELETE", `/api/qpaynet/webhook-subs/${subId}`, null, auth);
   assert("DELETE /webhook-subs/:id → 200", subDel.status === 200);
 
-  // 19. Insufficient balance
-  console.log("\n14. Edge cases");
+  // 19. Notifications
+  console.log("\n14. Notifications");
+  const notif = await req("GET", "/api/qpaynet/notifications", null, auth);
+  assert("GET /notifications → 200", notif.status === 200);
+  assert("notifications array", Array.isArray(notif.body.notifications));
+
+  const unread = await req("GET", "/api/qpaynet/notifications/unread-count", null, auth);
+  assert("GET /notifications/unread-count → 200", unread.status === 200);
+  assert("unread is number", typeof unread.body.unread === "number");
+
+  // 20. Deposit checkout (stub mode if Stripe not configured)
+  console.log("\n15. Deposit checkout");
+  const checkout = await req("POST", "/api/qpaynet/deposit/checkout", { walletId, amount: 500 }, auth);
+  assert("POST /deposit/checkout → 200", checkout.status === 200);
+  assert("checkout has id + url", typeof checkout.body.id === "string" && typeof checkout.body.url === "string");
+  assert("provider is stripe or stub", ["stripe", "stub"].includes(checkout.body.provider));
+
+  // 21. Payouts
+  console.log("\n16. Payouts");
+  const payoutBad = await req("POST", "/api/qpaynet/payouts", { walletId, amount: 10, method: "invalid", destination: "x" }, auth);
+  assert("payout invalid method → 400", payoutBad.status === 400 && payoutBad.body.error === "method_must_be_card_bank_transfer_or_kaspi");
+
+  const payoutShort = await req("POST", "/api/qpaynet/payouts", { walletId, amount: 10, method: "card", destination: "x" }, auth);
+  assert("payout short destination → 400", payoutShort.status === 400 && payoutShort.body.error === "destination_required");
+
+  const payoutsList = await req("GET", "/api/qpaynet/payouts", null, auth);
+  assert("GET /payouts → 200", payoutsList.status === 200);
+  assert("payouts array", Array.isArray(payoutsList.body.payouts));
+
+  // 22. Insufficient balance
+  console.log("\n17. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

@@ -32,6 +32,22 @@ function DepositForm() {
     finally { setLoading(false); }
   }
 
+  async function handleCard() {
+    const token = localStorage.getItem("aevion_token") ?? "";
+    if (!token || !amount || parseFloat(amount) <= 0) { setError("Введите сумму и авторизуйтесь"); return; }
+    setLoading(true); setError("");
+    try {
+      const r = await fetch("/api/qpaynet/deposit/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ walletId, amount: parseFloat(amount) }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Ошибка");
+      window.location.href = d.url;
+    } catch (e) { setError(e instanceof Error ? e.message : "Ошибка"); setLoading(false); }
+  }
+
   if (done) return (
     <div className="text-center py-12">
       <div className="text-4xl mb-4">✅</div>
@@ -66,9 +82,13 @@ function DepositForm() {
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500" />
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
+        <button onClick={handleCard} disabled={loading || !amount}
+          className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-xl font-semibold flex items-center justify-center gap-2">
+          {loading ? "..." : <>💳 Оплатить картой{amount ? ` ${parseFloat(amount).toLocaleString("ru-RU")} ₸` : ""}</>}
+        </button>
         <button onClick={handleDeposit} disabled={loading || !amount}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 rounded-xl font-semibold">
-          {loading ? "Пополнение..." : `Пополнить${amount ? ` ${parseFloat(amount).toLocaleString("ru-RU")} ₸` : ""}`}
+          className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 rounded-xl text-sm border border-slate-700">
+          🧪 Тестовое пополнение (без карты)
         </button>
         <Link href="/qpaynet" className="block text-center text-xs text-slate-500 hover:text-slate-300">← Назад</Link>
       </div>

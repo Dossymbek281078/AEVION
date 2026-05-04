@@ -1,50 +1,41 @@
 "use client";
 /**
- * useBoardInput v8 — chess board input. Clean rewrite.
+ * useBoardInput v9 — restoration of the proven v5 architecture
+ * (window pointer listeners + delegate click logic to page's `click`),
+ * with ONLY the additive premove improvements layered on top:
+ *   - premoveLegalMoves: per-square removal with king preserved (rescue).
+ *   - virtualGame still does rescue projection in page.tsx.
  *
- * Design:
- *   - One handler per phase (Down / Move / Up / Cancel) wired to the board's React JSX.
- *   - setPointerCapture on press → all subsequent move/up events route to the board even
- *     when the pointer leaves it. We do NOT use window listeners (they were unreliable).
- *   - dragRef is a ref (state would force re-render on every pixel of motion).
- *   - Ghost piece is rendered by page.tsx as a sibling of the board (so overflow:hidden
- *     on the board cannot clip it). We expose ghostFrom (state) + ghostRef (for transform).
+ * Why we are back here: every variant since (v6/v7/v8) tried to inline the
+ * click logic into onBoardDown and chase setPointerCapture / native fallback.
+ * Each variant broke something the user could feel. v5 worked. Keep v5.
  *
- * Tap-to-move semantics (the case the user was missing):
- *   1. Press own piece → set sel + show vm dots. dragRef armed.
- *   2. Release without crossing threshold → KEEP sel; user can now tap a target.
- *   3. Press a legal target with sel set → execute move. (priority-1 in onDown)
- *   4. Press the same selected piece → deselect.
- *   5. Press another own piece → switch sel to it.
+ * Wiring in page.tsx:
+ *   <div ref={boardRef}
+ *        onPointerDown={onBoardDown}        ← only synchronous preventDefault
+ *        ...>
  *
- * Premove semantics (during opponent's turn):
- *   - Same flow, but writes to pmSel/pms.
- *   - Legal target list comes from premoveLegalMoves(virtualGame, pCol, from):
- *       pass-1: standard chess.js legal moves (with our color forced to move).
- *       pass-2: own-piece squares this piece could reach IF that own piece were
- *               captured first (per-square removal — king preserved so chess.js
- *               doesn't bail with "game over").
- *
- * Chained premoves work because virtualGame projects every queued premove forward
- * (also via the rescue-fallback) — see page.tsx::virtualGame useMemo.
+ * Drag/click flow:
+ *   - onBoardDown captures the press: sets dragRef, draws sel + vm dots.
+ *   - WINDOW pointermove tracks: once distance > threshold, ghost shows and
+ *     follows the cursor via RAF.
+ *   - WINDOW pointerup: if drag activated, executeDrop. If not, treat as a
+ *     tap — call opts.click(sq) for the OTHER square (the page's click()
+ *     handles all selection/deselection/exec/premove logic).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chess, type Square, type Color as ChessColor } from "chess.js";
 
 const FILES = ["a","b","c","d","e","f","g","h"] as const;
-
-const THRESHOLD_MOUSE = 4;  // mouse / pen are precise
-const THRESHOLD_TOUCH = 8;  // touch jitters more
-const RECENT_DRAG_GUARD_MS = 250; // suppress synthetic click after a real drop
+const ACTIVATION_PX_MOUSE = 4;
+const ACTIVATION_PX_TOUCH = 8;
 
 type Pre = { from: Square; to: Square; pr?: "q"|"r"|"b"|"n" };
 
 function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): any[] {
   try {
     const fen = virtualGame.fen();
-    // Build a board with our color forced to move (chess.js refuses to query
-    // moves for the side that is not to-move).
     const buildBoard = (): Chess | null => {
       const g = new Chess(fen);
       const fp = g.fen().split(" "); fp[1] = pCol;
@@ -54,13 +45,9 @@ function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): 
     if (!g1) return [];
     const piece = g1.get(from);
     if (!piece || piece.color !== pCol) return [];
-
-    // Pass 1 — standard.
     const pass1: any[] = g1.moves({ square: from, verbose: true });
     const have = new Set(pass1.map(m => m.to));
 
-    // Pass 2 — rescue: per own-piece square, simulate it being captured and
-    // see if FROM can now reach it. King preserved (otherwise game-over).
     const board = g1.board();
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
@@ -112,34 +99,26 @@ export interface BoardInputOptions {
   sScratchHist: (fn: (h: string[]) => string[]) => void;
   sScratchLm: (v: { from: string; to: string } | null) => void;
   snd: (name: string) => void;
+  click: (sq: Square) => void;  // ← delegate tap-to-move to page's proven click()
   filterMovesByDice?: (moves: any[], pieceType: string) => any[];
 }
 
-type DragState = {
-  from: Square;
-  sx: number;
-  sy: number;
-  pid: number;
-  ptype: string;
-  active: boolean;
-  isPM: boolean;
-};
+type BRect = { l: number; t: number; cw: number; flip: boolean };
+type DragState = { from: Square; sx: number; sy: number; pid: number; ptype: string; active: boolean; bRect: BRect };
 
 export function useBoardInput(opts: BoardInputOptions) {
   const boardRef = useRef<HTMLDivElement | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
   const dragRef  = useRef<DragState | null>(null);
-  const ghostPosRef    = useRef({ x: 0, y: 0 });
-  const ghostSizeRef   = useRef(0);
-  const ghostRafRef    = useRef<number | null>(null);
-  const dragHoverIntRef = useRef<Square | null>(null);
-  const recentDragRef   = useRef(0);
-  const bDownHandledRef = useRef(0);
+  const recentDragRef    = useRef(0);
+  const ghostPosRef      = useRef({ x: 0, y: 0 });
+  const ghostRafRef      = useRef<number | null>(null);
+  const dragHoverIntRef  = useRef<Square | null>(null);
+  const bDownHandledRef  = useRef(0); // kept for back-compat with page.tsx onClick guard
 
   const [ghostFrom, setGhostFrom] = useState<Square | null>(null);
   const [dragHover, setDragHover] = useState<Square | null>(null);
 
-  // optsRef gives stable access to the latest props from inside memoized callbacks.
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
@@ -157,7 +136,14 @@ export function useBoardInput(opts: BoardInputOptions) {
     return `${FILES[flip ? 7 - fx : fx]}${(flip ? fy : 7 - fy) + 1}` as Square;
   }, []);
 
-  // ── Ghost rendering (RAF-throttled position update) ──────────────────────
+  const sqFromRect = useCallback((x: number, y: number, b: BRect): Square | null => {
+    const fx = Math.floor((x - b.l) / b.cw);
+    const fy = Math.floor((y - b.t) / b.cw);
+    if (fx < 0 || fx > 7 || fy < 0 || fy > 7) return null;
+    return `${FILES[b.flip ? 7 - fx : fx]}${(b.flip ? fy : 7 - fy) + 1}` as Square;
+  }, []);
+
+  // ── Ghost helpers ────────────────────────────────────────────────────────
   const flushGhostPos = useCallback(() => {
     ghostRafRef.current = null;
     const el = ghostRef.current;
@@ -180,11 +166,9 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (typeof document !== "undefined") document.body.style.cursor = "";
   }, []);
 
-  // ── Apply a move (or queue a premove) ────────────────────────────────────
-  const executeDrop = useCallback((from: Square, to: Square, isPM: boolean) => {
+  // ── Drop / premove application (drag path only) ─────────────────────────
+  const executeDrop = useCallback((from: Square, to: Square) => {
     const o = optsRef.current;
-
-    // Scratch board (off-game freeplay)
     if (o.scratchOn && o.scratchGame) {
       const moves = o.scratchGame.moves({ square: from, verbose: true });
       const matched = moves.find(m => m.to === to);
@@ -201,8 +185,8 @@ export function useBoardInput(opts: BoardInputOptions) {
       } else { o.sScratchSel(null); o.sScratchVm(new Set()); }
       return;
     }
-
-    if (isPM) {
+    if (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over) {
+      // Premove drop
       if (o.pmsRef.current.length >= o.pmLim) return;
       const piece = o.virtualGame.get(from);
       if (!piece || piece.color !== o.pCol) { o.sPmSel(null); o.sVm(new Set()); return; }
@@ -214,8 +198,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       o.sPms(v => [...v, pre]); o.sPmSel(null); o.sVm(new Set()); o.snd("premove");
       return;
     }
-
-    // Normal move on real board
+    // Normal move
     const raw = o.game.moves({ square: from, verbose: true });
     const legal = (o.variant === "diceblade" && o.dicePieceType && o.filterMovesByDice)
       ? o.filterMovesByDice(raw, o.dicePieceType) : raw;
@@ -225,36 +208,105 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
         if (o.autoQueen) o.exec(from, to, "q"); else o.sPromo({ from, to });
       } else { o.exec(from, to); }
-    } else {
-      o.sSel(null); o.sVm(new Set());
-    }
+    } else { o.sSel(null); o.sVm(new Set()); }
   }, []);
 
-  // ── onPointerDown — single entry point for all board taps/drags ─────────
-  const onBoardDown = useCallback((e: React.PointerEvent) => {
-    // Mouse: only main button. Touch/pen always (button is 0).
-    if (e.button !== 0 && e.pointerType === "mouse") return;
-    // Re-entry guard against same-event double dispatch.
-    if (Date.now() - bDownHandledRef.current < 50) return;
+  // ── WINDOW pointer listeners — primary path for move/up/cancel ──────────
+  // (v5 architecture — no setPointerCapture, no React handlers on the board
+  //  for move/up. Window listeners are reliable and survive HMR.)
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || d.pid !== e.pointerId) return;
+      const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
+      const threshold = d.ptype === "touch" ? ACTIVATION_PX_TOUCH : ACTIVATION_PX_MOUSE;
+      if (!d.active && Math.hypot(dx, dy) > threshold) {
+        d.active = true;
+        ghostPosRef.current = { x: e.clientX, y: e.clientY };
+        showGhost(d.from, e.clientX, e.clientY);
+      }
+      if (d.active) {
+        e.preventDefault();
+        ghostPosRef.current = { x: e.clientX, y: e.clientY };
+        if (ghostRafRef.current === null)
+          ghostRafRef.current = requestAnimationFrame(flushGhostPos);
+        const hover = sqFromRect(e.clientX, e.clientY, d.bRect);
+        const target = hover && hover !== d.from ? hover : null;
+        if (target !== dragHoverIntRef.current) {
+          dragHoverIntRef.current = target;
+          setDragHover(target);
+        }
+      }
+    };
 
+    const onUp = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || d.pid !== e.pointerId) return;
+      dragRef.current = null;
+      const wasActive = d.active;
+      hideGhost();
+      if (!wasActive) {
+        // Tap with no drag. Same-square tap is already handled by onBoardDown's
+        // priority logic — calling click() again would deselect what we just
+        // selected. Cross-square taps (rare — finger lifted on a different
+        // square without crossing the drag threshold) DO need click() to fire.
+        const sq = sqFromRect(e.clientX, e.clientY, d.bRect) || sqFromBoard(e.clientX, e.clientY);
+        if (sq && sq !== d.from) optsRef.current.click(sq);
+        return;
+      }
+      // Drag activated — drop on target.
+      recentDragRef.current = Date.now();
+      const to = sqFromRect(e.clientX, e.clientY, d.bRect) || sqFromBoard(e.clientX, e.clientY);
+      if (!to || to === d.from) {
+        // Drop on origin → keep selection so click-to-move still works after a misfire.
+        return;
+      }
+      executeDrop(d.from, to);
+    };
+
+    const onCancel = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || d.pid !== e.pointerId) return;
+      if (d.active) {
+        const { x, y } = ghostPosRef.current;
+        const to = sqFromRect(x, y, d.bRect) || sqFromBoard(x, y);
+        if (to && to !== d.from) { recentDragRef.current = Date.now(); executeDrop(d.from, to); }
+      }
+      dragRef.current = null;
+      hideGhost();
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+  }, [executeDrop, flushGhostPos, hideGhost, showGhost, sqFromBoard, sqFromRect]);
+
+  // ── onPointerDown — v5 verbatim. Synchronous preventDefault path runs the
+  //    chess priority logic (priority-1 = exec on legal tap target, priority-2
+  //    = exec premove, priority-3 = deselect-same-piece) AND then arms a drag.
+  //    Window-pointerup then handles either drop-on-target OR cross-square tap
+  //    fallback via opts.click().
+  const onBoardDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
     const sq = sqFromBoard(e.clientX, e.clientY);
     if (!sq) return;
     const o = optsRef.current;
     const boardEl = boardRef.current;
     if (!boardEl) return;
-
+    const br = boardEl.getBoundingClientRect();
+    const bRect: BRect = { l: br.left, t: br.top, cw: br.width / 8, flip: o.flip };
     bDownHandledRef.current = Date.now();
 
-    // ── SCRATCH ──────────────────────────────────────────────────────────
     if (o.scratchOn && o.scratchGame) {
       const p = o.scratchGame.get(sq);
-      if (!p || p.color !== o.scratchGame.turn()) {
-        o.sScratchSel(null); o.sScratchVm(new Set());
-        return;
-      }
+      if (!p || p.color !== o.scratchGame.turn()) return;
       e.preventDefault();
-      dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, isPM: false };
-      try { boardEl.setPointerCapture(e.pointerId); } catch {}
+      dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, bRect };
       o.sScratchSel(sq);
       o.sScratchVm(new Set(o.scratchGame.moves({ square: sq, verbose: true }).map(m => m.to)));
       return;
@@ -263,19 +315,18 @@ export function useBoardInput(opts: BoardInputOptions) {
     const isPM = o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over;
 
     if (!o.over && !o.editorMode) {
-      // ── Priority-1: tap-to-move (your turn, you have a selection, this sq is a legal target).
+      // Priority-1: tap-to-exec (your turn, sel set, this sq is a legal target).
       if (!isPM && o.sel && o.vm.has(sq)) {
         const f = o.sel;
-        e.preventDefault();
         const mp = o.game.get(f);
+        e.preventDefault();
         if (mp?.type === "p" && (sq[1] === "1" || sq[1] === "8")) {
           if (o.autoQueen) o.exec(f, sq, "q"); else o.sPromo({ from: f, to: sq });
         } else { o.exec(f, sq); }
         o.sSel(null); o.sVm(new Set());
         return;
       }
-
-      // ── Priority-2: complete a queued premove selection.
+      // Priority-2: complete a queued premove selection.
       if (isPM && o.pmSelRef.current && sq !== o.pmSelRef.current && o.pmsRef.current.length < o.pmLim) {
         const f = o.pmSelRef.current;
         const piece = o.virtualGame.get(f);
@@ -290,40 +341,27 @@ export function useBoardInput(opts: BoardInputOptions) {
             return;
           }
         }
-        // Premove target was illegal — clear the selection state and continue
-        // through to the selection-start branch (so a second tap on a different
-        // own piece switches the selection cleanly).
         o.sPmSel(null); o.sVm(new Set());
       }
-
-      // ── Tap same selected piece → deselect.
-      if (!isPM && o.sel === sq) {
+      // Priority-3: tap same selected piece → deselect.
+      if (!isPM && o.sel === sq && !o.vm.has(sq)) {
         e.preventDefault();
         o.sSel(null); o.sVm(new Set());
         return;
       }
     }
 
-    // ── Drag/selection start ─────────────────────────────────────────────
     const checkBoard = isPM ? o.virtualGame : o.game;
     const p = checkBoard.get(sq);
     const side = o.tab === "analysis" ? o.game.turn() : o.pCol;
-    const canSelect = !!p && (o.tab === "analysis" || p.color === side) && !o.over;
-
-    if (!canSelect) {
-      // Tap empty/opponent square with no premove match → clear stale selection.
-      if (!o.editorMode && (o.sel || (isPM && o.pmSelRef.current))) {
-        o.sSel(null); o.sVm(new Set()); o.sPmSel(null);
-      }
-      return;
-    }
+    const canDrag = !!p && (o.tab === "analysis" || p.color === side) && !o.over;
+    if (!canDrag) return;
 
     e.preventDefault();
-    dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, isPM };
-    try { boardEl.setPointerCapture(e.pointerId); } catch {}
+    dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, bRect };
 
-    // Show selection + dots immediately (lichess-style on press).
-    if (!isPM) {
+    const isMyTurn = o.tab === "analysis" || o.game.turn() === o.pCol;
+    if (isMyTurn) {
       o.sSel(sq);
       const all = o.game.moves({ square: sq, verbose: true });
       const filtered = (o.variant === "diceblade" && o.dicePieceType && o.filterMovesByDice)
@@ -335,92 +373,8 @@ export function useBoardInput(opts: BoardInputOptions) {
     }
   }, [sqFromBoard]);
 
-  // ── onPointerMove — drag tracking. Fires on the board element thanks to setPointerCapture.
-  const onBoardMove = useCallback((e: React.PointerEvent) => {
-    const d = dragRef.current;
-    if (!d || d.pid !== e.pointerId) return;
-    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
-    const threshold = d.ptype === "touch" ? THRESHOLD_TOUCH : THRESHOLD_MOUSE;
-    if (!d.active && Math.hypot(dx, dy) > threshold) {
-      d.active = true;
-      ghostPosRef.current = { x: e.clientX, y: e.clientY };
-      showGhost(d.from, e.clientX, e.clientY);
-    }
-    if (d.active) {
-      e.preventDefault();
-      ghostPosRef.current = { x: e.clientX, y: e.clientY };
-      if (ghostRafRef.current === null)
-        ghostRafRef.current = requestAnimationFrame(flushGhostPos);
-      const hover = sqFromBoard(e.clientX, e.clientY);
-      const target = hover && hover !== d.from ? hover : null;
-      if (target !== dragHoverIntRef.current) {
-        dragHoverIntRef.current = target;
-        setDragHover(target);
-      }
-    }
-  }, [showGhost, flushGhostPos, sqFromBoard]);
-
-  // ── onPointerUp — drop or close out a tap.
-  const onBoardUp = useCallback((e: React.PointerEvent) => {
-    const d = dragRef.current;
-    if (!d || d.pid !== e.pointerId) return;
-    const boardEl = boardRef.current;
-    if (boardEl) { try { boardEl.releasePointerCapture(e.pointerId); } catch {} }
-
-    dragRef.current = null;
-    const wasActive = d.active;
-    hideGhost();
-
-    // Tap (no drag activated) → onBoardDown already set the selection. Nothing else to do.
-    if (!wasActive) return;
-
-    // Drag drop.
-    recentDragRef.current = Date.now();
-    const to = sqFromBoard(e.clientX, e.clientY);
-    // Drop on origin (or off-board) → KEEP sel so click-to-move still works.
-    if (!to || to === d.from) return;
-    executeDrop(d.from, to, d.isPM);
-  }, [executeDrop, hideGhost, sqFromBoard]);
-
-  const onBoardCancel = useCallback((e: React.PointerEvent) => {
-    const d = dragRef.current;
-    if (!d || d.pid !== e.pointerId) return;
-    if (d.active) {
-      const { x, y } = ghostPosRef.current;
-      const to = sqFromBoard(x, y);
-      if (to && to !== d.from) { recentDragRef.current = Date.now(); executeDrop(d.from, to, d.isPM); }
-    }
-    dragRef.current = null;
-    hideGhost();
-  }, [executeDrop, hideGhost, sqFromBoard]);
-
-  // ── Window safety net — ONLY for pointerup/cancel, in case capture was lost
-  // (e.g., devtools paused, or user lifted finger outside window).
-  useEffect(() => {
-    const onWinUp = (e: PointerEvent) => {
-      const d = dragRef.current;
-      if (!d || d.pid !== e.pointerId) return;
-      dragRef.current = null;
-      const wasActive = d.active;
-      hideGhost();
-      if (!wasActive) return;
-      recentDragRef.current = Date.now();
-      const to = sqFromBoard(e.clientX, e.clientY);
-      if (!to || to === d.from) return;
-      executeDrop(d.from, to, d.isPM);
-    };
-    const onWinCancel = (_e: PointerEvent) => {
-      if (!dragRef.current) return;
-      dragRef.current = null;
-      hideGhost();
-    };
-    window.addEventListener("pointerup", onWinUp);
-    window.addEventListener("pointercancel", onWinCancel);
-    return () => {
-      window.removeEventListener("pointerup", onWinUp);
-      window.removeEventListener("pointercancel", onWinCancel);
-    };
-  }, [executeDrop, hideGhost, sqFromBoard]);
+  // ── No-op handlers (kept so page.tsx wiring can still reference them). ──
+  const noopHandler = useCallback((_e: React.PointerEvent) => {}, []);
 
   return {
     boardRef,
@@ -428,14 +382,13 @@ export function useBoardInput(opts: BoardInputOptions) {
     ghostFrom,
     dragHover,
     ghostPosRef,
-    ghostSizeRef,
+    ghostSizeRef: { current: 0 } as React.MutableRefObject<number>,
     recentDragRef,
     bDownHandledRef,
     onBoardDown,
-    onBoardMove,
-    onBoardUp,
-    onBoardCancel,
+    onBoardMove:   noopHandler,
+    onBoardUp:     noopHandler,
+    onBoardCancel: noopHandler,
     sqFromBoard,
-    RECENT_DRAG_GUARD_MS,
   };
 }

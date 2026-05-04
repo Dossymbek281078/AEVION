@@ -2675,6 +2675,7 @@ export default function CyberChessPage(){
     exec, sSel, sVm, sPms, sPmSel, sPromo,
     sScratchSel, sScratchVm, sScratchBk, sScratchHist, sScratchLm,
     snd,
+    click,  // tap (pointer-up without drag) delegates here
     filterMovesByDice,
   });
   const boardRef = _bi.boardRef;
@@ -3617,18 +3618,14 @@ export default function CyberChessPage(){
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
             <div ref={boardRef}
               onPointerDown={onBoardDown}
-              onPointerMove={onBoardMove}
-              onPointerUp={onBoardUp}
-              onPointerCancel={onBoardCancel}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onClick={e=>{
-                // onClick only clears annotations / forwards to editor. All chess logic
-                // lives in the native pointerdown handler attached via useEffect.
-                if(Date.now()-recentDragRef.current<200)return;
+                // Pointerdown arms the gesture; window-pointerup decides drop vs tap
+                // and delegates taps to click(). onClick here only clears annotations
+                // (e.g., right-click arrows) when the user clicks empty space.
+                if(Date.now()-recentDragRef.current<300)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
-                if(editorMode){click(sq);return}
-                if(Date.now()-bDownHandledRef.current<150)return;
                 if(arrows.length>0||sqHL.length>0)clearAnnotations();
               }}
               onMouseDown={e=>{

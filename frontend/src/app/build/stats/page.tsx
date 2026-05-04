@@ -20,6 +20,9 @@ type Stats = {
   timestamp: string;
 };
 
+type Series = { day: string; n: number }[];
+type Timeseries = { vacancies: Series; applications: Series; projects: Series };
+
 async function load(): Promise<Stats | null> {
   try {
     const r = await fetch(`${getApiBase()}/api/build/stats`, {
@@ -34,8 +37,55 @@ async function load(): Promise<Stats | null> {
   }
 }
 
+async function loadSeries(): Promise<Timeseries | null> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/build/stats/timeseries`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { success: boolean; data?: Timeseries };
+    return j?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function Sparkline({
+  values,
+  stroke = "#34d399",
+  fill = "rgba(52,211,153,0.15)",
+}: {
+  values: number[];
+  stroke?: string;
+  fill?: string;
+}) {
+  if (values.length === 0) return null;
+  const w = 240;
+  const h = 48;
+  const max = Math.max(1, ...values);
+  const step = w / (values.length - 1 || 1);
+  const points = values
+    .map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * (h - 6) - 3).toFixed(1)}`)
+    .join(" ");
+  const area = `0,${h} ${points} ${w},${h}`;
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      width="100%"
+      height={h}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="14-day trend"
+    >
+      <polygon points={area} fill={fill} />
+      <polyline points={points} fill="none" stroke={stroke} strokeWidth={1.6} />
+    </svg>
+  );
+}
+
 export default async function StatsPage() {
-  const s = await load();
+  const [s, ts] = await Promise.all([load(), loadSeries()]);
   return (
     <main className="min-h-screen bg-[#06070b] px-6 py-16 text-white sm:px-10">
       <div className="mx-auto max-w-5xl">
@@ -78,6 +128,34 @@ export default async function StatsPage() {
                 accent="emerald"
               />
             </section>
+            {ts && (
+              <section className="mt-10">
+                <div className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Последние 14 дней
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <SparkTile
+                    label="Новые вакансии"
+                    series={ts.vacancies}
+                    stroke="#34d399"
+                    fill="rgba(52,211,153,0.15)"
+                  />
+                  <SparkTile
+                    label="Отклики"
+                    series={ts.applications}
+                    stroke="#7dd3fc"
+                    fill="rgba(125,211,252,0.15)"
+                  />
+                  <SparkTile
+                    label="Новые проекты"
+                    series={ts.projects}
+                    stroke="#f0abfc"
+                    fill="rgba(240,171,252,0.15)"
+                  />
+                </div>
+              </section>
+            )}
+
             <p className="mt-8 text-[11px] text-slate-500">
               Обновлено: {new Date(s.timestamp).toLocaleString("ru-RU")}
             </p>
@@ -112,6 +190,40 @@ export default async function StatsPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function SparkTile({
+  label,
+  series,
+  stroke,
+  fill,
+}: {
+  label: string;
+  series: Series;
+  stroke: string;
+  fill: string;
+}) {
+  const total = series.reduce((s, p) => s + p.n, 0);
+  const last = series[series.length - 1]?.n ?? 0;
+  const prev = series.length > 1 ? series[series.length - 2]!.n : 0;
+  const trend = last - prev;
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="text-[11px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-2xl font-bold text-white">{total}</span>
+        <span className="text-[11px] text-slate-500">за 14д</span>
+        {trend !== 0 && (
+          <span className={`text-[11px] font-semibold ${trend > 0 ? "text-emerald-300" : "text-rose-300"}`}>
+            {trend > 0 ? "▲" : "▼"} {Math.abs(trend)} за день
+          </span>
+        )}
+      </div>
+      <div className="mt-2">
+        <Sparkline values={series.map((p) => p.n)} stroke={stroke} fill={fill} />
+      </div>
+    </div>
   );
 }
 

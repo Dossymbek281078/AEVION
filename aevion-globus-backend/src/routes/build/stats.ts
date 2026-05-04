@@ -41,6 +41,62 @@ statsRouter.get("/", async (_req, res) => {
   }
 });
 
+// GET /api/build/stats/timeseries — daily counts for the last 14 days, public.
+// Powers the sparkline visualisations on /build/stats so people can see
+// growth / liveness without us hand-curating numbers.
+statsRouter.get("/timeseries", async (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=600, s-maxage=600");
+  try {
+    const [vacancies, applications, projects] = await Promise.all([
+      pool.query(
+        `SELECT date_trunc('day', "createdAt") AS "day", COUNT(*)::int AS "n"
+         FROM "BuildVacancy"
+         WHERE "createdAt" > NOW() - INTERVAL '14 days'
+         GROUP BY 1 ORDER BY 1`,
+      ),
+      pool.query(
+        `SELECT date_trunc('day', "createdAt") AS "day", COUNT(*)::int AS "n"
+         FROM "BuildApplication"
+         WHERE "createdAt" > NOW() - INTERVAL '14 days'
+         GROUP BY 1 ORDER BY 1`,
+      ),
+      pool.query(
+        `SELECT date_trunc('day', "createdAt") AS "day", COUNT(*)::int AS "n"
+         FROM "BuildProject"
+         WHERE "createdAt" > NOW() - INTERVAL '14 days'
+         GROUP BY 1 ORDER BY 1`,
+      ),
+    ]);
+
+    // Densify: emit a value for every one of the last 14 days even if zero.
+    function densify(rows: { day: string | Date; n: number }[]) {
+      const out: { day: string; n: number }[] = [];
+      const map = new Map<string, number>();
+      for (const r of rows) {
+        const d = new Date(r.day);
+        const key = d.toISOString().slice(0, 10);
+        map.set(key, Number(r.n));
+      }
+      const now = new Date();
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(now);
+        d.setUTCDate(d.getUTCDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        out.push({ day: key, n: map.get(key) ?? 0 });
+      }
+      return out;
+    }
+
+    return ok(res, {
+      vacancies: densify(vacancies.rows as { day: string | Date; n: number }[]),
+      applications: densify(applications.rows as { day: string | Date; n: number }[]),
+      projects: densify(projects.rows as { day: string | Date; n: number }[]),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "stats_timeseries_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/stats/salary?skill=AutoCAD — salary market data for a skill
 statsRouter.get("/salary", async (req, res) => {
   res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=7200");

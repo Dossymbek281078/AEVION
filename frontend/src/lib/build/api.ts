@@ -1049,8 +1049,8 @@ export const buildApi = {
         workerName: string | null; clientName: string | null;
       }[];
     }>("GET", "/api/build/shifts/my"),
-  shiftCheckin: (id: string, lat: number | null, lng: number | null) =>
-    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkin`, { lat, lng }),
+  shiftCheckin: (id: string, lat: number | null | undefined, lng: number | null | undefined) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkin`, { lat: lat ?? null, lng: lng ?? null }),
   shiftCheckout: (id: string) =>
     call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkout`),
 
@@ -1082,11 +1082,14 @@ export const buildApi = {
     }>("GET", `/api/build/team-requests?limit=${q.limit ?? 30}`),
   teamRequest: (id: string) =>
     call<{
-      id: string; title: string; description: string; rolesJson: string;
-      city: string | null; clientName: string | null; applicantCount: number; createdAt: string;
+      id: string; title: string; description: string;
+      roles: { specialty: string; count: number; salary: number | null }[];
+      city: string | null; clientName: string | null;
+      applications: { id: string; userId: string; roleIndex: number; message: string | null; status: string; applicantName: string | null }[];
+      createdAt: string;
     }>("GET", `/api/build/team-requests/${encodeURIComponent(id)}`),
-  applyToTeam: (id: string, role: string, message?: string) =>
-    call<{ ok: boolean }>("POST", `/api/build/team-requests/${encodeURIComponent(id)}/apply`, { role, message }),
+  applyToTeam: (id: string, roleIndex: number, message?: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/team-requests/${encodeURIComponent(id)}/apply`, { roleIndex, message }),
   createTeamRequest: (input: {
     title: string; description: string; city?: string;
     roles: { specialty: string; count: number; salary?: number | null }[];

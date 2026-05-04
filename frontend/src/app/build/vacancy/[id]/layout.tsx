@@ -1,7 +1,21 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 
-async function fetchVacancy(id: string) {
+type VacancyMeta = {
+  id: string;
+  title: string;
+  description: string;
+  salary: number;
+  salaryCurrency?: string | null;
+  city?: string | null;
+  status?: string;
+  createdAt?: string;
+  expiresAt?: string | null;
+  skills?: string[];
+  projectTitle?: string;
+};
+
+async function fetchVacancy(id: string): Promise<VacancyMeta | null> {
   try {
     const res = await fetch(
       `${getApiBase()}/api/build/vacancies/${encodeURIComponent(id)}`,
@@ -9,7 +23,7 @@ async function fetchVacancy(id: string) {
     );
     if (!res.ok) return null;
     const j = await res.json();
-    return j?.data as { title: string; description: string; salary: number } | null;
+    return (j?.data as VacancyMeta) ?? null;
   } catch {
     return null;
   }
@@ -41,6 +55,69 @@ export async function generateMetadata({
   };
 }
 
-export default function VacancyLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+// Schema.org JobPosting JSON-LD — required shape for Google Jobs ingestion.
+// We emit it from the layout (server) so crawlers see it without JS, then
+// the page itself can re-render the same data interactively.
+function buildJobPostingJsonLd(v: VacancyMeta) {
+  const jsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org/",
+    "@type": "JobPosting",
+    title: v.title,
+    description: v.description,
+    datePosted: v.createdAt || new Date().toISOString(),
+    employmentType: "FULL_TIME",
+    hiringOrganization: {
+      "@type": "Organization",
+      name: v.projectTitle || "AEVION QBuild",
+      sameAs: "https://aevion.com/build",
+    },
+    directApply: true,
+  };
+  if (v.expiresAt) jsonLd.validThrough = v.expiresAt;
+  if (v.salary && v.salary > 0) {
+    jsonLd.baseSalary = {
+      "@type": "MonetaryAmount",
+      currency: v.salaryCurrency || "USD",
+      value: { "@type": "QuantitativeValue", value: v.salary, unitText: "MONTH" },
+    };
+  }
+  if (v.city) {
+    jsonLd.jobLocation = {
+      "@type": "Place",
+      address: { "@type": "PostalAddress", addressLocality: v.city },
+    };
+  } else {
+    // Required when no physical location — flag as remote.
+    jsonLd.jobLocationType = "TELECOMMUTE";
+    jsonLd.applicantLocationRequirements = {
+      "@type": "Country",
+      name: "Worldwide",
+    };
+  }
+  if (v.skills && v.skills.length > 0) {
+    jsonLd.skills = v.skills.join(", ");
+  }
+  return jsonLd;
+}
+
+export default async function VacancyLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const v = await fetchVacancy(id);
+  if (!v || v.status === "CLOSED") return <>{children}</>;
+  const jsonLd = buildJobPostingJsonLd(v);
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {children}
+    </>
+  );
 }

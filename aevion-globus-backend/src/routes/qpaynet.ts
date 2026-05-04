@@ -413,3 +413,15 @@ qpaynetRouter.get("/stats", async (_req, res) => {
     res.json({ activeWallets: 0, totalTransactions: 0, totalDepositedKzt: 0 });
   }
 });
+
+// GET /api/qpaynet/health — lightweight liveness check for hub monitor
+qpaynetRouter.get("/health", async (_req, res) => {
+  try {
+    await ensureTables();
+    const pool = getPool();
+    const r = await pool.query("SELECT COUNT(*) AS n FROM qpaynet_wallets");
+    res.json({ status: "ok", service: "qpaynet", wallets: Number(r.rows[0]?.n ?? 0) });
+  } catch (err) {
+    res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
+  }
+});

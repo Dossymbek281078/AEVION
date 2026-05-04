@@ -533,3 +533,15 @@ qcontractRouter.get("/stats", async (_req, res) => {
     res.json({ totalDocuments: 0, totalViews: 0, signedViews: 0 });
   }
 });
+
+// GET /api/qcontract/health
+qcontractRouter.get("/health", async (_req, res) => {
+  try {
+    await ensureTables();
+    const pool = getPool();
+    const r = await pool.query("SELECT COUNT(*) AS n FROM qcontract_documents");
+    res.json({ status: "ok", service: "qcontract", documents: Number(r.rows[0]?.n ?? 0) });
+  } catch (err) {
+    res.status(503).json({ status: "error", service: "qcontract", error: err instanceof Error ? err.message : String(err) });
+  }
+});

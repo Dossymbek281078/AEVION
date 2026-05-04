@@ -44,6 +44,7 @@ type Bundle = {
   email: string | null;
   avgRating?: number;
   reviewCount?: number;
+  achievementBadges?: { key: string; label: string; emoji: string; description: string }[];
   experiences: {
     id: string;
     title: string;
@@ -207,6 +208,23 @@ export default async function PublicProfilePage({ params }: Props) {
             )}
           </div>
         </header>
+
+        {data.achievementBadges && data.achievementBadges.length > 0 && (
+          <Section title="Achievements">
+            <div className="flex flex-wrap gap-2">
+              {data.achievementBadges.map((b) => (
+                <span
+                  key={b.key}
+                  title={b.description}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-100"
+                >
+                  <span aria-hidden="true">{b.emoji}</span>
+                  <span className="font-medium">{b.label}</span>
+                </span>
+              ))}
+            </div>
+          </Section>
+        )}
 
         {data.introVideoUrl && (
           <Section title="Intro video">

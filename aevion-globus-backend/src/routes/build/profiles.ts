@@ -232,6 +232,7 @@ profilesRouter.get("/profiles/:id", async (req, res) => {
               p."preferredLocationsJson", p."toolsOwnedJson",
               p."medicalCheckValid", p."medicalCheckUntil",
               p."safetyTrainingValid", p."safetyTrainingUntil",
+              p."introVideoUrl",
               u."email"
        FROM "BuildProfile" p
        LEFT JOIN "AEVIONUser" u ON u."id" = p."userId"
@@ -240,7 +241,7 @@ profilesRouter.get("/profiles/:id", async (req, res) => {
     );
     if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
 
-    const [exp, edu, ratingAgg] = await Promise.all([
+    const [exp, edu, ratingAgg, hiresAgg, applicationsAgg, projectsAgg] = await Promise.all([
       pool.query(
         `SELECT * FROM "BuildExperience" WHERE "userId" = $1
          ORDER BY "current" DESC, "sortOrder" ASC, "createdAt" DESC`,
@@ -254,6 +255,19 @@ profilesRouter.get("/profiles/:id", async (req, res) => {
       pool.query(
         `SELECT COUNT(*)::int AS "count", COALESCE(AVG("rating"),0)::float8 AS "avg"
            FROM "BuildReview" WHERE "revieweeId" = $1`,
+        [id],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS "count" FROM "BuildApplication"
+         WHERE "userId" = $1 AND "status" = 'ACCEPTED'`,
+        [id],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS "count" FROM "BuildApplication" WHERE "userId" = $1`,
+        [id],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS "count" FROM "BuildProject" WHERE "clientId" = $1`,
         [id],
       ),
     ]);
@@ -273,11 +287,128 @@ profilesRouter.get("/profiles/:id", async (req, res) => {
       education: edu.rows,
       reviewCount: Number(ratingAgg.rows[0]?.count ?? 0),
       avgRating: Number((Number(ratingAgg.rows[0]?.avg ?? 0)).toFixed(2)),
+      achievementBadges: computeAchievementBadges({
+        verifiedAt: row.verifiedAt,
+        reviewCount: Number(ratingAgg.rows[0]?.count ?? 0),
+        avgRating: Number(ratingAgg.rows[0]?.avg ?? 0),
+        hires: Number(hiresAgg.rows[0]?.count ?? 0),
+        applications: Number(applicationsAgg.rows[0]?.count ?? 0),
+        projectsPosted: Number(projectsAgg.rows[0]?.count ?? 0),
+        skillsCount: safeParseJson(row.skillsJson, [] as string[]).length,
+        introVideoUrl: row.introVideoUrl,
+        medicalCheckValid: row.medicalCheckValid,
+        safetyTrainingValid: row.safetyTrainingValid,
+        memberSinceDays: row.createdAt
+          ? Math.floor((Date.now() - new Date(row.createdAt).getTime()) / 86400000)
+          : 0,
+      }),
     });
   } catch (err: unknown) {
     return fail(res, 500, "profile_fetch_failed", { details: (err as Error).message });
   }
 });
+
+type AchievementBadge = {
+  key: string;
+  label: string;
+  emoji: string;
+  description: string;
+};
+
+function computeAchievementBadges(stats: {
+  verifiedAt: string | null;
+  reviewCount: number;
+  avgRating: number;
+  hires: number;
+  applications: number;
+  projectsPosted: number;
+  skillsCount: number;
+  introVideoUrl: string | null;
+  medicalCheckValid: boolean;
+  safetyTrainingValid: boolean;
+  memberSinceDays: number;
+}): AchievementBadge[] {
+  const out: AchievementBadge[] = [];
+  if (stats.verifiedAt) out.push({
+    key: "verified",
+    label: "Verified",
+    emoji: "✓",
+    description: "Identity verified by AEVION admin team",
+  });
+  if (stats.reviewCount >= 1) out.push({
+    key: "first_review",
+    label: "First review",
+    emoji: "⭐",
+    description: "Earned the first 5-star feedback",
+  });
+  if (stats.reviewCount >= 5) out.push({
+    key: "five_reviews",
+    label: "5+ reviews",
+    emoji: "🌟",
+    description: "Five or more clients have reviewed this profile",
+  });
+  if (stats.reviewCount >= 5 && stats.avgRating >= 4.7) out.push({
+    key: "top_rated",
+    label: "Top-rated",
+    emoji: "🏆",
+    description: "Average rating above 4.7 across 5+ reviews",
+  });
+  if (stats.hires >= 1) out.push({
+    key: "first_hire",
+    label: "Hired",
+    emoji: "💼",
+    description: "First time accepted for a vacancy on QBuild",
+  });
+  if (stats.hires >= 5) out.push({
+    key: "veteran",
+    label: "QBuild veteran",
+    emoji: "🎖",
+    description: "Accepted on five or more vacancies",
+  });
+  if (stats.applications >= 10) out.push({
+    key: "active",
+    label: "Active applicant",
+    emoji: "🎯",
+    description: "Applied to ten or more vacancies",
+  });
+  if (stats.projectsPosted >= 1) out.push({
+    key: "first_project",
+    label: "First project",
+    emoji: "🏗",
+    description: "Posted a construction project",
+  });
+  if (stats.projectsPosted >= 5) out.push({
+    key: "frequent_recruiter",
+    label: "Frequent recruiter",
+    emoji: "🧰",
+    description: "Posted five or more projects",
+  });
+  if (stats.skillsCount >= 5) out.push({
+    key: "skills_5",
+    label: "Multi-skilled",
+    emoji: "🧠",
+    description: "Five or more skills declared",
+  });
+  if (stats.introVideoUrl) out.push({
+    key: "video_pitch",
+    label: "Video pitch",
+    emoji: "🎥",
+    description: "30-second intro video on profile",
+  });
+  if (stats.medicalCheckValid && stats.safetyTrainingValid) out.push({
+    key: "site_ready",
+    label: "Site-ready",
+    emoji: "🦺",
+    description: "Medical check and safety training current",
+  });
+  if (stats.memberSinceDays >= 365) out.push({
+    key: "year_one",
+    label: "1+ year",
+    emoji: "🕰",
+    description: "Member of QBuild for over a year",
+  });
+  return out;
+}
 
 // GET /api/build/profiles/search — recruiter talent search
 profilesRouter.get("/profiles/search", async (req, res) => {

@@ -91,6 +91,31 @@ const APIS = [
       "POST /api/auth/sign-out-everywhere",
     ],
   },
+  {
+    name: "QPayNet",
+    color: "#a78bfa",
+    href: "/qpaynet",
+    desc: "Embedded payments — KZT wallets, P2P transfers (0.1% fee), tracked payment requests, merchant API key for charging customers. CSV export, public recipient lookup.",
+    endpoints: [
+      "POST /api/qpaynet/wallets",
+      "POST /api/qpaynet/transfer",
+      "POST /api/qpaynet/requests",
+      "GET /api/qpaynet/wallets/:id/public",
+      "POST /api/qpaynet/merchant/charge",
+    ],
+  },
+  {
+    name: "QContract",
+    color: "#ef4444",
+    href: "/qcontract",
+    desc: "Self-destruct smart documents. Password protection, max-views or expiry, audit log + CSV export, 5 RU templates (NDA, offer, service, construction, equipment-lease).",
+    endpoints: [
+      "POST /api/qcontract/documents",
+      "POST /api/qcontract/view/:token",
+      "PATCH /api/qcontract/documents/:id",
+      "GET /api/qcontract/documents/:id/log.csv",
+    ],
+  },
 ];
 
 const SDKS = [

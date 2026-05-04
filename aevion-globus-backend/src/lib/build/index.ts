@@ -501,6 +501,21 @@ async function _doEnsureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVerifReq_status_idx" ON "BuildVerificationRequest" ("status", "createdAt" DESC);`);
 
+  // BuildApplicationNote: private recruiter notes attached to an application.
+  // Visible only to the vacancy owner (or ADMIN). Used by the recruiter to
+  // jot impressions, screening status, etc. without polluting the candidate-
+  // facing rejectReason field.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildApplicationNote" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "authorUserId" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationNote_app_idx" ON "BuildApplicationNote" ("applicationId", "createdAt" DESC);`);
+
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.
   await pool.query(

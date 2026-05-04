@@ -155,7 +155,9 @@ applicationsRouter.get("/my", async (req, res) => {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
     const result = await pool.query(
-      `SELECT a.*, v."title" AS "vacancyTitle", v."salary", p."id" AS "projectId", p."title" AS "projectTitle"
+      `SELECT a.*, v."title" AS "vacancyTitle", v."salary",
+              v."status" AS "vacancyStatus", v."expiresAt" AS "vacancyExpiresAt",
+              p."id" AS "projectId", p."title" AS "projectTitle"
        FROM "BuildApplication" a
        LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
@@ -366,6 +368,102 @@ applicationsRouter.patch("/:id", async (req, res) => {
     return ok(res, { ...result.rows[0], hireOrder });
   } catch (err: unknown) {
     return fail(res, 500, "application_update_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/applications/:id/notes — vacancy owner reads private notes.
+applicationsRouter.get("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_read_notes");
+    }
+
+    const r = await pool.query(
+      `SELECT "id","applicationId","authorUserId","body","createdAt"
+       FROM "BuildApplicationNote"
+       WHERE "applicationId" = $1
+       ORDER BY "createdAt" DESC
+       LIMIT 200`,
+      [id],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "application_notes_fetch_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/applications/:id/notes — vacancy owner writes a note.
+applicationsRouter.post("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const body = vString(req.body?.body, "body", { min: 1, max: 4000 });
+    if (!body.ok) return fail(res, 400, body.error);
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_add_notes");
+    }
+
+    const noteId = crypto.randomUUID();
+    const r = await pool.query(
+      `INSERT INTO "BuildApplicationNote" ("id","applicationId","authorUserId","body")
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [noteId, id, auth.sub, body.value],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_note_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/applications/:id/notes/:noteId — owner or note author deletes.
+applicationsRouter.delete("/:id/notes/:noteId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const noteId = String(req.params.noteId);
+
+    const note = await pool.query(
+      `SELECT n."authorUserId", p."clientId"
+       FROM "BuildApplicationNote" n
+       LEFT JOIN "BuildApplication" a ON a."id" = n."applicationId"
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE n."id" = $1 AND n."applicationId" = $2 LIMIT 1`,
+      [noteId, id],
+    );
+    if (note.rowCount === 0) return fail(res, 404, "note_not_found");
+    const { authorUserId, clientId } = note.rows[0];
+    if (authorUserId !== auth.sub && clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_owner_or_author_can_delete_note");
+    }
+    await pool.query(`DELETE FROM "BuildApplicationNote" WHERE "id" = $1`, [noteId]);
+    return ok(res, { id: noteId });
+  } catch (err: unknown) {
+    return fail(res, 500, "application_note_delete_failed", { details: (err as Error).message });
   }
 });
 

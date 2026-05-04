@@ -324,3 +324,101 @@ aiRouter.post("/generate-vacancy", aiRateLimiter, async (req, res) => {
     return fail(res, 500, "ai_generate_vacancy_failed", { details: (err as Error).message });
   }
 });
+
+// POST /api/build/ai/match-vacancy — score how well a candidate profile
+// matches a vacancy. UI on /build/ai-match shows the score + breakdown.
+aiRouter.post("/match-vacancy", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const profileText = vString(req.body?.profileText, "profileText", { min: 20, max: 4000 });
+    if (!profileText.ok) return fail(res, 400, profileText.error);
+    const vacancyText = vString(req.body?.vacancyText, "vacancyText", { min: 20, max: 4000 });
+    if (!vacancyText.ok) return fail(res, 400, vacancyText.error);
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const sys = `Ты — рекрутер на стройплощадке платформы AEVION QBuild.
+Получаешь две блока текста: профиль кандидата и описание вакансии. Возвращаешь СТРОГИЙ JSON:
+{
+  "score": number,             // 0-100, насколько профиль подходит
+  "label": string,              // короткая метка ("Сильное совпадение", "Частичное", "Не подходит")
+  "strengths": string[],        // 2-5 пунктов, что у кандидата совпадает с требованиями
+  "gaps": string[],             // 0-5 пунктов, чего не хватает
+  "tip": string                 // одно предложение совета кандидату для отклика
+}
+
+Правила:
+- Не выдумывай факты, которых нет в текстах. Если в профиле нет упоминания навыка — это gap.
+- score < 50 ⇒ label "Не подходит"; 50-79 ⇒ "Частичное совпадение"; 80+ ⇒ "Сильное совпадение".
+- Никакого markdown, никакой обёртки \`\`\`json\`\`\`. Только raw JSON.
+- Язык ответа: русский.`;
+
+    const reply = await callClaude({
+      systemPrompt: sys,
+      messages: [{ role: "user", content: `ПРОФИЛЬ:\n${profileText.value}\n\n---\n\nВАКАНСИЯ:\n${vacancyText.value}` }],
+      maxTokens: 800,
+      cacheSystem: true,
+    });
+
+    const cleaned = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return fail(res, 502, "ai_returned_invalid_json", { sample: cleaned.slice(0, 200) });
+    }
+    return ok(res, {
+      match: parsed,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_match_vacancy_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/cover-letter — generate a tailored cover letter from
+// profile + vacancy. UI on /build/ai-match offers tone presets.
+aiRouter.post("/cover-letter", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const profileText = vString(req.body?.profileText, "profileText", { min: 20, max: 4000 });
+    if (!profileText.ok) return fail(res, 400, profileText.error);
+    const vacancyText = vString(req.body?.vacancyText, "vacancyText", { min: 20, max: 4000 });
+    if (!vacancyText.ok) return fail(res, 400, vacancyText.error);
+    const toneRaw = typeof req.body?.tone === "string" ? req.body.tone : "professional";
+    const tone = ["professional", "friendly", "concise"].includes(toneRaw) ? toneRaw : "professional";
+
+    const toneGuide: Record<string, string> = {
+      professional: "Деловой тон. Сухо, по делу, без эмоций. 4-6 предложений.",
+      friendly: "Тёплый дружелюбный тон, но без панибратства. 4-6 предложений.",
+      concise: "Максимально коротко: 2-3 предложения. Только опыт + готов начать.",
+    };
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — редактор сопроводительных писем для строителей на платформе AEVION QBuild.
+Получаешь профиль кандидата и описание вакансии. Возвращаешь готовое сопроводительное письмо ПРОСТЫМ ТЕКСТОМ (без markdown, без подписи "С уважением, ...", без email-шапки).
+
+${toneGuide[tone]}
+
+Правила:
+- Используй только факты из профиля. Не выдумывай работодателей, годы, проекты.
+- Связывай конкретные навыки кандидата с конкретными требованиями вакансии.
+- Без преамбулы вроде "Вот письмо:". Только сам текст.
+- Язык: русский.`,
+      messages: [{ role: "user", content: `ПРОФИЛЬ:\n${profileText.value}\n\n---\n\nВАКАНСИЯ:\n${vacancyText.value}` }],
+      maxTokens: 800,
+      cacheSystem: true,
+    });
+
+    return ok(res, {
+      coverLetter: reply.text.trim(),
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_cover_letter_failed", { details: (err as Error).message });
+  }
+});

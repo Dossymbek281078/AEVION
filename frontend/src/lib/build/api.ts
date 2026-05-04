@@ -978,6 +978,73 @@ export const buildApi = {
     sizeBytes?: number;
   }) => call<BuildFile>("POST", "/api/build/files/upload", input),
 
+  // Documents (admin verification)
+  adminPendingDocuments: () =>
+    call<{
+      items: {
+        id: string; userId: string; docType: string; fileUrl: string;
+        createdAt: string; userName: string | null; userEmail: string | null;
+      }[];
+    }>("GET", "/api/build/documents/admin/pending"),
+  verifyDocument: (id: string) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/verify`),
+  rejectDocument: (id: string, reason?: string) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/reject`, { reason }),
+
+  // Shifts
+  myShifts: () =>
+    call<{
+      items: {
+        id: string; applicationId: string; workerId: string; clientId: string;
+        shiftDate: string; startTime: string | null; endTime: string | null;
+        status: string; checkInAt: string | null; checkOutAt: string | null;
+        workerName: string | null; clientName: string | null;
+      }[];
+    }>("GET", "/api/build/shifts/my"),
+  shiftCheckin: (id: string, lat: number | null, lng: number | null) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkin`, { lat, lng }),
+  shiftCheckout: (id: string) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkout`),
+
+  // Video Rooms
+  myVideoRooms: () =>
+    call<{
+      items: {
+        id: string; roomUrl: string; hostId: string; guestId: string | null;
+        scheduledAt: string | null; status: string; hostName: string | null;
+        guestName: string | null; createdAt: string;
+      }[];
+    }>("GET", "/api/build/video/my"),
+  createVideoRoom: (input: { guestId?: string | null; scheduledAt?: string | null }) =>
+    call<{
+      id: string; roomUrl: string; hostId: string; guestId: string | null;
+      scheduledAt: string | null; status: string; hostName: string | null;
+      guestName: string | null; createdAt: string;
+    }>("POST", "/api/build/video", input),
+  inviteToVideoRoom: (roomId: string, guestId: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/video/${encodeURIComponent(roomId)}/invite`, { guestId }),
+
+  // Team Requests
+  teamRequests: (q: { limit?: number } = {}) =>
+    call<{
+      items: {
+        id: string; title: string; description: string; rolesJson: string;
+        city: string | null; clientName: string | null; applicantCount: number; createdAt: string;
+      }[];
+    }>("GET", `/api/build/team-requests?limit=${q.limit ?? 30}`),
+  teamRequest: (id: string) =>
+    call<{
+      id: string; title: string; description: string; rolesJson: string;
+      city: string | null; clientName: string | null; applicantCount: number; createdAt: string;
+    }>("GET", `/api/build/team-requests/${encodeURIComponent(id)}`),
+  applyToTeam: (id: string, role: string, message?: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/team-requests/${encodeURIComponent(id)}/apply`, { role, message }),
+  createTeamRequest: (input: {
+    title: string; description: string; city?: string;
+    roles: { specialty: string; count: number; salary?: number | null }[];
+  }) =>
+    call<{ id: string }>("POST", "/api/build/team-requests", input),
+
   // Leaderboard
   leaderboard: (kind: "employer" | "worker", limit = 30) =>
     call<{ items: LeaderboardRow[] }>(

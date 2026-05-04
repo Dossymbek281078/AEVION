@@ -607,6 +607,47 @@ vacanciesRouter.patch("/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/build/vacancies/:id — owner can delete a vacancy that has
+// zero applications. The "zero apps" guard exists because deleting a
+// vacancy with applications would orphan candidate records, hire fees
+// and CSV history. For vacancies with applications we recommend
+// PATCH status=CLOSED via the existing patch endpoint instead.
+vacanciesRouter.delete("/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId",
+              (SELECT COUNT(*)::int FROM "BuildApplication" a WHERE a."vacancyId" = v."id") AS "appsCount"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_delete");
+    }
+    if (Number(owner.rows[0].appsCount) > 0) {
+      return fail(res, 409, "vacancy_has_applications", {
+        appsCount: Number(owner.rows[0].appsCount),
+        hint: "Close the vacancy instead (PATCH status=CLOSED) to preserve the application history.",
+      });
+    }
+
+    // Cascade-delete supporting rows that don't have FK to applications:
+    // bookmarks pointing at this vacancy and any boost rows.
+    await pool.query(`DELETE FROM "BuildBoost" WHERE "vacancyId" = $1`, [id]).catch(() => {});
+    await pool.query(`DELETE FROM "BuildBookmark" WHERE "kind" = 'VACANCY' AND "targetId" = $1`, [id]).catch(() => {});
+    await pool.query(`DELETE FROM "BuildVacancy" WHERE "id" = $1`, [id]);
+    return ok(res, { id });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_delete_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/vacancies/:id/duplicate — clone into another project
 vacanciesRouter.post("/:id/duplicate", async (req, res) => {
   try {

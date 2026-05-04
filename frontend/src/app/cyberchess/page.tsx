@@ -159,6 +159,8 @@ function snd(t:string){if(isMuted())return;try{
   else if(t==="check")    makeBurst(n,0.07,2400,0.28);
   else if(t==="castle")   {makeBurst(n,0.05,1200,0.2);makeBurst(n+0.08,0.05,1200,0.18);}
   else if(t==="premove")  makeBurst(n,0.04,1800,0.12);
+  // Distinct premove-cancel sound: short downward tone — clearly different from "premove confirm".
+  else if(t==="cancel")   {makeBurst(n,0.05,900,0.18);makeBurst(n+0.05,0.05,500,0.13);}
   else if(t==="x")        {for(let i=0;i<4;i++)makeBurst(n+i*0.08,0.07,600-i*60,0.15);}
   else                    makeBurst(n,0.05,1200,0.20);
 }catch{}}
@@ -1907,6 +1909,9 @@ export default function CyberChessPage(){
   const lmKeyRef=useRef("");
   // Capture animation: захваченная фигура коротко fade+shrink на cell взятия (lichess-style).
   const[capAnim,sCapAnim]=useState<{sq:Square;piece:{type:any;color:any};key:number}|null>(null);
+  // Premove cancel flash: красный pulse на FROM-клетке отменённого премува (~600ms).
+  const[cancelFlash,sCancelFlash]=useState<{sq:Square;key:number}|null>(null);
+  useEffect(()=>{if(!cancelFlash)return;const id=window.setTimeout(()=>sCancelFlash(null),650);return()=>clearTimeout(id);},[cancelFlash?.key]);
   useEffect(()=>{
     if(!lm||!lm.from||!lm.to||lm.from===lm.to)return;
     const key=`${lm.from}-${lm.to}-${bk}`;
@@ -2257,7 +2262,14 @@ export default function CyberChessPage(){
       // (FROM или TO) — отменяет этот премув. Цепочки премувов теперь только драгом
       // (drag отрабатывается в pointerup отдельно и не попадает сюда).
       const pmHit=curPms.findIndex(x=>x.from===sq||x.to===sq);
-      if(pmHit>=0){sPms(v=>v.filter((_,i)=>i!==pmHit));snd("premove");return}
+      if(pmHit>=0){
+        const cancelled=curPms[pmHit];
+        sPms(v=>v.filter((_,i)=>i!==pmHit));
+        snd("cancel");
+        sCancelFlash({sq:cancelled.from,key:Date.now()});
+        showToast(`Премув отменён · ${cancelled.from}→${cancelled.to}`,"info");
+        return;
+      }
 
       // Case 2: no selection → click on own piece (real or virtual) starts new premove
       if(vp?.color===pCol){sPmSel(sq);return}
@@ -2636,7 +2648,18 @@ export default function CyberChessPage(){
         try{g.load(fenParts.join(" "));}catch{}
         const from=g.get(pm.from);
         if(!from||from.color!==pCol)continue;
-        try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+        // First try the move as-is.
+        let moved=false;
+        try{const mv=g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});if(mv)moved=true;}catch{}
+        if(moved)continue;
+        // "Rescue" premove: TO is occupied by our own piece. Project as if opponent
+        // captured that piece (remove it), then retry the move so chained premoves
+        // see the right virtual state. If still illegal, skip this premove.
+        const occ=g.get(pm.to);
+        if(occ&&occ.color===pCol){
+          try{g.remove(pm.to);}catch{}
+          try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+        }
       }
       return g;
     }catch{return game;}
@@ -3559,6 +3582,9 @@ export default function CyberChessPage(){
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
             <div ref={boardRef}
               onPointerDown={onBoardDown}
+              onPointerMove={onBoardMove}
+              onPointerUp={onBoardUp}
+              onPointerCancel={onBoardCancel}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onClick={e=>{
@@ -3591,7 +3617,14 @@ export default function CyberChessPage(){
                 // Right-click на тот же квадрат: если на нём премув — удалить премув
                 // (старая полезная фича). Иначе — toggle highlight.
                 const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
-                if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
+                if(pmIdx>=0){
+                  const cancelled=pms[pmIdx];
+                  sPms(p=>p.filter((_,i)=>i!==pmIdx));
+                  snd("cancel"); // distinct sound for premove cancel
+                  sCancelFlash({sq:cancelled.from,key:Date.now()});
+                  showToast(`Премув отменён · ${cancelled.from}→${cancelled.to}`,"info");
+                  return;
+                }
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
@@ -3681,6 +3714,14 @@ export default function CyberChessPage(){
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
                   coordFile={isBottomRow?sq[0]:undefined}/>;
               }))}
+              {/* Premove cancel flash — красный pulse на FROM-клетке отменённого премува */}
+              {cancelFlash&&(()=>{
+                const cf=FILES.indexOf(cancelFlash.sq[0]);
+                const cr=8-parseInt(cancelFlash.sq[1]);
+                const cc=flip?7-cf:cf;const crr=flip?7-cr:cr;
+                return <div key={`cancel-${cancelFlash.key}`} className="cc-cancel-flash"
+                  style={{position:"absolute",left:`${cc*12.5}%`,top:`${crr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:7,boxSizing:"border-box"}}/>;
+              })()}
               {/* Capture animation — захваченная фигура pop+fade на cell взятия */}
               {capAnim&&(()=>{
                 const cf=FILES.indexOf(capAnim.sq[0]);

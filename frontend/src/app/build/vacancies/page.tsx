@@ -7,6 +7,7 @@ import { BuildShell } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { VacancySkeleton } from "@/components/build/Skeleton";
 import { buildApi, type BuildVacancy, type VacancyStatus } from "@/lib/build/api";
+import { getRecentVacancies, clearRecentVacancies, type RecentVacancy } from "@/lib/build/recentlyViewed";
 
 const STATUS_FILTERS: (VacancyStatus | "ALL")[] = ["ALL", "OPEN", "CLOSED"];
 
@@ -196,6 +197,8 @@ export default function VacanciesFeedPage() {
         </div>
       )}
 
+      <RecentlyViewedRow />
+
       <SavedSearches
         current={{ q, city, minSalary, skill, sort, status }}
         onApply={(s) => {
@@ -260,6 +263,55 @@ function Stat({
     <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
       <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${toneCls}`}>{value}</div>
+    </div>
+  );
+}
+
+function RecentlyViewedRow() {
+  const [items, setItems] = useState<RecentVacancy[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setItems(getRecentVacancies());
+    setHydrated(true);
+  }, []);
+
+  if (!hydrated || items.length === 0) return null;
+
+  return (
+    <div className="mb-4">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Recently viewed
+        </span>
+        <button
+          onClick={() => {
+            clearRecentVacancies();
+            setItems([]);
+          }}
+          className="text-[10px] text-slate-500 hover:text-slate-300"
+        >
+          Clear
+        </button>
+      </div>
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {items.map((v) => (
+          <Link
+            key={v.id}
+            href={`/build/vacancy/${encodeURIComponent(v.id)}`}
+            className="group shrink-0 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 transition hover:border-emerald-500/30 hover:bg-white/[0.06]"
+            style={{ minWidth: 200, maxWidth: 240 }}
+          >
+            <div className="truncate text-xs font-semibold text-white group-hover:text-emerald-200">
+              {v.title}
+            </div>
+            <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400">
+              {v.salary > 0 && <span className="text-emerald-300">${v.salary.toLocaleString()}</span>}
+              {v.city && <span>📍 {v.city}</span>}
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

@@ -482,6 +482,46 @@ qcontractRouter.get("/documents/:id/log", async (req, res) => {
   });
 });
 
+// GET /api/qcontract/documents/:id/log.csv — audit log CSV export
+qcontractRouter.get("/documents/:id/log.csv", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "unknown";
+
+  const doc = await pool.query(
+    "SELECT id, title FROM qcontract_documents WHERE id = $1 AND owner_id = $2",
+    [req.params.id, ownerId],
+  );
+  if (!doc.rows[0]) return res.status(404).json({ error: "not_found" });
+
+  const views = await pool.query(
+    `SELECT id, viewer_ip, viewer_ua, viewer_email, signed_at, viewed_at
+     FROM qcontract_views WHERE document_id = $1 ORDER BY viewed_at DESC LIMIT 5000`,
+    [req.params.id],
+  );
+
+  const escape = (v: unknown) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = "view_id,viewer_ip,viewer_email,signed,viewed_at,user_agent";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = views.rows.map((v: any) => [
+    v.id, v.viewer_ip ?? "", v.viewer_email ?? "",
+    v.signed_at ? "yes" : "no",
+    new Date(v.viewed_at).toISOString(),
+    v.viewer_ua ?? "",
+  ].map(escape).join(","));
+
+  const safeTitle = doc.rows[0].title.replace(/[^\w-]/g, "_").slice(0, 40);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="qcontract-${safeTitle}-log-${new Date().toISOString().slice(0,10)}.csv"`);
+  res.send(header + "\n" + rows.join("\n"));
+});
+
 // POST /api/qcontract/view/:token — record view + return content
 qcontractRouter.post("/view/:token", async (req, res) => {
   await ensureTables();

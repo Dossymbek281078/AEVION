@@ -199,7 +199,7 @@ parity + docs/runbook.
 | P3-1 | Demo recording — 8-minute scripted walkthrough across QRight → Bureau → Awards → Bank | aevion-core |
 | P3-2 | Press kit / one-pager — `docs/AEVION_ONEPAGER.md` exists; bring up to current state | aevion-core |
 | P3-3 | Reference customer onboarding — RU partnership artifacts in `docs/bureau/` need productisation | aevion-bureau / aevion-core |
-| P3-4 | First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau |
+| P3-4 | First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau | **partial** — Trust Graph edge + AEC reward scaffold shipped in `aca91c2` (`BureauTrustEdge` table, `/upgrade/:certId` hook, 2 read endpoints, env-driven reward); remaining: product decision on reward sizes, prod Stripe keys, AEC mint claim flow |
 | P3-5 | Investor demo flow on prod — every link in pitch deck resolves, every stat is live | aevion-core |
 
 ### Phase 4 — Public launch
@@ -243,7 +243,7 @@ If the user insists on more code work in this window, candidates are:
 1. ~~**AEC ↔ fiat boundary doc**~~ ✅ done — `docs/bank/AEC_FIAT_BOUNDARY.md` (4 canonical rules R1–R4, P3-4 flow diagram, legal positioning, pre-P3-4 checklist)
 2. ~~Resolve `bank-payment-layer` branch~~ ✅ done — archived as `archive/bank-payment-layer-2026-05-03` tag; all 362 net-new files were already present on main via parallel development; worktree + remote branch removed
 3. ~~Wire `npm run smoke:bank-prod` into the daily cron~~ ✅ done — added `bank-prod-smoke` job to `daily-smoke.yml` (cron+dispatch only, skips on push; artifact stored 14 days in GitHub Actions)
-4. **P3-4** First paid Bureau cert E2E — prereqs now met (AEC boundary doc done); implement Trust Graph edge record + connect prod Stripe keys
+4. **P3-4** First paid Bureau cert E2E — Trust Graph + AEC reward scaffold shipped (`aca91c2`); next: product decision on `BUREAU_*_AEC_REWARD` env values, connect prod Stripe keys, add Bureau-Stripe step to `smoke:bank-prod`, design AEC mint claim flow (edge.userId → aev_wallet.deviceId link)
 
 ### `aevion-qsign`
 1. **Do nothing without checking PR list** — P1-P9 already merged via PR #2 on 2026-04-26

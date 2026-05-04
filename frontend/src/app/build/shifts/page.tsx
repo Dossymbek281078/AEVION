@@ -77,7 +77,7 @@ function ShiftsInner() {
           lng = pos.coords.longitude;
         } catch {/*optional*/}
       }
-      await buildApi.shiftCheckin(id, lat, lng);
+      await buildApi.shiftCheckin(id, lat ?? null, lng ?? null);
       load();
     } catch {/**/} finally { setBusy(null); }
   }

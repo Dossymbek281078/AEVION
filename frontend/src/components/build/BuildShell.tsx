@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
 import { ToastProvider } from "./Toast";
+import { HeaderSearch } from "./HeaderSearch";
 
 const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build", label: "Projects" },
@@ -112,6 +113,10 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
               </button>
             )}
           </nav>
+
+          <div className="hidden md:block">
+            <HeaderSearch />
+          </div>
 
           <div className="flex items-center gap-2 text-xs">
             {hydrated && user ? (

@@ -10,6 +10,7 @@ import {
 } from "@/lib/build/api";
 import { VoiceInput } from "./VoiceInput";
 import { AiImprove } from "./AiImprove";
+import { phoneError, normalizePhone } from "@/lib/build/validate";
 
 const SHIFTS: ShiftPreference[] = ["DAY", "NIGHT", "FLEX", "ANY"];
 const AVAILS: AvailabilityType[] = ["FULL_TIME", "PART_TIME", "PROJECT", "SHIFT", "REMOTE"];
@@ -126,6 +127,11 @@ export function ProfileForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const phoneIssue = phoneError(phone);
+    if (phoneIssue) {
+      setError(phoneIssue);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -202,10 +208,20 @@ export function ProfileForm({
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
+            onBlur={() => {
+              const n = normalizePhone(phone);
+              if (n && n !== phone) setPhone(n);
+            }}
             maxLength={32}
             placeholder="+7 700 000 0000"
-            className="input-build"
+            inputMode="tel"
+            autoComplete="tel"
+            aria-invalid={phoneError(phone) ? true : undefined}
+            className={`input-build ${phoneError(phone) ? "ring-1 ring-rose-500/40" : ""}`}
           />
+          {phoneError(phone) && (
+            <p className="mt-1 text-xs text-rose-300">{phoneError(phone)}</p>
+          )}
         </Field>
         <Field label="Photo URL">
           <input

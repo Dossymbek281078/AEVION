@@ -114,6 +114,19 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
 
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
+      <footer className="border-t border-white/5 mt-8">
+        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">
+          <div className="flex flex-wrap gap-4">
+            <Link href="/build/help" className="hover:text-slate-300">Help</Link>
+            <Link href="/build/stats" className="hover:text-slate-300">Platform stats</Link>
+            <Link href="/build/leaderboard" className="hover:text-slate-300">Leaderboard</Link>
+            <Link href="/build/success-stories" className="hover:text-slate-300">Success stories</Link>
+            <Link href="/build/why-aevion" className="hover:text-slate-300">Why AEVION</Link>
+            <Link href="/build/pricing" className="hover:text-slate-300">Pricing</Link>
+          </div>
+          <span>© 2026 AEVION QBuild</span>
+        </div>
+      </footer>
     </div>
   );
 }

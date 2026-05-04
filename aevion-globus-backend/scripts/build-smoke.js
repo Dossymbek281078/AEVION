@@ -546,6 +546,61 @@ async function main() {
   if (is2xx(r) && unwrap(r)?.marked === true) {
     ok("POST /notifications/mark-read");
   } else return fail("notifications mark-read", `status=${r.status}`);
+
+  // 40. Stats — public leaderboard
+  r = await call("GET", "/api/build/stats/leaderboard");
+  if (is2xx(r) && Array.isArray(unwrap(r)?.employers)) {
+    ok("GET /stats/leaderboard", `employers=${unwrap(r).employers.length}`);
+  } else return fail("stats leaderboard", `status=${r.status}`);
+
+  // 41. Stats — salary market data
+  r = await call("GET", "/api/build/stats/salary");
+  if (is2xx(r) && typeof unwrap(r)?.count === "number") {
+    ok("GET /stats/salary", `count=${unwrap(r).count} median=${unwrap(r).median}`);
+  } else return fail("stats salary", `status=${r.status}`);
+
+  // 42. Stats — recent hires
+  r = await call("GET", "/api/build/stats/hires?limit=5");
+  if (is2xx(r) && Array.isArray(unwrap(r)?.items)) {
+    ok("GET /stats/hires", `count=${unwrap(r).items.length}`);
+  } else return fail("stats hires", `status=${r.status}`);
+
+  // 43. Vacancies — popular skills
+  r = await call("GET", "/api/build/vacancies/skills/popular");
+  if (is2xx(r) && Array.isArray(unwrap(r)?.items)) {
+    ok("GET /vacancies/skills/popular", `top=${unwrap(r).items[0]?.skill ?? "none"}`);
+  } else return fail("popular skills", `status=${r.status}`);
+
+  // 44. Job alert subscribe
+  r = await call("POST", "/api/build/alerts", { keywords: "welder", skills: "AutoCAD" }, clientToken);
+  if (is2xx(r) && unwrap(r)?.alert?.keywords === "welder") {
+    ok("POST /alerts upsert");
+  } else return fail("alerts upsert", `status=${r.status}`);
+
+  // 45. Job alert read-back
+  r = await call("GET", "/api/build/alerts/me", null, clientToken);
+  if (is2xx(r) && unwrap(r)?.alert?.keywords === "welder") {
+    ok("GET /alerts/me", `keywords=${unwrap(r).alert.keywords}`);
+  } else return fail("alerts me", `status=${r.status}`);
+
+  // 46. Verification request
+  r = await call("POST", "/api/build/verification/request", { note: "Smoke test" }, workerToken);
+  if (is2xx(r) && unwrap(r)?.request?.status === "PENDING") {
+    ok("POST /verification/request");
+  } else return fail("verification request", `status=${r.status} body=${JSON.stringify(r.body)}`);
+
+  // 47. Verification my — read-back
+  r = await call("GET", "/api/build/verification/my", null, workerToken);
+  if (is2xx(r) && unwrap(r)?.request?.status === "PENDING") {
+    ok("GET /verification/my");
+  } else return fail("verification my", `status=${r.status}`);
+
+  // 48. Health metrics endpoint
+  r = await call("GET", "/api/build/health/metrics");
+  if (is2xx(r)) {
+    const body = r.body; // text/plain Prometheus
+    ok("GET /health/metrics", `has qbuild_vacancies=${String(r.body).includes("qbuild_vacancies") || String(body).includes("qbuild")}`);
+  } else return fail("health metrics", `status=${r.status}`);
 }
 
 main()

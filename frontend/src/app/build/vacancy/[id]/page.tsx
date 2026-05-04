@@ -243,12 +243,18 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 currentStatus={vacancy.status}
                 onToggled={refresh}
               />
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap justify-end gap-1.5">
                 <CloneVacancyButton
                   vacancyId={vacancy.id}
                   projectId={vacancy.projectId}
                 />
                 <SaveAsTemplateButton vacancy={vacancy} />
+                {(applications?.length ?? 0) === 0 && (
+                  <DeleteVacancyButton
+                    vacancyId={vacancy.id}
+                    projectId={vacancy.projectId}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -941,6 +947,7 @@ function ApplicationRow({
             Reject
           </button>
         )}
+        <InterviewPrepButton applicationId={app.id} />
       </div>
       {aiOpen && aiDetails && (
         <div className="mt-3 space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs">
@@ -1477,6 +1484,94 @@ function VacancyExpiryBadge({
   );
 }
 
+function InterviewPrepButton({ applicationId }: { applicationId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{
+    questions: { q: string; hint: string }[];
+    skillOverlap: string[];
+    missingSkills: string[];
+  } | null>(null);
+  const toast = useToast();
+
+  async function run() {
+    setBusy(true);
+    try {
+      const r = await buildApi.aiInterviewPrep(applicationId);
+      setData(r);
+      setOpen(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyAll() {
+    if (!data) return;
+    const text = data.questions
+      .map((qq, i) => `${i + 1}. ${qq.q}\n   (${qq.hint})`)
+      .join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied questions");
+    } catch {
+      toast.error("Clipboard blocked");
+    }
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => (data ? setOpen((v) => !v) : run())}
+        disabled={busy}
+        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50"
+        title="Claude drafts 5 interview questions tailored to this candidate + role"
+      >
+        {busy ? "✨ prepping…" : "✨ Interview prep"}
+      </button>
+      {open && data && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-[min(440px,calc(100vw-2rem))] rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-200">
+              Interview prep · {data.questions.length} questions
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copyAll}
+                className="text-[10px] text-fuchsia-300 hover:text-fuchsia-200"
+                title="Copy all to clipboard"
+              >
+                ⎘ copy
+              </button>
+              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+                ×
+              </button>
+            </div>
+          </div>
+          {data.missingSkills.length > 0 && (
+            <p className="mb-2 rounded border border-amber-500/20 bg-amber-500/[0.06] px-2 py-1 text-[10px] text-amber-200">
+              ⚠ Missing skills: {data.missingSkills.slice(0, 5).join(", ")}
+            </p>
+          )}
+          <ol className="space-y-2">
+            {data.questions.map((qq, i) => (
+              <li key={i} className="rounded border border-fuchsia-500/20 bg-fuchsia-500/[0.04] p-2">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[10px] font-bold text-fuchsia-200">{i + 1}.</span>
+                  <span className="flex-1 text-xs text-slate-200">{qq.q}</span>
+                </div>
+                <div className="mt-1 pl-5 text-[10px] italic text-slate-400">{qq.hint}</div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AiShortlistButton({
   vacancyId,
   pendingCount,
@@ -1749,6 +1844,48 @@ function TranslateVacancyButton({
         </div>
       )}
     </div>
+  );
+}
+
+function DeleteVacancyButton({
+  vacancyId,
+  projectId,
+}: {
+  vacancyId: string;
+  projectId: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function del() {
+    if (
+      !confirm(
+        "Permanently delete this vacancy? This is only allowed when no applications exist. Otherwise close the vacancy instead.",
+      )
+    ) return;
+    setBusy(true);
+    try {
+      await buildApi.deleteVacancy(vacancyId);
+      toast.success("Vacancy deleted");
+      router.push(`/build/project/${encodeURIComponent(projectId)}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={del}
+      disabled={busy}
+      title="Permanently delete (only when 0 applications)"
+      className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+    >
+      {busy ? "…" : "🗑 Delete"}
+    </button>
   );
 }
 

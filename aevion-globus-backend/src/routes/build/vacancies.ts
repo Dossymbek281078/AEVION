@@ -140,7 +140,7 @@ vacanciesRouter.get("/", async (req, res) => {
 
     const result = await pool.query(
       `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
-              v."skillsJson",
+              v."skillsJson", v."expiresAt",
               p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"

@@ -23,6 +23,10 @@ export function VacancyCard({
   const isOwner = me?.id === vacancy.clientId;
   const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
   const hasQuestions = (vacancy.questions?.length ?? 0) > 0;
+  const daysLeft = vacancy.expiresAt
+    ? Math.ceil((new Date(vacancy.expiresAt).getTime() - Date.now()) / 86400000)
+    : null;
+  const expiringSoon = daysLeft != null && daysLeft >= 0 && daysLeft <= 7 && !isClosed;
 
   async function quickApply(e: React.MouseEvent) {
     e.preventDefault();
@@ -78,8 +82,24 @@ export function VacancyCard({
         </div>
       </div>
       <p className="mt-2 line-clamp-2 text-sm text-slate-300">{vacancy.description}</p>
-      <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-        <span>{new Date(vacancy.createdAt).toLocaleDateString()}</span>
+      <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-400">
+        <span className="flex items-center gap-2">
+          {new Date(vacancy.createdAt).toLocaleDateString()}
+          {expiringSoon && (
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                daysLeft! <= 1
+                  ? "bg-rose-500/20 text-rose-200"
+                  : daysLeft! <= 3
+                    ? "bg-amber-500/20 text-amber-200"
+                    : "bg-amber-500/10 text-amber-300"
+              }`}
+              title={`Closes ${new Date(vacancy.expiresAt!).toLocaleDateString()}`}
+            >
+              {daysLeft === 0 ? "ends today" : `${daysLeft}d left`}
+            </span>
+          )}
+        </span>
         {typeof vacancy.applicationsCount === "number" && (
           <span>
             {vacancy.applicationsCount} application{vacancy.applicationsCount === 1 ? "" : "s"}

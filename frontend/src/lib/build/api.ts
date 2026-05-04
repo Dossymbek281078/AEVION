@@ -149,6 +149,7 @@ export type BuildVacancy = {
   salaryCurrency?: string | null;
   questions?: string[];
   viewCount?: number;
+  expiresAt?: string | null;
 };
 
 export type ApplicationAiScores = {

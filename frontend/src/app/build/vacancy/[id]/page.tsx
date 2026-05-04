@@ -14,6 +14,7 @@ import {
   type TalentRow,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { emailError, isEmail } from "@/lib/build/validate";
 
 export default function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -88,6 +89,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             <span className={vacancy.status === "OPEN" ? "text-emerald-300" : "text-slate-500"}>
               {vacancy.status}
             </span>
+            <VacancyExpiryBadge expiresAt={vacancy.expiresAt} status={vacancy.status} />
             {isOwner && vacancy.viewCount != null && vacancy.viewCount > 0 && (
               <span title="Total page views">👁 {vacancy.viewCount} views</span>
             )}
@@ -638,14 +640,16 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const validationError = emailError(email);
+  const canSubmit = !busy && isEmail(email);
 
   async function invite() {
-    if (!email.trim()) return;
+    if (!canSubmit) return;
     setBusy(true);
     setMsg(null);
     try {
       await buildApi.inviteCandidate(vacancyId, email.trim());
-      setMsg({ ok: true, text: `Invite sent to ${email}` });
+      setMsg({ ok: true, text: `Invite sent to ${email.trim()}` });
       setEmail("");
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
@@ -662,21 +666,65 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && canSubmit) invite();
+          }}
           placeholder="candidate@email.com"
-          className="flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
+          aria-invalid={validationError ? true : undefined}
+          className={`flex-1 rounded-md border bg-white/5 px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none ${
+            validationError
+              ? "border-rose-500/40 focus:border-rose-500/60"
+              : "border-white/10 focus:border-emerald-500/40"
+          }`}
         />
         <button
           onClick={invite}
-          disabled={busy || !email.trim()}
+          disabled={!canSubmit}
           className="rounded-md bg-sky-500/20 px-3 py-1.5 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/30 disabled:opacity-50"
         >
           {busy ? "…" : "Send"}
         </button>
       </div>
+      {validationError && (
+        <p className="mt-1.5 text-xs text-rose-300">{validationError}</p>
+      )}
       {msg && (
         <p className={`mt-1.5 text-xs ${msg.ok ? "text-emerald-300" : "text-rose-300"}`}>{msg.text}</p>
       )}
     </div>
+  );
+}
+
+function VacancyExpiryBadge({
+  expiresAt,
+  status,
+}: {
+  expiresAt?: string | null;
+  status: string;
+}) {
+  if (!expiresAt || status !== "OPEN") return null;
+  const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
+  if (days > 14) return null;
+  if (days < 0) {
+    return (
+      <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
+        expired
+      </span>
+    );
+  }
+  const tone =
+    days <= 1
+      ? "bg-rose-500/20 text-rose-200"
+      : days <= 3
+        ? "bg-amber-500/25 text-amber-100"
+        : "bg-amber-500/15 text-amber-200";
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone}`}
+      title={`Closes ${new Date(expiresAt).toLocaleDateString()}`}
+    >
+      {days === 0 ? "ends today" : `${days} day${days === 1 ? "" : "s"} left`}
+    </span>
   );
 }
 

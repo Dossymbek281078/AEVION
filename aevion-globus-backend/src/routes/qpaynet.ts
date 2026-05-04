@@ -911,6 +911,46 @@ qpaynetRouter.get("/requests/:id/deliveries", async (req, res) => {
   });
 });
 
+// POST /api/qpaynet/webhooks/test — merchant smoke-tests their endpoint before going live.
+// No DB persistence; returns the actual delivery result + payload that was sent.
+qpaynetRouter.post("/webhooks/test", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { url, secret } = req.body as { url?: string; secret?: string };
+  if (!url || !/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: "url_must_be_http_or_https" });
+  }
+  if (!secret || secret.length < 16) {
+    return res.status(400).json({ error: "secret_must_be_at_least_16_chars" });
+  }
+
+  const payload = {
+    event: "payment_request.paid",
+    requestId: "test-" + randomUUID().slice(0, 8),
+    token: "test-token",
+    amount: 100,
+    fee: 0.1,
+    currency: "KZT",
+    description: "AEVION QPayNet webhook test",
+    paidBy: "test-wallet",
+    paidTxId: "test-tx-" + randomUUID().slice(0, 8),
+    paidAt: new Date().toISOString(),
+    test: true,
+  };
+
+  const result = await fireRequestWebhook(url, secret, payload);
+  res.json({
+    ok: result.ok,
+    deliveryStatus: result.status,
+    error: result.error,
+    payloadSent: payload,
+    hint: result.ok
+      ? "Receiver responded 2xx — verification working."
+      : `Delivery failed (${result.error}). Check URL reachability, HMAC verification, and response code (must be 2xx).`,
+  });
+});
+
 // GET /api/qpaynet/health — lightweight liveness check for hub monitor
 qpaynetRouter.get("/health", async (_req, res) => {
   try {

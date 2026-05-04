@@ -130,6 +130,9 @@ X-Api-Key: qpn_live_...
 }`}</code>
         </div>
 
+        {/* Webhook tester */}
+        <WebhookTester token={token} />
+
         {/* Embed widget */}
         {wallets.length > 0 && (
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
@@ -173,6 +176,65 @@ X-Api-Key: qpn_live_...
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WebhookTester({ token }: { token: string }) {
+  const [url, setUrl] = useState("");
+  const [secret, setSecret] = useState("");
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; deliveryStatus: number; error?: string; hint: string; payloadSent: unknown } | null>(null);
+
+  if (!token) return null;
+
+  async function run() {
+    if (!url || !secret) return;
+    setRunning(true);
+    setResult(null);
+    try {
+      const r = await fetch("/api/qpaynet/webhooks/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ url: url.trim(), secret: secret.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setResult({ ok: false, deliveryStatus: 0, error: d.error, hint: "Validation failed.", payloadSent: null });
+      } else {
+        setResult(d);
+      }
+    } finally { setRunning(false); }
+  }
+
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
+      <h2 className="font-bold mb-1">Тест webhook</h2>
+      <p className="text-xs text-slate-400 mb-3">
+        Проверьте свой endpoint до боевого использования. Получатель должен ответить 2xx.
+      </p>
+      <div className="space-y-2">
+        <input type="url" value={url} onChange={e => setUrl(e.target.value)}
+          placeholder="https://your-site.kz/webhook/qpaynet"
+          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500" />
+        <input type="text" value={secret} onChange={e => setSecret(e.target.value)}
+          placeholder="notifySecret (≥16 chars)"
+          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-violet-500" />
+        <button onClick={run} disabled={running || !url || !secret}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold">
+          {running ? "Отправка..." : "Отправить тестовый POST"}
+        </button>
+      </div>
+      {result && (
+        <div className={`mt-3 p-3 rounded-lg border text-xs ${result.ok ? "border-emerald-800 bg-emerald-950/30" : "border-red-800 bg-red-950/30"}`}>
+          <div className={`font-semibold mb-1 ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
+            {result.ok ? "✓ Доставлено" : "✗ Ошибка"}
+            {result.deliveryStatus > 0 && <span className="ml-2 text-slate-400 font-mono">HTTP {result.deliveryStatus}</span>}
+          </div>
+          <div className="text-slate-300">{result.hint}</div>
+          {result.error && <div className="text-red-300/80 mt-1 font-mono break-all">{result.error}</div>}
+        </div>
+      )}
     </div>
   );
 }

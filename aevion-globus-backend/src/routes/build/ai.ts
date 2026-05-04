@@ -264,6 +264,136 @@ ${kindGuide[kind]}
   }
 });
 
+// POST /api/build/ai/shortlist
+// Body: { vacancyId: string }
+// Owner-only. Reads ALL pending applications + per-applicant AI scores +
+// profiles, asks Claude to pick the top 3 candidates and explain why.
+// Returns { items: [{ applicationId, rank, reasoning }], summary }.
+aiRouter.post("/shortlist", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 64 });
+    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
+
+    const owner = await pool.query(
+      `SELECT v."title", v."description", v."skillsJson", p."clientId"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [vacancyId.value],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_shortlist");
+    }
+
+    const apps = await pool.query(
+      `SELECT a."id", a."message", a."aiScoreOverall", a."matchScore" AS "_matchScore",
+              u."name" AS "applicantName",
+              bp."title", bp."summary", bp."skillsJson", bp."experienceYears", bp."city"
+       FROM "BuildApplication" a
+       LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+       LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+       WHERE a."vacancyId" = $1 AND a."status" = 'PENDING'
+       ORDER BY a."createdAt" DESC
+       LIMIT 30`,
+      [vacancyId.value],
+    );
+
+    if (apps.rowCount === 0) {
+      return ok(res, {
+        items: [],
+        summary: "No pending applications to shortlist yet.",
+      });
+    }
+
+    type AppRow = {
+      id: string;
+      message: string | null;
+      aiScoreOverall: number | null;
+      applicantName: string;
+      title: string | null;
+      summary: string | null;
+      skillsJson: string;
+      experienceYears: number | null;
+      city: string | null;
+    };
+
+    const rows = apps.rows as AppRow[];
+    const v = owner.rows[0];
+    const requiredSkills = safeParseJson(v.skillsJson, [] as string[]);
+
+    const candidatesPayload = rows
+      .map((r, i) => {
+        const skills = safeParseJson(r.skillsJson, [] as string[]);
+        return [
+          `--- Candidate #${i + 1} (id: ${r.id}) ---`,
+          `Name: ${r.applicantName ?? "—"}`,
+          `Headline: ${r.title ?? "—"}`,
+          `Years exp: ${r.experienceYears ?? 0}`,
+          `City: ${r.city ?? "—"}`,
+          `Skills: ${skills.join(", ") || "—"}`,
+          `AI score (per-application screening): ${r.aiScoreOverall ?? "—"}/100`,
+          `Cover note: ${(r.message ?? "").slice(0, 400) || "—"}`,
+          `Profile summary: ${(r.summary ?? "").slice(0, 400) || "—"}`,
+        ].join("\n");
+      })
+      .join("\n\n");
+
+    const userPayload = `VACANCY: ${v.title}
+Description: ${String(v.description).slice(0, 600)}
+Required skills: ${requiredSkills.join(", ") || "—"}
+
+PENDING APPLICATIONS (${rows.length}):
+${candidatesPayload}
+
+Pick up to 3 strongest candidates. Возвращай только JSON в формате:
+{"summary": "1-2 sentences overall pool quality", "picks": [{"applicationId": "...", "rank": 1, "reasoning": "1-2 sentences why"}, ...]}
+Никаких преамбул, никакого markdown.`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — старший рекрутер на платформе AEVION QBuild (стройка/инженерия).
+Тебе показан список кандидатов на конкретную вакансию + их скоры и резюме.
+Задача: выбрать топ-3 (или меньше, если меньше достойных), объяснить почему.
+
+Жёсткие правила:
+- Опирайся на навыки + годы опыта + конкретику в cover note + AI score.
+- Не выдумывай данные, которых нет.
+- Кратко (1-2 предложения на обоснование).
+- Возвращай только валидный JSON. Никакого текста до/после.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 1500,
+      cacheSystem: false,
+    });
+
+    const stripped = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: { summary?: string; picks?: { applicationId: string; rank: number; reasoning: string }[] } = {};
+    try {
+      parsed = JSON.parse(stripped) as typeof parsed;
+    } catch {
+      return fail(res, 502, "ai_shortlist_invalid_json", { details: stripped.slice(0, 200) });
+    }
+
+    const validIds = new Set(rows.map((r) => r.id));
+    const picks = (parsed.picks ?? [])
+      .filter((p) => validIds.has(p.applicationId))
+      .slice(0, 3)
+      .sort((a, b) => a.rank - b.rank);
+
+    return ok(res, {
+      items: picks,
+      summary: parsed.summary ?? "",
+      total: rows.length,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_shortlist_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/ai/cover-letter
 // Body: { vacancyId: string, locale?: "ru" | "en" | "kz" }
 // Generates a tailored cover note from the user's profile + vacancy. The

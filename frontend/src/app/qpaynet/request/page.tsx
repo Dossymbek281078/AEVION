@@ -14,7 +14,9 @@ function RequestForm() {
   const [walletId, setWalletId] = useState(initialWallet);
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [generated, setGenerated] = useState<{ link: string; qrPath: string } | null>(null);
+  const [notifyUrl, setNotifyUrl] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [generated, setGenerated] = useState<{ link: string; qrPath: string; notifySecret?: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ function RequestForm() {
     // Try the tracked backend request first; fall back to QR-only deep link
     // if the endpoint is not deployed yet.
     let link: string | null = null;
+    let notifySecret: string | undefined;
     try {
       const r = await fetch("/api/qpaynet/requests", {
         method: "POST",
@@ -43,11 +46,13 @@ function RequestForm() {
           toWalletId: walletId,
           amount: parseFloat(amount),
           description: description || "Запрос на оплату",
+          ...(notifyUrl.trim() ? { notifyUrl: notifyUrl.trim() } : {}),
         }),
       });
       if (r.ok) {
         const d = await r.json();
         link = `${window.location.origin}/qpaynet/r/${d.token}`;
+        notifySecret = d.notifySecret;
       }
     } catch { /* fall through */ }
 
@@ -59,7 +64,7 @@ function RequestForm() {
       link = url.toString();
     }
     const qrPath = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
-    setGenerated({ link, qrPath });
+    setGenerated({ link, qrPath, notifySecret });
   }
 
   if (!token) {
@@ -86,6 +91,16 @@ function RequestForm() {
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 mb-4">
           <code className="text-xs text-emerald-400 break-all">{generated.link}</code>
         </div>
+
+        {generated.notifySecret && (
+          <div className="bg-amber-950/50 border border-amber-800/60 rounded-xl p-3 mb-4 text-left">
+            <div className="text-[10px] text-amber-400 font-semibold mb-1 uppercase tracking-wide">Секрет webhook (показан 1 раз)</div>
+            <code className="text-[11px] text-amber-200 break-all block">{generated.notifySecret}</code>
+            <div className="text-[10px] text-amber-500/80 mt-1">
+              Сохраните для верификации HMAC: <code>HMAC-SHA256(secret, ts.body)</code>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button
@@ -139,6 +154,17 @@ function RequestForm() {
           <input type="text" value={description} onChange={e => setDescription(e.target.value)}
             placeholder="Оплата за услуги..."
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500" />
+        </div>
+        <div>
+          <button type="button" onClick={() => setShowAdvanced(s => !s)}
+            className="text-xs text-slate-500 hover:text-slate-300">
+            {showAdvanced ? "− Скрыть webhook" : "+ Webhook на оплату (для мерчанта)"}
+          </button>
+          {showAdvanced && (
+            <input type="url" value={notifyUrl} onChange={e => setNotifyUrl(e.target.value)}
+              placeholder="https://your-site.kz/webhook/qpaynet"
+              className="w-full mt-2 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-violet-500" />
+          )}
         </div>
         <button onClick={generate} disabled={!walletId || !amount}
           className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-xl font-semibold">

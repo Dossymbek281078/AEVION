@@ -615,6 +615,42 @@ export const buildApi = {
     ),
   patchVacancy: (id: string, fields: Partial<{ status: VacancyStatus; title: string; description: string; salary: number }>) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, fields),
+  listVacancyTemplates: () =>
+    call<{
+      items: {
+        id: string;
+        name: string;
+        title: string;
+        description: string;
+        skills: string[];
+        salary: number;
+        salaryCurrency: string | null;
+        city: string | null;
+        questions: string[];
+        createdAt: string;
+      }[];
+      total: number;
+    }>("GET", "/api/build/vacancies/templates"),
+  saveVacancyTemplate: (input: {
+    name: string;
+    title: string;
+    description: string;
+    skills?: string[];
+    salary?: number;
+    salaryCurrency?: string | null;
+    city?: string | null;
+    questions?: string[];
+  }) =>
+    call<{ id: string; name: string }>(
+      "POST",
+      "/api/build/vacancies/templates",
+      input,
+    ),
+  deleteVacancyTemplate: (id: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/vacancies/templates/${encodeURIComponent(id)}`,
+    ),
   duplicateVacancy: (id: string, targetProjectId: string) =>
     call<BuildVacancy>(
       "POST",
@@ -660,6 +696,16 @@ export const buildApi = {
     call<BuildApplication>(
       "POST",
       `/api/build/applications/${encodeURIComponent(id)}/withdraw`,
+    ),
+  bulkUpdateApplicationStatus: (
+    ids: string[],
+    status: "ACCEPTED" | "REJECTED",
+    rejectReason?: string,
+  ) =>
+    call<{ updated: number; skipped: string[]; status: string }>(
+      "POST",
+      "/api/build/applications/bulk-status",
+      { ids, status, ...(rejectReason ? { rejectReason } : {}) },
     ),
   setApplicationLabel: (id: string, labelKey: ApplicationLabel | null) =>
     call<BuildApplication>(
@@ -741,6 +787,15 @@ export const buildApi = {
       improved: string;
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/improve-text", input),
+  aiTranslateVacancy: (input: {
+    title: string;
+    description: string;
+    targetLocales?: ("ru" | "en" | "kz")[];
+  }) =>
+    call<{
+      translations: Record<string, { title: string; description: string }>;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/translate-vacancy", input),
   aiShortlist: (vacancyId: string) =>
     call<{
       items: { applicationId: string; rank: number; reasoning: string }[];

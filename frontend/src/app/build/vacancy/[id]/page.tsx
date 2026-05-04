@@ -30,6 +30,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   const [myApplied, setMyApplied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [labelFilter, setLabelFilter] = useState<ApplicationLabel | "ALL">("ALL");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -115,10 +117,13 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 currentStatus={vacancy.status}
                 onToggled={refresh}
               />
-              <CloneVacancyButton
-                vacancyId={vacancy.id}
-                projectId={vacancy.projectId}
-              />
+              <div className="flex gap-1.5">
+                <CloneVacancyButton
+                  vacancyId={vacancy.id}
+                  projectId={vacancy.projectId}
+                />
+                <SaveAsTemplateButton vacancy={vacancy} />
+              </div>
             </div>
           )}
         </div>
@@ -127,9 +132,17 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-              Role description
-            </h2>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Role description
+              </h2>
+              {isOwner && (
+                <TranslateVacancyButton
+                  title={vacancy.title}
+                  description={vacancy.description}
+                />
+              )}
+            </div>
             <p className="whitespace-pre-wrap text-sm text-slate-200">{vacancy.description}</p>
             {vacancy.skills && vacancy.skills.length > 0 && (
               <div className="mt-4">
@@ -185,29 +198,83 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   No applications yet.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {applications.map((a) => (
-                    <div key={a.id}>
-                      <ul className="space-y-3">
-                        <ApplicationRow
-                          app={a}
-                          onChanged={refresh}
-                          onOptimistic={(status) =>
+                <>
+                  <ApplicationLabelFilter
+                    applications={applications}
+                    value={labelFilter}
+                    onChange={(v) => {
+                      setLabelFilter(v);
+                      setSelected(new Set());
+                    }}
+                  />
+                  {(() => {
+                    const filtered = applications.filter((a) => {
+                      if (labelFilter === "ALL") return true;
+                      return a.labelKey === labelFilter;
+                    });
+                    return (
+                      <>
+                        <BulkActionBar
+                          selectedIds={Array.from(selected)}
+                          onClear={() => setSelected(new Set())}
+                          onDone={() => {
+                            setSelected(new Set());
+                            refresh();
+                          }}
+                          onOptimistic={(ids, status) =>
                             setApplications((prev) =>
-                              prev ? prev.map((x) => (x.id === a.id ? { ...x, status } : x)) : prev,
-                            )
-                          }
-                          onOptimisticLabel={(labelKey) =>
-                            setApplications((prev) =>
-                              prev ? prev.map((x) => (x.id === a.id ? { ...x, labelKey } : x)) : prev,
+                              prev ? prev.map((x) => (ids.includes(x.id) ? { ...x, status } : x)) : prev,
                             )
                           }
                         />
-                      </ul>
-                      <TrialTaskBlock applicationId={a.id} isRecruiter isCandidate={false} onChanged={refresh} />
-                    </div>
-                  ))}
-                </div>
+                        <div className="space-y-3">
+                          {filtered.map((a) => (
+                            <div key={a.id} className="flex gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selected.has(a.id)}
+                                onChange={(e) => {
+                                  setSelected((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(a.id);
+                                    else next.delete(a.id);
+                                    return next;
+                                  });
+                                }}
+                                aria-label={`Select ${a.applicantName ?? "application"}`}
+                                className="mt-3 h-4 w-4 shrink-0 rounded border-white/20 bg-white/5 accent-emerald-500"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <ul className="space-y-3">
+                                  <ApplicationRow
+                                    app={a}
+                                    onChanged={refresh}
+                                    onOptimistic={(status) =>
+                                      setApplications((prev) =>
+                                        prev ? prev.map((x) => (x.id === a.id ? { ...x, status } : x)) : prev,
+                                      )
+                                    }
+                                    onOptimisticLabel={(labelKey) =>
+                                      setApplications((prev) =>
+                                        prev ? prev.map((x) => (x.id === a.id ? { ...x, labelKey } : x)) : prev,
+                                      )
+                                    }
+                                  />
+                                </ul>
+                                <TrialTaskBlock applicationId={a.id} isRecruiter isCandidate={false} onChanged={refresh} />
+                              </div>
+                            </div>
+                          ))}
+                          {filtered.length === 0 && (
+                            <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-4 text-center text-xs text-slate-500">
+                              No applications match this label filter.
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
               )}
             </div>
           )}
@@ -708,6 +775,121 @@ function ApplicationRow({
       )}
       <RecruiterNotes applicationId={app.id} />
     </li>
+  );
+}
+
+function ApplicationLabelFilter({
+  applications,
+  value,
+  onChange,
+}: {
+  applications: BuildApplication[];
+  value: ApplicationLabel | "ALL";
+  onChange: (v: ApplicationLabel | "ALL") => void;
+}) {
+  const counts = applications.reduce<Record<string, number>>((acc, a) => {
+    if (a.labelKey) acc[a.labelKey] = (acc[a.labelKey] ?? 0) + 1;
+    return acc;
+  }, {});
+  const labelled = Object.keys(counts);
+  if (labelled.length === 0) return null;
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] uppercase tracking-wider text-slate-500">Filter by label:</span>
+      <button
+        onClick={() => onChange("ALL")}
+        className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
+          value === "ALL" ? "bg-white/15 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"
+        }`}
+      >
+        All ({applications.length})
+      </button>
+      {(["TOP_PICK", "SHORTLIST", "INTERVIEW", "HOLD"] as ApplicationLabel[]).map((l) => {
+        const n = counts[l] ?? 0;
+        if (n === 0) return null;
+        const active = value === l;
+        return (
+          <button
+            key={l}
+            onClick={() => onChange(l)}
+            className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+              active ? LABEL_TONE[l] : "border-transparent bg-white/5 text-slate-400 hover:bg-white/10"
+            }`}
+          >
+            {LABEL_EMOJI[l]} {l} ({n})
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BulkActionBar({
+  selectedIds,
+  onClear,
+  onDone,
+  onOptimistic,
+}: {
+  selectedIds: string[];
+  onClear: () => void;
+  onDone: () => void;
+  onOptimistic: (ids: string[], status: ApplicationStatus) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  if (selectedIds.length === 0) return null;
+
+  async function bulk(status: "ACCEPTED" | "REJECTED") {
+    if (
+      !confirm(
+        status === "ACCEPTED"
+          ? `Accept ${selectedIds.length} application${selectedIds.length === 1 ? "" : "s"}? They will be notified by email. (No hire fee from bulk — fee fires only from the per-row Accept.)`
+          : `Reject ${selectedIds.length} application${selectedIds.length === 1 ? "" : "s"}?`,
+      )
+    ) return;
+    let reason: string | undefined;
+    if (status === "REJECTED") {
+      const r = prompt("Reason (optional, shown to candidate):") ?? "";
+      reason = r.trim() || undefined;
+    }
+    setBusy(true);
+    onOptimistic(selectedIds, status);
+    try {
+      const r = await buildApi.bulkUpdateApplicationStatus(selectedIds, status, reason);
+      toast.success(`${r.updated} updated${r.skipped.length > 0 ? `, ${r.skipped.length} skipped` : ""}`);
+      onDone();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] px-3 py-2 text-xs">
+      <span className="font-semibold text-emerald-200">{selectedIds.length} selected</span>
+      <span className="text-slate-500">·</span>
+      <button
+        onClick={() => bulk("ACCEPTED")}
+        disabled={busy}
+        className="rounded-md bg-emerald-500/20 px-3 py-1 font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+      >
+        Bulk accept
+      </button>
+      <button
+        onClick={() => bulk("REJECTED")}
+        disabled={busy}
+        className="rounded-md bg-rose-500/20 px-3 py-1 font-semibold text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
+      >
+        Bulk reject
+      </button>
+      <button
+        onClick={onClear}
+        className="ml-auto text-[11px] text-slate-400 hover:text-slate-200"
+      >
+        Clear
+      </button>
+    </div>
   );
 }
 
@@ -1277,6 +1459,133 @@ function BulkMessageButton({
         </div>
       )}
     </div>
+  );
+}
+
+function TranslateVacancyButton({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<Record<string, { title: string; description: string }> | null>(null);
+  const [activeLoc, setActiveLoc] = useState<string>("en");
+  const toast = useToast();
+
+  async function run() {
+    setBusy(true);
+    try {
+      const r = await buildApi.aiTranslateVacancy({ title, description });
+      setData(r.translations);
+      const first = Object.keys(r.translations)[0];
+      if (first) setActiveLoc(first);
+      setOpen(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    if (!data?.[activeLoc]) return;
+    const text = `${data[activeLoc].title}\n\n${data[activeLoc].description}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard");
+    } catch {
+      toast.error("Clipboard blocked");
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => (data ? setOpen((v) => !v) : run())}
+        disabled={busy}
+        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
+        title="Claude generates RU/EN/KK variants of this vacancy"
+      >
+        {busy ? "✨ translating…" : "✨ Translate"}
+      </button>
+      {open && data && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-[min(560px,calc(100vw-2rem))] rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex gap-1">
+              {Object.keys(data).map((loc) => (
+                <button
+                  key={loc}
+                  onClick={() => setActiveLoc(loc)}
+                  className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                    activeLoc === loc ? "bg-fuchsia-500/20 text-fuchsia-100" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                  }`}
+                >
+                  {loc.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={copy} className="text-[10px] text-fuchsia-300 hover:text-fuchsia-200">
+                ⎘ copy
+              </button>
+              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+                ×
+              </button>
+            </div>
+          </div>
+          <div className="rounded border border-white/10 bg-black/20 p-2">
+            <div className="mb-2 text-sm font-semibold text-white">{data[activeLoc]?.title}</div>
+            <p className="max-h-72 overflow-y-auto whitespace-pre-wrap text-xs text-slate-200">
+              {data[activeLoc]?.description}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SaveAsTemplateButton({ vacancy }: { vacancy: BuildVacancy }) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function save() {
+    const name = prompt("Template name (e.g. 'Senior welder · Astana'):");
+    if (!name?.trim()) return;
+    setBusy(true);
+    try {
+      await buildApi.saveVacancyTemplate({
+        name: name.trim(),
+        title: vacancy.title,
+        description: vacancy.description,
+        skills: vacancy.skills,
+        salary: vacancy.salary,
+        salaryCurrency: vacancy.salaryCurrency,
+        city: vacancy.city,
+        questions: vacancy.questions,
+      });
+      toast.success("Saved as template — pick it on the next vacancy you post.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={save}
+      disabled={busy}
+      title="Save the current vacancy as a reusable template"
+      className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+    >
+      {busy ? "…" : "★ Template"}
+    </button>
   );
 }
 

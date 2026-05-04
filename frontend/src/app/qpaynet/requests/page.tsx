@@ -78,9 +78,29 @@ export default function MyRequestsPage() {
           <span className="text-slate-600">·</span>
           <h1 className="text-sm font-bold">Запросы оплаты</h1>
         </div>
-        <Link href="/qpaynet/request" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg">
-          + Создать
-        </Link>
+        <div className="flex items-center gap-2">
+          {token && reqs.length > 0 && (
+            <button
+              onClick={async () => {
+                const r = await fetch("/api/qpaynet/requests.csv", { headers: { Authorization: `Bearer ${token}` } });
+                if (!r.ok) return;
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `qpaynet-requests-${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700"
+            >
+              ⬇ CSV
+            </button>
+          )}
+          <Link href="/qpaynet/request" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg">
+            + Создать
+          </Link>
+        </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-4">

@@ -710,6 +710,46 @@ qpaynetRouter.get("/requests", async (req, res) => {
   })) });
 });
 
+// GET /api/qpaynet/requests.csv — owner accounting export (auth)
+qpaynetRouter.get("/requests.csv", async (req, res) => {
+  await ensureRequestsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const result = await pool.query(
+    `SELECT id, token, to_wallet_id, amount, currency, description, status,
+            paid_by, paid_tx_id, paid_at, expires_at, created_at,
+            notify_url, notify_attempts, notified_at
+     FROM qpaynet_payment_requests
+     WHERE owner_id=$1
+     ORDER BY created_at DESC LIMIT 5000`,
+    [ownerId],
+  );
+  const escape = (v: unknown) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = "id,token,to_wallet_id,amount,currency,description,status,paid_by,paid_tx_id,paid_at,expires_at,created_at,notify_url,notify_attempts,delivered_at";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = result.rows.map((r: any) => [
+    r.id, r.token, r.to_wallet_id,
+    fromTiin(BigInt(r.amount)),
+    r.currency, r.description ?? "", r.status,
+    r.paid_by ?? "", r.paid_tx_id ?? "",
+    r.paid_at ? new Date(r.paid_at).toISOString() : "",
+    r.expires_at ? new Date(r.expires_at).toISOString() : "",
+    new Date(r.created_at).toISOString(),
+    r.notify_url ?? "",
+    r.notify_attempts ?? 0,
+    r.notified_at ? new Date(r.notified_at).toISOString() : "",
+  ].map(escape).join(","));
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="qpaynet-requests-${new Date().toISOString().slice(0,10)}.csv"`);
+  res.send(header + "\n" + rows.join("\n"));
+});
+
 // GET /api/qpaynet/requests/:token — view request (public, no auth)
 qpaynetRouter.get("/requests/:token", async (req, res) => {
   await ensureRequestsTable();

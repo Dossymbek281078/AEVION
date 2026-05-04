@@ -81,6 +81,8 @@ function Body() {
         </Link>
       </div>
 
+      <ClosingSoonBanner items={items} />
+
       <div className="mb-5 flex flex-wrap gap-2">
         {(["ALL", "PENDING", "ACCEPTED", "REJECTED"] as const).map((s) => (
           <button
@@ -135,6 +137,46 @@ function Body() {
           <ApplicationCard key={a.id} app={a} onWithdraw={() => withdraw(a.id)} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function ClosingSoonBanner({ items }: { items: BuildApplication[] }) {
+  const closingSoon = items
+    .filter((a) => a.status === "PENDING" && a.vacancyStatus === "OPEN" && a.vacancyExpiresAt)
+    .map((a) => ({
+      ...a,
+      daysLeft: Math.ceil(
+        (new Date(a.vacancyExpiresAt!).getTime() - Date.now()) / 86400000,
+      ),
+    }))
+    .filter((a) => a.daysLeft >= 0 && a.daysLeft <= 3);
+
+  if (closingSoon.length === 0) return null;
+
+  return (
+    <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+      <div className="text-xs font-semibold uppercase tracking-wider text-amber-200">
+        ⏰ Closing soon
+      </div>
+      <p className="mt-1 text-sm text-amber-100">
+        {closingSoon.length === 1
+          ? "1 vacancy you applied to is closing in the next 3 days. The recruiter may stop reviewing once it expires."
+          : `${closingSoon.length} vacancies you applied to are closing within 3 days.`}
+      </p>
+      <ul className="mt-2 space-y-0.5 text-xs">
+        {closingSoon.slice(0, 5).map((a) => (
+          <li key={a.id}>
+            <Link
+              href={`/build/vacancy/${encodeURIComponent(a.vacancyId)}`}
+              className="text-amber-200 hover:underline"
+            >
+              {a.vacancyTitle ?? "Vacancy"} —{" "}
+              {a.daysLeft === 0 ? "ends today" : `${a.daysLeft} day${a.daysLeft === 1 ? "" : "s"} left`}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

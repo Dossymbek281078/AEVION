@@ -819,6 +819,16 @@ export default function CyberChessPage(){
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
+  // "Your turn" board glow — fires for ~700ms when AI just moved.
+  // Suppressed during hotseat/p2p (those use other cues), and on first myT.
+  const prevMyTRef=useRef(myT);
+  const[turnFlashKey,sTurnFlashKey]=useState(0);
+  useEffect(()=>{
+    if(!prevMyTRef.current&&myT&&on&&!over&&!hotseat){
+      sTurnFlashKey(k=>k+1);
+    }
+    prevMyTRef.current=myT;
+  },[myT,on,over,hotseat]);
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
   const moveListScrollRef=useRef<HTMLDivElement>(null);
   const fPz=PUZZLES.filter(p=>{
@@ -3682,6 +3692,12 @@ export default function CyberChessPage(){
                   </div>
                 </div>;
               })()}
+              {/* "Your turn" flash — brief inner-glow overlay when AI just moved.
+                  Keyed on turnFlashKey so each transition mounts a fresh overlay
+                  whose CSS animation runs once and self-removes via opacity 0. */}
+              {turnFlashKey>0&&<div key={`tflash-${turnFlashKey}`}
+                className="cc-turn-flash"
+                style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:6,borderRadius:6}}/>}
               {/* Hover halo — кольцо на cell под курсором во время drag (lichess-style) */}
               {dragHover&&(()=>{
                 const hf=FILES.indexOf(dragHover[0]);
@@ -3689,7 +3705,7 @@ export default function CyberChessPage(){
                 const hc=flip?7-hf:hf;const hrr=flip?7-hr:hr;
                 const isLegal=vm.has(dragHover);
                 const ringCol=isLegal?"#10b981":"#94a3b8";
-                return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
+                return <div className={isLegal?"cc-hover-pulse":undefined} style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
               })()}
               {/* Ghost moved to sibling of main so overflow:hidden of board cannot clip it */}
 

@@ -19,6 +19,47 @@ export const metadata: Metadata = {
   },
 };
 
+// Brand-level structured data so search engines understand QBuild as a
+// recognised entity. WebSite + SearchAction enables the sitelinks search
+// box on Google, Organization powers knowledge-panel info.
+const ORG_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "AEVION QBuild",
+  url: "https://aevion.com/build",
+  logo: "https://aevion.com/build/icon.png",
+  description:
+    "AEVION QBuild — construction recruiting marketplace. Post projects, hire crews, get hired.",
+  sameAs: ["https://aevion.com"],
+};
+
+const SITE_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "AEVION QBuild",
+  url: "https://aevion.com/build",
+  potentialAction: {
+    "@type": "SearchAction",
+    target: {
+      "@type": "EntryPoint",
+      urlTemplate: "https://aevion.com/build/vacancies?q={search_term_string}",
+    },
+    "query-input": "required name=search_term_string",
+  },
+};
+
 export default function BuildLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_LD) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_LD) }}
+      />
+      {children}
+    </>
+  );
 }

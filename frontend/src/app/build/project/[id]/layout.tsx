@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 
-async function fetchProject(id: string) {
+type ProjectMeta = { title: string; description: string; budget: number; city?: string };
+
+async function fetchProject(id: string): Promise<ProjectMeta | null> {
   try {
     const res = await fetch(
       `${getApiBase()}/api/build/projects/${encodeURIComponent(id)}/public`,
@@ -9,7 +11,7 @@ async function fetchProject(id: string) {
     );
     if (!res.ok) return null;
     const j = await res.json();
-    const d = j?.data as { project?: { title: string; description: string; budget: number; city?: string } } | null;
+    const d = j?.data as { project?: ProjectMeta } | null;
     return d?.project ?? null;
   } catch {
     return null;
@@ -42,6 +44,42 @@ export async function generateMetadata({
   };
 }
 
-export default function ProjectLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+export default async function ProjectLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const p = await fetchProject(id);
+  if (!p) return <>{children}</>;
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.com/build" },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Projects",
+        item: "https://aevion.com/build",
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: p.title,
+        item: `https://aevion.com/build/project/${encodeURIComponent(id)}`,
+      },
+    ],
+  };
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+      />
+      {children}
+    </>
+  );
 }

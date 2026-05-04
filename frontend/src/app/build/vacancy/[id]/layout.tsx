@@ -100,6 +100,29 @@ function buildJobPostingJsonLd(v: VacancyMeta) {
   return jsonLd;
 }
 
+function buildBreadcrumbJsonLd(v: VacancyMeta) {
+  const items: Record<string, unknown>[] = [
+    { "@type": "ListItem", position: 1, name: "QBuild", item: "https://aevion.com/build" },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "Vacancies",
+      item: "https://aevion.com/build/vacancies",
+    },
+    {
+      "@type": "ListItem",
+      position: 3,
+      name: v.title,
+      item: `https://aevion.com/build/vacancy/${encodeURIComponent(v.id)}`,
+    },
+  ];
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items,
+  };
+}
+
 export default async function VacancyLayout({
   children,
   params,
@@ -109,13 +132,19 @@ export default async function VacancyLayout({
 }) {
   const { id } = await params;
   const v = await fetchVacancy(id);
-  if (!v || v.status === "CLOSED") return <>{children}</>;
-  const jsonLd = buildJobPostingJsonLd(v);
+  if (!v) return <>{children}</>;
+  const breadcrumb = buildBreadcrumbJsonLd(v);
   return (
     <>
+      {v.status !== "CLOSED" && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(buildJobPostingJsonLd(v)) }}
+        />
+      )}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
       {children}
     </>

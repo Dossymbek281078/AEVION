@@ -157,8 +157,26 @@ async function run() {
   const prAfter = await req("GET", `/api/qpaynet/requests/${prToken}`);
   assert("cancelled status reflected", prAfter.body.status === "cancelled");
 
-  // 16. Insufficient balance
-  console.log("\n11. Edge cases");
+  // 16. Limit enforcement
+  console.log("\n11. Limits");
+  const overTransfer = await req("POST", "/api/qpaynet/transfer", {
+    fromWalletId: walletId, toWalletId: walletId, amount: 9999999,
+  }, auth);
+  assert("transfer > MAX_TRANSFER → 400", overTransfer.status === 400 &&
+    (overTransfer.body.error === "transfer_amount_exceeds_max" || overTransfer.body.error === "cannot_transfer_to_same_wallet"));
+
+  const sameWallet = await req("POST", "/api/qpaynet/transfer", {
+    fromWalletId: walletId, toWalletId: walletId, amount: 100,
+  }, auth);
+  assert("transfer to self → 400", sameWallet.status === 400 && sameWallet.body.error === "cannot_transfer_to_same_wallet");
+
+  const overReq = await req("POST", "/api/qpaynet/requests", {
+    toWalletId: walletId, amount: 9999999, description: "over limit",
+  }, auth);
+  assert("request > MAX_TRANSFER → 400", overReq.status === 400 && overReq.body.error === "request_amount_exceeds_max");
+
+  // 17. Insufficient balance
+  console.log("\n12. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

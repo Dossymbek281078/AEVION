@@ -85,10 +85,23 @@ async function ensureTables(): Promise<void> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const FEE_PCT = 0.001; // 0.1% on transfers
+const DAILY_DEPOSIT_CAP_KZT = parseInt(process.env.QPAYNET_DAILY_DEPOSIT_CAP ?? "500000", 10);
+const MAX_TRANSFER_KZT      = parseInt(process.env.QPAYNET_MAX_TRANSFER ?? "100000", 10);
 
 function toTiin(kzt: number): bigint { return BigInt(Math.round(kzt * 100)); }
 function fromTiin(t: bigint): number { return Number(t) / 100; }
 function feeFor(amount: bigint): bigint { return BigInt(Math.ceil(Number(amount) * FEE_PCT)); }
+
+// Returns sum of today's deposits for a wallet (in tiin).
+async function depositedToday(pool: ReturnType<typeof getPool>, walletId: string): Promise<bigint> {
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS s
+     FROM qpaynet_transactions
+     WHERE wallet_id = $1 AND type = 'deposit' AND created_at >= NOW() - INTERVAL '24 hours'`,
+    [walletId],
+  );
+  return BigInt(r.rows[0]?.s ?? 0);
+}
 
 function makeMerchantKey(): { raw: string; hash: string; prefix: string } {
   const raw = "qpn_live_" + randomBytes(24).toString("base64url");
@@ -200,6 +213,16 @@ qpaynetRouter.post("/deposit", async (req, res) => {
   if (w.rows[0].status !== "active") return res.status(400).json({ error: "wallet_inactive" });
 
   const tiin = toTiin(amount);
+  const cap = toTiin(DAILY_DEPOSIT_CAP_KZT);
+  const already = await depositedToday(pool, walletId);
+  if (already + tiin > cap) {
+    return res.status(400).json({
+      error: "daily_deposit_cap_exceeded",
+      capKzt: DAILY_DEPOSIT_CAP_KZT,
+      depositedTodayKzt: fromTiin(already),
+      remainingKzt: Math.max(0, fromTiin(cap - already)),
+    });
+  }
   const txId = randomUUID();
 
   await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, walletId]);
@@ -258,6 +281,12 @@ qpaynetRouter.post("/transfer", async (req, res) => {
   };
   if (!fromWalletId || !toWalletId || !amount || amount <= 0) {
     return res.status(400).json({ error: "fromWalletId, toWalletId and positive amount required" });
+  }
+  if (amount > MAX_TRANSFER_KZT) {
+    return res.status(400).json({ error: "transfer_amount_exceeds_max", maxKzt: MAX_TRANSFER_KZT });
+  }
+  if (fromWalletId === toWalletId) {
+    return res.status(400).json({ error: "cannot_transfer_to_same_wallet" });
   }
 
   const pool = getPool();
@@ -533,6 +562,9 @@ qpaynetRouter.post("/requests", async (req, res) => {
   };
   if (!toWalletId || !amount || amount <= 0 || !description?.trim()) {
     return res.status(400).json({ error: "toWalletId, positive amount, and description required" });
+  }
+  if (amount > MAX_TRANSFER_KZT) {
+    return res.status(400).json({ error: "request_amount_exceeds_max", maxKzt: MAX_TRANSFER_KZT });
   }
 
   const pool = getPool();

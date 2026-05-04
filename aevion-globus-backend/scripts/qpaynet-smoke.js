@@ -248,8 +248,38 @@ async function run() {
   assert("GET /payouts → 200", payoutsList.status === 200);
   assert("payouts array", Array.isArray(payoutsList.body.payouts));
 
-  // 22. Insufficient balance
-  console.log("\n17. Edge cases");
+  // 22. Notification preferences
+  console.log("\n17. Notification prefs");
+  const prefsGet = await req("GET", "/api/qpaynet/notifications/preferences", null, auth);
+  assert("GET /notifications/preferences → 200", prefsGet.status === 200);
+  assert("availableKinds is array", Array.isArray(prefsGet.body.availableKinds));
+  assert("emailEnabled defaults true", prefsGet.body.emailEnabled === true);
+
+  const prefsPatch = await req("PATCH", "/api/qpaynet/notifications/preferences", {
+    emailEnabled: false, mutedKinds: ["payout_approved"],
+  }, auth);
+  assert("PATCH preferences → 200", prefsPatch.status === 200);
+  assert("emailEnabled persisted false", prefsPatch.body.emailEnabled === false);
+  assert("muted kind persisted", prefsPatch.body.mutedKinds.includes("payout_approved"));
+
+  // Restore defaults
+  await req("PATCH", "/api/qpaynet/notifications/preferences", {
+    emailEnabled: true, inAppEnabled: true, mutedKinds: [],
+  }, auth);
+
+  // 23. Admin payouts (only meaningful if QPAYNET_ADMIN_EMAILS unset = open access)
+  console.log("\n18. Admin payouts");
+  const adminList = await req("GET", "/api/qpaynet/admin/payouts", null, auth);
+  assert("GET /admin/payouts → 200 or 403", [200, 403].includes(adminList.status));
+  if (adminList.status === 200) {
+    assert("admin payouts array", Array.isArray(adminList.body.payouts));
+    const adminStats = await req("GET", "/api/qpaynet/admin/payouts/stats", null, auth);
+    assert("GET /admin/payouts/stats → 200", adminStats.status === 200);
+    assert("stats has shape", typeof adminStats.body.stats === "object");
+  }
+
+  // 24. Insufficient balance
+  console.log("\n19. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

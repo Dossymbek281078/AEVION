@@ -188,11 +188,37 @@ async function ensureNotificationsTable(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS idx_qpn_owner ON qpaynet_notifications (owner_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_qpn_unread ON qpaynet_notifications (owner_id) WHERE read_at IS NULL;
+
+      CREATE TABLE IF NOT EXISTS qpaynet_notif_prefs (
+        owner_id              TEXT PRIMARY KEY,
+        email_enabled         BOOLEAN NOT NULL DEFAULT true,
+        in_app_enabled        BOOLEAN NOT NULL DEFAULT true,
+        muted_kinds           TEXT NOT NULL DEFAULT '',  -- comma-sep e.g. "deposit_received,payout_approved"
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     notificationsTableReady = true;
   } catch (err) {
     console.warn("[qpaynet notif] table init skipped:", err instanceof Error ? err.message : err);
   }
+}
+
+// Returns prefs (with defaults if no row).
+async function getNotifPrefs(
+  pool: ReturnType<typeof getPool>,
+  ownerId: string,
+): Promise<{ emailEnabled: boolean; inAppEnabled: boolean; mutedKinds: string[] }> {
+  await ensureNotificationsTable();
+  const r = await pool.query(
+    "SELECT email_enabled, in_app_enabled, muted_kinds FROM qpaynet_notif_prefs WHERE owner_id=$1",
+    [ownerId],
+  );
+  if (!r.rows[0]) return { emailEnabled: true, inAppEnabled: true, mutedKinds: [] };
+  return {
+    emailEnabled: !!r.rows[0].email_enabled,
+    inAppEnabled: !!r.rows[0].in_app_enabled,
+    mutedKinds: (r.rows[0].muted_kinds ?? "").split(",").map((s: string) => s.trim()).filter(Boolean),
+  };
 }
 
 async function ensureDepositCheckoutsTable(): Promise<void> {
@@ -223,6 +249,8 @@ async function ensureDepositCheckoutsTable(): Promise<void> {
 }
 
 // Insert a notification row + fire SMTP email when configured. Fire-and-forget.
+// Honors per-user prefs: skips in-app if in_app_enabled=false; skips email if
+// email_enabled=false; skips both if kind in muted_kinds.
 async function notify(
   pool: ReturnType<typeof getPool>,
   ownerId: string,
@@ -234,22 +262,40 @@ async function notify(
 ): Promise<void> {
   try {
     await ensureNotificationsTable();
-    await pool.query(
-      "INSERT INTO qpaynet_notifications (id, owner_id, kind, title, body, ref_id, amount) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      [randomUUID(), ownerId, kind, title.slice(0, 200), body?.slice(0, 1000) ?? null, refId ?? null, amountTiin ?? null],
-    );
-    // Best-effort email: look up user's email by id or email-as-id, send if SMTP configured.
-    void sendNotifEmail(pool, ownerId, title, body ?? "");
+    const prefs = await getNotifPrefs(pool, ownerId);
+    if (prefs.mutedKinds.includes(kind)) return; // user muted this event entirely
+
+    if (prefs.inAppEnabled) {
+      await pool.query(
+        "INSERT INTO qpaynet_notifications (id, owner_id, kind, title, body, ref_id, amount) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        [randomUUID(), ownerId, kind, title.slice(0, 200), body?.slice(0, 1000) ?? null, refId ?? null, amountTiin ?? null],
+      );
+    }
+    if (prefs.emailEnabled) {
+      void sendNotifEmail(pool, ownerId, kind, title, body ?? "", refId);
+    }
   } catch (err) {
     console.warn("[qpaynet notify] failed:", err instanceof Error ? err.message : err);
   }
 }
 
+// Per-event email subject/CTA — keeps inbox tidy and helps users scan.
+const EMAIL_TEMPLATES: Record<string, { subjectPrefix: string; ctaText: string; ctaPath: string }> = {
+  payment_received:  { subjectPrefix: "💸 Получен платёж",      ctaText: "Открыть кошелёк",      ctaPath: "/qpaynet" },
+  deposit_received:  { subjectPrefix: "💳 Кошелёк пополнен",    ctaText: "Открыть кошелёк",      ctaPath: "/qpaynet" },
+  payout_approved:   { subjectPrefix: "✅ Выплата одобрена",     ctaText: "Посмотреть выплаты",   ctaPath: "/qpaynet/payouts" },
+  payout_paid:       { subjectPrefix: "🏦 Выплата отправлена",  ctaText: "Посмотреть выплаты",   ctaPath: "/qpaynet/payouts" },
+  payout_rejected:   { subjectPrefix: "✗ Выплата отклонена",     ctaText: "Посмотреть выплаты",   ctaPath: "/qpaynet/payouts" },
+  kyc_verified:      { subjectPrefix: "🛡 KYC верифицирован",    ctaText: "Открыть QPayNet",     ctaPath: "/qpaynet" },
+};
+
 async function sendNotifEmail(
   pool: ReturnType<typeof getPool>,
   ownerId: string,
+  kind: string,
   title: string,
   body: string,
+  refId?: string,
 ): Promise<void> {
   const host = process.env.SMTP_HOST?.trim();
   const user = process.env.SMTP_USER?.trim();
@@ -279,17 +325,21 @@ async function sendNotifEmail(
       auth: { user, pass },
     });
     const from = process.env.SMTP_FROM || "AEVION QPayNet <noreply@aevion.io>";
+    const tpl = EMAIL_TEMPLATES[kind] ?? { subjectPrefix: "AEVION QPayNet", ctaText: "Открыть QPayNet", ctaPath: "/qpaynet" };
+    const subject = `${tpl.subjectPrefix} — ${title}`;
     const html = `
-      <div style="font-family:sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;">
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;">
         <div style="max-width:520px;margin:0 auto;background:#1e293b;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.1);">
-          <div style="font-size:13px;font-weight:800;color:#a78bfa;letter-spacing:0.05em;margin-bottom:24px;">AEVION QPayNet</div>
+          <div style="font-size:13px;font-weight:800;color:#a78bfa;letter-spacing:0.05em;margin-bottom:24px;">AEVION · QPayNet</div>
           <h2 style="margin:0 0 12px;font-size:22px;color:#f8fafc;">${escapeHtml(title)}</h2>
           ${body ? `<p style="margin:0 0 16px;line-height:1.6;color:#cbd5e1;font-size:14px;">${escapeHtml(body)}</p>` : ""}
-          <a href="${FRONTEND}/qpaynet" style="display:inline-block;background:#7c3aed;color:#fff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:10px;text-decoration:none;margin-top:8px;">Открыть QPayNet</a>
-          <p style="font-size:11px;color:#475569;margin-top:24px;">Чтобы отписаться, отключите уведомления в настройках.</p>
+          <a href="${FRONTEND}${tpl.ctaPath}${refId ? `?ref=${encodeURIComponent(refId)}` : ""}" style="display:inline-block;background:#7c3aed;color:#fff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:10px;text-decoration:none;margin-top:8px;">${tpl.ctaText} →</a>
+          <p style="font-size:11px;color:#475569;margin-top:32px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px;">
+            Получаете лишние письма? <a href="${FRONTEND}/qpaynet/notifications/preferences" style="color:#7c3aed;">Настроить уведомления</a>
+          </p>
         </div>
       </div>`;
-    await transport.sendMail({ from, to: toEmail, subject: title, html });
+    await transport.sendMail({ from, to: toEmail, subject, html });
   } catch (err) {
     console.warn("[qpaynet email] failed:", err instanceof Error ? err.message : err);
   }
@@ -1546,6 +1596,57 @@ qpaynetRouter.get("/payouts", async (req, res) => {
   res.json({ payouts: r.rows.map((x: any) => ({ ...x, amount: fromTiin(BigInt(x.amount)) })) });
 });
 
+function isAdmin(email: string | undefined): boolean {
+  const adminEmails = (process.env.QPAYNET_ADMIN_EMAILS ?? "")
+    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (adminEmails.length === 0) return true; // open in dev when env unset
+  return adminEmails.includes((email ?? "").toLowerCase());
+}
+
+// GET /api/qpaynet/admin/payouts — admin lists all payouts
+qpaynetRouter.get("/admin/payouts", async (req, res) => {
+  await ensurePayoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const pool = getPool();
+  const status = req.query.status as string | undefined;
+  const params: unknown[] = [];
+  let where = "1=1";
+  if (status) { params.push(status); where = `status=$${params.length}`; }
+  const r = await pool.query(
+    `SELECT id, owner_id, wallet_id, amount, currency, method, destination, status,
+            rejected_reason, approved_by, paid_external_ref,
+            created_at, approved_at, paid_at
+     FROM qpaynet_payouts WHERE ${where}
+     ORDER BY (status='requested') DESC, created_at DESC LIMIT 200`,
+    params,
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  res.json({ payouts: r.rows.map((x: any) => ({ ...x, amount: fromTiin(BigInt(x.amount)) })) });
+});
+
+// GET /api/qpaynet/admin/payouts/stats — counts by status (for badges)
+qpaynetRouter.get("/admin/payouts/stats", async (req, res) => {
+  await ensurePayoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    `SELECT status, COUNT(*) AS n, COALESCE(SUM(amount),0) AS total
+     FROM qpaynet_payouts GROUP BY status`,
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const out: Record<string, { count: number; totalKzt: number }> = {};
+  for (const row of r.rows) {
+    out[row.status] = { count: Number(row.n), totalKzt: fromTiin(BigInt(row.total)) };
+  }
+  res.json({ stats: out });
+});
+
 // POST /api/qpaynet/admin/payouts/:id/approve — admin marks paid
 // Soft-admin: gated via env QPAYNET_ADMIN_EMAILS comma-list.
 qpaynetRouter.post("/admin/payouts/:id/:action", async (req, res) => {
@@ -1553,12 +1654,8 @@ qpaynetRouter.post("/admin/payouts/:id/:action", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const adminEmails = (process.env.QPAYNET_ADMIN_EMAILS ?? "")
-    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
   const callerEmail = (auth.email ?? "").toLowerCase();
-  if (adminEmails.length > 0 && !adminEmails.includes(callerEmail)) {
-    return res.status(403).json({ error: "not_admin" });
-  }
 
   const action = req.params.action;
   if (!["approve", "mark-paid", "reject"].includes(action)) return res.status(400).json({ error: "invalid_action" });
@@ -1646,6 +1743,53 @@ qpaynetRouter.post("/notifications/:id/read", async (req, res) => {
   );
   if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_already_read" });
   res.json({ ok: true });
+});
+
+// GET /api/qpaynet/notifications/preferences
+qpaynetRouter.get("/notifications/preferences", async (req, res) => {
+  await ensureNotificationsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const prefs = await getNotifPrefs(pool, ownerId);
+  res.json({
+    emailEnabled: prefs.emailEnabled,
+    inAppEnabled: prefs.inAppEnabled,
+    mutedKinds: prefs.mutedKinds,
+    availableKinds: Object.keys(EMAIL_TEMPLATES),
+  });
+});
+
+// PATCH /api/qpaynet/notifications/preferences
+qpaynetRouter.patch("/notifications/preferences", async (req, res) => {
+  await ensureNotificationsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { emailEnabled, inAppEnabled, mutedKinds } = req.body as {
+    emailEnabled?: boolean; inAppEnabled?: boolean; mutedKinds?: string[];
+  };
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const muted = Array.isArray(mutedKinds)
+    ? mutedKinds.filter(k => Object.keys(EMAIL_TEMPLATES).includes(k)).join(",")
+    : undefined;
+
+  await pool.query(
+    `INSERT INTO qpaynet_notif_prefs (owner_id, email_enabled, in_app_enabled, muted_kinds, updated_at)
+     VALUES ($1, COALESCE($2, true), COALESCE($3, true), COALESCE($4, ''), NOW())
+     ON CONFLICT (owner_id) DO UPDATE SET
+       email_enabled  = COALESCE($2, qpaynet_notif_prefs.email_enabled),
+       in_app_enabled = COALESCE($3, qpaynet_notif_prefs.in_app_enabled),
+       muted_kinds    = COALESCE($4, qpaynet_notif_prefs.muted_kinds),
+       updated_at     = NOW()`,
+    [ownerId, emailEnabled, inAppEnabled, muted],
+  );
+  const prefs = await getNotifPrefs(pool, ownerId);
+  res.json({ ok: true, ...prefs });
 });
 
 // POST /api/qpaynet/notifications/read-all

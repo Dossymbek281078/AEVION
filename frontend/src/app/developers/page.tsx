@@ -105,6 +105,8 @@ const APIS = [
       "POST /api/qpaynet/webhook-subs",
       "POST /api/qpaynet/kyc/submit",
       "GET /api/qpaynet/notifications",
+      "PATCH /api/qpaynet/notifications/preferences",
+      "GET /api/qpaynet/admin/payouts",
       "POST /api/qpaynet/merchant/charge",
     ],
   },

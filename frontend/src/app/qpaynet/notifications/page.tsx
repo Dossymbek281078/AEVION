@@ -73,12 +73,18 @@ export default function NotificationsPage() {
           <span className="text-slate-600">·</span>
           <h1 className="text-sm font-bold">Уведомления {unreadCount > 0 && <span className="text-amber-400">({unreadCount})</span>}</h1>
         </div>
-        {unreadCount > 0 && (
-          <button onClick={markAll}
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <button onClick={markAll}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg">
+              Прочитать все
+            </button>
+          )}
+          <Link href="/qpaynet/notifications/preferences"
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg">
-            Прочитать все
-          </button>
-        )}
+            ⚙ Настройки
+          </Link>
+        </div>
       </header>
 
       <div className="max-w-xl mx-auto px-6 py-6 space-y-3">

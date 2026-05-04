@@ -119,7 +119,7 @@ export default function MerchantPage() {
 
         {/* Usage example */}
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <h2 className="font-bold mb-3">Использование</h2>
+          <h2 className="font-bold mb-3">Использование (server-to-server)</h2>
           <code className="block bg-slate-800 text-emerald-400 text-xs p-4 rounded-xl font-mono whitespace-pre overflow-x-auto">{`POST /api/qpaynet/merchant/charge
 X-Api-Key: qpn_live_...
 
@@ -129,6 +129,24 @@ X-Api-Key: qpn_live_...
   "description": "Оплата подписки QBuild Pro"
 }`}</code>
         </div>
+
+        {/* Embed widget */}
+        {wallets.length > 0 && (
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
+            <h2 className="font-bold mb-1">Pay-кнопка для сайта</h2>
+            <p className="text-xs text-slate-400 mb-3">
+              Вставьте iframe на любой сайт — получатели смогут оплатить через AEVION без интеграции:
+            </p>
+            <code className="block bg-slate-800 text-violet-300 text-xs p-4 rounded-xl font-mono whitespace-pre-wrap break-all">{`<iframe
+  src="https://aevion.kz/qpaynet/widget/${wallets[0].id}?amount=990&desc=Подписка"
+  width="380" height="360" frameborder="0"
+  style="border-radius:16px"
+></iframe>`}</code>
+            <p className="text-[11px] text-slate-500 mt-2">
+              Параметры: <code className="text-slate-400">amount</code>, <code className="text-slate-400">desc</code>, <code className="text-slate-400">compact=1</code> (прозрачный фон).
+            </p>
+          </div>
+        )}
 
         {/* Keys list */}
         <div>

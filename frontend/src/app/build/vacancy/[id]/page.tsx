@@ -12,6 +12,7 @@ import {
   type BuildVacancy,
   type BuildApplication,
   type ApplicationStatus,
+  type ApplicationLabel,
   type TalentRow,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
@@ -159,6 +160,15 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 </h2>
                 {applications.length > 0 && (
                   <div className="flex items-center gap-2">
+                    <AiShortlistButton
+                      vacancyId={vacancy.id}
+                      pendingCount={applications.filter((a) => a.status === "PENDING").length}
+                      onLabel={(appId, label) =>
+                        setApplications((prev) =>
+                          prev ? prev.map((x) => (x.id === appId ? { ...x, labelKey: label } : x)) : prev,
+                        )
+                      }
+                    />
                     <BulkMessageButton vacancyId={vacancy.id} pendingCount={applications.filter((a) => a.status === "PENDING").length} />
                     <a
                       href={`/api/build/applications/by-vacancy/${encodeURIComponent(vacancy.id)}/export.csv`}
@@ -185,6 +195,11 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                           onOptimistic={(status) =>
                             setApplications((prev) =>
                               prev ? prev.map((x) => (x.id === a.id ? { ...x, status } : x)) : prev,
+                            )
+                          }
+                          onOptimisticLabel={(labelKey) =>
+                            setApplications((prev) =>
+                              prev ? prev.map((x) => (x.id === a.id ? { ...x, labelKey } : x)) : prev,
                             )
                           }
                         />
@@ -487,10 +502,12 @@ function ApplicationRow({
   app,
   onChanged,
   onOptimistic,
+  onOptimisticLabel,
 }: {
   app: BuildApplication;
   onChanged: () => void;
   onOptimistic?: (status: ApplicationStatus) => void;
+  onOptimisticLabel?: (labelKey: ApplicationLabel | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -578,11 +595,18 @@ function ApplicationRow({
             </div>
           )}
         </div>
-        <span
-          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${STATUS_TONE[app.status]}`}
-        >
-          {app.status}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-xs ${STATUS_TONE[app.status]}`}
+          >
+            {app.status}
+          </span>
+          <ApplicationLabelPicker
+            applicationId={app.id}
+            current={app.labelKey ?? null}
+            onSet={(lk) => onOptimisticLabel?.(lk)}
+          />
+        </div>
       </div>
       {app.message && (
         <p className="mt-2 whitespace-pre-wrap text-sm text-slate-300">{app.message}</p>
@@ -684,6 +708,85 @@ function ApplicationRow({
       )}
       <RecruiterNotes applicationId={app.id} />
     </li>
+  );
+}
+
+const LABEL_TONE: Record<ApplicationLabel, string> = {
+  TOP_PICK: "border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-100",
+  SHORTLIST: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+  INTERVIEW: "border-sky-500/40 bg-sky-500/10 text-sky-200",
+  HOLD: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+};
+const LABEL_EMOJI: Record<ApplicationLabel, string> = {
+  TOP_PICK: "★",
+  SHORTLIST: "✓",
+  INTERVIEW: "📞",
+  HOLD: "⏸",
+};
+const LABEL_OPTIONS: ApplicationLabel[] = ["TOP_PICK", "SHORTLIST", "INTERVIEW", "HOLD"];
+
+function ApplicationLabelPicker({
+  applicationId,
+  current,
+  onSet,
+}: {
+  applicationId: string;
+  current: ApplicationLabel | null;
+  onSet: (label: ApplicationLabel | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const toast = useToast();
+
+  async function set(label: ApplicationLabel | null) {
+    const prev = current;
+    onSet(label);
+    setOpen(false);
+    try {
+      await buildApi.setApplicationLabel(applicationId, label);
+    } catch (e) {
+      onSet(prev);
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+          current ? LABEL_TONE[current] : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+        }`}
+        title="Recruiter label (private)"
+      >
+        {current ? `${LABEL_EMOJI[current]} ${current}` : "+ Label"}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-white/10 bg-slate-900 p-1 shadow-2xl">
+          {LABEL_OPTIONS.map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => set(l)}
+              className={`block w-full rounded px-2 py-1 text-left text-[11px] hover:bg-white/5 ${
+                current === l ? "text-emerald-200" : "text-slate-200"
+              }`}
+            >
+              {LABEL_EMOJI[l]} {l}
+            </button>
+          ))}
+          {current && (
+            <button
+              type="button"
+              onClick={() => set(null)}
+              className="mt-0.5 block w-full rounded border-t border-white/5 px-2 py-1 text-left text-[11px] text-slate-500 hover:bg-white/5 hover:text-rose-300"
+            >
+              ✕ Clear label
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -986,6 +1089,114 @@ function VacancyExpiryBadge({
     >
       {days === 0 ? "ends today" : `${days} day${days === 1 ? "" : "s"} left`}
     </span>
+  );
+}
+
+function AiShortlistButton({
+  vacancyId,
+  pendingCount,
+  onLabel,
+}: {
+  vacancyId: string;
+  pendingCount: number;
+  onLabel: (applicationId: string, label: ApplicationLabel) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{
+    summary: string;
+    picks: { applicationId: string; rank: number; reasoning: string }[];
+  } | null>(null);
+  const [open, setOpen] = useState(false);
+  const toast = useToast();
+
+  if (pendingCount === 0) return null;
+
+  async function run() {
+    setBusy(true);
+    try {
+      const r = await buildApi.aiShortlist(vacancyId);
+      setResult({ summary: r.summary, picks: r.items });
+      setOpen(true);
+      if (r.items.length === 0) toast.info("No clear top picks among pending applicants.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyLabel(applicationId: string, rank: number) {
+    const label: ApplicationLabel = rank === 1 ? "TOP_PICK" : "SHORTLIST";
+    try {
+      await buildApi.setApplicationLabel(applicationId, label);
+      onLabel(applicationId, label);
+      toast.success(`Tagged as ${label}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => (result ? setOpen((v) => !v) : run())}
+        disabled={busy}
+        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
+        title="Claude reads all pending applications and picks the top 3"
+      >
+        {busy ? "✨ analysing…" : result ? "✨ AI picks" : `✨ AI shortlist (${pendingCount})`}
+      </button>
+      {open && result && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-96 rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-200">
+              Claude shortlist
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={run}
+                disabled={busy}
+                className="text-[10px] text-slate-400 hover:text-slate-200"
+                title="Re-run"
+              >
+                ⟳
+              </button>
+              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+                ×
+              </button>
+            </div>
+          </div>
+          {result.summary && (
+            <p className="mb-2 rounded border border-white/5 bg-black/20 p-2 text-[11px] italic text-slate-300">
+              {result.summary}
+            </p>
+          )}
+          {result.picks.length === 0 ? (
+            <p className="text-[11px] text-slate-500">Claude couldn&apos;t identify clear top picks.</p>
+          ) : (
+            <ul className="space-y-2">
+              {result.picks.map((p) => (
+                <li key={p.applicationId} className="rounded border border-fuchsia-500/20 bg-fuchsia-500/[0.04] p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase text-fuchsia-200">
+                      #{p.rank}
+                    </span>
+                    <button
+                      onClick={() => applyLabel(p.applicationId, p.rank)}
+                      className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/15 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-200 hover:bg-fuchsia-500/25"
+                    >
+                      Tag {p.rank === 1 ? "TOP_PICK" : "SHORTLIST"}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-200">{p.reasoning}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -186,7 +186,10 @@ export type BuildApplication = {
   rejectReason?: string | null;
   vacancyStatus?: VacancyStatus;
   vacancyExpiresAt?: string | null;
+  labelKey?: ApplicationLabel | null;
 };
+
+export type ApplicationLabel = "SHORTLIST" | "INTERVIEW" | "HOLD" | "TOP_PICK";
 
 export type BuildMessage = {
   id: string;
@@ -576,6 +579,26 @@ export const buildApi = {
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
   updateVacancy: (id: string, status: VacancyStatus) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
+  myVacanciesFunnel: () =>
+    call<{
+      items: {
+        id: string;
+        title: string;
+        status: VacancyStatus;
+        salary: number;
+        salaryCurrency: string | null;
+        viewCount: number | null;
+        createdAt: string;
+        expiresAt: string | null;
+        projectId: string;
+        projectTitle: string;
+        appsTotal: number;
+        appsPending: number;
+        appsAccepted: number;
+        appsRejected: number;
+      }[];
+      total: number;
+    }>("GET", "/api/build/vacancies/mine/funnel"),
   similarVacancies: (vacancyId: string) =>
     call<{
       items: (BuildVacancy & {
@@ -637,6 +660,12 @@ export const buildApi = {
     call<BuildApplication>(
       "POST",
       `/api/build/applications/${encodeURIComponent(id)}/withdraw`,
+    ),
+  setApplicationLabel: (id: string, labelKey: ApplicationLabel | null) =>
+    call<BuildApplication>(
+      "PATCH",
+      `/api/build/applications/${encodeURIComponent(id)}/label`,
+      { labelKey },
     ),
   bulkMessageApplicants: (vacancyId: string, content: string, status: "PENDING" | "ACCEPTED" | "REJECTED" | "ALL" = "PENDING") =>
     call<{ sent: number; recipients: string[] }>(
@@ -712,6 +741,13 @@ export const buildApi = {
       improved: string;
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/improve-text", input),
+  aiShortlist: (vacancyId: string) =>
+    call<{
+      items: { applicationId: string; rank: number; reasoning: string }[];
+      summary: string;
+      total: number;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/shortlist", { vacancyId }),
   aiCoverLetter: (input: { vacancyId: string; locale?: "ru" | "en" | "kz" }) =>
     call<{
       coverLetter: string;
@@ -914,6 +950,12 @@ export const buildApi = {
       cashback: { totalAev: number; entries: number };
       timestamp: string;
     }>("GET", "/api/build/stats", undefined, { auth: false }),
+  buildStatsTimeseries: () =>
+    call<{
+      vacancies: { day: string; n: number }[];
+      applications: { day: string; n: number }[];
+      projects: { day: string; n: number }[];
+    }>("GET", "/api/build/stats/timeseries", undefined, { auth: false }),
   adminStats: () =>
     call<{
       leads: { total: number; last7d: number };

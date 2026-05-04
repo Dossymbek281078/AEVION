@@ -184,6 +184,8 @@ export type BuildApplication = {
   aiScoresJson?: string | null;
   aiScoreOverall?: number | null;
   rejectReason?: string | null;
+  vacancyStatus?: VacancyStatus;
+  vacancyExpiresAt?: string | null;
 };
 
 export type BuildMessage = {
@@ -574,6 +576,20 @@ export const buildApi = {
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
   updateVacancy: (id: string, status: VacancyStatus) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
+  similarVacancies: (vacancyId: string) =>
+    call<{
+      items: (BuildVacancy & {
+        overlapCount: number;
+        overlapSkills: string[];
+        projectCity?: string | null;
+      })[];
+      total: number;
+    }>(
+      "GET",
+      `/api/build/vacancies/${encodeURIComponent(vacancyId)}/similar`,
+      undefined,
+      { auth: false },
+    ),
   patchVacancy: (id: string, fields: Partial<{ status: VacancyStatus; title: string; description: string; salary: number }>) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, fields),
   matchCandidates: (vacancyId: string) =>
@@ -615,6 +631,22 @@ export const buildApi = {
     call<BuildApplication>(
       "POST",
       `/api/build/applications/${encodeURIComponent(id)}/withdraw`,
+    ),
+  applicationNotes: (id: string) =>
+    call<{
+      items: { id: string; applicationId: string; authorUserId: string; body: string; createdAt: string }[];
+      total: number;
+    }>("GET", `/api/build/applications/${encodeURIComponent(id)}/notes`),
+  addApplicationNote: (id: string, body: string) =>
+    call<{ id: string; applicationId: string; authorUserId: string; body: string; createdAt: string }>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/notes`,
+      { body },
+    ),
+  deleteApplicationNote: (id: string, noteId: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/applications/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
     ),
 
   // Messages

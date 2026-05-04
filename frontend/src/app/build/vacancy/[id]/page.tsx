@@ -247,7 +247,88 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           )}
         </aside>
       </div>
+
+      {!isOwner && <SimilarVacancies vacancyId={vacancy.id} />}
     </BuildShell>
+  );
+}
+
+function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
+  const [items, setItems] = useState<
+    (BuildVacancy & { overlapCount: number; overlapSkills: string[]; projectCity?: string | null })[]
+  >([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .similarVacancies(vacancyId)
+      .then((r) => {
+        if (!cancelled) {
+          setItems(r.items);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vacancyId]);
+
+  if (!loaded || items.length === 0) return null;
+
+  return (
+    <section className="mt-10 border-t border-white/5 pt-8">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-white">Similar vacancies</h2>
+        <Link href="/build/vacancies" className="text-xs text-emerald-300 hover:underline">
+          See all →
+        </Link>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((v) => (
+          <Link
+            key={v.id}
+            href={`/build/vacancy/${encodeURIComponent(v.id)}`}
+            className="group block rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-emerald-500/40 hover:bg-white/[0.06]"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
+                  {v.title}
+                </div>
+                {v.projectTitle && (
+                  <div className="mt-0.5 truncate text-[11px] text-slate-400">{v.projectTitle}</div>
+                )}
+              </div>
+              <div className="shrink-0 text-right text-sm font-semibold text-emerald-300">
+                {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+              </div>
+            </div>
+            {v.overlapSkills.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {v.overlapSkills.slice(0, 4).map((s) => (
+                  <span
+                    key={s}
+                    className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
+                  >
+                    ✓ {s}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+              {v.projectCity && <span>📍 {v.projectCity}</span>}
+              {v.overlapCount > 0 && (
+                <span className="text-emerald-300/80">{v.overlapCount} skill match</span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -591,7 +672,103 @@ function ApplicationRow({
           )}
         </div>
       )}
+      <RecruiterNotes applicationId={app.id} />
     </li>
+  );
+}
+
+function RecruiterNotes({ applicationId }: { applicationId: string }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<{ id: string; body: string; createdAt: string; authorUserId: string }[]>([]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    buildApi
+      .applicationNotes(applicationId)
+      .then((r) => setItems(r.items))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [open, loaded, applicationId]);
+
+  async function add() {
+    const body = draft.trim();
+    if (!body) return;
+    setBusy(true);
+    try {
+      const r = await buildApi.addApplicationNote(applicationId, body);
+      setItems((prev) => [r, ...prev]);
+      setDraft("");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(noteId: string) {
+    try {
+      await buildApi.deleteApplicationNote(applicationId, noteId);
+      setItems((prev) => prev.filter((n) => n.id !== noteId));
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[11px] text-slate-400 hover:text-slate-200"
+      >
+        {open ? "▼" : "▶"} Private notes {loaded && items.length > 0 ? `(${items.length})` : ""}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 rounded-md border border-amber-500/20 bg-amber-500/[0.04] p-3">
+          <div className="flex gap-2">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={2}
+              maxLength={4000}
+              placeholder="Private note (only you and admins see this)…"
+              className="flex-1 rounded border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-slate-500 focus:border-amber-500/40 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={add}
+              disabled={busy || !draft.trim()}
+              className="self-start rounded-md bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+            >
+              {busy ? "…" : "Add"}
+            </button>
+          </div>
+          {!loaded ? (
+            <p className="text-xs text-slate-500">Loading…</p>
+          ) : items.length === 0 ? (
+            <p className="text-[11px] text-slate-500">No notes yet — first one logs the impression you don&apos;t want to forget by next interview.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {items.map((n) => (
+                <li key={n.id} className="rounded border border-white/5 bg-black/20 p-2 text-xs">
+                  <div className="whitespace-pre-wrap text-slate-200">{n.body}</div>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+                    <span>{new Date(n.createdAt).toLocaleString()}</span>
+                    <button onClick={() => remove(n.id)} className="hover:text-rose-300">
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

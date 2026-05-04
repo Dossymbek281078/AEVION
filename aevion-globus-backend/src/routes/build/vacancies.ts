@@ -265,6 +265,88 @@ vacanciesRouter.get("/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/vacancies/:id/similar
+// Public: returns up to 6 OPEN vacancies that overlap on skills (or fall back
+// to same-city if the source vacancy has no skills declared). Used by the
+// "Similar vacancies" widget on the detail page to keep candidates engaged
+// when the current role doesn't fit.
+vacanciesRouter.get("/:id/similar", async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const src = await pool.query(
+      `SELECT v."id", v."skillsJson", p."city" AS "projectCity"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (src.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    const skills = safeParseJson(src.rows[0].skillsJson, [] as string[]);
+    const city = src.rows[0].projectCity ? String(src.rows[0].projectCity) : null;
+
+    // Pull a candidate set, score in JS — keeps the SQL simple while still
+    // letting us rank by overlap count.
+    const limit = 60;
+    let rows: Record<string, unknown>[];
+    if (skills.length > 0) {
+      const orClauses = skills.map((_s, i) => `lower(v."skillsJson") LIKE $${i + 2}`).join(" OR ");
+      const params: unknown[] = [id, ...skills.map((s) => `%"${s.toLowerCase()}"%`)];
+      const r = await pool.query(
+        `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status",
+                v."createdAt", v."skillsJson", v."expiresAt",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."status" = 'OPEN' AND v."id" <> $1 AND (${orClauses})
+         ORDER BY v."createdAt" DESC
+         LIMIT ${limit}`,
+        params,
+      );
+      rows = r.rows;
+    } else if (city) {
+      const r = await pool.query(
+        `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status",
+                v."createdAt", v."skillsJson", v."expiresAt",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."status" = 'OPEN' AND v."id" <> $1 AND p."city" ILIKE $2
+         ORDER BY v."createdAt" DESC
+         LIMIT 6`,
+        [id, city],
+      );
+      rows = r.rows;
+    } else {
+      const r = await pool.query(
+        `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status",
+                v."createdAt", v."skillsJson", v."expiresAt",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."status" = 'OPEN' AND v."id" <> $1
+         ORDER BY v."createdAt" DESC
+         LIMIT 6`,
+        [id],
+      );
+      rows = r.rows;
+    }
+
+    const skillSet = new Set(skills.map((s) => s.toLowerCase()));
+    const scored = rows
+      .map((row: Record<string, unknown>) => {
+        const rowSkills = safeParseJson(row.skillsJson, [] as string[]);
+        const overlap = rowSkills.filter((s) => skillSet.has(s.toLowerCase()));
+        return { ...row, skills: rowSkills, overlapCount: overlap.length, overlapSkills: overlap };
+      })
+      .sort((a, b) => b.overlapCount - a.overlapCount)
+      .slice(0, 6);
+
+    return ok(res, { items: scored, total: scored.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_similar_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/:id/match-candidates — owner only
 vacanciesRouter.get("/:id/match-candidates", async (req, res) => {
   try {

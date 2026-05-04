@@ -369,6 +369,40 @@ applicationsRouter.patch("/:id", async (req, res) => {
   }
 });
 
+// POST /api/build/applications/:id/withdraw — candidate withdraws their own application.
+// Status moves to REJECTED with a rejectReason of "(withdrawn by candidate)" so the
+// recruiter still sees it in their pipeline. We don't introduce a new status to keep
+// the existing analytics/CSV stable.
+applicationsRouter.post("/:id/withdraw", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const row = await pool.query(
+      `SELECT "id","userId","status" FROM "BuildApplication" WHERE "id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (row.rows[0].userId !== auth.sub) {
+      return fail(res, 403, "only_applicant_can_withdraw");
+    }
+    if (row.rows[0].status === "ACCEPTED") {
+      return fail(res, 409, "cannot_withdraw_accepted_application");
+    }
+
+    const result = await pool.query(
+      `UPDATE "BuildApplication"
+       SET "status" = 'REJECTED', "rejectReason" = '(withdrawn by candidate)', "updatedAt" = NOW()
+       WHERE "id" = $1 RETURNING *`,
+      [id],
+    );
+    return ok(res, result.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_withdraw_failed", { details: (err as Error).message });
+  }
+});
+
 async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECTED") {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return; // email not configured

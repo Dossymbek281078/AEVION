@@ -611,6 +611,11 @@ export const buildApi = {
       `/api/build/applications/${encodeURIComponent(id)}`,
       { status, ...(rejectReason ? { rejectReason } : {}) },
     ),
+  withdrawApplication: (id: string) =>
+    call<BuildApplication>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/withdraw`,
+    ),
 
   // Messages
   inbox: () => call<{ items: BuildInboxRow[]; total: number }>("GET", "/api/build/messages"),
@@ -657,6 +662,12 @@ export const buildApi = {
       improved: string;
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/improve-text", input),
+  aiCoverLetter: (input: { vacancyId: string; locale?: "ru" | "en" | "kz" }) =>
+    call<{
+      coverLetter: string;
+      skillsOverlap: string[];
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/cover-letter", input),
   loyaltyMe: () =>
     call<{
       hires: number;

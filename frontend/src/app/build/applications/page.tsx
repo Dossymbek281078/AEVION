@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildApplication, type ApplicationStatus } from "@/lib/build/api";
 import { Skeleton } from "@/components/build/Skeleton";
+import { useToast } from "@/components/build/Toast";
 
 const STATUS_COLOR: Record<ApplicationStatus, string> = {
   PENDING: "text-amber-200 bg-amber-500/10 border-amber-500/20",
@@ -32,6 +33,7 @@ function Body() {
   const [items, setItems] = useState<BuildApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<ApplicationStatus | "ALL">("ALL");
+  const toast = useToast();
 
   useEffect(() => {
     buildApi
@@ -40,6 +42,18 @@ function Body() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  async function withdraw(id: string) {
+    if (!confirm("Withdraw this application? The employer will be notified.")) return;
+    try {
+      await buildApi.withdrawApplication(id);
+      toast.success("Application withdrawn");
+      const r = await buildApi.myApplications();
+      setItems(r.items);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   const filtered = filter === "ALL" ? items : items.filter((a) => a.status === filter);
 
@@ -118,14 +132,20 @@ function Body() {
 
       <div className="space-y-3">
         {filtered.map((a) => (
-          <ApplicationCard key={a.id} app={a} />
+          <ApplicationCard key={a.id} app={a} onWithdraw={() => withdraw(a.id)} />
         ))}
       </div>
     </div>
   );
 }
 
-function ApplicationCard({ app }: { app: BuildApplication }) {
+function ApplicationCard({
+  app,
+  onWithdraw,
+}: {
+  app: BuildApplication;
+  onWithdraw: () => void;
+}) {
   const statusCls = STATUS_COLOR[app.status];
   const icon = STATUS_ICON[app.status];
 
@@ -197,6 +217,15 @@ function ApplicationCard({ app }: { app: BuildApplication }) {
               Trial tasks
             </Link>
           </>
+        )}
+        {app.status === "PENDING" && (
+          <button
+            type="button"
+            onClick={onWithdraw}
+            className="rounded-md border border-rose-500/20 bg-rose-500/5 px-3 py-1 text-xs text-rose-200/80 transition hover:bg-rose-500/10"
+          >
+            Withdraw
+          </button>
         )}
       </div>
     </div>

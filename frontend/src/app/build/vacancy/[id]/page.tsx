@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { use } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
@@ -167,7 +167,15 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   {applications.map((a) => (
                     <div key={a.id}>
                       <ul className="space-y-3">
-                        <ApplicationRow app={a} onChanged={refresh} />
+                        <ApplicationRow
+                          app={a}
+                          onChanged={refresh}
+                          onOptimistic={(status) =>
+                            setApplications((prev) =>
+                              prev ? prev.map((x) => (x.id === a.id ? { ...x, status } : x)) : prev,
+                            )
+                          }
+                        />
                       </ul>
                       <TrialTaskBlock applicationId={a.id} isRecruiter isCandidate={false} onChanged={refresh} />
                     </div>
@@ -382,10 +390,19 @@ const STATUS_TONE: Record<ApplicationStatus, string> = {
   REJECTED: "bg-rose-500/15 text-rose-200 border-rose-500/30",
 };
 
-function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: () => void }) {
+function ApplicationRow({
+  app,
+  onChanged,
+  onOptimistic,
+}: {
+  app: BuildApplication;
+  onChanged: () => void;
+  onOptimistic?: (status: ApplicationStatus) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const toast = useToast();
+  const previousStatusRef = useRef<ApplicationStatus>(app.status);
   const matchScore = app.matchScore;
   const matchTone =
     matchScore == null
@@ -488,10 +505,11 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
           <button
             disabled={busy}
             onClick={async () => {
+              previousStatusRef.current = app.status;
+              onOptimistic?.("ACCEPTED");
               setBusy(true);
               try {
                 const r = await buildApi.updateApplication(app.id, "ACCEPTED");
-                onChanged();
                 if (r.hireOrder && r.hireOrder.amount > 0) {
                   toast.success(
                     `Кандидат принят. Hire fee: ${r.hireOrder.amount.toLocaleString()} ${r.hireOrder.currency} — оплатите в «Settings → Orders».`,
@@ -499,6 +517,10 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
                 } else {
                   toast.success("Candidate accepted.");
                 }
+                onChanged();
+              } catch (err) {
+                onOptimistic?.(previousStatusRef.current);
+                toast.error((err as Error).message);
               } finally {
                 setBusy(false);
               }
@@ -513,10 +535,16 @@ function ApplicationRow({ app, onChanged }: { app: BuildApplication; onChanged: 
             disabled={busy}
             onClick={async () => {
               const reason = prompt("Reason for rejection (optional, shown to candidate):");
+              previousStatusRef.current = app.status;
+              onOptimistic?.("REJECTED");
               setBusy(true);
               try {
                 await buildApi.updateApplication(app.id, "REJECTED", reason?.trim() || undefined);
+                toast.info("Candidate rejected.");
                 onChanged();
+              } catch (err) {
+                onOptimistic?.(previousStatusRef.current);
+                toast.error((err as Error).message);
               } finally {
                 setBusy(false);
               }

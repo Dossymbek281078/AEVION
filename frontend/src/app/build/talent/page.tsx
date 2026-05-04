@@ -40,6 +40,8 @@ function TalentBody() {
   const [role, setRole] = useState<BuildRole | "ALL">("ALL");
   const [minExp, setMinExp] = useState<string>("");
   const [openOnly, setOpenOnly] = useState(true);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [withRatingOnly, setWithRatingOnly] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +176,22 @@ function TalentBody() {
         >
           {openOnly ? "✓ Open to work only" : "Open to work only"}
         </button>
+        <button
+          onClick={() => setVerifiedOnly((v) => !v)}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            verifiedOnly ? "bg-sky-500/20 text-sky-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
+          }`}
+        >
+          {verifiedOnly ? "✓ Verified only" : "Verified only"}
+        </button>
+        <button
+          onClick={() => setWithRatingOnly((v) => !v)}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            withRatingOnly ? "bg-amber-500/20 text-amber-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
+          }`}
+        >
+          {withRatingOnly ? "★ Reviewed only" : "★ Reviewed only"}
+        </button>
       </div>
 
       {usage && (
@@ -208,23 +226,37 @@ function TalentBody() {
 
       {loading && <p className="text-sm text-slate-400">Searching…</p>}
 
-      {!loading && items.length === 0 && (
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
-          <p className="text-sm text-slate-400">
-            No candidates match these filters yet. Try clearing some — or invite people to{" "}
-            <Link href="/build/profile" className="text-emerald-300 underline">
-              create a profile
-            </Link>
-            .
-          </p>
-        </div>
-      )}
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {items.map((t) => (
-          <TalentCard key={t.userId} talent={t} />
-        ))}
-      </div>
+      {!loading && (() => {
+        const filtered = items
+          .filter((t) => (verifiedOnly ? !!t.verifiedAt : true))
+          .filter((t) => (withRatingOnly ? (t.reviewCount ?? 0) > 0 : true));
+        if (filtered.length === 0) {
+          return (
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
+              <p className="text-sm text-slate-400">
+                {items.length > 0
+                  ? "No candidates match the active quick-filters. Toggle Verified / Reviewed off to widen."
+                  : (
+                    <>
+                      No candidates match these filters yet. Try clearing some — or invite people to{" "}
+                      <Link href="/build/profile" className="text-emerald-300 underline">
+                        create a profile
+                      </Link>
+                      .
+                    </>
+                  )}
+              </p>
+            </div>
+          );
+        }
+        return (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {filtered.map((t) => (
+              <TalentCard key={t.userId} talent={t} />
+            ))}
+          </div>
+        );
+      })()}
     </>
   );
 }

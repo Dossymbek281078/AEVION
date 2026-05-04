@@ -130,6 +130,9 @@ X-Api-Key: qpn_live_...
 }`}</code>
         </div>
 
+        {/* Webhook subscriptions (set-once) */}
+        <WebhookSubs token={token} />
+
         {/* Webhook tester */}
         <WebhookTester token={token} />
 
@@ -175,6 +178,109 @@ X-Api-Key: qpn_live_...
             ))}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface SubItem {
+  id: string;
+  url: string;
+  events: string;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+function WebhookSubs({ token }: { token: string }) {
+  const [subs, setSubs] = useState<SubItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newUrl, setNewUrl] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) { setLoading(false); return; }
+    fetch("/api/qpaynet/webhook-subs", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setSubs(d.subscriptions ?? []))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  if (!token) return null;
+
+  async function create() {
+    if (!newUrl.trim()) return;
+    setCreating(true);
+    try {
+      const r = await fetch("/api/qpaynet/webhook-subs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ url: newUrl.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setSubs(prev => [{ id: d.id, url: d.url, events: d.events, revoked_at: null, created_at: new Date().toISOString() }, ...prev]);
+        setCreatedSecret(d.secret);
+        setNewUrl("");
+      }
+    } finally { setCreating(false); }
+  }
+
+  async function revoke(id: string) {
+    if (!confirm("Отозвать webhook подписку?")) return;
+    const r = await fetch(`/api/qpaynet/webhook-subs/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (r.ok) setSubs(prev => prev.map(s => s.id === id ? { ...s, revoked_at: new Date().toISOString() } : s));
+  }
+
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
+      <h2 className="font-bold mb-1">Webhook подписки (set-once)</h2>
+      <p className="text-xs text-slate-400 mb-3">
+        Подписка получает все <code>payment_request.paid</code> события для всех ваших кошельков.
+        Альтернатива per-request <code>notifyUrl</code>.
+      </p>
+
+      {createdSecret && (
+        <div className="bg-amber-950/40 border border-amber-800 rounded-xl p-3 mb-3">
+          <div className="text-[10px] text-amber-400 font-bold uppercase mb-1">Секрет (показан 1 раз)</div>
+          <code className="text-xs text-amber-200 break-all block">{createdSecret}</code>
+          <button onClick={() => setCreatedSecret(null)} className="text-[10px] text-amber-400/70 mt-2 hover:text-amber-300">Скрыть</button>
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-4">
+        <input type="url" value={newUrl} onChange={e => setNewUrl(e.target.value)}
+          placeholder="https://your-site.kz/webhooks/qpaynet"
+          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500" />
+        <button onClick={create} disabled={creating || !newUrl}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold">
+          {creating ? "..." : "+ Добавить"}
+        </button>
+      </div>
+
+      {loading && <div className="text-slate-500 text-xs">Загрузка...</div>}
+      {!loading && subs.length === 0 && <div className="text-slate-600 text-xs">Подписок нет</div>}
+
+      <div className="space-y-2">
+        {subs.map(s => (
+          <div key={s.id} className={`flex items-center justify-between p-2 rounded-lg border ${s.revoked_at ? "border-slate-800 opacity-50" : "border-slate-700 bg-slate-950"}`}>
+            <div className="min-w-0 flex-1 mr-3">
+              <div className="text-xs font-mono text-slate-300 truncate">{s.url}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{s.events}</div>
+            </div>
+            {s.revoked_at ? (
+              <span className="text-[10px] bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full shrink-0">Отозвана</span>
+            ) : (
+              <button onClick={() => revoke(s.id)}
+                className="text-[10px] px-2 py-1 bg-red-900 hover:bg-red-800 text-red-300 rounded shrink-0">
+                Отозвать
+              </button>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

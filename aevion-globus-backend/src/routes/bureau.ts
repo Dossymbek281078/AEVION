@@ -15,6 +15,7 @@ import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { internalMintForDevice } from "./aev";
 import { getPool } from "../lib/dbPool";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getKycProvider } from "../lib/kyc";
@@ -727,6 +728,88 @@ bureauRouter.get("/trust-edges/me", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "trust edges read failed";
     captureBureauError(err, { route: "trust-edges-by-user" });
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/bureau/trust-edges/:edgeId/claim-aec
+ * Body: { deviceId }
+ *
+ * Mints the planned AEC reward for a Trust Graph edge into the caller's
+ * device wallet. Bridges aev.ts (device-keyed wallets) and the auth-keyed
+ * Bureau verification flow — boundary rule R1 in AEC_FIAT_BOUNDARY.md.
+ *
+ * Idempotent: re-calling on an already-claimed edge returns the prior
+ * mint reference and does not re-mint. Caller's userId must match
+ * edge.userId; the device wallet, if previously bound, must also match.
+ */
+bureauRouter.post("/trust-edges/:edgeId/claim-aec", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) {
+      return res.status(401).json({ error: "authentication required" });
+    }
+    const { edgeId } = req.params;
+    const deviceId = typeof req.body?.deviceId === "string" ? req.body.deviceId.trim() : "";
+    if (!deviceId) {
+      return res.status(400).json({ error: "deviceId is required" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT "id","certId","userId","tier","aecRewardPlanned","aecRewardClaimedAt"
+         FROM "BureauTrustEdge" WHERE "id" = $1`,
+      [edgeId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "edge not found" });
+    }
+    const edge = rows[0];
+    if (edge.userId && edge.userId !== user.userId) {
+      return res.status(403).json({ error: "edge belongs to another user" });
+    }
+    if (edge.aecRewardClaimedAt) {
+      return res.json({
+        edgeId,
+        idempotent: true,
+        claimedAt: edge.aecRewardClaimedAt,
+        amount: edge.aecRewardPlanned,
+      });
+    }
+    if (!edge.aecRewardPlanned || edge.aecRewardPlanned <= 0) {
+      return res.status(409).json({ error: "no reward planned for this edge" });
+    }
+
+    const mint = await internalMintForDevice({
+      deviceId,
+      amount: edge.aecRewardPlanned,
+      sourceKind: "bureau-cert-reward",
+      sourceModule: "bureau",
+      sourceAction: `verified-tier-${edge.tier}`,
+      reason: `Bureau ${edge.tier} cert (${edge.certId})`,
+      expectedUserId: user.userId,
+    });
+    if (!mint.ok) {
+      return res.status(409).json({ error: mint.error });
+    }
+
+    await pool.query(
+      `UPDATE "BureauTrustEdge" SET "aecRewardClaimedAt" = NOW() WHERE "id" = $1`,
+      [edgeId],
+    );
+
+    res.json({
+      edgeId,
+      claimedAt: new Date().toISOString(),
+      amount: edge.aecRewardPlanned,
+      walletBalance: mint.wallet.balance,
+      ledgerEntryId: mint.entry.id,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "claim failed";
+    console.error("[Bureau] claim-aec:", msg);
+    captureBureauError(err, { route: "trust-edges-claim-aec" });
     res.status(500).json({ error: msg });
   }
 });

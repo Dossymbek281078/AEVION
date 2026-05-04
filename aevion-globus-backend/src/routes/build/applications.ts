@@ -438,6 +438,88 @@ applicationsRouter.post("/:id/notes", async (req, res) => {
   }
 });
 
+// POST /api/build/applications/bulk-status
+// Owner-only. Bulk-update status (e.g. ACCEPTED or REJECTED) for several
+// applications at once. Each application is verified to belong to a vacancy
+// owned by the caller; rows that fail the check are silently skipped (their
+// id is returned in skipped[]). Caps at 50 per call.
+//
+// We do NOT fire hire fees from this endpoint — too easy to trigger expensive
+// operations in bulk by accident. Bulk ACCEPT just flips status and emails;
+// individual Accept on the row keeps the fee logic.
+applicationsRouter.post("/bulk-status", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const ids = Array.isArray(req.body?.ids)
+      ? (req.body.ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 50)
+      : [];
+    if (ids.length === 0) return fail(res, 400, "ids_required");
+
+    const status = vEnum(req.body?.status, "status", APPLICATION_STATUSES);
+    if (!status.ok) return fail(res, 400, status.error);
+    if (status.value === "PENDING") return fail(res, 400, "cannot_bulk_revert_to_pending");
+
+    const rejectReason = status.value === "REJECTED" && typeof req.body?.rejectReason === "string"
+      ? req.body.rejectReason.slice(0, 500)
+      : null;
+
+    // Load owner for each application in one query.
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+    const owned = await pool.query(
+      `SELECT a."id", a."userId", p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" IN (${placeholders})`,
+      ids,
+    );
+
+    const ownedSet = new Set<string>();
+    const skipped: string[] = [];
+    const candidateIdsByApp: Record<string, string> = {};
+    for (const row of owned.rows as { id: string; userId: string; clientId: string }[]) {
+      if (row.clientId === auth.sub || auth.role === "ADMIN") {
+        ownedSet.add(row.id);
+        candidateIdsByApp[row.id] = row.userId;
+      } else {
+        skipped.push(row.id);
+      }
+    }
+    for (const id of ids) {
+      if (!ownedSet.has(id) && !skipped.includes(id)) skipped.push(id);
+    }
+    const okIds = ids.filter((id) => ownedSet.has(id));
+    if (okIds.length === 0) return ok(res, { updated: 0, skipped });
+
+    const updatePlaceholders = okIds.map((_, i) => `$${i + 2}`).join(",");
+    const params: unknown[] = [status.value, ...okIds];
+    let extra = "";
+    if (rejectReason !== null) {
+      params.push(rejectReason);
+      extra = `, "rejectReason" = $${params.length}`;
+    }
+    await pool.query(
+      `UPDATE "BuildApplication"
+       SET "status" = $1, "updatedAt" = NOW()${extra}
+       WHERE "id" IN (${updatePlaceholders})`,
+      params,
+    );
+
+    // Fire-and-forget candidate emails for each
+    for (const id of okIds) {
+      const candidateId = candidateIdsByApp[id];
+      if (candidateId) {
+        void notifyCandidate(candidateId, status.value as "ACCEPTED" | "REJECTED").catch(() => {});
+      }
+    }
+
+    return ok(res, { updated: okIds.length, skipped, status: status.value });
+  } catch (err: unknown) {
+    return fail(res, 500, "applications_bulk_status_failed", { details: (err as Error).message });
+  }
+});
+
 // PATCH /api/build/applications/:id/label
 // Owner-only. Sets a recruiter-private label on the application
 // (SHORTLIST/INTERVIEW/HOLD/TOP_PICK or null to clear). Doesn't move the

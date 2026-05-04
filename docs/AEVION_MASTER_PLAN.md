@@ -243,7 +243,7 @@ If the user insists on more code work in this window, candidates are:
 1. ~~**AEC ↔ fiat boundary doc**~~ ✅ done — `docs/bank/AEC_FIAT_BOUNDARY.md` (4 canonical rules R1–R4, P3-4 flow diagram, legal positioning, pre-P3-4 checklist)
 2. ~~Resolve `bank-payment-layer` branch~~ ✅ done — archived as `archive/bank-payment-layer-2026-05-03` tag; all 362 net-new files were already present on main via parallel development; worktree + remote branch removed
 3. ~~Wire `npm run smoke:bank-prod` into the daily cron~~ ✅ done — added `bank-prod-smoke` job to `daily-smoke.yml` (cron+dispatch only, skips on push; artifact stored 14 days in GitHub Actions)
-4. **P3-4 code-complete** — Trust Graph edge (`aca91c2`) + AEC claim flow (PR #112). Remaining is config: product decision on `BUREAU_*_AEC_REWARD` env values, prod Stripe keys, Bureau-Stripe step in `smoke:bank-prod`
+4. **P3-4 code-complete** — Trust Graph edge (`aca91c2`) + AEC claim flow (PR #112) + smoke plumbing & reward sizing draft (PR #113). Remaining is config-only: product decision on `BUREAU_*_AEC_REWARD` env values (proposal in `AEC_FIAT_BOUNDARY.md` §8: 50/150/500/1000), prod Stripe keys
 
 ### `aevion-qsign`
 1. **Do nothing without checking PR list** — P1-P9 already merged via PR #2 on 2026-04-26

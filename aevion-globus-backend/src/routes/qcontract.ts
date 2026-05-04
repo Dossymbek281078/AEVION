@@ -383,6 +383,42 @@ qcontractRouter.get("/documents", async (req, res) => {
   });
 });
 
+// PATCH /api/qcontract/documents/:id — extend expiry / bump max views
+qcontractRouter.patch("/documents/:id", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { extendDays, addMaxViews } = req.body as { extendDays?: number; addMaxViews?: number };
+  if (!extendDays && !addMaxViews) return res.status(400).json({ error: "extendDays_or_addMaxViews_required" });
+  if (extendDays && (extendDays < 1 || extendDays > 365)) return res.status(400).json({ error: "extendDays_1_to_365" });
+  if (addMaxViews && (addMaxViews < 1 || addMaxViews > 1000)) return res.status(400).json({ error: "addMaxViews_1_to_1000" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "unknown";
+
+  const sets: string[] = ["updated_at = NOW()"];
+  const params: unknown[] = [];
+  if (extendDays) {
+    params.push(extendDays);
+    sets.push(`expires_at = COALESCE(expires_at, NOW()) + ($${params.length} || ' days')::interval`);
+  }
+  if (addMaxViews) {
+    params.push(addMaxViews);
+    sets.push(`max_views = COALESCE(max_views, 0) + $${params.length}`);
+  }
+  params.push(req.params.id, ownerId);
+
+  const result = await pool.query(
+    `UPDATE qcontract_documents SET ${sets.join(", ")}
+     WHERE id = $${params.length - 1} AND owner_id = $${params.length} AND revoked_at IS NULL
+     RETURNING id, expires_at, max_views`,
+    params,
+  );
+  if ((result.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_revoked" });
+  res.json({ ok: true, ...result.rows[0] });
+});
+
 // DELETE /api/qcontract/documents/:id
 qcontractRouter.delete("/documents/:id", async (req, res) => {
   await ensureTables();

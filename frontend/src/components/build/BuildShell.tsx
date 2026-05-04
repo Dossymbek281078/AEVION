@@ -40,19 +40,54 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
   const user = useBuildAuth((s) => s.user);
   const logout = useBuildAuth((s) => s.logout);
   const hydrated = useBuildAuth((s) => s.hydrated);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Auto-close the drawer on route change so taps on a link feel instant.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the drawer is open.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (drawerOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [drawerOpen]);
+
+  const visibleNav = NAV.filter((n) => !n.authOnly || !!user);
 
   return (
     <ToastProvider>
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/build" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
-            <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
-            <span className="text-slate-400">AEVION Construction & Recruiting</span>
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Open menu"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen(true)}
+              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200 hover:bg-white/10 sm:hidden"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
+              </svg>
+            </button>
+            <Link href="/build" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
+              <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
+              <span className="hidden text-slate-400 sm:inline">AEVION Construction & Recruiting</span>
+            </Link>
+          </div>
 
           <nav className="hidden items-center gap-1 sm:flex">
-            {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
+            {visibleNav.slice(0, 7).map((n) => {
               const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
               return (
                 <Link
@@ -66,6 +101,16 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            {visibleNav.length > 7 && (
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                className="rounded-md px-3 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+                aria-label="More menu"
+              >
+                More…
+              </button>
+            )}
           </nav>
 
           <div className="flex items-center gap-2 text-xs">
@@ -95,24 +140,16 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
         </div>
-
-        <nav className="flex items-center gap-1 overflow-x-auto border-t border-white/5 px-4 py-2 sm:hidden">
-          {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
-            const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
-            return (
-              <Link
-                key={n.href}
-                href={n.href}
-                className={`shrink-0 rounded-md px-3 py-1.5 text-xs ${
-                  active ? "bg-white/10 text-white" : "text-slate-400"
-                }`}
-              >
-                {n.label}
-              </Link>
-            );
-          })}
-        </nav>
       </header>
+
+      <NavDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        items={visibleNav}
+        pathname={pathname}
+        signedIn={!!user}
+        onLogout={logout}
+      />
 
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
@@ -131,6 +168,88 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
       </footer>
     </div>
     </ToastProvider>
+  );
+}
+
+function NavDrawer({
+  open,
+  onClose,
+  items,
+  pathname,
+  signedIn,
+  onLogout,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: { href: string; label: string }[];
+  pathname: string;
+  signedIn: boolean;
+  onLogout: () => void;
+}) {
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        aria-hidden={!open}
+        onClick={onClose}
+      />
+      <aside
+        role="dialog"
+        aria-label="Navigation menu"
+        aria-modal="true"
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-white/10 bg-slate-950 shadow-2xl transition-transform ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
+            <span className="text-slate-400">Menu</span>
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close menu"
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-sm text-slate-200 hover:bg-white/10"
+          >
+            ×
+          </button>
+        </div>
+        <nav className="flex-1 overflow-y-auto px-2 py-3">
+          {items.map((n) => {
+            const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
+            return (
+              <Link
+                key={n.href}
+                href={n.href}
+                onClick={onClose}
+                className={`block rounded-md px-3 py-2 text-sm transition ${
+                  active ? "bg-emerald-500/15 text-emerald-200" : "text-slate-300 hover:bg-white/5"
+                }`}
+              >
+                {n.label}
+              </Link>
+            );
+          })}
+        </nav>
+        {signedIn && (
+          <div className="border-t border-white/10 px-4 py-3">
+            <button
+              type="button"
+              onClick={() => {
+                onLogout();
+                onClose();
+              }}
+              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-200"
+            >
+              Log out
+            </button>
+          </div>
+        )}
+      </aside>
+    </>
   );
 }
 

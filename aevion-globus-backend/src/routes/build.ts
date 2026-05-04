@@ -23,6 +23,7 @@ import { leadsRouter } from "./build/leads";
 import { healthRouter } from "./build/health";
 import { alertsRouter } from "./build/alerts";
 import { verificationRouter } from "./build/verification";
+import { publicRouter } from "./build/public";
 
 export const buildRouter = Router();
 
@@ -102,3 +103,7 @@ buildRouter.use("/leads", leadsRouter);
 buildRouter.use("/health", healthRouter);
 buildRouter.use("/alerts", alertsRouter);
 buildRouter.use("/verification", verificationRouter);
+// Public partner-facing read-only API. Mounted under /api/build/public/* so
+// /v1/vacancies resolves at /api/build/public/v1/vacancies. Auth is the
+// X-Build-Key header validated inside the public router.
+buildRouter.use("/public", publicRouter);

@@ -233,6 +233,25 @@ async function _doEnsureBuildTables(): Promise<void> {
   // Used downstream for referrer rewards / leaderboard.
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "referredByUserId" TEXT;`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`);
+  // BuildPartnerApiKey: read-only API key for partner sites that want to
+  // syndicate the QBuild vacancy feed (e.g. an employer's own careers page).
+  // Stores a sha256 hash of the key, never the plaintext. The key itself
+  // (qb_pk_*) is shown to the admin once at creation time.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPartnerApiKey" (
+      "id" TEXT PRIMARY KEY,
+      "label" TEXT NOT NULL,
+      "keyHash" TEXT NOT NULL UNIQUE,
+      "scopesJson" TEXT NOT NULL DEFAULT '["vacancies:read"]',
+      "ownerUserId" TEXT,
+      "lastUsedAt" TIMESTAMPTZ,
+      "usageCount" INTEGER NOT NULL DEFAULT 0,
+      "revokedAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPartnerApiKey_hash_idx" ON "BuildPartnerApiKey" ("keyHash") WHERE "revokedAt" IS NULL;`);
+
   // BuildVacancyTemplate: recruiter-saved reusable vacancy blueprint.
   // Stores the same fields a vacancy needs (title/description/skills/salary/
   // questions) so a future post can spin up from the template instead of

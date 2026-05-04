@@ -40,6 +40,67 @@ adminRouter.get("/stats", async (req, res) => {
   }
 });
 
+// --- Partner API key management (admin) ----------------------------------
+// GET /api/build/admin/partner-keys — list all keys (without plaintext).
+adminRouter.get("/partner-keys", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const r = await pool.query(
+      `SELECT "id","label","scopesJson","ownerUserId","lastUsedAt","usageCount","revokedAt","createdAt"
+       FROM "BuildPartnerApiKey" ORDER BY "createdAt" DESC LIMIT 200`,
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_keys_list_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/admin/partner-keys — mint a new key. Plaintext returned
+// ONCE in the response (qb_pk_*); the DB stores only sha256(plaintext).
+adminRouter.post("/partner-keys", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const label = typeof req.body?.label === "string" ? String(req.body.label).trim().slice(0, 200) : "";
+    if (label.length < 2) return fail(res, 400, "label_required");
+
+    const id = crypto.randomUUID();
+    const plaintext = `qb_pk_${crypto.randomBytes(24).toString("base64url")}`;
+    const keyHash = crypto.createHash("sha256").update(plaintext).digest("hex");
+
+    const r = await pool.query(
+      `INSERT INTO "BuildPartnerApiKey" ("id","label","keyHash") VALUES ($1,$2,$3) RETURNING *`,
+      [id, label, keyHash],
+    );
+    return ok(res, { ...r.rows[0], plaintext }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_key_create_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/admin/partner-keys/:id/revoke — revoke a key (idempotent).
+adminRouter.post("/partner-keys/:id/revoke", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const id = String(req.params.id);
+    const r = await pool.query(
+      `UPDATE "BuildPartnerApiKey" SET "revokedAt" = COALESCE("revokedAt", NOW())
+       WHERE "id" = $1 RETURNING *`,
+      [id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "key_not_found");
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_key_revoke_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/admin/leads
 adminRouter.get("/leads", async (req, res) => {
   try {

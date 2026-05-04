@@ -31,6 +31,8 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qpaynet", changeFrequency: "weekly", priority: 0.8 },
   { path: "/qpaynet/merchant", changeFrequency: "weekly", priority: 0.7 },
   { path: "/qpaynet/transactions", changeFrequency: "daily", priority: 0.6 },
+  { path: "/qpaynet/request", changeFrequency: "weekly", priority: 0.65 },
+  { path: "/qpaynet/requests", changeFrequency: "weekly", priority: 0.55 },
   { path: "/healthai", changeFrequency: "weekly", priority: 0.8 },
   { path: "/build", changeFrequency: "daily", priority: 1.0 },
   { path: "/build/vacancies", changeFrequency: "hourly", priority: 0.9 },

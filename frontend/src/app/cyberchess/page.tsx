@@ -2628,7 +2628,7 @@ export default function CyberChessPage(){
     editorMode,
     exec, sSel, sVm, sPms, sPmSel, sPromo,
     sScratchSel, sScratchVm, sScratchBk, sScratchHist, sScratchLm,
-    snd, click,
+    snd,
     filterMovesByDice,
   });
   const boardRef = _bi.boardRef;
@@ -2638,6 +2638,7 @@ export default function CyberChessPage(){
   const ghostFrom = _bi.ghostFrom;
   const dragHover = _bi.dragHover;
   const recentDragRef = _bi.recentDragRef;
+  const bDownHandledRef = _bi.bDownHandledRef;
   const onBoardDown = _bi.onBoardDown;
   const onBoardMove = _bi.onBoardMove;
   const onBoardUp = _bi.onBoardUp;
@@ -3538,11 +3539,14 @@ export default function CyberChessPage(){
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onClick={e=>{
+                // onClick only clears annotations. All chess logic is in onBoardDown.
+                // If onBoardDown handled this press (within 150ms), skip entirely.
+                if(Date.now()-bDownHandledRef.current<150)return;
                 if(Date.now()-recentDragRef.current<200)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
-                // Левый клик чистит размышляющие стрелки/хайлайты во всех режимах.
                 if(arrows.length>0||sqHL.length>0)clearAnnotations();
-                click(sq);
+                // Only call click() for editor mode (onBoardDown doesn't handle placing pieces)
+                if(editorMode)click(sq);
               }}
               onMouseDown={e=>{
                 if(e.button!==2)return;
@@ -3674,17 +3678,7 @@ export default function CyberChessPage(){
                 const ringCol=isLegal?"#10b981":"#94a3b8";
                 return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
               })()}
-              {/* Ghost piece following cursor during drag */}
-              {ghostFrom&&(()=>{
-                const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
-                if(!gp)return null;
-                const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
-                return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(56px,9vw,88px)",height:"clamp(56px,9vw,88px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform"}}>
-                  <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}>
-                    <Piece type={gp.type as any} color={gp.color as any}/>
-                  </div>
-                </div>;
-              })()}
+              {/* Ghost moved to sibling of main so overflow:hidden of board cannot clip it */}
 
               {/* Move slide animation — летящая фигура поверх board */}
               {moveAnim&&(()=>{
@@ -7597,10 +7591,18 @@ export default function CyberChessPage(){
     </Modal>
 
     </ProductPageShell>
-    {/* Ghost element is created imperatively by the hook in useEffect via
-        document.createElement + appendChild(document.body). It lives
-        outside React's render tree entirely — no re-render can ever
-        overwrite its inline style. See useBoardInput.ts. */}
+    {/* Ghost piece — rendered OUTSIDE the board div so overflow:hidden cannot clip it.
+        position:fixed + zIndex:9999 → always visible on top of everything. */}
+    {ghostFrom&&(()=>{
+      const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
+      if(!gp)return null;
+      const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
+      return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(60px,9vw,92px)",height:"clamp(60px,9vw,92px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:9999,willChange:"transform"}}>
+        <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))"}}>
+          <Piece type={gp.type as any} color={gp.color as any}/>
+        </div>
+      </div>;
+    })()}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
     </main>);
 }

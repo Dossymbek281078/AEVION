@@ -566,16 +566,31 @@ async function ensureRequestsTable(): Promise<void> {
     ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_url TEXT;
     ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_secret TEXT;
     ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+    ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_last_error TEXT;
+    ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_next_retry_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS idx_qpr_notify_due ON qpaynet_payment_requests (notify_next_retry_at)
+      WHERE notify_url IS NOT NULL AND notified_at IS NULL;
   `).catch(() => {});
 }
 
-// Fire-and-forget HMAC-SHA256 signed webhook for payment_request events.
-// Matches AEVION convention: X-Aevion-Signature = sha256(timestamp + "." + JSON), X-Aevion-Timestamp.
+// Exponential backoff: 30s, 2m, 10m, 30m, 2h, then give up at 5 attempts.
+const RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 1_800_000, 7_200_000];
+const MAX_NOTIFY_ATTEMPTS = 5;
+
+function nextRetryAt(attempts: number): Date | null {
+  if (attempts >= MAX_NOTIFY_ATTEMPTS) return null;
+  return new Date(Date.now() + RETRY_DELAYS_MS[Math.min(attempts, RETRY_DELAYS_MS.length - 1)]);
+}
+
+// Single-attempt HMAC-SHA256 signed webhook delivery for payment_request events.
+// Returns { ok, status, error } for the caller to decide on retry scheduling.
+// Matches AEVION convention: X-Aevion-Signature = HMAC-SHA256(secret, timestamp + "." + body).
 async function fireRequestWebhook(
   url: string,
   secret: string,
   payload: Record<string, unknown>,
-): Promise<void> {
+): Promise<{ ok: boolean; status: number; error?: string }> {
   const body = JSON.stringify(payload);
   const timestamp = Math.floor(Date.now() / 1000);
   const signed = `${timestamp}.${body}`;
@@ -583,7 +598,7 @@ async function fireRequestWebhook(
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 5000);
-    await fetch(url, {
+    const r = await fetch(url, {
       method: "POST",
       signal: ctrl.signal,
       headers: {
@@ -596,9 +611,29 @@ async function fireRequestWebhook(
       body,
     });
     clearTimeout(t);
+    return { ok: r.ok, status: r.status, error: r.ok ? undefined : `HTTP ${r.status}` };
   } catch (err) {
-    console.warn("[qpaynet] webhook fire failed:", err instanceof Error ? err.message : err);
+    return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// Build payload for a paid request — used by both initial fire and retries.
+async function buildPaidPayload(
+  pool: ReturnType<typeof getPool>,
+  pr: { id: string; token: string; amount: bigint; description: string; paid_by: string | null; paid_tx_id: string | null; paid_at: Date | null },
+): Promise<Record<string, unknown>> {
+  return {
+    event: "payment_request.paid",
+    requestId: pr.id,
+    token: pr.token,
+    amount: fromTiin(pr.amount),
+    fee: fromTiin(feeFor(pr.amount)),
+    currency: "KZT",
+    description: pr.description,
+    paidBy: pr.paid_by,
+    paidTxId: pr.paid_tx_id,
+    paidAt: pr.paid_at?.toISOString?.() ?? null,
+  };
 }
 
 // POST /api/qpaynet/requests — create payment request (auth required)
@@ -758,9 +793,9 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
 
   const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
 
-  // Fire-and-forget HMAC-signed webhook to merchant if notify_url was set.
+  // Async webhook with retry queue (handled by background worker on failure).
   if (pr.notify_url && pr.notify_secret) {
-    fireRequestWebhook(pr.notify_url, pr.notify_secret, {
+    const payload = {
       event: "payment_request.paid",
       requestId: pr.id,
       token: req.params.token,
@@ -771,8 +806,21 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
       paidBy: fromWalletId,
       paidTxId: txOutId,
       paidAt: new Date().toISOString(),
-    }).then(() => pool.query("UPDATE qpaynet_payment_requests SET notified_at=NOW() WHERE id=$1", [pr.id]))
-      .catch(() => {});
+    };
+    fireRequestWebhook(pr.notify_url, pr.notify_secret, payload).then(async (result) => {
+      if (result.ok) {
+        await pool.query(
+          "UPDATE qpaynet_payment_requests SET notified_at=NOW(), notify_attempts=1, notify_next_retry_at=NULL WHERE id=$1",
+          [pr.id],
+        );
+      } else {
+        const next = nextRetryAt(1);
+        await pool.query(
+          "UPDATE qpaynet_payment_requests SET notify_attempts=1, notify_last_error=$1, notify_next_retry_at=$2 WHERE id=$3",
+          [result.error?.slice(0, 500) ?? "unknown", next, pr.id],
+        );
+      }
+    }).catch(() => {});
   }
 
   res.json({
@@ -797,6 +845,32 @@ qpaynetRouter.delete("/requests/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/qpaynet/requests/:id/deliveries — owner sees webhook delivery state
+qpaynetRouter.get("/requests/:id/deliveries", async (req, res) => {
+  await ensureRequestsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    `SELECT id, notify_url, notify_attempts, notify_last_error, notify_next_retry_at, notified_at
+     FROM qpaynet_payment_requests
+     WHERE id=$1 AND owner_id=$2`,
+    [req.params.id, auth.sub ?? auth.email ?? "anon"],
+  );
+  if (!r.rows[0]) return res.status(404).json({ error: "not_found" });
+  const d = r.rows[0];
+  res.json({
+    requestId: d.id,
+    notifyUrl: d.notify_url,
+    attempts: d.notify_attempts,
+    lastError: d.notify_last_error,
+    nextRetryAt: d.notify_next_retry_at,
+    deliveredAt: d.notified_at,
+    status: d.notified_at ? "delivered" : (d.notify_attempts >= MAX_NOTIFY_ATTEMPTS ? "exhausted" : (d.notify_attempts > 0 ? "retrying" : "pending")),
+  });
+});
+
 // GET /api/qpaynet/health — lightweight liveness check for hub monitor
 qpaynetRouter.get("/health", async (_req, res) => {
   try {
@@ -808,3 +882,66 @@ qpaynetRouter.get("/health", async (_req, res) => {
     res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// ── Background webhook retry worker ──────────────────────────────────────────
+// Runs every 30s. Picks up to 20 due deliveries per tick to avoid hammering DB.
+// Idempotent: marks notified_at on success, advances notify_next_retry_at on
+// failure with exponential backoff. After MAX_NOTIFY_ATTEMPTS, leaves
+// notify_next_retry_at = NULL → row stops being polled (status=exhausted).
+
+const RETRY_INTERVAL_MS = 30_000;
+const RETRY_BATCH = 20;
+let retryWorkerStarted = false;
+
+async function runRetryTick(): Promise<void> {
+  try {
+    await ensureTables();
+    await ensureRequestsTable();
+    const pool = getPool();
+    const due = await pool.query(
+      `SELECT id, token, amount, description, notify_url, notify_secret,
+              notify_attempts, paid_by, paid_tx_id, paid_at
+       FROM qpaynet_payment_requests
+       WHERE notify_url IS NOT NULL
+         AND notified_at IS NULL
+         AND notify_next_retry_at IS NOT NULL
+         AND notify_next_retry_at <= NOW()
+         AND notify_attempts < $1
+       ORDER BY notify_next_retry_at ASC
+       LIMIT $2`,
+      [MAX_NOTIFY_ATTEMPTS, RETRY_BATCH],
+    );
+    for (const row of due.rows) {
+      const payload = await buildPaidPayload(pool, {
+        id: row.id, token: row.token, amount: BigInt(row.amount),
+        description: row.description, paid_by: row.paid_by,
+        paid_tx_id: row.paid_tx_id, paid_at: row.paid_at,
+      });
+      const result = await fireRequestWebhook(row.notify_url, row.notify_secret, payload);
+      const attempts = (row.notify_attempts ?? 0) + 1;
+      if (result.ok) {
+        await pool.query(
+          "UPDATE qpaynet_payment_requests SET notified_at=NOW(), notify_attempts=$1, notify_next_retry_at=NULL, notify_last_error=NULL WHERE id=$2",
+          [attempts, row.id],
+        );
+      } else {
+        const next = nextRetryAt(attempts);
+        await pool.query(
+          "UPDATE qpaynet_payment_requests SET notify_attempts=$1, notify_last_error=$2, notify_next_retry_at=$3 WHERE id=$4",
+          [attempts, result.error?.slice(0, 500) ?? "unknown", next, row.id],
+        );
+      }
+    }
+  } catch (err) {
+    console.warn("[qpaynet retry] tick failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+export function startQpaynetRetryWorker(): void {
+  if (retryWorkerStarted) return;
+  retryWorkerStarted = true;
+  // Skip in test env unless explicitly enabled.
+  if (process.env.NODE_ENV === "test" && process.env.QPAYNET_RETRY_IN_TEST !== "1") return;
+  setInterval(() => { void runRetryTick(); }, RETRY_INTERVAL_MS).unref();
+  console.log(`[qpaynet] retry worker started (interval ${RETRY_INTERVAL_MS}ms, batch ${RETRY_BATCH})`);
+}

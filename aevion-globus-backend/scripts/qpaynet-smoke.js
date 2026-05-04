@@ -188,6 +188,11 @@ async function run() {
   assert("notifyUrl valid → 201", okNotify.status === 201);
   assert("notifySecret returned", typeof okNotify.body.notifySecret === "string" && okNotify.body.notifySecret.length > 20);
 
+  const deliveries = await req("GET", `/api/qpaynet/requests/${okNotify.body.id}/deliveries`, null, auth);
+  assert("GET /requests/:id/deliveries → 200", deliveries.status === 200);
+  assert("delivery has status field", typeof deliveries.body.status === "string");
+  assert("delivery has notifyUrl", deliveries.body.notifyUrl === "https://example.com/hook");
+
   // 17. Insufficient balance
   console.log("\n12. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);

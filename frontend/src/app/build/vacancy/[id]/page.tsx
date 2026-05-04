@@ -17,6 +17,7 @@ import { useBuildAuth } from "@/lib/build/auth";
 import { emailError, isEmail } from "@/lib/build/validate";
 import { useToast } from "@/components/build/Toast";
 import { VacancyDetailSkeleton } from "@/components/build/Skeleton";
+import { recordVacancyView } from "@/lib/build/recentlyViewed";
 
 export default function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -34,6 +35,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
       .getVacancy(id)
       .then(async (v) => {
         setVacancy(v);
+        recordVacancyView({ id: v.id, title: v.title, salary: v.salary, city: v.city });
         if (me?.id) {
           const isOwner = v.clientId === me.id;
           const [my, owned] = await Promise.all([
@@ -92,7 +94,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               {vacancy.status}
             </span>
             <VacancyExpiryBadge expiresAt={vacancy.expiresAt} status={vacancy.status} />
-            {isOwner && vacancy.viewCount != null && vacancy.viewCount > 0 && (
+            {vacancy.viewCount != null && vacancy.viewCount >= 5 && (
               <span title="Total page views">👁 {vacancy.viewCount} views</span>
             )}
           </div>

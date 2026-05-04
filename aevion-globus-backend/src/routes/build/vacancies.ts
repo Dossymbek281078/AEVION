@@ -265,6 +265,33 @@ vacanciesRouter.get("/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/vacancies/mine/funnel
+// Recruiter overview: every vacancy the caller owns plus funnel counts
+// (views, total apps, pending, accepted, rejected). Used by /build/dashboard.
+vacanciesRouter.get("/mine/funnel", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const r = await pool.query(
+      `SELECT v."id", v."title", v."status", v."salary", v."salaryCurrency",
+              v."viewCount", v."createdAt", v."expiresAt", v."projectId",
+              p."title" AS "projectTitle",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "appsTotal",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING')::int AS "appsPending",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'ACCEPTED')::int AS "appsAccepted",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'REJECTED')::int AS "appsRejected"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE p."clientId" = $1
+       ORDER BY v."status" ASC, v."createdAt" DESC`,
+      [auth.sub],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancies_mine_funnel_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/:id/similar
 // Public: returns up to 6 OPEN vacancies that overlap on skills (or fall back
 // to same-city if the source vacancy has no skills declared). Used by the

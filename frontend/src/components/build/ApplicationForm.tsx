@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { buildApi, BuildApiError } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { AiImprove } from "@/components/build/AiImprove";
+import { useToast } from "@/components/build/Toast";
 
 export function ApplicationForm({
   vacancyId,
@@ -17,6 +18,7 @@ export function ApplicationForm({
   onApplied?: () => void;
 }) {
   const token = useBuildAuth((s) => s.token);
+  const toast = useToast();
   const [message, setMessage] = useState("");
   const qs = questions || [];
   const [answers, setAnswers] = useState<string[]>(() => qs.map(() => ""));
@@ -24,6 +26,29 @@ export function ApplicationForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [referredBy, setReferredBy] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  async function generateCoverLetter() {
+    setAiBusy(true);
+    try {
+      const r = await buildApi.aiCoverLetter({ vacancyId, locale: "ru" });
+      setMessage(r.coverLetter);
+      if (r.skillsOverlap.length > 0) {
+        toast.success(`Drafted with skill match: ${r.skillsOverlap.slice(0, 3).join(", ")}`);
+      } else {
+        toast.info("Draft ready — review and tweak before sending.");
+      }
+    } catch (e) {
+      const err = e as BuildApiError;
+      if (err.code === "profile_required_for_ai_cover_letter") {
+        toast.error("Fill out your profile first — Claude needs material to work from.");
+      } else {
+        toast.error(err.message);
+      }
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   // Read ?ref=<userId> from URL once on mount to attribute applications
   // back to whoever shared the vacancy link.
@@ -78,7 +103,18 @@ export function ApplicationForm({
   return (
     <form onSubmit={submit} className="space-y-3">
       <label className="block text-sm font-medium text-slate-200">
-        Cover note (optional)
+        <span className="flex items-center justify-between gap-2">
+          <span>Cover note (optional)</span>
+          <button
+            type="button"
+            onClick={generateCoverLetter}
+            disabled={aiBusy}
+            className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
+            title="Claude drafts a cover from your profile + this vacancy"
+          >
+            {aiBusy ? "✨ drafting…" : "✨ Generate from profile"}
+          </button>
+        </span>
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}

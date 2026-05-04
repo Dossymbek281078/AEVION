@@ -263,3 +263,92 @@ ${kindGuide[kind]}
     return fail(res, 500, "ai_improve_failed", { details: (err as Error).message });
   }
 });
+
+// POST /api/build/ai/cover-letter
+// Body: { vacancyId: string, locale?: "ru" | "en" | "kz" }
+// Generates a tailored cover note from the user's profile + vacancy. The
+// candidate sees a draft they can edit before submitting — never auto-submits.
+aiRouter.post("/cover-letter", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 64 });
+    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
+    const locale = typeof req.body?.locale === "string" ? req.body.locale.trim().slice(0, 8) : "ru";
+
+    const [vRow, pRow] = await Promise.all([
+      pool.query(
+        `SELECT v."title", v."description", v."skillsJson", v."salary", v."salaryCurrency", v."city",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."id" = $1 LIMIT 1`,
+        [vacancyId.value],
+      ),
+      pool.query(
+        `SELECT "name","title","summary","skillsJson","experienceYears","city"
+         FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
+        [auth.sub],
+      ),
+    ]);
+    if (vRow.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (pRow.rowCount === 0) return fail(res, 400, "profile_required_for_ai_cover_letter");
+
+    const v = vRow.rows[0];
+    const p = pRow.rows[0];
+    const vacancySkills = safeParseJson(v.skillsJson, [] as string[]);
+    const profileSkills = safeParseJson(p.skillsJson, [] as string[]);
+    const overlap = vacancySkills.filter((s: string) =>
+      profileSkills.some((ps: string) => ps.toLowerCase() === s.toLowerCase()),
+    );
+
+    const userPayload = `VACANCY:
+Title: ${v.title}
+Project: ${v.projectTitle || "—"}
+City: ${v.city || v.projectCity || "—"}
+Salary: ${v.salary > 0 ? `${v.salary} ${v.salaryCurrency || "USD"}` : "не указано"}
+Description:
+${v.description}
+Required skills: ${vacancySkills.join(", ") || "—"}
+
+CANDIDATE PROFILE:
+Name: ${p.name}
+Headline: ${p.title || "—"}
+City: ${p.city || "—"}
+Years experience: ${p.experienceYears ?? 0}
+Skills: ${profileSkills.join(", ") || "—"}
+Skills overlap with vacancy: ${overlap.join(", ") || "(none)"}
+Summary:
+${p.summary || "—"}
+
+Сформируй сопроводительное. 3–5 коротких предложений. Без markdown.`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — карьерный консультант на платформе AEVION QBuild (стройка/инженерные роли).
+Сгенерируй сопроводительное письмо к отклику от лица кандидата.
+
+Жёсткие правила:
+- 3–5 коротких предложений, разговорный, профессиональный.
+- Опирайся ТОЛЬКО на данные из профиля. Никаких вымышленных компаний, объектов, цифр.
+- Если в профиле нет нужного навыка — НЕ заявляй, что он есть.
+- Подсвети 1–2 совпадения между навыками вакансии и профилем.
+- Заверши готовностью обсудить детали и выйти.
+- Ответ строго на ${locale === "en" ? "English" : locale === "kz" ? "Kazakh" : "Russian"}.
+- Без преамбул типа "Вот письмо:". Только сам текст.
+- Без markdown.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 700,
+      cacheSystem: false,
+    });
+
+    return ok(res, {
+      coverLetter: reply.text.trim(),
+      skillsOverlap: overlap,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_cover_letter_failed", { details: (err as Error).message });
+  }
+});

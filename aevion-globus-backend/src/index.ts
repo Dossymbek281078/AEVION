@@ -39,6 +39,7 @@ import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { qcontractRouter } from "./routes/qcontract";
 import { healthaiRouter } from "./routes/healthai";
+import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -407,6 +408,10 @@ app.use("/api/qcontract", qcontractRouter);
 
 // HealthAI — personal AI doctor
 app.use("/api/healthai", healthaiRouter);
+
+// QPayNet — embedded payment infrastructure
+app.use("/api/qpaynet", qpaynetRouter);
+startQpaynetRetryWorker();
 
 app.use(
   (

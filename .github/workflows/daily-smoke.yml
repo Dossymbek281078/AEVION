@@ -112,3 +112,40 @@ jobs:
       - name: Stop backend
         if: always()
         run: kill $(cat /tmp/backend.pid) 2>/dev/null || true
+
+  bank-prod-smoke:
+    name: Bank prod smoke (Vercel → Railway)
+    # Only run on cron and manual dispatch — skip on push triggers so we
+    # don't hit prod on every commit.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Run bank prod smoke
+        run: node scripts/bank-prod-smoke.js
+        env:
+          # Default in the script already points to the Vercel rewrite URL.
+          # Override with BASE secret to pin a stable prod URL if needed.
+          BASE: ${{ secrets.BANK_PROD_SMOKE_BASE || '' }}
+          ARTIFACT: /tmp/smoke-bank-prod-${{ github.run_id }}.json
+
+      - name: Upload smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bank-prod-smoke-${{ github.run_id }}
+          path: /tmp/smoke-bank-prod-${{ github.run_id }}.json
+          retention-days: 14

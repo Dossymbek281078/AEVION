@@ -146,3 +146,15 @@ smetaTrainerRouter.get("/stats", async (_req, res) => {
     res.status(500).json({ error: "stats_failed", detail: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// GET /api/smeta-trainer/health — liveness probe for hub monitor
+smetaTrainerRouter.get("/health", async (_req, res) => {
+  try {
+    await ensureTables();
+    const pool = getPool();
+    const r = await pool.query("SELECT COUNT(*) AS n FROM smeta_sessions");
+    res.json({ status: "ok", service: "smeta-trainer", sessions: Number(r.rows[0]?.n ?? 0) });
+  } catch (err) {
+    res.status(503).json({ status: "error", service: "smeta-trainer", error: err instanceof Error ? err.message : String(err) });
+  }
+});

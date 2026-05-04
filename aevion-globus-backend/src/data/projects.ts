@@ -117,9 +117,9 @@ export const projects: GlobusProject[] = [
     code: "QPAYNET",
     name: "QPayNet Embedded — Payment Core",
     description:
-      "Встроенная платёжная система для приложений AEVION: счета, переводы, комиссии, интеграции.",
+      "Встроенная платёжная система для приложений AEVION: кошельки, переводы, мерчант-ключи, комиссии.",
     kind: "service",
-    status: "planning",
+    status: "mvp",
     priority: 1,
     tags: ["payments", "engine", "fintech"],
     createdAt: now,
@@ -177,7 +177,7 @@ export const projects: GlobusProject[] = [
     description:
       "Персональный ИИ-доктор и тренер здоровья: рекомендации, трекеры, персональные планы.",
     kind: "product",
-    status: "planning",
+    status: "mvp",
     priority: 2,
     tags: ["health", "ai", "coach"],
     createdAt: now,
@@ -369,7 +369,7 @@ export const projects: GlobusProject[] = [
     description:
       "Платформа найма для строительной вертикали: проекты, вакансии, тестовые задания, AI-оценка резюме, лояльность и cashback в AEV.",
     kind: "product",
-    status: "in_progress",
+    status: "mvp",
     priority: 1,
     tags: ["hiring", "construction", "ai", "marketplace"],
     createdAt: now,
@@ -385,6 +385,21 @@ export const projects: GlobusProject[] = [
     status: "idea",
     priority: 4,
     tags: ["dao", "governance"],
+    createdAt: now,
+    updatedAt: now,
+  },
+
+  // ===== EDUCATION / TRAINING =====
+  {
+    id: "smeta-trainer",
+    code: "SMETA",
+    name: "Smeta Trainer — AI Сметный тренажёр РК",
+    description:
+      "Учебная платформа по сметному делу Казахстана: 5 уровней, 222 расценки ЭСН РК, AI-советник, сквозной кейс школа №47.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["education", "construction", "ai", "kazakhstan"],
     createdAt: now,
     updatedAt: now,
   },

@@ -15,6 +15,7 @@ import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { internalMintForDevice } from "./aev";
 import { getPool } from "../lib/dbPool";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getKycProvider } from "../lib/kyc";
@@ -224,7 +225,105 @@ async function ensureBureauTables(): Promise<void> {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS "BureauAuditLog_action_at_idx" ON "BureauAuditLog" ("action", "at" DESC);`,
   );
+  // P3-4: Trust Graph append-only edge log. One row per cert verification
+  // event — links certId ↔ userId at a tier ("verified" / "notarized" / "filed-kz").
+  // Read by Trust Graph visualisations and by AEC reward provisioning.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauTrustEdge" (
+      "id" TEXT PRIMARY KEY,
+      "certId" TEXT NOT NULL,
+      "userId" TEXT,
+      "tier" TEXT NOT NULL,
+      "verificationId" TEXT,
+      "verifiedName" TEXT,
+      "paymentAmountCents" INTEGER,
+      "paymentCurrency" TEXT,
+      "aecRewardPlanned" INTEGER NOT NULL DEFAULT 0,
+      "aecRewardClaimedAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_certId_idx" ON "BureauTrustEdge" ("certId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_userId_idx" ON "BureauTrustEdge" ("userId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_tier_createdAt_idx" ON "BureauTrustEdge" ("tier", "createdAt" DESC);`,
+  );
   bureauTablesReady = true;
+}
+
+// AEC reward per Bureau tier. AEC↔fiat boundary R1 (see docs/bank/AEC_FIAT_BOUNDARY.md):
+// fiat→AEC is platform-minted on event, never automatic from Stripe. Default 0
+// until product decides reward sizing; the row is still recorded so a later
+// claim flow can backfill mints when a user device links their account.
+function bureauAecReward(tier: string): number {
+  const env = (key: string): number => {
+    const raw = process.env[key];
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  };
+  switch (tier) {
+    case "verified":
+      return env("BUREAU_VERIFIED_AEC_REWARD");
+    case "notarized":
+      return env("BUREAU_NOTARIZED_AEC_REWARD");
+    case "filed-kz":
+      return env("BUREAU_FILED_KZ_AEC_REWARD");
+    case "filed-pct":
+      return env("BUREAU_FILED_PCT_AEC_REWARD");
+    default:
+      return 0;
+  }
+}
+
+// Record a Trust Graph edge for a verification event. Idempotent on
+// (certId, tier) — re-calling on an already-recorded edge is a no-op so
+// /upgrade/:certId stays idempotent end-to-end. AEC mint itself happens
+// separately via aev.ts when the user device claims the reward.
+async function recordTrustEdge(opts: {
+  certId: string;
+  userId: string | null;
+  tier: string;
+  verificationId: string | null;
+  verifiedName: string | null;
+  paymentAmountCents: number | null;
+  paymentCurrency: string | null;
+}): Promise<{ edgeId: string; aecRewardPlanned: number; idempotent: boolean }> {
+  const existing = await pool.query(
+    `SELECT "id","aecRewardPlanned" FROM "BureauTrustEdge"
+       WHERE "certId" = $1 AND "tier" = $2 LIMIT 1`,
+    [opts.certId, opts.tier],
+  );
+  if (existing.rows.length > 0) {
+    return {
+      edgeId: existing.rows[0].id,
+      aecRewardPlanned: existing.rows[0].aecRewardPlanned,
+      idempotent: true,
+    };
+  }
+  const reward = bureauAecReward(opts.tier);
+  const edgeId = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO "BureauTrustEdge"
+       ("id","certId","userId","tier","verificationId","verifiedName",
+        "paymentAmountCents","paymentCurrency","aecRewardPlanned")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      edgeId,
+      opts.certId,
+      opts.userId,
+      opts.tier,
+      opts.verificationId,
+      opts.verifiedName,
+      opts.paymentAmountCents,
+      opts.paymentCurrency,
+      reward,
+    ],
+  );
+  return { edgeId, aecRewardPlanned: reward, idempotent: false };
 }
 
 function slugify(name: string): string {
@@ -518,10 +617,21 @@ bureauRouter.post("/upgrade/:certId", async (req, res) => {
       return res.status(404).json({ error: "certificate not found" });
     }
     if (cRows[0].authorVerificationLevel === "verified") {
+      const trust = await recordTrustEdge({
+        certId,
+        userId: v.userId,
+        tier: "verified",
+        verificationId,
+        verifiedName: v.kycVerifiedName,
+        paymentAmountCents: v.paymentAmountCents,
+        paymentCurrency: v.paymentCurrency,
+      });
       return res.json({
         certId,
         verificationLevel: "verified",
         idempotent: true,
+        trustEdgeId: trust.edgeId,
+        aecRewardPlanned: trust.aecRewardPlanned,
       });
     }
 
@@ -541,17 +651,165 @@ bureauRouter.post("/upgrade/:certId", async (req, res) => {
       [verificationId],
     );
 
+    const trust = await recordTrustEdge({
+      certId,
+      userId: v.userId,
+      tier: "verified",
+      verificationId,
+      verifiedName: v.kycVerifiedName,
+      paymentAmountCents: v.paymentAmountCents,
+      paymentCurrency: v.paymentCurrency,
+    });
+
     res.json({
       certId,
       verificationLevel: "verified",
       verifiedName: v.kycVerifiedName,
       verifiedAt: new Date().toISOString(),
       provider: v.kycProvider,
+      trustEdgeId: trust.edgeId,
+      aecRewardPlanned: trust.aecRewardPlanned,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "upgrade failed";
     console.error("[Bureau] upgrade:", msg);
     captureBureauError(err, { route: "upgrade" });
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/bureau/trust-edges/cert/:certId
+ * Public read of all Trust Graph edges for a certificate (one per tier
+ * the cert has reached). No PII beyond verifiedName.
+ */
+bureauRouter.get("/trust-edges/cert/:certId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const { certId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "id","tier","verifiedName","paymentAmountCents",
+              "paymentCurrency","aecRewardPlanned","createdAt"
+         FROM "BureauTrustEdge"
+        WHERE "certId" = $1
+        ORDER BY "createdAt" ASC`,
+      [certId],
+    );
+    res.json({ certId, edges: rows });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "trust edges read failed";
+    captureBureauError(err, { route: "trust-edges-by-cert" });
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/bureau/trust-edges/me
+ * Authenticated read of all Trust Graph edges that name the caller as
+ * the verified party. Used by Bank dashboard to surface earned tiers.
+ */
+bureauRouter.get("/trust-edges/me", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) {
+      return res.status(401).json({ error: "authentication required" });
+    }
+    const { rows } = await pool.query(
+      `SELECT "id","certId","tier","verifiedName","paymentAmountCents",
+              "paymentCurrency","aecRewardPlanned","aecRewardClaimedAt","createdAt"
+         FROM "BureauTrustEdge"
+        WHERE "userId" = $1
+        ORDER BY "createdAt" DESC
+        LIMIT 200`,
+      [user.userId],
+    );
+    res.json({ userId: user.userId, edges: rows });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "trust edges read failed";
+    captureBureauError(err, { route: "trust-edges-by-user" });
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/bureau/trust-edges/:edgeId/claim-aec
+ * Body: { deviceId }
+ *
+ * Mints the planned AEC reward for a Trust Graph edge into the caller's
+ * device wallet. Bridges aev.ts (device-keyed wallets) and the auth-keyed
+ * Bureau verification flow — boundary rule R1 in AEC_FIAT_BOUNDARY.md.
+ *
+ * Idempotent: re-calling on an already-claimed edge returns the prior
+ * mint reference and does not re-mint. Caller's userId must match
+ * edge.userId; the device wallet, if previously bound, must also match.
+ */
+bureauRouter.post("/trust-edges/:edgeId/claim-aec", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) {
+      return res.status(401).json({ error: "authentication required" });
+    }
+    const { edgeId } = req.params;
+    const deviceId = typeof req.body?.deviceId === "string" ? req.body.deviceId.trim() : "";
+    if (!deviceId) {
+      return res.status(400).json({ error: "deviceId is required" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT "id","certId","userId","tier","aecRewardPlanned","aecRewardClaimedAt"
+         FROM "BureauTrustEdge" WHERE "id" = $1`,
+      [edgeId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "edge not found" });
+    }
+    const edge = rows[0];
+    if (edge.userId && edge.userId !== user.userId) {
+      return res.status(403).json({ error: "edge belongs to another user" });
+    }
+    if (edge.aecRewardClaimedAt) {
+      return res.json({
+        edgeId,
+        idempotent: true,
+        claimedAt: edge.aecRewardClaimedAt,
+        amount: edge.aecRewardPlanned,
+      });
+    }
+    if (!edge.aecRewardPlanned || edge.aecRewardPlanned <= 0) {
+      return res.status(409).json({ error: "no reward planned for this edge" });
+    }
+
+    const mint = await internalMintForDevice({
+      deviceId,
+      amount: edge.aecRewardPlanned,
+      sourceKind: "bureau-cert-reward",
+      sourceModule: "bureau",
+      sourceAction: `verified-tier-${edge.tier}`,
+      reason: `Bureau ${edge.tier} cert (${edge.certId})`,
+      expectedUserId: user.userId,
+    });
+    if (!mint.ok) {
+      return res.status(409).json({ error: mint.error });
+    }
+
+    await pool.query(
+      `UPDATE "BureauTrustEdge" SET "aecRewardClaimedAt" = NOW() WHERE "id" = $1`,
+      [edgeId],
+    );
+
+    res.json({
+      edgeId,
+      claimedAt: new Date().toISOString(),
+      amount: edge.aecRewardPlanned,
+      walletBalance: mint.wallet.balance,
+      ledgerEntryId: mint.entry.id,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "claim failed";
+    console.error("[Bureau] claim-aec:", msg);
+    captureBureauError(err, { route: "trust-edges-claim-aec" });
     res.status(500).json({ error: msg });
   }
 });

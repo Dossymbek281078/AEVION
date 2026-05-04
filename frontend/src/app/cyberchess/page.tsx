@@ -38,6 +38,12 @@ import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as
 import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
 import RepertoireModal, { loadRepertoire, saveRepertoire, type Repertoire } from "./Repertoire";
 import DailyMission, { bumpDaily } from "./DailyMission";
+import WhatIfButton from "./WhatIfButton";
+import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from "./BoardArt";
+import { useP2P, genRoomId, type P2PMessage } from "./P2P";
+import { generateShareSVG, downloadFile } from "./gameShare";
+import CoachPredictions from "./CoachPredictions";
+import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -137,33 +143,26 @@ function getAudioCtx():AudioContext|null{
 }
 function snd(t:string){if(isMuted())return;try{
   const x=getAudioCtx();if(!x)return;const n=x.currentTime;
-  // Generate short noise burst
-  const dur = t==="capture"?0.12 : t==="check"?0.08 : t==="premove"?0.04 : t==="x"?0.25 : 0.05;
-  const bufSize = Math.floor(x.sampleRate * dur);
-  const buf = x.createBuffer(1, bufSize, x.sampleRate);
-  const data = buf.getChannelData(0);
-  // White noise with fast exponential decay envelope
-  for(let i=0; i<bufSize; i++){
-    const env = Math.exp(-i/(bufSize*0.2)); // sharp attack, quick decay
-    data[i] = (Math.random()*2-1) * env;
-  }
-  const src = x.createBufferSource();
-  src.buffer = buf;
-  // Low-pass filter to remove harsh highs → wooden/tapping quality
-  const filt = x.createBiquadFilter();
-  filt.type = "lowpass";
-  filt.frequency.value = t==="capture" ? 800 : t==="check" ? 2000 : t==="premove" ? 1500 : 1200;
-  filt.Q.value = 1;
-  // High-pass to remove rumble
-  const hp = x.createBiquadFilter();
-  hp.type = "highpass";
-  hp.frequency.value = 200;
-  const g = x.createGain();
-  const vol = t==="premove"?0.15 : t==="capture"?0.3 : t==="x"?0.18 : 0.22;
-  g.gain.setValueAtTime(vol, n);
-  g.gain.exponentialRampToValueAtTime(0.001, n+dur);
-  src.connect(hp); hp.connect(filt); filt.connect(g); g.connect(x.destination);
-  src.start(n);
+  const makeBurst=(at:number,dur:number,lpFreq:number,vol:number)=>{
+    const bufSize=Math.floor(x.sampleRate*dur);
+    const buf=x.createBuffer(1,bufSize,x.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<bufSize;i++){d[i]=(Math.random()*2-1)*Math.exp(-i/(bufSize*0.18));}
+    const src=x.createBufferSource();src.buffer=buf;
+    const lp=x.createBiquadFilter();lp.type="lowpass";lp.frequency.value=lpFreq;lp.Q.value=0.8;
+    const hp=x.createBiquadFilter();hp.type="highpass";hp.frequency.value=180;
+    const g=x.createGain();g.gain.setValueAtTime(vol,at);g.gain.exponentialRampToValueAtTime(0.001,at+dur);
+    src.connect(hp);hp.connect(lp);lp.connect(g);g.connect(x.destination);src.start(at);
+  };
+  if(t==="move")   makeBurst(n,0.06,1400,0.22);
+  else if(t==="capture")  {makeBurst(n,0.10,700,0.35);makeBurst(n+0.03,0.07,1000,0.15);}
+  else if(t==="check")    makeBurst(n,0.07,2400,0.28);
+  else if(t==="castle")   {makeBurst(n,0.05,1200,0.2);makeBurst(n+0.08,0.05,1200,0.18);}
+  else if(t==="premove")  makeBurst(n,0.04,1800,0.12);
+  // Distinct premove-cancel sound: short downward tone — clearly different from "premove confirm".
+  else if(t==="cancel")   {makeBurst(n,0.05,900,0.18);makeBurst(n+0.05,0.05,500,0.13);}
+  else if(t==="x")        {for(let i=0;i<4;i++)makeBurst(n+i*0.08,0.07,600-i*60,0.15);}
+  else                    makeBurst(n,0.05,1200,0.20);
 }catch{}}
 
 /* ═══ Rating ═══ */
@@ -370,11 +369,24 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   const isLifted=(iS||iPS)&&!isDragOrigin;
   // Coord label color: contrast against cell background
   const coordCol=bg.includes("e2e8f0")||bg.includes("f8fafc")||bg.includes("cbd5e1")||bg.includes("bfdbfe")||bg.includes("dcfce7")||bg.includes("fed7aa")||bg.includes("fef9c3")?"rgba(30,41,59,0.5)":"rgba(255,255,255,0.55)";
+  // Snap-on-land: when isAnimDest flips true→false, the slide just landed —
+  // briefly apply cc-piece-snap so the piece "settles" with a tiny bounce.
+  const prevAnimDestRef=useRef(false);
+  const[snapNonce,setSnapNonce]=useState(0);
+  useEffect(()=>{
+    if(prevAnimDestRef.current&&!isAnimDest){
+      setSnapNonce(n=>n+1);
+    }
+    prevAnimDestRef.current=isAnimDest;
+  },[isAnimDest]);
+  // The inner piece div is keyed on snapNonce so a snap-trigger remounts it
+  // and the cc-piece-snap class plays its animation once on the fresh element.
+  const snapClass=snapNonce>0&&iL&&!iCk?"cc-piece-snap":"";
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.12s"}}>
     {iV&&!hasPiece&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
-    {hasPiece&&<div style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
+    {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
     {coordFile&&<div style={{position:"absolute",bottom:"5%",right:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordFile}</div>}
@@ -416,6 +428,14 @@ export default function CyberChessPage(){
   const[repertoire,sRepertoire]=useState<Repertoire>(()=>loadRepertoire());
   useEffect(()=>{saveRepertoire(repertoire)},[repertoire]);
   const[repertoireOpen,sRepertoireOpen]=useState(false);
+  const[boardArt,sBoardArt]=useState<BoardArtId>(()=>{try{return(localStorage.getItem("aevion_chess_art_v1")||"off") as BoardArtId}catch{return"off"}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_art_v1",boardArt)}catch{}},[boardArt]);
+  const[p2pMode,sP2pMode]=useState(false);
+  const[p2pRoomId,sP2pRoomId]=useState("");
+  const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
+  const[ghostDuelMode,sGhostDuelMode]=useState(false);
+  const[ghostDuelConfig,sGhostDuelConfig]=useState<GhostDuelConfig|null>(null);
+  const[ghostDuelDivergePly,sGhostDuelDivergePly]=useState<number|null>(null);
   const[scratchOn,sScratchOn]=useState(false);
   const[scratchGame,sScratchGame]=useState<Chess|null>(null);
   const[scratchHist,sScratchHist]=useState<string[]>([]);
@@ -801,6 +821,16 @@ export default function CyberChessPage(){
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
+  // "Your turn" board glow — fires for ~700ms when AI just moved.
+  // Suppressed during hotseat/p2p (those use other cues), and on first myT.
+  const prevMyTRef=useRef(myT);
+  const[turnFlashKey,sTurnFlashKey]=useState(0);
+  useEffect(()=>{
+    if(!prevMyTRef.current&&myT&&on&&!over&&!hotseat){
+      sTurnFlashKey(k=>k+1);
+    }
+    prevMyTRef.current=myT;
+  },[myT,on,over,hotseat]);
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
   const moveListScrollRef=useRef<HTMLDivElement>(null);
   const fPz=PUZZLES.filter(p=>{
@@ -976,6 +1006,29 @@ export default function CyberChessPage(){
     };
   },[bk,tab,setup,think,over,sfOk]);
 
+  // Real-time blunder/brilliant detection: compare eval before and after user's move.
+  const prevEvalCpRef=useRef<number>(0);
+  const prevBkRef=useRef<number>(-1);
+  useEffect(()=>{
+    if(!on||over||tab!=="play"||hist.length<1)return;
+    const lastMoveWasMine=hist.length%2===(pCol==="w"?1:0);
+    if(!lastMoveWasMine)return; // only react to user's own moves
+    const prevCp=prevEvalCpRef.current;
+    const curCp=evalCp;
+    const cpFromMePerspective=pCol==="w"?curCp:-curCp;
+    const prevFromMe=pCol==="w"?prevCp:-prevCp;
+    const drop=prevFromMe-cpFromMePerspective;
+    if(drop>=300)showToast(`?? Блундер! Потеряно ${(drop/100).toFixed(1)} (${pCol==="w"?"―"+Math.round(curCp/100):"+"+(Math.round(-curCp/100))})`, "error");
+    else if(drop>=150)showToast(`? Неточность — позиция ухудшилась`, "error");
+    else if(cpFromMePerspective-prevFromMe>=200)showToast("!! Блестящий ход", "success");
+  },[evalCp]);// eslint-disable-line react-hooks/exhaustive-deps
+  // track prev eval
+  useEffect(()=>{
+    if(bk===prevBkRef.current)return;
+    prevBkRef.current=bk;
+    prevEvalCpRef.current=evalCp;
+  },[bk]);// eslint-disable-line react-hooks/exhaustive-deps
+
   // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
   // worker on browseIdx/tab changes; deps included `tab` so every tab switch fired
   // `new SF(); s.init()` which loaded WASM and blocked the main thread ~500ms-1s each.
@@ -1047,6 +1100,25 @@ export default function CyberChessPage(){
     })();
     return()=>{cancelled=true};
   },[tab,hist.length,sfOk]);
+
+  // ── P2P friend play ─────────────────────────────────────────────────────
+  const p2pMsgRef=useRef<((msg:P2PMessage)=>void)|null>(null);
+  const p2p=useP2P({onMessage:(msg)=>p2pMsgRef.current?.(msg)});
+  const p2pRef=useRef({mode:false,send:p2p.send});
+  p2pRef.current={mode:p2pMode,send:p2p.send};
+  // Auto-join via URL param: /cyberchess?room=ABC123&color=w
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const room=params.get("room");const hostColor=(params.get("color")||"w") as ChessColor;
+    if(!room)return;
+    sP2pMode(true);sP2pRoomId(room);
+    p2p.join(room);
+    // Take opposite color of host
+    const myColor:ChessColor=hostColor==="w"?"b":"w";
+    sPCol(myColor);sFlip(myColor==="b");
+    showToast(`🤝 Подключаюсь к комнате ${room}…`,"info");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   // Когда true — следующий апдейт lm (свой ход юзера) НЕ запускает slide-animation.
   // Юзер только что сам перетащил/щёлкнул — анимация лишь добавляет восприятия лага.
@@ -1229,6 +1301,8 @@ export default function CyberChessPage(){
     let mv;
     try{mv=game.move({from,to,promotion:pr||"q"});}catch{return false;}
     if(!mv)return false;
+    // P2P: send move to peer
+    if(p2pRef.current.mode&&p2pRef.current.send){p2pRef.current.send({t:"mv",uci:`${from}${to}${pr||""}`,san:mv.san,at:Date.now()})}
     if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(game.isCheck())snd("check");else snd("move");
     if(mv.captured){
       const cc=pc(mv.captured,mv.color==="w"?"b":"w");
@@ -1835,6 +1909,9 @@ export default function CyberChessPage(){
   const lmKeyRef=useRef("");
   // Capture animation: захваченная фигура коротко fade+shrink на cell взятия (lichess-style).
   const[capAnim,sCapAnim]=useState<{sq:Square;piece:{type:any;color:any};key:number}|null>(null);
+  // Premove cancel flash: красный pulse на FROM-клетке отменённого премува (~600ms).
+  const[cancelFlash,sCancelFlash]=useState<{sq:Square;key:number}|null>(null);
+  useEffect(()=>{if(!cancelFlash)return;const id=window.setTimeout(()=>sCancelFlash(null),650);return()=>clearTimeout(id);},[cancelFlash?.key]);
   useEffect(()=>{
     if(!lm||!lm.from||!lm.to||lm.from===lm.to)return;
     const key=`${lm.from}-${lm.to}-${bk}`;
@@ -1870,12 +1947,56 @@ export default function CyberChessPage(){
     doPremoveRef.current();
   },[bk,over,on,tab,pCol,pms.length]);
 
+  /* ── P2P onMessage — wired here so exec is in scope ── */
+  useEffect(()=>{
+    p2pMsgRef.current=(msg:P2PMessage)=>{
+      if(msg.t==="mv"){
+        const f=msg.uci.slice(0,2) as Square,t=msg.uci.slice(2,4) as Square;
+        const pr=msg.uci[4] as any||undefined;
+        exec(f,t,pr);
+      }else if(msg.t==="hello"){sP2pOpponentName((msg as any).name||"Оппонент")}
+      else if(msg.t==="resign"){sOver(`${p2pOpponentName} сдался — Вы победили!`);sOn(false)}
+      else if(msg.t==="draw-accept"){sOver("Ничья (договорились)");sOn(false)}
+    };
+    return()=>{p2pMsgRef.current=null};
+  },[exec,p2pOpponentName]);
+
+  /* ── P2P status → connect toast ── */
+  useEffect(()=>{
+    if(p2p.status==="connected")showToast(`🤝 ${p2pOpponentName} подключился — игра началась!`,"success");
+    if(p2p.status==="closed"&&p2pMode)showToast("P2P соединение закрыто","error");
+  },[p2p.status]);// eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── AI turn trigger ── */
   // Snapshot fen at trigger time so a late-arriving Stockfish bestmove
   // can't try to apply itself on a position the user has already moved on.
   useEffect(()=>{
     if(over||!on||(tab!=="play"&&tab!=="coach"))return;
     if(hotseat)return; // two-player hotseat: no AI moves
+    if(p2pMode)return; // P2P mode: opponent is human, no AI
+    // Ghost Duel: replay past game moves as ghost's turns
+    if(ghostDuelMode&&ghostDuelConfig){
+      const ply=hist.length;
+      const ghostSan=getGhostMoveAt(ghostDuelConfig,ply);
+      if(ghostSan){
+        const fenAtTrigger2=game.fen();
+        const t2=setTimeout(()=>{
+          try{
+            if(game.fen()!==fenAtTrigger2){sThink(false);return}
+            const mv=game.move(ghostSan);
+            if(mv){
+              sLm({from:mv.from,to:mv.to});sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);
+              snd(mv.captured?"capture":mv.san.includes("O-")?"castle":game.isCheck()?"check":"move");
+              const div=checkDivergence(ghostDuelConfig,[...hist,mv.san]);
+              if(div!==null&&ghostDuelDivergePly===null){sGhostDuelDivergePly(div);showToast(`👻 Отклонение от прошлой партии на ходу ${Math.floor(div/2)+1}!`,"info")}
+            }
+          }catch{}
+          sThink(false);
+        },600+Math.random()*400);
+        return()=>clearTimeout(t2);
+      }
+      // past game ended → fall through to Stockfish
+    }
     if(openingDrill)return; // Opening Trainer plays bot moves from script
     if(game.turn()===pCol)return;
     sThink(true);
@@ -2049,7 +2170,7 @@ export default function CyberChessPage(){
       sThink(false);
     },delay);
     return()=>clearTimeout(t);
-  },[bk,over,on,tab]);
+  },[bk,over,on,tab,p2pMode,ghostDuelMode,ghostDuelConfig,ghostDuelDivergePly]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
@@ -2141,7 +2262,14 @@ export default function CyberChessPage(){
       // (FROM или TO) — отменяет этот премув. Цепочки премувов теперь только драгом
       // (drag отрабатывается в pointerup отдельно и не попадает сюда).
       const pmHit=curPms.findIndex(x=>x.from===sq||x.to===sq);
-      if(pmHit>=0){sPms(v=>v.filter((_,i)=>i!==pmHit));snd("premove");return}
+      if(pmHit>=0){
+        const cancelled=curPms[pmHit];
+        sPms(v=>v.filter((_,i)=>i!==pmHit));
+        snd("cancel");
+        sCancelFlash({sq:cancelled.from,key:Date.now()});
+        showToast(`Премув отменён · ${cancelled.from}→${cancelled.to}`,"info");
+        return;
+      }
 
       // Case 2: no selection → click on own piece (real or virtual) starts new premove
       if(vp?.color===pCol){sPmSel(sq);return}
@@ -2213,6 +2341,8 @@ export default function CyberChessPage(){
     sVariantStartFen(startFen);sVariantArmies(armies);
     const ng=startFen?new Chess(startFen):new Chess();
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
+    // Reset Ghost Duel and P2P if they were active (new game started)
+    if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}
     reinfLastMoveRef.current=0;
     sChecksByWhite(0);sChecksByBlack(0);lastCheckBkRef.current=-1;
     sDropPool(EMPTY_POOL);sDropPickerOpen(false);sSelectedDropPiece(null);lastCaptureBkRef.current=-1;
@@ -2518,7 +2648,18 @@ export default function CyberChessPage(){
         try{g.load(fenParts.join(" "));}catch{}
         const from=g.get(pm.from);
         if(!from||from.color!==pCol)continue;
-        try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+        // First try the move as-is.
+        let moved=false;
+        try{const mv=g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});if(mv)moved=true;}catch{}
+        if(moved)continue;
+        // "Rescue" premove: TO is occupied by our own piece. Project as if opponent
+        // captured that piece (remove it), then retry the move so chained premoves
+        // see the right virtual state. If still illegal, skip this premove.
+        const occ=g.get(pm.to);
+        if(occ&&occ.color===pCol){
+          try{g.remove(pm.to);}catch{}
+          try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+        }
       }
       return g;
     }catch{return game;}
@@ -2533,7 +2674,7 @@ export default function CyberChessPage(){
     editorMode,
     exec, sSel, sVm, sPms, sPmSel, sPromo,
     sScratchSel, sScratchVm, sScratchBk, sScratchHist, sScratchLm,
-    snd, click,
+    snd,
     filterMovesByDice,
   });
   const boardRef = _bi.boardRef;
@@ -2543,11 +2684,56 @@ export default function CyberChessPage(){
   const ghostFrom = _bi.ghostFrom;
   const dragHover = _bi.dragHover;
   const recentDragRef = _bi.recentDragRef;
+  const bDownHandledRef = _bi.bDownHandledRef;
   const onBoardDown = _bi.onBoardDown;
   const onBoardMove = _bi.onBoardMove;
   const onBoardUp = _bi.onBoardUp;
   const onBoardCancel = _bi.onBoardCancel;
   const sqFromPoint = _bi.sqFromBoard;
+
+  // ── NATIVE pointer fallback (mounts AFTER the board is in the DOM) ──────
+  // The board lives inside a conditional branch (`{(!setup||tab==="puzzles"||...)&&...}`),
+  // so on the first render boardRef.current can be null. A plain useEffect on
+  // mount would run too early. We use an effect keyed on the SAME conditions
+  // that gate the board, so it re-runs once the board appears, and an interval
+  // re-check on top of that as belt-and-suspenders for hot-reload cases where
+  // React's synthetic delegation might have been dropped.
+  useEffect(() => {
+    let attached: HTMLDivElement | null = null;
+    let cleanup: (() => void) | null = null;
+    const wrap = (e: PointerEvent): React.PointerEvent => ({
+      clientX: e.clientX, clientY: e.clientY,
+      pointerId: e.pointerId, pointerType: e.pointerType,
+      button: e.button,
+      preventDefault: () => e.preventDefault(),
+      stopPropagation: () => e.stopPropagation(),
+      target: e.target as any,
+      currentTarget: e.currentTarget as any,
+    } as any);
+    const tryAttach = () => {
+      const el = boardRef.current;
+      if (!el || el === attached) return;
+      if (cleanup) cleanup();
+      attached = el;
+      const onDown = (e: PointerEvent) => { try { onBoardDown(wrap(e)); } catch {} };
+      const onMove = (e: PointerEvent) => { try { onBoardMove(wrap(e)); } catch {} };
+      const onUp   = (e: PointerEvent) => { try { onBoardUp  (wrap(e)); } catch {} };
+      const onCan  = (e: PointerEvent) => { try { onBoardCancel(wrap(e)); } catch {} };
+      el.addEventListener("pointerdown",   onDown, { passive: false });
+      el.addEventListener("pointermove",   onMove, { passive: false });
+      el.addEventListener("pointerup",     onUp);
+      el.addEventListener("pointercancel", onCan);
+      cleanup = () => {
+        el.removeEventListener("pointerdown",   onDown);
+        el.removeEventListener("pointermove",   onMove);
+        el.removeEventListener("pointerup",     onUp);
+        el.removeEventListener("pointercancel", onCan);
+      };
+    };
+    tryAttach();
+    const id = window.setInterval(tryAttach, 600);
+    return () => { window.clearInterval(id); if (cleanup) cleanup(); };
+  }, [onBoardDown, onBoardMove, onBoardUp, onBoardCancel, setup, tab]);
 
   // Scratch — отдельный inst отображается вместо virtualGame.
   const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
@@ -3038,7 +3224,7 @@ export default function CyberChessPage(){
           {(()=>{
             type DashId="play"|"learn"|"meta";
             const dashes:{id:DashId;icon:string;title:string;hint:string;tint:string;ring:string;active:number}[]=[
-              {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · Турниры",         tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)},
+              {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · P2P · Ghost Duel", tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)+(p2pMode?1:0)+(ghostDuelMode?1:0)},
               {id:"learn",icon:"🎓",title:"Тренировка",   hint:"Координаты · Эндшпиль · Личность · Editor",tint:"linear-gradient(135deg,#fef3c7,#fde68a)",ring:"#d97706",active:0},
               {id:"meta", icon:"📊",title:"Анализ & Стрим",hint:"Game DNA · Insights · OBS · Live-озвучка", tint:"linear-gradient(135deg,#ede9fe,#ddd6fe)",ring:"#7c3aed",active:(streamerMode?1:0)+(liveCommentary?1:0)},
             ];
@@ -3085,6 +3271,18 @@ export default function CyberChessPage(){
                   <button onClick={()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл — играй вдвоём за одной доской","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${hotseat?"#3b82f6":CC.border}`,background:hotseat?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Hotseat 1v1</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:hotseat?"#3b82f6":"#e5e7eb",color:hotseat?"#fff":CC.textDim}}>{hotseat?"ON":"OFF"}</span></div>
                     <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без AI — оба игрока ходят на одном устройстве.</div>
+                  </button>
+                  {/* P2P — play with friend online via WebRTC */}
+                  <button onClick={()=>{
+                    const room=genRoomId();const myColor:ChessColor="w";
+                    sP2pMode(true);sP2pRoomId(room);sHotseat(false);sRivalMode(false);
+                    p2p.host(room);
+                    sPCol(myColor);sFlip(false);
+                    const url=typeof window!=="undefined"?`${window.location.origin}/cyberchess?room=${room}&color=${myColor}`:`/cyberchess?room=${room}&color=${myColor}`;
+                    try{navigator.clipboard.writeText(url).then(()=>showToast(`🤝 Комната ${room} — ссылка скопирована! Жди друга…`,"success"))}catch{showToast(`🤝 Комната: ${room}. Отправь другу эту ссылку`,"info")}
+                  }} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${p2pMode?"#059669":CC.border}`,background:p2pMode?"linear-gradient(135deg,#d1fae5,#a7f3d0)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🤝</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Друг онлайн</span>{p2p.status!=="idle"&&<span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:p2p.status==="connected"?"#059669":"#f59e0b",color:"#fff"}}>{p2p.status==="connected"?"ONLINE":p2p.status==="open"?"Жду…":p2p.status}</span>}</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{p2pMode&&p2pRoomId?`Комната: ${p2pRoomId} · ${p2p.latencyMs?`${p2p.latencyMs}ms`:""}`:p2p.errorMsg||"P2P через WebRTC — без сервера. Отправь другу ссылку."}</div>
                   </button>
                   <button onClick={()=>sShowTournament(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🏆</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Турниры</span></div>
@@ -3364,6 +3562,17 @@ export default function CyberChessPage(){
                   <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                     <span style={{fontSize:13,fontWeight:800,color:CC.gold}}>{g.rating}</span>
                     <Badge tone={catBadge} size="xs">{g.category}</Badge>
+                    {g.moves.length>4&&<button title="⚔ Дуэль с прошлым собой" onClick={evt=>{
+                      evt.stopPropagation();
+                      const src:GhostSourceGame={id:g.id,date:g.date,moves:g.moves,playerColor:g.playerColor as "w"|"b",result:g.result,rating:g.rating,aiLevel:g.aiLevel,opening:g.opening};
+                      const cfg=makeDuelConfig(src,"rematch");
+                      sGhostDuelMode(true);sGhostDuelConfig(cfg);sGhostDuelDivergePly(null);
+                      sTab("play");sSetup(false);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sP2pMode(false);
+                      const myCol=cfg.userPlaysAs;sPCol(myCol);sFlip(myCol==="b");
+                      const ng=new Chess();setGame(ng);sBk(k=>k+1);
+                      sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sOn(true);sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+                      showToast(`👻 Дуэль: ${formatPastDate(g.date)} — ${g.aiLevel}. Попробуй сыграть лучше!`,"success");
+                    }} style={{padding:"2px 7px",borderRadius:6,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:10,fontWeight:900,cursor:"pointer"}}>⚔</button>}
                   </div>
                 </button>);
               })}
@@ -3380,9 +3589,44 @@ export default function CyberChessPage(){
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
 
+          {/* ── TOP STRIP above board: premove queue + (vs-computer only) recent moves
+                + analysis best line. P2P shows only premoves to keep play surface clean. */}
+          {(tab==="play"||tab==="coach")&&(pms.length>0||(!p2pMode&&hist.length>0))&&<div
+            style={{width:"min(920px,calc(100vw - 32px))",marginBottom:6,display:"flex",flexDirection:"column",gap:6}}>
+            {/* Premove row — shown in any mode while a premove is queued */}
+            {pms.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:8,background:"linear-gradient(90deg,#eff6ff,#dbeafe)",border:"1px solid #bfdbfe",flexWrap:"wrap"}}>
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:"#1d4ed8"}}>Премувы · {pms.length}</span>
+              {pms.map((pm,i)=>(<span key={`pm-strip-${i}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:999,background:"#fff",border:"1px solid #93c5fd",fontSize:11,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:"#1e40af",fontWeight:800}}>
+                <span style={{minWidth:14,height:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900}}>{i+1}</span>
+                {pm.from}→{pm.to}
+              </span>))}
+              <span style={{flex:1}}/>
+              <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title="Отменить последний премув"
+                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶ Undo</button>
+              <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title="Отменить все премувы"
+                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Clear</button>
+            </div>}
+            {/* Recent moves — vs computer / coach only. P2P hides this to focus on play. */}
+            {!p2pMode&&hist.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:8,background:CC.surface1,border:`1px solid ${CC.border}`,overflowX:"auto",scrollbarWidth:"thin"}}
+              className="cc-no-scrollbar">
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:CC.textDim,flexShrink:0}}>Ходы</span>
+              {hist.slice(Math.max(0,hist.length-12)).map((san,i)=>{
+                const realIdx=Math.max(0,hist.length-12)+i;
+                const isLast=realIdx===hist.length-1;
+                const moveNum=Math.floor(realIdx/2)+1;
+                const isWhite=realIdx%2===0;
+                return <span key={`top-mv-${realIdx}`} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",borderRadius:6,background:isLast?"rgba(5,150,105,0.15)":"transparent",border:isLast?`1px solid ${CC.accent}`:"1px solid transparent",fontSize:12,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:CC.text,fontWeight:isLast?900:600,flexShrink:0}}>
+                  {isWhite&&<span style={{color:CC.textMute,fontSize:10,fontWeight:700}}>{moveNum}.</span>}
+                  {san}
+                </span>;
+              })}
+            </div>}
+          </div>}
+
           <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px))",gap:4}}>
-            {/* Eval bar — with W/B labels + centered numeric badge */}
-            {sfOk&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
+            {/* Eval bar — with W/B labels + centered numeric badge.
+                Hidden in P2P mode (no analysis surface during human matches). */}
+            {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
               const pct=50+cp/30;
               const wPct=Math.max(2,Math.min(98,pct));
@@ -3393,6 +3637,8 @@ export default function CyberChessPage(){
               const isWhiteBetter=evalMate!==0?evalMate>0:evalCp>=0;
               const badgeBg=isWhiteBetter?"#ffffff":"#1e293b";
               const badgeFg=isWhiteBetter?"#0f172a":"#ffffff";
+              const absCp=Math.abs(evalMate!==0?9999:evalCp);
+              const strengthLabel=evalMate!==0?`M${Math.abs(evalMate)}`:absCp<20?"=":absCp<60?"±":absCp<150?"+":absCp<350?"±±":"±±±";
               const pipStyle=(side:"W"|"B"):React.CSSProperties=>side==="W"
                 ? {background:"#f8fafc",color:CC.text,border:`1px solid ${CC.border}`}
                 : {background:"#1e293b",color:"#fff"};
@@ -3409,19 +3655,25 @@ export default function CyberChessPage(){
                   <div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",padding:"2px 5px",background:badgeBg,color:badgeFg,fontSize:10,fontWeight:900,fontFamily:"ui-monospace, monospace",borderRadius:4,boxShadow:"0 1px 3px rgba(0,0,0,0.3)",whiteSpace:"nowrap",minWidth:26,textAlign:"center",letterSpacing:0.3}}>{label}</div>
                 </div>
                 <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(botSide)}}>{botSide}</div>
+                <div style={{fontSize:8,fontWeight:900,color:absCp<20?CC.textMute:isWhiteBetter?CC.accent:CC.danger,letterSpacing:0.5,textAlign:"center",marginTop:2}}>{strengthLabel}</div>
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
             <div ref={boardRef}
               onPointerDown={onBoardDown}
+              onPointerMove={onBoardMove}
+              onPointerUp={onBoardUp}
+              onPointerCancel={onBoardCancel}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onClick={e=>{
+                // onClick only clears annotations / forwards to editor. All chess logic
+                // lives in the native pointerdown handler attached via useEffect.
                 if(Date.now()-recentDragRef.current<200)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
-                // Левый клик чистит размышляющие стрелки/хайлайты во всех режимах.
+                if(editorMode){click(sq);return}
+                if(Date.now()-bDownHandledRef.current<150)return;
                 if(arrows.length>0||sqHL.length>0)clearAnnotations();
-                click(sq);
               }}
               onMouseDown={e=>{
                 if(e.button!==2)return;
@@ -3443,11 +3695,20 @@ export default function CyberChessPage(){
                 // Right-click на тот же квадрат: если на нём премув — удалить премув
                 // (старая полезная фича). Иначе — toggle highlight.
                 const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
-                if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
+                if(pmIdx>=0){
+                  const cancelled=pms[pmIdx];
+                  sPms(p=>p.filter((_,i)=>i!==pmIdx));
+                  snd("cancel"); // distinct sound for premove cancel
+                  sCancelFlash({sq:cancelled.from,key:Date.now()});
+                  showToast(`Премув отменён · ${cancelled.from}→${cancelled.to}`,"info");
+                  return;
+                }
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
+              {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
+              {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
                 const tm:ThreatMap=computeThreatMap(bd as any);
@@ -3531,6 +3792,14 @@ export default function CyberChessPage(){
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
                   coordFile={isBottomRow?sq[0]:undefined}/>;
               }))}
+              {/* Premove cancel flash — красный pulse на FROM-клетке отменённого премува */}
+              {cancelFlash&&(()=>{
+                const cf=FILES.indexOf(cancelFlash.sq[0]);
+                const cr=8-parseInt(cancelFlash.sq[1]);
+                const cc=flip?7-cf:cf;const crr=flip?7-cr:cr;
+                return <div key={`cancel-${cancelFlash.key}`} className="cc-cancel-flash"
+                  style={{position:"absolute",left:`${cc*12.5}%`,top:`${crr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:7,boxSizing:"border-box"}}/>;
+              })()}
               {/* Capture animation — захваченная фигура pop+fade на cell взятия */}
               {capAnim&&(()=>{
                 const cf=FILES.indexOf(capAnim.sq[0]);
@@ -3542,6 +3811,12 @@ export default function CyberChessPage(){
                   </div>
                 </div>;
               })()}
+              {/* "Your turn" flash — brief inner-glow overlay when AI just moved.
+                  Keyed on turnFlashKey so each transition mounts a fresh overlay
+                  whose CSS animation runs once and self-removes via opacity 0. */}
+              {turnFlashKey>0&&<div key={`tflash-${turnFlashKey}`}
+                className="cc-turn-flash"
+                style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:6,borderRadius:6}}/>}
               {/* Hover halo — кольцо на cell под курсором во время drag (lichess-style) */}
               {dragHover&&(()=>{
                 const hf=FILES.indexOf(dragHover[0]);
@@ -3549,19 +3824,9 @@ export default function CyberChessPage(){
                 const hc=flip?7-hf:hf;const hrr=flip?7-hr:hr;
                 const isLegal=vm.has(dragHover);
                 const ringCol=isLegal?"#10b981":"#94a3b8";
-                return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
+                return <div className={isLegal?"cc-hover-pulse":undefined} style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
               })()}
-              {/* Ghost piece following cursor during drag */}
-              {ghostFrom&&(()=>{
-                const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
-                if(!gp)return null;
-                const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
-                return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(56px,9vw,88px)",height:"clamp(56px,9vw,88px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform"}}>
-                  <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}>
-                    <Piece type={gp.type as any} color={gp.color as any}/>
-                  </div>
-                </div>;
-              })()}
+              {/* Ghost moved to sibling of main so overflow:hidden of board cannot clip it */}
 
               {/* Move slide animation — летящая фигура поверх board */}
               {moveAnim&&(()=>{
@@ -3745,11 +4010,11 @@ export default function CyberChessPage(){
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
             }}>⌨️ Ход текстом</Btn>}
             {over&&<Btn size="sm" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
-            {pms.length>0&&<Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>sPms(p=>p.slice(0,-1))} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Undo</Btn>}
-            {pms.length>0&&<Btn size="sm" variant="secondary" onClick={()=>{sPms([]);sPmSel(null)}} style={{background:"#fef2f2",color:CC.danger,borderColor:"#fca5a5"}}>✕ Clear ({pms.length})</Btn>}
+            {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
+                Removed from this bottom controls row to avoid duplication. */}
           </div>
           {on&&!over&&!setup&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
-            <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
+            <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
             <Btn size="sm" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
             <Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{
               if(hist.length<2){showToast("No moves","error");return}
@@ -3790,13 +4055,35 @@ export default function CyberChessPage(){
               const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
               sReelMeta({white,black,result});sShowReel(true);
             }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Auto-Reel</Btn>
+            <Btn size="sm" variant="secondary" onClick={()=>{
+              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+              const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
+              const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
+              const blob=new Blob([svg],{type:"image/svg+xml"});
+              downloadFile(blob,`aevion-chess-${new Date().toISOString().slice(0,10)}.svg`);
+              showToast("SVG скачан — открой в браузере чтобы поделиться","success");
+            }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Share SVG</Btn>
           </div>}
         </div>
 
         {/* Right panel */}
         <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
-          {/* Daily Mission widget */}
-          {(tab==="play"||tab==="puzzles")&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
+          {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
+              (it reads as "noise" when user is focused on the board). Shown in puzzles tab
+              and when no game is in progress (between matches). */}
+          {((tab==="puzzles"&&!on)||(tab==="play"&&!on&&!p2pMode))&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
+          {/* Coach Predictions: shows opponent's likely next moves while AI thinks.
+              Hidden in P2P (no analytics during human-vs-human matches per design). */}
+          {tab==="play"&&on&&!over&&!hotseat&&!p2pMode&&sfOk&&<CoachPredictions
+            fen={game.fen()}
+            opponentColor={pCol==="w"?"b":"w"}
+            isOpponentTurn={game.turn()!==pCol}
+            lastMoveUci={lm?`${lm.from}${lm.to}`:null}
+            enabled={coachAIEnabled}
+            onToggle={()=>sCoachAIEnabled(v=>!v)}
+            runEngine={runEnginePromise}
+          />}
           {/* Opening Drill HUD */}
           {openingDrill&&<Card padding={SPACE[3]} tone="surface1"
             style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>
@@ -3852,6 +4139,24 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
+          {/* P2P connection HUD during play */}
+          {p2pMode&&(tab==="play")&&<div style={{padding:"8px 14px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:`1px solid ${p2p.status==="connected"?"#10b981":"#6ee7b7"}`,display:"flex",alignItems:"center",gap:SPACE[2]}}>
+            <span style={{fontSize:16}}>🤝</span>
+            <span style={{fontWeight:900,color:"#065f46",fontSize:13}}>{p2pOpponentName}</span>
+            <span style={{fontSize:11,padding:"2px 8px",borderRadius:RADIUS.full,background:p2p.status==="connected"?"#059669":"#f59e0b",color:"#fff",fontWeight:800}}>{p2p.status==="connected"?"CONNECTED":p2p.status==="open"?"Waiting for friend…":p2p.status}</span>
+            {p2p.latencyMs>0&&<span style={{fontSize:11,color:"#065f46"}}>ping {p2p.latencyMs}ms</span>}
+            {p2pRoomId&&<span style={{fontSize:10,color:"#047857",fontFamily:"ui-monospace,monospace",marginLeft:"auto"}}>#{p2pRoomId}</span>}
+            <button onClick={()=>{p2p.disconnect();sP2pMode(false);sP2pRoomId("")}} style={{padding:"2px 8px",borderRadius:6,border:"1px solid #6ee7b7",background:"white",color:"#065f46",fontSize:10,fontWeight:800,cursor:"pointer"}}>✕ Disconnect</button>
+          </div>}
+          {/* Ghost Duel HUD */}
+          {ghostDuelMode&&ghostDuelConfig&&on&&!over&&(tab==="play")&&<div style={{padding:"8px 14px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"1px solid #a78bfa",display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
+            <span style={{fontSize:18}}>👻</span>
+            <span style={{fontWeight:900,color:"#6d28d9",fontSize:13}}>Дуэль с прошлым</span>
+            <span style={{fontSize:11,color:"#5b21b6"}}>{formatPastDate(ghostDuelConfig.pastDate)} · {ghostDuelConfig.pastAiLevel} · ход {hist.length}/{ghostDuelConfig.pastMoves.length}</span>
+            {ghostDuelDivergePly!==null&&<span style={{fontSize:11,color:"#dc2626",fontWeight:800}}>⚡ Отклонение на ходу {Math.floor(ghostDuelDivergePly/2)+1}</span>}
+            <div style={{flex:1}}/>
+            <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
+          </div>}
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
@@ -4268,6 +4573,7 @@ export default function CyberChessPage(){
                 const sanMoves=uciToSan(analFen||game.fen(),line.moves);
                 const uciMoves=line.moves;
                 const baseFen=analFen||game.fen();
+                const bestSan=sanMoves[0]||uciMoves[0]||"";
                 return(<div key={i} style={{padding:"5px 10px",borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",gap:8,background:i===0?"rgba(5,150,105,0.03)":"transparent"}}>
                   <div style={{minWidth:20,height:20,borderRadius:4,background:i===0?T.accent:i===1?T.blue:T.dim,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
                   <div style={{minWidth:40,padding:"2px 5px",borderRadius:4,background:isPos?"#065f46":"#1e293b",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",textAlign:"center",flexShrink:0}}>{isPos?"+":""}{evalStr}</div>
@@ -4282,6 +4588,7 @@ export default function CyberChessPage(){
                     })}
                     {sanMoves.length>8&&<span style={{fontSize:10,color:T.dim}}>…</span>}
                   </div>
+                  {bestSan&&<WhatIfButton fen={baseFen} san={bestSan} evalStr={evalStr} rank={i+1} isBest={i===0}/>}
                 </div>);
               })}
             </div>
@@ -5514,7 +5821,15 @@ export default function CyberChessPage(){
           ["M","Вкл./выкл. звук"],
           ["N","Новая партия (в Play, до старта)"],
           ["R","📚 Открыть / закрыть Репертуар дебютов"],
+          ["Ctrl+Shift+D","Debug HUD (drag-механика)"],
           ["?","Показать / скрыть эту подсказку"],
+        ]},
+        {title:"Эксклюзивные фичи AEVION",rows:[
+          ["⚔ в «Мои партии»","Ghost Duel — дуэль с прошлой собой"],
+          ["🤝 Друг онлайн","P2P без сервера — отправь другу ссылку"],
+          ["BoardArt в Настройках","Декор доски: Шанырак, Волна, Klimt…"],
+          ["?? / !! тосты","Авто-обнаружение блунда/брилланта"],
+          ["WhatIf в Analysis","AI объяснит любую кандидатную линию"],
         ]},
       ] as const).map(grp=><div key={grp.title} style={{marginBottom:SPACE[3]}}>
         <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6}}>{grp.title}</div>
@@ -7044,6 +7359,17 @@ export default function CyberChessPage(){
                 </button>;
               })}
             </div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>🖼 Декор доски (Board Art)</div>
+            <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
+              {BOARD_ART_OPTIONS.map(opt=>{
+                const selected=boardArt===opt.v;
+                return <button key={opt.v} className="cc-focus-ring" onClick={()=>{sBoardArt(opt.v);showToast(`Арт: ${opt.label}`,"info")}}
+                  title={opt.hint}
+                  style={{padding:"5px 12px",borderRadius:RADIUS.full,border:selected?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,background:selected?CC.accentSoft:CC.surface1,cursor:"pointer",fontSize:12,fontWeight:selected?800:600,color:selected?CC.accent:CC.textDim,transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                  {opt.label}
+                </button>;
+              })}
+            </div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>♟ Набор фигур</div>
             <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap",marginBottom:SPACE[2]}}>
               {PIECE_SETS.map(ps=>{
@@ -7416,10 +7742,18 @@ export default function CyberChessPage(){
     </Modal>
 
     </ProductPageShell>
-    {/* Ghost element is created imperatively by the hook in useEffect via
-        document.createElement + appendChild(document.body). It lives
-        outside React's render tree entirely — no re-render can ever
-        overwrite its inline style. See useBoardInput.ts. */}
+    {/* Ghost piece — rendered OUTSIDE the board div so overflow:hidden cannot clip it.
+        position:fixed + zIndex:9999 → always visible on top of everything. */}
+    {ghostFrom&&(()=>{
+      const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
+      if(!gp)return null;
+      const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
+      return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(60px,9vw,92px)",height:"clamp(60px,9vw,92px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:9999,willChange:"transform"}}>
+        <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))"}}>
+          <Piece type={gp.type as any} color={gp.color as any}/>
+        </div>
+      </div>;
+    })()}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
     </main>);
 }

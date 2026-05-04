@@ -3,9 +3,10 @@
  * Bank prod smoke — end-to-end AEV wallet + QTrade account/transfer flow.
  *
  * Exercises the bank-relevant surface against a real deploy:
- *   AEV  : stats → mint → sync → spend → insufficient → ledger → wallet
- *   Auth : register fresh user → token (cleanup DELETE at end)
- *   QTrade: create 2 accounts → topup → transfer → list → cap-status
+ *   AEV    : stats → mint → sync → spend → insufficient → ledger → wallet
+ *   Auth   : register fresh user → token (cleanup DELETE at end)
+ *   QTrade : create 2 accounts → topup → transfer → list → cap-status
+ *   Bureau : trust-edges read endpoints + claim-aec auth/404 plumbing (P3-4)
  *
  * Default BASE points through the Vercel rewrite (`/api-backend/*`) so the
  * smoke validates the full prod path: browser → Vercel → Railway → Express →
@@ -181,6 +182,55 @@ async function runAuthAndQtrade() {
   return token;
 }
 
+async function runBureauTrustGraph(token) {
+  console.log(`\n[Bureau Trust Graph plumbing]`);
+  if (!token) {
+    fail("bureau trust-edges/me", "no token from auth step — skipped");
+    return;
+  }
+
+  // Fresh user has no edges. Endpoint should return 200 with empty array.
+  let r = await call("GET", "/api/bureau/trust-edges/me", { token });
+  if (r.status === 200 && Array.isArray(r.body?.edges) && r.body.edges.length === 0) {
+    ok("bureau /trust-edges/me empty", `userId=${r.body.userId?.slice(0, 8)} ${fmtMs(r.durMs)}`);
+  } else {
+    fail("bureau /trust-edges/me empty", `status=${r.status} edges=${JSON.stringify(r.body?.edges)?.slice(0, 200)}`);
+  }
+
+  // Public read for an unknown cert should return 200 with empty edges.
+  const fakeCert = `nonexistent-${Date.now()}`;
+  r = await call("GET", `/api/bureau/trust-edges/cert/${fakeCert}`);
+  if (r.status === 200 && Array.isArray(r.body?.edges) && r.body.edges.length === 0) {
+    ok("bureau /trust-edges/cert empty", fmtMs(r.durMs));
+  } else {
+    fail("bureau /trust-edges/cert empty", `status=${r.status}`);
+  }
+
+  // claim-aec without auth → 401.
+  r = await call("POST", `/api/bureau/trust-edges/${fakeCert}/claim-aec`, { body: { deviceId: DEVICE } });
+  if (r.status === 401) {
+    ok("bureau claim-aec unauth → 401", fmtMs(r.durMs));
+  } else {
+    fail("bureau claim-aec unauth", `expected 401 got ${r.status}`);
+  }
+
+  // claim-aec with auth on missing edge → 404.
+  r = await call("POST", `/api/bureau/trust-edges/${fakeCert}/claim-aec`, { body: { deviceId: DEVICE }, token });
+  if (r.status === 404 && r.body?.error === "edge not found") {
+    ok("bureau claim-aec missing edge → 404", fmtMs(r.durMs));
+  } else {
+    fail("bureau claim-aec missing edge", `expected 404 got ${r.status}`);
+  }
+
+  // claim-aec with auth, no deviceId → 400.
+  r = await call("POST", `/api/bureau/trust-edges/${fakeCert}/claim-aec`, { body: {}, token });
+  if (r.status === 400 && /deviceId/.test(r.body?.error || "")) {
+    ok("bureau claim-aec no deviceId → 400", fmtMs(r.durMs));
+  } else {
+    fail("bureau claim-aec no deviceId", `expected 400 got ${r.status}`);
+  }
+}
+
 async function cleanup(token) {
   if (!token) return;
   console.log(`\n[Cleanup]`);
@@ -195,6 +245,7 @@ async function main() {
 
   await runAev();
   const token = await runAuthAndQtrade();
+  await runBureauTrustGraph(token);
   await cleanup(token);
 
   if (ARTIFACT) {

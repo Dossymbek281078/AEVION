@@ -1,8 +1,14 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
-import { PrismaClient } from "@prisma/client";
 import { verifyBearerOptional } from "../lib/authJwt";
 
+// HealthAI tables aren't in prisma/schema.prisma yet — the route stays
+// in-memory until they are. The Prisma branches below are kept as
+// scaffolding for the eventual cutover; `prisma` is typed `any` so the
+// type checker doesn't insist on models that don't exist yet, and the
+// `useDb` flag stays false at runtime so those branches never execute.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PrismaClient = any;
 /**
  * HealthAI v1 — Personal AI Doctor MVP.
  *
@@ -91,6 +97,7 @@ const planSnapshotsMem = new Map<string, any[]>();
  * in-memory Maps. Init выполняется лениво при первом use, чтобы не
  * падать на старте если БД ещё не готова.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let prisma: PrismaClient | null = null;
 let useDb = false;
 let dbInitTried = false;
@@ -103,7 +110,9 @@ async function ensureDb() {
     return;
   }
   try {
-    const p = new PrismaClient();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { PrismaClient: PC } = require("@prisma/client");
+    const p = new PC();
     await p.healthProfile.findFirst();
     prisma = p;
     useDb = true;
@@ -404,7 +413,7 @@ const store = {
         orderBy: { generatedAt: "desc" },
         take: limit,
       });
-      return rows.map((r) => ({
+      return rows.map((r: any) => ({
         id: r.id,
         profileId: r.profileId,
         plan: r.plan,
@@ -449,7 +458,7 @@ const store = {
       const rows = await prisma.healthDailyLog.groupBy({
         by: ["profileId"],
       });
-      return rows.map((r) => r.profileId);
+      return rows.map((r: any) => r.profileId);
     }
     return Array.from(logsMem.keys());
   },
@@ -693,17 +702,17 @@ healthaiRouter.get("/profiles/me", async (req: Request, res: Response) => {
 healthaiRouter.delete("/profile/:id", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth-required" });
-  const profile = await store.getProfile(req.params.id);
+  const profile = await store.getProfile(String(req.params.id));
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   if (profile.userId !== auth.sub) {
     return res.status(403).json({ error: "not-profile-owner" });
   }
-  const ok = await store.deleteProfile(req.params.id);
+  const ok = await store.deleteProfile(String(req.params.id));
   res.json({ ok });
 });
 
 healthaiRouter.get("/profile/:id", async (req: Request, res: Response) => {
-  const profile = await store.getProfile(req.params.id);
+  const profile = await store.getProfile(String(req.params.id));
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   res.json({
     profile,
@@ -775,14 +784,14 @@ healthaiRouter.post("/log", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/history/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = String(req.params.id);
   const cks = await store.getChecks(profileId, 20);
   const lgs = await store.getLogs(profileId, 90);
   res.json({ checks: cks, logs: lgs });
 });
 
 healthaiRouter.get("/trends/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = String(req.params.id);
   const lgs = await store.getLogs(profileId);
   if (lgs.length === 0) {
     return res.json({
@@ -1093,7 +1102,7 @@ healthaiRouter.post("/import", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = String(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1271,7 +1280,7 @@ healthaiRouter.post("/cycle", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/cycle/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = String(req.params.profileId);
   const all = await store.getCycles(profileId);
   if (all.length === 0) {
     return res.json({
@@ -1425,7 +1434,7 @@ healthaiRouter.post("/screener/phq9", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/phq9/:profileId",
   async (req: Request, res: Response) => {
-    const last = PHQ9_LAST.get(req.params.profileId);
+    const last = PHQ9_LAST.get(String(req.params.profileId));
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1506,7 +1515,7 @@ healthaiRouter.post("/screener/gad7", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/gad7/:profileId",
   async (req: Request, res: Response) => {
-    const last = GAD7_LAST.get(req.params.profileId);
+    const last = GAD7_LAST.get(String(req.params.profileId));
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1534,7 +1543,7 @@ type GeneratedPlan = {
 };
 
 healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = String(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1723,7 +1732,7 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Response) => {
-  const list = await store.listPlanSnapshots(req.params.profileId);
+  const list = await store.listPlanSnapshots(String(req.params.profileId));
   res.json({
     snapshots: list.map((s) => ({
       id: s.id,
@@ -1737,14 +1746,14 @@ healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Respons
 });
 
 healthaiRouter.get("/plan/snapshot/:id", async (req: Request, res: Response) => {
-  const snap = await store.getPlanSnapshot(req.params.id);
+  const snap = await store.getPlanSnapshot(String(req.params.id));
   if (!snap) return res.status(404).json({ error: "snapshot-not-found" });
   res.json(snap);
 });
 
 /** Полный экспорт профиля для врача (или для backup). */
 healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = String(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   const cks = await store.getChecks(profileId);
@@ -1778,7 +1787,7 @@ const POP_BASELINE = {
 };
 
 healthaiRouter.get("/population/:profileId", async (req, res) => {
-  const profileId = req.params.profileId;
+  const profileId = String(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 

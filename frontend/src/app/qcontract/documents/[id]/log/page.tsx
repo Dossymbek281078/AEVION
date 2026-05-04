@@ -159,10 +159,29 @@ export default function DocumentLog() {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2 border-t border-slate-800">
+        <div className="flex gap-3 pt-2 border-t border-slate-800 flex-wrap">
           <Link href="/qcontract" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors">
             ← К дашборду
           </Link>
+          {data.views.length > 0 && (
+            <button
+              onClick={async () => {
+                const token = localStorage.getItem("aevion_token") ?? "";
+                const r = await fetch(`/api/qcontract/documents/${id}/log.csv`, { headers: { Authorization: `Bearer ${token}` } });
+                if (!r.ok) return;
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `qcontract-log-${id?.slice(0,8) ?? "doc"}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors"
+            >
+              ⬇ CSV аудит
+            </button>
+          )}
           {!data.expired && (
             <button
               onClick={async () => {

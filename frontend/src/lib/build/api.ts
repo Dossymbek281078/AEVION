@@ -61,6 +61,10 @@ export type BuildProfile = {
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
   introVideoUrl: string | null;
+  // KZ localisation (v3)
+  iin?: string | null;
+  bin?: string | null;
+  locale?: "ru" | "en" | "kz";
 };
 
 export type BuildExperience = {
@@ -214,6 +218,16 @@ export type BuildFile = {
   createdAt: string;
 };
 
+export type AiVacancyDraft = {
+  title: string;
+  skills: string[];
+  description: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: "RUB" | "KZT" | "USD";
+  questions: string[];
+};
+
 // ── Pricing types ────────────────────────────────────────────────────
 
 export type PlanKey = "FREE" | "PRO" | "AGENCY" | "PPHIRE";
@@ -321,6 +335,48 @@ export type BuildSubscription = {
   currency?: string;
 };
 
+export type LeaderboardRow = {
+  userId: string;
+  name: string;
+  photoUrl: string | null;
+  title: string | null;
+  city: string | null;
+  avgRating?: number | null;
+  reviewCount?: number;
+  hires?: number;
+  tierKey?: string;
+  tierLabel?: string;
+  trialsApproved?: number;
+};
+
+export type BuildStory = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userPhoto: string | null;
+  userCity: string | null;
+  content: string;
+  mediaUrl: string | null;
+  mediaType: "image" | "video" | null;
+  likeCount: number;
+  createdAt: string;
+};
+
+export type PaymentEventStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+
+export type BuildPaymentEvent = {
+  id: string;
+  applicationId: string;
+  clientId: string;
+  workerId: string;
+  amount: number;
+  currency: string;
+  dueDate: string;
+  status: PaymentEventStatus;
+  note: string | null;
+  createdAt: string;
+};
+
 // ── Envelope + transport ─────────────────────────────────────────────
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string; [k: string]: unknown };
@@ -417,6 +473,9 @@ export const buildApi = {
     safetyTrainingValid?: boolean;
     safetyTrainingUntil?: string | null;
     introVideoUrl?: string | null;
+    iin?: string | null;
+    bin?: string | null;
+    locale?: "ru" | "en" | "kz";
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
@@ -441,6 +500,19 @@ export const buildApi = {
     return call<{ items: TalentRow[]; total: number }>(
       "GET",
       `/api/build/profiles/search${qs ? "?" + qs : ""}`,
+    );
+  },
+  availableWorkers: (q?: { city?: string; specialty?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (q?.city) params.set("city", q.city);
+    if (q?.specialty) params.set("specialty", q.specialty);
+    if (q?.limit) params.set("limit", String(q.limit));
+    const qs = params.toString();
+    return call<{ items: TalentRow[]; total: number; asOf: string }>(
+      "GET",
+      `/api/build/availability/workers${qs ? "?" + qs : ""}`,
+      undefined,
+      { auth: false },
     );
   },
   addExperience: (input: {
@@ -935,6 +1007,156 @@ export const buildApi = {
     mimeType?: string;
     sizeBytes?: number;
   }) => call<BuildFile>("POST", "/api/build/files/upload", input),
+
+  // Availability
+  myAvailability: () =>
+    call<{ availableNow: boolean; availableUntil: string | null }>("GET", "/api/build/availability/me"),
+  setAvailability: (availableNow: boolean, hours: number) =>
+    call<{ availableNow: boolean; availableUntil: string | null }>("POST", "/api/build/availability", { availableNow, hours }),
+
+  // Push notifications
+  pushPublicKey: () =>
+    call<{ publicKey: string | null }>("GET", "/api/build/push/public-key"),
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    call<{ ok: boolean }>("POST", "/api/build/push/subscribe", sub),
+  pushUnsubscribe: (endpoint: string) =>
+    call<{ ok: boolean }>("POST", "/api/build/push/unsubscribe", { endpoint }),
+  pushTest: () =>
+    call<{ ok: boolean }>("POST", "/api/build/push/test"),
+
+  // Quick Apply
+  quickApply: (input: { vacancyId: string; referredByUserId?: string }) =>
+    call<{ applied: boolean; applicationId: string }>("POST", "/api/build/applications/quick", input),
+
+  // Safety Briefing
+  safetyTemplate: () =>
+    call<{ items: string[] }>("GET", "/api/build/safety-briefing/template", undefined, { auth: false }),
+  signSafetyBriefing: (shiftId: string, items: string[]) =>
+    call<{ signed: boolean }>("POST", "/api/build/safety-briefing", { shiftId, items }),
+
+  // Communities
+  communities: () =>
+    call<{
+      items: {
+        id: string; slug: string; name: string; specialty: string;
+        description: string | null; memberCount: number; lastMessageAt: string | null;
+      }[];
+    }>("GET", "/api/build/communities"),
+  community: (slug: string) =>
+    call<{
+      community: { id: string; slug: string; name: string; specialty: string; memberCount: number };
+      messages: {
+        id: string; userId: string; content: string; createdAt: string;
+        authorName: string | null; authorPhoto: string | null; buildRole: string | null;
+      }[];
+    }>("GET", `/api/build/communities/${encodeURIComponent(slug)}`),
+  joinCommunity: (slug: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/join`),
+  sendCommunityMessage: (slug: string, content: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/messages`, { content }),
+
+  // Documents (admin verification)
+  adminPendingDocuments: () =>
+    call<{
+      items: {
+        id: string; userId: string; docType: string; fileUrl: string;
+        createdAt: string; userName: string | null; userEmail: string | null;
+      }[];
+    }>("GET", "/api/build/documents/admin/pending"),
+  verifyDocument: (id: string) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/verify`),
+  rejectDocument: (id: string, reason?: string) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/reject`, { reason }),
+
+  // Shifts
+  myShifts: () =>
+    call<{
+      items: {
+        id: string; applicationId: string; workerId: string; clientId: string;
+        shiftDate: string; startTime: string | null; endTime: string | null;
+        status: string; checkInAt: string | null; checkOutAt: string | null;
+        workerName: string | null; clientName: string | null;
+      }[];
+    }>("GET", "/api/build/shifts/my"),
+  shiftCheckin: (id: string, lat: number | null | undefined, lng: number | null | undefined) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkin`, { lat: lat ?? null, lng: lng ?? null }),
+  shiftCheckout: (id: string) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkout`),
+
+  // Video Rooms
+  myVideoRooms: () =>
+    call<{
+      items: {
+        id: string; roomUrl: string; hostId: string; guestId: string | null;
+        scheduledAt: string | null; status: string; hostName: string | null;
+        guestName: string | null; createdAt: string;
+      }[];
+    }>("GET", "/api/build/video/my"),
+  createVideoRoom: (input: { guestId?: string | null; scheduledAt?: string | null }) =>
+    call<{
+      id: string; roomUrl: string; hostId: string; guestId: string | null;
+      scheduledAt: string | null; status: string; hostName: string | null;
+      guestName: string | null; createdAt: string;
+    }>("POST", "/api/build/video", input),
+  inviteToVideoRoom: (roomId: string, guestId: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/video/${encodeURIComponent(roomId)}/invite`, { guestId }),
+
+  // Team Requests
+  teamRequests: (q: { limit?: number } = {}) =>
+    call<{
+      items: {
+        id: string; title: string; description: string; rolesJson: string;
+        city: string | null; clientName: string | null; applicantCount: number; createdAt: string;
+      }[];
+    }>("GET", `/api/build/team-requests?limit=${q.limit ?? 30}`),
+  teamRequest: (id: string) =>
+    call<{
+      id: string; title: string; description: string;
+      roles: { specialty: string; count: number; salary: number | null }[];
+      city: string | null; clientName: string | null;
+      applications: { id: string; userId: string; roleIndex: number; message: string | null; status: string; applicantName: string | null }[];
+      createdAt: string;
+    }>("GET", `/api/build/team-requests/${encodeURIComponent(id)}`),
+  applyToTeam: (id: string, roleIndex: number | null, message?: string) =>
+    call<{ ok: boolean }>("POST", `/api/build/team-requests/${encodeURIComponent(id)}/apply`, { roleIndex, message }),
+  aiGenerateVacancy: (input: { brief: string; city?: string | null; locale?: "ru" | "en" | "kz" }) =>
+    call<{
+      draft: AiVacancyDraft;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/generate-vacancy", input),
+  createTeamRequest: (input: {
+    title: string; description: string; city?: string;
+    startDate?: string;
+    roles: { specialty: string; count: number; salary?: number | null }[];
+  }) =>
+    call<{ id: string }>("POST", "/api/build/team-requests", input),
+
+  // Leaderboard
+  leaderboard: (kind: "employer" | "worker", limit = 30) =>
+    call<{ items: LeaderboardRow[] }>(
+      "GET",
+      `/api/build/leaderboard?kind=${kind}&limit=${limit}`,
+    ),
+
+  // Stories
+  storiesFeed: (q: { limit?: number } = {}) =>
+    call<{ items: BuildStory[] }>(
+      "GET",
+      `/api/build/stories?limit=${q.limit ?? 30}`,
+    ),
+  createStory: (input: { content: string; mediaUrl: string | null; mediaType: string | null }) =>
+    call<BuildStory>("POST", "/api/build/stories", input),
+  toggleStoryLike: (id: string) =>
+    call<{ likeCount: number; liked: boolean }>("POST", `/api/build/stories/${encodeURIComponent(id)}/like`),
+
+  // Payment Calendar
+  myPaymentCalendar: () =>
+    call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>(
+      "GET",
+      "/api/build/payment-calendar/me",
+    ),
+  updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus }) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/payment-calendar/${encodeURIComponent(id)}`, patch),
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─
@@ -968,5 +1190,64 @@ export async function buildRegister(email: string, password: string, name: strin
   });
   const json = await res.json();
   if (!res.ok) throw new BuildApiError(res.status, json?.error || "register_failed", json);
+  return json;
+}
+
+export async function requestEmailVerification(): Promise<{ ok: boolean; email?: string }> {
+  const token = getAuthToken();
+  const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "verify_request_failed", json);
+  return json;
+}
+
+export async function completeEmailVerification(verifyToken: string): Promise<{ verified: boolean }> {
+  const token = getAuthToken();
+  const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ token: verifyToken }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "invalid_or_expired_token", json);
+  return json;
+}
+
+export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
+  const res = await fetch(apiUrl("/api/auth/password/reset/request"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "reset_request_failed", json);
+  return json;
+}
+
+export async function completePasswordReset(
+  email: string,
+  token: string,
+  newPassword: string,
+): Promise<{ ok: boolean }> {
+  const res = await fetch(apiUrl("/api/auth/password/reset/complete"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, token, newPassword }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "invalid_or_expired_token", json);
   return json;
 }

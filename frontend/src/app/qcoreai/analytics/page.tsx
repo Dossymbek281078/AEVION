@@ -198,6 +198,17 @@ export default function QCoreAnalyticsPage() {
             >
               ← Back to multi-agent
             </Link>
+            <a
+              href={apiUrl("/api/qcoreai/analytics/export?days=30")}
+              download="qcoreai-analytics-30d.csv"
+              style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.15)",
+                color: "#fff", textDecoration: "none",
+              }}
+            >
+              ↓ Export CSV
+            </a>
           </div>
         </div>
 

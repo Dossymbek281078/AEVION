@@ -30,14 +30,34 @@ function RequestForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function generate() {
+  async function generate() {
     if (!walletId || !amount) return;
-    const url = new URL(`${window.location.origin}/qpaynet/send`);
-    url.searchParams.set("toWallet", walletId);
-    url.searchParams.set("amount", amount);
-    if (description) url.searchParams.set("description", description);
-    const link = url.toString();
-    // QR code service (free, no API key needed)
+    // Try the tracked backend request first; fall back to QR-only deep link
+    // if the endpoint is not deployed yet.
+    let link: string | null = null;
+    try {
+      const r = await fetch("/api/qpaynet/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          toWalletId: walletId,
+          amount: parseFloat(amount),
+          description: description || "Запрос на оплату",
+        }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        link = `${window.location.origin}/qpaynet/r/${d.token}`;
+      }
+    } catch { /* fall through */ }
+
+    if (!link) {
+      const url = new URL(`${window.location.origin}/qpaynet/send`);
+      url.searchParams.set("toWallet", walletId);
+      url.searchParams.set("amount", amount);
+      if (description) url.searchParams.set("description", description);
+      link = url.toString();
+    }
     const qrPath = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
     setGenerated({ link, qrPath });
   }

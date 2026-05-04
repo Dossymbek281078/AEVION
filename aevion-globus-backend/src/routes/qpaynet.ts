@@ -492,6 +492,199 @@ qpaynetRouter.get("/stats", async (_req, res) => {
   }
 });
 
+// ── Payment Requests ─────────────────────────────────────────────────────────
+// Public "request money" link: owner creates → shares link → payer pays.
+
+async function ensureRequestsTable(): Promise<void> {
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS qpaynet_payment_requests (
+      id            TEXT PRIMARY KEY,
+      owner_id      TEXT NOT NULL,
+      to_wallet_id  TEXT NOT NULL,
+      token         TEXT UNIQUE NOT NULL,
+      amount        BIGINT NOT NULL,
+      currency      TEXT NOT NULL DEFAULT 'KZT',
+      description   TEXT NOT NULL,
+      note          TEXT,
+      status        TEXT NOT NULL DEFAULT 'pending',
+      paid_by       TEXT,
+      paid_tx_id    TEXT,
+      paid_at       TIMESTAMPTZ,
+      expires_at    TIMESTAMPTZ,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_qpr_owner ON qpaynet_payment_requests (owner_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_qpr_token ON qpaynet_payment_requests (token);
+    CREATE INDEX IF NOT EXISTS idx_qpr_wallet ON qpaynet_payment_requests (to_wallet_id);
+  `);
+}
+
+// POST /api/qpaynet/requests — create payment request (auth required)
+qpaynetRouter.post("/requests", async (req, res) => {
+  await ensureTables();
+  await ensureRequestsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { toWalletId, amount, description, note, expiresAt } = req.body as {
+    toWalletId?: string; amount?: number; description?: string;
+    note?: string; expiresAt?: string;
+  };
+  if (!toWalletId || !amount || amount <= 0 || !description?.trim()) {
+    return res.status(400).json({ error: "toWalletId, positive amount, and description required" });
+  }
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const w = await pool.query("SELECT id FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2", [toWalletId, ownerId]);
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+
+  const id = randomUUID();
+  const token = randomBytes(16).toString("base64url");
+  const tiin = toTiin(amount);
+
+  await pool.query(
+    `INSERT INTO qpaynet_payment_requests
+       (id, owner_id, to_wallet_id, token, amount, description, note, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [id, ownerId, toWalletId, token, tiin, description.trim(), note?.trim() ?? null, expiresAt ?? null],
+  );
+
+  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
+  res.status(201).json({ id, token, payUrl: `${frontendBase}/qpaynet/r/${token}`, amount, currency: "KZT" });
+});
+
+// GET /api/qpaynet/requests — list my requests (auth required)
+qpaynetRouter.get("/requests", async (req, res) => {
+  await ensureTables();
+  await ensureRequestsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const result = await pool.query(
+    `SELECT id, to_wallet_id, token, amount, currency, description, status,
+            paid_at, expires_at, created_at
+     FROM qpaynet_payment_requests WHERE owner_id=$1
+     ORDER BY created_at DESC LIMIT 50`,
+    [ownerId],
+  );
+
+  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  res.json({ requests: result.rows.map((r: any) => ({
+    ...r,
+    amount: fromTiin(BigInt(r.amount)),
+    payUrl: `${frontendBase}/qpaynet/r/${r.token}`,
+  })) });
+});
+
+// GET /api/qpaynet/requests/:token — view request (public, no auth)
+qpaynetRouter.get("/requests/:token", async (req, res) => {
+  await ensureRequestsTable();
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT id, to_wallet_id, amount, currency, description, status, paid_at, expires_at, created_at
+     FROM qpaynet_payment_requests WHERE token=$1`,
+    [req.params.token],
+  );
+  const r = result.rows[0];
+  if (!r) return res.status(404).json({ error: "request_not_found" });
+
+  const expired = r.expires_at && new Date(r.expires_at) < new Date();
+  res.json({
+    id: r.id,
+    amount: fromTiin(BigInt(r.amount)),
+    currency: r.currency,
+    description: r.description,
+    status: expired && r.status === "pending" ? "expired" : r.status,
+    paidAt: r.paid_at,
+    expiresAt: r.expires_at,
+    createdAt: r.created_at,
+  });
+});
+
+// POST /api/qpaynet/requests/:token/pay — pay a request (auth required)
+qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
+  await ensureTables();
+  await ensureRequestsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { fromWalletId } = req.body as { fromWalletId?: string };
+  if (!fromWalletId) return res.status(400).json({ error: "fromWalletId required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  const reqRow = await pool.query(
+    "SELECT id, to_wallet_id, amount, description, status, expires_at FROM qpaynet_payment_requests WHERE token=$1",
+    [req.params.token],
+  );
+  const pr = reqRow.rows[0];
+  if (!pr) return res.status(404).json({ error: "request_not_found" });
+  if (pr.status !== "pending") return res.status(400).json({ error: `request_${pr.status}` });
+  if (pr.expires_at && new Date(pr.expires_at) < new Date()) return res.status(400).json({ error: "request_expired" });
+  if (pr.to_wallet_id === fromWalletId) return res.status(400).json({ error: "cannot_pay_own_request" });
+
+  const from = await pool.query(
+    "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
+    [fromWalletId, ownerId],
+  );
+  if (!from.rows[0]) return res.status(404).json({ error: "from_wallet_not_found" });
+  if (from.rows[0].status !== "active") return res.status(400).json({ error: "wallet_inactive" });
+
+  const tiin = BigInt(pr.amount);
+  const fee = feeFor(tiin);
+  const total = tiin + fee;
+
+  if (BigInt(from.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+
+  const txOutId = randomUUID();
+  const txInId  = randomUUID();
+  const desc = `Оплата запроса: ${pr.description}`;
+
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, fromWalletId]);
+  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, pr.to_wallet_id]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_out',$4,$5,$6,$7)",
+    [txOutId, fromWalletId, ownerId, tiin, fee, desc, txInId],
+  );
+  const toWallet = await pool.query("SELECT owner_id FROM qpaynet_wallets WHERE id=$1", [pr.to_wallet_id]);
+  await pool.query(
+    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
+    [txInId, pr.to_wallet_id, toWallet.rows[0]?.owner_id ?? "unknown", tiin, desc, txOutId],
+  );
+  await pool.query(
+    "UPDATE qpaynet_payment_requests SET status='paid', paid_by=$1, paid_tx_id=$2, paid_at=NOW() WHERE id=$3",
+    [fromWalletId, txOutId, pr.id],
+  );
+
+  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
+  res.json({
+    ok: true, txId: txOutId,
+    amount: fromTiin(tiin), fee: fromTiin(fee),
+    newBalance: fromTiin(BigInt(updated.rows[0].balance)),
+  });
+});
+
+// DELETE /api/qpaynet/requests/:id — cancel request (owner only)
+qpaynetRouter.delete("/requests/:id", async (req, res) => {
+  await ensureRequestsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_payment_requests SET status='cancelled' WHERE id=$1 AND owner_id=$2 AND status='pending' RETURNING id",
+    [req.params.id, auth.sub ?? auth.email ?? "anon"],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_not_pending" });
+  res.json({ ok: true });
+});
+
 // GET /api/qpaynet/health — lightweight liveness check for hub monitor
 qpaynetRouter.get("/health", async (_req, res) => {
   try {

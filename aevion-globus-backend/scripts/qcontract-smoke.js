@@ -85,6 +85,12 @@ async function run() {
   assert("GET documents/:id/log → 200", log.status === 200);
   assert("log has 1 view", log.body.viewCount >= 1);
 
+  // 5b. Log CSV
+  const csvR = await fetch(`${BASE}/api/qcontract/documents/${docId}/log.csv`, { headers: auth });
+  const csvText = await csvR.text();
+  assert("GET log.csv → 200", csvR.status === 200);
+  assert("csv has audit header", csvText.startsWith("view_id,viewer_ip,viewer_email,signed,viewed_at,user_agent"));
+
   // 6. Extend expiry (NEW)
   console.log("\n4. PATCH (extend)");
   const extend = await req("PATCH", `/api/qcontract/documents/${docId}`, { extendDays: 30 }, auth);

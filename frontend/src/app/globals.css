@@ -412,6 +412,11 @@ code {
    transition on the board cell itself so child inherits; no JS needed. */
 .cc-board-cell {
   will-change: auto;
+  /* Prevent browser from stealing touch for scroll/zoom on board cells.
+     Mirrors touch-action:none on board container — belt-and-suspenders. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .cc-board-cell[style*="cursor: grab"]:hover {
   z-index: 2;
@@ -420,6 +425,35 @@ code {
 .cc-board-cell[style*="cursor: grab"]:hover > div {
   transition: transform 0.07s cubic-bezier(0.34, 1.56, 0.64, 1);
   transform: scale(1.07) !important;
+}
+
+/* ── Ghost piece pop-in when drag begins ──────────────── */
+@keyframes cc-ghost-pop {
+  0%   { transform: scale(0.86); opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1.06); opacity: 1; }
+}
+
+/* ── Captured piece pop+fade on the capture square ────── */
+@keyframes cc-capture-pop {
+  0%   { transform: scale(1);    opacity: 1; }
+  35%  { transform: scale(1.22); opacity: 1; }
+  100% { transform: scale(0.40); opacity: 0; }
+}
+
+/* ── Piece "snap" landing animation after a drop/move ── */
+@keyframes cc-piece-snap {
+  0%   { transform: scale(0.92); }
+  60%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.cc-piece-snap {
+  animation: cc-piece-snap 140ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Reduce-motion: skip the bounce, keep the visual change instant. */
+@media (prefers-reduced-motion: reduce) {
+  .cc-piece-snap > div { animation: none !important; }
 }
 
 /* ── Global a11y focus ring ───────────────────────────── */

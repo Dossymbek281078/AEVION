@@ -367,11 +367,24 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   const isLifted=(iS||iPS)&&!isDragOrigin;
   // Coord label color: contrast against cell background
   const coordCol=bg.includes("e2e8f0")||bg.includes("f8fafc")||bg.includes("cbd5e1")||bg.includes("bfdbfe")||bg.includes("dcfce7")||bg.includes("fed7aa")||bg.includes("fef9c3")?"rgba(30,41,59,0.5)":"rgba(255,255,255,0.55)";
+  // Snap-on-land: when isAnimDest flips true→false, the slide just landed —
+  // briefly apply cc-piece-snap so the piece "settles" with a tiny bounce.
+  const prevAnimDestRef=useRef(false);
+  const[snapNonce,setSnapNonce]=useState(0);
+  useEffect(()=>{
+    if(prevAnimDestRef.current&&!isAnimDest){
+      setSnapNonce(n=>n+1);
+    }
+    prevAnimDestRef.current=isAnimDest;
+  },[isAnimDest]);
+  // The inner piece div is keyed on snapNonce so a snap-trigger remounts it
+  // and the cc-piece-snap class plays its animation once on the fresh element.
+  const snapClass=snapNonce>0&&iL&&!iCk?"cc-piece-snap":"";
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.12s"}}>
     {iV&&!hasPiece&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
-    {hasPiece&&<div style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
+    {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
     {coordFile&&<div style={{position:"absolute",bottom:"5%",right:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordFile}</div>}

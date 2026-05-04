@@ -321,6 +321,48 @@ export type BuildSubscription = {
   currency?: string;
 };
 
+export type LeaderboardRow = {
+  userId: string;
+  name: string;
+  photoUrl: string | null;
+  title: string | null;
+  city: string | null;
+  avgRating?: number | null;
+  reviewCount?: number;
+  hires?: number;
+  tierKey?: string;
+  tierLabel?: string;
+  trialsApproved?: number;
+};
+
+export type BuildStory = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userPhoto: string | null;
+  userCity: string | null;
+  content: string;
+  mediaUrl: string | null;
+  mediaType: "image" | "video" | null;
+  likeCount: number;
+  createdAt: string;
+};
+
+export type PaymentEventStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+
+export type BuildPaymentEvent = {
+  id: string;
+  applicationId: string;
+  clientId: string;
+  workerId: string;
+  amount: number;
+  currency: string;
+  dueDate: string;
+  status: PaymentEventStatus;
+  note: string | null;
+  createdAt: string;
+};
+
 // ── Envelope + transport ─────────────────────────────────────────────
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string; [k: string]: unknown };
@@ -935,6 +977,33 @@ export const buildApi = {
     mimeType?: string;
     sizeBytes?: number;
   }) => call<BuildFile>("POST", "/api/build/files/upload", input),
+
+  // Leaderboard
+  leaderboard: (kind: "employer" | "worker", limit = 30) =>
+    call<{ items: LeaderboardRow[] }>(
+      "GET",
+      `/api/build/leaderboard?kind=${kind}&limit=${limit}`,
+    ),
+
+  // Stories
+  storiesFeed: (q: { limit?: number } = {}) =>
+    call<{ items: BuildStory[] }>(
+      "GET",
+      `/api/build/stories?limit=${q.limit ?? 30}`,
+    ),
+  createStory: (input: { content: string; mediaUrl: string | null; mediaType: string | null }) =>
+    call<BuildStory>("POST", "/api/build/stories", input),
+  toggleStoryLike: (id: string) =>
+    call<{ likeCount: number; liked: boolean }>("POST", `/api/build/stories/${encodeURIComponent(id)}/like`),
+
+  // Payment Calendar
+  myPaymentCalendar: () =>
+    call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>(
+      "GET",
+      "/api/build/payment-calendar/me",
+    ),
+  updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus }) =>
+    call<{ ok: boolean }>("PATCH", `/api/build/payment-calendar/${encodeURIComponent(id)}`, patch),
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─
@@ -968,5 +1037,64 @@ export async function buildRegister(email: string, password: string, name: strin
   });
   const json = await res.json();
   if (!res.ok) throw new BuildApiError(res.status, json?.error || "register_failed", json);
+  return json;
+}
+
+export async function requestEmailVerification(): Promise<{ ok: boolean; email?: string }> {
+  const token = getAuthToken();
+  const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "verify_request_failed", json);
+  return json;
+}
+
+export async function completeEmailVerification(verifyToken: string): Promise<{ verified: boolean }> {
+  const token = getAuthToken();
+  const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ token: verifyToken }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "invalid_or_expired_token", json);
+  return json;
+}
+
+export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
+  const res = await fetch(apiUrl("/api/auth/password/reset/request"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "reset_request_failed", json);
+  return json;
+}
+
+export async function completePasswordReset(
+  email: string,
+  token: string,
+  newPassword: string,
+): Promise<{ ok: boolean }> {
+  const res = await fetch(apiUrl("/api/auth/password/reset/complete"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, token, newPassword }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) throw new BuildApiError(res.status, json?.error || "invalid_or_expired_token", json);
   return json;
 }

@@ -92,6 +92,9 @@ export default function BuildHomePage() {
         <Stat label="Vacancies" value={stats.vacancies} />
       </div>
 
+      <LiveActivityBand />
+
+
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           value={q}
@@ -281,6 +284,78 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
         </Link>
       </div>
     </section>
+  );
+}
+
+function LiveActivityBand() {
+  const [items, setItems] = useState<
+    { kind: "VACANCY" | "APPLICATION" | "HIRE"; title: string; city: string | null; at: string }[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    function load() {
+      buildApi
+        .liveActivity()
+        .then((r) => {
+          if (!cancelled) setItems(r.items);
+        })
+        .catch(() => {});
+    }
+    load();
+    // Refresh every 60s so a long-open tab feels alive without burning DB.
+    const t = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  if (items.length === 0) return null;
+
+  function relative(at: string): string {
+    const ms = Date.now() - new Date(at).getTime();
+    const m = Math.floor(ms / 60_000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  return (
+    <div className="mb-6 overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04]">
+      <div className="flex items-center gap-2 border-b border-emerald-500/15 px-3 py-1.5">
+        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200">
+          Live · last 20 events
+        </span>
+      </div>
+      <ul className="divide-y divide-white/5 max-h-48 overflow-y-auto">
+        {items.map((e, i) => {
+          const tone =
+            e.kind === "HIRE"
+              ? "text-emerald-300"
+              : e.kind === "VACANCY"
+                ? "text-sky-300"
+                : "text-fuchsia-300";
+          const verb =
+            e.kind === "HIRE"
+              ? "✓ hired for"
+              : e.kind === "VACANCY"
+                ? "+ posted"
+                : "→ applied to";
+          return (
+            <li key={i} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+              <span className={`shrink-0 font-semibold ${tone}`}>{verb}</span>
+              <span className="min-w-0 flex-1 truncate text-slate-200">{e.title}</span>
+              {e.city && <span className="shrink-0 text-slate-500">📍 {e.city}</span>}
+              <span className="shrink-0 text-slate-500">{relative(e.at)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

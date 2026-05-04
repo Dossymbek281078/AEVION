@@ -651,6 +651,11 @@ export const buildApi = {
       "DELETE",
       `/api/build/vacancies/templates/${encodeURIComponent(id)}`,
     ),
+  deleteVacancy: (id: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/vacancies/${encodeURIComponent(id)}`,
+    ),
   duplicateVacancy: (id: string, targetProjectId: string) =>
     call<BuildVacancy>(
       "POST",
@@ -787,6 +792,13 @@ export const buildApi = {
       improved: string;
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/improve-text", input),
+  aiInterviewPrep: (applicationId: string) =>
+    call<{
+      questions: { q: string; hint: string }[];
+      skillOverlap: string[];
+      missingSkills: string[];
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/interview-prep", { applicationId }),
   aiTranslateVacancy: (input: {
     title: string;
     description: string;
@@ -1005,6 +1017,11 @@ export const buildApi = {
       cashback: { totalAev: number; entries: number };
       timestamp: string;
     }>("GET", "/api/build/stats", undefined, { auth: false }),
+  liveActivity: () =>
+    call<{
+      items: { kind: "VACANCY" | "APPLICATION" | "HIRE"; title: string; city: string | null; at: string }[];
+      total: number;
+    }>("GET", "/api/build/stats/activity", undefined, { auth: false }),
   buildStatsTimeseries: () =>
     call<{
       vacancies: { day: string; n: number }[];

@@ -41,6 +41,59 @@ statsRouter.get("/", async (_req, res) => {
   }
 });
 
+// GET /api/build/stats/activity
+// Public, anonymous-friendly. Returns the last 20 platform events
+// (new vacancy / new application / hire) for a "live" social-proof
+// scroller on the home page. Names are anonymised — we share role
+// titles + cities, not who applied to what.
+statsRouter.get("/activity", async (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
+  try {
+    const [vacancies, applications, hires] = await Promise.all([
+      pool.query(
+        `SELECT v."id", v."title", v."createdAt", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."status" = 'OPEN'
+         ORDER BY v."createdAt" DESC LIMIT 10`,
+      ),
+      pool.query(
+        `SELECT a."createdAt", v."title", p."city" AS "projectCity"
+         FROM "BuildApplication" a
+         LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         ORDER BY a."createdAt" DESC LIMIT 10`,
+      ),
+      pool.query(
+        `SELECT a."updatedAt" AS "at", v."title", p."city" AS "projectCity"
+         FROM "BuildApplication" a
+         LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE a."status" = 'ACCEPTED'
+         ORDER BY a."updatedAt" DESC LIMIT 5`,
+      ),
+    ]);
+
+    type Event = { kind: string; title: string; city: string | null; at: string };
+    const events: Event[] = [];
+    for (const v of vacancies.rows as { title: string; createdAt: string; projectCity: string | null }[]) {
+      events.push({ kind: "VACANCY", title: v.title, city: v.projectCity, at: new Date(v.createdAt).toISOString() });
+    }
+    for (const a of applications.rows as { title: string; createdAt: string; projectCity: string | null }[]) {
+      if (!a.title) continue;
+      events.push({ kind: "APPLICATION", title: a.title, city: a.projectCity, at: new Date(a.createdAt).toISOString() });
+    }
+    for (const h of hires.rows as { title: string; at: string; projectCity: string | null }[]) {
+      if (!h.title) continue;
+      events.push({ kind: "HIRE", title: h.title, city: h.projectCity, at: new Date(h.at).toISOString() });
+    }
+    events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return ok(res, { items: events.slice(0, 20), total: events.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "stats_activity_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/stats/timeseries — daily counts for the last 14 days, public.
 // Powers the sparkline visualisations on /build/stats so people can see
 // growth / liveness without us hand-curating numbers.

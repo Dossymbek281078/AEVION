@@ -55,6 +55,8 @@ export default function QPayNetDashboard() {
   const [newWalletName, setNewWalletName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
 
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
@@ -70,6 +72,20 @@ export default function QPayNetDashboard() {
       if (wd.wallets?.[0]) setActiveWallet(wd.wallets[0].id);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  async function saveRename() {
+    const name = renameValue.trim();
+    if (!name || !activeWallet) return;
+    const r = await fetch(`/api/qpaynet/wallets/${activeWallet}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name }),
+    });
+    if (r.ok) {
+      setWallets(prev => prev.map(w => w.id === activeWallet ? { ...w, name } : w));
+    }
+    setRenaming(false);
+  }
 
   async function createWallet() {
     setCreating(true);
@@ -183,8 +199,26 @@ export default function QPayNetDashboard() {
                 {activeW && (
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <div className="text-xs text-slate-400">{activeW.name}</div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 group">
+                          {renaming ? (
+                            <>
+                              <input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") setRenaming(false); }}
+                                className="bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-violet-500 w-40" />
+                              <button onClick={saveRename} className="text-emerald-400 hover:text-emerald-300 text-xs">✓</button>
+                              <button onClick={() => setRenaming(false)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-xs text-slate-400 truncate">{activeW.name}</div>
+                              <button onClick={() => { setRenameValue(activeW.name); setRenaming(true); }}
+                                className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-500 hover:text-slate-300 transition-opacity">
+                                ✎
+                              </button>
+                            </>
+                          )}
+                        </div>
                         <div className="text-2xl font-bold">{fmt(activeW.balance)} ₸</div>
                       </div>
                       <div className="flex gap-2 flex-wrap">

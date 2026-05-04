@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -15,6 +15,21 @@ function SendForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ newBalance: number; fee: number } | null>(null);
+  const [recipient, setRecipient] = useState<{ name: string; active: boolean } | "loading" | "notfound" | null>(null);
+
+  useEffect(() => {
+    const id = toWalletId.trim();
+    if (id.length < 8) { setRecipient(null); return; }
+    setRecipient("loading");
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(`/api/qpaynet/wallets/${encodeURIComponent(id)}/public`, { signal: ctrl.signal })
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(d => setRecipient({ name: d.name, active: d.active }))
+        .catch(() => { if (!ctrl.signal.aborted) setRecipient("notfound"); });
+    }, 350);
+    return () => { ctrl.abort(); clearTimeout(t); };
+  }, [toWalletId]);
 
   async function handleSend() {
     const token = localStorage.getItem("aevion_token") ?? "";
@@ -54,6 +69,13 @@ function SendForm() {
           <input type="text" value={toWalletId} onChange={e => setToWalletId(e.target.value)}
             placeholder="UUID кошелька..."
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-violet-500" />
+          {recipient === "loading" && <p className="text-[11px] text-slate-500 mt-1">Проверка получателя...</p>}
+          {recipient === "notfound" && <p className="text-[11px] text-red-400 mt-1">⚠ Кошелёк не найден</p>}
+          {recipient && typeof recipient === "object" && (
+            <p className={`text-[11px] mt-1 ${recipient.active ? "text-emerald-400" : "text-amber-400"}`}>
+              {recipient.active ? "✓" : "⚠"} {recipient.name}{!recipient.active && " (неактивен)"}
+            </p>
+          )}
         </div>
         <div>
           <label className="text-xs text-slate-400 mb-1 block">Сумма (тенге)</label>

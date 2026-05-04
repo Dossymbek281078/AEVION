@@ -2,14 +2,17 @@
  * QPayNet Embedded — платёжная инфраструктура AEVION
  *
  * Endpoints:
- *   POST /api/qpaynet/wallets              create wallet
- *   GET  /api/qpaynet/wallets              list my wallets
- *   GET  /api/qpaynet/wallets/:id          wallet detail + balance
- *   POST /api/qpaynet/deposit              top up wallet
- *   POST /api/qpaynet/withdraw             withdraw
- *   POST /api/qpaynet/transfer             P2P transfer
- *   GET  /api/qpaynet/transactions         my transaction history
- *   POST /api/qpaynet/merchant/keys        create merchant API key
+ *   POST   /api/qpaynet/wallets              create wallet
+ *   GET    /api/qpaynet/wallets              list my wallets
+ *   GET    /api/qpaynet/wallets/:id          wallet detail + balance (owner)
+ *   GET    /api/qpaynet/wallets/:id/public   recipient lookup (no auth, no balance)
+ *   PATCH  /api/qpaynet/wallets/:id          rename wallet (owner)
+ *   POST   /api/qpaynet/deposit              top up wallet
+ *   POST   /api/qpaynet/withdraw             withdraw
+ *   POST   /api/qpaynet/transfer             P2P transfer
+ *   GET    /api/qpaynet/transactions         my transaction history
+ *   GET    /api/qpaynet/transactions.csv     CSV export (max 5000)
+ *   POST   /api/qpaynet/merchant/keys        create merchant API key
  *   GET  /api/qpaynet/merchant/keys        list my merchant keys
  *   DELETE /api/qpaynet/merchant/keys/:id  revoke key
  *   POST /api/qpaynet/merchant/charge      charge via merchant key (public, key-auth)
@@ -142,6 +145,39 @@ qpaynetRouter.get("/wallets/:id", async (req, res) => {
   if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
   const r = w.rows[0];
   res.json({ ...r, balance: fromTiin(BigInt(r.balance)) });
+});
+
+// GET /api/qpaynet/wallets/:id/public — recipient lookup (no auth, no balance)
+qpaynetRouter.get("/wallets/:id/public", async (req, res) => {
+  await ensureTables();
+  const pool = getPool();
+  const w = await pool.query(
+    "SELECT id, name, currency, status FROM qpaynet_wallets WHERE id=$1",
+    [req.params.id],
+  );
+  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+  const r = w.rows[0];
+  res.json({ id: r.id, name: r.name, currency: r.currency, active: r.status === "active" });
+});
+
+// PATCH /api/qpaynet/wallets/:id — rename wallet (owner only)
+qpaynetRouter.patch("/wallets/:id", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { name } = req.body as { name?: string };
+  const trimmed = (name ?? "").trim();
+  if (!trimmed || trimmed.length > 80) return res.status(400).json({ error: "name_required_max_80" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const r = await pool.query(
+    "UPDATE qpaynet_wallets SET name=$1 WHERE id=$2 AND owner_id=$3 RETURNING id, name",
+    [trimmed, req.params.id, ownerId],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "wallet_not_found" });
+  res.json({ ok: true, ...r.rows[0] });
 });
 
 // ── Deposit ───────────────────────────────────────────────────────────────────
@@ -294,6 +330,45 @@ qpaynetRouter.get("/transactions", async (req, res) => {
       fee: fromTiin(BigInt(r.fee)),
     })),
   });
+});
+
+// GET /api/qpaynet/transactions.csv — CSV export
+qpaynetRouter.get("/transactions.csv", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const walletId = req.query.walletId as string | undefined;
+
+  const params: unknown[] = [ownerId];
+  let where = "owner_id=$1";
+  if (walletId) { params.push(walletId); where += ` AND wallet_id=$${params.length}`; }
+
+  const result = await pool.query(
+    `SELECT id, wallet_id, type, amount, fee, currency, description, status, created_at
+     FROM qpaynet_transactions WHERE ${where} ORDER BY created_at DESC LIMIT 5000`,
+    params,
+  );
+
+  const escape = (v: unknown) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = "id,wallet_id,type,amount,fee,currency,description,status,created_at";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = result.rows.map((r: any) => [
+    r.id, r.wallet_id, r.type,
+    fromTiin(BigInt(r.amount)),
+    fromTiin(BigInt(r.fee)),
+    r.currency, r.description ?? "", r.status,
+    new Date(r.created_at).toISOString(),
+  ].map(escape).join(","));
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="qpaynet-transactions-${new Date().toISOString().slice(0,10)}.csv"`);
+  res.send(header + "\n" + rows.join("\n"));
 });
 
 // ── Merchant keys ─────────────────────────────────────────────────────────────

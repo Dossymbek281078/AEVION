@@ -592,6 +592,12 @@ export const buildApi = {
     ),
   patchVacancy: (id: string, fields: Partial<{ status: VacancyStatus; title: string; description: string; salary: number }>) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, fields),
+  duplicateVacancy: (id: string, targetProjectId: string) =>
+    call<BuildVacancy>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(id)}/duplicate`,
+      { projectId: targetProjectId },
+    ),
   matchCandidates: (vacancyId: string) =>
     call<{
       items: (TalentRow & { matchScore: number; matchedSkills: string[] })[];
@@ -632,16 +638,28 @@ export const buildApi = {
       "POST",
       `/api/build/applications/${encodeURIComponent(id)}/withdraw`,
     ),
+  bulkMessageApplicants: (vacancyId: string, content: string, status: "PENDING" | "ACCEPTED" | "REJECTED" | "ALL" = "PENDING") =>
+    call<{ sent: number; recipients: string[] }>(
+      "POST",
+      `/api/build/applications/bulk-message/${encodeURIComponent(vacancyId)}`,
+      { content, status },
+    ),
   applicationNotes: (id: string) =>
     call<{
-      items: { id: string; applicationId: string; authorUserId: string; body: string; createdAt: string }[];
+      items: { id: string; applicationId: string; authorUserId: string; body: string; isPinned: boolean; createdAt: string }[];
       total: number;
     }>("GET", `/api/build/applications/${encodeURIComponent(id)}/notes`),
   addApplicationNote: (id: string, body: string) =>
-    call<{ id: string; applicationId: string; authorUserId: string; body: string; createdAt: string }>(
+    call<{ id: string; applicationId: string; authorUserId: string; body: string; isPinned: boolean; createdAt: string }>(
       "POST",
       `/api/build/applications/${encodeURIComponent(id)}/notes`,
       { body },
+    ),
+  pinApplicationNote: (id: string, noteId: string, isPinned: boolean) =>
+    call<{ id: string; isPinned: boolean }>(
+      "PATCH",
+      `/api/build/applications/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
+      { isPinned },
     ),
   deleteApplicationNote: (id: string, noteId: string) =>
     call<{ id: string }>(

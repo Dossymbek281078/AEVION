@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ApplicationForm } from "@/components/build/ApplicationForm";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
@@ -107,11 +108,17 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             </div>
           </div>
           {isOwner && (
-            <VacancyStatusToggle
-              vacancyId={vacancy.id}
-              currentStatus={vacancy.status}
-              onToggled={refresh}
-            />
+            <div className="flex flex-col items-end gap-1.5">
+              <VacancyStatusToggle
+                vacancyId={vacancy.id}
+                currentStatus={vacancy.status}
+                onToggled={refresh}
+              />
+              <CloneVacancyButton
+                vacancyId={vacancy.id}
+                projectId={vacancy.projectId}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -151,13 +158,16 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   Applications <span className="text-slate-500">({applications.length})</span>
                 </h2>
                 {applications.length > 0 && (
-                  <a
-                    href={`/api/build/applications/by-vacancy/${encodeURIComponent(vacancy.id)}/export.csv`}
-                    className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10"
-                    download
-                  >
-                    ↓ CSV
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <BulkMessageButton vacancyId={vacancy.id} pendingCount={applications.filter((a) => a.status === "PENDING").length} />
+                    <a
+                      href={`/api/build/applications/by-vacancy/${encodeURIComponent(vacancy.id)}/export.csv`}
+                      className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10"
+                      download
+                    >
+                      ↓ CSV
+                    </a>
+                  </div>
                 )}
               </div>
               {applications.length === 0 ? (
@@ -679,7 +689,9 @@ function ApplicationRow({
 
 function RecruiterNotes({ applicationId }: { applicationId: string }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<{ id: string; body: string; createdAt: string; authorUserId: string }[]>([]);
+  const [items, setItems] = useState<
+    { id: string; body: string; createdAt: string; authorUserId: string; isPinned: boolean }[]
+  >([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -714,6 +726,25 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
       await buildApi.deleteApplicationNote(applicationId, noteId);
       setItems((prev) => prev.filter((n) => n.id !== noteId));
     } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function togglePin(noteId: string, isPinned: boolean) {
+    // Optimistic
+    setItems((prev) => {
+      const updated = prev.map((n) => (n.id === noteId ? { ...n, isPinned } : n));
+      // Re-sort: pinned first, then createdAt desc.
+      return updated.sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    });
+    try {
+      await buildApi.pinApplicationNote(applicationId, noteId, isPinned);
+    } catch (e) {
+      // Roll back on failure
+      setItems((prev) => prev.map((n) => (n.id === noteId ? { ...n, isPinned: !isPinned } : n)));
       toast.error((e as Error).message);
     }
   }
@@ -754,13 +785,32 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
           ) : (
             <ul className="space-y-1.5">
               {items.map((n) => (
-                <li key={n.id} className="rounded border border-white/5 bg-black/20 p-2 text-xs">
-                  <div className="whitespace-pre-wrap text-slate-200">{n.body}</div>
+                <li
+                  key={n.id}
+                  className={`rounded border p-2 text-xs ${
+                    n.isPinned
+                      ? "border-amber-500/40 bg-amber-500/[0.07]"
+                      : "border-white/5 bg-black/20"
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap text-slate-200">
+                    {n.isPinned && <span className="mr-1 text-amber-300">📌</span>}
+                    {n.body}
+                  </div>
                   <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
                     <span>{new Date(n.createdAt).toLocaleString()}</span>
-                    <button onClick={() => remove(n.id)} className="hover:text-rose-300">
-                      Delete
-                    </button>
+                    <span className="flex items-center gap-2">
+                      <button
+                        onClick={() => togglePin(n.id, !n.isPinned)}
+                        className={n.isPinned ? "text-amber-300 hover:text-amber-200" : "hover:text-slate-300"}
+                        title={n.isPinned ? "Unpin" : "Pin to top"}
+                      >
+                        {n.isPinned ? "Unpin" : "Pin"}
+                      </button>
+                      <button onClick={() => remove(n.id)} className="hover:text-rose-300">
+                        Delete
+                      </button>
+                    </span>
                   </div>
                 </li>
               ))}
@@ -936,6 +986,123 @@ function VacancyExpiryBadge({
     >
       {days === 0 ? "ends today" : `${days} day${days === 1 ? "" : "s"} left`}
     </span>
+  );
+}
+
+function BulkMessageButton({
+  vacancyId,
+  pendingCount,
+}: {
+  vacancyId: string;
+  pendingCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [content, setContent] = useState("");
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  if (pendingCount === 0) return null;
+
+  async function send() {
+    const body = content.trim();
+    if (body.length < 5) {
+      toast.error("Message is too short.");
+      return;
+    }
+    if (!confirm(`Send this DM to all ${pendingCount} PENDING applicants?`)) return;
+    setBusy(true);
+    try {
+      const r = await buildApi.bulkMessageApplicants(vacancyId, body, "PENDING");
+      toast.success(`Sent to ${r.sent} applicant${r.sent === 1 ? "" : "s"}.`);
+      setContent("");
+      setOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-200 transition hover:bg-sky-500/20"
+        title="Send the same DM to every PENDING applicant on this vacancy"
+      >
+        ✉ Message all ({pendingCount})
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-80 rounded-lg border border-white/10 bg-slate-900 p-3 shadow-2xl">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-200">
+            Message {pendingCount} pending applicants
+          </div>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={4}
+            maxLength={4000}
+            placeholder="Hi, thanks for applying — I'd like to schedule a 15-min call this week. Free Tue/Wed afternoon?"
+            className="w-full rounded border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-slate-500 focus:border-sky-500/40 focus:outline-none"
+          />
+          <div className="mt-2 flex justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={send}
+              disabled={busy || content.trim().length < 5}
+              className="rounded-md bg-sky-500 px-3 py-1 text-[11px] font-semibold text-sky-950 hover:bg-sky-400 disabled:opacity-50"
+            >
+              {busy ? "…" : "Send"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CloneVacancyButton({
+  vacancyId,
+  projectId,
+}: {
+  vacancyId: string;
+  projectId: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function clone() {
+    setBusy(true);
+    try {
+      const r = await buildApi.duplicateVacancy(vacancyId, projectId);
+      toast.success("Vacancy cloned. Edit the copy and re-publish.");
+      router.push(`/build/vacancy/${encodeURIComponent(r.id)}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={clone}
+      disabled={busy}
+      title="Create a draft copy of this vacancy in the same project"
+      className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+    >
+      {busy ? "…" : "⎘ Clone"}
+    </button>
   );
 }
 

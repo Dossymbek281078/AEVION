@@ -61,6 +61,10 @@ export type BuildProfile = {
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
   introVideoUrl: string | null;
+  // KZ localisation (v3)
+  iin?: string | null;
+  bin?: string | null;
+  locale?: "ru" | "en" | "kz";
 };
 
 export type BuildExperience = {
@@ -212,6 +216,16 @@ export type BuildFile = {
   sizeBytes: number | null;
   uploaderId: string;
   createdAt: string;
+};
+
+export type AiVacancyDraft = {
+  title: string;
+  skills: string[];
+  description: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: "RUB" | "KZT" | "USD";
+  questions: string[];
 };
 
 // ── Pricing types ────────────────────────────────────────────────────
@@ -459,6 +473,9 @@ export const buildApi = {
     safetyTrainingValid?: boolean;
     safetyTrainingUntil?: string | null;
     introVideoUrl?: string | null;
+    iin?: string | null;
+    bin?: string | null;
+    locale?: "ru" | "en" | "kz";
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
@@ -996,14 +1013,26 @@ export const buildApi = {
     call<{ availableNow: boolean; availableUntil: string | null }>("GET", "/api/build/availability/me"),
   setAvailability: (availableNow: boolean, hours: number) =>
     call<{ availableNow: boolean; availableUntil: string | null }>("POST", "/api/build/availability", { availableNow, hours }),
-  availableWorkers: (q: { city?: string; specialty?: string; limit?: number } = {}) => {
-    const params = new URLSearchParams();
-    if (q.city) params.set("city", q.city);
-    if (q.specialty) params.set("specialty", q.specialty);
-    if (q.limit != null) params.set("limit", String(q.limit));
-    const qs = params.toString();
-    return call<{ items: unknown[]; asOf: string }>("GET", `/api/build/availability/workers${qs ? `?${qs}` : ""}`);
-  },
+
+  // Push notifications
+  pushPublicKey: () =>
+    call<{ publicKey: string | null }>("GET", "/api/build/push/public-key"),
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    call<{ ok: boolean }>("POST", "/api/build/push/subscribe", sub),
+  pushUnsubscribe: (endpoint: string) =>
+    call<{ ok: boolean }>("POST", "/api/build/push/unsubscribe", { endpoint }),
+  pushTest: () =>
+    call<{ ok: boolean }>("POST", "/api/build/push/test"),
+
+  // Quick Apply
+  quickApply: (input: { vacancyId: string; referredByUserId?: string }) =>
+    call<{ applied: boolean; applicationId: string }>("POST", "/api/build/applications/quick", input),
+
+  // Safety Briefing
+  safetyTemplate: () =>
+    call<{ items: string[] }>("GET", "/api/build/safety-briefing/template", undefined, { auth: false }),
+  signSafetyBriefing: (shiftId: string, items: string[]) =>
+    call<{ signed: boolean }>("POST", "/api/build/safety-briefing", { shiftId, items }),
 
   // Communities
   communities: () =>
@@ -1088,10 +1117,16 @@ export const buildApi = {
       applications: { id: string; userId: string; roleIndex: number; message: string | null; status: string; applicantName: string | null }[];
       createdAt: string;
     }>("GET", `/api/build/team-requests/${encodeURIComponent(id)}`),
-  applyToTeam: (id: string, roleIndex: number, message?: string) =>
+  applyToTeam: (id: string, roleIndex: number | null, message?: string) =>
     call<{ ok: boolean }>("POST", `/api/build/team-requests/${encodeURIComponent(id)}/apply`, { roleIndex, message }),
+  aiGenerateVacancy: (input: { brief: string; city?: string | null; locale?: "ru" | "en" | "kz" }) =>
+    call<{
+      draft: AiVacancyDraft;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/generate-vacancy", input),
   createTeamRequest: (input: {
     title: string; description: string; city?: string;
+    startDate?: string;
     roles: { specialty: string; count: number; salary?: number | null }[];
   }) =>
     call<{ id: string }>("POST", "/api/build/team-requests", input),

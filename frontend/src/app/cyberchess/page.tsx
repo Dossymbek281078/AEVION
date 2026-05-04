@@ -2691,50 +2691,6 @@ export default function CyberChessPage(){
   const onBoardCancel = _bi.onBoardCancel;
   const sqFromPoint = _bi.sqFromBoard;
 
-  // ── NATIVE pointer fallback (mounts AFTER the board is in the DOM) ──────
-  // The board lives inside a conditional branch (`{(!setup||tab==="puzzles"||...)&&...}`),
-  // so on the first render boardRef.current can be null. A plain useEffect on
-  // mount would run too early. We use an effect keyed on the SAME conditions
-  // that gate the board, so it re-runs once the board appears, and an interval
-  // re-check on top of that as belt-and-suspenders for hot-reload cases where
-  // React's synthetic delegation might have been dropped.
-  useEffect(() => {
-    let attached: HTMLDivElement | null = null;
-    let cleanup: (() => void) | null = null;
-    const wrap = (e: PointerEvent): React.PointerEvent => ({
-      clientX: e.clientX, clientY: e.clientY,
-      pointerId: e.pointerId, pointerType: e.pointerType,
-      button: e.button,
-      preventDefault: () => e.preventDefault(),
-      stopPropagation: () => e.stopPropagation(),
-      target: e.target as any,
-      currentTarget: e.currentTarget as any,
-    } as any);
-    const tryAttach = () => {
-      const el = boardRef.current;
-      if (!el || el === attached) return;
-      if (cleanup) cleanup();
-      attached = el;
-      const onDown = (e: PointerEvent) => { try { onBoardDown(wrap(e)); } catch {} };
-      const onMove = (e: PointerEvent) => { try { onBoardMove(wrap(e)); } catch {} };
-      const onUp   = (e: PointerEvent) => { try { onBoardUp  (wrap(e)); } catch {} };
-      const onCan  = (e: PointerEvent) => { try { onBoardCancel(wrap(e)); } catch {} };
-      el.addEventListener("pointerdown",   onDown, { passive: false });
-      el.addEventListener("pointermove",   onMove, { passive: false });
-      el.addEventListener("pointerup",     onUp);
-      el.addEventListener("pointercancel", onCan);
-      cleanup = () => {
-        el.removeEventListener("pointerdown",   onDown);
-        el.removeEventListener("pointermove",   onMove);
-        el.removeEventListener("pointerup",     onUp);
-        el.removeEventListener("pointercancel", onCan);
-      };
-    };
-    tryAttach();
-    const id = window.setInterval(tryAttach, 600);
-    return () => { window.clearInterval(id); if (cleanup) cleanup(); };
-  }, [onBoardDown, onBoardMove, onBoardUp, onBoardCancel, setup, tab]);
-
   // Scratch — отдельный inst отображается вместо virtualGame.
   const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
   const bd=renderGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildVacancy } from "@/lib/build/api";
 import { ApplicationForm } from "@/components/build/ApplicationForm";
+import { Skeleton } from "@/components/build/Skeleton";
 
 export default function StandaloneApplyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -28,7 +29,15 @@ function Body({ vacancyId }: { vacancyId: string }) {
     buildApi.getVacancy(vacancyId).then(setVacancy).catch(() => {}).finally(() => setLoading(false));
   }, [vacancyId]);
 
-  if (loading) return <p className="text-sm text-slate-400">Loading…</p>;
+  if (loading) {
+    return (
+      <div className="max-w-lg space-y-3" aria-busy="true">
+        <Skeleton width="40%" height={24} />
+        <Skeleton width="60%" height={11} />
+        <Skeleton width="100%" height={120} className="mt-4" />
+      </div>
+    );
+  }
 
   if (!vacancy) {
     return (

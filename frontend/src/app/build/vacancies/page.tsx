@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
+import { VacancySkeleton } from "@/components/build/Skeleton";
 import { buildApi, type BuildVacancy, type VacancyStatus } from "@/lib/build/api";
 
 const STATUS_FILTERS: (VacancyStatus | "ALL")[] = ["ALL", "OPEN", "CLOSED"];
@@ -11,20 +13,45 @@ const STATUS_FILTERS: (VacancyStatus | "ALL")[] = ["ALL", "OPEN", "CLOSED"];
 type FeedVacancy = BuildVacancy & { projectCity?: string | null };
 
 export default function VacanciesFeedPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<FeedVacancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<VacancyStatus | "ALL">("OPEN");
-  const [q, setQ] = useState("");
-  const [city, setCity] = useState("");
-  const [minSalary, setMinSalary] = useState<string>("");
-  const [skill, setSkill] = useState("");
-  const [sort, setSort] = useState<"recent" | "salary" | "popular">("recent");
+  // Initial state hydrates from URL so deep links / back-button restore filters.
+  const [status, setStatus] = useState<VacancyStatus | "ALL">(
+    (searchParams.get("status") as VacancyStatus | "ALL") || "OPEN",
+  );
+  const [q, setQ] = useState(searchParams.get("q") || "");
+  const [city, setCity] = useState(searchParams.get("city") || "");
+  const [minSalary, setMinSalary] = useState<string>(searchParams.get("minSalary") || "");
+  const [skill, setSkill] = useState(searchParams.get("skill") || "");
+  const [sort, setSort] = useState<"recent" | "salary" | "popular">(
+    (searchParams.get("sort") as "recent" | "salary" | "popular") || "recent",
+  );
   const [popularSkills, setPopularSkills] = useState<string[]>([]);
 
   useEffect(() => {
     buildApi.popularSkills().then((r) => setPopularSkills(r.items.slice(0, 12).map((s) => s.skill))).catch(() => {});
   }, []);
+
+  // Reflect filter state back into URL (debounced via the same 250ms gate
+  // as the network call). Skip the very-first run if URL already matches.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const next = new URLSearchParams();
+      if (q.trim()) next.set("q", q.trim());
+      if (city.trim()) next.set("city", city.trim());
+      if (minSalary.trim()) next.set("minSalary", minSalary.trim());
+      if (skill.trim()) next.set("skill", skill.trim());
+      if (sort !== "recent") next.set("sort", sort);
+      if (status !== "OPEN") next.set("status", status);
+      const qs = next.toString();
+      const url = qs ? `/build/vacancies?${qs}` : "/build/vacancies";
+      router.replace(url, { scroll: false });
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [q, city, minSalary, skill, sort, status, router]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -175,9 +202,13 @@ export default function VacanciesFeedPage() {
         </p>
       )}
 
-      {loading && <p className="text-sm text-slate-400">Loading…</p>}
-
-      {!loading && items.length === 0 && (
+      {loading ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <VacancySkeleton key={i} />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
           <p className="text-sm text-slate-400">
             No vacancies match these filters. Try clearing them, or{" "}
@@ -187,13 +218,13 @@ export default function VacanciesFeedPage() {
             .
           </p>
         </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((v) => (
+            <VacancyCard key={v.id} vacancy={v} showProject />
+          ))}
+        </div>
       )}
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((v) => (
-          <VacancyCard key={v.id} vacancy={v} showProject />
-        ))}
-      </div>
     </BuildShell>
   );
 }

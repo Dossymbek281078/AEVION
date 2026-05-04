@@ -42,48 +42,46 @@ const DRAG_THRESHOLD_TOUCH = 9;
 type Pre = { from: Square; to: Square; pr?: "q"|"r"|"b"|"n" };
 
 function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): any[] {
-  // Premove legality is computed in TWO passes so the user can also premove ONTO
-  // their own pieces — this anticipates the opponent capturing those pieces.
-  // (Lichess/Chess.com both allow this; if opponent doesn't capture, the premove
-  // auto-cancels at exec time as illegal.)
-  //
-  // Pass 1: standard legal moves on virtualGame with our color forced to move.
-  // Pass 2: clone virtualGame with EVERY own piece (except FROM) cleared off the
-  //   board, so chess.js no longer blocks moves that would land on own squares.
-  //   We merge the new TO squares from pass 2 onto pass 1 (only TOs that weren't
-  //   already there). King moves from pass 2 are filtered to remove self-check
-  //   (pass 1 already enforces that for all moves; pass 2 is just expanding TOs).
+  // Premove legality with rescue semantics: also lists own-piece squares that the
+  // FROM piece could reach IF that own piece were captured by the opponent first.
+  // Pass-1 = standard chess.js legal moves with our color forced to move.
+  // Pass-2 = for EACH own-piece square, simulate removing JUST that piece and
+  //   check if FROM→that-square is then legal. Per-square removal preserves
+  //   en-route blockers (e.g., a bishop with own pawns in between still blocked).
   try {
     const fen = virtualGame.fen();
-    const g1 = new Chess(fen);
-    {
-      const fp = g1.fen().split(" "); fp[1] = pCol;
-      try { g1.load(fp.join(" ")); } catch { return []; }
-    }
+    const buildBoard = () => {
+      const g = new Chess(fen);
+      const fp = g.fen().split(" "); fp[1] = pCol;
+      try { g.load(fp.join(" ")); return g; } catch { return null; }
+    };
+    const g1 = buildBoard();
+    if (!g1) return [];
     const piece = g1.get(from);
     if (!piece || piece.color !== pCol) return [];
     const pass1: any[] = g1.moves({ square: from, verbose: true });
+    const have = new Set(pass1.map(m => m.to));
 
-    // Pass 2 — strip own pieces (except FROM) so chess.js sees those squares as empty.
-    const g2 = new Chess(fen);
-    {
-      const fp = g2.fen().split(" "); fp[1] = pCol;
-      try { g2.load(fp.join(" ")); } catch { return pass1; }
-    }
-    const board = g2.board();
+    // Collect own-piece squares (skip FROM and skip our king — removing the king
+    // makes chess.js consider the position game-over and reject all moves).
+    const board = g1.board();
+    const ownSquares: Square[] = [];
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const sq = (FILES[c] + (8 - r)) as Square;
         const p = board[r][c];
-        if (p && p.color === pCol && sq !== from) {
-          try { g2.remove(sq); } catch {}
-        }
+        if (p && p.color === pCol && sq !== from && p.type !== "k") ownSquares.push(sq);
       }
     }
-    const pass2: any[] = g2.moves({ square: from, verbose: true });
 
-    const have = new Set(pass1.map(m => m.to));
-    for (const m of pass2) if (!have.has(m.to)) pass1.push(m);
+    for (const ownSq of ownSquares) {
+      if (have.has(ownSq)) continue;
+      const g2 = buildBoard(); if (!g2) continue;
+      try { g2.remove(ownSq); } catch { continue; }
+      const moves = g2.moves({ square: from, verbose: true });
+      const m = moves.find((x: any) => x.to === ownSq);
+      if (m) { pass1.push(m); have.add(ownSq); }
+    }
     return pass1;
   } catch { return []; }
 }

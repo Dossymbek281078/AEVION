@@ -2691,6 +2691,42 @@ export default function CyberChessPage(){
   const onBoardCancel = _bi.onBoardCancel;
   const sqFromPoint = _bi.sqFromBoard;
 
+  // ── NATIVE event fallback ────────────────────────────────────────────────
+  // React's synthetic event system has been the suspect in repeated drag/click
+  // breakage. Attach native pointer listeners directly to the board element via
+  // useEffect so the handlers fire even if React's onPointerDown wiring is lost
+  // (e.g., HMR module mismatch, suspended boundary, dev-mode strict double-mount).
+  // Each native event mints a tiny React-event-like object so the same v7 callbacks
+  // can be invoked. The native path runs FIRST (capture phase); we set
+  // bDownHandledRef so the React path skips chess logic and just clears annotations.
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const wrap = (e: PointerEvent): React.PointerEvent => ({
+      clientX: e.clientX, clientY: e.clientY,
+      pointerId: e.pointerId, pointerType: e.pointerType,
+      button: e.button,
+      preventDefault: () => e.preventDefault(),
+      stopPropagation: () => e.stopPropagation(),
+      target: e.target as any,
+      currentTarget: e.currentTarget as any,
+    } as any);
+    const onDown = (e: PointerEvent) => { try { onBoardDown(wrap(e)); } catch {} };
+    const onMove = (e: PointerEvent) => { try { onBoardMove(wrap(e)); } catch {} };
+    const onUp   = (e: PointerEvent) => { try { onBoardUp  (wrap(e)); } catch {} };
+    const onCan  = (e: PointerEvent) => { try { onBoardCancel(wrap(e)); } catch {} };
+    el.addEventListener("pointerdown",   onDown, { passive: false });
+    el.addEventListener("pointermove",   onMove, { passive: false });
+    el.addEventListener("pointerup",     onUp);
+    el.addEventListener("pointercancel", onCan);
+    return () => {
+      el.removeEventListener("pointerdown",   onDown);
+      el.removeEventListener("pointermove",   onMove);
+      el.removeEventListener("pointerup",     onUp);
+      el.removeEventListener("pointercancel", onCan);
+    };
+  }, [onBoardDown, onBoardMove, onBoardUp, onBoardCancel]);
+
   // Scratch — отдельный inst отображается вместо virtualGame.
   const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
   const bd=renderGame.board(),rws=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7],cls=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
@@ -3616,21 +3652,16 @@ export default function CyberChessPage(){
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
             <div ref={boardRef}
-              onPointerDown={onBoardDown}
-              onPointerMove={onBoardMove}
-              onPointerUp={onBoardUp}
-              onPointerCancel={onBoardCancel}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onClick={e=>{
-                // onClick only clears annotations. All chess logic is in onBoardDown.
-                // If onBoardDown handled this press (within 150ms), skip entirely.
-                if(Date.now()-bDownHandledRef.current<150)return;
+                // onClick only clears annotations / forwards to editor. All chess logic
+                // lives in the native pointerdown handler attached via useEffect.
                 if(Date.now()-recentDragRef.current<200)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
+                if(editorMode){click(sq);return}
+                if(Date.now()-bDownHandledRef.current<150)return;
                 if(arrows.length>0||sqHL.length>0)clearAnnotations();
-                // Only call click() for editor mode (onBoardDown doesn't handle placing pieces)
-                if(editorMode)click(sq);
               }}
               onMouseDown={e=>{
                 if(e.button!==2)return;

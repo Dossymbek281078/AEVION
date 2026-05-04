@@ -271,16 +271,19 @@ qpaynetRouter.get("/transactions", async (req, res) => {
   const pool = getPool();
   const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
   const walletId = req.query.walletId as string | undefined;
+  const type = req.query.type as string | undefined;
   const ownerId = auth.sub ?? auth.email ?? "anon";
 
-  const params: unknown[] = [ownerId, limit];
-  const walletFilter = walletId ? " AND wallet_id=$3" : "";
-  if (walletId) params.push(walletId);
+  const params: unknown[] = [ownerId];
+  let where = "owner_id=$1";
+  if (walletId) { params.push(walletId); where += ` AND wallet_id=$${params.length}`; }
+  if (type) { params.push(type); where += ` AND type=$${params.length}`; }
+  params.push(limit);
 
   const result = await pool.query(
     `SELECT id, wallet_id, type, amount, fee, currency, description, status, created_at
-     FROM qpaynet_transactions WHERE owner_id=$1${walletFilter}
-     ORDER BY created_at DESC LIMIT $2`,
+     FROM qpaynet_transactions WHERE ${where}
+     ORDER BY created_at DESC LIMIT $${params.length}`,
     params,
   );
   res.json({

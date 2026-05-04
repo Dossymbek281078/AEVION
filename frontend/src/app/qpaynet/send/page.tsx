@@ -9,9 +9,9 @@ function SendForm() {
   const params = useSearchParams();
   const router = useRouter();
   const walletId = params.get("wallet") ?? "";
-  const [toWalletId, setToWalletId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
+  const [toWalletId, setToWalletId] = useState(params.get("toWallet") ?? "");
+  const [amount, setAmount] = useState(params.get("amount") ?? "");
+  const [description, setDescription] = useState(params.get("description") ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ newBalance: number; fee: number } | null>(null);

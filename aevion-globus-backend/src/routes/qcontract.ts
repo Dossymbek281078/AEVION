@@ -337,13 +337,28 @@ qcontractRouter.get("/documents", async (req, res) => {
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "unknown";
+  const q = (req.query.q as string | undefined)?.trim();
+  const status = req.query.status as string | undefined; // "active" | "expired" | "revoked"
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+
+  const params: unknown[] = [ownerId];
+  let where = "owner_id = $1";
+
+  if (q) {
+    params.push(`%${q.toLowerCase()}%`);
+    where += ` AND LOWER(title) LIKE $${params.length}`;
+  }
+  if (status === "revoked") where += " AND revoked_at IS NOT NULL";
+  else if (status === "active") where += " AND revoked_at IS NULL";
+
+  params.push(limit);
   const result = await pool.query(
     `SELECT id, title, content_type, max_views, view_count, expires_at, revoked_at,
             require_signature, qright_id, (password_hash IS NOT NULL) as has_password,
             access_token, created_at
      FROM qcontract_documents
-     WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 50`,
-    [ownerId],
+     WHERE ${where} ORDER BY created_at DESC LIMIT $${params.length}`,
+    params,
   );
 
   const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");

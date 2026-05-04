@@ -57,6 +57,20 @@ export default function QContractHome() {
     setRevoking(null);
   }
 
+  async function extend(id: string) {
+    const days = prompt("Продлить на сколько дней?", "7");
+    const n = parseInt(days ?? "");
+    if (!n || n < 1 || n > 365) return;
+    const r = await fetch(`/api/qcontract/documents/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ extendDays: n }),
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    setDocs((prev) => prev.map((x) => x.id === id ? { ...x, expiresAt: d.expires_at } : x));
+  }
+
   function copyLink(url: string, id: string) {
     navigator.clipboard.writeText(url).then(() => {
       setCopied(id);
@@ -198,6 +212,15 @@ export default function QContractHome() {
                         >
                           Лог
                         </Link>
+                        {doc.expiresAt && (
+                          <button
+                            onClick={() => extend(doc.id)}
+                            title="Продлить срок действия"
+                            className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                          >
+                            ⏱ Продлить
+                          </button>
+                        )}
                         <button
                           onClick={() => revoke(doc.id)}
                           disabled={revoking === doc.id}

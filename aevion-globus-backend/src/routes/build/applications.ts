@@ -438,6 +438,50 @@ applicationsRouter.post("/:id/notes", async (req, res) => {
   }
 });
 
+// PATCH /api/build/applications/:id/label
+// Owner-only. Sets a recruiter-private label on the application
+// (SHORTLIST/INTERVIEW/HOLD/TOP_PICK or null to clear). Doesn't move the
+// application status, so it doesn't email the candidate or fire hire fees.
+const ALLOWED_LABELS = new Set(["SHORTLIST", "INTERVIEW", "HOLD", "TOP_PICK"]);
+applicationsRouter.patch("/:id/label", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const labelRaw = req.body?.labelKey;
+    let labelKey: string | null = null;
+    if (labelRaw === null || labelRaw === "" || labelRaw === undefined) {
+      labelKey = null;
+    } else if (typeof labelRaw === "string" && ALLOWED_LABELS.has(labelRaw)) {
+      labelKey = labelRaw;
+    } else {
+      return fail(res, 400, "invalid_label");
+    }
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_label");
+    }
+
+    const r = await pool.query(
+      `UPDATE "BuildApplication" SET "labelKey" = $2, "updatedAt" = NOW()
+       WHERE "id" = $1 RETURNING *`,
+      [id, labelKey],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_label_failed", { details: (err as Error).message });
+  }
+});
+
 // PATCH /api/build/applications/:id/notes/:noteId — toggle isPinned.
 applicationsRouter.patch("/:id/notes/:noteId", async (req, res) => {
   try {

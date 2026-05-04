@@ -233,6 +233,10 @@ async function _doEnsureBuildTables(): Promise<void> {
   // Used downstream for referrer rewards / leaderboard.
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "referredByUserId" TEXT;`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`);
+  // Recruiter-only label e.g. SHORTLIST / INTERVIEW / HOLD / TOP_PICK.
+  // Kept as a free-form short string rather than an enum so we can add
+  // labels without schema migrations.
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "labelKey" TEXT;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildApplication_vacancy_user_uniq" ON "BuildApplication" ("vacancyId", "userId");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_user_created_idx" ON "BuildApplication" ("userId", "createdAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_vacancy_status_idx" ON "BuildApplication" ("vacancyId", "status");`);

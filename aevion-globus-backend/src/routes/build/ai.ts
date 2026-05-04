@@ -394,6 +394,107 @@ Pick up to 3 strongest candidates. Возвращай только JSON в фо�
   }
 });
 
+// POST /api/build/ai/interview-prep
+// Body: { applicationId: string }
+// Owner-only (verified against the application's parent vacancy). Claude
+// reads the vacancy + the candidate's profile + cover note and returns
+// 5 likely-to-be-useful interview questions with one-line rationale each.
+// Saves the recruiter from cold-typing into ChatGPT before every call.
+aiRouter.post("/interview-prep", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const applicationId = vString(req.body?.applicationId, "applicationId", { min: 1, max: 64 });
+    if (!applicationId.ok) return fail(res, 400, applicationId.error);
+
+    const r = await pool.query(
+      `SELECT a."id", a."message", a."userId" AS "candidateId",
+              v."title", v."description", v."skillsJson",
+              p."clientId",
+              u."name" AS "candidateName",
+              bp."title" AS "candidateHeadline", bp."summary" AS "candidateSummary",
+              bp."skillsJson" AS "candidateSkillsJson", bp."experienceYears" AS "candidateYears"
+       FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+       LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [applicationId.value],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    const row = r.rows[0];
+    if (row.clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_prep");
+    }
+
+    const reqSkills = safeParseJson(row.skillsJson, [] as string[]);
+    const candSkills = safeParseJson(row.candidateSkillsJson, [] as string[]);
+    const candSet = new Set(candSkills.map((s: string) => s.toLowerCase()));
+    const overlap = reqSkills.filter((s: string) => candSet.has(s.toLowerCase()));
+    const missing = reqSkills.filter((s: string) => !candSet.has(s.toLowerCase()));
+
+    const userPayload = `VACANCY: ${row.title}
+Description: ${String(row.description).slice(0, 500)}
+Required skills: ${reqSkills.join(", ") || "—"}
+
+CANDIDATE: ${row.candidateName ?? "—"}
+Headline: ${row.candidateHeadline ?? "—"}
+Years experience: ${row.candidateYears ?? 0}
+Skills declared: ${candSkills.join(", ") || "—"}
+Skill overlap with vacancy: ${overlap.join(", ") || "(none)"}
+Skills declared on vacancy that the candidate did NOT list: ${missing.join(", ") || "(none)"}
+Profile summary: ${String(row.candidateSummary ?? "").slice(0, 400) || "—"}
+Cover note: ${String(row.message ?? "").slice(0, 400) || "—"}
+
+Сгенерируй 5 вопросов для интервью.`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — старший рекрутер на платформе AEVION QBuild (стройка/инженерия).
+Твоя задача: подготовить рекрутеру 5 вопросов для интервью с конкретным кандидатом.
+
+Жёсткие правила:
+- Вопросы должны быть конкретны для этой связки vacancy + candidate.
+  Не "расскажите о себе" — а "вы упомянули X, как именно вы делали Y".
+- 1-2 вопроса должны проверять навык, заявленный в вакансии, но НЕ
+  заявленный кандидатом (если такой есть).
+- 1-2 вопроса должны углубить заявленный опыт кандидата.
+- 1 вопрос про soft skills / motivation, привязанный к роли.
+- К каждому вопросу — короткая (≤15 слов) подсказка для рекрутера, что
+  именно проверяется.
+- Возвращай только JSON:
+  {"questions": [{"q": "...", "hint": "..."}, ...]}
+- Никаких преамбул, никакого markdown.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 1200,
+      cacheSystem: false,
+    });
+
+    const stripped = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: { questions?: { q: string; hint: string }[] } = {};
+    try {
+      parsed = JSON.parse(stripped) as typeof parsed;
+    } catch {
+      return fail(res, 502, "ai_interview_prep_invalid_json", { details: stripped.slice(0, 200) });
+    }
+
+    const questions = (parsed.questions ?? [])
+      .filter((q) => typeof q?.q === "string" && typeof q?.hint === "string")
+      .slice(0, 5);
+
+    return ok(res, {
+      questions,
+      skillOverlap: overlap,
+      missingSkills: missing,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_interview_prep_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/ai/translate-vacancy
 // Body: { title: string, description: string, targetLocales?: string[] }
 // Returns { translations: { [locale]: { title, description } } } for the

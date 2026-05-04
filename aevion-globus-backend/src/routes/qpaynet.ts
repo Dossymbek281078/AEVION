@@ -17,10 +17,25 @@
  *   DELETE /api/qpaynet/merchant/keys/:id  revoke key
  *   POST /api/qpaynet/merchant/charge      charge via merchant key (public, key-auth)
  *   GET  /api/qpaynet/stats                public aggregate stats
+ *
+ * Payment requests:
+ *   POST   /api/qpaynet/requests              create request (optional notifyUrl for webhook)
+ *   GET    /api/qpaynet/requests              list my requests
+ *   GET    /api/qpaynet/requests/:token       public view (no auth)
+ *   POST   /api/qpaynet/requests/:token/pay   pay request (auth, fires HMAC webhook on success)
+ *   DELETE /api/qpaynet/requests/:id          cancel pending
+ *
+ * Webhook contract: when notifyUrl is set, on successful payment we POST
+ *   { event: "payment_request.paid", requestId, token, amount, fee, paidBy, paidTxId, paidAt }
+ * with headers:
+ *   X-Aevion-Event: payment_request.paid
+ *   X-Aevion-Timestamp: <unix-seconds>
+ *   X-Aevion-Signature: sha256=<hmac-sha256(secret, "<ts>.<body>")>
+ * Verify: HMAC-SHA256(notifySecret, `${timestamp}.${rawBody}`).
  */
 
 import { Router } from "express";
-import { randomUUID, createHash, randomBytes } from "node:crypto";
+import { randomUUID, createHash, createHmac, randomBytes } from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 
@@ -547,6 +562,43 @@ async function ensureRequestsTable(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_qpr_token ON qpaynet_payment_requests (token);
     CREATE INDEX IF NOT EXISTS idx_qpr_wallet ON qpaynet_payment_requests (to_wallet_id);
   `);
+  await pool.query(`
+    ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_url TEXT;
+    ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_secret TEXT;
+    ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+  `).catch(() => {});
+}
+
+// Fire-and-forget HMAC-SHA256 signed webhook for payment_request events.
+// Matches AEVION convention: X-Aevion-Signature = sha256(timestamp + "." + JSON), X-Aevion-Timestamp.
+async function fireRequestWebhook(
+  url: string,
+  secret: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const body = JSON.stringify(payload);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signed = `${timestamp}.${body}`;
+  const sig = createHmac("sha256", secret).update(signed).digest("hex");
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    await fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "AEVION-QPayNet/1.0",
+        "X-Aevion-Event": "payment_request.paid",
+        "X-Aevion-Timestamp": String(timestamp),
+        "X-Aevion-Signature": `sha256=${sig}`,
+      },
+      body,
+    });
+    clearTimeout(t);
+  } catch (err) {
+    console.warn("[qpaynet] webhook fire failed:", err instanceof Error ? err.message : err);
+  }
 }
 
 // POST /api/qpaynet/requests — create payment request (auth required)
@@ -556,15 +608,18 @@ qpaynetRouter.post("/requests", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { toWalletId, amount, description, note, expiresAt } = req.body as {
+  const { toWalletId, amount, description, note, expiresAt, notifyUrl } = req.body as {
     toWalletId?: string; amount?: number; description?: string;
-    note?: string; expiresAt?: string;
+    note?: string; expiresAt?: string; notifyUrl?: string;
   };
   if (!toWalletId || !amount || amount <= 0 || !description?.trim()) {
     return res.status(400).json({ error: "toWalletId, positive amount, and description required" });
   }
   if (amount > MAX_TRANSFER_KZT) {
     return res.status(400).json({ error: "request_amount_exceeds_max", maxKzt: MAX_TRANSFER_KZT });
+  }
+  if (notifyUrl && !/^https?:\/\//i.test(notifyUrl)) {
+    return res.status(400).json({ error: "notifyUrl_must_be_http_or_https" });
   }
 
   const pool = getPool();
@@ -575,16 +630,23 @@ qpaynetRouter.post("/requests", async (req, res) => {
   const id = randomUUID();
   const token = randomBytes(16).toString("base64url");
   const tiin = toTiin(amount);
+  // Auto-mint a per-request webhook secret so partners can verify HMAC.
+  const notifySecret = notifyUrl ? randomBytes(24).toString("base64url") : null;
 
   await pool.query(
     `INSERT INTO qpaynet_payment_requests
-       (id, owner_id, to_wallet_id, token, amount, description, note, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [id, ownerId, toWalletId, token, tiin, description.trim(), note?.trim() ?? null, expiresAt ?? null],
+       (id, owner_id, to_wallet_id, token, amount, description, note, expires_at, notify_url, notify_secret)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [id, ownerId, toWalletId, token, tiin, description.trim(), note?.trim() ?? null, expiresAt ?? null, notifyUrl ?? null, notifySecret],
   );
 
   const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
-  res.status(201).json({ id, token, payUrl: `${frontendBase}/qpaynet/r/${token}`, amount, currency: "KZT" });
+  res.status(201).json({
+    id, token,
+    payUrl: `${frontendBase}/qpaynet/r/${token}`,
+    amount, currency: "KZT",
+    ...(notifyUrl ? { notifyUrl, notifySecret } : {}),
+  });
 });
 
 // GET /api/qpaynet/requests — list my requests (auth required)
@@ -652,7 +714,7 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
   const ownerId = auth.sub ?? auth.email ?? "anon";
 
   const reqRow = await pool.query(
-    "SELECT id, to_wallet_id, amount, description, status, expires_at FROM qpaynet_payment_requests WHERE token=$1",
+    "SELECT id, to_wallet_id, amount, description, status, expires_at, notify_url, notify_secret FROM qpaynet_payment_requests WHERE token=$1",
     [req.params.token],
   );
   const pr = reqRow.rows[0];
@@ -695,6 +757,24 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
   );
 
   const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
+
+  // Fire-and-forget HMAC-signed webhook to merchant if notify_url was set.
+  if (pr.notify_url && pr.notify_secret) {
+    fireRequestWebhook(pr.notify_url, pr.notify_secret, {
+      event: "payment_request.paid",
+      requestId: pr.id,
+      token: req.params.token,
+      amount: fromTiin(tiin),
+      fee: fromTiin(fee),
+      currency: "KZT",
+      description: pr.description,
+      paidBy: fromWalletId,
+      paidTxId: txOutId,
+      paidAt: new Date().toISOString(),
+    }).then(() => pool.query("UPDATE qpaynet_payment_requests SET notified_at=NOW() WHERE id=$1", [pr.id]))
+      .catch(() => {});
+  }
+
   res.json({
     ok: true, txId: txOutId,
     amount: fromTiin(tiin), fee: fromTiin(fee),

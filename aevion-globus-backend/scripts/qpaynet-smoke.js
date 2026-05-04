@@ -175,6 +175,19 @@ async function run() {
   }, auth);
   assert("request > MAX_TRANSFER → 400", overReq.status === 400 && overReq.body.error === "request_amount_exceeds_max");
 
+  const badNotify = await req("POST", "/api/qpaynet/requests", {
+    toWalletId: walletId, amount: 100, description: "bad notify",
+    notifyUrl: "ftp://evil.example",
+  }, auth);
+  assert("notifyUrl non-http → 400", badNotify.status === 400 && badNotify.body.error === "notifyUrl_must_be_http_or_https");
+
+  const okNotify = await req("POST", "/api/qpaynet/requests", {
+    toWalletId: walletId, amount: 100, description: "with webhook",
+    notifyUrl: "https://example.com/hook",
+  }, auth);
+  assert("notifyUrl valid → 201", okNotify.status === 201);
+  assert("notifySecret returned", typeof okNotify.body.notifySecret === "string" && okNotify.body.notifySecret.length > 20);
+
   // 17. Insufficient balance
   console.log("\n12. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);

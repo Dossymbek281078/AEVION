@@ -196,6 +196,18 @@ export default function VacanciesFeedPage() {
         </div>
       )}
 
+      <SavedSearches
+        current={{ q, city, minSalary, skill, sort, status }}
+        onApply={(s) => {
+          setQ(s.q);
+          setCity(s.city);
+          setMinSalary(s.minSalary);
+          setSkill(s.skill);
+          setSort(s.sort);
+          setStatus(s.status);
+        }}
+      />
+
       {error && (
         <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
           {error}
@@ -248,6 +260,115 @@ function Stat({
     <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
       <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${toneCls}`}>{value}</div>
+    </div>
+  );
+}
+
+type SavedSearch = {
+  id: string;
+  name: string;
+  q: string;
+  city: string;
+  minSalary: string;
+  skill: string;
+  sort: "recent" | "salary" | "popular";
+  status: VacancyStatus | "ALL";
+};
+
+const SAVED_KEY = "qbuild.savedSearches.v1";
+
+function SavedSearches({
+  current,
+  onApply,
+}: {
+  current: Omit<SavedSearch, "id" | "name">;
+  onApply: (s: Omit<SavedSearch, "id" | "name">) => void;
+}) {
+  const [items, setItems] = useState<SavedSearch[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_KEY);
+      if (raw) setItems(JSON.parse(raw) as SavedSearch[]);
+    } catch {
+      // Corrupt JSON — reset.
+      try { localStorage.removeItem(SAVED_KEY); } catch {}
+    }
+    setHydrated(true);
+  }, []);
+
+  function persist(next: SavedSearch[]) {
+    setItems(next);
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch {}
+  }
+
+  function describe(c: Omit<SavedSearch, "id" | "name">) {
+    const parts: string[] = [];
+    if (c.q) parts.push(`"${c.q}"`);
+    if (c.skill) parts.push(`skill:${c.skill}`);
+    if (c.city) parts.push(`city:${c.city}`);
+    if (c.minSalary) parts.push(`≥$${c.minSalary}`);
+    if (c.sort !== "recent") parts.push(`sort:${c.sort}`);
+    if (c.status !== "OPEN") parts.push(`status:${c.status}`);
+    return parts.length > 0 ? parts.join(" · ") : "all open vacancies";
+  }
+
+  function save() {
+    const summary = describe(current);
+    const name = window.prompt("Name this search:", summary === "all open vacancies" ? "" : summary);
+    if (!name?.trim()) return;
+    const id = `s_${Date.now()}`;
+    persist([{ id, name: name.trim().slice(0, 60), ...current }, ...items].slice(0, 20));
+  }
+
+  function remove(id: string) {
+    persist(items.filter((s) => s.id !== id));
+  }
+
+  // Hide entirely until we know what's stored — avoids SSR hydration flicker.
+  if (!hydrated) return null;
+
+  const hasFilters =
+    current.q || current.city || current.minSalary || current.skill || current.sort !== "recent" || current.status !== "OPEN";
+
+  if (items.length === 0 && !hasFilters) return null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
+      {items.length === 0 && (
+        <span className="text-[11px] text-slate-500">none yet</span>
+      )}
+      {items.map((s) => (
+        <span
+          key={s.id}
+          className="inline-flex items-center gap-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-0.5 text-xs text-fuchsia-200"
+        >
+          <button
+            onClick={() => onApply(s)}
+            title={describe(s)}
+            className="hover:underline"
+          >
+            {s.name}
+          </button>
+          <button
+            onClick={() => remove(s.id)}
+            aria-label={`Delete ${s.name}`}
+            className="text-fuchsia-200/60 hover:text-fuchsia-200"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {hasFilters && (
+        <button
+          onClick={save}
+          className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
+        >
+          ★ Save current
+        </button>
+      )}
     </div>
   );
 }
